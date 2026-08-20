@@ -112,7 +112,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     <PanelRoot
       ref={rootRef}
       data-testid="prompt-history-panel"
-      className="overflow-y-auto p-2"
+      className="relative overflow-y-auto p-2"
       onWheel={shouldPaginate ? onUserGesture : undefined}
       onTouchMove={shouldPaginate ? onUserGesture : undefined}
     >
@@ -128,18 +128,22 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
           onNavigate={onNavigateToPrompt}
         />
       ))}
+      {/* The sentinel stays the final in-flow child so its geometry is stable
+       * while loading; the loading message is a floating overlay pinned to the
+       * panel bottom (absolute inside the relative root), out of the content
+       * flow, so its presence cannot reflow the rows or shift the sentinel. */}
       {shouldPaginate && (
-        <>
-          {isLoadingMore && (
-            <div
-              data-testid={LOADING_OLDER_TEST_ID}
-              className="py-2 text-center text-xs text-muted-foreground"
-            >
-              {t("task:loadingOlderMessages")}
-            </div>
-          )}
-          <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
-        </>
+        <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
+      )}
+      {shouldPaginate && isLoadingMore && (
+        <div
+          data-testid={LOADING_OLDER_TEST_ID}
+          className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center"
+        >
+          <div className="rounded-full border border-border bg-card/95 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+            {t("task:loadingOlderMessages")}
+          </div>
+        </div>
       )}
     </PanelRoot>
   );
@@ -171,11 +175,18 @@ function emptyEntriesSpec({
     return {
       content: (
         <>
-          <div className="py-2 text-center text-xs text-muted-foreground">{loadingOlderText}</div>
           <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
+          <div
+            data-testid={LOADING_OLDER_TEST_ID}
+            className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center"
+          >
+            <div className="rounded-full border border-border bg-card/95 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+              {loadingOlderText}
+            </div>
+          </div>
         </>
       ),
-      wrapperClass: "overflow-y-auto p-2",
+      wrapperClass: "relative overflow-y-auto p-2",
       interactive: true,
     };
   }

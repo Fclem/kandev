@@ -705,23 +705,6 @@ describe("PromptHistoryPanelContent — auto-load sentinel", () => {
     expect(screen.queryByTestId("load-older-messages")).toBeNull();
   });
 
-  it("shows the older-page loading row only while shouldPaginate && isLoadingMore", () => {
-    pagination.hasMore = true;
-    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
-
-    const { rerender } = render(<PromptHistoryPanelContent />);
-    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
-
-    pagination.isLoadingMore = true;
-    rerender(<PromptHistoryPanelContent />);
-    expect(screen.getByTestId(LOADING_OLDER_TEST_ID).textContent).toBe("Loading older messages...");
-
-    // Loading row disappears when the load settles.
-    pagination.isLoadingMore = false;
-    rerender(<PromptHistoryPanelContent />);
-    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
-  });
-
   it("fires the shared loader while isLoadingMore (joinInFlightWhileLoading) but never while messagesLoading", async () => {
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
@@ -807,6 +790,38 @@ describe("PromptHistoryPanelContent — auto-load sentinel", () => {
 });
 
 describe("PromptHistoryPanelContent — auto-load loading states", () => {
+  it("shows the older-page loading message only while shouldPaginate && isLoadingMore", () => {
+    pagination.hasMore = true;
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+
+    const { rerender } = render(<PromptHistoryPanelContent />);
+    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
+
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    const loading = screen.getByTestId(LOADING_OLDER_TEST_ID);
+    expect(loading.textContent).toBe("Loading older messages...");
+
+    // Floating-overlay contract (flicker regression): the indicator is
+    // absolutely positioned inside the panel root (the positioned containing
+    // block), so it never participates in content layout and cannot reflow the
+    // rows or move the sentinel while older pages stream in.
+    const panel = screen.getByTestId(PANEL_TEST_ID);
+    expect(panel.className).toContain("relative");
+    expect(loading.className).toContain("absolute");
+    expect(loading.className).toContain("pointer-events-none");
+    expect(loading.className).toContain("z-10");
+    expect(loading.parentElement).toBe(panel);
+    // The sentinel stays the final in-flow child; the overlay is not its
+    // preceding sibling, so the indicator cannot shift sentinel geometry.
+    expect(screen.getByTestId(SENTINEL_TEST_ID).previousElementSibling).not.toBe(loading);
+
+    // Loading message disappears when the load settles.
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
+  });
+
   it("shows neutral loading, not empty, when messagesLoading is true with no entries", () => {
     pagination.messagesLoading = true;
     pagination.hasMore = false;
@@ -824,6 +839,10 @@ describe("PromptHistoryPanelContent — auto-load loading states", () => {
 
     expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe("Loading older messages...");
     expect(screen.getByTestId(SENTINEL_TEST_ID)).toBeTruthy();
+    // Empty-state loading uses the same floating overlay: absolute inside the
+    // positioned panel root, never in the content flow.
+    expect(screen.getByTestId(PANEL_TEST_ID).className).toContain("relative");
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).toContain("absolute");
   });
 
   it("renders the definitive empty state only when entries are empty, hasMore is false, and loading ended", () => {

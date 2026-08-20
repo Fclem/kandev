@@ -144,16 +144,16 @@ func TestPostgresGitSnapshotLifecycle(t *testing.T) {
 		t.Errorf("live_monitor rows = %d, want exactly 1", liveRows)
 	}
 	if got := countRows(t, repo,
-		`SELECT COUNT(1) FROM task_session_git_snapshots WHERE session_id = ?`, "session-git-pg-a"); got != 2 {
-		t.Errorf("total rows = %d, want 2 (archive snapshot + one live row)", got)
+		`SELECT COUNT(1) FROM task_session_git_snapshots WHERE session_id = ?`, "session-git-pg-a"); got != 3 {
+		t.Errorf("total rows = %d, want 3 (archive + live + resumed agent_completed)", got)
 	}
 
 	if err := repo.DeleteLiveMonitorSnapshots(ctx, "session-git-pg-a"); err != nil {
 		t.Fatalf("DeleteLiveMonitorSnapshots: %v", err)
 	}
 	if got := countRows(t, repo,
-		`SELECT COUNT(1) FROM task_session_git_snapshots WHERE session_id = ?`, "session-git-pg-a"); got != 1 {
-		t.Errorf("rows after live delete = %d, want 1", got)
+		`SELECT COUNT(1) FROM task_session_git_snapshots WHERE session_id = ?`, "session-git-pg-a"); got != 2 {
+		t.Errorf("rows after live delete = %d, want 2 (archive + resumed agent_completed)", got)
 	}
 
 	if _, err := repo.GetLatestGitSnapshot(ctx, "session-git-pg-missing"); !errors.Is(err, sql.ErrNoRows) {

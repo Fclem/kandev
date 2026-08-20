@@ -97,7 +97,7 @@ Wave 1:
 - [x] [task-01-duration-helper](task-01-duration-helper.md)
 
 Wave 2:
-- [ ] [task-02-message-actions-ui](task-02-message-actions-ui.md)
+- [x] [task-02-message-actions-ui](task-02-message-actions-ui.md)
 
 Wave 3:
 - [ ] [task-03-e2e](task-03-e2e.md)

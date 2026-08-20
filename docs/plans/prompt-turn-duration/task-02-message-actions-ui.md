@@ -1,7 +1,7 @@
 ---
 id: "02-message-actions-ui"
 title: "Render duration in message action row"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-duration-helper"]
 plan: "plan.md"
@@ -36,4 +36,9 @@ spec: "../../specs/ui/prompt-turn-duration.md"
 
 ## Results
 
-Pending. Record exact commands run with outcomes, generated artifacts, and cleanup evidence.
+- TDD red: `cd apps/web && pnpm vitest run components/task/chat/messages/message-actions.test.tsx lib/prompt-history.test.ts` failed as expected: completed and `0s` duration spans were absent.
+- Verification: `cd apps/web && pnpm vitest run components/task/chat/messages/message-actions.test.tsx lib/prompt-history.test.ts` passed: 2 files, 50 tests.
+- Verification: `cd apps/web && pnpm exec eslint components/task/chat/messages/message-actions.tsx components/task/chat/messages/message-actions.test.tsx lib/prompt-history.ts lib/prompt-history.test.ts` passed with no warnings.
+- Verification: `cd apps/web && pnpm run typecheck` passed.
+- Mobile parity: content-only inline addition to the existing action row; nearest mobile exemplar is `mobile-prompt-history-panel.spec.ts`. The existing below-`sm` `opacity-100` reveal, scroll owner, and touch behavior are unchanged. Rendered Pixel 5 verification is recorded after the mandatory mobile E2E run in task 03.
+- Generated artifacts: release-notes/changelog pretypecheck output only; no generated source artifacts to remove.

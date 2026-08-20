@@ -165,8 +165,41 @@ Task 01 (design package) is complete: this plan, the spec, and the task files.
 
 ## Verification Results
 
-Pending. On completion, synchronize this section with each task's `## Results`
-(exact commands and outcomes, artifact paths, instance teardown evidence).
+All tasks 02–07 complete (2026-08-20); each task file carries exact commands
+and outcomes in its `## Results` section. Summary:
+
+- Task 02 (bootstrap): repo created as `Fclem/kandev-plugin-deepseek-credits`
+  (kdlbs creation refused — transfer request pending), attached to the task,
+  sibling worktree with `../kandev` symlink; `make fmt/vet/test-backend/build/
+  verify-package-host` all pass; archive layout exact. Commit `7602a5b`.
+- Task 03 (balance client): httptest suite (12 cases) green; `make
+  test-backend`/`vet` pass. Commit `8a102e0`.
+- Task 04 (action + poller): 34 plugin tests green (status windows, cooldown,
+  joins, precedence, config precedence/trimming), race-clean; `make
+  test-backend`/`vet`/`build` pass; response shape confirmed exact. Commit
+  `74c5877`.
+- Task 05 (UI): 22 bundle tests green; `node --check`/`node --test`/`make
+  test-backend`/`vet` pass. Commit `ed3ddbc`.
+- Task 06 (manifest/package): 5 manifest-contract tests green; `make
+  verify-package-host` and five-platform `make verify-package` pass;
+  `go mod tidy` clean. Commit `db521a3`.
+- Task 07 (smoke): disposable `kandev-launcher dev` instance
+  (`http://localhost:35917`, state in `<repo>/.kandev-dev`) — unconfigured/
+  invalid-key/disable-reenable/upgrade/reinstall/uninstall browser-driven
+  checks, secret hygiene (vault reference, masked config, zero raw-key
+  occurrences), no-webhook 404s, auth-disabled 400 branches; live-balance and
+  fetched_at-advance cooldown not exercised (no real DeepSeek key — recorded
+  limitation; unit-tested in task 04); non-owner 404/unauth 401 evidenced by
+  `handlers_test.go` (passing). Instance stopped, `.kandev-dev` removed.
+- Plugin repo CI (PR `Fclem/kandev-plugin-deepseek-credits#1`): all three
+  checks green — Tidy/format/vet/test (53s), Action contract floor on Kandev
+  v0.88.0 (40s), Build plugin packages (1m33s).
+
+Artifact paths: plugin repo at
+`…/we-want-to-create-a_wuer51ad/kandev-plugin-deepseek-credits`
+(remote `https://github.com/Fclem/kandev-plugin-deepseek-credits`), packages
+`kandev-deepseek-credits-0.1.0.tar.gz` / `0.1.1.tar.gz` (built during the
+upgrade check, cleaned after), worktree restored to the task-06 commit.
 
 ## Open Questions
 

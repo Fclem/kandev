@@ -80,6 +80,7 @@ const EMPTY_TEXT = "No prompts yet.";
 
 type ObserverEntry = { element: Element; callback: ResizeObserverCallback };
 const observerEntries: ObserverEntry[] = [];
+const resizeObserverInstances: CapturingResizeObserver[] = [];
 
 type IntersectionRecord = {
   callback: IntersectionObserverCallback;
@@ -132,10 +133,13 @@ function fireIntersection(isIntersecting: boolean, target?: Element) {
 
 class CapturingResizeObserver {
   private readonly callback: ResizeObserverCallback;
+  /** Set once the instance is torn down; lets tests prove cleanup runs. */
+  disconnected = false;
 
   /** Stores the ResizeObserver callback for later manual invocation. */
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    resizeObserverInstances.push(this);
   }
 
   /** Records the observed element and its callback for later manual resize firing. */
@@ -143,8 +147,11 @@ class CapturingResizeObserver {
     observerEntries.push({ element, callback: this.callback });
   }
 
-  /** No-op: recorded observations are retained so tests can fire them manually. */
-  disconnect() {}
+  /** Retains recorded observations so tests can fire them manually, but flags
+   * the instance as torn down so cleanup is observable. */
+  disconnect() {
+    this.disconnected = true;
+  }
   /** No-op: recorded observations are retained so tests can fire them manually. */
   unobserve() {}
 }
@@ -241,6 +248,7 @@ function expandButton(index: number): HTMLElement {
 beforeEach(() => {
   vi.clearAllMocks();
   observerEntries.length = 0;
+  resizeObserverInstances.length = 0;
   intersectionRecords.length = 0;
   vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
   vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
@@ -801,7 +809,7 @@ describe("PromptHistoryPanelContent — auto-load sentinel", () => {
   });
 });
 
-describe("PromptHistoryPanelContent — loading message placement and continuity", () => {
+describe("PromptHistoryPanelContent — loading message placement", () => {
   it("shows the loading message only while shouldPaginate && isLoadingMore", () => {
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
@@ -880,6 +888,16 @@ describe("PromptHistoryPanelContent — loading message placement and continuity
     expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).toContain("absolute");
   });
 
+  it("disconnects its ResizeObservers on unmount", () => {
+    const { unmount } = render(<PromptHistoryPanelContent />);
+    // Row max-height observer + scrollability observer.
+    expect(resizeObserverInstances.length).toBeGreaterThanOrEqual(2);
+    unmount();
+    expect(resizeObserverInstances.every((instance) => instance.disconnected)).toBe(true);
+  });
+});
+
+describe("PromptHistoryPanelContent — loading message continuity", () => {
   it("keeps the loading message mounted across consecutive loads so it does not flicker", () => {
     vi.useFakeTimers();
     pagination.hasMore = true;
@@ -912,7 +930,7 @@ describe("PromptHistoryPanelContent — loading message placement and continuity
     vi.useRealTimers();
   });
 
-  it("resets the loading grace when the active session switches", () => {
+  it("cancels the previous session's loading grace on switch and never revives it", () => {
     vi.useFakeTimers();
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
@@ -928,11 +946,28 @@ describe("PromptHistoryPanelContent — loading message placement and continuity
     expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
 
     // Switching to session B (paginatable but NOT loading) within the grace
-    // window must hide the indicator: B has no in-flight load of its own.
+    // window hides the indicator even during the switch render itself: B has
+    // no in-flight load of its own (render-safe session identity guard).
     state.tasks.activeSessionId = SESSION_B;
     rerender(<PromptHistoryPanelContent />);
     expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
+
+    // Switching back to A within the window does not revive A's old grace.
+    state.tasks.activeSessionId = SESSION_A;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
     vi.useRealTimers();
+  });
+
+  it("shows the loading message for the new session's own in-flight load", () => {
+    pagination.hasMore = true;
+    messagesBySession[SESSION_B] = [message({ id: "b1", prompt_index: 5, content: "prompt" })];
+    state.tasks.activeSessionId = SESSION_B;
+    const { rerender } = render(<PromptHistoryPanelContent />);
+
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
   });
 });
 

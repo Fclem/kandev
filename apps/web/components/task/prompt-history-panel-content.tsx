@@ -317,26 +317,34 @@ function usePanelContentScrollable(
 /** Minimum-display grace for the loading message: once a load starts, keep the
  * message mounted for LOADING_GRACE_MS after the request settles so the
  * sentinel's re-arm loop (next page firing right after a positive settle)
- * renders a continuous indicator instead of a per-page flash. Scoped to the
- * active session: switching sessions cancels the previous session's grace so
- * the new session never shows the indicator without its own in-flight load. */
+ * renders a continuous indicator instead of a per-page flash.
+ *
+ * The grace is bound to the session that produced it. The returned value is
+ * derived from the state's own session identity, so it is `false` for a
+ * session that did not start its own load synchronously during the render in
+ * which the active session changes (the effect only confirms/clears
+ * afterwards, so the new session can never paint the old session's grace), and
+ * switching away and back within the window never revives an old session's
+ * grace. */
 function useLoadingGrace(sessionId: string | null, isLoadingMore: boolean): boolean {
-  const [showGrace, setShowGrace] = useState(false);
-  const sessionRef = useRef(sessionId);
+  const [grace, setGrace] = useState<{ sessionId: string | null; show: boolean }>({
+    sessionId,
+    show: false,
+  });
   useEffect(() => {
-    if (sessionRef.current !== sessionId) {
-      sessionRef.current = sessionId;
-      setShowGrace(false);
+    if (grace.sessionId !== sessionId) {
+      // The active session changed: drop the previous session's grace.
+      setGrace({ sessionId, show: false });
       return;
     }
     if (isLoadingMore) {
-      setShowGrace(true);
+      setGrace({ sessionId, show: true });
       return;
     }
-    const timer = window.setTimeout(() => setShowGrace(false), LOADING_GRACE_MS);
+    const timer = window.setTimeout(() => setGrace({ sessionId, show: false }), LOADING_GRACE_MS);
     return () => window.clearTimeout(timer);
-  }, [sessionId, isLoadingMore]);
-  return showGrace;
+  }, [sessionId, isLoadingMore, grace.sessionId]);
+  return grace.sessionId === sessionId && grace.show;
 }
 
 /** The small `#N` ordinal label at the start of a prompt bubble. Rendered

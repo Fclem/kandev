@@ -567,6 +567,46 @@ func TestGetCumulativeDiff_ModeOnlyBSlashPath(t *testing.T) {
 	}
 }
 
+// TestParseCommitDiffWithOptions_HeaderTokenInsideBody guards the section
+// boundary against a patch body (or filename) containing the literal
+// `diff --git ` byte sequence. git only emits that token at the start of a
+// section header line, so the split must be line-aware: an added line like
+// `+diff --git a/example b/example` must not truncate the real section or
+// fabricate a bogus one.
+func TestParseCommitDiffWithOptions_HeaderTokenInsideBody(t *testing.T) {
+	output := "diff --git a/real.txt b/real.txt\n" +
+		"index 111..222 100644\n" +
+		"--- a/real.txt\n" +
+		"+++ b/real.txt\n" +
+		"@@ -1 +1,2 @@\n" +
+		"-old\n" +
+		"+diff --git a/example b/example\n" +
+		"+new\n"
+
+	gitOp := &GitOperator{}
+	files := gitOp.parseCommitDiffWithOptions(output, parseCommitDiffOptions{})
+	if len(files) != 1 {
+		t.Fatalf("got %d files, want exactly real.txt (%v)", len(files), keysOf(files))
+	}
+	entry, ok := files["real.txt"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("no entry for real.txt; got keys %v", keysOf(files))
+	}
+	if got, _ := entry["path"].(string); got != "real.txt" {
+		t.Errorf("entry path = %#v, want real.txt", got)
+	}
+	diff, _ := entry["diff"].(string)
+	if !strings.Contains(diff, "+diff --git a/example b/example") || !strings.Contains(diff, "+new") {
+		t.Errorf("real.txt diff truncated by header-token line: %q", diff)
+	}
+	if got, _ := entry["additions"].(int); got != 2 {
+		t.Errorf("real.txt additions = %d, want 2 (the added header-token line counts)", got)
+	}
+	if _, ok := files["example"]; ok {
+		t.Errorf("bogus example entry created from patch-body token: %v", keysOf(files))
+	}
+}
+
 // TestGetCumulativeDiff_CountsDashAndPlusPrefixedContent covers the second
 // caller, which builds its diff from `git diff <base>` rather than `git show`.
 func TestGetCumulativeDiff_CountsDashAndPlusPrefixedContent(t *testing.T) {

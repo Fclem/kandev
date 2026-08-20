@@ -448,27 +448,25 @@ func (g *GitOperator) parseCommitDiff(output string) map[string]interface{} {
 func (g *GitOperator) parseCommitDiffWithOptions(output string, opts parseCommitDiffOptions) map[string]interface{} {
 	files := make(map[string]interface{})
 
-	// Split by "diff --git" to get individual file diffs
-	parts := strings.Split(output, "diff --git ")
-	if len(parts) <= 1 {
+	// Split into per-file sections. The split is line-aware: only a line that
+	// STARTS with `diff --git ` begins a new section, because git only emits
+	// that token at the start of a section header. Splitting the raw byte
+	// stream would truncate a real section when a patch body or filename
+	// contains the literal sequence (e.g. an added line
+	// `+diff --git a/example b/example`) and fabricate a bogus section.
+	prefix, sections := splitDiffSections(output)
+	if len(sections) == 0 {
 		return files
 	}
 
 	// When the caller's git command included --numstat, git printed authoritative
 	// per-file counts ahead of the first "diff --git" — exactly the text the split
-	// above discards. Recover them; files without a row fall back to counting
+	// discards. Recover them; files without a row fall back to counting
 	// their own patch body.
-	numstat := numstatByPath(parts[0])
+	numstat := numstatByPath(prefix)
 
 	totalDiffBytes := 0
-	for _, part := range parts[1:] {
-		if part == "" {
-			continue
-		}
-
-		// Re-add the "diff --git " prefix
-		diffContent := "diff --git " + part
-
+	for _, diffContent := range sections {
 		// Extract the file path. git's per-file `+++ b/<path>` line is the
 		// authoritative source: it carries exactly one path, so spaces and
 		// literal ` b/` sequences inside a filename can't be confused with
@@ -563,6 +561,49 @@ func diffSectionPath(diffContent string) (string, bool) {
 	// Mode-only changes (old mode/new mode) have no path-bearing line at all;
 	// parse the header, handling git's C-quoted form.
 	return diffHeaderNewPath(lines[0])
+}
+
+// splitDiffSections splits git diff/show output into the pre-header prefix
+// (numstat rows when --numstat was used) and one section per file, each
+// section starting with its `diff --git ` header line. The split only breaks
+// at lines that begin with the token — git's actual section-boundary
+// grammar — so the token appearing inside a patch body or filename cannot
+// truncate a real section or create a bogus one.
+func splitDiffSections(output string) (prefix string, sections []string) {
+	first := firstDiffHeaderIndex(output)
+	prefix = output[:first]
+	rest := output[first:]
+	for rest != "" {
+		// rest starts at a `diff --git ` header line; the next section
+		// begins at the next line that starts with the token.
+		next := strings.Index(rest, "\ndiff --git ")
+		if next == -1 {
+			sections = append(sections, rest)
+			break
+		}
+		sections = append(sections, rest[:next+1])
+		rest = rest[next+1:]
+	}
+	return prefix, sections
+}
+
+// firstDiffHeaderIndex returns the byte offset of the first line that starts
+// with `diff --git `, or len(s) when there is none.
+func firstDiffHeaderIndex(s string) int {
+	for i := 0; i < len(s); {
+		lineEnd := i
+		for lineEnd < len(s) && s[lineEnd] != '\n' {
+			lineEnd++
+		}
+		if strings.HasPrefix(s[i:lineEnd], "diff --git ") {
+			return i
+		}
+		if lineEnd >= len(s) {
+			return len(s)
+		}
+		i = lineEnd + 1
+	}
+	return len(s)
 }
 
 // diffHeaderNewPath parses the new-side path out of a `diff --git` header,

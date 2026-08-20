@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository/sqlite"
@@ -518,6 +519,57 @@ func TestGetLatestGitSnapshot_UnarchivedResumePrefersCompleted(t *testing.T) {
 		}
 		if got.HeadCommit != "archive-head" {
 			t.Errorf("expected archive-head, got %q — archive lost while task is still archived", got.HeadCommit)
+		}
+	})
+}
+
+// TestGetLatestGitSnapshot_TieBreakerIsDeterministic guards the equal-rank
+// ordering: Postgres stores created_at at microsecond precision, so distinct
+// writes (e.g. two archive rows from re-archive flows) can collapse to the
+// same timestamp. Both selectors must break the tie identically via the ID
+// column so the selected row is never database-plan dependent.
+func TestGetLatestGitSnapshot_TieBreakerIsDeterministic(t *testing.T) {
+	ctx := context.Background()
+	repo, cleanup := createTestSQLiteRepo(t)
+	defer cleanup()
+
+	const taskID = "task-tie"
+	const sessionID = "session-tie"
+	seedTaskAndSession(t, ctx, repo, taskID, sessionID)
+	if err := repo.ArchiveTask(ctx, taskID); err != nil {
+		t.Fatalf("archive task: %v", err)
+	}
+
+	at := time.Date(2026, 3, 4, 5, 6, 7, 123456000, time.UTC)
+	for _, snap := range []*models.GitSnapshot{
+		{ID: "tie-aaa", SessionID: sessionID, SnapshotType: models.SnapshotTypeArchive,
+			Branch: "feature", HeadCommit: "older-id", CreatedAt: at},
+		{ID: "tie-bbb", SessionID: sessionID, SnapshotType: models.SnapshotTypeArchive,
+			Branch: "feature", HeadCommit: "newer-id", CreatedAt: at},
+	} {
+		if err := repo.CreateGitSnapshot(ctx, snap); err != nil {
+			t.Fatalf("create snapshot %s: %v", snap.ID, err)
+		}
+	}
+
+	// Both rows tie on created_at and rank; the id DESC tie-breaker picks
+	// tie-bbb deterministically in both selectors.
+	t.Run("single query", func(t *testing.T) {
+		got, err := repo.GetLatestGitSnapshot(ctx, sessionID)
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshot: %v", err)
+		}
+		if got.ID != "tie-bbb" {
+			t.Errorf("expected tie-bbb (id DESC tie-break), got %q", got.ID)
+		}
+	})
+	t.Run("batch query", func(t *testing.T) {
+		got, err := repo.GetLatestGitSnapshotsBySessionIDs(ctx, []string{sessionID})
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
+		}
+		if snap := got[sessionID]; snap == nil || snap.ID != "tie-bbb" {
+			t.Errorf("expected tie-bbb in batch, got %+v", got[sessionID])
 		}
 	})
 }

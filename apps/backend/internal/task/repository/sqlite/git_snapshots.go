@@ -168,8 +168,10 @@ func (r *Repository) getGitSnapshotByOrder(ctx context.Context, sessionID, order
 // agent_completed / live_monitor rows describe the current execution.
 // agent_completed (captured at exact completion time) is preferred over
 // live_monitor (periodic polls that may contain stale data if the poll raced
-// with agent completion). Falls back to most-recent-by-time when none of
-// those exist.
+// with agent completion). Equal-rank rows break ties by created_at DESC,
+// then id DESC so the selection is deterministic even when Postgres stores
+// multiple writes at the same microsecond timestamp. Falls back to
+// most-recent-by-time when none of those exist.
 // Returns sql.ErrNoRows if no snapshot is found.
 func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string) (*models.GitSnapshot, error) {
 	query := `
@@ -189,7 +191,8 @@ func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string)
 				WHEN snapshot_type = 'archive' THEN 3
 				ELSE 2
 			END,
-			created_at DESC
+			created_at DESC,
+			id DESC
 		LIMIT 1
 	`
 	return scanGitSnapshot(r.ro.QueryRowContext(ctx, r.ro.Rebind(query), sessionID))
@@ -198,8 +201,9 @@ func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string)
 // GetLatestGitSnapshotsBySessionIDs loads one authoritative snapshot per
 // session in one query per placeholder-sized chunk. It mirrors
 // GetLatestGitSnapshot's archive(while archived) > agent_completed >
-// live_monitor > archive(stale) preference without introducing an N+1 read
-// when task-list summaries repair historical rows.
+// live_monitor > archive(stale) preference (with the same created_at DESC,
+// id DESC tie-break) without introducing an N+1 read when task-list
+// summaries repair historical rows.
 func (r *Repository) GetLatestGitSnapshotsBySessionIDs(
 	ctx context.Context,
 	sessionIDs []string,
@@ -230,7 +234,8 @@ func (r *Repository) GetLatestGitSnapshotsBySessionIDs(
 						               WHEN snapshot_type = 'archive' THEN 3
 						               ELSE 2
 					               END,
-					               created_at DESC
+					               created_at DESC,
+					               id DESC
 				       ) AS row_number
 				FROM task_session_git_snapshots
 				WHERE session_id IN (` + placeholders + `)

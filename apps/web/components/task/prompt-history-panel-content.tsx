@@ -52,7 +52,6 @@ const LOADING_GRACE_MS = 400;
  * with no load-more button. Passthrough sessions are an unconditional
  * empty-state with NO controls (rows, arrows, sentinel, loading indicators):
  * the transcript the arrow would jump to does not exist. */
-// eslint-disable-next-line max-lines-per-function -- composition root wiring every panel hook (messages, pagination, sentinel, grace, scrollability) plus the passthrough/empty/rows branches; splitting would fragment the branch invariants
 export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryPanelContentProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -85,25 +84,16 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   // hasMore term alone drives exhaustion.
   const shouldPaginate = hasMore && !entries.some((entry) => entry.promptNumber === 1);
   const showLoading = shouldPaginate && (isLoadingMore || showLoadingGrace);
-  const { sentinelRef, onUserGesture } = useLazyLoadSentinel(
+  const { sentinelRef, onUserGesture } = usePanelOlderPromptSentinel({
     scrollRef,
     shouldPaginate,
     messagesLoading,
     isLoadingMore,
     loadMore,
-    {
-      rootMargin: "0px 0px 200px 0px",
-      rearmWhileIntersecting: true,
-      joinInFlightWhileLoading: true,
-      // Keep loading while the user waits at the bottom: appended rows would
-      // push the sentinel below the viewport and stall the auto-load.
-      stickToBottomWhileLoading: true,
-    },
-  );
+  });
 
-  // Passthrough sessions render a toolbar instead of a transcript: the panel
-  // is an unconditional no-controls empty state, even when entries/hasMore
-  // exist (a restored layout can leave the tab present after a session switch).
+  // Passthrough: unconditional no-controls empty state (no rows, arrows,
+  // sentinel, or loading indicators), even when entries/hasMore exist.
   if (session?.is_passthrough) {
     return (
       <PanelRoot
@@ -117,10 +107,11 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   }
 
   if (entries.length === 0) {
-    // Keep PanelRoot as the stable top-level element in every branch so the
-    // root element (and its ResizeObserver) survives the empty→rows
-    // transition; the scroller structure matches the rows branch (an empty
-    // panel never scrolls, so the loading message stays in-flow).
+    // Keep PanelRoot as the stable top-level element in EVERY branch (same
+    // element type at the same position) so the root element and its
+    // ResizeObserver survive the empty→rows transition; only the inner
+    // content varies. An empty panel never scrolls, so the loading message
+    // stays in-flow.
     const spec = emptyEntriesSpec({
       showLoading,
       messagesLoading,
@@ -136,13 +127,11 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
         data-testid="prompt-history-panel"
         className="relative overflow-hidden"
       >
-        <PromptHistoryScroller
+        <PromptHistoryEmptyScroller
+          spec={spec}
           scrollRef={scrollRef}
-          interactive={spec.interactive}
           onUserGesture={onUserGesture}
-        >
-          {spec.content}
-        </PromptHistoryScroller>
+        />
       </PanelRoot>
     );
   }
@@ -153,35 +142,25 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
       data-testid="prompt-history-panel"
       className="relative overflow-hidden"
     >
-      {/* The scroller is a distinct inner element so the floating loading
-       * message can anchor to the panel viewport (the outer relative root)
-       * instead of the scrolled content: an absolutely positioned child of a
-       * scroll container moves with its content. The sentinel stays the final
-       * in-flow child of the content wrapper with a stable geometry, and
-       * scrollability is measured from that wrapper alone against this
-       * scroller's content box. */}
+      {/* Distinct scroller from the positioned outer root: an absolute child
+       * of a scroll container moves with its content, so the floating chip
+       * must anchor to the panel viewport. */}
       <PromptHistoryScroller
         scrollRef={scrollRef}
         interactive={shouldPaginate}
         onUserGesture={onUserGesture}
       >
-        <div ref={contentRef} className="shrink-0">
-          {entries.map((entry, index) => (
-            <PromptHistoryRow
-              key={entry.messageId}
-              sessionId={sessionId}
-              entry={entry}
-              index={index}
-              expanded={expanded === entry.messageId}
-              maxHeight={maxHeight}
-              onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
-              onNavigate={onNavigateToPrompt}
-            />
-          ))}
-          {shouldPaginate && (
-            <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
-          )}
-        </div>
+        <PromptHistoryRowList
+          contentRef={contentRef}
+          entries={entries}
+          sessionId={sessionId}
+          expanded={expanded}
+          maxHeight={maxHeight}
+          onToggle={(messageId) => setExpanded(expanded === messageId ? null : messageId)}
+          onNavigate={onNavigateToPrompt}
+          shouldPaginate={shouldPaginate}
+          sentinelRef={sentinelRef}
+        />
         {showLoading && !isScrollable && (
           <LoadingMoreMessage floating={false} text={t("task:loadingOlderMessages")} />
         )}
@@ -190,6 +169,105 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
         <LoadingMoreMessage floating text={t("task:loadingOlderMessages")} />
       )}
     </PanelRoot>
+  );
+}
+
+/** The panel's older-prompt auto-load sentinel configuration: bottom-margin
+ * root, re-arm while intersecting, join in-flight requests, and stick to the
+ * bottom while the user waits there so appended rows cannot stall the load. */
+function usePanelOlderPromptSentinel(opts: {
+  scrollRef: RefObject<HTMLDivElement | null>;
+  shouldPaginate: boolean;
+  messagesLoading: boolean;
+  isLoadingMore: boolean;
+  loadMore: () => Promise<number>;
+}): {
+  sentinelRef: (node: HTMLDivElement | null) => void;
+  onUserGesture: () => void;
+} {
+  return useLazyLoadSentinel(
+    opts.scrollRef,
+    opts.shouldPaginate,
+    opts.messagesLoading,
+    opts.isLoadingMore,
+    opts.loadMore,
+    {
+      rootMargin: "0px 0px 200px 0px",
+      rearmWhileIntersecting: true,
+      joinInFlightWhileLoading: true,
+      // Keep loading while the user waits at the bottom: appended rows would
+      // push the sentinel below the viewport and stall the auto-load.
+      stickToBottomWhileLoading: true,
+    },
+  );
+}
+
+/** The zero-entries scroller wrapper: the same scroller structure as the rows
+ * branch, rendered inside the panel's stable PanelRoot (which stays the
+ * top-level element across branches so its ResizeObserver survives). */
+function PromptHistoryEmptyScroller({
+  spec,
+  scrollRef,
+  onUserGesture,
+}: {
+  spec: { content: React.ReactNode; interactive: boolean };
+  scrollRef: RefObject<HTMLDivElement | null>;
+  onUserGesture: () => void;
+}) {
+  return (
+    <PromptHistoryScroller
+      scrollRef={scrollRef}
+      interactive={spec.interactive}
+      onUserGesture={onUserGesture}
+    >
+      {spec.content}
+    </PromptHistoryScroller>
+  );
+}
+
+/** The prompt rows plus the pagination sentinel, inside the content wrapper
+ * the panel measures scrollability from. The sentinel stays the final in-flow
+ * child with a stable geometry, so the loading indicator can never reflow the
+ * rows or shift it. */
+function PromptHistoryRowList({
+  contentRef,
+  entries,
+  sessionId,
+  expanded,
+  maxHeight,
+  onToggle,
+  onNavigate,
+  shouldPaginate,
+  sentinelRef,
+}: {
+  contentRef: RefObject<HTMLDivElement | null>;
+  entries: PromptHistoryEntry[];
+  sessionId: string | null;
+  expanded: string | null;
+  maxHeight: string;
+  onToggle: (messageId: string) => void;
+  onNavigate?: (messageId: string) => void;
+  shouldPaginate: boolean;
+  sentinelRef: (node: HTMLDivElement | null) => void;
+}) {
+  return (
+    <div ref={contentRef} className="shrink-0">
+      {entries.map((entry, index) => (
+        <PromptHistoryRow
+          key={entry.messageId}
+          sessionId={sessionId}
+          entry={entry}
+          index={index}
+          expanded={expanded === entry.messageId}
+          maxHeight={maxHeight}
+          onToggle={() => onToggle(entry.messageId)}
+          onNavigate={onNavigate}
+        />
+      ))}
+      {shouldPaginate && (
+        <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
+      )}
+    </div>
   );
 }
 
@@ -214,7 +292,9 @@ function PromptHistoryScroller({
       data-testid={SCROLL_TEST_ID}
       className="h-full min-h-0 overflow-y-auto p-2"
       onWheel={interactive ? onUserGesture : undefined}
-      onTouchMove={interactive ? onUserGesture : undefined}
+      // onTouchStart fires once per gesture; onTouchMove would retry on every
+      // pixel of movement (30-120 events/sec) while a gesture drags.
+      onTouchStart={interactive ? onUserGesture : undefined}
     >
       {children}
     </div>

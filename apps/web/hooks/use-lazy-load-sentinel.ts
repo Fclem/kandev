@@ -20,6 +20,163 @@ export type LazyLoadSentinelOptions = {
   stickToBottomWhileLoading?: boolean;
 };
 
+/** How close to the scroll container's bottom counts as "pinned". */
+const STICK_BOTTOM_TOLERANCE_PX = 24;
+
+/** Mutable state shared by the sentinel state-machine helpers. */
+type SentinelMutableRefs = {
+  stateRef: React.MutableRefObject<{
+    hasMore: boolean;
+    blocked: boolean;
+    isLoadingMore: boolean;
+  }>;
+  optionsRef: React.MutableRefObject<{
+    rearmWhileIntersecting: boolean;
+    joinInFlightWhileLoading: boolean;
+    stickToBottomWhileLoading: boolean;
+  }>;
+  observerRef: React.MutableRefObject<IntersectionObserver | null>;
+  sentinelNodeRef: React.MutableRefObject<HTMLDivElement | null>;
+  mountedRef: React.MutableRefObject<boolean>;
+  disarmedRef: React.MutableRefObject<boolean>;
+  intersectingRef: React.MutableRefObject<boolean>;
+};
+
+/** Creates and destroys the IntersectionObserver over the scroll container.
+ * The callback updates the intersection/disarm state and fires `fireLoad` when
+ * eligible; the sentinel is observed eagerly if it already mounted. */
+function useSentinelObserver(opts: {
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  rootMargin: string;
+  fireLoad: () => void;
+  refs: SentinelMutableRefs;
+}) {
+  useEffect(() => {
+    const root = opts.scrollRef.current;
+    if (!root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        opts.refs.intersectingRef.current = entry.isIntersecting;
+        if (opts.refs.disarmedRef.current) {
+          // Ignore the current intersection; arm only after an observed exit.
+          if (!entry.isIntersecting) opts.refs.disarmedRef.current = false;
+          return;
+        }
+        const { hasMore, blocked, isLoadingMore } = opts.refs.stateRef.current;
+        const { joinInFlightWhileLoading } = opts.refs.optionsRef.current;
+        if (
+          !entry.isIntersecting ||
+          !hasMore ||
+          blocked ||
+          (isLoadingMore && !joinInFlightWhileLoading)
+        ) {
+          return;
+        }
+        void opts.fireLoad();
+      },
+      { root, rootMargin: opts.rootMargin },
+    );
+    opts.refs.observerRef.current = observer;
+    if (opts.refs.sentinelNodeRef.current) {
+      observer.observe(opts.refs.sentinelNodeRef.current);
+    }
+    return () => {
+      observer.disconnect();
+      opts.refs.observerRef.current = null;
+    };
+  }, [opts.scrollRef, opts.rootMargin, opts.fireLoad]);
+}
+
+/** Post-load settle: re-arm after a positive result, disarm after a rejected
+ * or zero-result load. Stale completions (unmount, observer cleanup or
+ * replacement, sentinel replacement) never re-arm or disarm: the settle is
+ * applied only when the observer that STARTED the request is still current. */
+function useSentinelSettle(opts: {
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  isPinned: () => boolean;
+  refs: SentinelMutableRefs;
+}) {
+  return useCallback(
+    (
+      node: HTMLDivElement,
+      observer: IntersectionObserver,
+      outcome: { count: number; rejected: boolean },
+    ) => {
+      if (!opts.refs.mountedRef.current || opts.refs.observerRef.current !== observer) return;
+      if (node !== opts.refs.sentinelNodeRef.current) return;
+      if (outcome.count > 0 && !outcome.rejected) {
+        // Positive progress: re-arm and re-observe (re-arm only when enabled;
+        // the transcript leaves observation untouched). A gesture retry that
+        // succeeded while disarmed must arm again so the next page can load
+        // without another gesture.
+        opts.refs.disarmedRef.current = false;
+        if (opts.refs.optionsRef.current.rearmWhileIntersecting) {
+          opts.refs.observerRef.current.observe(node);
+        }
+        // Appended rows push the sentinel below the viewport while the user
+        // waits at the bottom, so the re-armed observer never fires. Scroll
+        // back to the new bottom to keep it in view and the next page loading.
+        if (
+          opts.refs.optionsRef.current.stickToBottomWhileLoading &&
+          opts.isPinned() &&
+          opts.scrollRef.current
+        ) {
+          opts.scrollRef.current.scrollTop = opts.scrollRef.current.scrollHeight;
+        }
+        return;
+      }
+      // Rejected or zero-result load: re-observe disarmed. The current
+      // intersection is ignored; arming waits for an observed exit, and the
+      // next true re-entry (or onUserGesture) can retry.
+      opts.refs.disarmedRef.current = true;
+      if (opts.refs.optionsRef.current.rearmWhileIntersecting) {
+        opts.refs.observerRef.current.observe(node);
+      }
+    },
+    [opts.isPinned, opts.scrollRef],
+  );
+}
+
+/** Tracks whether the user is pinned at the scroll container's bottom. The
+ * pin is updated by scroll events and on demand via `refreshPinned` (called
+ * before each fresh load so late-arriving content or a session switch cannot
+ * leave it stale); content growth alone never clears it, so it survives rows
+ * being appended beneath the viewport while a load runs. The scroll listener
+ * attaches at most once per scroller node, so re-renders do not churn it. */
+function useScrollPinnedToBottom(scrollRef: React.RefObject<HTMLDivElement | null>): {
+  isPinned: () => boolean;
+  refreshPinned: () => void;
+} {
+  const pinnedRef = useRef(false);
+  const initializedRef = useRef(false);
+  const attachedScrollerRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshPinned = useCallback(() => {
+    const scroller = scrollRef.current;
+    pinnedRef.current = Boolean(
+      scroller &&
+      scroller.scrollTop + scroller.clientHeight >=
+        scroller.scrollHeight - STICK_BOTTOM_TOLERANCE_PX,
+    );
+  }, [scrollRef]);
+  const isPinned = useCallback(() => pinnedRef.current, []);
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || attachedScrollerRef.current === scroller) return;
+    attachedScrollerRef.current = scroller;
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      refreshPinned();
+    }
+    scroller.addEventListener("scroll", refreshPinned, { passive: true });
+  }, [refreshPinned, scrollRef]);
+
+  return { isPinned, refreshPinned };
+}
+
 /**
  * Observes a sentinel element to trigger older-message lazy loading, shared by
  * the native transcript (top-of-list sentinel, no automatic re-arm) and the
@@ -43,7 +200,7 @@ export type LazyLoadSentinelOptions = {
  * scroll-away). Stale completions (unmount, observer cleanup, sentinel
  * replacement) never re-arm.
  */
-// eslint-disable-next-line max-params, max-lines-per-function -- plan-mandated unified sentinel state machine (scrollRef, hasMore, blocked, isLoadingMore, loadMore, options); splitting would fragment the re-arm/disarm/join invariants
+// eslint-disable-next-line max-params -- plan-mandated unified sentinel state machine (scrollRef, hasMore, blocked, isLoadingMore, loadMore, options); the re-arm/disarm/join invariants live in the extracted observer/settle/pin helpers
 export function useLazyLoadSentinel(
   scrollRef: React.RefObject<HTMLDivElement | null>,
   hasMore: boolean,
@@ -85,34 +242,7 @@ export function useLazyLoadSentinel(
   /** When true, ignore intersections until an observed exit arms the hook. */
   const disarmedRef = useRef(false);
   const intersectingRef = useRef(false);
-  /** Whether the user is pinned at the scroll container's bottom. Updated only
-   * by scroll events (content growth does not fire scroll events), so it stays
-   * true while a load appends rows beneath a user waiting at the bottom. */
-  const pinnedRef = useRef(false);
-  /** How close to the bottom counts as pinned. */
-  const STICK_BOTTOM_TOLERANCE_PX = 24;
-
-  // Track the user's bottom pin via scroll events. Attached per commit (like
-  // the panel's scrollability observer) so it reconnects when the scroller
-  // first appears, but the pin itself is initialized exactly once: content
-  // growth fires neither scroll events nor a re-initialization, so the pin
-  // survives rows being appended beneath the viewport while a load runs.
-  const pinnedInitializedRef = useRef(false);
-  useEffect(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-    const updatePinned = () => {
-      pinnedRef.current =
-        scroller.scrollTop + scroller.clientHeight >=
-        scroller.scrollHeight - STICK_BOTTOM_TOLERANCE_PX;
-    };
-    if (!pinnedInitializedRef.current) {
-      pinnedInitializedRef.current = true;
-      updatePinned();
-    }
-    scroller.addEventListener("scroll", updatePinned, { passive: true });
-    return () => scroller.removeEventListener("scroll", updatePinned);
-  });
+  const { isPinned, refreshPinned } = useScrollPinnedToBottom(scrollRef);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -121,54 +251,27 @@ export function useLazyLoadSentinel(
     };
   }, []);
 
-  /** Post-load settle: re-arm after a positive result, disarm after a rejected
-   * or zero-result load. Stale completions (unmount, observer cleanup or
-   * replacement, sentinel replacement) never re-arm or disarm: the settle is
-   * applied only when the observer that STARTED the request is still current. */
-  const settleLoad = useCallback(
-    (
-      node: HTMLDivElement,
-      observer: IntersectionObserver,
-      outcome: { count: number; rejected: boolean },
-    ) => {
-      if (!mountedRef.current || observerRef.current !== observer) return;
-      if (node !== sentinelNodeRef.current) return;
-      if (outcome.count > 0 && !outcome.rejected) {
-        // Positive progress: re-arm and re-observe (re-arm only when enabled;
-        // the transcript leaves observation untouched). A gesture retry that
-        // succeeded while disarmed must arm again so the next page can load
-        // without another gesture.
-        disarmedRef.current = false;
-        if (optionsRef.current.rearmWhileIntersecting) {
-          observerRef.current.observe(node);
-        }
-        // Appended rows push the sentinel below the viewport while the user
-        // waits at the bottom, so the re-armed observer never fires. Scroll
-        // back to the new bottom to keep it in view and the next page loading.
-        if (
-          optionsRef.current.stickToBottomWhileLoading &&
-          pinnedRef.current &&
-          scrollRef.current
-        ) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-        return;
-      }
-      // Rejected or zero-result load: re-observe disarmed. The current
-      // intersection is ignored; arming waits for an observed exit, and the
-      // next true re-entry (or onUserGesture) can retry.
-      disarmedRef.current = true;
-      if (optionsRef.current.rearmWhileIntersecting) {
-        observerRef.current.observe(node);
-      }
-    },
-    [],
-  );
+  const refs: SentinelMutableRefs = {
+    stateRef,
+    optionsRef,
+    observerRef,
+    sentinelNodeRef,
+    mountedRef,
+    disarmedRef,
+    intersectingRef,
+  };
+  const settleLoad = useSentinelSettle({ scrollRef, isPinned, refs });
 
   const fireLoad = useCallback(async () => {
     const node = sentinelNodeRef.current;
     const observer = observerRef.current;
     if (!node || !observer) return;
+    // Refresh the pin from the CURRENT geometry before the request: the pin
+    // otherwise reflects only the initial mount or the last user scroll, which
+    // can be stale after a session switch or late-arriving content. Preserving
+    // it during the in-flight load keeps rows appended beneath the viewport
+    // from clearing it.
+    refreshPinned();
     if (optionsRef.current.rearmWhileIntersecting) {
       // Unobserve the current sentinel before awaiting so a still-intersecting
       // node cannot re-fire mid-load.
@@ -182,46 +285,9 @@ export function useLazyLoadSentinel(
       rejected = true;
     }
     settleLoad(node, observer, { count, rejected });
-  }, [loadMore, settleLoad]);
+  }, [loadMore, refreshPinned, settleLoad]);
 
-  // Create/destroy observer when the scroll container changes
-  useEffect(() => {
-    const root = scrollRef.current;
-    if (!root) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (!entry) return;
-        intersectingRef.current = entry.isIntersecting;
-        if (disarmedRef.current) {
-          // Ignore the current intersection; arm only after an observed exit.
-          if (!entry.isIntersecting) disarmedRef.current = false;
-          return;
-        }
-        const { hasMore, blocked, isLoadingMore } = stateRef.current;
-        const { joinInFlightWhileLoading } = optionsRef.current;
-        if (
-          !entry.isIntersecting ||
-          !hasMore ||
-          blocked ||
-          (isLoadingMore && !joinInFlightWhileLoading)
-        ) {
-          return;
-        }
-        void fireLoad();
-      },
-      { root, rootMargin },
-    );
-    observerRef.current = observer;
-    // If the sentinel already mounted before this effect ran, observe it now
-    if (sentinelNodeRef.current) {
-      observer.observe(sentinelNodeRef.current);
-    }
-    return () => {
-      observer.disconnect();
-      observerRef.current = null;
-    };
-  }, [scrollRef, loadMore, rootMargin, fireLoad]);
+  useSentinelObserver({ scrollRef, rootMargin, fireLoad, refs });
 
   // Callback ref — stores the node and observes if the observer already exists
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {

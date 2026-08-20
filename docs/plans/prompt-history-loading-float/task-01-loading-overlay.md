@@ -56,9 +56,15 @@ analysis.
   in-flight load of its own). With zero entries, the loading message shows
   instead of the neutral `task:loading` text or the empty state. Passthrough
   sessions remain an unconditional no-controls empty state.
-- Sentinel behavior, pagination, and the shared lazy-load hooks are untouched;
-  all existing sentinel/loading unit tests in
-  `prompt-history-panel-content.test.tsx` stay green unchanged.
+- Shared lazy-load hooks gained OPT-IN behavior without changing defaults:
+  `useLazyLoadMessages` accepts `minUserPromptsPerLoad` (the panel passes 10;
+  the transcript stays single-page) and `useLazyLoadSentinel` accepts
+  `stickToBottomWhileLoading` (the panel enables it; the transcript never
+  sticks). The panel wiring lives in `usePanelOlderPromptSentinel` and the
+  pin tracking in `useScrollPinnedToBottom`, with the sentinel observer/settle
+  extracted into `useSentinelObserver`/`useSentinelSettle`. Existing sentinel
+  and loading unit tests stay green unchanged; new tests cover the opt-in
+  behaviors.
 
 ## Verification
 
@@ -71,12 +77,12 @@ cd apps/web && pnpm vitest run components/task/prompt-history-panel-content.test
 Add/extend regression tests in `prompt-history-panel-content.test.tsx`:
 
 1. Mode test: with default geometry (content does not overflow), the loading
-   element is in-flow (`py-2`, not `absolute`) and the panel root has no
-   `relative`; stub the content wrapper's `scrollHeight` above the panel
-   root's `clientHeight` (via the file's `setGeometry` helper, extended with
+   element is in-flow (`py-2`, not `absolute`) and its parent is the inner
+   scroller; stub the content wrapper's `scrollHeight` above the scroller's
+   `clientHeight` (via the file's `setGeometry` helper, extended with
    `scrollHeight`) and rerender: the loading element carries the overlay
-   contract (`absolute`, `pointer-events-none`, `z-10`), the panel root is
-   `relative`, and in both modes the sentinel's `previousElementSibling` is
+   contract (`absolute`, `pointer-events-none`, `z-10`), its parent is the
+   panel root, and in both modes the sentinel's `previousElementSibling` is
    not the loading element.
 2. Grace test (fake timers): after `isLoadingMore` settles, the loading
    element stays mounted through the 400 ms window and across a load that
@@ -107,13 +113,18 @@ The existing "visible while held" assertion stays valid.
 
 ## Files Likely Touched
 
-- `apps/web/components/task/prompt-history-panel-content.tsx` — floating
-  overlay + `relative` on the panel root (rows branch and empty `isLoadingMore`
-  branch via `emptyEntriesSpec`).
+- `apps/web/components/task/prompt-history-panel-content.tsx` — outer
+  wrapper + inner scroller split, floating/inline loading message, panel
+  sentinel/pagination wiring.
 - `apps/web/components/task/prompt-history-panel-content.test.tsx` — regression
   assertions above.
-- `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts` — scrollHeight
-  stability assertion.
+- `apps/web/hooks/use-lazy-load-messages.ts` + `use-lazy-load-messages.test.ts`
+  — `minUserPromptsPerLoad` loop.
+- `apps/web/hooks/use-lazy-load-sentinel.ts` + `use-lazy-load-sentinel.test.ts`
+  — `stickToBottomWhileLoading`, extracted pin/observer/settle helpers.
+- `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts` and
+  `apps/web/e2e/tests/task/mobile-prompt-history-panel.spec.ts` — scroll the
+  inner scroller; scrollHeight stability + absolute-placement assertions.
 
 ## Output Contract
 

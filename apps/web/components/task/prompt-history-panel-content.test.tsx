@@ -741,7 +741,12 @@ describe("PromptHistoryPanelContent — auto-load behavior", () => {
       resolveLoad(20);
     });
     expect(pagination.loadMore).toHaveBeenCalledTimes(1);
-    expect(scroller.scrollTop).toBe(800);
+    // Browser-faithful: a real browser clamps scrollTop to
+    // scrollHeight - clientHeight, so assert the "pinned at the bottom"
+    // invariant rather than the raw jsdom write.
+    expect(scroller.scrollTop).toBeGreaterThanOrEqual(
+      scroller.scrollHeight - scroller.clientHeight,
+    );
   });
 });
 

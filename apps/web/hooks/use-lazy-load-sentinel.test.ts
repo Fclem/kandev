@@ -211,9 +211,59 @@ describe("useLazyLoadSentinel — stickToBottomWhileLoading", () => {
       resolveLoad(20);
     });
     expect(loadMore).toHaveBeenCalledTimes(1);
-    expect(scroller.scrollTop).toBe(800);
+    // Browser-faithful assertion: jsdom stores the raw write (800) while a
+    // real browser clamps scrollTop to scrollHeight - clientHeight (400); the
+    // invariant is "pinned at the bottom", so assert that instead of the
+    // raw value.
+    expect(scroller.scrollTop).toBeGreaterThanOrEqual(
+      scroller.scrollHeight - scroller.clientHeight,
+    );
   });
+});
 
+describe("useLazyLoadSentinel — pin refresh before a load", () => {
+  it("refreshes the pin from the current geometry before a load (no scroll event needed)", async () => {
+    const scrollRef = makeScrollRef();
+    const scroller = scrollRef.current!;
+    // Mounted scrolled near the top: the initial pin check is false.
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 600 });
+    scroller.scrollTop = 0;
+    let resolveLoad: (value: number) => void = () => {};
+    const loadMore = vi.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    const { result } = renderHook(() =>
+      useLazyLoadSentinel(scrollRef, true, false, false, loadMore, {
+        rearmWhileIntersecting: true,
+        joinInFlightWhileLoading: true,
+        stickToBottomWhileLoading: true,
+      }),
+    );
+    await act(async () => {});
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+
+    // The user reaches the bottom without any scroll event (e.g. programmatic
+    // scroll restoration after a session switch): fireLoad must refresh the
+    // pin from the current geometry instead of the stale mount value.
+    scroller.scrollTop = 200;
+    fire(records[0], true, node);
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 800 });
+    await act(async () => {
+      resolveLoad(20);
+    });
+    expect(loadMore).toHaveBeenCalledTimes(1);
+    expect(scroller.scrollTop).toBeGreaterThanOrEqual(
+      scroller.scrollHeight - scroller.clientHeight,
+    );
+  });
+});
+
+describe("useLazyLoadSentinel — stickToBottomWhileLoading", () => {
   it("does not stick when the user is not pinned at the bottom", async () => {
     const scrollRef = makeScrollRef();
     const scroller = scrollRef.current!;

@@ -499,6 +499,7 @@ func startAgentInfrastructure(
 		agentRegistry,
 		userSecretStore,
 		services.Task.TaskBaseBranches,
+		services.Task.TaskComparisonTargets,
 		services.ManagedRuntimeSelections,
 	)
 	if err != nil {
@@ -526,6 +527,7 @@ func startAgentInfrastructure(
 	services.Task.SetWorkspaceSourceMaterializer(workspaceSourceMaterializer)
 	services.Task.SetWorkspaceSourceProviderRefresher(newTaskMCPProviderRefresher(repos.Task, lifecycleMgr, log))
 	services.Task.SetAgentBaseBranchPusher(lifecycleMgr)
+	services.Task.SetAgentComparisonTargetPusher(lifecycleMgr)
 
 	lifecycleMgr.SetWorkspaceInfoProvider(services.Task)
 	// Session/environment-scoped HTTP surfaces (shell, files, ports, vscode,

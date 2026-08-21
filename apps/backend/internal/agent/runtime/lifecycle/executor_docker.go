@@ -172,6 +172,9 @@ func (r *DockerExecutor) CreateInstance(ctx context.Context, req *ExecutorCreate
 	if _, err := validateContributionDestinations(req.ContributionDestinations); err != nil {
 		return nil, err
 	}
+	if _, err := validateComparisonTargets(req.ComparisonTargets); err != nil {
+		return nil, err
+	}
 	dockerClient, containerMgr, err := r.ensureClient()
 	if err != nil {
 		return nil, fmt.Errorf("docker unavailable: %w", err)
@@ -291,6 +294,7 @@ func (r *DockerExecutor) buildContainerLaunchConfig(req *ExecutorCreateRequest) 
 		BaseBranches:                   getMetadataStringMap(req.Metadata, MetadataKeyBaseBranches),
 		RemoteContributions:            req.RemoteContributions,
 		ContributionDestinations:       req.ContributionDestinations,
+		ComparisonTargets:              req.ComparisonTargets,
 		AgentctlStartupConfig:          req.AgentctlStartupConfig,
 	}, nil
 }
@@ -593,6 +597,7 @@ func buildReconnectCreateInstanceRequest(req *ExecutorCreateRequest, instanceID 
 		BaseBranches:             getMetadataStringMap(req.Metadata, MetadataKeyBaseBranches),
 		RemoteContributions:      req.RemoteContributions,
 		ContributionDestinations: req.ContributionDestinations,
+		ComparisonTargets:        req.ComparisonTargets,
 	}
 }
 

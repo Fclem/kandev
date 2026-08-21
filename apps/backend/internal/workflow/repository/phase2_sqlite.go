@@ -650,6 +650,8 @@ func (r *Repository) FindParticipantID(
 // rather than surfacing an error to the caller.
 const decisionActiveDeciderIndexName = "uniq_workflow_step_decisions_active_decider"
 
+const decisionLockNamespace = "workflow-step-decision:"
+
 // sqliteDecisionActiveDeciderViolationMessage is the substring go-sqlite3
 // puts in a UNIQUE-constraint error for this index's column list.
 const sqliteDecisionActiveDeciderViolationMessage = "UNIQUE constraint failed: workflow_step_decisions.task_id, " +
@@ -738,14 +740,12 @@ func (r *Repository) recordStepDecisionTx(ctx context.Context, d *models.Workflo
 	// provides this serialization.
 	lockIdentity := d.ParticipantID
 	if d.DeciderID != "" && d.Role != "" {
-		lockIdentity = d.DeciderID + "\x1f" + d.Role
+		lockIdentity = strings.Join([]string{d.DeciderID, d.Role}, "|")
 	}
 	if dialect.IsPostgres(r.db.DriverName()) {
-		lockKey := "workflow-step-decision:" + d.TaskID + "\x1f" + d.StepID + "\x1f" + lockIdentity
-		if _, err := tx.ExecContext(ctx, tx.Rebind(`
-			SELECT pg_advisory_xact_lock(hashtextextended(?, 0))
-		`), lockKey); err != nil {
-			return fmt.Errorf("lock step decision identity: %w", err)
+		lockKey := strings.Join([]string{decisionLockNamespace, d.TaskID, d.StepID, lockIdentity}, "|")
+		if _, err := tx.ExecContext(ctx, r.db.Rebind("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))"), lockKey); err != nil {
+			return fmt.Errorf("lock active decision identity: %w", err)
 		}
 	}
 

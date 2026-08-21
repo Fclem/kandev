@@ -51,8 +51,28 @@ function useSentinelObserver(opts: {
   fireLoad: () => void;
   refs: SentinelMutableRefs;
 }) {
+  const fireLoadRef = useRef(opts.fireLoad);
+  fireLoadRef.current = opts.fireLoad;
+  const observerRootRef = useRef<Element | Document | null>(null);
+  const observerRootMarginRef = useRef<string | null>(null);
+  const observerFireLoadRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     const root = opts.scrollRef.current;
+    const currentObserver = opts.refs.observerRef.current;
+    if (
+      currentObserver &&
+      observerRootRef.current === root &&
+      observerRootMarginRef.current === opts.rootMargin &&
+      observerFireLoadRef.current === opts.fireLoad
+    ) {
+      return;
+    }
+    currentObserver?.disconnect();
+    opts.refs.observerRef.current = null;
+    observerRootRef.current = root;
+    observerRootMarginRef.current = opts.rootMargin;
+    observerFireLoadRef.current = opts.fireLoad;
     if (!root) return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -74,7 +94,7 @@ function useSentinelObserver(opts: {
         ) {
           return;
         }
-        void opts.fireLoad();
+        void fireLoadRef.current();
       },
       { root, rootMargin: opts.rootMargin },
     );
@@ -82,11 +102,18 @@ function useSentinelObserver(opts: {
     if (opts.refs.sentinelNodeRef.current) {
       observer.observe(opts.refs.sentinelNodeRef.current);
     }
-    return () => {
-      observer.disconnect();
+  });
+
+  useEffect(
+    () => () => {
+      opts.refs.observerRef.current?.disconnect();
       opts.refs.observerRef.current = null;
-    };
-  }, [opts.scrollRef, opts.rootMargin, opts.fireLoad]);
+      observerRootRef.current = null;
+      observerRootMarginRef.current = null;
+      observerFireLoadRef.current = null;
+    },
+    [],
+  );
 }
 
 /** Post-load settle: re-arm after a positive result, disarm after a rejected
@@ -150,7 +177,6 @@ function useScrollPinnedToBottom(scrollRef: React.RefObject<HTMLDivElement | nul
   refreshPinned: () => void;
 } {
   const pinnedRef = useRef(false);
-  const initializedRef = useRef(false);
   const attachedScrollerRef = useRef<HTMLDivElement | null>(null);
 
   const refreshPinned = useCallback(() => {
@@ -163,16 +189,26 @@ function useScrollPinnedToBottom(scrollRef: React.RefObject<HTMLDivElement | nul
   }, [scrollRef]);
   const isPinned = useCallback(() => pinnedRef.current, []);
 
+  // Run after every commit because the ref object stays stable while its DOM
+  // node can appear or change between panel branches.
   useEffect(() => {
+    const previousScroller = attachedScrollerRef.current;
     const scroller = scrollRef.current;
-    if (!scroller || attachedScrollerRef.current === scroller) return;
+    if (previousScroller === scroller) return;
+    previousScroller?.removeEventListener("scroll", refreshPinned);
     attachedScrollerRef.current = scroller;
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      refreshPinned();
-    }
+    if (!scroller) return;
+    refreshPinned();
     scroller.addEventListener("scroll", refreshPinned, { passive: true });
-  }, [refreshPinned, scrollRef]);
+  });
+
+  useEffect(
+    () => () => {
+      attachedScrollerRef.current?.removeEventListener("scroll", refreshPinned);
+      attachedScrollerRef.current = null;
+    },
+    [refreshPinned],
+  );
 
   return { isPinned, refreshPinned };
 }

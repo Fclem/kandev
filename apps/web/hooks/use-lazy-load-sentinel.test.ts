@@ -167,6 +167,50 @@ describe("useLazyLoadSentinel", () => {
   });
 });
 
+describe("useLazyLoadSentinel — scroller lifecycle", () => {
+  it("connects the observer when the scroll container appears after mount", () => {
+    const scrollRef = { current: null as HTMLDivElement | null };
+    const loadMore = vi.fn(async () => 20);
+    const { result, rerender } = renderHook(() =>
+      useLazyLoadSentinel(scrollRef, true, false, false, loadMore),
+    );
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+    expect(records).toHaveLength(0);
+
+    scrollRef.current = document.createElement("div");
+    rerender();
+
+    expect(records).toHaveLength(1);
+    expect(records[0].targets).toContain(node);
+  });
+
+  it("moves the pin listener with the scroller and cleans it up on unmount", () => {
+    const firstScroller = document.createElement("div");
+    const secondScroller = document.createElement("div");
+    const firstAdd = vi.spyOn(firstScroller, "addEventListener");
+    const firstRemove = vi.spyOn(firstScroller, "removeEventListener");
+    const secondAdd = vi.spyOn(secondScroller, "addEventListener");
+    const secondRemove = vi.spyOn(secondScroller, "removeEventListener");
+    const scrollRef = { current: firstScroller as HTMLDivElement | null };
+    const loadMore = vi.fn(async () => 20);
+    const { rerender, unmount } = renderHook(() =>
+      useLazyLoadSentinel(scrollRef, true, false, false, loadMore),
+    );
+
+    expect(firstAdd).toHaveBeenCalledWith("scroll", expect.any(Function), { passive: true });
+
+    scrollRef.current = secondScroller;
+    rerender();
+
+    expect(firstRemove).toHaveBeenCalledWith("scroll", expect.any(Function));
+    expect(secondAdd).toHaveBeenCalledWith("scroll", expect.any(Function), { passive: true });
+
+    unmount();
+    expect(secondRemove).toHaveBeenCalledWith("scroll", expect.any(Function));
+  });
+});
+
 describe("useLazyLoadSentinel — re-arm, disarm, and stale completions", () => {
   it("re-arms only when enabled: unobserves before loading and re-observes after a positive result", async () => {
     const scrollRef = makeScrollRef();

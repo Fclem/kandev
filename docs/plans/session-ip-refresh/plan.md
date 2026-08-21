@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/auth/session-ip-refresh.md
 created: 2026-08-19
-status: draft
+status: complete
 ---
 
 # Implementation Plan: Session IP Refresh

@@ -167,7 +167,7 @@ func TestSessionLifecycle(t *testing.T) {
 // ip is non-empty (empty never clobbers; an empty stored IP is backfilled by
 // a non-empty touch). Two targets (non-empty and empty seeded IPs) plus a
 // same-user_id decoy make the transitions unambiguous: a missing WHERE clause
-// or a user_id-scoped WHERE that drops the decoy would trip the untouched
+// or a user_id-scoped WHERE that touches the decoy would trip the untouched
 // assertions.
 func TestTouchSessionIPRefresh(t *testing.T) {
 	s := newTestStore(t)

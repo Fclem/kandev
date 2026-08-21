@@ -229,7 +229,9 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 		automationComponents.Service.SetWorkspaceAuthorizer(taskSvc.AuthorizeWorkspaceAccess)
 		// A UI filter is not an authorization boundary: reject a workflow owned
 		// by another workspace even when a request names it directly.
-		automationComponents.Service.SetWorkflowLocator(&automationWorkflowLocatorAdapter{svc: taskSvc})
+		automationWorkflowLocator := &automationWorkflowLocatorAdapter{svc: taskSvc, workflows: workflowSvc}
+		automationComponents.Service.SetWorkflowLocator(automationWorkflowLocator)
+		automationComponents.Service.SetWorkflowStepLocator(automationWorkflowLocator)
 		automationComponents.Service.SetTaskOriginLookup(&automationTaskOriginLookupAdapter{svc: taskSvc, log: log})
 		// Profile deletion disables the automations bound to a profile before
 		// the row goes, but nothing ever checked that the binding pointed at a
@@ -237,6 +239,16 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 		// that never existed produced the same orphan without any delete
 		// involved.
 		automationComponents.Service.SetAgentProfileLookup(&automationAgentProfileLookupAdapter{store: repos.AgentSettings})
+		// YAML export descriptor resolution (AC-29): each Set* below is
+		// satisfied directly by an existing repository's Tx-accepting method,
+		// so the export's single read transaction can pass straight through
+		// without an adapter shim.
+		automationComponents.Service.SetExportAgentProfileLookup(repos.AgentSettings)
+		automationComponents.Service.SetExportExecutorProfileLookup(repos.Task)
+		automationComponents.Service.SetExportWorkflowLookup(repos.Task)
+		automationComponents.Service.SetExportWorkflowStepLookup(repos.Workflow)
+		automationComponents.Service.SetExportRepositoryLookup(repos.Task)
+		automationComponents.Service.SetExportWorkspaceLookup(&automationExportWorkspaceLookupAdapter{svc: taskSvc})
 	}
 
 	services := &Services{

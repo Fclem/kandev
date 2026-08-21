@@ -721,6 +721,7 @@
   "sessionIdBefore": "工作階段 ID（之前）",
   "setSpendingLimitsPerAgentOr": "按代理程式或專案設定支出限額。超出限額時代理程式會暫停。",
   "setupTierAgentProfiles": "設定層級代理程式設定檔",
+  "setupTitle": "初始設置",
   "setUpYourOfficeWorkspace": "設定你的辦公室工作區",
   "ship": "釋出",
   "showSystemTasks": "顯示系統任務",

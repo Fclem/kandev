@@ -721,6 +721,7 @@
   "sessionIdBefore": "Session ID (before)",
   "setSpendingLimitsPerAgentOr": "Set spending limits per agent or project. Agents pause when limits are exceeded.",
   "setupTierAgentProfiles": "Setup tier agent profiles",
+  "setupTitle": "Setup",
   "setUpYourOfficeWorkspace": "Set up your Office workspace",
   "ship": "Ship",
   "showSystemTasks": "Show system tasks",

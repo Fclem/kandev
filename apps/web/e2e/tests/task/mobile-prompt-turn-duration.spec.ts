@@ -65,5 +65,17 @@ test.describe("Prompt turn duration on mobile", () => {
       durationBox.x >= actionsBox.x &&
       durationBox.x + durationBox.width <= actionsBox.x + actionsBox.width;
     expect({ fits, contained }).toEqual({ fits: true, contained: true });
+
+    await testPage.setViewportSize({ width: 700, height: 800 });
+    await testPage.reload();
+    await session.waitForLoad();
+    expect(await testPage.evaluate(() => window.matchMedia("(pointer: coarse)").matches)).toBe(
+      true,
+    );
+
+    const tabletRow = session.activeChat().locator(`#msg-${messageId!}`);
+    await expect(tabletRow).toHaveCount(1);
+    const tabletDuration = tabletRow.getByTestId("message-turn-duration");
+    await expect(tabletDuration.locator("xpath=..")).toHaveCSS("opacity", "1");
   });
 });

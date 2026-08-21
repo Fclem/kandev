@@ -130,6 +130,20 @@ describe("MessageActions timestamp tooltip on touch devices", () => {
   });
 });
 
+describe("MessageActions action row disclosure", () => {
+  it("keeps the action row visible for coarse pointers at tablet widths", () => {
+    TOUCH_DRAWER.enabled = true;
+
+    renderMessageActions(userMessage(), turn({ completed_at: "2026-07-20T10:15:05Z" }));
+
+    const actions = screen.getByTestId(MESSAGE_TURN_DURATION_TEST_ID).parentElement;
+    expect(actions).not.toBeNull();
+    expect(actions?.className).toContain("opacity-100");
+    expect(actions?.className).not.toContain("sm:opacity-0");
+    expect(actions?.className).not.toContain("sm:group-hover:opacity-100");
+  });
+});
+
 describe("MessageActions favorite toggle", () => {
   it("renders a star button reflecting isFavorite and calls onToggleFavorite when clicked", () => {
     const onToggleFavorite = vi.fn();

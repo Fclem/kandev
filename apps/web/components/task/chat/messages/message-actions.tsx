@@ -397,14 +397,23 @@ export function MessageActions(props: MessageActionsProps) {
   const { t } = useTranslation();
   const { copied, copy } = useCopyToClipboard();
   const { turn, usageMultiplier } = useMessageTurnAndUsage(message);
+  const usesTouchDrawer = useTouchDrawer();
   const durationSeconds = messageTurnDurationSeconds(message, turn);
   const sessionConfigText = formatMessageSessionConfig(message.metadata, turn?.metadata);
+  const actionRowVisibility = usesTouchDrawer
+    ? "opacity-100"
+    : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100";
   const handleCopy = async () => {
     await copy(message.content);
   };
 
   return (
-    <div className="flex items-center gap-2 mt-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+    <div
+      className={cn(
+        "flex items-center gap-2 mt-2 focus-within:opacity-100 transition-opacity",
+        actionRowVisibility,
+      )}
+    >
       {showCopy && <CopyButton copied={copied} onCopy={handleCopy} />}
       {showRawToggle && onToggleRaw && (
         <RawToggleButton

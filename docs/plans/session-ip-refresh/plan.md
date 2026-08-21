@@ -244,7 +244,7 @@ Environment notes (all verified pre-existing on a clean tree via `git stash`):
 
 ## Implementation Waves And Parallel Candidates
 
-```
+```text
 Wave 1:
 - [x] [task-01-store-service-refresh](task-01-store-service-refresh.md)
 

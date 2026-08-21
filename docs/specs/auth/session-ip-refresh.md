@@ -62,7 +62,7 @@ users read as a security problem (a proxy IP attributed to their client).
 
 ## Data model
 
-```
+```text
 auth_sessions
   ip  TEXT NOT NULL DEFAULT ''   existing column; updated in place on touch
 ```

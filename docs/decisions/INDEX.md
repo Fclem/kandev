@@ -191,3 +191,6 @@ Read individual ADRs for full context. Create new ones via `/record decision` or
 | 2026-08-20-acp-client-non-underscore-extension-methods | [Route Non-Underscore Inbound Client Methods to the Extension Handler](2026-08-20-acp-client-non-underscore-extension-methods.md) | accepted | backend, protocol | 2026-08-20 |
 | 2026-08-22-persistent-fork-approval-labels | [Persist Fork Approval Labels Across Pushes](2026-08-22-persistent-fork-approval-labels.md) | accepted | infra, workflow, security | 2026-08-22 |
 | 2026-08-22-plugin-version-retention | [Keep Exactly One Superseded Plugin Version](2026-08-22-plugin-version-retention.md) | accepted | backend | 2026-08-22 |
+| 2026-08-22-pr-walkthrough-r2-hosting | [Host PR walkthrough HTML in Cloudflare R2](2026-08-22-pr-walkthrough-r2-hosting.md) | accepted | infra, workflow, security | 2026-08-22 |
+| 2026-08-22-agent-owned-pr-walkthrough-rendering | [Keep PR walkthrough rendering agent owned and provider neutral](2026-08-22-agent-owned-pr-walkthrough-rendering.md) | accepted | workflow, infra, security | 2026-08-22 |
+| 2026-08-22-pr-walkthrough-description-link | [Own a top-level PR walkthrough callout](2026-08-22-pr-walkthrough-description-link.md) | accepted | workflow, infra, security, GitHub | 2026-08-22 |

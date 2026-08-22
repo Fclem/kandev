@@ -259,6 +259,7 @@ Subscription quota tracking and per-agent cheap-model profile routing.
 | [cancel-turn-progress](ui/cancel-turn-progress.md) | approved |
 | [agent-todo-list-panel](ui/agent-todo-list-panel.md) | shipped |
 | [prompt-history-panel](ui/prompt-history-panel.md) | draft |
+| [prompt-turn-duration](ui/prompt-turn-duration.md) | draft |
 
 ## system-page/ — operational diagnostics & maintenance UI
 

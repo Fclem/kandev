@@ -139,6 +139,7 @@ Roles, governance gates, and granular permissions that apply across human users 
 | [roles](agents/roles.md) | shipped |
 | [governance](agents/governance.md) | shipped |
 | [granular-permissions](agents/granular-permissions.md) | draft |
+| [external-permission-resolution](agents/external-permission-resolution.md) | draft |
 
 ## integrations/ — external service integrations
 
@@ -288,6 +289,7 @@ System pages (Radarr/Sonarr-style) for status, disk usage, database maintenance,
 | [agent-stall-recovery](agent-stall-recovery/spec.md) | approved |
 | [mcp-session-observability](mcp-session-observability/spec.md) | approved |
 | [subagent-context-persistence](subagent-context-persistence/spec.md) | draft |
+| [external-question-answering](external-question-answering/spec.md) | draft |
 | [auth](auth/spec.md) | building |
 | [create-local-repository](create-local-repository/spec.md) | shipped |
 | [workflow-cycle-guardrails](workflow-cycle-guardrails/spec.md) | building |

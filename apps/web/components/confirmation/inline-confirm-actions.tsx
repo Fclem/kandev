@@ -13,6 +13,7 @@ export type InlineConfirmActionsProps = {
   confirmLabel: ReactNode;
   confirmAriaLabel?: string;
   confirmTestId?: string;
+  confirmDisabled?: boolean;
   onCancel: () => void;
   onClose?: () => void;
   onConfirm: () => void | Promise<void>;
@@ -31,6 +32,7 @@ export function InlineConfirmActions({
   confirmLabel,
   confirmAriaLabel,
   confirmTestId,
+  confirmDisabled = false,
   onCancel,
   onClose,
   onConfirm,
@@ -39,13 +41,14 @@ export function InlineConfirmActions({
   const [confirmed, setConfirmed] = useState(false);
   const touch = density === "touch";
   const actionClass = touch ? "h-11 min-w-11 px-2" : "h-10 min-w-10 px-2 text-xs";
+  const confirmIsDisabled = disabled || confirmDisabled;
 
   useEffect(() => {
     cancelRef.current?.focus();
   }, []);
 
   const handleConfirm = () => {
-    if (disabled) return;
+    if (confirmIsDisabled) return;
     onClose?.();
     setConfirmed(true);
     queueMicrotask(() => {
@@ -99,9 +102,9 @@ export function InlineConfirmActions({
           type="button"
           variant="destructive"
           size="sm"
-          disabled={disabled}
           aria-label={confirmAriaLabel}
           data-testid={confirmTestId}
+          disabled={confirmIsDisabled}
           className={`${actionClass} transition-[color,background-color,border-color,transform] duration-100 active:scale-[0.96]`}
           onClick={handleConfirm}
         >

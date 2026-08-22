@@ -22,6 +22,7 @@ export type ActionConfirmPopoverProps = {
   confirmLabel: ReactNode;
   confirmAriaLabel?: string;
   confirmTestId?: string;
+  confirmDisabled?: boolean;
   testId?: string;
   onOpenChange: (open: boolean) => void;
   onCancel?: () => void;
@@ -46,6 +47,7 @@ export function ActionConfirmPopover({
   confirmLabel,
   confirmAriaLabel,
   confirmTestId,
+  confirmDisabled = false,
   testId = "action-confirm-popover",
   onOpenChange,
   onCancel,
@@ -55,6 +57,7 @@ export function ActionConfirmPopover({
   const descriptionId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmedRef = useRef(false);
+  const confirmIsDisabled = disabled || confirmDisabled;
 
   // Intentionally runs on every render: an anchor can disappear through live
   // data without changing the confirmation's open state, so each render must
@@ -79,7 +82,7 @@ export function ActionConfirmPopover({
   };
 
   const handleConfirm = () => {
-    if (disabled) return;
+    if (confirmIsDisabled) return;
     if (!isConnected(anchorRef.current)) {
       handleOpenChange(false);
       return;
@@ -106,6 +109,7 @@ export function ActionConfirmPopover({
         confirmLabel={confirmLabel}
         confirmAriaLabel={confirmAriaLabel}
         confirmTestId={confirmTestId}
+        confirmDisabled={confirmIsDisabled}
         testId={testId}
         disabled={disabled}
         cancelRef={cancelRef}
@@ -128,6 +132,7 @@ type ActionConfirmPopoverContentProps = {
   confirmLabel: ReactNode;
   confirmAriaLabel?: string;
   confirmTestId?: string;
+  confirmDisabled: boolean;
   testId: string;
   disabled: boolean;
   cancelRef: RefObject<HTMLButtonElement | null>;
@@ -147,6 +152,7 @@ function ActionConfirmPopoverContent({
   confirmLabel,
   confirmAriaLabel,
   confirmTestId,
+  confirmDisabled,
   testId,
   disabled,
   cancelRef,
@@ -205,9 +211,9 @@ function ActionConfirmPopoverContent({
         <Button
           type="button"
           variant="destructive"
-          disabled={disabled}
           aria-label={confirmAriaLabel}
           data-testid={confirmTestId}
+          disabled={confirmDisabled}
           className="min-h-11 px-3 transition-[color,background-color,border-color,transform] duration-100 active:scale-[0.96]"
           onClick={onConfirm}
         >

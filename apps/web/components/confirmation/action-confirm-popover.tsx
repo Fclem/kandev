@@ -15,6 +15,7 @@ export type ActionConfirmPopoverProps = {
   open: boolean;
   disabled?: boolean;
   anchorRef: RefObject<HTMLElement | null>;
+  focusReturnRef?: RefObject<HTMLElement | null>;
   focusBoundaryRef?: RefObject<HTMLElement | null>;
   title: ReactNode;
   description?: ReactNode;
@@ -41,6 +42,7 @@ export function ActionConfirmPopover({
   open,
   disabled = false,
   anchorRef,
+  focusReturnRef,
   focusBoundaryRef,
   title,
   description,
@@ -115,6 +117,7 @@ export function ActionConfirmPopover({
         confirmationBoundary={confirmationBoundary}
         disabled={disabled}
         cancelRef={cancelRef}
+        focusReturnRef={focusReturnRef}
         focusBoundaryRef={focusBoundaryRef}
         confirmedRef={confirmedRef}
         anchorRef={anchorRef}
@@ -139,6 +142,7 @@ type ActionConfirmPopoverContentProps = {
   confirmationBoundary: boolean;
   disabled: boolean;
   cancelRef: RefObject<HTMLButtonElement | null>;
+  focusReturnRef?: RefObject<HTMLElement | null>;
   focusBoundaryRef?: RefObject<HTMLElement | null>;
   confirmedRef: { current: boolean };
   anchorRef: RefObject<HTMLElement | null>;
@@ -160,6 +164,7 @@ function ActionConfirmPopoverContent({
   confirmationBoundary,
   disabled,
   cancelRef,
+  focusReturnRef,
   focusBoundaryRef,
   confirmedRef,
   anchorRef,
@@ -192,7 +197,11 @@ function ActionConfirmPopoverContent({
       }}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
-        if (!confirmedRef.current && isConnected(anchorRef.current)) anchorRef.current.focus();
+        if (!confirmedRef.current) {
+          const focusReturnTarget = focusReturnRef?.current ?? null;
+          if (isConnected(focusReturnTarget)) focusReturnTarget.focus();
+          else if (isConnected(anchorRef.current)) anchorRef.current.focus();
+        }
         confirmedRef.current = false;
       }}
     >

@@ -16,6 +16,7 @@ export type InlineConfirmActionsProps = {
   confirmDisabled?: boolean;
   onCancel: () => void;
   onClose?: () => void;
+  /** Reject the returned promise to restore the confirmation UI for retry. */
   onConfirm: () => void | Promise<void>;
 };
 

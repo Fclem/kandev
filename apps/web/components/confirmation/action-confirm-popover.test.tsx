@@ -85,6 +85,21 @@ describe("ActionConfirmPopover", () => {
     expect(shellClosed).toBe(true);
   });
 
+  it("does not restore focus to the confirmed action anchor", async () => {
+    const onConfirm = vi.fn();
+    render(<Harness onConfirm={onConfirm} />);
+
+    const anchor = screen.getByTestId("anchor");
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: deleteTitle })).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(document.activeElement).not.toBe(anchor);
+  });
+
   it("keeps a disabled confirmation inert", () => {
     const onConfirm = vi.fn();
     render(<Harness onConfirm={onConfirm} confirmDisabled />);

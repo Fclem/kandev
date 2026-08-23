@@ -475,7 +475,8 @@ const taskSessionSelectCols = `ts.id, ts.task_id,
 	COALESCE(NULLIF(te.workspace_path, ''), ts.workspace_path),
 	ts.agent_profile_snapshot, ts.executor_snapshot, ts.environment_snapshot, ts.repository_snapshot,
 	ts.state, ts.error_message, ts.metadata, ts.started_at, ts.completed_at, ts.updated_at,
-	ts.is_primary, ts.review_status, ts.is_passthrough, ts.task_environment_id, ts.name, ts.last_read_message_id`
+	ts.is_primary, ts.review_status, ts.is_passthrough, ts.task_environment_id, ts.name, ts.last_read_message_id,
+	ts.cost_subcents, ts.tokens_in, ts.tokens_cached_in, ts.tokens_out`
 
 // taskSessionFromClause is the FROM clause that pairs with taskSessionSelectCols.
 // Always reference task_sessions as `ts` and executors_running as `er` in WHERE/ORDER.
@@ -987,6 +988,7 @@ func (r *Repository) scanTaskSession(ctx context.Context, row *sql.Row, noRowsEr
 		&agentProfileSnapshotJSON, &executorSnapshotJSON, &environmentSnapshotJSON, &repositorySnapshotJSON,
 		&state, &session.ErrorMessage, &metadataJSON, &session.StartedAt, &completedAt, &session.UpdatedAt,
 		&isPrimary, &reviewStatus, &isPassthrough, &session.TaskEnvironmentID, &name, &lastReadMessageID,
+		&session.CostSubcents, &session.TokensIn, &session.TokensCachedIn, &session.TokensOut,
 	)
 
 	if err == sql.ErrNoRows {
@@ -2142,29 +2144,16 @@ func (r *Repository) GetLastAgentMessage(ctx context.Context, sessionID string) 
 	return content, nil
 }
 
-// IncrementTaskSessionUsage adds the given deltas to the cumulative
+// IncrementTaskSessionUsageTx adds the given deltas to the cumulative
 // tokens / cost columns on task_sessions, including cached input tokens
 // (tokens_cached_in mirrors office_cost_events.tokens_cached_in and is kept
-// separate from tokens_in because it is priced differently). Used by the
-// office cost subscriber after a cost event lands so the per-session totals
-// stay in sync without re-summing office_cost_events. The model + DTO
-// don't surface these columns yet (DB-only per the office-costs
-// wedge); the cost explorer follow-up will expose them.
-//
-// Delegates to IncrementTaskSessionUsageTx using r.db as the executor; a
-// caller that needs this atomic with another write (e.g. the office cost
-// subscriber's ledger insert) should call the Tx variant directly with a
-// shared transaction instead.
-func (r *Repository) IncrementTaskSessionUsage(
-	ctx context.Context, sessionID string, tokensIn, tokensCachedIn, tokensOut, costSubcents int64,
-) error {
-	return r.IncrementTaskSessionUsageTx(ctx, nil, sessionID, tokensIn, tokensCachedIn, tokensOut, costSubcents)
-}
-
-// IncrementTaskSessionUsageTx implements shared.SessionUsageWriterTx: same
-// write as IncrementTaskSessionUsage, but executed against tx when non-nil
-// (falling back to r.db, the shared writer connection, when tx is nil) so a
-// caller can make this atomic with another write in the same transaction.
+// separate from tokens_in because it is priced differently). Surfaced on
+// models.TaskSession and dto.TaskSessionDTO. internal/task/usage's writer is
+// the sole production caller (docs/specs/task-cost-ledger/spec.md AC-10,
+// AC-21) — it inserts a task_usage_events row and increments this rollup in
+// one transaction (insertUsageEventAndRollup in this package), so this
+// method is executed against tx when non-nil (falling back to r.db, the
+// shared writer connection, when tx is nil).
 func (r *Repository) IncrementTaskSessionUsageTx(
 	ctx context.Context, tx *sqlx.Tx, sessionID string, tokensIn, tokensCachedIn, tokensOut, costSubcents int64,
 ) error {
@@ -2621,6 +2610,7 @@ func scanTaskSessionRow(rows *sql.Rows) (*models.TaskSession, error) {
 		&agentProfileSnapshotJSON, &executorSnapshotJSON, &environmentSnapshotJSON, &repositorySnapshotJSON,
 		&state, &session.ErrorMessage, &metadataJSON, &session.StartedAt, &completedAt, &session.UpdatedAt,
 		&isPrimary, &reviewStatus, &isPassthrough, &session.TaskEnvironmentID, &name, &lastReadMessageID,
+		&session.CostSubcents, &session.TokensIn, &session.TokensCachedIn, &session.TokensOut,
 	)
 	if err != nil {
 		return nil, err

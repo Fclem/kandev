@@ -47,6 +47,9 @@ func (e *Executor) resolveTaskSessionMCPMode(ctx context.Context, taskID string,
 	if err != nil {
 		return "", fmt.Errorf("load task for MCP mode: %w", err)
 	}
+	if task != nil && task.Origin == models.TaskOriginAutomationRun {
+		return McpModeAutomation, nil
+	}
 	if task != nil && task.IsFromOffice {
 		return McpModeOffice, nil
 	}
@@ -75,6 +78,9 @@ func (e *Executor) resolveTaskSessionMCPProfile(ctx context.Context, taskID stri
 		// task launches resolve the persisted task above and therefore still get
 		// the exact office/autopilot capability set.
 		return mcpprofile.Legacy("", session != nil && session.IsPassthrough, nil), nil
+	}
+	if task.Origin == models.TaskOriginAutomationRun {
+		return mcpprofile.NewAutomation(), nil
 	}
 	surface := mcpprofile.SurfaceKanbanTask
 	if task.IsFromOffice {

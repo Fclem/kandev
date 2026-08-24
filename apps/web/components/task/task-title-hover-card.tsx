@@ -6,6 +6,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@kandev/ui/popover";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useTaskSubtasks, type TaskSubtask } from "@/hooks/domains/kanban/use-task-subtasks";
 import { useHoverPopover } from "@/components/integrations/use-hover-popover";
+import { cn } from "@/lib/utils";
 import { TaskSubtaskRow } from "./task-subtask-row";
 
 const MAX_VISIBLE_SUBTASKS = 12;
@@ -47,12 +48,14 @@ function DesktopTaskTitlePreview({
   subtasks,
   side,
   align,
+  triggerClassName,
 }: {
   title: string;
   children: ReactNode;
   subtasks: TaskSubtask[];
   side: "top" | "right" | "bottom" | "left";
   align: "start" | "center" | "end";
+  triggerClassName?: string;
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -92,7 +95,10 @@ function DesktopTaskTitlePreview({
             event.stopPropagation();
           }}
           onClick={handleTriggerClick}
-          className="min-w-0 max-w-full cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+          className={cn(
+            "min-w-0 max-w-full cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            triggerClassName,
+          )}
         >
           {children}
         </button>
@@ -143,12 +149,14 @@ export function TaskTitleHoverCard({
   children,
   side = "bottom",
   align = "start",
+  triggerClassName,
 }: {
   taskId: string;
   title: string;
   children: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
+  triggerClassName?: string;
 }) {
   const { isFinePointer } = useResponsiveBreakpoint();
   const subtasks = useTaskSubtasks(taskId);
@@ -156,7 +164,13 @@ export function TaskTitleHoverCard({
   if (!isFinePointer || subtasks.length === 0) return <>{children}</>;
 
   return (
-    <DesktopTaskTitlePreview title={title} subtasks={subtasks} side={side} align={align}>
+    <DesktopTaskTitlePreview
+      title={title}
+      subtasks={subtasks}
+      side={side}
+      align={align}
+      triggerClassName={triggerClassName}
+    >
       {children}
     </DesktopTaskTitlePreview>
   );

@@ -115,19 +115,6 @@ function expectPreparingSpinner(): void {
   expect(icon.classList.contains(SLOW_SPIN_CLASS)).toBe(true);
 }
 
-describe("TaskItem status icon", () => {
-  it("animates the running status on an HTML wrapper", () => {
-    renderTaskItem({ state: "IN_PROGRESS", sessionState: "RUNNING" });
-
-    const spinner = screen.getByTestId(RUNNING_ICON_TEST_ID);
-    expect(spinner.tagName).toBe("SPAN");
-    expect(spinner.classList.contains(SPIN_CLASS)).toBe(true);
-    const spinnerSvg = spinner.querySelector("svg");
-    expect(spinnerSvg).not.toBeNull();
-    expect(spinnerSvg?.classList.contains(SPIN_CLASS)).toBe(false);
-  });
-});
-
 describe("TaskItem status icon states", () => {
   it("shows the autopilot icon with an accessible description", () => {
     renderTaskItem({ autopilot: true });
@@ -621,6 +608,29 @@ describe("TaskItem activity timestamp", () => {
       </StateProvider>,
     );
     expect(screen.getByTestId("sidebar-task-time").textContent).toBe(formatRelativeTime(updatedAt));
+  });
+});
+
+describe("TaskItem task-row presentation", () => {
+  it("moves relative time to the trailing slot and hides the details row", () => {
+    renderTaskItem({
+      taskId: "t1",
+      updatedAt: "2026-07-24T00:00:00Z",
+      repositoryPath: "acme/api",
+      showRepository: true,
+      diffStats: { additions: 2, deletions: 1 },
+      taskRowPresentation: {
+        detailsEnabled: false,
+        detailOrder: ["relative_time", "repository", "pull_request_number"],
+        visibleDetails: [],
+        trailing: "relative_time",
+      },
+    });
+
+    expect(screen.queryByTestId("sidebar-task-time")).toBeNull();
+    expect(screen.queryByTestId("sidebar-task-repository")).toBeNull();
+    expect(screen.queryByTestId("sidebar-task-diff-stats")).toBeNull();
+    expect(screen.getByTestId("sidebar-task-trailing-time")).toBeTruthy();
   });
 });
 

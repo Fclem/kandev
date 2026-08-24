@@ -29,8 +29,12 @@ import { ScrollOnOverflow } from "@kandev/ui/scroll-on-overflow";
 import { useTranslation } from "react-i18next";
 import { TaskItemComparisonUnavailable } from "./task-item-comparison-unavailable";
 import type { WipQueueStatus } from "@/lib/kanban/wip-queue";
-import { TaskMenuButton } from "./task-item-menu-button";
 import { TaskItemLeadingBadges } from "./task-item-leading-badges";
+import {
+  resolveTaskRowPresentation,
+  type ResolvedTaskRowPresentation,
+} from "./task-row-presentation";
+import { TaskItemTrailing } from "./task-item-trailing";
 import { CompositorSpin } from "@kandev/ui/compositor-spin";
 
 type DiffStats = {
@@ -115,6 +119,7 @@ type TaskItemProps = {
   issueInfo?: { url: string; number: number };
   isPinned?: boolean;
   agentErrorMessage?: string | null;
+  taskRowPresentation?: import("@/lib/state/slices/ui/sidebar-task-row-presentation").SidebarTaskRowPresentation;
 };
 
 // Delegates to the shared classifier in task-switcher so the sidebar bucket
@@ -159,9 +164,11 @@ function taskItemRowClassName(
   isSelected: boolean,
   isMultiSelected: boolean,
   isRoot: boolean,
+  hasDetails: boolean,
 ): string {
   return cn(
-    "group relative flex w-full items-start gap-2 py-2 pr-3 text-left text-sm outline-none cursor-pointer",
+    "group relative flex w-full gap-2 py-2 pr-3 text-left text-sm outline-none cursor-pointer",
+    hasDetails ? "items-start" : "items-center",
     "transition-colors duration-75 hover:bg-foreground/[0.05]",
     isSelected && "bg-primary/10",
     // When a row is both the active task and multi-selected, keep the stronger
@@ -320,23 +327,6 @@ function TaskStateIcon({
   );
 }
 
-function DiffStatsRight({ diffStats, menuOpen }: { diffStats: DiffStats; menuOpen: boolean }) {
-  return (
-    <div
-      data-testid="sidebar-task-diff-stats"
-      className={cn(
-        "mobile-task-diff-stats shrink-0 self-center font-mono text-[11px] transition-opacity duration-100",
-        menuOpen
-          ? "opacity-0"
-          : "[@media(hover:hover)]:group-hover:opacity-0 group-focus-within/actions:opacity-0",
-      )}
-    >
-      <span className="text-emerald-500">+{diffStats.additions}</span>{" "}
-      <span className="text-rose-500">-{diffStats.deletions}</span>
-    </div>
-  );
-}
-
 function TaskItemTitle({ title }: { title: string }) {
   return <ScrollOnOverflow className="min-w-0 w-full">{title}</ScrollOnOverflow>;
 }
@@ -353,16 +343,14 @@ function TaskItemContent({
   isArchived,
   isPinned,
   repositoryPath,
-  showRepository,
-  updatedAt,
-  lastActivityAt,
-  showActivityTime,
   prInfo,
   queuedCount,
   wipQueue,
   issueInfo,
   agentErrorMessage,
   comparisonUnavailable,
+  resolvedTaskRow,
+  relativeTime,
 }: {
   title: string;
   autopilot?: boolean;
@@ -375,16 +363,14 @@ function TaskItemContent({
   isArchived?: boolean;
   isPinned?: boolean;
   repositoryPath?: string;
-  showRepository: boolean;
-  updatedAt?: string;
-  lastActivityAt?: string;
-  showActivityTime?: boolean;
   prInfo?: { number: number; state: string; aggregateState?: string };
   queuedCount?: number;
   wipQueue?: WipQueueStatus;
   issueInfo?: { url: string; number: number };
   agentErrorMessage?: string | null;
   comparisonUnavailable?: boolean;
+  resolvedTaskRow: ResolvedTaskRowPresentation;
+  relativeTime?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -396,6 +382,7 @@ function TaskItemContent({
           isPinned={isPinned}
           taskId={taskId}
           prInfo={prInfo}
+          showChangeRequestStatus={resolvedTaskRow.trailing !== "change_request_status"}
           issueInfo={issueInfo}
           agentErrorMessage={agentErrorMessage}
         />
@@ -415,129 +402,188 @@ function TaskItemContent({
           </span>
         )}
       </span>
-      {taskId && (
+      {taskId && resolvedTaskRow.detailsEnabled && (
         <TaskRowMetadata
           taskId={taskId}
           workflowStepId={workflowStepId ?? null}
           surface="sidebar"
         />
       )}
-      <TaskItemStatsRow
-        updatedAt={showActivityTime ? (lastActivityAt ?? updatedAt) : updatedAt}
-        repositoryLabel={showRepository ? repositoryPath : undefined}
-        prInfo={prInfo}
-        primarySessionId={primarySessionId}
-        queuedCount={queuedCount}
-        wipQueue={wipQueue}
-      />
+      {resolvedTaskRow.detailsEnabled && (
+        <TaskItemStatsRow
+          updatedAt={relativeTime}
+          repositoryLabel={resolvedTaskRow.showRepository ? repositoryPath : undefined}
+          prInfo={resolvedTaskRow.showPullRequestNumber ? prInfo : undefined}
+          primarySessionId={primarySessionId}
+          queuedCount={queuedCount}
+          wipQueue={wipQueue}
+          detailOrder={resolvedTaskRow.detailOrder}
+          showRelativeTime={resolvedTaskRow.showRelativeTime}
+          showRepository={resolvedTaskRow.showRepository}
+          showPullRequestNumber={resolvedTaskRow.showPullRequestNumber}
+        />
+      )}
     </div>
   );
 }
 
 function TaskItemActions({
   archiveConfirmation,
+  resolvedTaskRow,
   diffStats,
-  hasDiffStats,
   menuOpen,
   effectiveMenuOpen,
+  relativeTime,
+  taskId,
+  prInfo,
 }: {
   archiveConfirmation?: ReactNode;
+  resolvedTaskRow: ResolvedTaskRowPresentation;
   diffStats?: DiffStats;
-  hasDiffStats: boolean;
   menuOpen: boolean;
   effectiveMenuOpen: boolean;
+  relativeTime?: string;
+  taskId?: string;
+  prInfo?: { number: number; state: string; aggregateState?: string };
 }) {
   if (archiveConfirmation) {
     return (
       <div className="min-w-0 basis-full flex items-center justify-end">{archiveConfirmation}</div>
     );
   }
-  if (hasDiffStats) {
-    return (
-      <div className="mobile-task-actions-with-stats group/actions relative shrink-0 self-center flex items-center">
-        <DiffStatsRight diffStats={diffStats!} menuOpen={effectiveMenuOpen} />
-        <div className="mobile-task-actions-slot absolute inset-0 flex items-center justify-end">
-          <TaskMenuButton visible={effectiveMenuOpen} expanded={menuOpen} />
-        </div>
-      </div>
-    );
-  }
-  return <TaskMenuButton visible={effectiveMenuOpen} expanded={menuOpen} rowFocus />;
+  return (
+    <TaskItemTrailing
+      trailing={resolvedTaskRow.trailing}
+      diffStats={diffStats}
+      menuOpen={menuOpen}
+      effectiveMenuOpen={effectiveMenuOpen}
+      relativeTime={relativeTime}
+      taskId={taskId}
+      prInfo={prInfo}
+    />
+  );
 }
 
-export const TaskItem = memo(function TaskItem(props: TaskItemProps) {
-  const isSelected = props.isSelected ?? false;
-  const isMultiSelected = props.isMultiSelected ?? false;
-  const menuOpen = props.menuOpen ?? false;
-  const effectiveMenuOpen = menuOpen || props.isDeleting === true;
-  const hasDiffStats =
-    !!props.diffStats && (props.diffStats.additions > 0 || props.diffStats.deletions > 0);
-  const taskColor = useTaskColor(props.taskId);
-  const indent = computeRowIndent(resolveRowDepth(props.depth, props.isSubTask));
+// eslint-disable-next-line max-lines-per-function
+export const TaskItem = memo(function TaskItem({
+  title,
+  autopilot,
+  state,
+  sessionState,
+  foregroundActivity,
+  isArchived,
+  isSelected = false,
+  isMultiSelected = false,
+  onClick,
+  onSelect,
+  diffStats,
+  archiveConfirmation,
+  comparisonUnavailable,
+  isRemoteExecutor,
+  remoteExecutorType,
+  remoteExecutorName,
+  updatedAt,
+  lastActivityAt,
+  showActivityTime = false,
+  menuOpen = false,
+  isDeleting,
+  taskId,
+  workflowStepId,
+  primarySessionId,
+  hasPendingClarification,
+  hasPendingPermission,
+  interrupted,
+  isSubTask,
+  depth,
+  subtaskCount,
+  subtasksCollapsed,
+  onToggleSubtasks,
+  repositoryPath,
+  showRepository = true,
+  prInfo,
+  queuedCount,
+  wipQueue,
+  issueInfo,
+  isPinned,
+  agentErrorMessage,
+  isOnLastWorkflowStep = false,
+  taskRowPresentation,
+}: TaskItemProps) {
+  const effectiveMenuOpen = menuOpen || isDeleting === true;
+  const resolvedTaskRow = resolveTaskRowPresentation(taskRowPresentation, { showRepository });
+  const relativeTime = showActivityTime ? (lastActivityAt ?? updatedAt) : updatedAt;
+  const taskColor = useTaskColor(taskId);
+  const indent = computeRowIndent(resolveRowDepth(depth, isSubTask));
 
   return (
     <div
       role="button"
       tabIndex={0}
       data-testid="sidebar-task-item"
-      data-task-row-id={props.taskId}
+      data-task-row-id={taskId}
       {...taskItemStateAttrs(isSelected, isMultiSelected)}
-      onClick={taskItemRowClick(props.onSelect, props.onClick)}
-      onKeyDown={(e) => handleTaskItemKeyDown(e, props.onSelect, props.onClick)}
+      onClick={taskItemRowClick(onSelect, onClick)}
+      onKeyDown={(e) => handleTaskItemKeyDown(e, onSelect, onClick)}
       style={indent.depth > 0 ? { paddingLeft: indent.paddingLeftPx } : undefined}
       className={cn(
-        taskItemRowClassName(isSelected, isMultiSelected, indent.depth === 0),
-        props.archiveConfirmation && "flex-wrap",
+        taskItemRowClassName(
+          isSelected,
+          isMultiSelected,
+          indent.depth === 0,
+          resolvedTaskRow.detailsEnabled,
+        ),
+        archiveConfirmation && "flex-wrap",
       )}
     >
       <SelectionBar isSelected={isSelected} color={taskColor} />
       <RowConnector depth={indent.depth} leftPx={indent.connectorLeftPx} />
       <TaskStateIcon
-        sessionState={props.sessionState}
-        state={props.state}
-        foregroundActivity={props.foregroundActivity}
-        isInProgress={computeIsInProgress(props.state, props.sessionState)}
-        hasPendingClarification={props.hasPendingClarification}
-        hasPendingPermission={props.hasPendingPermission}
-        interrupted={props.interrupted}
-        isOnLastWorkflowStep={props.isOnLastWorkflowStep ?? false}
+        sessionState={sessionState}
+        state={state}
+        foregroundActivity={foregroundActivity}
+        isInProgress={computeIsInProgress(state, sessionState)}
+        hasPendingClarification={hasPendingClarification}
+        hasPendingPermission={hasPendingPermission}
+        interrupted={interrupted}
+        isOnLastWorkflowStep={isOnLastWorkflowStep}
       />
       <TaskItemContent
-        title={props.title}
-        autopilot={props.autopilot}
-        taskId={props.taskId}
-        workflowStepId={props.workflowStepId}
-        isRemoteExecutor={props.isRemoteExecutor}
-        remoteExecutorType={props.remoteExecutorType}
-        remoteExecutorName={props.remoteExecutorName}
-        primarySessionId={props.primarySessionId}
-        isArchived={props.isArchived}
-        isPinned={props.isPinned}
-        repositoryPath={props.repositoryPath}
-        showRepository={props.showRepository ?? true}
-        updatedAt={props.updatedAt}
-        lastActivityAt={props.lastActivityAt}
-        showActivityTime={props.showActivityTime ?? false}
-        prInfo={props.prInfo}
-        queuedCount={props.queuedCount}
-        wipQueue={props.wipQueue}
-        issueInfo={props.issueInfo}
-        agentErrorMessage={props.agentErrorMessage}
-        comparisonUnavailable={props.comparisonUnavailable}
+        title={title}
+        autopilot={autopilot}
+        taskId={taskId}
+        workflowStepId={workflowStepId}
+        isRemoteExecutor={isRemoteExecutor}
+        remoteExecutorType={remoteExecutorType}
+        remoteExecutorName={remoteExecutorName}
+        primarySessionId={primarySessionId}
+        isArchived={isArchived}
+        isPinned={isPinned}
+        repositoryPath={repositoryPath}
+        prInfo={prInfo}
+        queuedCount={queuedCount}
+        wipQueue={wipQueue}
+        issueInfo={issueInfo}
+        agentErrorMessage={agentErrorMessage}
+        comparisonUnavailable={comparisonUnavailable}
+        resolvedTaskRow={resolvedTaskRow}
+        relativeTime={relativeTime}
       />
       <TaskItemActions
-        archiveConfirmation={props.archiveConfirmation}
-        diffStats={props.diffStats}
-        hasDiffStats={hasDiffStats}
+        archiveConfirmation={archiveConfirmation}
+        resolvedTaskRow={resolvedTaskRow}
+        diffStats={diffStats}
         menuOpen={menuOpen}
         effectiveMenuOpen={effectiveMenuOpen}
+        relativeTime={relativeTime}
+        taskId={taskId}
+        prInfo={prInfo}
       />
-      {!!props.subtaskCount && props.subtaskCount > 0 && !!props.onToggleSubtasks && (
+      {!!subtaskCount && subtaskCount > 0 && !!onToggleSubtasks && (
         <SubtaskToggle
-          taskId={props.taskId}
-          count={props.subtaskCount}
-          collapsed={!!props.subtasksCollapsed}
-          onToggle={props.onToggleSubtasks}
+          taskId={taskId}
+          count={subtaskCount}
+          collapsed={!!subtasksCollapsed}
+          onToggle={onToggleSubtasks}
         />
       )}
     </div>

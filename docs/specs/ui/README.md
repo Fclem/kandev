@@ -116,6 +116,7 @@ contract that other capabilities can reuse.
 - [Sidebar Last Activity Sort](requirements/sidebar-last-activity-sort.md)
 - [Sidebar Queued Prompt Count Badge](requirements/sidebar-queued-prompt-count.md)
 - [Sidebar Task Completion Icons](requirements/sidebar-task-completion-icons.md)
+- [Sidebar Task Row Presentation](requirements/sidebar-task-row-presentation.md)
 - [Direct Sidebar View Creation](requirements/sidebar-view-creation.md)
 - [Slash Command Composer Selection](requirements/slash-command-composer.md)
 - [Subagent Observability](requirements/subagent-observability.md)

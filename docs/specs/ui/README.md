@@ -153,6 +153,7 @@ contract that other capabilities can reuse.
 - [Prompt History Panel](system-design/prompt-history-panel.md)
 - [Quick Chat and Terminal Tabs](system-design/quick-terminal.md)
 - [Task Layout Profiles](system-design/task-layout-profiles.md)
+- [Task Transcript History Visibility](system-design/task-prompt-transcript-visibility.md)
 
 ## Migration record
 

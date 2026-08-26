@@ -32,7 +32,6 @@ type TaskLayoutProps = {
   /** `owner/repo` (or the repository name) of the task's primary repository. */
   repositoryLabel?: string | null;
   baseBranch?: string;
-  pullRequestTarget?: string;
   worktreeBranch?: string | null;
   isRemoteExecutor?: boolean;
   remoteExecutorType?: string | null;
@@ -56,7 +55,6 @@ export const TaskLayout = memo(function TaskLayout({
   taskTitle,
   repositoryLabel,
   baseBranch,
-  pullRequestTarget,
   worktreeBranch,
   isRemoteExecutor,
   remoteExecutorType,
@@ -97,7 +95,6 @@ export const TaskLayout = memo(function TaskLayout({
         workflowId={workflowId}
         sessionId={sessionId}
         baseBranch={baseBranch}
-        pullRequestTarget={pullRequestTarget}
         worktreeBranch={worktreeBranch}
         taskTitle={taskTitle}
         repositoryLabel={repositoryLabel}

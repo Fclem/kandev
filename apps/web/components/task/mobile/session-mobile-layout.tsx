@@ -78,7 +78,6 @@ type SessionMobileLayoutProps = {
   workflowId: string | null;
   sessionId?: string | null;
   baseBranch?: string;
-  pullRequestTarget?: string;
   worktreeBranch?: string | null;
   taskTitle?: string;
   /** `owner/repo` (or the repository name) of the task's primary repository. */
@@ -359,7 +358,6 @@ type MobileTopBarStickyProps = {
   repositoryLabel?: string | null;
   effectiveSessionId: string | null;
   baseBranch?: string;
-  pullRequestTarget?: string;
   worktreeBranch?: string | null;
   onMenuClick: () => void;
   showApproveButton: boolean;
@@ -387,7 +385,6 @@ function MobileTopBarSticky(props: MobileTopBarStickyProps) {
         repositoryLabel={props.repositoryLabel}
         sessionId={props.effectiveSessionId}
         baseBranch={props.baseBranch}
-        pullRequestTarget={props.pullRequestTarget}
         worktreeBranch={props.worktreeBranch}
         onMenuClick={props.onMenuClick}
         showApproveButton={props.showApproveButton}

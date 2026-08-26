@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo } from "react";
 import Link from "@/components/routing/app-link";
 import { IconArrowLeft, IconMenu2, IconGitBranch, IconCheck } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -8,32 +8,12 @@ import { RemoteCloudTooltip } from "@/components/task/remote-cloud-tooltip";
 import { LineStat } from "@/components/diff-stat";
 import { useSessionGitStatus } from "@/hooks/domains/session/use-session-git-status";
 import { useSessionCommits } from "@/hooks/domains/session/use-session-commits";
-import { useRemoteContributionRelation } from "@/hooks/domains/session/use-remote-contribution-relation";
-import {
-  remoteContributionActionPolicy,
-  remoteContributionActionReasonKey,
-} from "@/hooks/domains/session/remote-contribution-relation";
-import {
-  CommitDialog,
-  PRDialog,
-  GitActionsDropdown,
-  computeUncommittedStats,
-  useMobileGitActions,
-} from "./session-mobile-top-bar-git-controls";
+import type { FileInfo } from "@/lib/state/slices";
 import { TaskTopBarPluginActions } from "@/components/task/task-top-bar-plugin-actions";
-import { LayoutPresetSelector } from "@/components/task/layout-preset-selector";
 import { MRTopbarButton } from "@/components/gitlab/mr-topbar-button";
 import { PortForwardButton } from "@/components/task/port-forward-dialog";
 import { linkToTaskOverview } from "@/lib/links";
 import { useTranslation } from "react-i18next";
-import { openExternalLink } from "@/lib/desktop/external-links";
-import {
-  buildRemoteContributionResolutionTarget,
-  useRemoteContributionResolution,
-  useRemoteContributionResolutionConfirmation,
-  type RemoteContributionResolutionTarget,
-} from "../use-remote-contribution-resolution";
-import { MobileContributionResolutionDrawer } from "./mobile-contribution-resolution-drawer";
 
 type SessionMobileTopBarProps = {
   taskId?: string | null;
@@ -43,7 +23,6 @@ type SessionMobileTopBarProps = {
   repositoryLabel?: string | null;
   sessionId?: string | null;
   baseBranch?: string;
-  pullRequestTarget?: string;
   worktreeBranch?: string | null;
   onMenuClick: () => void;
   showApproveButton?: boolean;
@@ -156,6 +135,16 @@ function ApproveButton({ onApprove }: { onApprove: () => void }) {
   );
 }
 
+function computeUncommittedStats(files: Record<string, FileInfo> | undefined) {
+  let additions = 0;
+  let deletions = 0;
+  for (const file of Object.values(files ?? {})) {
+    additions += file.additions || 0;
+    deletions += file.deletions || 0;
+  }
+  return { additions, deletions };
+}
+
 function useMobileGitMetrics(
   sessionId: string | null | undefined,
   worktreeBranch: string | null | undefined,
@@ -166,139 +155,10 @@ function useMobileGitMetrics(
   const stats = computeUncommittedStats(gitStatus?.files);
 
   return {
-    commits,
     displayBranch: worktreeBranch || baseBranch,
-    uncommittedAdditions: stats.additions,
-    uncommittedDeletions: stats.deletions,
-    uncommittedCount: stats.count,
     totalAdditions: stats.additions + commits.reduce((sum, commit) => sum + commit.insertions, 0),
     totalDeletions: stats.deletions + commits.reduce((sum, commit) => sum + commit.deletions, 0),
   };
-}
-
-function useMobileRemoteActionPolicy(sessionId: string | null | undefined) {
-  const contribution = useRemoteContributionRelation(sessionId);
-  return {
-    ...contribution,
-    ...remoteContributionActionPolicy(contribution.relation),
-  };
-}
-
-type MobileGitDialogsProps = {
-  commitDialogOpen: boolean;
-  setCommitDialogOpen: (open: boolean) => void;
-  prDialogOpen: boolean;
-  setPrDialogOpen: (open: boolean) => void;
-  displayBranch?: string;
-  baseBranch?: string;
-  taskTitle?: string;
-  firstCommitMessage?: string;
-  isGitLoading: boolean;
-  branchPushed: boolean;
-  uncommittedCount: number;
-  uncommittedAdditions: number;
-  uncommittedDeletions: number;
-  onCommit: (message: string, stageAll: boolean) => void;
-  onCreatePR: (title: string, body: string, draft: boolean) => void;
-};
-
-function MobileGitDialogs(props: MobileGitDialogsProps) {
-  return (
-    <>
-      <CommitDialog
-        open={props.commitDialogOpen}
-        onOpenChange={props.setCommitDialogOpen}
-        uncommittedCount={props.uncommittedCount}
-        uncommittedAdditions={props.uncommittedAdditions}
-        uncommittedDeletions={props.uncommittedDeletions}
-        isGitLoading={props.isGitLoading}
-        onCommit={props.onCommit}
-      />
-      <PRDialog
-        open={props.prDialogOpen}
-        onOpenChange={props.setPrDialogOpen}
-        displayBranch={props.displayBranch}
-        baseBranch={props.baseBranch}
-        isGitLoading={props.isGitLoading}
-        taskTitle={props.taskTitle}
-        firstCommitMessage={props.firstCommitMessage}
-        onCreatePR={props.onCreatePR}
-        branchPushed={props.branchPushed}
-      />
-    </>
-  );
-}
-
-function useMobileContributionResolutionActions(sessionId: string | null | undefined) {
-  const { t } = useTranslation();
-  const remoteActionPolicy = useMobileRemoteActionPolicy(sessionId);
-  const resolution = useRemoteContributionResolution(
-    sessionId,
-    remoteActionPolicy.refreshProviderEvidence,
-  );
-  const remoteRepositoryLabel = t("task:remoteRepository");
-  const resolutionTarget = useMemo(
-    () =>
-      buildRemoteContributionResolutionTarget(
-        remoteActionPolicy.relation,
-        remoteActionPolicy.repositoryName,
-        remoteActionPolicy.selectedPR,
-        remoteRepositoryLabel,
-      ),
-    [
-      remoteActionPolicy.relation,
-      remoteActionPolicy.repositoryName,
-      remoteActionPolicy.selectedPR,
-      remoteRepositoryLabel,
-    ],
-  );
-  const requestReplace = useCallback(() => {
-    if (resolutionTarget) resolution.requestReplace(resolutionTarget);
-  }, [resolution, resolutionTarget]);
-  const requestUse = useCallback(() => {
-    if (resolutionTarget) resolution.requestUse(resolutionTarget);
-  }, [resolution, resolutionTarget]);
-  const viewPRVersion = useCallback(() => {
-    const url = remoteActionPolicy.selectedPR?.pr_url;
-    if (url) void openExternalLink(url).catch(() => undefined);
-  }, [remoteActionPolicy.selectedPR?.pr_url]);
-  const confirmResolution = useRemoteContributionResolutionConfirmation(resolution);
-
-  return {
-    remoteActionPolicy,
-    resolution,
-    resolutionTarget,
-    requestReplace,
-    requestUse,
-    viewPRVersion,
-    confirmResolution,
-  };
-}
-
-function MobileResolutionDrawer({
-  resolution,
-  resolutionTarget,
-  confirmResolution,
-}: {
-  resolution: ReturnType<typeof useRemoteContributionResolution>;
-  resolutionTarget: RemoteContributionResolutionTarget | null;
-  confirmResolution: () => Promise<void>;
-}) {
-  if (!resolution.pending || !resolutionTarget) return null;
-  return (
-    <MobileContributionResolutionDrawer
-      open
-      action={resolution.pending.action}
-      repositoryName={resolutionTarget.repositoryName ?? ""}
-      expectedRemoteHead={resolution.pending.expectedRemoteHead}
-      isLoading={resolution.isLoading}
-      errorKey={resolution.errorKey}
-      onOpenChange={(open) => {
-        if (!open) resolution.cancel();
-      }}
-      onConfirm={confirmResolution}
-    />
-  );
 }
 
 type MobileTopBarActionsProps = {
@@ -314,86 +174,10 @@ type MobileTopBarActionsProps = {
   showApproveButton: boolean;
   onApprove?: () => void;
   sessionId?: string | null;
-  isGitLoading: boolean;
-  uncommittedCount: number;
-  baseBranch?: string;
   taskTitle?: string;
   isArchived?: boolean;
-  onCommitClick: () => void;
-  onPRClick: () => void;
-  onPull: () => void;
-  onPush: (force?: boolean) => void;
-  onRebase: () => void;
-  onMerge: () => void;
   onMenuClick: () => void;
 };
-
-type MobileTopBarGitActionsProps = Pick<
-  MobileTopBarActionsProps,
-  | "sessionId"
-  | "isGitLoading"
-  | "uncommittedCount"
-  | "baseBranch"
-  | "onCommitClick"
-  | "onPRClick"
-  | "onPull"
-  | "onPush"
-  | "onRebase"
-  | "onMerge"
->;
-
-function MobileTopBarGitActions(props: MobileTopBarGitActionsProps) {
-  const { t } = useTranslation();
-  const {
-    remoteActionPolicy,
-    resolution,
-    resolutionTarget,
-    requestReplace,
-    requestUse,
-    viewPRVersion,
-    confirmResolution,
-  } = useMobileContributionResolutionActions(props.sessionId);
-  const pushDisabledReasonKey = remoteContributionActionReasonKey(
-    remoteActionPolicy.relation,
-    "push",
-  );
-  const pullDisabledReasonKey = remoteContributionActionReasonKey(
-    remoteActionPolicy.relation,
-    "pull",
-  );
-  return (
-    <>
-      <GitActionsDropdown
-        sessionId={props.sessionId}
-        isGitLoading={props.isGitLoading}
-        uncommittedCount={props.uncommittedCount}
-        baseBranch={props.baseBranch}
-        onCommitClick={props.onCommitClick}
-        onPRClick={props.onPRClick}
-        onPull={props.onPull}
-        onPush={props.onPush}
-        onRebase={props.onRebase}
-        onMerge={props.onMerge}
-        pushDisabled={remoteActionPolicy.pushDisabled}
-        pullDisabled={remoteActionPolicy.pullDisabled}
-        pushDisabledReason={pushDisabledReasonKey ? t(pushDisabledReasonKey) : undefined}
-        pullDisabledReason={pullDisabledReasonKey ? t(pullDisabledReasonKey) : undefined}
-        showContributionResolution={remoteActionPolicy.action === "diverged_replace"}
-        replaceDisabled={remoteActionPolicy.replaceDisabled}
-        useDisabled={remoteActionPolicy.useDisabled}
-        onReplaceContribution={requestReplace}
-        onUseContribution={requestUse}
-        onViewPRVersion={viewPRVersion}
-        prNumber={remoteActionPolicy.selectedPR?.pr_number}
-      />
-      <MobileResolutionDrawer
-        resolution={resolution}
-        resolutionTarget={resolutionTarget}
-        confirmResolution={confirmResolution}
-      />
-    </>
-  );
-}
 
 function MobileTopBarActions({
   taskId,
@@ -408,17 +192,8 @@ function MobileTopBarActions({
   showApproveButton,
   onApprove,
   sessionId,
-  isGitLoading,
-  uncommittedCount,
-  baseBranch,
   taskTitle,
   isArchived,
-  onCommitClick,
-  onPRClick,
-  onPull,
-  onPush,
-  onRebase,
-  onMerge,
   onMenuClick,
 }: MobileTopBarActionsProps) {
   const { t } = useTranslation();
@@ -426,7 +201,6 @@ function MobileTopBarActions({
     <div className="flex items-center gap-1" data-testid="mobile-topbar-actions">
       <MRTopbarButton compact mobile />
       {!isArchived && <PortForwardButton sessionId={sessionId} />}
-      {!isArchived && <LayoutPresetSelector mobile />}
       {!isArchived && (
         <TaskTopBarPluginActions
           sessionId={sessionId ?? null}
@@ -448,22 +222,10 @@ function MobileTopBarActions({
         />
       )}
       {showApproveButton && onApprove && <ApproveButton onApprove={onApprove} />}
-      <MobileTopBarGitActions
-        sessionId={sessionId}
-        isGitLoading={isGitLoading}
-        uncommittedCount={uncommittedCount}
-        baseBranch={baseBranch}
-        onCommitClick={onCommitClick}
-        onPRClick={onPRClick}
-        onPull={onPull}
-        onPush={onPush}
-        onRebase={onRebase}
-        onMerge={onMerge}
-      />
       <Button
         variant="ghost"
         size="icon-sm"
-        className="cursor-pointer"
+        className="h-11 w-11 cursor-pointer"
         onClick={onMenuClick}
         data-testid="mobile-session-menu"
         aria-label={t("task:openTaskSwitcher")}
@@ -474,60 +236,15 @@ function MobileTopBarActions({
   );
 }
 
-function useSessionMobileTopBarState(props: SessionMobileTopBarProps) {
-  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
-  const [prDialogOpen, setPrDialogOpen] = useState(false);
-  const [prBranchPushed, setPrBranchPushed] = useState(false);
-  const metrics = useMobileGitMetrics(props.sessionId, props.worktreeBranch, props.baseBranch);
-  const actions = useMobileGitActions(
-    {
-      sessionId: props.sessionId,
-      baseBranch: props.baseBranch,
-      pullRequestTarget: props.pullRequestTarget,
-    },
-    setCommitDialogOpen,
-    setPrDialogOpen,
-    setPrBranchPushed,
-  );
-
-  return {
-    ...metrics,
-    ...actions,
-    commitDialogOpen,
-    setCommitDialogOpen,
-    prDialogOpen,
-    setPrDialogOpen,
-    prBranchPushed,
-    setPrBranchPushed,
-  };
-}
-
 export const SessionMobileTopBar = memo(function SessionMobileTopBar(
   props: SessionMobileTopBarProps,
 ) {
   const { t } = useTranslation();
-  const {
-    commits,
-    displayBranch,
-    uncommittedAdditions,
-    uncommittedDeletions,
-    uncommittedCount,
-    totalAdditions,
-    totalDeletions,
-    commitDialogOpen,
-    setCommitDialogOpen,
-    prDialogOpen,
-    setPrDialogOpen,
-    prBranchPushed,
-    setPrBranchPushed,
-    isGitLoading,
-    handlePull,
-    handlePush,
-    handleRebase,
-    handleMerge,
-    handleCommit,
-    handleCreatePR,
-  } = useSessionMobileTopBarState(props);
+  const { displayBranch, totalAdditions, totalDeletions } = useMobileGitMetrics(
+    props.sessionId,
+    props.worktreeBranch,
+    props.baseBranch,
+  );
   return (
     <header className="flex items-center justify-between px-2 py-2 bg-background">
       <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -560,38 +277,9 @@ export const SessionMobileTopBar = memo(function SessionMobileTopBar(
         showApproveButton={props.showApproveButton ?? false}
         onApprove={props.onApprove}
         sessionId={props.sessionId}
-        isGitLoading={isGitLoading}
-        uncommittedCount={uncommittedCount}
-        baseBranch={props.baseBranch}
         taskTitle={props.taskTitle}
         isArchived={props.isArchived}
-        onCommitClick={() => setCommitDialogOpen(true)}
-        onPRClick={() => {
-          setPrBranchPushed(false);
-          setPrDialogOpen(true);
-        }}
-        onPull={handlePull}
-        onPush={handlePush}
-        onRebase={handleRebase}
-        onMerge={handleMerge}
         onMenuClick={props.onMenuClick}
-      />
-      <MobileGitDialogs
-        commitDialogOpen={commitDialogOpen}
-        setCommitDialogOpen={setCommitDialogOpen}
-        prDialogOpen={prDialogOpen}
-        setPrDialogOpen={setPrDialogOpen}
-        displayBranch={displayBranch}
-        baseBranch={props.pullRequestTarget ?? props.baseBranch}
-        taskTitle={props.taskTitle}
-        firstCommitMessage={commits[0]?.commit_message}
-        isGitLoading={isGitLoading}
-        branchPushed={prBranchPushed}
-        uncommittedCount={uncommittedCount}
-        uncommittedAdditions={uncommittedAdditions}
-        uncommittedDeletions={uncommittedDeletions}
-        onCommit={handleCommit}
-        onCreatePR={handleCreatePR}
       />
     </header>
   );

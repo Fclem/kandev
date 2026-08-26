@@ -237,16 +237,31 @@ func workflowModelToDTO(w *taskmodels.Workflow) pluginsdk.Workflow {
 
 func workflowStepModelToDTO(s *wfmodels.WorkflowStep) pluginsdk.WorkflowStep {
 	return pluginsdk.WorkflowStep{
-		ID:             s.ID,
-		WorkflowID:     s.WorkflowID,
-		Name:           s.Name,
-		Position:       int32(s.Position),
-		StageType:      string(s.StageType),
-		Color:          s.Color,
-		IsStartStep:    s.IsStartStep,
-		WIPLimit:       int32(s.WIPLimit),
-		AgentProfileID: s.AgentProfileID,
+		ID:                 s.ID,
+		WorkflowID:         s.WorkflowID,
+		Name:               s.Name,
+		Position:           int32(s.Position),
+		StageType:          string(s.StageType),
+		Color:              s.Color,
+		IsStartStep:        s.IsStartStep,
+		WIPLimit:           int32(s.WIPLimit),
+		AgentProfileID:     s.AgentProfileID,
+		OnEnterActionTypes: onEnterActionTypesToDTO(s.Events.OnEnter),
 	}
+}
+
+// onEnterActionTypesToDTO exposes only the on_enter action TYPES, order
+// preserved as authored. Action Config (target task ids, payloads, participant
+// roles, agent profile ids) is deliberately not exposed to plugins.
+func onEnterActionTypesToDTO(actions []wfmodels.OnEnterAction) []string {
+	if len(actions) == 0 {
+		return nil
+	}
+	out := make([]string, len(actions))
+	for i, action := range actions {
+		out[i] = string(action.Type)
+	}
+	return out
 }
 
 func repositoryModelToDTO(r *taskmodels.Repository) pluginsdk.Repository {

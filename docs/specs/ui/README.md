@@ -160,6 +160,7 @@ contract that other capabilities can reuse.
 - [Entity Reference Composer](system-design/entity-reference-composer.md)
 - [Mobile Task Chrome](system-design/mobile-task-chrome.md)
 - [Persistent status motion](system-design/persistent-status-motion.md)
+- [PR Task Status Summary](system-design/pr-task-status-summary.md)
 - [Prompt History Panel](system-design/prompt-history-panel.md)
 - [Quick Chat and Terminal Tabs](system-design/quick-terminal.md)
 - [Task Confirmation Warning Hierarchy](system-design/confirmation-warning-hierarchy.md)

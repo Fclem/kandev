@@ -55,12 +55,9 @@ beforeEach(() => {
   if (typeof window !== "undefined") window.WebSocket = noNetworkWebSocket;
 });
 
-afterEach(async () => {
+afterEach(() => {
   globalThis.WebSocket = noNetworkWebSocket;
-  if (typeof window !== "undefined") {
-    window.WebSocket = noNetworkWebSocket;
-    await (window as unknown as HappyDOMWindow).happyDOM.abort();
-  }
+  if (typeof window !== "undefined") window.WebSocket = noNetworkWebSocket;
 });
 
 function createLocalStorageMock(): Storage {

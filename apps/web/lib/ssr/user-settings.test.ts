@@ -148,6 +148,9 @@ describe("quick-chat tab order hydration", () => {
       quickChatTabOrderByWorkspace: order,
     };
     expect(buildCoreFields({}, current).quickChatTabOrderByWorkspace).toEqual(order);
+  });
+});
+
 describe("session hostname resolution setting hydration", () => {
   it("defaults to disabled, maps explicit values, and preserves omitted updates", () => {
     const defaults = buildCoreFields({}) as Record<string, unknown>;

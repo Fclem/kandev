@@ -128,6 +128,7 @@ contract that other capabilities can reuse.
 - [Nested Submodule Review](requirements/submodule-review.md)
 - [Task Confirmation Warning Hierarchy](requirements/confirmation-warning-hierarchy.md)
 - [Task Layout Profiles](requirements/task-layout-profiles.md)
+- [Task Agent Tab Reconciliation](requirements/task-agent-tab-reconciliation.md)
 - [Task Listing Display Preferences](requirements/task-listing-display-preferences.md)
 - [Task transcript history visibility](requirements/task-prompt-transcript-visibility.md)
 - [Task Review Shortcut Switcher](requirements/task-review-shortcut.md)
@@ -168,6 +169,8 @@ contract that other capabilities can reuse.
 - [Task Confirmation Warning Hierarchy](system-design/confirmation-warning-hierarchy.md)
 - [Resizable Markdown Table Columns](system-design/resizable-markdown-tables.md)
 - [Task Layout Profiles](system-design/task-layout-profiles.md)
+- [Task Agent Tab Reconciliation](system-design/task-agent-tab-reconciliation.md)
+- [Command-panel Sidebar Task Reveal](system-design/command-panel-sidebar-task-reveal.md)
 - [Terminal Rendering](system-design/terminal-rendering.md)
 - [Task Transcript History Visibility](system-design/task-prompt-transcript-visibility.md)
 

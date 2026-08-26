@@ -86,6 +86,36 @@ If the repository is intentionally offline, open its workspace repository settin
 opts out of the freshness guarantee and allows the task to use the local base state. Re-enable the
 setting before relying on remote changes for later task launches.
 
+### Named branch policies
+
+Open **Settings → Workspaces → _workspace_ → Repositories**, edit a repository, and expand
+**Branch policies**. A policy names the base branch, branch-name template, and pull-request target.
+Policies belong to that repository. Create, edit, and delete actions take effect immediately.
+The branch controls list local and remote branches. You can search the list or refresh it from Git.
+
+The base branch is the starting point for the new task branch. The pull-request target is its merge
+destination. These values are usually the same. A Gitflow Release policy can start from `develop`
+and target `main`.
+
+In **New Task** or **New subtask**, the repository branch picker shows saved policies before raw
+branches. Select a policy to create a fresh task branch from its base branch. The policy template
+controls the branch name. Raw branches keep their existing checkout behavior. Each policy uses one
+line in the picker. Point to or focus its information icon to see the saved values. On touch devices,
+tap the icon.
+
+The **Gitflow starter** can create Feature, Bugfix, Hotfix, and Release policies in one operation.
+It requires two different existing branches and does not change Git branches. A task stores the
+selected policy values when it is created. Later policy edits or deletion do not change that task's
+branch or pull-request target. Kandev's pull-request dialog uses the saved target by default. You can
+select a different target before creation.
+
+Kandev adds the saved target to the agent's task context. The instruction tells the agent to pass the
+target to the provider CLI. For example, a GitHub agent uses `gh pr create --base <target>`. Kandev
+does not add a separate shell environment value, and it does not prevent the user from changing the
+target.
+
+Policies are not available in **Quick Chat**, **Remote**, **Add Sources**, or **Add Branch** flows.
+
 When a task opens an existing branch or GitHub PR, Kandev fetches that branch; for a numbered GitHub PR it can fetch `refs/pull/NUMBER/head`, including fork PRs. If the intended branch is already checked out in another worktree, the new worktree uses a suffixed local branch and tracks the original `origin` branch when available. The required-refresh rule still applies before that new worktree is created.
 
 Tasks created without an initial title can expose the one-shot `set_task_title_kandev` handoff when

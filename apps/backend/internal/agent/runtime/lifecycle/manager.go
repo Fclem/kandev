@@ -18,6 +18,7 @@ import (
 	"github.com/kandev/kandev/internal/agent/runtime/activity"
 	agentctl "github.com/kandev/kandev/internal/agent/runtime/agentctl"
 	"github.com/kandev/kandev/internal/agent/runtime/routingerr"
+	commonconfig "github.com/kandev/kandev/internal/common/config"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/secrets"
@@ -91,6 +92,16 @@ type Manager struct {
 	// resolves executions by environment ID. Nil = no scoping.
 	environmentAccessCheck func(ctx context.Context, environmentID string) error
 
+	// taskAccessCheck is the task-keyed sibling of sessionAccessCheck, used by
+	// the task-keyed SSR terminal list which reads terminal rows by task ID
+	// without resolving an execution at all. Nil = no scoping.
+	taskAccessCheck func(ctx context.Context, taskID string) error
+
+	// taskEnvironmentAccessCheck authorizes a (task, environment) pair for
+	// surfaces that merge state keyed by both, where authorizing each ID on
+	// its own would not establish that they belong together. Nil = no scoping.
+	taskEnvironmentAccessCheck func(ctx context.Context, taskID, environmentID string) error
+
 	// singleflight deduplicates concurrent GetOrEnsureExecution calls for the same session
 	ensureExecutionGroup singleflight.Group
 
@@ -118,6 +129,10 @@ type Manager struct {
 	// every workspace can be seeded at agentctl-ready time, not just full
 	// launches. See manager_base_branches.go.
 	baseBranchProvider BaseBranchProvider
+
+	// comparisonTargetProvider hydrates task-repository comparison bindings so
+	// every workspace creation path can seed agentctl from durable state.
+	comparisonTargetProvider ComparisonTargetProvider
 
 	// secretStore encrypts/decrypts runtime auth tokens (e.g., agentctl handshake tokens).
 	// Used to persist tokens across backend restarts for remote executor recovery.
@@ -156,6 +171,10 @@ type Manager struct {
 	// 0 when unset (tests, or before the launcher wires it). Never used for
 	// SSH/remote rows — their process lives on another host.
 	standaloneHostPID atomic.Int64
+
+	// agentctlStartupConfig is the resolved child contract applied to every
+	// managed agentctl launch path.
+	agentctlStartupConfig commonconfig.AgentctlStartupConfig
 
 	// managedGoCache provides the opt-in GOCACHE for host-local executions.
 	// System storage wiring installs it after settings persistence is ready.
@@ -224,6 +243,17 @@ func (m *Manager) SetStandaloneHostPID(pid int) {
 	m.standaloneHostPID.Store(int64(pid))
 }
 
+// SetAgentctlStartupConfig wires the resolved backend-owned agentctl values
+// into every executor request. Remote and container executors serialize this
+// contract explicitly instead of inheriting the backend environment.
+func (m *Manager) SetAgentctlStartupConfig(startup commonconfig.AgentctlStartupConfig) error {
+	if err := startup.Validate(); err != nil {
+		return err
+	}
+	m.agentctlStartupConfig = startup
+	return nil
+}
+
 // NewManager creates a new lifecycle manager.
 // The executorRegistry manages multiple runtimes (Docker, Standalone, etc.) for task-specific execution.
 // The fallbackPolicy controls behavior when a requested runtime is unavailable.
@@ -286,17 +316,19 @@ func NewManager(
 	// mcpHandler will be set later via SetMCPHandler.
 	// stopCh is shared with the manager so workspace-stream backoff drains on Stop.
 	mgr.streamManager = NewStreamManager(log, StreamCallbacks{
-		OnAgentEvent:       mgr.handleAgentEvent,
-		OnStreamDisconnect: mgr.handleStreamDisconnect,
-		OnGitStatus:        mgr.handleGitStatusUpdate,
-		OnGitCommit:        mgr.handleGitCommitCreated,
-		OnGitReset:         mgr.handleGitResetDetected,
-		OnBranchSwitch:     mgr.handleBranchSwitch,
-		OnFileChange:       mgr.handleFileChangeNotification,
-		OnShellOutput:      mgr.handleShellOutput,
-		OnShellExit:        mgr.handleShellExit,
-		OnProcessOutput:    mgr.handleProcessOutput,
-		OnProcessStatus:    mgr.handleProcessStatus,
+		OnAgentEvent:                     mgr.handleAgentEvent,
+		OnStreamDisconnect:               mgr.handleStreamDisconnect,
+		OnAgentEventWithGeneration:       mgr.handleAgentEventWithStartupGeneration,
+		OnStreamDisconnectWithGeneration: mgr.handleStreamDisconnectWithStartupGeneration,
+		OnGitStatus:                      mgr.handleGitStatusUpdate,
+		OnGitCommit:                      mgr.handleGitCommitCreated,
+		OnGitReset:                       mgr.handleGitResetDetected,
+		OnBranchSwitch:                   mgr.handleBranchSwitch,
+		OnFileChange:                     mgr.handleFileChangeNotification,
+		OnShellOutput:                    mgr.handleShellOutput,
+		OnShellExit:                      mgr.handleShellExit,
+		OnProcessOutput:                  mgr.handleProcessOutput,
+		OnProcessStatus:                  mgr.handleProcessStatus,
 	}, nil, stopCh)
 
 	// Set session manager dependencies for full orchestration
@@ -389,6 +421,13 @@ func (m *Manager) SetMCPIdentityScoper(scoper MCPIdentityScoper) {
 	m.streamManager.mcpIdentityScoper = scoper
 }
 
+// SetMCPPrincipalScoper installs the trusted in-session MCP principal resolver.
+// The resolver derives automation identity and workspace boundaries from the
+// execution's own task and session, never from the agent request payload.
+func (m *Manager) SetMCPPrincipalScoper(scoper MCPPrincipalScoper) {
+	m.streamManager.mcpPrincipalScoper = scoper
+}
+
 // SetSessionAccessChecker installs the per-user session visibility check used
 // by GetOrEnsureExecution and EnsurePassthroughExecution. The checker must
 // return nil for contexts without a request identity (internal callers). Set
@@ -412,6 +451,20 @@ func (m *Manager) SetEnvironmentAccessChecker(check func(ctx context.Context, en
 	m.environmentAccessCheck = check
 }
 
+// SetTaskAccessChecker installs the per-user task visibility check used by
+// the task-keyed SSR terminal route. The checker must return nil for contexts
+// without a request identity (internal callers).
+func (m *Manager) SetTaskAccessChecker(check func(ctx context.Context, taskID string) error) {
+	m.taskAccessCheck = check
+}
+
+// SetTaskEnvironmentAccessChecker installs the per-user check for a
+// (task, environment) pair, used by the task-keyed SSR terminal route which
+// merges terminals from the task with unmanaged shells from the environment.
+func (m *Manager) SetTaskEnvironmentAccessChecker(check func(ctx context.Context, taskID, environmentID string) error) {
+	m.taskEnvironmentAccessCheck = check
+}
+
 // CheckSessionAccess authorizes a session-scoped operation for the ctx
 // identity. Handlers that resolve an execution by a bare in-memory lookup
 // (vscode/port reverse proxies) must call this before serving, since only the
@@ -433,6 +486,29 @@ func (m *Manager) CheckEnvironmentAccess(ctx context.Context, taskEnvironmentID 
 		return nil
 	}
 	return m.environmentAccessCheck(ctx, taskEnvironmentID)
+}
+
+// CheckTaskAccess authorizes a task-scoped operation for the ctx identity.
+// The task-keyed sibling of CheckSessionAccess, for handlers that read
+// task-owned state (the SSR terminal list) without going through an
+// execution. No-op when no checker is set.
+func (m *Manager) CheckTaskAccess(ctx context.Context, taskID string) error {
+	if m.taskAccessCheck == nil {
+		return nil
+	}
+	return m.taskAccessCheck(ctx, taskID)
+}
+
+// CheckTaskEnvironmentAccess authorizes a (task, environment) pair for the ctx
+// identity: both IDs visible, and the environment actually bound to the task.
+// Handlers that merge state keyed by both must use this rather than the two
+// single-ID checks, which pass independently for an unrelated pair. No-op when
+// no checker is set.
+func (m *Manager) CheckTaskEnvironmentAccess(ctx context.Context, taskID, taskEnvironmentID string) error {
+	if m.taskEnvironmentAccessCheck == nil {
+		return nil
+	}
+	return m.taskEnvironmentAccessCheck(ctx, taskID, taskEnvironmentID)
 }
 
 // SetWorkspaceInfoProvider sets the provider for workspace information.

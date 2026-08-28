@@ -103,17 +103,36 @@ func extractErrorMessage(event *agentctl.AgentEvent) string {
 	return "agent error completion"
 }
 
+func isUninitializedStartupExecution(execution *AgentExecution) bool {
+	if execution == nil || execution.startupAttemptSnapshot() == 0 || execution.isSessionInitialized() {
+		return false
+	}
+	return execution.Status == v1.AgentStatusStarting || execution.Status == v1.AgentStatusRunning
+}
+
 // handleCompleteEventMarkState marks the execution state after a complete event:
 // failed+removed on error, ready on success.
+func isUninitializedStartupFailure(execution *AgentExecution, event *agentctl.AgentEvent) bool {
+	return event != nil && event.PromptGeneration == 0 && isUninitializedStartupExecution(execution)
+}
+
 func (m *Manager) handleCompleteEventMarkState(execution *AgentExecution, event *agentctl.AgentEvent, isError bool) {
 	if isError {
+		// A process can exit while the startup owner is still waiting for ACP
+		// initialization. Leave that failure non-terminal so the startup path can
+		// classify it and perform its bounded managed-runtime recovery, if any.
+		if isUninitializedStartupFailure(execution, event) {
+			m.logger.Debug("deferring uninitialized startup failure to startup owner",
+				zap.String("execution_id", execution.ID))
+			return
+		}
 		errorMsg := extractErrorMessage(event)
 		// A turn aborted by backend graceful shutdown is not an agent failure.
 		// Redirect it to a benign stop so the session stays resumable and the UI
 		// shows no red error banner. MarkCompleted applies the same guard, but
 		// routing here keeps the misleading "marking as failed" WARN out of logs.
 		if m.IsShuttingDown() {
-			_ = m.markStoppedDuringShutdown(execution, 1, errorMsg)
+			_ = m.markStoppedDuringShutdown(execution, 1, errorMsg, event.TurnID)
 			return
 		}
 		m.logger.Warn("error completion received, marking execution as failed",
@@ -125,7 +144,7 @@ func (m *Manager) handleCompleteEventMarkState(execution *AgentExecution, event 
 			zap.Any("event_data", event.Data),
 			zap.String("agent_command", execution.AgentCommand),
 			zap.String("acp_session_id", execution.ACPSessionID))
-		if err := m.MarkCompleted(execution.ID, 1, errorMsg); err != nil {
+		if err := m.markCompletedWithTurnID(execution.ID, 1, errorMsg, event.TurnID); err != nil {
 			m.logger.Error("failed to mark execution as failed after error completion",
 				zap.String("execution_id", execution.ID),
 				zap.Error(err))
@@ -177,16 +196,15 @@ func handleCompleteEventSignal(execution *AgentExecution, event *agentctl.AgentE
 			stopReason = sr
 		}
 	}
-	select {
-	case execution.promptDoneCh <- PromptCompletionSignal{
-		StopReason:       stopReason,
-		IsError:          isError,
-		Error:            errorMsg,
-		PromptGeneration: event.PromptGeneration,
-	}:
-	default:
-		// Channel full or no one waiting — that's fine (e.g., initial prompt in goroutine)
-	}
+	execution.signalPromptCompletionForStartupGeneration(
+		execution.startupAttemptSnapshot(),
+		PromptCompletionSignal{
+			StopReason:       stopReason,
+			IsError:          isError,
+			Error:            errorMsg,
+			PromptGeneration: event.PromptGeneration,
+		},
+	)
 }
 
 type promptCompletionClaim struct {
@@ -226,11 +244,11 @@ func (m *Manager) claimPromptCompletion(
 		if current.Status != v1.AgentStatusReady {
 			current.firstActivityOnce.Do(func() {
 				claim.publishRunning = true
-				claim.runningPayload = newAgentEventPayload(current)
+				claim.runningPayload = newAgentEventPayloadWithTurnID(current, event.TurnID)
 			})
 		}
 		current.Status = v1.AgentStatusReady
-		claim.readyPayload = newAgentEventPayload(current)
+		claim.readyPayload = newAgentEventPayloadWithTurnID(current, event.TurnID)
 	})
 	if err == nil && claimed {
 		return claim, true
@@ -305,15 +323,21 @@ func (m *Manager) handleCompleteEvent(execution *AgentExecution, event *agentctl
 		event.TurnID = execution.promptTurnIDSnapshot()
 	}
 	isError, stopReason := completeEventResult(event)
+	if isError && isUninitializedStartupFailure(execution, event) {
+		// The startup owner is waiting for this failed process to classify its
+		// stderr. Do not release startup activity or signal prompt completion;
+		// the closed child stream will return the ACP request error to that owner.
+		m.logger.Debug("deferring uninitialized startup error event to startup owner",
+			zap.String("execution_id", execution.ID))
+		return true
+	}
 	claim, claimed := m.claimPromptCompletion(execution, event, isError)
 	if !claimed {
 		return false
 	}
 	m.releaseActivity(executionActivityKey(execution.ID))
 
-	execution.lastActivityAtMu.Lock()
-	execution.lastActivityAt = time.Now()
-	execution.lastActivityAtMu.Unlock()
+	execution.markAgentActivity()
 
 	// Check buffer content BEFORE any processing
 	execution.messageMu.Lock()
@@ -509,8 +533,13 @@ func isTerminalToolUpdate(event agentctl.AgentEvent) bool {
 // (available_commands_update arriving 50ms after MarkBootReady, etc.) don't
 // accidentally re-arm a freshly-booted no-prompt session as Running.
 func (m *Manager) recordActivity(execution *AgentExecution, event agentctl.AgentEvent) {
+	_, isTurnContent := turnContentEventTypes[event.Type]
 	execution.lastActivityAtMu.Lock()
 	execution.lastActivityAt = time.Now()
+	if isTurnContent {
+		execution.agentEventSincePrompt = true
+		execution.promptActivityEpoch++
+	}
 	execution.lastActivityAtMu.Unlock()
 
 	// Gate firstActivityOnce on `Status != Ready` so a delayed metadata
@@ -620,6 +649,32 @@ func (m *Manager) handleStreamDisconnect(
 	m.publishStreamDisconnectError(execution, err)
 }
 
+func (m *Manager) handleStreamDisconnectWithStartupGeneration(
+	execution *AgentExecution,
+	err error,
+	promptGeneration uint64,
+	startupGeneration uint64,
+) {
+	if !execution.acceptsStartupAttempt(startupGeneration) {
+		m.logger.Debug("ignoring stale managed-runtime stream disconnect",
+			zap.String("execution_id", execution.ID),
+			zap.Uint64("stream_startup_generation", startupGeneration),
+			zap.Uint64("current_startup_generation", execution.startupAttemptSnapshot()))
+		return
+	}
+	// A startup stream can disconnect before ACP session initialization. The
+	// startup caller owns that failure and may still perform the bounded npm
+	// recovery, so do not publish an intermediate failed state here.
+	if promptGeneration == 0 && !execution.isSessionInitialized() {
+		m.logger.Debug("ignoring startup stream disconnect before ACP initialization",
+			zap.String("execution_id", execution.ID),
+			zap.Uint64("startup_generation", startupGeneration),
+			zap.Error(err))
+		return
+	}
+	m.handleStreamDisconnect(execution, err, promptGeneration)
+}
+
 func (m *Manager) publishStreamDisconnectError(execution *AgentExecution, err error) {
 	m.eventPublisher.PublishAgentctlEvent(
 		context.Background(), events.AgentctlError, execution,
@@ -662,16 +717,13 @@ func (m *Manager) handlePromptHandoffEvent(
 	execution.messageMu.Unlock()
 	m.flushAssistantHistory(execution)
 
-	select {
-	case execution.promptDoneCh <- PromptCompletionSignal{
-		StopReason:       streams.EventTypeForegroundIdle,
-		PromptGeneration: event.PromptGeneration,
-	}:
-	default:
-		m.logger.Warn("prompt handoff could not signal lifecycle waiter",
-			zap.String("execution_id", execution.ID),
-			zap.Uint64("prompt_generation", event.PromptGeneration))
-	}
+	execution.signalPromptCompletionForStartupGeneration(
+		execution.startupAttemptSnapshot(),
+		PromptCompletionSignal{
+			StopReason:       streams.EventTypeForegroundIdle,
+			PromptGeneration: event.PromptGeneration,
+		},
+	)
 }
 
 // handleAgentEvent processes incoming agent events from the agent
@@ -786,6 +838,28 @@ func (m *Manager) handleAgentEvent(execution *AgentExecution, event agentctl.Age
 	}
 
 	m.eventPublisher.PublishAgentStreamEvent(execution, event)
+}
+
+func (m *Manager) handleAgentEventWithStartupGeneration(
+	execution *AgentExecution,
+	event agentctl.AgentEvent,
+	startupGeneration uint64,
+) {
+	if !execution.acceptsStartupAttempt(startupGeneration) {
+		m.logger.Debug("ignoring stale managed-runtime agent event",
+			zap.String("execution_id", execution.ID),
+			zap.String("event_type", event.Type),
+			zap.Uint64("event_startup_generation", startupGeneration),
+			zap.Uint64("current_startup_generation", execution.startupAttemptSnapshot()))
+		return
+	}
+	if !execution.isSessionInitialized() && event.PromptGeneration == 0 && event.Type == toolStatusComplete {
+		m.logger.Debug("ignoring startup completion before ACP initialization",
+			zap.String("execution_id", execution.ID),
+			zap.Uint64("startup_generation", startupGeneration))
+		return
+	}
+	m.handleAgentEvent(execution, event)
 }
 
 func agentEventDataString(data map[string]any, key string) string {

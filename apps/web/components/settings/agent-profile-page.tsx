@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import { useParams } from "@/lib/routing/client-router";
@@ -17,7 +17,7 @@ import { ProfileFormFields, type ProfileFormData } from "@/components/settings/p
 import { profilePermissionValues } from "@/lib/agent-permissions";
 import { toAgentProfilePatch } from "@/app/settings/agents/[agentId]/agent-save-helpers";
 import {
-  AgentProfileDeleteConfirmDialog,
+  AgentProfileDeleteConfirmation,
   AgentProfileDeleteConflictDialog,
   AgentProfileDisableConflictDialog,
   type AgentProfileDeleteConflict,
@@ -61,6 +61,8 @@ import { CommandPreviewCard } from "@/app/settings/agents/[agentId]/profiles/[pr
 import type { AgentProfileMcpConfig } from "@/lib/types/http";
 import { useAgentProfileSettings } from "@/app/settings/agents/[agentId]/profiles/[profileId]/use-agent-profile-settings";
 import { agentProfileDiscoveryTarget } from "@/lib/settings-discovery/dynamic-targets";
+import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
+import { DynamicAgentProfileEditor } from "@/components/settings/dynamic-agent-profile-editor";
 
 type ProfileEditorProps = {
   agent: Agent;
@@ -92,7 +94,7 @@ function ProfileEditorHeader({
 }: ProfileEditorHeaderProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-start">
+    <div className="flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-start">
       <div className="min-w-0">
         <h2 className="text-2xl font-bold flex min-w-0 items-center gap-2 wrap-break-word">
           <AgentLogo agentName={agentName} size={28} className="shrink-0" />
@@ -102,12 +104,12 @@ function ProfileEditorHeader({
           {t("agents:agentProfileSettings", { name: agentDisplayName })}
         </p>
       </div>
-      <div className="flex items-center gap-3 sm:shrink-0">
+      <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3 md:shrink-0">
         <Button
           variant="outline"
           onClick={onDuplicate}
           data-testid="duplicate-profile-header"
-          className="min-h-11"
+          className="min-h-11 w-full md:w-auto"
           disabled={duplicating}
           aria-busy={duplicating}
           title={t("agents:duplicateProfileNamed", { name: savedProfileName })}
@@ -132,25 +134,64 @@ function ProfileEditorHeader({
 
 type DeleteProfileCardProps = {
   onDelete: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void | Promise<void>;
 };
 
-function DeleteProfileCard({ onDelete }: DeleteProfileCardProps) {
+function DeleteProfileCard({ onDelete, open, onOpenChange, onConfirm }: DeleteProfileCardProps) {
   const { t } = useTranslation();
+  const { isFinePointer } = useResponsiveBreakpoint();
+  const deleteAnchorRef = useRef<HTMLButtonElement>(null);
+  const closeDeleteConfirmation = () => {
+    onOpenChange(false);
+    queueMicrotask(() => deleteAnchorRef.current?.focus());
+  };
   return (
     <Card className="border-destructive">
       <CardHeader>
         <CardTitle className="text-destructive">{t("agents:deleteProfile")}</CardTitle>
       </CardHeader>
-      <CardContent className="flex items-center justify-between">
-        <div>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-sm font-medium">{t("agents:removeThisProfile")}</p>
           <p className="text-xs text-muted-foreground">{t("agents:actionCannotBeUndone")}</p>
         </div>
-        <Button variant="destructive" onClick={onDelete}>
-          <IconTrash className="h-4 w-4 mr-2" />
-          {t("agents:delete")}
-        </Button>
+        {!open || isFinePointer ? (
+          <Button
+            ref={deleteAnchorRef}
+            variant="destructive"
+            className="cursor-pointer"
+            onClick={onDelete}
+            data-testid="profile-delete-trigger"
+          >
+            <IconTrash className="h-4 w-4 mr-2" />
+            {t("agents:delete")}
+          </Button>
+        ) : null}
+        {!isFinePointer && open ? (
+          <div className="basis-full min-w-0">
+            <AgentProfileDeleteConfirmation
+              open={open}
+              isFinePointer={false}
+              anchorRef={deleteAnchorRef}
+              onOpenChange={onOpenChange}
+              onCancel={closeDeleteConfirmation}
+              onConfirm={onConfirm}
+            />
+          </div>
+        ) : null}
       </CardContent>
+      {isFinePointer ? (
+        <AgentProfileDeleteConfirmation
+          open={open}
+          isFinePointer
+          anchorRef={deleteAnchorRef}
+          onOpenChange={onOpenChange}
+          onCancel={closeDeleteConfirmation}
+          onConfirm={onConfirm}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -239,32 +280,18 @@ function ProfileSettingsCard({
 }
 
 type ProfileDeleteDialogsProps = {
-  showDeleteConfirm: boolean;
-  setShowDeleteConfirm: (open: boolean) => void;
-  handleDeleteProfile: () => void;
   conflict: AgentProfileDeleteConflict | null;
   setConflict: (c: AgentProfileDeleteConflict | null) => void;
   handleForceDelete: () => void;
 };
 
 function ProfileDeleteDialogs({
-  showDeleteConfirm,
-  setShowDeleteConfirm,
-  handleDeleteProfile,
   conflict,
   setConflict,
   handleForceDelete,
 }: ProfileDeleteDialogsProps) {
   return (
     <>
-      <AgentProfileDeleteConfirmDialog
-        open={showDeleteConfirm}
-        onOpenChange={(open) => {
-          if (!open) setShowDeleteConfirm(false);
-        }}
-        onConfirm={handleDeleteProfile}
-      />
-
       <AgentProfileDeleteConflictDialog
         conflict={conflict}
         onOpenChange={(open) => {
@@ -455,7 +482,12 @@ function ProfileEditor({
         onModelConfigResolutionPendingChange={setModelConfigResolutionPending}
       />
 
-      <DeleteProfileCard onDelete={deleteState.requestDelete} />
+      <DeleteProfileCard
+        onDelete={deleteState.requestDelete}
+        open={deleteState.showDeleteConfirm}
+        onOpenChange={deleteState.setShowDeleteConfirm}
+        onConfirm={deleteState.handleDeleteProfile}
+      />
 
       <AgentProfileDisableConflictDialog
         agents={utilityConflict}
@@ -467,9 +499,6 @@ function ProfileEditor({
       />
 
       <ProfileDeleteDialogs
-        showDeleteConfirm={deleteState.showDeleteConfirm}
-        setShowDeleteConfirm={deleteState.setShowDeleteConfirm}
-        handleDeleteProfile={deleteState.handleDeleteProfile}
         conflict={deleteState.conflict}
         setConflict={deleteState.setConflict}
         handleForceDelete={deleteState.handleForceDelete}
@@ -503,6 +532,10 @@ export function AgentProfilePage({ initialMcpConfig }: AgentProfilePageClientPro
         </CardContent>
       </Card>
     );
+  }
+
+  if (profile.kind === "dynamic" || agent.name === "dynamic") {
+    return <DynamicAgentProfileEditor agent={agent} profile={profile} />;
   }
 
   return (

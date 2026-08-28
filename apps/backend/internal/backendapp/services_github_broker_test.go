@@ -36,6 +36,37 @@ type fakeContributionDestinationVerifier struct {
 	calls int
 }
 
+type factoryTestGitCredentialResolver struct{}
+
+func (factoryTestGitCredentialResolver) Supports(providerID string) bool {
+	return strings.EqualFold(providerID, "github")
+}
+
+func (factoryTestGitCredentialResolver) Binding(context.Context, gitcredentials.Scope) (string, error) {
+	return "generation-1", nil
+}
+
+func (factoryTestGitCredentialResolver) Resolve(context.Context, gitcredentials.Scope) (gitcredentials.Credential, error) {
+	return gitcredentials.Credential{Username: "x-access-token", Password: "secret"}, nil
+}
+
+type factoryTestGitHubCredentialSource struct {
+	verifier *fakeContributionDestinationVerifier
+}
+
+func (s *factoryTestGitHubCredentialSource) GitCredentialResolver() gitcredentials.Resolver {
+	return factoryTestGitCredentialResolver{}
+}
+
+func (s *factoryTestGitHubCredentialSource) VerifyContributionDestinationForWorkspace(
+	ctx context.Context,
+	workspaceID, sourceOwner, sourceRepo, sourceProviderID, targetOwner, targetRepo, targetProviderID string,
+) error {
+	return s.verifier.VerifyContributionDestinationForWorkspace(
+		ctx, workspaceID, sourceOwner, sourceRepo, sourceProviderID, targetOwner, targetRepo, targetProviderID,
+	)
+}
+
 func (f *fakeContributionDestinationVerifier) VerifyContributionDestinationForWorkspace(
 	context.Context, string, string, string, string, string, string, string,
 ) error {
@@ -173,11 +204,11 @@ func TestGitHubCredentialBrokerEndpoint(t *testing.T) {
 	dedicated := &config.Config{
 		GitHubCredentialBroker: config.GitHubCredentialBrokerConfig{PublicBaseURL: "https://broker.example/"},
 	}
-	if got, want := githubCredentialBrokerEndpoint(dedicated), "https://broker.example/api/v1/github/credentials/resolve"; got != want {
+	if got, want := githubCredentialBrokerEndpoint(dedicated), "https://broker.example/api/v1/git/credentials/resolve"; got != want {
 		t.Fatalf("dedicated endpoint = %q, want %q", got, want)
 	}
 	local := &config.Config{Server: config.ServerConfig{Port: 49123}}
-	if got, want := githubCredentialBrokerEndpoint(local), "http://localhost:49123/api/v1/github/credentials/resolve"; got != want {
+	if got, want := githubCredentialBrokerEndpoint(local), "http://localhost:49123/api/v1/git/credentials/resolve"; got != want {
 		t.Fatalf("local endpoint = %q, want %q", got, want)
 	}
 }
@@ -329,8 +360,15 @@ func TestGitHubBrokerScopeAuthorizerAllowsOnlyTheBoundContributionDestination(t 
 	); err != nil {
 		t.Fatalf("bound destination identity was denied: %v", err)
 	}
-	if verifier.calls != 1 {
-		t.Fatalf("provider verification calls = %d, want 1", verifier.calls)
+	if err := authorizer.AuthorizeGitCredential(context.Background(), gitcredentials.Scope{
+		ProviderID: "github", WorkspaceID: "workspace-destination", TaskID: "task-destination", SessionID: "session-destination",
+		RepositoryID: "repository-destination", Host: "github.com", Path: "/automation/kandev.git",
+		IdentityProviderID: "200", ParentProviderID: "100",
+	}); err != nil {
+		t.Fatalf("authorized contribution-destination lease was denied: %v", err)
+	}
+	if verifier.calls != 2 {
+		t.Fatalf("provider verification calls = %d, want 2", verifier.calls)
 	}
 	if err := authorizer.AuthorizeGitHubRepositoryWithIdentity(
 		context.Background(), "workspace-destination", "task-destination", "session-destination", "repository-destination", "automation", "kandev", "201", "100",
@@ -347,19 +385,63 @@ func TestGitHubBrokerScopeAuthorizerAllowsOnlyTheBoundContributionDestination(t 
 	}
 }
 
-func TestIsCanonicalKandevRepositoryInputRequiresPublicGitHubHost(t *testing.T) {
-	for _, host := range []string{"", "https://github.enterprise.example"} {
-		input := &taskservice.TaskRepositoryInput{
-			Provider: "github", ProviderHost: host, ProviderOwner: "kdlbs", ProviderName: "kandev",
-		}
-		if isCanonicalKandevRepositoryInput(input, nil) {
-			t.Fatalf("host %q was accepted as the public canonical GitHub repository", host)
-		}
+func TestGitCredentialBrokerFactoryWiresGitHubDestinationVerifier(t *testing.T) {
+	destination := taskmodels.ContributionDestination{
+		Version:  taskmodels.ContributionDestinationVersion,
+		Provider: taskmodels.ContributionDestinationProviderGitHub,
+		SourceRepository: taskmodels.ContributionDestinationRepository{
+			Host: "github.com", Path: "kdlbs/kandev", ProviderID: "100", RemoteURL: "https://github.com/kdlbs/kandev.git",
+		},
+		TargetRepository: taskmodels.ContributionDestinationRepository{
+			Host: "github.com", Path: "automation/kandev", ProviderID: "200", RemoteURL: "https://github.com/automation/kandev.git",
+		},
 	}
-	if !isCanonicalKandevRepositoryInput(&taskservice.TaskRepositoryInput{
-		Provider: "github", ProviderHost: "https://github.com", ProviderOwner: "kdlbs", ProviderName: "kandev",
-	}, nil) {
-		t.Fatal("public GitHub canonical repository was rejected")
+	metadata := map[string]interface{}{}
+	if err := taskmodels.PutContributionDestination(metadata, &destination); err != nil {
+		t.Fatalf("PutContributionDestination() = %v", err)
+	}
+	repo := &fakeGitHubBrokerTaskRepository{
+		task:       &taskmodels.Task{ID: "task-factory", WorkspaceID: "workspace-factory"},
+		session:    &taskmodels.TaskSession{ID: "session-factory", TaskID: "task-factory", State: taskmodels.TaskSessionStateRunning},
+		repository: &taskmodels.Repository{ID: "repository-factory", WorkspaceID: "workspace-factory", Provider: "github", ProviderHost: "https://github.com", ProviderRepoID: "100", ProviderOwner: "kdlbs", ProviderName: "kandev"},
+		links:      []*taskmodels.TaskRepository{{TaskID: "task-factory", RepositoryID: "repository-factory", Metadata: metadata}},
+	}
+	verifier := &fakeContributionDestinationVerifier{}
+	broker := newGitCredentialBroker(&factoryTestGitHubCredentialSource{verifier: verifier}, nil, repo, "")
+
+	if _, err := broker.Issue(context.Background(), gitcredentials.Scope{
+		ProviderID: "github", WorkspaceID: "workspace-factory", TaskID: "task-factory", SessionID: "session-factory",
+		RepositoryID: "repository-factory", Host: "github.com", Path: "/automation/kandev.git",
+		IdentityProviderID: "200", ParentProviderID: "100",
+	}); err != nil {
+		t.Fatalf("managed fork lease issuance = %v", err)
+	}
+	if verifier.calls != 1 {
+		t.Fatalf("destination verifier calls = %d, want 1", verifier.calls)
+	}
+}
+
+func TestIsCanonicalKandevRepositoryInputRequiresPublicGitHubHost(t *testing.T) {
+	tests := []struct {
+		name  string
+		input *taskservice.TaskRepositoryInput
+		repo  *taskmodels.Repository
+		valid bool
+	}{
+		{name: "input canonical", input: &taskservice.TaskRepositoryInput{Provider: "github", ProviderHost: "https://github.com", ProviderOwner: "kdlbs", ProviderName: "kandev"}, valid: true},
+		{name: "repository canonical", repo: &taskmodels.Repository{Provider: "github", ProviderHost: "github.com", ProviderOwner: "kdlbs", ProviderName: "kandev"}, valid: true},
+		{name: "input empty host", input: &taskservice.TaskRepositoryInput{Provider: "github", ProviderOwner: "kdlbs", ProviderName: "kandev"}},
+		{name: "input enterprise host", input: &taskservice.TaskRepositoryInput{Provider: "github", ProviderHost: "https://github.enterprise.example", ProviderOwner: "kdlbs", ProviderName: "kandev"}},
+		{name: "input provider mismatch", input: &taskservice.TaskRepositoryInput{Provider: "gitlab", ProviderHost: "https://github.com", ProviderOwner: "kdlbs", ProviderName: "kandev"}},
+		{name: "input owner mismatch", input: &taskservice.TaskRepositoryInput{Provider: "github", ProviderHost: "https://github.com", ProviderOwner: "other", ProviderName: "kandev"}},
+		{name: "repository name mismatch", repo: &taskmodels.Repository{Provider: "github", ProviderHost: "github.com", ProviderOwner: "kdlbs", ProviderName: "other"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isCanonicalKandevRepositoryInput(tt.input, tt.repo); got != tt.valid {
+				t.Fatalf("isCanonicalKandevRepositoryInput() = %v, want %v", got, tt.valid)
+			}
+		})
 	}
 }
 

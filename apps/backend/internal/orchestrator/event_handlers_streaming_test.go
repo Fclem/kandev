@@ -112,12 +112,22 @@ func (r *taskServiceStateRepository) UpdateTaskStateIfSessionState(
 }
 
 type recordingClarificationCanceller struct {
-	sessions []string
+	sessions              []string
+	expiredSessions       []string
+	expireContextDeadline []bool
+	expireErr             error
 }
 
-func (c *recordingClarificationCanceller) DetachSessionAndNotify(_ context.Context, sessionID string) int {
+func (c *recordingClarificationCanceller) DetachSessionAndNotify(_ context.Context, sessionID string) (int, error) {
 	c.sessions = append(c.sessions, sessionID)
-	return 1
+	return 1, nil
+}
+
+func (c *recordingClarificationCanceller) ExpireSessionAndNotify(ctx context.Context, sessionID string) (int, error) {
+	c.expiredSessions = append(c.expiredSessions, sessionID)
+	_, hasDeadline := ctx.Deadline()
+	c.expireContextDeadline = append(c.expireContextDeadline, hasDeadline)
+	return 1, c.expireErr
 }
 
 type listTaskSessionsErrorRepo struct {
@@ -349,6 +359,39 @@ func TestUpdateTaskSessionStatePublishesPersistedUpdatedAt(t *testing.T) {
 	require.Equal(t, session.UpdatedAt.UTC().Format(time.RFC3339Nano), data["updated_at"])
 }
 
+func TestUpdateTaskSessionStateExpiresClarificationsOnTerminalTransition(t *testing.T) {
+	for _, terminalState := range []models.TaskSessionState{
+		models.TaskSessionStateCompleted,
+		models.TaskSessionStateFailed,
+		models.TaskSessionStateCancelled,
+	} {
+		t.Run(string(terminalState), func(t *testing.T) {
+			ctx := context.Background()
+			repo := setupTestRepo(t)
+			seedSession(t, repo, "t1", "s1", "step1")
+			svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+			canceller := &recordingClarificationCanceller{}
+			svc.clarificationCanceller = canceller
+
+			svc.updateTaskSessionState(ctx, "t1", "s1", terminalState, "", false)
+
+			require.Equal(t, []string{"s1"}, canceller.expiredSessions)
+			require.Equal(t, []bool{true}, canceller.expireContextDeadline)
+		})
+	}
+}
+
+func TestExpireClarificationWaitersReturnsPersistenceError(t *testing.T) {
+	repo := setupTestRepo(t)
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	wantErr := errors.New("expiry write failed")
+	svc.clarificationCanceller = &recordingClarificationCanceller{expireErr: wantErr}
+
+	err := svc.expireClarificationWaiters(context.Background(), "s1")
+
+	require.ErrorIs(t, err, wantErr)
+}
+
 func TestUpdateTaskSessionState_EnabledClaudePublishesSettledBackground(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
@@ -385,6 +428,8 @@ func TestTransitionTaskSessionStateReportsAcceptedWrite(t *testing.T) {
 	eb := &recordingEventBus{}
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	svc.eventBus = eb
+	canceller := &recordingClarificationCanceller{}
+	svc.clarificationCanceller = canceller
 
 	changed, finalState, err := svc.transitionTaskSessionState(
 		ctx,
@@ -400,6 +445,47 @@ func TestTransitionTaskSessionStateReportsAcceptedWrite(t *testing.T) {
 	require.Equal(t, models.TaskSessionStateCancelled, finalState)
 	require.Len(t, eb.events, 1)
 	require.Equal(t, events.TaskSessionStateChanged, eb.events[0].subject)
+	require.Equal(t, []string{"s1"}, canceller.expiredSessions)
+	require.Equal(t, []bool{true}, canceller.expireContextDeadline)
+}
+
+func TestTransitionTaskSessionStatePublishesMetadataWrittenByHook(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t1", "s1", "step1")
+	eb := &recordingEventBus{}
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.eventBus = eb
+	errorValue := models.LastAgentError{
+		Message:    "The selected base branch is not available.",
+		Code:       "base_branch_missing",
+		OccurredAt: time.Date(2026, 8, 19, 23, 10, 41, 0, time.UTC),
+		StampValue: "launch-error-stamp",
+	}
+
+	changed, _, err := svc.transitionTaskSessionState(
+		ctx,
+		"t1",
+		"s1",
+		models.TaskSessionStateFailed,
+		errorValue.Message,
+		func() {
+			require.NoError(t, repo.SetSessionMetadataKey(
+				ctx, "s1", models.SessionMetaKeyLastAgentError, errorValue,
+			))
+		},
+	)
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Len(t, eb.events, 1)
+	data, ok := eb.events[0].event.Data.(map[string]interface{})
+	require.True(t, ok)
+	metadata, ok := data["session_metadata"].(map[string]interface{})
+	require.True(t, ok)
+	lastError, ok := metadata[models.SessionMetaKeyLastAgentError].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, "base_branch_missing", lastError["code"])
 }
 
 func TestTransitionTaskSessionStateReportsPersistenceFailure(t *testing.T) {
@@ -715,6 +801,7 @@ func TestPersistTurnPromptMetadata(t *testing.T) {
 			Usage: &streams.PromptUsage{
 				InputTokens:                  10,
 				OutputTokens:                 20,
+				OutputTokensPresent:          true,
 				CachedReadTokens:             3,
 				CachedWriteTokens:            4,
 				ThoughtTokens:                5,
@@ -740,6 +827,7 @@ func TestPersistTurnPromptMetadata(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, float64(42), usage["total_tokens"])
 	require.Equal(t, float64(123), usage["provider_reported_cost_subcents"])
+	require.Equal(t, true, usage["output_tokens_present"])
 	require.Equal(t, true, usage["estimated"])
 }
 
@@ -1318,6 +1406,10 @@ func TestPublishPromptUsage_NonTerminalCompletionUsesReadyTurnSnapshot(t *testin
 	ctx := context.Background()
 	repo := setupTestRepo(t)
 	seedSession(t, repo, "t1", "s1", "step1")
+	session, err := repo.GetTaskSession(ctx, "s1")
+	require.NoError(t, err)
+	session.AgentProfileID = "session-agent"
+	require.NoError(t, repo.UpdateTaskSession(ctx, session))
 
 	stepGetter := newMockStepGetter()
 	stepGetter.steps["step1"] = &wfmodels.WorkflowStep{
@@ -1361,6 +1453,8 @@ func TestPublishPromptUsage_NonTerminalCompletionUsesReadyTurnSnapshot(t *testin
 	require.NotNil(t, usageEvent, "expected a session_prompt_usage.updated event to be published")
 	require.Equal(t, turn.ID, usageEvent.TurnID,
 		"non-terminal completion must carry the turn id the ready event just closed, not NULL")
+	require.Equal(t, "session-agent", usageEvent.AgentProfileID,
+		"prompt usage must carry the stable profile recorded on the task session")
 }
 
 // TestPublishPromptUsage_CompletionPayloadTurnIDOwnsTurn verifies that a
@@ -1689,6 +1783,58 @@ func TestPublishPromptUsage_RepublishedCompletionReusesUsageEventID(t *testing.T
 	require.NotEmpty(t, published[0].UsageEventID)
 	require.Equal(t, published[0].UsageEventID, published[1].UsageEventID,
 		"republishing the same completion must reuse the same usage_event_id so the DB unique index catches the duplicate")
+}
+
+// TestPublishPromptUsage_RepublishedCompletionWithoutPromptGenerationMintsDistinctUsageEventIDs
+// is the integration-level counterpart to TestUsageEventIDFor's unit-level
+// promptGeneration==0 assertion, and the random-identifier-class counterpart
+// to TestPublishPromptUsage_RepublishedCompletionReusesUsageEventID's
+// deterministic-class coverage (docs/specs/task-cost-ledger/spec.md AC-22).
+// A generation-less transport's "same" redelivered completion frame mints a
+// fresh random usage_event_id on every publish, so the two publishes carry
+// DIFFERENT ids: office/costs already documents that those rows are
+// intentionally not deduplicated, and this proves that end to end rather
+// than just at usageEventIDFor's own return value.
+func TestPublishPromptUsage_RepublishedCompletionWithoutPromptGenerationMintsDistinctUsageEventIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t1", "s1", "")
+
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.turnService = &repoTurnService{repo: repo}
+	eb := &recordingEventBus{}
+	svc.eventBus = eb
+
+	_, err := svc.turnService.StartTurn(ctx, "s1")
+	require.NoError(t, err)
+	svc.markExecutionCompleted("s1", "exec-1")
+	svc.completeTurnForSession(ctx, "s1")
+
+	frame := func() *lifecycle.AgentStreamEventPayload {
+		return &lifecycle.AgentStreamEventPayload{
+			TaskID:      "t1",
+			SessionID:   "s1",
+			ExecutionID: "exec-1",
+			Data: &lifecycle.AgentStreamEventData{
+				Type:             agentEventComplete,
+				PromptGeneration: 0,
+				Usage:            &streams.PromptUsage{InputTokens: 10, OutputTokens: 5},
+			},
+		}
+	}
+
+	// Simulates the same buffered stream frame being delivered twice on a
+	// generation-less transport - same session and execution, but no
+	// prompt-generation tracking either time.
+	svc.handleAgentStreamEvent(ctx, frame())
+	svc.handleAgentStreamEvent(ctx, frame())
+
+	published := findAllPromptUsageEvents(t, eb, "s1")
+	require.Len(t, published, 2, "expected both republished frames to publish a prompt-usage event")
+	require.NotEmpty(t, published[0].UsageEventID)
+	require.NotEmpty(t, published[1].UsageEventID)
+	require.NotEqual(t, published[0].UsageEventID, published[1].UsageEventID,
+		"a generation-less transport must mint a fresh id per publish, so this redelivery is recorded as a new row and its rollup applied - not deduplicated")
 }
 
 func TestCompleteStreamFromCompletedExecutionSkipsDuplicateOfficeTeardown(t *testing.T) {
@@ -2589,6 +2735,72 @@ func TestSessionStartClearsInterruptedMarker(t *testing.T) {
 	})
 }
 
+func TestSessionStartClearsAutoStartFailedMarker(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("state hook transition to STARTING", func(t *testing.T) {
+		repo := setupTestRepo(t)
+		seedSession(t, repo, "t1", "s1", "step1")
+		require.NoError(t, repo.SetTaskMetadataKey(ctx, "t1", models.MetaKeyAutoStartFailed, true))
+
+		publisher := &recordingTaskUpdatedPublisher{}
+		svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+		svc.SetTaskEventPublisher(publisher)
+
+		_, changed := svc.updateTaskSessionStateWithHook(
+			ctx, "t1", "s1", models.TaskSessionStateStarting, "", false, nil,
+		)
+		require.True(t, changed)
+
+		task, err := repo.GetTask(ctx, "t1")
+		require.NoError(t, err)
+		_, marked := task.Metadata[models.MetaKeyAutoStartFailed]
+		require.False(t, marked)
+		require.Equal(t, []string{"t1"}, publisher.updatedTaskIDs)
+	})
+
+	t.Run("launch path via setSessionStarting", func(t *testing.T) {
+		repo := setupTestRepo(t)
+		seedSession(t, repo, "t1", "s1", "step1")
+		require.NoError(t, repo.SetTaskMetadataKey(ctx, "t1", models.MetaKeyAutoStartFailed, true))
+
+		session, err := repo.GetTaskSession(ctx, "s1")
+		require.NoError(t, err)
+		session.State = models.TaskSessionStateStarting
+		session.ErrorMessage = ""
+		session.UpdatedAt = time.Now().UTC()
+
+		publisher := &recordingTaskUpdatedPublisher{}
+		svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+		svc.SetTaskEventPublisher(publisher)
+
+		require.NoError(t, svc.setSessionStarting(ctx, "t1", session, models.TaskSessionStateRunning, true))
+
+		task, err := repo.GetTask(ctx, "t1")
+		require.NoError(t, err)
+		_, marked := task.Metadata[models.MetaKeyAutoStartFailed]
+		require.False(t, marked)
+		require.Equal(t, []string{"t1"}, publisher.updatedTaskIDs)
+	})
+}
+
+func TestAutoStartFailureDoesNotMarkTaskWithActiveSession(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t1", "s1", "step1")
+	require.NoError(t, repo.UpdateTaskSessionState(
+		ctx, "s1", models.TaskSessionStateStarting, "",
+	))
+
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.setTaskAutoStartFailedMarker(ctx, "t1", "task.moved")
+
+	task, err := repo.GetTask(ctx, "t1")
+	require.NoError(t, err)
+	_, marked := task.Metadata[models.MetaKeyAutoStartFailed]
+	require.False(t, marked, "a late failure must not mark a task with active work")
+}
+
 // Nothing else ever retires a stored agent failure, so without this clear every
 // path that re-derives task status from session metadata resurrects it and the
 // error icon never goes away.
@@ -3257,6 +3469,100 @@ func TestPersistSessionRuntimeConfigUpdatesProviderState(t *testing.T) {
 	require.Equal(t, map[string]string{"model": "mock-fast", "effort": "medium"}, cfg.ConfigOptions)
 }
 
+func TestHandleSessionModelsEventDefersUnsettledStartupState(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t1", "s1", "step1")
+	require.NoError(t, repo.UpdateTaskSessionState(ctx, "s1", models.TaskSessionStateStarting, ""))
+	require.NoError(t, repo.SetSessionMetadataKey(ctx, "s1", models.SessionMetaKeyOrigin, models.SessionOriginTaskInitial))
+	require.NoError(t, repo.SetSessionMetadataKey(ctx, "s1", models.SessionMetaKeyRuntimeConfig, models.SessionRuntimeConfig{
+		Model: "gpt-5.6-sol",
+		ConfigOptions: map[string]string{
+			"model":            "gpt-5.6-sol",
+			"reasoning_effort": "high",
+		},
+	}))
+	require.NoError(t, repo.SetSessionMetadataKey(ctx, "s1", models.SessionMetaKeyACPConfigBaseline, map[string]string{
+		"model":            "gpt-5.6-sol",
+		"reasoning_effort": "medium",
+	}))
+	require.NoError(t, repo.SetSessionMetadataKey(ctx, "s1", models.SessionMetaKeyACPModelState, lifecycle.SessionModelsSnapshot{
+		CurrentModelID: "gpt-5.6-sol",
+		Models:         []streams.SessionModelInfo{{ModelID: "gpt-5.6-sol", Name: "GPT-5.6 Sol"}},
+		ConfigOptions: []streams.ConfigOption{{
+			ID: "model", Category: "model", CurrentValue: "gpt-5.6-sol",
+		}},
+		ConfigOptionsSettled: true,
+	}))
+	session, err := repo.GetTaskSession(ctx, "s1")
+	require.NoError(t, err)
+	session.AgentProfileSnapshot = map[string]interface{}{"model": "gpt-5.6-sol"}
+	require.NoError(t, repo.UpdateTaskSession(ctx, session))
+
+	eb := &recordingEventBus{}
+	svc := &Service{logger: testLogger(), repo: repo, eventBus: eb}
+	unsettled := func(model string) {
+		svc.handleSessionModelsEvent(ctx, &lifecycle.AgentStreamEventPayload{
+			TaskID:    "t1",
+			SessionID: "s1",
+			AgentID:   "a1",
+			Data: &lifecycle.AgentStreamEventData{
+				CurrentModelID: model,
+				SessionModels:  []streams.SessionModelInfo{{ModelID: model, Name: model}},
+				OriginalConfigCandidate: []streams.ConfigOption{{
+					Type: "select", ID: "reasoning_effort", CurrentValue: "high",
+				}},
+				ConfigOptions: []streams.ConfigOption{
+					{ID: "model", Category: "model", CurrentValue: model},
+					{ID: "reasoning_effort", CurrentValue: "low"},
+				},
+				Data: map[string]any{"original_config_settled": true},
+			},
+		})
+	}
+
+	unsettled("gpt-5.6-luna")
+
+	updated, err := repo.GetTaskSession(ctx, "s1")
+	require.NoError(t, err)
+	runtimeConfig, ok := models.LoadSessionRuntimeConfig(updated.Metadata)
+	require.True(t, ok)
+	require.Equal(t, "gpt-5.6-sol", runtimeConfig.Model)
+	require.Equal(t, "gpt-5.6-sol", updated.AgentProfileSnapshot["model"])
+	modelState, ok := lifecycle.LoadSessionModelsSnapshot(updated.Metadata[models.SessionMetaKeyACPModelState])
+	require.True(t, ok)
+	require.Equal(t, "gpt-5.6-sol", modelState.CurrentModelID)
+	require.Empty(t, eb.events)
+
+	svc.handleSessionModelsEvent(ctx, &lifecycle.AgentStreamEventPayload{
+		TaskID:    "t1",
+		SessionID: "s1",
+		AgentID:   "a1",
+		Data: &lifecycle.AgentStreamEventData{
+			CurrentModelID: "gpt-5.6-sol",
+			SessionModels:  []streams.SessionModelInfo{{ModelID: "gpt-5.6-sol", Name: "GPT-5.6 Sol"}},
+			ConfigOptions: []streams.ConfigOption{
+				{ID: "model", Category: "model", CurrentValue: "gpt-5.6-sol"},
+				{ID: "reasoning_effort", CurrentValue: "high"},
+			},
+			Data: map[string]any{
+				"config_options_settled":  true,
+				"original_config_settled": true,
+			},
+		},
+	})
+	require.Len(t, eb.events, 1)
+
+	require.NoError(t, repo.UpdateTaskSessionState(ctx, "s1", models.TaskSessionStateRunning, ""))
+	unsettled("gpt-5.6-luna")
+	require.Len(t, eb.events, 2)
+	updated, err = repo.GetTaskSession(ctx, "s1")
+	require.NoError(t, err)
+	runtimeConfig, ok = models.LoadSessionRuntimeConfig(updated.Metadata)
+	require.True(t, ok)
+	require.Equal(t, "gpt-5.6-luna", runtimeConfig.Model)
+}
+
 func TestHandleSessionModelsEventPublishesPersistedConfigBaselineAfterRestart(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
@@ -3453,6 +3759,87 @@ func TestHandleSessionModelFallbackEventResolvesSessionFromTask(t *testing.T) {
 	payload := eb.events[0].event.Data.(lifecycle.SessionModelFallbackEventPayload)
 	require.Equal(t, "s1", payload.SessionID)
 	require.Equal(t, "gpt-5", payload.FallbackModel)
+}
+
+func TestHandleSessionModelSelectionWarningPersistsIdempotently(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t1", "s1", "step1")
+	messages := &mockMessageCreator{}
+	eb := &recordingEventBus{}
+	svc := &Service{logger: testLogger(), repo: repo, eventBus: eb, messageCreator: messages}
+	warning := &streams.ModelSelectionWarning{
+		Kind:              "model_selection_warning",
+		DecisionID:        "decision-1",
+		Reason:            "requested_not_advertised",
+		RequestedModel:    "host-only-model",
+		EffectiveModel:    "executor-default",
+		AgentID:           "codex-acp",
+		ExecutorType:      "ssh",
+		ExecutorProfileID: "executor-profile-1",
+	}
+	payload := &lifecycle.AgentStreamEventPayload{
+		TaskID:    "t1",
+		SessionID: "s1",
+		AgentID:   "codex-acp",
+		Data: &lifecycle.AgentStreamEventData{
+			Type:                  streams.EventTypeSessionModelSelectionWarning,
+			ModelSelectionWarning: warning,
+		},
+	}
+
+	svc.handleAgentStreamEvent(ctx, payload)
+	svc.handleAgentStreamEvent(ctx, payload)
+
+	require.Len(t, messages.sessionMessages, 1)
+	require.Equal(t, "s1", messages.sessionMessages[0].sessionID)
+	require.Equal(t, string(v1.MessageTypeStatus), messages.sessionMessages[0].messageType)
+	require.Equal(t, "model_selection_warning", messages.sessionMessages[0].metadata["kind"])
+	require.Equal(t, "host-only-model", messages.sessionMessages[0].metadata["requested_model"])
+	require.Equal(t, "executor-default", messages.sessionMessages[0].metadata["effective_model"])
+	require.Equal(t, []string{"executor_credentials", "copied_agent_configuration", "agent_version"}, messages.sessionMessages[0].metadata["remediation"])
+	require.Len(t, eb.events, 1)
+	require.Equal(t, events.BuildSessionModelSelectionWarningSubject("s1"), eb.events[0].subject)
+
+	updated, err := repo.GetTaskSession(ctx, "s1")
+	require.NoError(t, err)
+	require.Equal(t, true, updated.Metadata["model_selection_warning:decision-1"])
+}
+
+func TestHandleSessionModelSelectionWarningReleasesClaimAfterPersistenceFailure(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t1", "s1", "step1")
+	messages := &mockMessageCreator{sessionMessageErr: errors.New("transient message failure")}
+	svc := &Service{logger: testLogger(), repo: repo, messageCreator: messages}
+	warning := &streams.ModelSelectionWarning{
+		Kind:           "model_selection_warning",
+		DecisionID:     "decision-retry",
+		Reason:         "requested_not_advertised",
+		RequestedModel: "host-only-model",
+		EffectiveModel: "executor-default",
+	}
+	payload := &lifecycle.AgentStreamEventPayload{
+		TaskID:    "t1",
+		SessionID: "s1",
+		Data: &lifecycle.AgentStreamEventData{
+			Type:                  streams.EventTypeSessionModelSelectionWarning,
+			ModelSelectionWarning: warning,
+		},
+	}
+
+	svc.handleAgentStreamEvent(ctx, payload)
+	failed, err := repo.GetTaskSession(ctx, "s1")
+	require.NoError(t, err)
+	require.NotContains(t, failed.Metadata, "model_selection_warning:decision-retry")
+	require.Empty(t, messages.sessionMessages)
+
+	messages.sessionMessageErr = nil
+	svc.handleAgentStreamEvent(ctx, payload)
+	require.Len(t, messages.sessionMessages, 1)
+	completed, err := repo.GetTaskSession(ctx, "s1")
+	require.NoError(t, err)
+	require.Equal(t, true, completed.Metadata["model_selection_warning:decision-retry"])
 }
 
 func TestHandleSessionModelsEventStoresBaselineCandidateAndPublishesLiveState(t *testing.T) {

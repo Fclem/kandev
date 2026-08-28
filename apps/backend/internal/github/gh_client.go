@@ -23,6 +23,8 @@ import (
 // sync.
 const ghSearchReposPath = "search/repositories"
 
+const ghMergeableState = "MERGEABLE"
+
 // ghAccessibleReposPath is the GET /user/repos endpoint (with affiliation +
 // sort + per_page baked in) that backs ListAccessibleRepos. It returns a flat
 // JSON array on the core REST quota, replacing the per-org search fan-out.
@@ -183,19 +185,24 @@ type ghRequestedReviewer struct {
 
 // ghPR is the JSON shape returned by gh pr list/view.
 type ghPR struct {
-	Number              int                   `json:"number"`
-	Title               string                `json:"title"`
-	URL                 string                `json:"url"`
-	State               string                `json:"state"`
-	Body                string                `json:"body"`
-	HeadRefName         string                `json:"headRefName"`
-	HeadRefOid          string                `json:"headRefOid"`
-	BaseRefName         string                `json:"baseRefName"`
-	IsDraft             bool                  `json:"isDraft"`
-	Mergeable           string                `json:"mergeable"`
-	MergeStateStatus    string                `json:"mergeStateStatus"`
-	Additions           int                   `json:"additions"`
-	Deletions           int                   `json:"deletions"`
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	State       string `json:"state"`
+	Body        string `json:"body"`
+	HeadRefName string `json:"headRefName"`
+	HeadRefOid  string `json:"headRefOid"`
+	BaseRefName string `json:"baseRefName"`
+	// IsDraft is a pointer: AC-12a requires distinguishing an omitted or
+	// null isDraft from a genuine false, which a plain bool can't after decode.
+	IsDraft          *bool  `json:"isDraft"`
+	Mergeable        string `json:"mergeable"`
+	MergeStateStatus string `json:"mergeStateStatus"`
+	Additions        int    `json:"additions"`
+	Deletions        int    `json:"deletions"`
+	// ChangedFiles is a pointer for the same reason as IsDraft (AC-12a): 0 is
+	// a legitimate observation and must stay distinguishable from absent/null.
+	ChangedFiles        *int                  `json:"changedFiles"`
 	CreatedAt           time.Time             `json:"createdAt"`
 	UpdatedAt           time.Time             `json:"updatedAt"`
 	MergedAt            string                `json:"mergedAt"`
@@ -207,6 +214,17 @@ type ghPR struct {
 	Author              struct {
 		Login string `json:"login"`
 	} `json:"author"`
+	// MergedBy decodes to a zero-value Login on gh's `null` for an unmerged
+	// PR — never a placeholder value.
+	MergedBy struct {
+		Login string `json:"login"`
+	} `json:"mergedBy"`
+	// AutoMergeRequest is a pointer: gh returns null when auto-merge was
+	// never armed. Any non-nil value means "armed at fetch time" — never
+	// "merged by auto-merge" (auto_merge is cleared once it fires).
+	AutoMergeRequest *struct {
+		EnabledAt string `json:"enabledAt"`
+	} `json:"autoMergeRequest"`
 }
 
 type ghRepository struct {
@@ -247,7 +265,7 @@ type ghIssue struct {
 func (c *GHClient) GetPR(ctx context.Context, owner, repo string, number int) (*PR, error) {
 	out, err := c.run(ctx, "pr", "view", fmt.Sprintf("%d", number),
 		"--repo", fmt.Sprintf("%s/%s", owner, repo),
-		"--json", "number,title,url,state,body,headRefName,headRefOid,baseRefName,author,isDraft,mergeable,mergeStateStatus,additions,deletions,createdAt,updatedAt,mergedAt,closedAt,reviewRequests,maintainerCanModify,headRepository,headRepositoryOwner")
+		"--json", "number,title,url,state,body,headRefName,headRefOid,baseRefName,author,isDraft,mergeable,mergeStateStatus,additions,deletions,changedFiles,mergedBy,autoMergeRequest,createdAt,updatedAt,mergedAt,closedAt,reviewRequests,maintainerCanModify,headRepository,headRepositoryOwner")
 	if err != nil {
 		if isNotFoundErr(err) {
 			return nil, &GitHubAPIError{
@@ -901,23 +919,55 @@ func (c *GHClient) RequestReviewers(ctx context.Context, owner, repo string, num
 	return nil
 }
 
-func (c *GHClient) MergePR(ctx context.Context, owner, repo string, number int, mergeMethod string) error {
-	endpoint := fmt.Sprintf("repos/%s/%s/pulls/%d/merge", owner, repo, number)
-	args := []string{"api", endpoint, "-X", "PUT"}
+func (c *GHClient) MergePR(ctx context.Context, owner, repo string, number int, mergeMethod string) (MergeOutcome, error) {
+	endpoint := fmt.Sprintf("repos/%s/%s/pulls/%d/merge-async", owner, repo, number)
+	args := []string{"api", endpoint, "-X", "PUT", "-f", "merge_action=default"}
 	if mergeMethod != "" {
 		args = append(args, "-f", "merge_method="+mergeMethod)
 	}
-	_, err := c.run(ctx, args...)
+	out, err := c.run(ctx, args...)
+	conflictBody := false
 	if err != nil {
 		// Surface status-based errors as GitHubAPIError so httpMergePR can
-		// translate 405 (not mergeable) / 409 (conflict) to HTTP 409 for
-		// gh CLI users too, matching the PAT path.
+		// translate merge rejections for gh CLI users, matching the PAT path.
 		if code, ok := ghMergeStatusCode(err); ok {
-			return &GitHubAPIError{StatusCode: code, Endpoint: endpoint, Body: err.Error()}
+			if code != http.StatusConflict {
+				return "", &GitHubAPIError{StatusCode: code, Endpoint: endpoint, Body: err.Error()}
+			}
+			out = err.Error()
+			conflictBody = true
+		} else {
+			return "", fmt.Errorf("merge PR #%d: %w", number, err)
 		}
-		return fmt.Errorf("merge PR #%d: %w", number, err)
 	}
-	return nil
+	var response mergeAsyncResponse
+	jsonBody := out
+	if start := strings.Index(jsonBody, "{"); start >= 0 {
+		if end := strings.LastIndex(jsonBody, "}"); end >= start {
+			jsonBody = jsonBody[start : end+1]
+		}
+	} else if conflictBody {
+		return "", &GitHubAPIError{StatusCode: http.StatusConflict, Endpoint: endpoint, Body: out}
+	}
+	if unmarshalErr := json.Unmarshal([]byte(jsonBody), &response); unmarshalErr != nil {
+		return "", fmt.Errorf("decode GitHub merge response: %w", unmarshalErr)
+	}
+	for response.Status == "pending" {
+		if response.UUID == "" {
+			return "", fmt.Errorf("GitHub merge response is pending without a UUID")
+		}
+		result, runErr := c.run(ctx, "api", endpoint+"/"+response.UUID)
+		if runErr != nil {
+			return "", fmt.Errorf("poll merge PR #%d: %w", number, runErr)
+		}
+		if unmarshalErr := json.Unmarshal([]byte(result), &response); unmarshalErr != nil {
+			return "", fmt.Errorf("decode GitHub merge response: %w", unmarshalErr)
+		}
+	}
+	if response.Status == mergeStatusFailed {
+		return "", fmt.Errorf("GitHub rejected merge: %s", response.Message)
+	}
+	return normalizeMergeOutcome(response.Status)
 }
 
 // ghMergeStatusCode extracts the HTTP status code from a gh CLI merge error.
@@ -935,6 +985,10 @@ func ghMergeStatusCode(err error) (int, bool) {
 		return http.StatusForbidden, true
 	}
 	s := err.Error()
+	if strings.Contains(s, "HTTP 400") || strings.Contains(s, "status: 400") ||
+		strings.Contains(s, "400 Bad Request") {
+		return http.StatusBadRequest, true
+	}
 	if strings.Contains(s, "HTTP 405") || strings.Contains(s, "status: 405") ||
 		strings.Contains(s, "405 Method Not Allowed") {
 		return http.StatusMethodNotAllowed, true
@@ -1270,30 +1324,42 @@ func convertGHPR(raw *ghPR, owner, repo string) *PR {
 	if raw.MergedAt != "" {
 		state = prStateMerged
 	}
+	draft, changedFiles := false, 0
+	if raw.IsDraft != nil {
+		draft = *raw.IsDraft
+	}
+	if raw.ChangedFiles != nil {
+		changedFiles = *raw.ChangedFiles
+	}
 	pr := &PR{
-		Number:              raw.Number,
-		Title:               raw.Title,
-		URL:                 raw.URL,
-		HTMLURL:             raw.URL,
-		State:               state,
-		Body:                raw.Body,
-		HeadBranch:          raw.HeadRefName,
-		HeadSHA:             raw.HeadRefOid,
-		BaseBranch:          raw.BaseRefName,
-		AuthorLogin:         raw.Author.Login,
-		RepoOwner:           owner,
-		RepoName:            repo,
-		MaintainerCanModify: raw.MaintainerCanModify,
-		Draft:               raw.IsDraft,
-		Mergeable:           raw.Mergeable == "MERGEABLE",
-		MergeableState:      strings.ToLower(raw.MergeStateStatus),
-		Additions:           raw.Additions,
-		Deletions:           raw.Deletions,
-		RequestedReviewers:  convertGHRequestedReviewers(raw.ReviewRequests),
-		CreatedAt:           raw.CreatedAt,
-		UpdatedAt:           raw.UpdatedAt,
-		MergedAt:            parseTimePtr(raw.MergedAt),
-		ClosedAt:            parseTimePtr(raw.ClosedAt),
+		Number:               raw.Number,
+		Title:                raw.Title,
+		URL:                  raw.URL,
+		HTMLURL:              raw.URL,
+		State:                state,
+		Body:                 raw.Body,
+		HeadBranch:           raw.HeadRefName,
+		HeadSHA:              raw.HeadRefOid,
+		BaseBranch:           raw.BaseRefName,
+		AuthorLogin:          raw.Author.Login,
+		RepoOwner:            owner,
+		RepoName:             repo,
+		MaintainerCanModify:  raw.MaintainerCanModify,
+		Draft:                draft,
+		IsDraftObserved:      raw.IsDraft != nil,
+		Mergeable:            raw.Mergeable == ghMergeableState,
+		MergeableState:       strings.ToLower(raw.MergeStateStatus),
+		Additions:            raw.Additions,
+		Deletions:            raw.Deletions,
+		ChangedFiles:         changedFiles,
+		ChangedFilesObserved: raw.ChangedFiles != nil,
+		MergedByLogin:        raw.MergedBy.Login,
+		AutoMergeEnabled:     raw.AutoMergeRequest != nil,
+		RequestedReviewers:   convertGHRequestedReviewers(raw.ReviewRequests),
+		CreatedAt:            raw.CreatedAt,
+		UpdatedAt:            raw.UpdatedAt,
+		MergedAt:             parseTimePtr(raw.MergedAt),
+		ClosedAt:             parseTimePtr(raw.ClosedAt),
 	}
 	pr.HeadRepoNodeID = raw.HeadRepository.ID
 	pr.HeadRepoOwner = raw.HeadRepositoryOwner.Login

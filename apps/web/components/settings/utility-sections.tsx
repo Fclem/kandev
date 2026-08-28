@@ -3,17 +3,20 @@
 import { useTranslation } from "react-i18next";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
-import { CardAction, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
-import { Label } from "@kandev/ui/label";
+import { CardContent } from "@kandev/ui/card";
 import type { UtilityAgent } from "@/lib/api/domains/utility-api";
 import type { AgentProfileOption } from "@/lib/state/slices/settings/types";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { useFeature } from "@/hooks/domains/features/use-feature";
 import { SETTINGS_TARGETS } from "@/lib/settings-discovery/catalog/standalone";
 import { isUtilityAgentDirty } from "@/components/settings/utility-dirty";
 import {
   UtilityAgentProfilePicker,
   utilityProfileEligibility,
 } from "@/components/settings/utility-agent-profile-picker";
+import { SettingsCardHeader } from "@/components/settings/settings-card-header";
+import { SettingsFieldLabel } from "@/components/settings/settings-typography";
+import { settingsActionClassName } from "@/components/settings/settings-control";
 
 export const USE_DEFAULT = "__USE_DEFAULT__";
 const UNCONFIGURED = "__UNCONFIGURED__";
@@ -49,7 +52,10 @@ export function DefaultModelSection({
   isDirty: boolean;
 }) {
   const { t } = useTranslation();
-  const eligibleProfiles = profiles.filter(utilityProfileEligibility);
+  const dynamicRoutingEnabled = useFeature("dynamicAgentRouting");
+  const eligibleProfiles = profiles.filter((profile) =>
+    utilityProfileEligibility(profile, dynamicRoutingEnabled),
+  );
   const selected = eligibleProfiles.find((profile) => profile.id === profileId);
   return (
     <SettingsCard
@@ -57,19 +63,13 @@ export function DefaultModelSection({
       discoveryTargetId={SETTINGS_TARGETS.utilityDefaultModel}
       data-testid="utility-default-model-card"
     >
-      <CardHeader>
-        <CardTitle className="text-base font-semibold leading-5">
-          <h3>{t("settings:utilityDefaultModelTitle")}</h3>
-        </CardTitle>
-      </CardHeader>
+      <SettingsCardHeader title={t("settings:utilityDefaultModelTitle")} />
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           {t("settings:utilityDefaultModelDescription")}
         </p>
         <div className="space-y-2">
-          <Label className="text-xs font-medium text-muted-foreground">
-            {t("settings:utilityAgentProfile")}
-          </Label>
+          <SettingsFieldLabel>{t("settings:utilityAgentProfile")}</SettingsFieldLabel>
           <UtilityAgentProfilePicker
             profiles={profiles}
             value={profileId || USE_DEFAULT}
@@ -169,11 +169,7 @@ export function PerActionOverridesSection({
       discoveryTargetId={SETTINGS_TARGETS.utilityActions}
       data-testid="utility-actions-card"
     >
-      <CardHeader>
-        <CardTitle className="text-base font-semibold leading-5">
-          <h3>{t("settings:utilityActionsTitle")}</h3>
-        </CardTitle>
-      </CardHeader>
+      <SettingsCardHeader title={t("settings:utilityActionsTitle")} />
       <CardContent className="space-y-0">
         <p className="pb-3 text-sm text-muted-foreground">
           {t("settings:utilityActionsDescription")}
@@ -260,17 +256,15 @@ export function CustomAgentsSection({
       discoveryTargetId={SETTINGS_TARGETS.utilityCustomAgents}
       data-testid="utility-custom-agents-card"
     >
-      <CardHeader>
-        <CardTitle className="text-base font-semibold leading-5">
-          <h3>{t("settings:utilityCustomAgentsTitle")}</h3>
-        </CardTitle>
-        <CardAction>
-          <Button onClick={onAdd} size="sm" className="cursor-pointer">
+      <SettingsCardHeader
+        title={t("settings:utilityCustomAgentsTitle")}
+        actions={
+          <Button onClick={onAdd} size="sm" className={settingsActionClassName("cursor-pointer")}>
             <IconPlus className="h-4 w-4 mr-1" />
             {t("settings:utilityAddCustomAgent")}
           </Button>
-        </CardAction>
-      </CardHeader>
+        }
+      />
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           {t("settings:utilityCustomAgentsDescription")}

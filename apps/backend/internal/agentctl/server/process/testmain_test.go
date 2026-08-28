@@ -44,9 +44,7 @@ func TestMain(m *testing.M) {
 	// assume these are unset. Scrub them here so the suite is hermetic regardless
 	// of the parent shell's environment; tests that need a specific value set it
 	// explicitly via t.Setenv.
-	_ = os.Unsetenv(gitLabHostEnv)
-	_ = os.Unsetenv(legacyGitLabHostEnv)
-	_ = os.Unsetenv(gitLabTokenEnv)
+	clearAmbientGitLabEnv()
 	goleak.VerifyTestMain(m)
 }
 
@@ -99,6 +97,7 @@ func runFixture(spec string) {
 			os.Exit(2)
 		}
 		signal.Ignore(os.Interrupt)
+		fmt.Println("fixture ready")
 		time.Sleep(time.Duration(secs) * time.Second)
 	case "echo":
 		fmt.Println(strings.Join(parts[1:], " "))

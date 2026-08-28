@@ -89,6 +89,29 @@ func (r *Repository) UpdateRepository(ctx context.Context, repository *models.Re
 	return r.updateRepository(ctx, r.db, repository)
 }
 
+// UpdateRepositoryDefaultBranch updates only the default branch while the
+// caller's previously read value is still current. This protects unrelated
+// repository fields from stale recovery writes.
+func (r *Repository) UpdateRepositoryDefaultBranch(ctx context.Context, repositoryID, expectedBranch, branch string) error {
+	updatedAt := time.Now().UTC()
+	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE repositories
+		SET default_branch = ?, updated_at = ?
+		WHERE id = ? AND default_branch = ? AND deleted_at IS NULL
+	`), branch, updatedAt, repositoryID, expectedBranch)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("repository default branch changed or repository not found: %s", repositoryID)
+	}
+	return nil
+}
+
 func (r *Repository) updateRepository(ctx context.Context, exec sqlx.ExtContext, repository *models.Repository) error {
 	repository.UpdatedAt = time.Now().UTC()
 
@@ -130,6 +153,28 @@ func (r *Repository) UpdateRepositoryWithSecretBindings(
 	return tx.Commit()
 }
 
+// pruneRepositoryDependents removes the rows that must not outlive a deleted
+// repository. Repository deletion is *soft* (deleted_at), so declared foreign
+// key cascades never fire for it and these rows have to go explicitly. All three
+// delete paths call this, so a fourth dependent table cannot be wired into one
+// path and forgotten in the others.
+func (r *Repository) pruneRepositoryDependents(ctx context.Context, tx *sqlx.Tx, id string) error {
+	statements := []string{
+		`DELETE FROM repository_secret_bindings WHERE repository_id = ?`,
+		`DELETE FROM repository_branch_policies WHERE repository_id = ?`,
+		// A membership row pointing at a deleted repository would offer the user
+		// a repository they can no longer select. Repository sets keep existing
+		// with their remaining members.
+		`DELETE FROM repository_set_items WHERE repository_id = ?`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, r.db.Rebind(statement), id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DeleteRepository soft-deletes a repository by ID
 func (r *Repository) DeleteRepository(ctx context.Context, id string) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -149,7 +194,7 @@ func (r *Repository) DeleteRepository(ctx context.Context, id string) error {
 	if rows == 0 {
 		return fmt.Errorf("repository not found: %s", id)
 	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM repository_secret_bindings WHERE repository_id = ?`), id); err != nil {
+	if err := r.pruneRepositoryDependents(ctx, tx, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -182,7 +227,7 @@ func (r *Repository) DeleteRepositoryIfUnreferenced(ctx context.Context, id stri
 		return false, err
 	}
 	if rows > 0 {
-		if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM repository_secret_bindings WHERE repository_id = ?`), id); err != nil {
+		if err := r.pruneRepositoryDependents(ctx, tx, id); err != nil {
 			return false, err
 		}
 		if err := tx.Commit(); err != nil {
@@ -227,7 +272,7 @@ func (r *Repository) DeleteRepositoryIfNoActiveTaskSessions(ctx context.Context,
 		return false, err
 	}
 	if rows > 0 {
-		if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM repository_secret_bindings WHERE repository_id = ?`), id); err != nil {
+		if err := r.pruneRepositoryDependents(ctx, tx, id); err != nil {
 			return false, err
 		}
 		if err := tx.Commit(); err != nil {

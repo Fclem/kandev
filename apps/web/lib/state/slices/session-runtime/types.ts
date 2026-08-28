@@ -74,6 +74,9 @@ export type GitStatusEntry = {
   behind: number;
   head_commit?: string;
   base_commit?: string;
+  comparison_target?: string;
+  comparison_status?: string;
+  comparison_error_code?: string;
   remote_ahead?: number;
   remote_behind?: number;
   remote_head_commit?: string;
@@ -139,6 +142,8 @@ export type CumulativeDiff = {
   head_commit: string;
   total_commits: number;
   files: Record<string, FileInfo>;
+  /** Bounded machine-readable failure reason for an unavailable comparison. */
+  error_code?: string;
   /**
    * Files dropped from `files` because the cumulative range exceeded the
    * backend's per-request file cap (a mid-rebase base→working-tree diff can
@@ -255,6 +260,7 @@ export type SessionModelsState = {
       currentModelId: string;
       models: SessionModelEntry[];
       configOptions: ConfigOptionEntry[];
+      configOptionsSettled?: boolean;
       configBaseline?: Record<string, string>;
       /** Set when the session started on the profile's fallback model. */
       fallbackModel?: string;
@@ -271,6 +277,14 @@ export type MCPAttachmentStatus =
   | "filtered"
   | "unavailable";
 
+export type MCPToolSummary = {
+  name: string;
+  description?: string;
+  input_schema?: unknown;
+  input_schema_truncated?: boolean;
+  estimated_tokens?: number;
+};
+
 export type MCPAttachmentServer = {
   name: string;
   source?: "kandev" | "profile";
@@ -281,6 +295,10 @@ export type MCPAttachmentServer = {
   summary?: string;
   connection_id?: string;
   tool_count?: number;
+  tools_listed_at?: string;
+  tools?: MCPToolSummary[];
+  tool_catalog_truncated?: boolean;
+  tool_token_estimator?: string;
 };
 
 export type MCPAttachmentHistory = {
@@ -343,6 +361,8 @@ export type UserShellInfo = {
 export type UserShellsState = {
   /** User shells keyed by environmentId (shared across sessions in the same environment). */
   byEnvironmentId: Record<string, UserShellInfo[]>;
+  /** Optimistically dismissed IDs hidden from stale list responses until this env is purged. */
+  dismissedByEnvironmentId: Record<string, Record<string, true>>;
   /** Keyed by environmentId (same key strategy as byEnvironmentId). */
   loading: Record<string, boolean>;
   /** Keyed by environmentId (same key strategy as byEnvironmentId). */

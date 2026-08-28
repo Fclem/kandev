@@ -14,9 +14,9 @@ import type { TaskFormInputsHandle } from "@/components/task-create-dialog-types
 import { useAgentProfileOptions } from "@/components/task-create-dialog-options";
 import { useSummarizeSession } from "@/hooks/use-summarize-session";
 import { useTaskSessions } from "@/hooks/use-task-sessions";
-import { useRemoteAuthSpecs } from "@/hooks/domains/settings/use-remote-auth-specs";
 import { useTaskExecutorProfile } from "@/hooks/domains/session/use-task-executor-profile";
-import { isAgentConfiguredOnExecutor } from "@/lib/agent-executor-compat";
+import { useCompatibleAgentProfiles } from "@/hooks/domains/session/use-compatible-agent-profiles";
+import { useFeature } from "@/hooks/domains/features/use-feature";
 import type { AgentProfileOption } from "@/lib/state/slices";
 import { isSelectableAgentProfile } from "@/lib/state/slices/settings/types";
 import type { ExecutorProfile } from "@/lib/types/http";
@@ -50,6 +50,7 @@ function agentProfileDisplayLabel(profile: AgentProfileOption): string {
 
 function useNewSessionDialogState(taskId: string) {
   const { t } = useTranslation();
+  const dynamicRoutingEnabled = useFeature("dynamicAgentRouting");
   const resolvedWorkspaceId = useAppStore((state) =>
     resolveComposerWorkspaceId({
       sessionId: null,
@@ -98,7 +99,9 @@ function useNewSessionDialogState(taskId: string) {
   // The default for a NEW session must be selectable: a current session
   // that uses a now-disabled profile still runs (no effect on existing
   // sessions), but the dialog falls back to the first enabled profile.
-  const selectableProfiles = agentProfiles.filter(isSelectableAgentProfile);
+  const selectableProfiles = agentProfiles.filter((profile) =>
+    isSelectableAgentProfile(profile, dynamicRoutingEnabled),
+  );
   const profileIsValid = selectableProfiles.some((p: { id: string }) => p.id === sessionProfileId);
   const effectiveDefaultProfileId: string = profileIsValid
     ? sessionProfileId
@@ -159,18 +162,6 @@ function isMissingCompatibleProfile(
   if (!executorProfile) return false;
   if (totalAgentCount === 0) return false;
   return !hasCompatibleProfiles;
-}
-
-function useCompatibleAgentProfiles(
-  agentProfiles: AgentProfileOption[],
-  executorProfile: ExecutorProfile | null,
-): AgentProfileOption[] {
-  const { specs: authSpecs, loaded: authLoaded } = useRemoteAuthSpecs();
-  return useMemo(() => {
-    const selectable = agentProfiles.filter(isSelectableAgentProfile);
-    if (!executorProfile || !authLoaded) return selectable;
-    return selectable.filter((ap) => isAgentConfiguredOnExecutor(ap, executorProfile, authSpecs));
-  }, [agentProfiles, executorProfile, authSpecs, authLoaded]);
 }
 
 function useHandoffAutoSummarize(
@@ -257,14 +248,20 @@ function useSessionProfileSelection({
   defaultProfileId,
   selectedProfileId,
   setSelectedProfileId,
+  handoff,
 }: {
   agentProfiles: AgentProfileOption[];
   executorProfile: ExecutorProfile | null;
   defaultProfileId: string;
   selectedProfileId: string;
   setSelectedProfileId: (value: string) => void;
+  handoff?: HandoffPreset;
 }) {
-  const compatibleAgentProfiles = useCompatibleAgentProfiles(agentProfiles, executorProfile);
+  const compatibleAgentProfiles = useCompatibleAgentProfiles(
+    agentProfiles,
+    executorProfile,
+    handoff,
+  );
   useEnforceCompatibleProfile(compatibleAgentProfiles, selectedProfileId, setSelectedProfileId);
   const profileOptions = useAgentProfileOptions(compatibleAgentProfiles);
   const hasProfiles = profileOptions.length > 0;
@@ -376,6 +373,7 @@ function NewSessionForm({
   const [selectedProfileId, setSelectedProfileId] = useState(
     handoffInitial?.selectedProfileId ?? initialProfileId ?? defaultProfileId,
   );
+  const [profileExplicit, setProfileExplicit] = useState(Boolean(handoff));
   const [hasPrompt, setHasPrompt] = useState(false);
   const [hasPendingAttachmentUploads, setHasPendingAttachmentUploads] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -390,6 +388,7 @@ function NewSessionForm({
     defaultProfileId,
     selectedProfileId,
     setSelectedProfileId,
+    handoff,
   });
   const { handleEnhancePrompt, isEnhancingPrompt, pendingResult, applyPending, copyPending } =
     useSessionPromptController(promptRef, taskId);
@@ -407,6 +406,7 @@ function NewSessionForm({
     promptRef,
     taskId,
     selectedProfileId,
+    profileExplicit,
     executorId,
     contextValue,
     initialPrompt,
@@ -434,7 +434,10 @@ function NewSessionForm({
         profileOptions={profileSelection.profileOptions}
         selectedProfileId={selectedProfileId}
         isCreating={isCreating}
-        onProfileChange={setSelectedProfileId}
+        onProfileChange={(value) => {
+          setProfileExplicit(true);
+          setSelectedProfileId(value);
+        }}
       />
       <ContextSelect
         value={contextValue}

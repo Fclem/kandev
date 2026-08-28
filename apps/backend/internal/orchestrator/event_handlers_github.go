@@ -61,6 +61,7 @@ type GitHubService interface {
 	RecordTaskCIFixAttempt(ctx context.Context, attempt github.TaskCIFixAttempt) error
 	RefreshTaskCIFixCheckpoint(ctx context.Context, taskID, repositoryID string, prNumber int, signature, checkpointJSON string) error
 	RecordTaskCIMergeAttempt(ctx context.Context, attempt github.TaskCIMergeAttempt) error
+	RecordTaskCIMergeQueueObservation(ctx context.Context, observation github.TaskCIMergeQueueObservation) error
 	RecordTaskCIError(ctx context.Context, taskID, repositoryID string, prNumber int, message string) error
 	MarkTaskCIAutoFixExhausted(ctx context.Context, taskID, repositoryID string, prNumber int, message string) error
 	ClearTaskCIError(ctx context.Context, taskID, repositoryID string, prNumber int) error
@@ -526,6 +527,9 @@ func (s *Service) shouldAutoStartStep(ctx context.Context, stepID string) bool {
 func (s *Service) autoStartReviewTask(
 	ctx context.Context, evt *github.NewReviewPREvent, task *models.Task,
 ) {
+	if s.shouldSkipTerminalPRAutoStart(ctx, task) {
+		return
+	}
 	// Compete for the one-shot auto-start token set at task creation.
 	// The promotion that ran inside CreateTask may have already triggered
 	// autoStartTaskForStep (Path A) asynchronously; only the first claimer

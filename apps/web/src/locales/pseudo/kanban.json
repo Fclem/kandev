@@ -53,6 +53,7 @@
   "menu": "Ḿēńũ",
   "moreOptions": "Ḿōŕē ōƥţĩōńś",
   "moveTo": "Ḿōvē ţō",
+  "moveToStep": "Ḿōvē ţō {{step}}",
   "multiSelect": "Ḿũĺţĩ-śēĺēćţ",
   "nextCapacity": "ńēxţ ćàƥàćĩţŷ",
   "nextStep": "Ńēxţ śţēƥ",
@@ -99,6 +100,13 @@
   "workflow": "Ŵōŕķƒĺōŵ",
   "workflowStepFallback": "ŵōŕķƒĺōŵ śţēƥ {{stepId}}",
   "columns": "Ćōĺũḿńś",
+  "autoHideEmptyColumns": "Àũţō-ĥĩďē ēḿƥţŷ ćōĺũḿńś",
+  "allEmptyStepsAutoHidden": "Àĺĺ ēḿƥţŷ śţēƥś àŕē ĥĩďďēń. Ţũŕń ōƒƒ Àũţō-ĥĩďē ēḿƥţŷ ćōĺũḿńś ĩń Ćōĺũḿńś ţō śĥōŵ ţĥēḿ àĝàĩń.",
   "columnsForWorkflow": "Ćōĺũḿńś ƒōŕ {{name}}",
-  "needsReassignment": "Ńēēďś Ŕēàśśĩĝńḿēńţ"
+  "needsReassignment": "Ńēēďś Ŕēàśśĩĝńḿēńţ",
+  "noTasksYet": "Ńō ţàśķś ŷēţ",
+  "noWorkflowsAvailableYet": "Ńō ŵōŕķƒĺōŵś àvàĩĺàƀĺē ŷēţ.",
+  "pullToRefreshPull": "Ƥũĺĺ ţō ŕēƒŕēśĥ",
+  "pullToRefreshRefreshing": "Ŕēƒŕēśĥĩńĝ ţàśķś",
+  "pullToRefreshRelease": "Ŕēĺēàśē ţō ŕēƒŕēśĥ"
 }

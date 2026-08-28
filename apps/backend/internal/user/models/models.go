@@ -46,6 +46,20 @@ func NormalizeStartupPage(value string) string {
 }
 
 const (
+	LastSeenDisplayAbsolute = "absolute"
+	LastSeenDisplayRelative = "relative"
+)
+
+// NormalizeLastSeenDisplay returns the canonical last-seen display mode:
+// relative is accepted as-is, anything else is coerced to absolute.
+func NormalizeLastSeenDisplay(value string) string {
+	if value == LastSeenDisplayRelative {
+		return value
+	}
+	return LastSeenDisplayAbsolute
+}
+
+const (
 	// RoleAdmin unlocks user management and system settings mutation when
 	// authentication is enabled. It does NOT grant visibility into other
 	// users' workspaces (hard privacy isolation).
@@ -123,10 +137,13 @@ type UserSettings struct {
 	TerminalFontFamily                string                            `json:"terminal_font_family"`
 	TerminalFontSize                  int                               `json:"terminal_font_size"`
 	ChangesPanelLayout                string                            `json:"changes_panel_layout"` // "flat" | "tree"
+	LastSeenDisplay                   string                            `json:"last_seen_display"`    // "absolute" | "relative"
 	SystemMetricsDisplay              SystemMetricsDisplaySettings      `json:"system_metrics_display"`
 	AppStatusBarEnabled               bool                              `json:"app_status_bar_enabled"`
 	AppStatusBarOrder                 AppStatusBarOrder                 `json:"app_status_bar_order"`
+	QuickChatTabOrderByWorkspace      map[string][]string               `json:"quick_chat_tab_order_by_workspace"`
 	KanbanHiddenStepIDs               map[string][]string               `json:"kanban_hidden_step_ids"`
+	WorkflowIDsWithAutoHideEmptySteps []string                          `json:"workflow_ids_with_auto_hide_empty_steps"`
 	Revision                          int64                             `json:"revision"`
 	CreatedAt                         time.Time                         `json:"created_at"`
 	UpdatedAt                         time.Time                         `json:"updated_at"`
@@ -155,12 +172,13 @@ type SavedLayout struct {
 // The payload is stored and returned as-is; the server does not interpret
 // clause values beyond passing them through.
 type SidebarView struct {
-	ID              string              `json:"id"`
-	Name            string              `json:"name"`
-	Filters         []SidebarViewClause `json:"filters"`
-	Sort            SidebarViewSort     `json:"sort"`
-	Group           string              `json:"group"`
-	CollapsedGroups []string            `json:"collapsed_groups"`
+	ID              string                      `json:"id"`
+	Name            string                      `json:"name"`
+	Filters         []SidebarViewClause         `json:"filters"`
+	Sort            SidebarViewSort             `json:"sort"`
+	Group           string                      `json:"group"`
+	CollapsedGroups []string                    `json:"collapsed_groups"`
+	TaskRow         *SidebarTaskRowPresentation `json:"task_row,omitempty"`
 }
 
 type SidebarViewClause struct {
@@ -176,10 +194,31 @@ type SidebarViewSort struct {
 }
 
 type SidebarViewDraft struct {
-	BaseViewID string              `json:"base_view_id"`
-	Filters    []SidebarViewClause `json:"filters"`
-	Sort       SidebarViewSort     `json:"sort"`
-	Group      string              `json:"group"`
+	BaseViewID string                      `json:"base_view_id"`
+	Filters    []SidebarViewClause         `json:"filters"`
+	Sort       SidebarViewSort             `json:"sort"`
+	Group      string                      `json:"group"`
+	TaskRow    *SidebarTaskRowPresentation `json:"task_row,omitempty"`
+}
+
+// SidebarTaskRowPresentation controls the optional metadata and trailing
+// presentation for a task row in a saved sidebar view.
+type SidebarTaskRowPresentation struct {
+	DetailsEnabled bool     `json:"details_enabled"`
+	DetailOrder    []string `json:"detail_order"`
+	VisibleDetails []string `json:"visible_details"`
+	Trailing       string   `json:"trailing"`
+}
+
+// DefaultSidebarTaskRowPresentation returns the presentation used by the
+// original sidebar layout.
+func DefaultSidebarTaskRowPresentation() *SidebarTaskRowPresentation {
+	return &SidebarTaskRowPresentation{
+		DetailsEnabled: true,
+		DetailOrder:    []string{"relative_time", "repository", "pull_request_number"},
+		VisibleDetails: []string{"relative_time", "repository", "pull_request_number"},
+		Trailing:       "git_changes",
+	}
 }
 
 type SidebarTaskPrefs struct {

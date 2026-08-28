@@ -7,10 +7,12 @@ import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { IconX, IconRocket } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
+import { useFeature } from "@/hooks/domains/features/use-feature";
 import { useToast } from "@/components/toast-provider";
 import { startQuickChat } from "@/lib/api/domains/workspace-api";
 import type { Repository } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices/settings/types";
+import { isSelectableAgentProfile } from "@/lib/state/slices/settings/types";
 import { useTranslation } from "react-i18next";
 
 type QuickChatPickerDialogProps = {
@@ -32,7 +34,11 @@ const NONE_VALUE = "__none__";
 
 function QuickChatFormBody({ state }: { state: FormState }) {
   const { t } = useTranslation();
+  const dynamicRoutingEnabled = useFeature("dynamicAgentRouting");
   const { selectedRepoId, setSelectedRepoId, selectedAgentId, setSelectedAgentId } = state;
+  const selectableProfiles = state.agentProfiles.filter((profile) =>
+    isSelectableAgentProfile(profile, dynamicRoutingEnabled),
+  );
   return (
     <div className="p-4 space-y-4">
       <p className="text-sm text-muted-foreground">{t("chat:quickChatDialogIntro")}</p>
@@ -66,7 +72,7 @@ function QuickChatFormBody({ state }: { state: FormState }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={NONE_VALUE}>{t("chat:useWorkspaceDefaultOption")}</SelectItem>
-            {state.agentProfiles.map((profile) => (
+            {selectableProfiles.map((profile) => (
               <SelectItem key={profile.id} value={profile.id}>
                 {profile.label}
               </SelectItem>
@@ -87,6 +93,7 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
   const { t } = useTranslation();
   const { toast } = useToast();
   const openQuickChat = useAppStore((s) => s.openQuickChat);
+  const agentGeneratedTaskTitles = useAppStore((s) => s.userSettings.agentGeneratedTaskTitles);
   const [isStarting, setIsStarting] = useState(false);
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
@@ -100,6 +107,7 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
       const response = await startQuickChat(workspaceId, {
         repository_id: selectedRepoId || undefined,
         agent_profile_id: selectedAgentId || undefined,
+        ...(agentGeneratedTaskTitles ? { auto_title: true } : {}),
       });
       onOpenChange(false);
       // Open the quick chat modal with the new session
@@ -117,6 +125,7 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
     workspaceId,
     selectedRepoId,
     selectedAgentId,
+    agentGeneratedTaskTitles,
     isStarting,
     onOpenChange,
     openQuickChat,

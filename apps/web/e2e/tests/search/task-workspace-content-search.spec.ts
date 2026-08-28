@@ -3,6 +3,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { expect, test } from "../../fixtures/test-base";
 import { GitHelper, makeGitEnv } from "../../helpers/git-helper";
+import { waitForSessionAgentctlReady } from "../../helpers/session-store";
 import { SessionPage } from "../../pages/session-page";
 import { MODIFIER } from "./shared";
 
@@ -39,8 +40,13 @@ test("@search keeps workspace modes out of non-task routes", async ({ testPage }
 
   await testPage.keyboard.press(`${MODIFIER}+k`);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("tablist", { name: "Command palette mode" })).toHaveCount(0);
-  await expect(dialog).not.toContainText("Switch mode");
+  // Commands and Tasks read no worktree, so they stay reachable off a task
+  // route; Files and Contents are the ones that must not appear.
+  await expect(
+    dialog.getByRole("tablist", { name: "Command palette mode" }).getByRole("tab"),
+  ).toHaveText(["Commands", "Tasks"]);
+  await expect(dialog.getByRole("tab", { name: "Files" })).toHaveCount(0);
+  await expect(dialog.getByRole("tab", { name: "Contents" })).toHaveCount(0);
 });
 
 test("@search searches all task repositories and opens the selected match", async ({
@@ -69,7 +75,7 @@ test("@search searches all task repositories and opens the selected match", asyn
     seedData.workspaceId,
     extraRepoDir,
     "main",
-    { name: EXTRA_REPOSITORY_NAME },
+    { name: EXTRA_REPOSITORY_NAME, pull_before_worktree: false },
   );
 
   const task = await apiClient.createTaskWithAgent(
@@ -89,6 +95,7 @@ test("@search searches all task repositories and opens the selected match", asyn
   const session = new SessionPage(testPage);
   await session.waitForLoad();
   await session.waitForChatIdle({ timeout: 30_000 });
+  await waitForSessionAgentctlReady(testPage, task.session_id);
 
   // The global content-search shortcut must win even when an editable chat
   // surface owns focus.
@@ -111,6 +118,7 @@ test("@search searches all task repositories and opens the selected match", asyn
   ).toHaveCount(1);
 
   const commandsTab = dialog.getByRole("tab", { name: "Commands" });
+  const tasksTab = dialog.getByRole("tab", { name: "Tasks" });
   const filesTab = dialog.getByRole("tab", { name: "Files" });
   const contentsTab = dialog.getByRole("tab", { name: "Contents" });
   await expect(contentsTab).toHaveAttribute("aria-selected", "true");
@@ -119,6 +127,10 @@ test("@search searches all task repositories and opens the selected match", asyn
   await expect(input).toBeFocused();
   await expect(input).toHaveValue(SEARCH_TERM);
   await expect(commandsTab).toHaveAttribute("aria-selected", "true");
+
+  await testPage.keyboard.press("Tab");
+  await expect(tasksTab).toHaveAttribute("aria-selected", "true");
+  await expect(input).toHaveValue(SEARCH_TERM);
 
   await testPage.keyboard.press("Tab");
   await expect(filesTab).toHaveAttribute("aria-selected", "true");
@@ -276,7 +288,7 @@ test("@search reveals and flashes a cached preview content match selected with E
   await expect(dialog).toBeVisible();
   await dialog.getByRole("combobox").fill(CACHED_PREVIEW_MARKER);
   const targetResult = dialog.getByTestId("content-search-result").filter({ hasText: targetPath });
-  await expect(targetResult).toHaveCount(1);
+  await expect(targetResult).toHaveCount(1, { timeout: 30_000 });
   await testPage.keyboard.press("Enter");
   await expect(dialog).not.toBeVisible();
 

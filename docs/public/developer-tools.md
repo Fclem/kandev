@@ -47,6 +47,13 @@ Quick Chat supports multiple tabs, tab renaming, and **+** to open another ordin
 
 Your chats and their names are shared by every browser and device signed in to the same Kandev instance. Starting, renaming, or closing a chat on one device updates the others, and a device that was offline catches up when it reconnects.
 
+When **Settings > General > Task Actions > Agent-generated task titles** is enabled, an ordinary
+Quick Chat starts with its normal provisional label and its owner agent can replace that label with a
+short title based on your first request. Structured and CLI-passthrough chats receive the title
+instruction through their existing first-turn path. The new title appears on every connected device
+and survives reload. Configuration Chat and Quick Terminal are excluded. If you disable the setting,
+or rename the chat first, the provisional or user-selected title remains authoritative.
+
 Closing a real chat tab permanently deletes its conversation, hidden backing task data, and associated worktree. There is no undo. Kandev also deletes abandoned chats after seven days; cleanup runs when the backend starts and then once per day. Only chats whose session is `RUNNING` or `IDLE` are protected from age-based cleanup. Old `CREATED`, `STARTING`, or `WAITING_FOR_INPUT` chats can expire, so do not use Quick Chat for durable work.
 
 If **Start chat** is disabled, select a profile and finish every repository/branch row. If a repository is missing, confirm that it belongs to the current workspace and refresh the repository configuration. Use a normal task when the result must remain visible on a board or become a reviewed PR.
@@ -95,7 +102,7 @@ Open **Settings > Prompts** (`/settings/prompts`) to add, edit, or delete reusab
 
 Type `@` in the task chat composer and select a prompt. The visible message keeps the `@name`; Kandev expands the prompt content into hidden system context for the agent. References are recognized only at the start of the text or after whitespace and must match the stored name. Prompt content can reference other saved prompts. Expansion stops at a depth of eight, skips cycles, and includes each prompt only once.
 
-The same `@name` reference works in a workflow step's Prompt field and in a GitHub Review Watch's prompt; see [Saved prompt references in step prompts](workflow-tips.md#saved-prompt-references-in-step-prompts).
+The Settings prompt editor also offers the same `@name` completion when you edit a saved prompt, a workflow prompt, a workflow step, an automation instruction, a quick action, or a provider watch. The prompt being edited is excluded from its own completion list, so selecting a reference cannot create a direct self-reference by accident. The same `@name` reference works in a workflow step's Prompt field and in a GitHub Review Watch's prompt; see [Saved prompt references in step prompts](workflow-tips.md#saved-prompt-references-in-step-prompts).
 
 Kandev seeds these built-ins:
 
@@ -110,6 +117,8 @@ Built-ins are marked in the UI but remain editable. Editing `ci-auto-fix` or `ch
 A saved prompt is an instruction, not an authorization or policy boundary. Executor permissions, human gates, tests, and provider protections still control what can happen.
 
 </details>
+
+Utility-agent prompt templates use a separate template engine. Type `{{` to select the utility variables shown by the editor, but do not use `@name` saved-prompt references there. Utility calls are sessionless and do not resolve saved prompts at runtime. Put reusable nested instructions in a saved prompt used by a task, workflow, automation, or integration prompt instead.
 
 ## Voice Mode
 

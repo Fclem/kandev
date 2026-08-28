@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   buildCoreFields,
+  createDefaultUserSettings,
+  mapUserSettingsData,
   mapUserSettingsResponse,
   parseChangesPanelLayout,
+  parseLastSeenDisplay,
   parseLspStatusLocation,
   parseStartupPage,
   parseSystemMetricsDisplay,
@@ -128,6 +131,23 @@ describe("app status bar visibility hydration", () => {
     expect((buildCoreFields({}, current) as Record<string, unknown>).appStatusBarEnabled).toBe(
       false,
     );
+  });
+});
+
+describe("quick-chat tab order hydration", () => {
+  it("maps the per-workspace mixed-tab order and keeps omitted patches unchanged", () => {
+    const order = {
+      "workspace-a": ["conversation:one", "terminal:one"],
+    };
+    expect(
+      buildCoreFields({ quick_chat_tab_order_by_workspace: order }).quickChatTabOrderByWorkspace,
+    ).toEqual(order);
+
+    const current = {
+      ...mapUserSettingsResponse(null),
+      quickChatTabOrderByWorkspace: order,
+    };
+    expect(buildCoreFields({}, current).quickChatTabOrderByWorkspace).toEqual(order);
   });
 });
 
@@ -423,6 +443,12 @@ describe("mapUserSettingsResponse", () => {
       filters: [],
       sort: { key: "updatedAt", direction: "desc" },
       group: "workflow",
+      taskRow: {
+        detailsEnabled: true,
+        detailOrder: ["relative_time", "repository", "pull_request_number"],
+        visibleDetails: ["relative_time", "repository", "pull_request_number"],
+        trailing: "git_changes",
+      },
     });
   });
 });
@@ -525,6 +551,61 @@ describe("parseChangesPanelLayout", () => {
     expect(parseChangesPanelLayout(undefined)).toBe("tree");
     expect(parseChangesPanelLayout("grid")).toBe("tree");
     expect(parseChangesPanelLayout("")).toBe("tree");
+  });
+});
+
+describe("parseLastSeenDisplay", () => {
+  it('returns "relative" for "relative"', () => {
+    expect(parseLastSeenDisplay("relative")).toBe("relative");
+  });
+
+  it('returns "absolute" for "absolute"', () => {
+    expect(parseLastSeenDisplay("absolute")).toBe("absolute");
+  });
+
+  it('returns "absolute" for undefined or unknown values', () => {
+    expect(parseLastSeenDisplay(undefined)).toBe("absolute");
+    expect(parseLastSeenDisplay("grid")).toBe("absolute");
+    expect(parseLastSeenDisplay("")).toBe("absolute");
+  });
+});
+
+describe("last seen display hydration", () => {
+  it("defaults to absolute", () => {
+    expect(createDefaultUserSettings().lastSeenDisplay).toBe("absolute");
+  });
+
+  it("maps a stored relative value", () => {
+    const mapped = mapUserSettingsData(
+      { last_seen_display: "relative" },
+      createDefaultUserSettings(),
+    );
+    expect(mapped.lastSeenDisplay).toBe("relative");
+  });
+
+  it("normalizes unknown stored values to absolute", () => {
+    const mapped = mapUserSettingsData(
+      { last_seen_display: "garbage" as "absolute" | "relative" },
+      createDefaultUserSettings(),
+    );
+    expect(mapped.lastSeenDisplay).toBe("absolute");
+  });
+
+  it("preserves the current value when omitted", () => {
+    const current = { ...createDefaultUserSettings(), lastSeenDisplay: "relative" as const };
+    const mapped = mapUserSettingsData({}, current);
+    expect(mapped.lastSeenDisplay).toBe("relative");
+  });
+});
+
+describe("auto-hide empty steps preference hydration", () => {
+  it("hydrates the canonical workflow-scoped key", () => {
+    const mapped = mapUserSettingsData(
+      { workflow_ids_with_auto_hide_empty_steps: ["wf-a"] },
+      createDefaultUserSettings(),
+    );
+
+    expect(mapped.workflowIdsWithAutoHideEmptySteps).toEqual(["wf-a"]);
   });
 });
 

@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/kandev/kandev/internal/common/httpcookie"
 	officedashboard "github.com/kandev/kandev/internal/office/dashboard"
 	taskdto "github.com/kandev/kandev/internal/task/dto"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
@@ -61,7 +62,7 @@ func (b bootStateBuilder) tasksPageBootData(ctx context.Context, req *http.Reque
 		state["userSettings"] = mapUserSettingsState(settings, activeWorkspaceID)
 	}
 	if activeWorkspaceID == "" {
-		return state, map[string]any{"activeWorkspaceId": nil, "workflows": []any{}, "steps": []any{}, "repositories": []any{}, "tasks": []any{}, "total": 0, "tasksListSort": tasksListSort, "tasksListGroup": tasksListGroup}
+		return state, map[string]any{"activeWorkspaceId": nil, "workflows": []any{}, "steps": []any{}, "repositories": []any{}, "repositorySets": []any{}, "repositoryBranchPolicies": []any{}, "tasks": []any{}, "total": 0, "tasksListSort": tasksListSort, "tasksListGroup": tasksListGroup}
 	}
 	workflows, err := b.p.taskSvc.ListWorkflows(ctx, activeWorkspaceID, false)
 	if err != nil {
@@ -75,17 +76,21 @@ func (b bootStateBuilder) tasksPageBootData(ctx context.Context, req *http.Reque
 		state["userSettings"] = mapUserSettingsStateWithWorkflow(settings, activeWorkspaceID, activeWorkflowID)
 	}
 	repositories := b.repositoriesForState(ctx, activeWorkspaceID, state)
+	repositorySets := b.repositorySetsForState(ctx, activeWorkspaceID, state)
+	repositoryBranchPolicies := b.repositoryBranchPoliciesForState(ctx, activeWorkspaceID, state)
 	steps := b.workflowStepsForWorkspace(ctx, activeWorkspaceID)
 	tasks, total := b.tasksForWorkspace(ctx, activeWorkspaceID, activeWorkflowID, settingsRepositoryID, tasksListSort)
 	routeData := map[string]any{
-		"activeWorkspaceId": activeWorkspaceID,
-		"workflows":         workflowsToDTOs(workflows),
-		"steps":             steps,
-		"repositories":      repositories,
-		"tasks":             tasks,
-		"total":             total,
-		"tasksListSort":     tasksListSort,
-		"tasksListGroup":    tasksListGroup,
+		"activeWorkspaceId":        activeWorkspaceID,
+		"workflows":                workflowsToDTOs(workflows),
+		"steps":                    steps,
+		"repositories":             repositories,
+		"repositorySets":           repositorySets,
+		"repositoryBranchPolicies": repositoryBranchPolicies,
+		"tasks":                    tasks,
+		"total":                    total,
+		"tasksListSort":            tasksListSort,
+		"tasksListGroup":           tasksListGroup,
 	}
 	return state, routeData
 }
@@ -125,7 +130,7 @@ func (b bootStateBuilder) routeContextBootData(ctx context.Context, req *http.Re
 		state["userSettings"] = mapUserSettingsState(settings, activeWorkspaceID)
 	}
 	if activeWorkspaceID == "" {
-		return state, map[string]any{"activeWorkspaceId": nil, "workflows": []any{}, "steps": []any{}, "repositories": []any{}}
+		return state, map[string]any{"activeWorkspaceId": nil, "workflows": []any{}, "steps": []any{}, "repositories": []any{}, "repositorySets": []any{}, "repositoryBranchPolicies": []any{}}
 	}
 	workflows, err := b.p.taskSvc.ListWorkflows(ctx, activeWorkspaceID, false)
 	if err != nil {
@@ -141,12 +146,16 @@ func (b bootStateBuilder) routeContextBootData(ctx context.Context, req *http.Re
 		state["userSettings"] = mapUserSettingsStateWithWorkflow(settings, activeWorkspaceID, activeWorkflowID)
 	}
 	repositories := b.repositoriesForState(ctx, activeWorkspaceID, state)
+	repositorySets := b.repositorySetsForState(ctx, activeWorkspaceID, state)
+	repositoryBranchPolicies := b.repositoryBranchPoliciesForState(ctx, activeWorkspaceID, state)
 	steps := b.workflowStepsForWorkspace(ctx, activeWorkspaceID)
 	return state, map[string]any{
-		"activeWorkspaceId": activeWorkspaceID,
-		"workflows":         workflowsToDTOs(workflows),
-		"steps":             steps,
-		"repositories":      repositories,
+		"activeWorkspaceId":        activeWorkspaceID,
+		"workflows":                workflowsToDTOs(workflows),
+		"steps":                    steps,
+		"repositories":             repositories,
+		"repositorySets":           repositorySets,
+		"repositoryBranchPolicies": repositoryBranchPolicies,
 	}
 }
 
@@ -210,6 +219,125 @@ func (b bootStateBuilder) repositoriesForState(ctx context.Context, workspaceID 
 		"itemsByWorkspaceId":   map[string]any{workspaceID: items},
 		"loadingByWorkspaceId": map[string]any{workspaceID: false},
 		"loadedByWorkspaceId":  map[string]any{workspaceID: true},
+	}
+	return items
+}
+
+// repositorySetsForState loads the workspace's repository sets for the boot
+// payload, logging and returning empty on failure. The task-create picker offers
+// sets on first paint from this, so the hook does not have to fetch.
+func (b bootStateBuilder) repositorySetsForState(
+	ctx context.Context,
+	workspaceID string,
+	state map[string]any,
+) []taskdto.RepositorySetDTO {
+	items := repositorySetsToDTOs(nil)
+	loaded := false
+	sets, err := b.p.taskSvc.ListRepositorySets(ctx, workspaceID)
+	if err != nil {
+		// Non-fatal, like every neighbour here: boot succeeds with an empty list
+		// and the client fetches instead. Leaving `loaded` false is what makes
+		// that fetch happen; marking a failed load as loaded would hide the
+		// workspace's real sets until an explicit refresh.
+		b.logBootError("list repository sets", err)
+	} else {
+		items = repositorySetsToDTOs(sets)
+		loaded = true
+	}
+	state["repositorySets"] = repositorySetsState(workspaceID, items, loaded)
+	return items
+}
+
+// repositoryBranchPoliciesForState hydrates the repository-keyed policy slice
+// used by repository settings and the task-create picker.
+func (b bootStateBuilder) repositoryBranchPoliciesForState(
+	ctx context.Context,
+	workspaceID string,
+	state map[string]any,
+) []taskdto.RepositoryBranchPolicyDTO {
+	itemsByRepositoryID := map[string]any{}
+	loadingByRepositoryID := map[string]any{}
+	loadedByRepositoryID := map[string]any{}
+	items := make([]taskdto.RepositoryBranchPolicyDTO, 0)
+	repositories, err := b.p.taskSvc.ListRepositories(ctx, workspaceID)
+	if err != nil {
+		b.logBootError("list repositories for branch policies", err)
+		state["repositoryBranchPolicies"] = map[string]any{
+			"itemsByRepositoryId":   itemsByRepositoryID,
+			"loadingByRepositoryId": loadingByRepositoryID,
+			"loadedByRepositoryId":  loadedByRepositoryID,
+		}
+		return items
+	}
+	policies, err := b.p.taskSvc.ListRepositoryBranchPoliciesForWorkspace(ctx, workspaceID)
+	if err != nil {
+		b.logBootError("list repository branch policies", err)
+		for _, repository := range repositories {
+			if repository == nil {
+				continue
+			}
+			itemsByRepositoryID[repository.ID] = []taskdto.RepositoryBranchPolicyDTO{}
+			loadedByRepositoryID[repository.ID] = false
+			loadingByRepositoryID[repository.ID] = false
+		}
+	} else {
+		policiesByRepositoryID := make(map[string][]*taskmodels.RepositoryBranchPolicy)
+		for _, policy := range policies {
+			if policy != nil {
+				policiesByRepositoryID[policy.RepositoryID] = append(policiesByRepositoryID[policy.RepositoryID], policy)
+			}
+		}
+		for _, repository := range repositories {
+			if repository == nil {
+				continue
+			}
+			dtos := repositoryBranchPoliciesToDTOs(policiesByRepositoryID[repository.ID])
+			itemsByRepositoryID[repository.ID] = dtos
+			loadedByRepositoryID[repository.ID] = true
+			loadingByRepositoryID[repository.ID] = false
+			items = append(items, dtos...)
+		}
+	}
+	state["repositoryBranchPolicies"] = map[string]any{
+		"itemsByRepositoryId":   itemsByRepositoryID,
+		"loadingByRepositoryId": loadingByRepositoryID,
+		"loadedByRepositoryId":  loadedByRepositoryID,
+	}
+	return items
+}
+
+// repositorySetsState is the workspace-keyed slice shape the web store expects.
+// An empty workspace still keys an entry: an absent key reads as "not loaded" to
+// the client hook, which then refetches on every dialog open.
+func repositorySetsState(
+	workspaceID string,
+	items []taskdto.RepositorySetDTO,
+	loaded bool,
+) map[string]any {
+	return map[string]any{
+		"itemsByWorkspaceId":   map[string]any{workspaceID: items},
+		"loadingByWorkspaceId": map[string]any{workspaceID: false},
+		"loadedByWorkspaceId":  map[string]any{workspaceID: loaded},
+	}
+}
+
+// repositorySetsToDTOs maps repository set models to DTOs, always as an array.
+func repositorySetsToDTOs(sets []*taskmodels.RepositorySet) []taskdto.RepositorySetDTO {
+	items := make([]taskdto.RepositorySetDTO, 0, len(sets))
+	for _, set := range sets {
+		if set != nil {
+			items = append(items, taskdto.FromRepositorySet(set))
+		}
+	}
+	return items
+}
+
+func repositoryBranchPoliciesToDTOs(policies []*taskmodels.RepositoryBranchPolicy) []taskdto.RepositoryBranchPolicyDTO {
+	items := make([]taskdto.RepositoryBranchPolicyDTO, 0, len(policies))
+	for _, policy := range policies {
+		if policy != nil {
+			items = append(items, taskdto.FromRepositoryBranchPolicy(policy))
+		}
 	}
 	return items
 }
@@ -336,7 +464,10 @@ func (b bootStateBuilder) addOfficeRouteState(ctx context.Context, req *http.Req
 	state["office"] = b.officeState(ctx, activeID)
 }
 
-// officeWorkspaces resolves the office workspaces and the active workspace id from the request cookie.
+// officeWorkspaces resolves the office workspaces and the active workspace id
+// from the request cookies and user settings. Candidates, each validated
+// against the office workspace set: general cookie (when it names an office
+// workspace) → office cookie → settings → first office workspace.
 func (b bootStateBuilder) officeWorkspaces(ctx context.Context, req *http.Request) ([]taskdto.WorkspaceDTO, string, error) {
 	if b.p.taskSvc == nil {
 		return nil, "", nil
@@ -357,7 +488,16 @@ func (b bootStateBuilder) officeWorkspaces(ctx context.Context, req *http.Reques
 			officeItems = append(officeItems, item)
 		}
 	}
-	return items, resolveActiveOfficeWorkspaceID(officeItems, readActiveWorkspaceCookie(req)), nil
+	settingsWorkspaceID := ""
+	if settings, ok := b.userSettings(ctx); ok {
+		settingsWorkspaceID = settings.Settings.WorkspaceID
+	}
+	return items, resolveActiveOfficeWorkspaceID(
+		officeItems,
+		readActiveWorkspaceCookie(req),
+		readOfficeWorkspaceCookie(req),
+		settingsWorkspaceID,
+	), nil
 }
 
 // officeState assembles the office boot state (agents, projects, inbox, dashboard) for the active workspace.
@@ -520,15 +660,18 @@ func mapUserSettingsState(response userdto.UserSettingsResponse, workspaceID str
 		"terminalFontFamily":                nullString(settings.TerminalFontFamily),
 		"terminalFontSize":                  nullInt(settings.TerminalFontSize),
 		"changesPanelLayout":                changesPanelLayout(settings.ChangesPanelLayout),
+		"lastSeenDisplay":                   lastSeenDisplay(settings.LastSeenDisplay),
 		"azureDevOpsBrowsePreferences":      settings.AzureDevOpsBrowsePreferences,
 		"systemMetricsDisplay": map[string]any{
 			"showInTopbar": settings.SystemMetricsDisplay.ShowInTopbar,
 			"simplified":   settings.SystemMetricsDisplay.Simplified,
 		},
-		"appStatusBarEnabled":   settings.AppStatusBarEnabled,
-		"appStatusBarOrder":     mapAppStatusBarOrder(settings.AppStatusBarOrder),
-		"hiddenWorkflowStepIds": stringSliceMap(settings.KanbanHiddenStepIDs),
-		"loaded":                true,
+		"appStatusBarEnabled":               settings.AppStatusBarEnabled,
+		"appStatusBarOrder":                 mapAppStatusBarOrder(settings.AppStatusBarOrder),
+		"quickChatTabOrderByWorkspace":      settings.QuickChatTabOrderByWorkspace,
+		"hiddenWorkflowStepIds":             stringSliceMap(settings.KanbanHiddenStepIDs),
+		"workflowIdsWithAutoHideEmptySteps": stringSlice(settings.WorkflowIDsWithAutoHideEmptySteps),
+		"loaded":                            true,
 	}
 }
 
@@ -622,6 +765,7 @@ func mapKanbanTaskState(task taskdto.TaskDTO) map[string]any {
 		"queuedForStepId":             nullString(task.QueuedForStepID),
 		"queuedAt":                    task.QueuedAt,
 		"interrupted":                 task.Interrupted,
+		"autoStartFailed":             task.AutoStartFailed,
 		"statusSummary":               task.StatusSummary,
 		"sessionCount":                task.SessionCount,
 		"reviewStatus":                nullString(string(task.ReviewStatus)),
@@ -670,6 +814,7 @@ func mapSidebarViews(views []usermodels.SidebarView) []map[string]any {
 			"sort":            view.Sort,
 			"group":           view.Group,
 			"collapsedGroups": stringSlice(view.CollapsedGroups),
+			"taskRow":         mapSidebarTaskRow(view.TaskRow),
 		})
 	}
 	return result
@@ -685,6 +830,19 @@ func mapSidebarDraft(draft *usermodels.SidebarViewDraft) map[string]any {
 		"filters":    draft.Filters,
 		"sort":       draft.Sort,
 		"group":      draft.Group,
+		"taskRow":    mapSidebarTaskRow(draft.TaskRow),
+	}
+}
+
+func mapSidebarTaskRow(value *usermodels.SidebarTaskRowPresentation) map[string]any {
+	if value == nil {
+		return nil
+	}
+	return map[string]any{
+		"detailsEnabled": value.DetailsEnabled,
+		"detailOrder":    stringSlice(value.DetailOrder),
+		"visibleDetails": stringSlice(value.VisibleDetails),
+		"trailing":       value.Trailing,
 	}
 }
 
@@ -722,11 +880,20 @@ func mapTaskCreateLastUsed(value usermodels.TaskCreateLastUsed) map[string]any {
 	}
 }
 
-// resolveActiveOfficeWorkspaceID returns the cookie workspace id when it is valid, otherwise the first workspace id.
-func resolveActiveOfficeWorkspaceID(workspaces []taskdto.WorkspaceDTO, cookieWorkspaceID string) string {
-	for _, workspace := range workspaces {
-		if workspace.ID == cookieWorkspaceID {
-			return workspace.ID
+// resolveActiveOfficeWorkspaceID returns the first candidate — general cookie,
+// office cookie, settings — that names a valid office workspace, otherwise the
+// first office workspace id.
+func resolveActiveOfficeWorkspaceID(
+	workspaces []taskdto.WorkspaceDTO,
+	generalCookieID string,
+	officeCookieID string,
+	settingsID string,
+) string {
+	for _, candidate := range []string{generalCookieID, officeCookieID, settingsID} {
+		for _, workspace := range workspaces {
+			if workspace.ID == candidate {
+				return workspace.ID
+			}
 		}
 	}
 	if len(workspaces) > 0 {
@@ -801,12 +968,50 @@ func tasksListGroupForRoute(queryValue, settingsValue string) string {
 	return usermodels.NormalizeTasksListGroup(settingsValue)
 }
 
-// readActiveWorkspaceCookie reads the active workspace id from the cookies.
+// readActiveWorkspaceCookie reads the active workspace id from the GENERAL
+// cookie family only: the port-scoped name first, then the legacy unprefixed
+// name as a read-only fallback (a pre-upgrade selection survives). The
+// office-family cookies are deliberately not consulted — generic boot paths
+// resolve settings/first when only an office cookie exists (parity with the
+// frontend generic reader). The suffix derives from the request host
+// (X-Forwarded-Host precedence), the same port the SPA derives from the API
+// base URL.
 func readActiveWorkspaceCookie(req *http.Request) string {
 	if req == nil {
 		return ""
 	}
-	for _, name := range []string{activeWorkspaceCookie, legacyOfficeWorkspaceCookie} {
+	// On a default-port host the scoped name IS the legacy name; reading the
+	// same cookie twice is a no-op, so only probe the legacy name when the
+	// port actually scopes it.
+	names := []string{httpcookie.ScopedName(req, activeWorkspaceCookie)}
+	if scoped := names[0]; scoped != activeWorkspaceCookie {
+		names = append(names, activeWorkspaceCookie)
+	}
+	for _, name := range names {
+		cookie, err := req.Cookie(name)
+		if err == nil {
+			if value := strings.TrimSpace(cookie.Value); value != "" {
+				return value
+			}
+		}
+	}
+	return ""
+}
+
+// readOfficeWorkspaceCookie reads the active workspace id from the OFFICE
+// cookie family only: the port-scoped name first, then the legacy unprefixed
+// name as a read-only fallback. The general cookie is never consulted here.
+func readOfficeWorkspaceCookie(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	// Same default-port dedupe as readActiveWorkspaceCookie: the scoped name
+	// equals the legacy name when the Host carries no (non-default) port.
+	names := []string{httpcookie.ScopedName(req, legacyOfficeWorkspaceCookie)}
+	if scoped := names[0]; scoped != legacyOfficeWorkspaceCookie {
+		names = append(names, legacyOfficeWorkspaceCookie)
+	}
+	for _, name := range names {
 		cookie, err := req.Cookie(name)
 		if err == nil {
 			if value := strings.TrimSpace(cookie.Value); value != "" {
@@ -887,6 +1092,11 @@ func changesPanelLayout(value string) string {
 		return "flat"
 	}
 	return "tree"
+}
+
+// lastSeenDisplay normalizes the last-seen display to absolute or relative.
+func lastSeenDisplay(value string) string {
+	return usermodels.NormalizeLastSeenDisplay(value)
 }
 
 // logBootError logs a debug entry when optional boot data failed to load.

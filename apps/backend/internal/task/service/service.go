@@ -75,6 +75,12 @@ type TaskExecutionStopper interface {
 	RegisterExecutionStopOwner(sessionID, executionID string, force bool)
 }
 
+// TerminalClarificationCanceller expires durable input requests after a task
+// service-owned terminal transition, such as archive cancellation.
+type TerminalClarificationCanceller interface {
+	ExpireSessionAndNotify(ctx context.Context, sessionID string) (int, error)
+}
+
 // TaskRowLivenessProber classifies an executors_running row's backing-process
 // liveness in a runtime-aware way (a local process check is never applied to a
 // remote/SSH row). It is optional and satisfied by the lifecycle adapter. When
@@ -124,6 +130,14 @@ type ProviderDefaultBranchProber interface {
 // Implementations must be no-op-safe when the task has no running execution.
 type AgentBaseBranchPusher interface {
 	PushBaseBranchesForTask(ctx context.Context, taskID string, branches map[string]string)
+}
+
+// AgentComparisonTargetPusher pushes the durable provider-qualified comparison
+// target map to every running agentctl execution for a task. Implementations
+// must replace the complete projection, including an empty map, so a cleared
+// target cannot remain cached in a live workspace.
+type AgentComparisonTargetPusher interface {
+	PushComparisonTargetsForTask(ctx context.Context, taskID string, targets map[string]models.ComparisonTarget)
 }
 
 type BranchMaterializer interface {
@@ -193,6 +207,7 @@ type PRTaskResolver interface {
 type StartStepResolver interface {
 	ResolveStartStep(ctx context.Context, workflowID string) (string, error)
 	ResolveFirstStep(ctx context.Context, workflowID string) (string, error)
+	ResolveAutoStartStep(ctx context.Context, workflowID string) (string, error)
 }
 
 // StepHistoryRecorder persists an ADR 0015 session-step transition audit
@@ -265,6 +280,8 @@ type Repos struct {
 	Sessions          repository.SessionRepository
 	GitSnapshots      repository.GitSnapshotRepository
 	RepoEntities      repository.RepositoryEntityRepository
+	RepositorySets    repository.RepositorySetRepository
+	BranchPolicies    repository.RepositoryBranchPolicyRepository
 	RepositoryCleanup repository.RepositoryCleanupRepository
 	Executors         repository.ExecutorRepository
 	Environments      repository.EnvironmentRepository
@@ -272,7 +289,9 @@ type Repos struct {
 	Reviews           repository.ReviewRepository
 	ResourceCleanups  repository.TaskResourceCleanupRepository
 	StatusSummaries   repository.TaskStatusSummaryRepository
+	TaskActivity      repository.TaskActivityRepository
 	SubagentContexts  repository.SubagentContextRepository
+	Usage             repository.UsageRepository
 }
 
 // Service provides task business logic
@@ -288,6 +307,8 @@ type Service struct {
 	sessions                        repository.SessionRepository
 	gitSnapshots                    repository.GitSnapshotRepository
 	repoEntities                    repository.RepositoryEntityRepository
+	repositorySets                  repository.RepositorySetRepository
+	branchPolicies                  repository.RepositoryBranchPolicyRepository
 	repositoryCleanup               repository.RepositoryCleanupRepository
 	executors                       repository.ExecutorRepository
 	environments                    repository.EnvironmentRepository
@@ -295,15 +316,19 @@ type Service struct {
 	reviews                         repository.ReviewRepository
 	resourceCleanups                repository.TaskResourceCleanupRepository
 	statusSummaries                 repository.TaskStatusSummaryRepository
+	taskActivity                    repository.TaskActivityRepository
 	subagentContexts                repository.SubagentContextRepository
+	usage                           repository.UsageRepository
 	attachmentSvc                   *AttachmentService
 	statusSummaryPRs                TaskStatusSummaryPRReader
+	statusSummaryProjector          TaskStatusSummaryEventProjector
 	queuedPromptCounter             QueuedPromptCounter
 	eventBus                        bus.EventBus
 	logger                          *logger.Logger
 	discoveryConfig                 RepositoryDiscoveryConfig
 	worktreeCleanup                 WorktreeCleanup
 	executionStopper                TaskExecutionStopper
+	clarificationCanceller          TerminalClarificationCanceller
 	rowLivenessProber               TaskRowLivenessProber
 	contextWindowResetter           func(context.Context, string) error
 	cleanupActivity                 TaskResourceCleanupActivityGate
@@ -323,8 +348,10 @@ type Service struct {
 	quickChatDir                    string // Directory for quick-chat workspaces (e.g., ~/.kandev/quick-chat)
 	branchFetcher                   *branchFetcher
 	envDestroyer                    EnvironmentDestroyer
+	sshTaskDirReclaimer             SSHTaskDirReclaimer
 	sessionRunningChecker           SessionRunningChecker
 	remoteBranchLister              RemoteBranchLister
+	repositorySelectionResolver     RepositorySelectionResolver
 	repoCloneLocation               RepoCloneLocation
 	blockers                        BlockerRepository
 	// dependencyEdgeMu serializes validate-then-insert for dependency edges so
@@ -332,9 +359,11 @@ type Service struct {
 	// other's insert and commit a cycle between them.
 	dependencyEdgeMu       sync.Mutex
 	comments               CommentRepository
+	taskStateActivity      TaskStateActivityLogger
 	secretStore            secrets.SecretStore
 	workspaceSecretDeleter WorkspaceSecretDeleter
 	baseBranchPusher       AgentBaseBranchPusher
+	comparisonTargetPusher AgentComparisonTargetPusher
 	runtimeOverridesMu     sync.Mutex
 
 	workspaceSourceProviderRefresher WorkspaceSourceProviderRefresher
@@ -371,6 +400,12 @@ type Service struct {
 	// within this backend process only — this backend is single-process per
 	// SQLite database, so that is the complete threat model today.
 	repoResolveMu sync.Mutex
+	// pendingActionProjectionMu guards the durable-generation logical clock
+	// shared by REST snapshots and semantic message events. Revisions are
+	// reserved before each repository read so delayed results stay ordered.
+	pendingActionProjectionMu       sync.Mutex
+	pendingActionProjectionEpoch    string
+	pendingActionProjectionSequence uint64
 }
 
 // SetAttachmentService wires the file-backed prompt attachment owner into the
@@ -419,6 +454,8 @@ func NewService(repos Repos, eventBus bus.EventBus, log *logger.Logger, discover
 		sessions:              repos.Sessions,
 		gitSnapshots:          repos.GitSnapshots,
 		repoEntities:          repos.RepoEntities,
+		repositorySets:        repos.RepositorySets,
+		branchPolicies:        repos.BranchPolicies,
 		repositoryCleanup:     repos.RepositoryCleanup,
 		executors:             repos.Executors,
 		environments:          repos.Environments,
@@ -426,13 +463,18 @@ func NewService(repos Repos, eventBus bus.EventBus, log *logger.Logger, discover
 		reviews:               repos.Reviews,
 		resourceCleanups:      repos.ResourceCleanups,
 		statusSummaries:       repos.StatusSummaries,
+		taskActivity:          repos.TaskActivity,
 		subagentContexts:      repos.SubagentContexts,
+		usage:                 repos.Usage,
 		eventBus:              eventBus,
 		logger:                log,
 		discoveryConfig:       discoveryConfig,
 		branchFetcher:         newBranchFetcher(log.Zap()),
 		lastTaskActivity:      make(map[string]v1.ForegroundActivity),
 		lastTaskSubagentCount: make(map[string]int),
+		// Focused service tests do not run backend composition. Production
+		// replaces this fallback with a database-allocated generation.
+		pendingActionProjectionEpoch: "1",
 	}
 }
 
@@ -470,6 +512,13 @@ func (s *Service) SetAgentBaseBranchPusher(p AgentBaseBranchPusher) {
 	s.baseBranchPusher = p
 }
 
+// SetAgentComparisonTargetPusher wires the live-update push for provider PR
+// and MR reconciliation. Optional: when unset, the persisted attachment
+// metadata remains authoritative and is hydrated at the next launch.
+func (s *Service) SetAgentComparisonTargetPusher(p AgentComparisonTargetPusher) {
+	s.comparisonTargetPusher = p
+}
+
 // SetProviderDefaultBranchProber wires the synchronous default-branch probe
 // used by AddBranchToTask's GitHub-URL resolution. Optional — when unset,
 // add_branch with a provider URL and no base_branch falls through to the
@@ -481,6 +530,12 @@ func (s *Service) SetProviderDefaultBranchProber(p ProviderDefaultBranchProber) 
 // SetExecutionStopper wires the task execution stopper (orchestrator).
 func (s *Service) SetExecutionStopper(stopper TaskExecutionStopper) {
 	s.executionStopper = stopper
+}
+
+// SetClarificationCanceller wires terminal clarification cleanup for session
+// transitions owned by the task service.
+func (s *Service) SetClarificationCanceller(canceller TerminalClarificationCanceller) {
+	s.clarificationCanceller = canceller
 }
 
 // SetRowLivenessProber wires the runtime-aware executors_running liveness probe
@@ -588,6 +643,13 @@ type RemoteBranchLister interface {
 // SetRemoteBranchLister wires the provider-neutral remote branch source.
 func (s *Service) SetRemoteBranchLister(lister RemoteBranchLister) {
 	s.remoteBranchLister = lister
+}
+
+// SetRepositorySelectionResolver wires server-side inspection for first-use
+// plugin repository selections. The resolver is optional for focused callers;
+// plugin selections fail closed when it is not wired.
+func (s *Service) SetRepositorySelectionResolver(resolver RepositorySelectionResolver) {
+	s.repositorySelectionResolver = resolver
 }
 
 // RepoCloneLocation reports the base path the orchestrator clones repos into

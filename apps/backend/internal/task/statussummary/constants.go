@@ -8,6 +8,7 @@ const (
 
 	messageTypeClarificationRequest = "clarification_request"
 	messageTypePermissionRequest    = "permission_request"
+	messageTypeUser                 = "user"
 	messageTypeError                = "error"
 	messageTypeStatus               = "status"
 	messageTypeAgent                = "agent"
@@ -28,6 +29,7 @@ const (
 	prStatePending  = "pending"
 	prStateAwaiting = "awaiting_review"
 	prStateReady    = "ready"
+	prStateQueued   = "queued"
 	prStatePassing  = "passing"
 	prStateNeutral  = "neutral"
 	prStateOpen     = "open"

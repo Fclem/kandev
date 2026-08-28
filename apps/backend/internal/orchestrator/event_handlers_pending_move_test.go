@@ -138,6 +138,138 @@ func TestPendingMove_OutOfTerminalStepReopensCompletedTask(t *testing.T) {
 	}
 }
 
+func TestPendingMove_DoesNotReplayAfterStaleSnapshotRestored(t *testing.T) {
+	sc := buildPendingMoveScenario(t)
+	session, err := sc.repo.GetTaskSession(sc.ctx, sc.reviewSessionID)
+	if err != nil {
+		t.Fatalf("load review session: %v", err)
+	}
+	queuedAt := time.Date(2026, 8, 17, 2, 23, 48, 0, time.UTC)
+	firstMove := &messagequeue.PendingMove{
+		TaskID:         "task-1",
+		WorkflowID:     "wf1",
+		WorkflowStepID: stepInProgressID,
+		QueuedAt:       queuedAt,
+	}
+
+	// Consume the deferred move once, as handleAgentReady does at turn end.
+	sc.svc.applyPendingMove(sc.ctx, "task-1", sc.reviewSessionID, session, firstMove)
+	task, err := sc.repo.GetTask(sc.ctx, "task-1")
+	if err != nil {
+		t.Fatalf("load task after first move: %v", err)
+	}
+	if task.WorkflowStepID != stepInProgressID {
+		t.Fatalf("workflow_step_id after first move = %q, want %q", task.WorkflowStepID, stepInProgressID)
+	}
+
+	// Simulate a legitimate later return to Review, followed by a stale queue
+	// rollback restoring the original already-consumed legacy pending move. The
+	// restored row predates move_id, so applyPendingMove must derive the same
+	// stable identity from the persisted legacy fields instead of relying on the
+	// mutated firstMove pointer above.
+	task.WorkflowStepID = stepInReviewID
+	if err := sc.repo.UpdateTask(sc.ctx, task); err != nil {
+		t.Fatalf("return task to review: %v", err)
+	}
+	staleRestoredMove := &messagequeue.PendingMove{
+		TaskID:         "task-1",
+		WorkflowID:     "wf1",
+		WorkflowStepID: stepInProgressID,
+		QueuedAt:       queuedAt,
+	}
+	sc.svc.applyPendingMove(sc.ctx, "task-1", sc.reviewSessionID, session, staleRestoredMove)
+
+	task, err = sc.repo.GetTask(sc.ctx, "task-1")
+	if err != nil {
+		t.Fatalf("load task after stale replay: %v", err)
+	}
+	if task.WorkflowStepID != stepInReviewID {
+		t.Fatalf("workflow_step_id after stale replay = %q, want %q", task.WorkflowStepID, stepInReviewID)
+	}
+}
+
+func TestPendingMove_EqualTargetRecordsAppliedMoveID(t *testing.T) {
+	sc := buildPendingMoveScenario(t)
+	session, err := sc.repo.GetTaskSession(sc.ctx, sc.reviewSessionID)
+	if err != nil {
+		t.Fatalf("load review session: %v", err)
+	}
+	task, err := sc.repo.GetTask(sc.ctx, "task-1")
+	if err != nil {
+		t.Fatalf("load task: %v", err)
+	}
+	task.WorkflowStepID = stepInProgressID
+	if err := sc.repo.UpdateTask(sc.ctx, task); err != nil {
+		t.Fatalf("move task to target step: %v", err)
+	}
+
+	const moveID = "move-equal-target"
+	sc.svc.applyPendingMove(sc.ctx, "task-1", sc.reviewSessionID, session, &messagequeue.PendingMove{
+		MoveID:         moveID,
+		TaskID:         "task-1",
+		WorkflowID:     "wf1",
+		WorkflowStepID: stepInProgressID,
+	})
+
+	updated, err := sc.repo.GetTask(sc.ctx, "task-1")
+	if err != nil {
+		t.Fatalf("reload task: %v", err)
+	}
+	applied, ok := updated.Metadata[models.MetaKeyAppliedDeferredMoves].(map[string]interface{})
+	if !ok || applied[moveID] != true {
+		t.Fatalf("applied deferred moves = %#v, want %q", updated.Metadata[models.MetaKeyAppliedDeferredMoves], moveID)
+	}
+}
+
+func TestPendingMove_DuplicateRemovesOnlyMatchingHandoffPrompt(t *testing.T) {
+	sc := buildPendingMoveScenario(t)
+	session, err := sc.repo.GetTaskSession(sc.ctx, sc.reviewSessionID)
+	if err != nil {
+		t.Fatalf("load review session: %v", err)
+	}
+
+	const moveID = "move-duplicate"
+	task, err := sc.repo.GetTask(sc.ctx, "task-1")
+	if err != nil {
+		t.Fatalf("load task: %v", err)
+	}
+	task.Metadata = map[string]interface{}{
+		models.MetaKeyAppliedDeferredMoves: map[string]interface{}{moveID: true},
+	}
+	if err := sc.repo.UpdateTask(sc.ctx, task); err != nil {
+		t.Fatalf("mark deferred move as applied: %v", err)
+	}
+	if _, ok := sc.svc.messageQueue.TakeQueued(sc.ctx, sc.reviewSessionID); !ok {
+		t.Fatalf("remove scenario handoff prompt")
+	}
+
+	if _, err := sc.svc.messageQueue.QueueMessageWithMetadata(
+		sc.ctx, sc.reviewSessionID, "task-1", "stale handoff", "",
+		messagequeue.QueuedByMoveTask, false, nil,
+		map[string]interface{}{messagequeue.MetadataDeferredMoveID: moveID},
+	); err != nil {
+		t.Fatalf("queue stale handoff: %v", err)
+	}
+	if _, err := sc.svc.messageQueue.QueueMessage(
+		sc.ctx, sc.reviewSessionID, "task-1", "unrelated prompt", "",
+		messagequeue.QueuedByUser, false, nil,
+	); err != nil {
+		t.Fatalf("queue unrelated prompt: %v", err)
+	}
+
+	sc.svc.applyPendingMove(sc.ctx, "task-1", sc.reviewSessionID, session, &messagequeue.PendingMove{
+		MoveID:         moveID,
+		TaskID:         "task-1",
+		WorkflowID:     "wf1",
+		WorkflowStepID: stepInProgressID,
+	})
+
+	status := sc.svc.messageQueue.GetStatus(sc.ctx, sc.reviewSessionID)
+	if len(status.Entries) != 1 || status.Entries[0].Content != "unrelated prompt" {
+		t.Fatalf("remaining queue entries = %#v, want only unrelated prompt", status.Entries)
+	}
+}
+
 func TestPendingMove_DropsForeignWorkflowStepWithoutMovingTask(t *testing.T) {
 	sc := buildPendingMoveScenario(t)
 	sc.stepGetter.steps["foreign-step"] = &wfmodels.WorkflowStep{
@@ -242,6 +374,9 @@ func buildPendingMoveScenario(t *testing.T) *pendingMoveScenario {
 
 	implSessionID := seedImplSession(t, repo, now)
 	reviewSessionID := seedReviewSession(t, repo, now)
+	if err := repo.CreateTaskEnvironment(ctx, &models.TaskEnvironment{ID: "env-1", TaskID: "task-1", ExecutorType: string(models.ExecutorTypeLocal), Status: models.TaskEnvironmentStatusReady}); err != nil {
+		t.Fatalf("create task environment: %v", err)
+	}
 
 	taskRepo := newMockTaskRepo()
 	taskRepo.tasks["task-1"] = &v1.Task{
@@ -273,7 +408,7 @@ func buildPendingMoveScenario(t *testing.T) *pendingMoveScenario {
 	const handoffPrompt = "You were moved to this step with the following message: " +
 		"The file fibonacci.py has two bugs — fix them."
 	if _, err := svc.messageQueue.QueueMessage(
-		ctx, reviewSessionID, "task-1", handoffPrompt, "", "mcp-move-task", false, nil,
+		ctx, reviewSessionID, "task-1", handoffPrompt, "", messagequeue.QueuedByMoveTask, false, nil,
 	); err != nil {
 		t.Fatalf("queue hand-off prompt: %v", err)
 	}
@@ -339,6 +474,7 @@ func seedImplSession(t *testing.T, repo *sqliterepo.Repository, now time.Time) s
 		AgentProfileID:    profileImpl,
 		ExecutorID:        "exec-local",
 		ExecutorProfileID: "ep1",
+		TaskEnvironmentID: "env-1",
 		AgentExecutionID:  "ae-impl-original",
 		State:             models.TaskSessionStateCompleted,
 		CompletedAt:       &completedAt,
@@ -369,6 +505,7 @@ func seedReviewSession(t *testing.T, repo *sqliterepo.Repository, now time.Time)
 		AgentProfileID:    profileReview,
 		ExecutorID:        "exec-local",
 		ExecutorProfileID: "ep1",
+		TaskEnvironmentID: "env-1",
 		AgentExecutionID:  "ae-review",
 		State:             models.TaskSessionStateRunning,
 		IsPrimary:         true,
@@ -381,12 +518,14 @@ func seedReviewSession(t *testing.T, repo *sqliterepo.Repository, now time.Time)
 	return id
 }
 
-// wireBootReadySimulator stubs LaunchAgent to fire handleAgentBootReady ~50ms
-// after returning. Real agentctl bootstrap publishes events.AgentBootReady from
-// outside the LaunchAgent call; mirroring that timing here lets the resume
-// path complete in unit tests without spawning a real subprocess.
+// wireBootReadySimulator models the two-phase prepared-session lifecycle:
+// LaunchAgent starts the workspace first, then StartAgentProcess starts ACP and
+// emits agent.boot_ready. A workflow replacement transfers its queued hand-off
+// between those phases, so emitting boot-ready from LaunchAgent would drain the
+// wrong session too early and leave the receiving queue without its real drain.
 func wireBootReadySimulator(svc *Service, agentMgr *mockAgentManager, newExecID string) {
 	promptReady := make(chan struct{})
+	var preparedSessionID string
 	agentMgr.isAgentReadyFn = func(_ context.Context, _ string) bool {
 		select {
 		case <-promptReady:
@@ -396,6 +535,9 @@ func wireBootReadySimulator(svc *Service, agentMgr *mockAgentManager, newExecID 
 		}
 	}
 	agentMgr.launchAgentFunc = func(_ context.Context, req *executor.LaunchAgentRequest) (*executor.LaunchAgentResponse, error) {
+		agentMgr.mu.Lock()
+		preparedSessionID = req.SessionID
+		agentMgr.mu.Unlock()
 		// Simulate the lifecycle manager's persistExecutorRunning: in production
 		// the row is upserted in lockstep with executionStore.Add; here we mirror
 		// that timing so the orchestrator's GetExecutionIDForSession lookup
@@ -410,21 +552,24 @@ func wireBootReadySimulator(svc *Service, agentMgr *mockAgentManager, newExecID 
 				Status:           "starting",
 			})
 		}
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			svc.handleAgentBootReady(context.Background(), watcher.AgentEventData{
-				TaskID:           req.TaskID,
-				SessionID:        req.SessionID,
-				AgentExecutionID: newExecID,
-				AgentProfileID:   req.AgentProfileID,
-			})
-			close(promptReady)
-		}()
 		return &executor.LaunchAgentResponse{
 			AgentExecutionID: newExecID,
 			ContainerID:      "container-relaunch",
 			Status:           v1.AgentStatusReady,
 		}, nil
+	}
+	agentMgr.startAgentProcessFunc = func(_ context.Context, executionID string) error {
+		agentMgr.mu.Lock()
+		sessionID := preparedSessionID
+		agentMgr.mu.Unlock()
+		close(promptReady)
+		svc.handleAgentBootReady(context.Background(), watcher.AgentEventData{
+			TaskID:           "task-1",
+			SessionID:        sessionID,
+			AgentExecutionID: executionID,
+			AgentProfileID:   profileImpl,
+		})
+		return nil
 	}
 }
 
@@ -453,8 +598,8 @@ func (sc *pendingMoveScenario) startStepHistorySampler(t *testing.T, duration ti
 
 // assertOneTransitionToInProgress checks every postcondition of the scenario:
 // task moved to In Progress, exactly one transition, sessions in the right
-// state, and the hand-off prompt landed on the impl session (delivered or
-// queued — either is acceptable for this regression).
+// state, and the hand-off prompt landed exactly once on the fresh impl
+// session's initial launch.
 func (sc *pendingMoveScenario) assertOneTransitionToInProgress(t *testing.T, stepHistory []string) {
 	t.Helper()
 
@@ -487,45 +632,81 @@ func (sc *pendingMoveScenario) assertOneTransitionToInProgress(t *testing.T, ste
 		t.Error("review session must no longer be primary (the impl session takes over)")
 	}
 
-	impl, err := sc.repo.GetTaskSession(sc.ctx, sc.implSessionID)
+	// The original impl session was seeded COMPLETED (it was previously
+	// launched and completed a real turn — mirroring production). Terminal
+	// sessions are never revived for workflow re-entry (see
+	// findReusableSessionForProfile), so it must stay exactly as seeded:
+	// terminal, non-primary, historically intact.
+	oldImpl, err := sc.repo.GetTaskSession(sc.ctx, sc.implSessionID)
 	if err != nil {
-		t.Fatalf("load impl session: %v", err)
+		t.Fatalf("load original impl session: %v", err)
 	}
-	if !impl.IsPrimary {
-		t.Error("impl session must be primary after the deferred move applies")
+	if oldImpl.State != models.TaskSessionStateCompleted {
+		t.Errorf("original impl session state = %q, want it to remain COMPLETED (never revived)", oldImpl.State)
 	}
-	if impl.State == models.TaskSessionStateCompleted {
-		t.Errorf("impl session state = %q, expected non-terminal (revived for a new turn)", impl.State)
+	if oldImpl.IsPrimary {
+		t.Error("original impl session must remain non-primary (never revived)")
 	}
 
-	sc.assertHandoffDeliveredOrQueued(t)
+	// Re-entry into the Impl profile must create a FRESH session rather than
+	// resurrecting session-impl's stale ACP conversation.
+	sessions, err := sc.repo.ListTaskSessions(sc.ctx, "task-1")
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	var freshImpl *models.TaskSession
+	for _, s := range sessions {
+		if s.AgentProfileID == profileImpl && s.ID != sc.implSessionID {
+			freshImpl = s
+		}
+	}
+	if freshImpl == nil {
+		t.Fatal("expected a fresh impl-profile session distinct from the original COMPLETED session-impl")
+	}
+	if !freshImpl.IsPrimary {
+		t.Error("fresh impl session must be primary after the deferred move applies")
+	}
+	if isTerminalSessionState(freshImpl.State) {
+		t.Errorf("fresh impl session state = %q, expected non-terminal", freshImpl.State)
+	}
+
+	sc.assertHandoffDeliveredToFreshLaunch(t, freshImpl.ID)
 }
 
-// assertHandoffDeliveredOrQueued checks the hand-off prompt landed on the impl
-// session — either delivered to its agent (PromptAgent capture) or sitting in
-// the queue waiting for delivery. Both are acceptable; the failure mode the
-// regression catches is "lost" (neither delivered nor queued) or "delivered
-// to the wrong session".
-func (sc *pendingMoveScenario) assertHandoffDeliveredOrQueued(t *testing.T) {
+// assertHandoffDeliveredToFreshLaunch proves the moved hand-off is consumed by
+// the fresh session's initial launch exactly once. A replacement has already
+// prepared its workspace, so StartCreatedSession configures the initial ACP
+// prompt through SetExecutionDescription before StartAgentProcess; this is the
+// delivery boundary rather than a follow-up PromptAgent call.
+func (sc *pendingMoveScenario) assertHandoffDeliveredToFreshLaunch(t *testing.T, targetSessionID string) {
 	t.Helper()
 	implPrompts := capturedPromptsForExecution(sc.agentMgr, sc.implRelaunchExec)
-	implQueued := sc.svc.messageQueue.GetStatus(sc.ctx, sc.implSessionID)
+	implDescriptions := capturedExecutionDescriptionsForExecution(sc.agentMgr, sc.implRelaunchExec)
+	implQueued := sc.svc.messageQueue.GetStatus(sc.ctx, targetSessionID)
 
-	if len(implPrompts) == 0 && implQueued.Count == 0 {
-		t.Error("hand-off prompt was neither delivered to the impl session nor queued for it")
-		return
-	}
+	const handoffFragment = "fibonacci.py has two bugs"
+	deliveries := 0
 	for _, p := range implPrompts {
-		if strings.Contains(p, "fibonacci.py has two bugs") {
-			return
+		if strings.Contains(p, handoffFragment) {
+			deliveries++
+		}
+	}
+	for _, description := range implDescriptions {
+		if strings.Contains(description, handoffFragment) {
+			deliveries++
 		}
 	}
 	for _, entry := range implQueued.Entries {
-		if strings.Contains(entry.Content, "fibonacci.py has two bugs") {
-			return
+		if strings.Contains(entry.Content, handoffFragment) {
+			deliveries++
 		}
 	}
-	t.Errorf("hand-off prompt was neither delivered nor queued with the expected content")
+	if deliveries != 1 {
+		t.Errorf("hand-off deliveries = %d, want exactly one", deliveries)
+	}
+	if len(implQueued.Entries) != 0 {
+		t.Errorf("fresh session queue = %+v, want empty after accepted initial delivery", implQueued.Entries)
+	}
 }
 
 // --- Helpers ---
@@ -539,6 +720,18 @@ func capturedPromptsForExecution(agentMgr *mockAgentManager, executionID string)
 	defer agentMgr.mu.Unlock()
 	out := make([]string, 0, len(agentMgr.capturedPromptCalls))
 	for _, c := range agentMgr.capturedPromptCalls {
+		if c.ExecutionID == executionID {
+			out = append(out, c.Prompt)
+		}
+	}
+	return out
+}
+
+func capturedExecutionDescriptionsForExecution(agentMgr *mockAgentManager, executionID string) []string {
+	agentMgr.mu.Lock()
+	defer agentMgr.mu.Unlock()
+	out := make([]string, 0, len(agentMgr.setExecutionDescriptionCalls))
+	for _, c := range agentMgr.setExecutionDescriptionCalls {
 		if c.ExecutionID == executionID {
 			out = append(out, c.Prompt)
 		}
@@ -708,6 +901,13 @@ func TestHandleAgentBootReady_DoesNotTriggerOnTurnComplete(t *testing.T) {
 			}
 			if finalSess.State != tc.expectSt {
 				t.Errorf("session.State = %q, want %q", finalSess.State, tc.expectSt)
+			}
+			resolvedAt, ok := finalSess.Metadata[models.SessionMetaKeyRecoveryResolvedAt].(string)
+			if !ok || resolvedAt == "" {
+				t.Fatalf("recovery resolution timestamp = %#v, want RFC3339 string", finalSess.Metadata[models.SessionMetaKeyRecoveryResolvedAt])
+			}
+			if _, err := time.Parse(time.RFC3339Nano, resolvedAt); err != nil {
+				t.Fatalf("recovery resolution timestamp %q is invalid: %v", resolvedAt, err)
 			}
 		})
 	}

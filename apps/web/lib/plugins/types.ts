@@ -10,8 +10,11 @@ import type { AppState } from "@/lib/state/store";
 import type * as PluginSDK from "@kandev/plugin-sdk";
 import type { PluginUIApi } from "@kandev/plugin-sdk";
 export type {
+  IntegrationSettingsActionProps,
+  IntegrationSettingsActionSurface,
   PluginContextApi,
   PluginHostRepository,
+  MainTopBarSlotProps,
   PluginNavSection,
   PluginUIApi,
 } from "@kandev/plugin-sdk";
@@ -101,6 +104,9 @@ export interface IntegrationSettingsRegistration {
   /** Curated icon name or plugin-owned component. */
   icon?: PluginSDK.PluginIcon;
   Component: ReactType.ComponentType<PluginIntegrationSettingsProps>;
+  /** Optional action rendered in the detail section header and index card.
+   * Receives the routed workspace and the native surface that mounted it. */
+  action?: ReactType.ComponentType<PluginSDK.IntegrationSettingsActionProps>;
 }
 
 /**
@@ -113,7 +119,12 @@ export interface IntegrationSettingsRegistration {
  * sessionIds }`), "main-top-bar" (status/actions in the default app top bar on
  * the Home / Kanban / Tasks views, beside the CPU/DB metrics and the
  * view/display controls — the app-wide, task-agnostic counterpart to
- * "chat-top-bar"; receives `{ workspaceId, workspaceLabel, currentPage }`),
+ * "chat-top-bar"; receives `{ workspaceId, workspaceLabel, currentPage,
+ * presentation }`). On phones, `presentation` is "mobile": contributions
+ * join the horizontally scrollable middle action strip between the fixed
+ * Kandev link and menu button. Use the host `ui.Button` icon-button contract
+ * there: a 32px box with a 16px SVG icon. Desktop contributions retain their
+ * existing sizing.
  * "app-status-bar-left" / "app-status-bar-right" (receives
  * `AppStatusBarSlotProps` as `slotProps`), and
  * "plugin-settings" (inline UI on a plugin's own settings
@@ -127,7 +138,9 @@ export interface IntegrationSettingsRegistration {
  * as `slotProps`), "task-card-tags" (its own row on every kanban card,
  * rendered below the badges row — for contributions too wide for the cramped
  * title-row `task-card-indicators` spot, e.g. a row of tag chips — receives
- * `TaskCardTagsSlotProps` as `slotProps`), and "sidebar-workspace-actions"
+ * `TaskCardTagsSlotProps` as `slotProps`), "task-row-metadata" (compact,
+ * read-only secondary metadata on sidebar and `/tasks` rows — receives
+ * `TaskRowMetadataSlotProps` as `slotProps`), and "sidebar-workspace-actions"
  * (icon-button cluster in the sidebar's New Task row, after the built-in
  * Quick Terminal and Quick Chat actions, with the same action group exposed
  * through mobile navigation — receives `SidebarWorkspaceActionsSlotProps`
@@ -155,6 +168,14 @@ export type TaskCardTagsSlotProps = {
   taskId: string;
   workspaceId: string | null;
   workflowStepId: string | null;
+};
+
+/** Context passed to compact, plugin-agnostic task-row metadata contributions. */
+export type TaskRowMetadataSlotProps = {
+  taskId: string;
+  workspaceId: string | null;
+  workflowStepId: string | null;
+  surface: "sidebar" | "task-list";
 };
 
 /** Context the host forwards to every `sidebar-workspace-actions` component. */
@@ -311,6 +332,10 @@ export type PluginTaskFilterRegistrationKey = `${string}:${string}`;
  * backend query for this filter.
  */
 export type TaskFilterRegistration = PluginSDK.TaskFilterRegistration;
+
+/** A plugin-provided, client-side facet for sorting and grouping `/tasks`. */
+export type TaskListFacetRegistration = PluginSDK.TaskListFacetRegistration;
+export type TaskListFacetValue = PluginSDK.TaskListFacetValue;
 
 /** One entry returned by `host.storage.list`. */
 export type PluginStorageEntry = PluginSDK.PluginStorageEntry;

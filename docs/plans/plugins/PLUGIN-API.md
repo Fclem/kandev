@@ -47,7 +47,7 @@ repositoryProviderIds?: string[] }`. `repositoryProviderIds` is JSON
    from an expired generation cannot mutate the replacement generation. Failure or
    timeout does **not** unregister `registry` contributions (nav items, routes,
    etc.) already made before the failure — those persist, and only the plugin's
-   lifecycle status becomes failed, until the plugin's *next* load revokes them.
+   lifecycle status becomes failed, until the plugin's _next_ load revokes them.
 
 ## Global entry point
 
@@ -72,6 +72,8 @@ interface PluginHostApi {
     // Versioned provider-neutral reads; never exposes private AppState slices.
     getActiveWorkspaceId(): string | undefined;
     subscribeActiveWorkspace(listener): () => void;
+    getWorkspaceIds(): readonly string[];
+    subscribeWorkspaces(listener): () => void;
     getTaskCreationContext(workspaceId: string): TaskCreationContext | null;
     subscribeTaskCreationContext(workspaceId: string, listener): () => void;
     resolveRepositoryId(identity: RepositoryIdentityInput): string | undefined;
@@ -154,6 +156,19 @@ interface PluginHostApi {
   // Shared helpers — plain functions, so they live here rather than in `ui`
   // (a component map). See the "host.utils" section below.
   utils: PluginUtilsApi;
+  // Registers one plugin-owned contributor with the native settings save bar.
+  // The host prefixes the contributor id with `plugin:<pluginId>:` before it
+  // reaches the shared coordinator, so ids only need to be unique inside the
+  // plugin. The contributor owns persistence and draft state.
+  useSettingsSaveContributor(contributor: SettingsSaveContributor): void;
+  // Publishes one integration registration's live enabled state for one
+  // workspace. The value is memory-only; persist it with host.storage and
+  // republish it for every workspace after plugin load.
+  setIntegrationEnabled(
+    integrationId: string,
+    workspaceId: string,
+    enabled: boolean,
+  ): void;
   // Authenticated, per-user key/value storage backed by
   // /api/plugins/{id}/user-state/... — see the "host.storage" section below.
   // Requires the plugin manifest to declare capabilities.user_state: true.
@@ -251,6 +266,19 @@ interface PluginStorageApi {
   ): () => void;
 }
 
+type SettingsSaveRevision = string | number;
+
+interface SettingsSaveContributor {
+  id: string;
+  order?: number;
+  revision: SettingsSaveRevision;
+  isDirty: boolean;
+  canSave?: boolean;
+  invalidReason?: string;
+  save(revision: SettingsSaveRevision): Promise<void> | void;
+  discard(revision?: SettingsSaveRevision): Promise<void> | void;
+}
+
 interface PluginUserStateChange {
   scope: PluginStorageScope;
   scopeId: string;
@@ -325,7 +353,9 @@ provider-neutral code-host dashboard set: `ChangeRequestList`,
 `ChangeRequestRow`, `ChangeRequestDetail`, `IntegrationListToolbar`, `IntegrationScopeBar`,
 `IntegrationSaveQueryDialog`, `IntegrationRepositoryFilter`, `IntegrationCursorPagination`,
 `IntegrationStartTaskMenu`, `IntegrationIcon`, `IntegrationChangeRequestStatus`, and
-`TaskRowIndicator`. The authoritative list is
+`TaskRowIndicator`, plus native integration settings surfaces:
+`IntegrationAuthStatusBanner`, `IntegrationEnabledControl`, `SettingsSection`,
+`SettingsCard`, and `WorkspaceScopedSection`. The authoritative list is
 `apps/web/lib/plugins/host-api.ts` (`PLUGIN_UI`).
 
 In create mode, `TaskCreateDialog` accepts this optional transport seam:
@@ -386,6 +416,57 @@ Radix/portal/context-based would split React context across instances and
 break refs/`asChild`. Pure-React libs (e.g. `@tabler/icons-react`) bundle
 fine.
 
+### First-use repository inspection action
+
+A manifest-owned repository provider that supports native task creation from a
+new URL declares this workspace-scoped action:
+
+```yaml
+actions:
+  - key: "repositories.inspect"
+    scope: "workspace"
+    max_body_bytes: 16384
+```
+
+The host invokes the active manifest owner from the backend. The plugin receives
+the verified workspace context and this bounded body. Browser descriptor fields
+are not forwarded:
+
+```json
+{"url":"https://code.example.com/owner/repository"}
+```
+
+Return the preferred nested response:
+
+```json
+{
+  "repository": {
+    "provider_id": "example-provider",
+    "provider_host": "https://code.example.com",
+    "provider_scope": "https://code.example.com/context-a",
+    "provider_repository_id": "owner/repository",
+    "owner_or_project": "owner",
+    "name": "repository",
+    "clone_url": "https://code.example.com/owner/repository.git",
+    "default_branch": "main"
+  }
+}
+```
+
+The host accepts the descriptor at the top level for compatibility and accepts
+`{"matched":false}` for a URL the provider does not own. A successful response
+must use the requested provider ID and include a provider host, provider scope,
+repository ID, owner or project, name, credential-free HTTPS clone URL, and
+default branch. The clone origin must match the HTTPS provider origin. Provider
+scope is limited to 512 bytes and identity fields cannot contain NUL bytes. Any
+scope or repository ID hint from the task request must match the response.
+
+The host enforces the manifest body limit, a 15-second timeout, and a 1 MiB
+response limit. It validates the response before it writes a repository or task.
+Malformed output is invalid, `matched:false` is not found, and provider or
+transport failures are unavailable. Error responses do not include plugin body
+content or upstream credentials.
+
 ### Persisted repository branch action
 
 A manifest-owned repository provider that participates in Kandev's native task branch
@@ -397,6 +478,10 @@ actions:
     scope: "workspace"
     max_body_bytes: 16384
 ```
+
+Browser-invoked actions may additionally declare `access: "admin"`. Omitting
+`access` preserves the default `authenticated` policy. The host rejects a
+non-administrator before it forwards any request body to an admin action.
 
 This action is invoked by the host backend, not the browser callback. Kandev resolves the
 active plugin that owns the repository's persisted provider ID and supplies a verified
@@ -476,11 +561,52 @@ interface PluginUtilsApi {
   // input. Prefer it over a hand-rolled ladder, which is English-only by
   // construction and goes untranslated for every non-English user.
   formatRelativeTime(value: string | number | Date): string;
+  // Polling interval used by native integration health controls.
+  integrationStatusRefreshMs: number;
 }
 ```
 
 These are functions, so they sit beside `navigate`/`openModal` rather than in
 `ui`, which is a component map.
+
+### Native integration settings state
+
+`registerIntegrationSettings` may provide an `action` component. The host mounts
+the action in the detail `SettingsSection` header and in the native integrations
+index card. The host passes the routed `workspaceId` and a `surface` value of
+`"detail"` or `"index"`. Use the workspace value for workspace-scoped reads and
+writes. Do not use `getActiveWorkspaceId()` for a routed settings page.
+
+`host.setIntegrationEnabled(integrationId, workspaceId, enabled)` publishes a
+live value for one registration and workspace. The host checks that the
+registration belongs to the current plugin. The value is not durable and is
+cleared when the plugin unloads. Persist the source of truth with
+`host.storage`, then republish it after load:
+
+```ts
+function publishAll(
+  host: PluginHostApi,
+  integrationId: string,
+  enabledByWorkspace: Map<string, boolean>,
+) {
+  for (const workspaceId of host.context.getWorkspaceIds()) {
+    host.setIntegrationEnabled(
+      integrationId,
+      workspaceId,
+      enabledByWorkspace.get(workspaceId) === true,
+    );
+  }
+}
+
+const unsubscribe = host.context.subscribeWorkspaces((workspaceIds) => {
+  // Load or refresh the durable value for the changed workspace ids.
+});
+```
+
+`host.useSettingsSaveContributor` connects plugin drafts to the native save
+bar. Contributor ids are local to the plugin because the host adds the
+`plugin:<pluginId>:` namespace before registration. Save and discard remain
+plugin-owned.
 
 ### `host.ui.RichTextEditor` / `host.ui.RichTextReadOnly`
 
@@ -572,7 +698,11 @@ own write).
 // unrecognised one, simply degrade to "main"'s placement — nothing is ever
 // silently dropped.
 type PluginIcon = string | React.ComponentType<{ className?: string }>;
-export type PluginNavSection = "main" | "settings" | "integrations" | "sidebar-footer";
+export type PluginNavSection =
+  | "main"
+  | "settings"
+  | "integrations"
+  | "sidebar-footer";
 
 interface NavItem {
   id: string;
@@ -639,7 +769,8 @@ interface PluginRegistry {
   // "settings-nav", "chat-input-actions", "task-create-input-actions",
   // "new-session-input-actions", "chat-top-bar",
   // "main-top-bar", "app-status-bar-left", "app-status-bar-right",
-  // "plugin-settings", "task-card-indicators", "task-card-tags", and
+  // "plugin-settings", "task-card-indicators", "task-card-tags",
+  // "task-row-metadata", and
   // "sidebar-workspace-actions".
   // "task-card-indicators" renders a small icon/badge beside the PR status
   // icon on every kanban card and forwards
@@ -651,6 +782,10 @@ interface PluginRegistry {
   // same `{ taskId: string, workspaceId: string | null, workflowStepId: string | null }`
   // shape as `slotProps` (`workspaceId` is null with no active workspace, and
   // `workflowStepId` is null when the task has no workflow step assigned).
+  // "task-row-metadata" renders compact, read-only metadata on the sidebar
+  // task tree and `/tasks` list. It forwards
+  // `{ taskId, workspaceId, workflowStepId, surface }`, where `surface` is
+  // "sidebar" or "task-list". The slot is plugin-agnostic.
   // "chat-input-actions", "task-create-input-actions", and
   // "new-session-input-actions" render composer actions for task/Quick Chat,
   // task creation, and new-session creation. Each forwards the typed
@@ -661,9 +796,14 @@ interface PluginRegistry {
   // carry the active session plus every kandev session id on the task.
   // "main-top-bar" renders status/actions in the default app top bar on the
   // Home / Kanban / Tasks views (beside the CPU/DB metrics and the view/display
-  // controls) and forwards `{ workspaceId, workspaceLabel, currentPage }`. It is
-  // the app-wide, task-agnostic counterpart to "chat-top-bar", so it carries no
-  // task/session ids.
+  // controls) and forwards `{ workspaceId, workspaceLabel, currentPage,
+  // presentation }`, where presentation is "desktop" or "mobile". On a phone,
+  // contributions join the horizontally scrollable middle action strip between
+  // the fixed Kandev link and menu button. Documented host ui.Button icon
+  // contributions are normalized to a 32px box with a 16px SVG icon on phones;
+  // desktop contribution sizing is unchanged. It is the app-wide,
+  // task-agnostic counterpart to "chat-top-bar", so it carries no task/session
+  // ids.
   // "sidebar-workspace-actions" renders icon buttons after the built-in Quick
   // Terminal and Quick Chat actions in the desktop sidebar's New Task row and
   // in the shared phone navigation sheet. It forwards
@@ -717,8 +857,8 @@ interface PluginRegistry {
   registerKeybinding(id: string, handler: (event: KeyboardEvent) => void): void;
 
   // Requires manifest ownership of provider.id. One active plugin owns one provider;
-  // unload revokes it and aborts in-flight provider work. inspectURL returns a complete
-  // credential-free HTTPS descriptor—host does not parse plugin provider URLs.
+  // unload revokes it and aborts in-flight provider work. inspectURL returns browser
+  // picker data only. Native first-use task creation also requires repositories.inspect.
   registerRepositoryProvider(provider: RepositoryProviderRegistration): void;
 
   // Native task-menu contribution. placement "link" renders in Link menus on desktop
@@ -742,6 +882,7 @@ interface PluginRegistry {
   // dropdown, alongside the built-in Workflow/Repository sections. See
   // "Task filters" below.
   registerTaskFilter(registration: TaskFilterRegistration): void;
+  registerTaskListFacet(registration: TaskListFacetRegistration): void;
 }
 
 interface IntegrationSettingsRegistration {
@@ -750,10 +891,21 @@ interface IntegrationSettingsRegistration {
   description: string;
   icon?: PluginIcon;
   Component: React.ComponentType<{ workspaceId?: string }>;
+  // Optional action for the detail section header and integrations index card.
+  // The surface identifies the host location and the workspace id identifies
+  // the settings target.
+  action?: React.ComponentType<IntegrationSettingsActionProps>;
+}
+
+type IntegrationSettingsActionSurface = "detail" | "index";
+
+interface IntegrationSettingsActionProps {
+  workspaceId?: string;
+  surface: IntegrationSettingsActionSurface;
 }
 
 // Integration settings render at /settings/integrations/{id} and
-// /settings/workspace/{workspaceId}/integrations/{id}. IDs are URL-safe, cannot
+// /settings/workspaces/{workspaceId}/integrations/{id}. IDs are URL-safe, cannot
 // shadow first-party integrations, and have one active owner; unload revokes them.
 
 interface RepositoryProviderRegistration {
@@ -777,6 +929,7 @@ interface RepositoryProviderRegistration {
     repository: RepositoryInspection;
     signal: AbortSignal;
   }): Promise<RepositoryProviderBranch[]>;
+// Browser picker callback. Its result is not authoritative for a native task write.
   inspectURL(context: {
     workspaceId: string;
     url: string;
@@ -1122,11 +1275,10 @@ console, and the menu still closes either way (Radix's own close-on-select,
 independent of the async result).
 
 Group `"primary"` renders each visible action as its own flat, top-level menu
-item instead of nesting it under `Edit` — positioned between the "Move
-to"/"Send to workflow" submenus and the "Link" submenu. Visibility filtering,
-registration order, and `run()`/error handling are identical to the `"edit"`
-group; the two groups are independent lists (an action only ever belongs to
-one).
+item instead of nesting it under `Edit`. It appears on cards and on the shared
+desktop/mobile task-row menu. Group `"edit"` remains card-only. Visibility
+filtering, registration order, and `run()`/error handling are identical; the
+two groups are independent lists (an action only ever belongs to one).
 
 `"task-card-indicators"` (documented above with the other slots) is the
 matching read-only surface: a small icon/badge rendered beside the PR status
@@ -1137,6 +1289,11 @@ context — same `{ taskId, workspaceId, workflowStepId }` shape — but mounted
 in its own row on the card instead of the cramped title row
 `"task-card-indicators"` shares with `PRTaskIcon`. Use it for a contribution
 that needs its own width, e.g. a row of tag chips.
+
+`"task-row-metadata"` is a separate, plugin-agnostic slot for compact,
+read-only metadata in the sidebar task tree and `/tasks` list. Its shape is
+`{ taskId, workspaceId, workflowStepId, surface }`, with `surface` equal to
+`"sidebar"` or `"task-list"`. The host emits no wrapper when the slot is empty.
 
 ### Task filters
 
@@ -1158,6 +1315,19 @@ combine with AND (a task must match every section with an active selection),
 mirroring how Workflow/Repository combine with the search query today. If
 `matches()` throws, the task is treated as non-matching and the error is
 logged (mirroring `TaskMenuActionRegistration.visible`'s error handling).
+
+### Task-list facets
+
+`registerTaskListFacet({ id, label, getValues, subscribe? })` adds a choice to `/tasks` Sort and
+Group controls. `getValues({ taskId, workspaceId })` synchronously returns `{ value, label,
+color? }[]`; `subscribe` invalidates the loaded page. Return each value at most once for a task,
+and keep one label and color for a value across all tasks. Facet sorting uses the first value label
+after a case-insensitive alphabetical comparison. Facets are page-local: no facet selection is
+persisted or sent to the backend. The host catches callback errors and revokes registrations and
+active subscriptions when the owning plugin unloads. A task with multiple values appears in each
+matching group; a task without a value appears in the host's `Ungrouped` section. Parent/child
+indentation is preserved only within a group both tasks match, so a matching child without its
+parent is rendered at that group's root.
 
 ## Registry internals (host side)
 

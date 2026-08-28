@@ -109,17 +109,6 @@ func (r *Repository) ExecRaw(ctx context.Context, query string, args ...interfac
 // package should keep using typed methods.
 func (r *Repository) ReaderDB() *sqlx.DB { return r.ro }
 
-// BeginTx starts a transaction on the shared writer connection. Exposed so
-// the office service layer can make CreateCostEventTx atomic with another
-// package's write (e.g. task.Repository.IncrementTaskSessionUsageTx via
-// shared.SessionUsageWriterTx) — safe because both repositories are
-// constructed from the same underlying *sqlx.DB (internal/backendapp/storage.go),
-// so a transaction begun here can execute statements against tables either
-// package owns.
-func (r *Repository) BeginTx(ctx context.Context) (*sqlx.Tx, error) {
-	return r.db.BeginTxx(ctx, nil)
-}
-
 // initSchema creates all office tables if they don't exist.
 func (r *Repository) initSchema() error {
 	if err := r.createCoreTables(); err != nil {
@@ -266,9 +255,9 @@ func (r *Repository) createAgentRuntimeTable() error {
 
 func (r *Repository) createCostTables() error {
 	// cost_subcents stores hundredths of a cent (int64). UI divides by
-	// 10000 when rendering dollars. The estimated flag is set when
-	// token counts were synthesised (e.g. cumulative-delta inference for
-	// codex-acp) rather than reported directly by the agent.
+	// 10000 when rendering dollars. The estimated flag is set when token
+	// counts are not authoritative for a complete turn, such as adapter
+	// synthesis or a provider frame that covers only part of a turn.
 	//
 	// tokens_cached_read / tokens_cached_write / turn_id / usage_event_id /
 	// cost_source / rate_*_per_million / pricing_catalog_version /
@@ -276,9 +265,9 @@ func (r *Repository) createCostTables() error {
 	// is what makes a fresh row's un-set columns NULL rather than 0, matching
 	// the ALTER-based migration in migrateCostEventContract (which the same
 	// columns must stay byte-identical to — see base_migrations.go). NULL
-	// means "not recorded" (legacy row, or an adapter with no per-turn usage
-	// frame); 0 would silently claim zero cache activity. See
-	// docs/specs/office/costs.md.
+	// means "not recorded" (legacy row, or an adapter that did not report
+	// cache data); 0 would silently claim zero cache activity. See
+	// docs/specs/office/requirements/costs.md.
 	_, err := r.db.Exec(`
 	CREATE TABLE IF NOT EXISTS office_cost_events (
 		id TEXT PRIMARY KEY,
@@ -311,13 +300,7 @@ func (r *Repository) createCostTables() error {
 	CREATE INDEX IF NOT EXISTS idx_office_cost_agent ON office_cost_events(agent_profile_id);
 	CREATE INDEX IF NOT EXISTS idx_office_cost_occurred ON office_cost_events(occurred_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_office_cost_task ON office_cost_events(task_id);
-	-- Indexes the join column internal/task/repository/sqlite's
-	-- BackfillSessionTokensCachedIn correlates task_sessions against. Lives
-	-- here (not in the task repository) because it indexes a table this
-	-- repository owns. Without it that correlated subquery falls back to a
-	-- full table scan per task_sessions row - measured at 76.72s at a modest
-	-- 4,000 sessions / 80,000 events versus 0.17s indexed.
-	CREATE INDEX IF NOT EXISTS idx_office_cost_events_session_id ON office_cost_events(session_id);
+	DROP INDEX IF EXISTS idx_office_cost_events_session_id;
 	-- uniq_office_cost_usage_event is created by migrateCostEventContract
 	-- (base_migrations.go), not here: schema init runs before migrations,
 	-- so indexing usage_event_id inline would crash a pre-migration
@@ -380,6 +363,13 @@ func (r *Repository) createRunTables() error {
 		result_json TEXT NOT NULL DEFAULT '{}',
 		assembled_prompt TEXT NOT NULL DEFAULT '',
 		summary_injected TEXT NOT NULL DEFAULT '',
+		-- continuation_scope is the continuation-summary scope key
+		-- (models.ContinuationScopeForRun) decided once at run creation
+		-- and persisted so every later reader/writer of this run's
+		-- continuation summary uses the same value instead of
+		-- re-deriving it against a context_snapshot a coalesced wakeup
+		-- may have since patched.
+		continuation_scope TEXT NOT NULL DEFAULT '',
 		requested_at TIMESTAMP NOT NULL,
 		claimed_at TIMESTAMP,
 		finished_at TIMESTAMP

@@ -131,11 +131,11 @@ func (s BudgetScopeType) Valid() bool {
 }
 
 // CostSource records which layer priced a CostEvent's dollars, distinct
-// from Estimated (a token-synthesis flag). NULL on legacy rows written
+// from Estimated (a usage-authority flag). NULL on legacy rows written
 // before this field existed — never inferred.
 type CostSource string
 
-// Cost-source values. See docs/specs/office/costs.md.
+// Cost-source values. See docs/specs/office/requirements/costs.md.
 const (
 	// CostSourceProviderReported means the CLI forwarded an authoritative
 	// USD amount (claude-acp's usage_update.cost.amount); no rates apply.

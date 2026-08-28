@@ -14,6 +14,7 @@ import { useLinearEnabled } from "@/hooks/domains/linear/use-linear-enabled";
 import { useHideDisabledIntegrationsInNav } from "@/hooks/domains/integrations/use-hide-disabled-integrations-in-nav";
 import type { AvailabilityMap } from "@/lib/navigation/types";
 import type { GitHubStatus } from "@/lib/types/github";
+import { t } from "@/lib/i18n";
 
 /**
  * The workspace the backend resolves when a request names none: the oldest by
@@ -30,13 +31,13 @@ function oldestWorkspace(items: ReadonlyArray<{ id: string; created_at?: string 
 
 /** Human-readable status label for a not-yet-connected integration destination. */
 function getStatusLabel(loading: boolean | undefined): string {
-  return loading ? "Checking" : "Setup";
+  return loading ? t("common:checking") : t("task:setup");
 }
 
 /** Derives the GitHub nav destination's ready/label pair from its auth status. */
 export function getGitHubIntegrationStatus(status: GitHubStatus | null, loading: boolean) {
-  if (status?.authenticated) return { ready: true, label: "Connected" };
-  if (status?.token_configured) return { ready: true, label: "Configured" };
+  if (status?.authenticated) return { ready: true, label: t("common:connected") };
+  if (status?.token_configured) return { ready: true, label: t("common:configured") };
   return { ready: false, label: getStatusLabel(loading) };
 }
 
@@ -59,7 +60,7 @@ export function getGitHubIntegrationStatus(status: GitHubStatus | null, loading:
  * elsewhere (import popovers, Kanban external-link buttons, task-top-bar
  * buttons) — those keep gating on enabled-and-authed via each integration's
  * `useXAvailable`, unaffected by this hook. See
- * `docs/specs/integrations/enable-disable-toggle.md`.
+ * `docs/specs/integrations/requirements/enable-disable-toggle.md`.
  *
  * Availability is **not** deduplicated across consumers. GitHub and GitLab are
  * store-backed, but Jira, Linear and Azure DevOps go through

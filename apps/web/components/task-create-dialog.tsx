@@ -52,6 +52,7 @@ function CreateModeBody(props: DialogFormBodyProps) {
     onTaskNameChange,
     onRowRepositoryChange,
     onRowBranchChange,
+    onRowPolicyChange,
     onToggleRemote,
     onToggleFreshBranch,
     repositories,
@@ -73,6 +74,10 @@ function CreateModeBody(props: DialogFormBodyProps) {
         workspaceId={workspaceId}
         onRowRepositoryChange={onRowRepositoryChange}
         onRowBranchChange={onRowBranchChange}
+        onRowPolicyChange={onRowPolicyChange}
+        onPolicySelected={
+          isLocalExecutor && freshBranchAvailable ? () => onToggleFreshBranch(true) : undefined
+        }
         onToggleRemote={onToggleRemote}
         freshBranchAvailable={freshBranchAvailable}
         freshBranchEnabled={fs.freshBranchEnabled}
@@ -85,6 +90,7 @@ function CreateModeBody(props: DialogFormBodyProps) {
         localRepositoryCreation={localRepositoryCreation}
         onRefreshRepositories={onRefreshRepositories}
         repositoriesRefreshing={repositoriesRefreshing}
+        repositorySets={props.repositorySets}
       />
       {showTaskName && (
         <InlineTaskName
@@ -252,6 +258,9 @@ export function TaskCreateDialog(props: TaskCreateDialogProps) {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent
         ref={setPopoverContainer}
+        onEscapeKeyDown={(event) => {
+          if (setup.isCreateMode) event.preventDefault();
+        }}
         data-testid="create-task-dialog"
         data-webkit-safe-motion="true"
         showCloseButton={false}

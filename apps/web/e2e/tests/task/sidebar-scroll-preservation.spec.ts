@@ -349,6 +349,7 @@ test.describe("sidebar scrolling", () => {
       "aria-current",
       "true",
     );
+    await expect(targetRow).toHaveClass(/task-sidebar-row-reveal/, { timeout: 1_000 });
     await expect
       .poll(
         async () => {
@@ -399,7 +400,7 @@ test.describe("sidebar scrolling", () => {
       const targetTask = created[0];
       await testPage.goto("/settings/general/appearance");
       await expect(
-        testPage.getByRole("heading", { name: "Appearance", exact: true }),
+        testPage.getByRole("heading", { level: 2, name: "Appearance", exact: true }),
       ).toBeVisible();
 
       await testPage.getByTestId("changes-panel-layout-select").click();

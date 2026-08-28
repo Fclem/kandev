@@ -23,6 +23,7 @@ import type {
   SlotComponent,
   TaskActionRegistration,
   TaskFilterRegistration,
+  TaskListFacetRegistration,
   TaskMenuActionRegistration,
   TaskPanelRegistration,
   WsHandler,
@@ -49,6 +50,7 @@ import type {
   PluginTaskActionRegistration,
   PluginTaskFilterRegistration,
   PluginTaskMenuActionRegistration,
+  PluginTaskListFacetRegistration,
   PluginTaskPanelRegistration,
   RouteRegistration,
 } from "./registry-registration-types";
@@ -89,6 +91,16 @@ class PluginRegistryStore {
   private routes: Owned<RouteRegistration>[] = [];
   private settingsRoutes: Owned<RouteRegistration>[] = [];
   private integrationSettings = new Map<string, Owned<IntegrationSettingsRegistration>>();
+  /**
+   * Plugin integration enabled state: integrationId -> (workspaceId ->
+   * enabled). The registration owner is checked before a write, so two
+   * integrations from one plugin cannot share a badge state and one plugin
+   * cannot publish another plugin's state. Kept here — not in localStorage —
+   * so it is workspace-scoped, survives via the plugin's own persisted
+   * storage, and is reactive through the registry's existing notify/subscribe
+   * cycle.
+   */
+  private integrationEnabled = new Map<string, Map<string, boolean>>();
   private navItems: Owned<NavItem>[] = [];
   private slotComponents: Owned<SlotRegistration>[] = [];
   private wsHandlers: Owned<WsHandlerRegistration>[] = [];
@@ -101,6 +113,7 @@ class PluginRegistryStore {
   private taskPanels: Owned<TaskPanelRegistration>[] = [];
   private taskMenuActions: Owned<TaskMenuActionRegistration>[] = [];
   private taskFilters: Owned<TaskFilterRegistration>[] = [];
+  private taskListFacets: Owned<TaskListFacetRegistration>[] = [];
   private nextSlotRegistrationId = 0;
   /** Display names from the boot payload, used for derived page-chrome titles. */
   private pluginNames = new Map<string, string>();
@@ -133,6 +146,38 @@ class PluginRegistryStore {
   getPluginLifecycle(pluginId: string): PluginLifecycleSnapshot | undefined {
     const snapshot = this.pluginLifecycles.get(pluginId);
     return snapshot ? { ...snapshot } : undefined;
+  }
+
+  /**
+   * Sets one plugin's integration enabled state for one workspace. No-op
+   * (no notify) when the value is unchanged: plugins boot-sync every
+   * workspace on initialize, and re-notifying identical values would
+   * re-render every registry consumer — the sidebar badge flicker.
+   */
+  setIntegrationEnabled(
+    pluginId: string,
+    integrationId: string,
+    workspaceId: string,
+    enabled: boolean,
+  ): void {
+    if (this.integrationSettings.get(integrationId)?.pluginId !== pluginId) return;
+
+    let byWorkspace = this.integrationEnabled.get(integrationId);
+    if (!byWorkspace) {
+      byWorkspace = new Map();
+      this.integrationEnabled.set(integrationId, byWorkspace);
+    }
+    if (byWorkspace.get(workspaceId) === enabled) return;
+    byWorkspace.set(workspaceId, enabled);
+    this.notify();
+  }
+
+  getIntegrationEnabled(integrationId: string, workspaceId: string): boolean | undefined {
+    return this.integrationEnabled.get(integrationId)?.get(workspaceId);
+  }
+
+  isIntegrationEnabled(integrationId: string, workspaceId: string): boolean {
+    return this.getIntegrationEnabled(integrationId, workspaceId) === true;
   }
 
   markPluginLoading(pluginId: string, generation: number): void {
@@ -263,6 +308,23 @@ class PluginRegistryStore {
     this.notify();
   }
 
+  registerTaskListFacet(pluginId: string, registration: TaskListFacetRegistration): void {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(registration.id)) {
+      throw new Error(`[plugins] task-list facet id "${registration.id}" must be URL-safe`);
+    }
+    if (
+      this.taskListFacets.some(
+        (entry) => entry.pluginId === pluginId && entry.value.id === registration.id,
+      )
+    ) {
+      throw new Error(
+        `[plugins] task-list facet "${registration.id}" is already registered by "${pluginId}"`,
+      );
+    }
+    this.taskListFacets.push({ pluginId, value: registration });
+    this.notify();
+  }
+
   /**
    * Records the keybinding ids declared in `pluginId`'s `ui.keybindings`
    * manifest, so `registerKeybinding` can warn on an undeclared id. Safe to
@@ -327,8 +389,12 @@ class PluginRegistryStore {
     const before = this.totalCount();
     this.routes = removeByPlugin(this.routes, pluginId);
     this.settingsRoutes = removeByPlugin(this.settingsRoutes, pluginId);
+    const removedIntegrationIds: string[] = [];
     this.integrationSettings.forEach((entry, id) => {
-      if (entry.pluginId === pluginId) this.integrationSettings.delete(id);
+      if (entry.pluginId === pluginId) {
+        this.integrationSettings.delete(id);
+        removedIntegrationIds.push(id);
+      }
     });
     this.navItems = removeByPlugin(this.navItems, pluginId);
     this.slotComponents = removeByPlugin(this.slotComponents, pluginId);
@@ -349,9 +415,14 @@ class PluginRegistryStore {
     this.taskPanels = removeByPlugin(this.taskPanels, pluginId);
     this.taskMenuActions = removeByPlugin(this.taskMenuActions, pluginId);
     this.taskFilters = removeByPlugin(this.taskFilters, pluginId);
+    this.taskListFacets = removeByPlugin(this.taskListFacets, pluginId);
     this.pluginNames.delete(pluginId);
     this.declaredKeybindingIds.delete(pluginId);
-    if (removedTranslations || this.totalCount() !== before) this.notify();
+    const removedEnabledState = removedIntegrationIds.reduce(
+      (removed, integrationId) => this.integrationEnabled.delete(integrationId) || removed,
+      false,
+    );
+    if (removedEnabledState || removedTranslations || this.totalCount() !== before) this.notify();
   }
 
   getRoutes(): PluginRouteRegistration[] {
@@ -505,6 +576,10 @@ class PluginRegistryStore {
     return this.taskFilters.map((entry) => ({ ...entry.value, pluginId: entry.pluginId }));
   }
 
+  getTaskListFacets(): PluginTaskListFacetRegistration[] {
+    return this.taskListFacets.map((entry) => ({ ...entry.value, pluginId: entry.pluginId }));
+  }
+
   /** Registry view scoped to one plugin — matches the frozen `PluginRegistry` contract. */
   forPlugin(pluginId: string, pluginName?: string): PluginRegistry {
     if (pluginName) this.pluginNames.set(pluginId, pluginName);
@@ -526,6 +601,7 @@ class PluginRegistryStore {
       registerTaskPanel: (registration) => this.registerTaskPanel(pluginId, registration),
       registerTaskMenuAction: (registration) => this.registerTaskMenuAction(pluginId, registration),
       registerTaskFilter: (registration) => this.registerTaskFilter(pluginId, registration),
+      registerTaskListFacet: (registration) => this.registerTaskListFacet(pluginId, registration),
     };
   }
 
@@ -567,7 +643,8 @@ class PluginRegistryStore {
       this.reviewProviders.size +
       this.taskPanels.length +
       this.taskMenuActions.length +
-      this.taskFilters.length
+      this.taskFilters.length +
+      this.taskListFacets.length
     );
   }
 

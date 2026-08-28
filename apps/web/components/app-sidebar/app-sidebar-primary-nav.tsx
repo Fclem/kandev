@@ -6,6 +6,7 @@ import { useAppStore } from "@/components/state-provider";
 import { selectOfficeInboxCount } from "@/lib/state/slices/office/selectors";
 import { useOfficeModeState } from "@/hooks/use-in-office";
 import { useQuickChatLauncher } from "@/hooks/use-quick-chat-launcher";
+import { useQuickChatActivity } from "@/components/quick-chat/use-quick-chat-activity";
 import { homeDestinationHref } from "@/lib/navigation/core-destinations";
 import { AppSidebarNavItem } from "./app-sidebar-nav-item";
 import { AppSidebarNewTaskItem } from "./app-sidebar-new-task-item";
@@ -21,6 +22,7 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
   const mode = useOfficeModeState();
   const inOffice = mode === "office";
   const handleOpenQuickChat = useQuickChatLauncher(workspaceId);
+  const { activity: quickChatActivity, label: quickChatLabel } = useQuickChatActivity(workspaceId);
   const homeHref = mode === "unknown" ? undefined : homeDestinationHref({ workspaceId, inOffice });
 
   return (
@@ -47,9 +49,10 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
       {workspaceId && collapsed && (
         <AppSidebarNavItem
           icon={IconMessageCircle}
-          label={t("sidebar:quickChat")}
+          label={quickChatLabel}
           onClick={handleOpenQuickChat}
           collapsed={collapsed}
+          activity={quickChatActivity}
         />
       )}
       <AppSidebarNewTaskItem collapsed={collapsed} />

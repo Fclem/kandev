@@ -554,6 +554,34 @@ func ensureSeededTurn(ctx context.Context, repo *sqliterepo.Repository, sessionI
 	return turn.ID, nil
 }
 
+// createSeededTurn always creates a fresh turn rather than reusing the
+// session's active one, so a spec can hold a real open turn on the session
+// while seeding a second, independently-timed turn alongside it (see
+// seedMessageRequest.NewTurn). startedAt/completedAt default to "now" and
+// "open" respectively when nil.
+func createSeededTurn(ctx context.Context, repo *sqliterepo.Repository, sessionID, taskID string, startedAt, completedAt *time.Time) (string, error) {
+	now := time.Now().UTC()
+	turn := &models.Turn{
+		ID:            uuid.New().String(),
+		TaskSessionID: sessionID,
+		TaskID:        taskID,
+		StartedAt:     now,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if startedAt != nil {
+		turn.StartedAt = startedAt.UTC()
+	}
+	if completedAt != nil {
+		ca := completedAt.UTC()
+		turn.CompletedAt = &ca
+	}
+	if err := repo.CreateTurn(ctx, turn); err != nil {
+		return "", err
+	}
+	return turn.ID, nil
+}
+
 func publishSessionStateChanged(ctx context.Context, eventBus bus.EventBus, session *models.TaskSession, log *logger.Logger) {
 	if eventBus == nil {
 		return
@@ -574,20 +602,43 @@ func publishSessionStateChanged(ctx context.Context, eventBus bus.EventBus, sess
 	}
 }
 
+// messageCreatedAtKey is the JSON key for seeded message timestamps.
+const messageCreatedAtKey = "created_at"
+
 type seedMessageRequest struct {
 	SessionID string                 `json:"session_id"`
 	Type      string                 `json:"type"`
 	Content   string                 `json:"content,omitempty"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	// AuthorType defaults to "agent"; "user" seeds a prompt row whose
+	// prompt_index is computed by the repository's atomic create boundary.
+	AuthorType string `json:"author_type,omitempty"`
+	// CreatedAt is an optional RFC3339 timestamp used for deterministic
+	// ordering; when omitted the repository assigns a live timestamp.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 	// TurnMetadata is persisted on the ensured turn (the same turn the seeded
 	// message is attached to), so e2e specs can exercise the message metadata
 	// dialog's turn_metadata field end to end.
 	TurnMetadata map[string]interface{} `json:"turn_metadata,omitempty"`
+	// NewTurn, when true, creates a brand-new turn for this message instead
+	// of reusing the session's active turn. Lets a spec construct two turns
+	// on the same session (e.g. a still-open turn plus a separate,
+	// later-started lifecycle-shaped turn) to exercise current-turn-authority
+	// ordering (D1) end to end, which ensureSeededTurn's reuse-active-turn
+	// behavior cannot produce.
+	NewTurn bool `json:"new_turn,omitempty"`
+	// TurnStartedAt/TurnCompletedAt set the new turn's timestamps when
+	// NewTurn is true, so a spec can control D1's ordering directly. Ignored
+	// when NewTurn is false.
+	TurnStartedAt   *time.Time `json:"turn_started_at,omitempty"`
+	TurnCompletedAt *time.Time `json:"turn_completed_at,omitempty"`
 }
 
-// seedMessageHandler inserts a synthetic agent message, ensuring an active
-// turn exists for the session and applying optional turn_metadata to it so
-// e2e specs can exercise the message metadata dialog end to end.
+// seedMessageHandler inserts a synthetic message, ensuring an active turn
+// exists for the session and applying optional turn_metadata to it so e2e
+// specs can exercise the message metadata dialog end to end. author_type
+// defaults to agent; user seeds are read back through GetMessageWithPromptIndex
+// so the WS event carries the same prompt_index the HTTP list path reports.
 func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req seedMessageRequest
@@ -610,7 +661,12 @@ func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log 
 			return
 		}
 
-		turnID, err := ensureSeededTurn(ctx, repo, session.ID, session.TaskID)
+		var turnID string
+		if req.NewTurn {
+			turnID, err = createSeededTurn(ctx, repo, session.ID, session.TaskID, req.TurnStartedAt, req.TurnCompletedAt)
+		} else {
+			turnID, err = ensureSeededTurn(ctx, repo, session.ID, session.TaskID)
+		}
 		if err != nil {
 			log.Error("test harness: ensure turn failed", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -638,16 +694,26 @@ func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log 
 		}
 		meta["seeded_by_e2e_mock"] = true
 
+		authorType := models.MessageAuthorAgent
+		if req.AuthorType == string(models.MessageAuthorUser) {
+			authorType = models.MessageAuthorUser
+		}
 		msg := &models.Message{
 			ID:            uuid.New().String(),
 			TaskSessionID: session.ID,
 			TaskID:        session.TaskID,
 			TurnID:        turnID,
-			AuthorType:    models.MessageAuthorAgent,
+			AuthorType:    authorType,
 			Type:          models.MessageType(req.Type),
 			Content:       req.Content,
 			Metadata:      meta,
-			CreatedAt:     time.Now().UTC(),
+		}
+		// CreatedAt stays zero unless explicitly supplied: the repository
+		// boundary treats a zero timestamp as a LIVE create (advancing a
+		// colliding key), while explicit timestamps must be strictly after
+		// the session's newest user message.
+		if req.CreatedAt != nil {
+			msg.CreatedAt = req.CreatedAt.UTC()
 		}
 		if err := repo.CreateMessage(ctx, msg); err != nil {
 			log.Error("test harness: create message failed", zap.Error(err))
@@ -655,11 +721,23 @@ func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log 
 			return
 		}
 
+		// User seeds carry the repository-computed ordinal (and any timestamp
+		// advance the boundary applied), so the WS event matches the HTTP
+		// list path exactly.
+		if msg.AuthorType == models.MessageAuthorUser {
+			if indexed, err := repo.GetMessageWithPromptIndex(ctx, msg.ID); err == nil {
+				msg = indexed
+			} else {
+				log.Warn("test harness: re-read indexed seed failed", zap.Error(err))
+			}
+		}
+
 		publishMessageAdded(ctx, eventBus, msg, log)
 		c.JSON(http.StatusOK, gin.H{"message_id": msg.ID})
 	}
 }
 
+// publishMessageAdded emits a message-added bus event for a seeded message so connected clients receive it without a refresh.
 func publishMessageAdded(ctx context.Context, eventBus bus.EventBus, msg *models.Message, log *logger.Logger) {
 	if eventBus == nil {
 		return
@@ -673,7 +751,13 @@ func publishMessageAdded(ctx context.Context, eventBus bus.EventBus, msg *models
 		"content":        msg.Content,
 		"type":           string(msg.Type),
 		"requests_input": msg.RequestsInput,
-		"created_at":     msg.CreatedAt.Format(time.RFC3339),
+		// RFC3339Nano preserves fractional precision so seeded user prompts
+		// order deterministically on the client.
+		messageCreatedAtKey: msg.CreatedAt.Format(time.RFC3339Nano),
+	}
+	// User rows carry their stable prompt ordinal in the live WS event.
+	if msg.PromptIndex > 0 {
+		data["prompt_index"] = msg.PromptIndex
 	}
 	if msg.Metadata != nil {
 		data["metadata"] = msg.Metadata

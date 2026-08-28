@@ -17,9 +17,12 @@ import (
 	"github.com/kandev/kandev/internal/db"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
+	mcpprofile "github.com/kandev/kandev/internal/mcp/profile"
+	mcpscope "github.com/kandev/kandev/internal/mcp/scope"
 	"github.com/kandev/kandev/internal/orchestrator"
 	"github.com/kandev/kandev/internal/orchestrator/executor"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
+	"github.com/kandev/kandev/internal/task/dto"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
@@ -84,18 +87,19 @@ func newTestTaskServiceWithEventBus(t *testing.T) (*service.Service, *sqliterepo
 	eventBus := bus.NewMemoryEventBus(log)
 	t.Cleanup(func() { eventBus.Close() })
 	svc := service.NewService(service.Repos{
-		Workspaces:   repo,
-		Tasks:        repo,
-		TaskRepos:    repo,
-		Workflows:    repo,
-		Messages:     repo,
-		Turns:        repo,
-		Sessions:     repo,
-		GitSnapshots: repo,
-		RepoEntities: repo,
-		Executors:    repo,
-		Environments: repo,
-		Reviews:      repo,
+		Workspaces:       repo,
+		Tasks:            repo,
+		TaskRepos:        repo,
+		WorkspaceFolders: repo,
+		Workflows:        repo,
+		Messages:         repo,
+		Turns:            repo,
+		Sessions:         repo,
+		GitSnapshots:     repo,
+		RepoEntities:     repo,
+		Executors:        repo,
+		Environments:     repo,
+		Reviews:          repo,
 	}, eventBus, log, service.RepositoryDiscoveryConfig{})
 	return svc, repo, eventBus
 }
@@ -122,22 +126,59 @@ func newTestTaskServiceWithWorkflow(t *testing.T) (*service.Service, *sqliterepo
 	eventBus := bus.NewMemoryEventBus(log)
 	t.Cleanup(func() { eventBus.Close() })
 	svc := service.NewService(service.Repos{
-		Workspaces:   repo,
-		Tasks:        repo,
-		TaskRepos:    repo,
-		Workflows:    repo,
-		Messages:     repo,
-		Turns:        repo,
-		Sessions:     repo,
-		GitSnapshots: repo,
-		RepoEntities: repo,
-		Executors:    repo,
-		Environments: repo,
-		Reviews:      repo,
+		Workspaces:       repo,
+		Tasks:            repo,
+		TaskRepos:        repo,
+		WorkspaceFolders: repo,
+		Workflows:        repo,
+		Messages:         repo,
+		Turns:            repo,
+		Sessions:         repo,
+		GitSnapshots:     repo,
+		RepoEntities:     repo,
+		Executors:        repo,
+		Environments:     repo,
+		Reviews:          repo,
 	}, eventBus, log, service.RepositoryDiscoveryConfig{})
 	workflowSvc := workflowservice.NewService(workflowRepo, log)
 	t.Cleanup(func() { _ = workflowSvc.Close() })
 	return svc, repo, workflowcontroller.NewController(workflowSvc), workflowRepo
+}
+
+func TestHandleListWorkspacesAutomationIsScopedToPrincipalWorkspace(t *testing.T) {
+	svc, repo := newTestTaskService(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateWorkspace(ctx, &models.Workspace{
+		ID:        "ws-state-event",
+		Name:      "State Event",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}))
+	foreignWorkspace := &models.Workspace{
+		ID:        "ws-foreign",
+		Name:      "Foreign",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, repo.CreateWorkspace(ctx, foreignWorkspace))
+
+	h := NewHandlers(svc, nil, nil, nil, nil, repo, repo, nil, nil, nil, nil, nil, testLogger(t))
+	ctx = mcpscope.WithPrincipal(ctx, mcpscope.Principal{
+		AutomationID:    "automation-1",
+		WorkspaceID:     "ws-state-event",
+		CallerTaskID:    "automation-task",
+		CallerSessionID: "automation-session",
+		Surface:         mcpprofile.SurfaceAutomation,
+	})
+	response, err := h.handleListWorkspaces(ctx, &ws.Message{ID: "1", Action: ws.ActionMCPListWorkspaces})
+	require.NoError(t, err)
+	require.NotNil(t, response)
+
+	var payload dto.ListWorkspacesResponse
+	require.NoError(t, json.Unmarshal(response.Payload, &payload))
+	require.Equal(t, 1, payload.Total)
+	require.Equal(t, "ws-state-event", payload.Workspaces[0].ID)
 }
 
 func seedMCPHandlerSession(t *testing.T, repo *sqliterepo.Repository, taskID, sessionID string, state models.TaskSessionState) {
@@ -469,15 +510,24 @@ func TestHandleAddBranchToTask_ReturnsMaterializedPaths(t *testing.T) {
 }
 
 func TestHandleAddWorkspaceSourcesRejectsUnknownKind(t *testing.T) {
-	h := &Handlers{}
+	ctx := context.Background()
+	svc, repo, parent, child := newWorkspaceSourceAuthorizationFixture(t)
+	require.NoError(t, repo.CreateTaskSession(ctx, &models.TaskSession{ID: "parent-session", TaskID: parent.ID}))
+	h := &Handlers{taskSvc: svc, sessionRepo: repo, logger: testLogger(t).WithFields()}
 	msg := makeWSMessage(t, ws.ActionMCPAddWorkspaceSources, map[string]interface{}{
-		"task_id": "task-1",
+		"task_id": child.ID, "caller_task_id": parent.ID, "caller_session_id": "parent-session",
 		"sources": []interface{}{map[string]interface{}{"kind": "unknown"}},
 	})
 
-	resp, err := h.handleAddWorkspaceSources(context.Background(), msg)
+	resp, err := h.handleAddWorkspaceSources(ctx, msg)
 	require.NoError(t, err)
 	assertWSError(t, resp, ws.ErrorCodeValidation)
+	folders, err := repo.ListTaskWorkspaceFolders(ctx, child.ID)
+	require.NoError(t, err)
+	require.Empty(t, folders)
+	repositories, err := repo.ListTaskRepositories(ctx, child.ID)
+	require.NoError(t, err)
+	require.Len(t, repositories, 1)
 }
 
 func TestClassifyWorkspaceSourceErrorMapsRepositoryNotFound(t *testing.T) {
@@ -2975,7 +3025,7 @@ func TestHandleCreateTask_BlockedBy_Accepted(t *testing.T) {
 }
 
 func TestHandleClarificationTimeout_DetachesMessages(t *testing.T) {
-	svc, repo := newTestTaskService(t)
+	svc, repo, eventBus := newTestTaskServiceWithEventBus(t)
 	ctx := context.Background()
 
 	require.NoError(t, repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-1", Name: "Test"}))
@@ -2999,9 +3049,7 @@ func TestHandleClarificationTimeout_DetachesMessages(t *testing.T) {
 	require.NoError(t, repo.CreateTurn(ctx, turn))
 
 	store := clarification.NewStore(time.Minute)
-	eventBus := bus.NewMemoryEventBus(testLogger(t))
-	t.Cleanup(func() { eventBus.Close() })
-	canceller := clarification.NewCanceller(store, repo, eventBus, testLogger(t))
+	canceller := clarification.NewCanceller(store, repo, svc, testLogger(t))
 
 	pendingID := "test-pending-id"
 	require.NoError(t, repo.CreateMessage(ctx, &models.Message{
@@ -3017,6 +3065,13 @@ func TestHandleClarificationTimeout_DetachesMessages(t *testing.T) {
 			"status":      "pending",
 		},
 	}))
+	var messageUpdated *bus.Event
+	subscription, err := eventBus.Subscribe(events.MessageUpdated, func(_ context.Context, event *bus.Event) error {
+		messageUpdated = event
+		return nil
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = subscription.Unsubscribe() })
 
 	// Drain the in-memory store so the handler must fall back to DB-driven cleanup
 	store.CancelSession(sess.ID)
@@ -3027,10 +3082,26 @@ func TestHandleClarificationTimeout_DetachesMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ws.MessageTypeResponse, resp.Type)
 
-	msgs, err := repo.FindPendingClarificationMessagesBySessionID(ctx, sess.ID)
+	msgs, err := repo.FindActiveClarificationMessagesBySessionID(ctx, sess.ID)
 	require.NoError(t, err)
 	require.Len(t, msgs, 1, "clarification should stay pending for deferred answer")
 	require.Equal(t, true, msgs[0].Metadata["agent_disconnected"])
+	require.NotNil(t, messageUpdated)
+	eventData, ok := messageUpdated.Data.(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, string(models.TaskPendingActionClarification), eventData["pending_action"])
+	require.IsType(t, models.PendingActionRevision{}, eventData["pending_action_revision"])
+
+	messageUpdated = nil
+	expired, err := canceller.ExpireSessionAndNotify(ctx, sess.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, expired)
+	require.NotNil(t, messageUpdated)
+	eventData, ok = messageUpdated.Data.(map[string]interface{})
+	require.True(t, ok)
+	require.Contains(t, eventData, "pending_action")
+	require.Nil(t, eventData["pending_action"])
+	require.IsType(t, models.PendingActionRevision{}, eventData["pending_action_revision"])
 }
 
 func TestHandleClarificationTimeout_WithoutCanceller_ReturnsError(t *testing.T) {

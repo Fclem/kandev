@@ -48,6 +48,7 @@
   "menu": "Menu",
   "moreOptions": "Mais opções",
   "moveTo": "Mover para",
+  "moveToStep": "Mover para {{step}}",
   "multiSelect": "Seleção múltipla",
   "nextCapacity": "próxima capacidade",
   "nextStep": "Passo seguinte",
@@ -93,5 +94,19 @@
   "wipTaskCount": "Tarefas em {{label}}",
   "workflow": "Fluxo de trabalho",
   "workflowStepFallback": "passo do fluxo de trabalho {{stepId}}",
-  "needsReassignment": "Precisa de reatribuição"
+  "needsReassignment": "Precisa de reatribuição",
+  "blockedByCount_one": "Bloqueada por {{count}}",
+  "blockedByCount_other": "Bloqueada por {{count}}",
+  "blockedByTasksTitle": "À espera de: {{tasks}}",
+  "blockedFailed": "O bloqueio falhou",
+  "blockedPredecessorFailed": "Uma tarefa de que esta depende falhou: {{tasks}}",
+  "columns": "Colunas",
+  "autoHideEmptyColumns": "Ocultar colunas vazias automaticamente",
+  "allEmptyStepsAutoHidden": "Todos os passos vazios estão ocultos. Desative Ocultar colunas vazias automaticamente em Colunas para os mostrar novamente.",
+  "columnsForWorkflow": "Colunas de {{name}}",
+  "noTasksYet": "Ainda sem tarefas",
+  "noWorkflowsAvailableYet": "Ainda não há fluxos de trabalho disponíveis.",
+  "pullToRefreshPull": "Puxe para atualizar",
+  "pullToRefreshRefreshing": "A atualizar tarefas",
+  "pullToRefreshRelease": "Largue para atualizar"
 }

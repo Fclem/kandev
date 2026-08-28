@@ -28,6 +28,8 @@ import {
 import { ContextZone } from "./chat/context-items/context-zone";
 import { useTaskTitleSelectionRestore } from "@/hooks/use-task-title-selection-restore";
 import { TaskAutopilotToggle } from "@/components/task-autopilot-toggle";
+import { useRepositorySets } from "@/hooks/domains/workspace/use-repository-sets";
+import { useApplyRepositorySet } from "@/components/task-create-dialog-repository-sets-apply";
 
 export function WorktreeBadge({ show, branch }: { show: boolean; branch: string | null }) {
   const { t } = useTranslation();
@@ -216,6 +218,8 @@ type WorkspaceSectionProps = {
   availableRepositories: Repository[];
   workspaceId: string | null;
   worktreeBranch: string | null;
+  isLocalExecutor: boolean;
+  freshBranchAvailable: boolean;
 };
 
 /**
@@ -231,7 +235,18 @@ function WorkspaceSection({
   availableRepositories,
   workspaceId,
   worktreeBranch,
+  isLocalExecutor,
+  freshBranchAvailable,
 }: WorkspaceSectionProps) {
+  // Hooks before the early return: a subtask that inherits the parent workspace
+  // renders no picker, but the rules of hooks do not care.
+  const { sets } = useRepositorySets(workspaceId, !inheritParent);
+  const onApplyRepositorySet = useApplyRepositorySet({
+    rows: fs.repositories,
+    repositories: availableRepositories,
+    setRepositories: fs.setRepositories,
+    setRepositoriesDirty: fs.setRepositoriesDirty,
+  });
   if (inheritParent) {
     return <WorktreeBadge show={!!worktreeBranch} branch={worktreeBranch} />;
   }
@@ -244,7 +259,16 @@ function WorkspaceSection({
         workspaceId={workspaceId}
         onRowRepositoryChange={handlers.handleRowRepositoryChange}
         onRowBranchChange={handlers.handleRowBranchChange}
+        onRowPolicyChange={handlers.handleRowPolicyChange}
+        onPolicySelected={
+          isLocalExecutor && freshBranchAvailable ? () => fs.setFreshBranchEnabled(true) : undefined
+        }
         onToggleRemote={handlers.handleToggleRemote}
+        freshBranchAvailable={freshBranchAvailable}
+        freshBranchEnabled={fs.freshBranchEnabled}
+        onToggleFreshBranch={fs.setFreshBranchEnabled}
+        isLocalExecutor={isLocalExecutor}
+        repositorySets={{ sets, onApply: onApplyRepositorySet }}
       />
     </>
   );
@@ -260,6 +284,8 @@ type SubtaskFormBodyProps = {
   workspaceId: string | null;
   availableRepositories: Repository[];
   worktreeBranch: string | null;
+  isLocalExecutor: boolean;
+  freshBranchAvailable: boolean;
   profileOptions: ReturnType<typeof useAgentProfileOptions>;
   executorProfileOptions: ReturnType<typeof useExecutorProfileOptions>;
   agentProfileId: string;
@@ -391,6 +417,8 @@ export function SubtaskFormBody({
   workspaceId,
   availableRepositories,
   worktreeBranch,
+  isLocalExecutor,
+  freshBranchAvailable,
   profileOptions,
   executorProfileOptions,
   agentProfileId,
@@ -445,6 +473,8 @@ export function SubtaskFormBody({
         availableRepositories={availableRepositories}
         workspaceId={workspaceId}
         worktreeBranch={worktreeBranch}
+        isLocalExecutor={isLocalExecutor}
+        freshBranchAvailable={freshBranchAvailable}
       />
       <SelectorsRow
         profileOptions={profileOptions}

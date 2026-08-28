@@ -36,22 +36,16 @@ func (h *TaskHandlers) doListTaskSessions(ctx context.Context, msg *ws.Message, 
 		h.logger.Error("failed to list task sessions", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to list task sessions", nil)
 	}
-	pendingActionsBySession, pendingErr := pendingActionsForInputCapableSessions(
-		ctx,
-		h.service,
-		map[string][]*models.TaskSession{taskID: sessions},
-	)
-	if pendingErr != nil {
-		h.logger.Warn("get task session pending actions failed", zap.Error(pendingErr))
-		pendingActionsBySession = map[string]models.TaskPendingAction{}
-	}
-	sessionDTOs := make([]dto.TaskSessionSummaryDTO, 0, len(sessions))
-	for _, session := range sessions {
-		summary := dto.FromTaskSessionSummary(session)
-		dto.EnrichForegroundActivitySummary(&summary, h.foregroundActivity)
-		dto.EnrichCancellationPendingSummary(&summary, h.cancellationPending)
-		summary.PendingAction = pendingActionPtr(&session.ID, pendingActionsBySession)
-		sessionDTOs = append(sessionDTOs, summary)
+	sessionDTOs, projectionErr := h.taskSessionSummariesWithPendingActions(ctx, sessions)
+	if projectionErr != nil {
+		h.logger.Error("get task session pending actions failed", zap.Error(projectionErr))
+		return ws.NewError(
+			msg.ID,
+			msg.Action,
+			ws.ErrorCodeInternalError,
+			"Failed to load task session pending actions",
+			nil,
+		)
 	}
 	resp := dto.ListTaskSessionSummariesResponse{
 		Sessions: sessionDTOs,
@@ -139,6 +133,7 @@ func (h *TaskHandlers) wsCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 			RepositoryID:   r.RepositoryID,
 			BaseBranch:     r.BaseBranch,
 			CheckoutBranch: r.CheckoutBranch,
+			BranchPolicyID: r.BranchPolicyID,
 			PRNumber:       r.PRNumber,
 			LocalPath:      r.LocalPath,
 			Name:           r.Name,
@@ -146,6 +141,8 @@ func (h *TaskHandlers) wsCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 			GitHubURL:      r.GitHubURL,
 			RemoteURL:      r.RemoteURL,
 			Provider:       r.Provider,
+			ProviderHost:   r.ProviderHost,
+			ProviderScope:  r.ProviderScope,
 			ProviderRepoID: r.ProviderRepoID,
 			ProviderOwner:  r.ProviderOwner,
 			ProviderName:   r.ProviderName,
@@ -173,7 +170,8 @@ func (h *TaskHandlers) wsCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		deferredLaunch = map[string]interface{}{
 			"intent": "start", "agent_profile_id": req.AgentProfileID, "executor_id": req.ExecutorID,
 			"executor_profile_id": req.ExecutorProfileID, "prompt": description,
-			"plan_mode": req.PlanMode, "attachments": req.Attachments,
+			"plan_mode":   req.PlanMode,
+			"attachments": req.Attachments,
 		}
 	}
 
@@ -190,16 +188,20 @@ func (h *TaskHandlers) wsCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		Position:       req.Position,
 		Metadata:       req.Metadata,
 		DeferredLaunch: deferredLaunch,
-		PlanMode:       req.PlanMode && !req.StartAgent,
+		PlanMode:       req.PlanMode,
+		StartAgent:     req.StartAgent,
 		ParentID:       req.ParentID,
 	})
 	if err != nil {
 		h.logger.Error("failed to create task", zap.Error(err))
+		if code, ok := repositorySelectionWSCode(err); ok {
+			return ws.NewError(msg.ID, msg.Action, code, err.Error(), taskErrorDetails(err))
+		}
 		if errors.Is(err, service.ErrWIPLimitExceeded) {
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, err.Error(), nil)
 		}
 		if isTaskCreateValidationError(err) {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, err.Error(), nil)
+			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, err.Error(), taskErrorDetails(err))
 		}
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to create task", nil)
 	}
@@ -305,6 +307,7 @@ func (h *TaskHandlers) wsUpdateTask(ctx context.Context, msg *ws.Message) (*ws.M
 				RepositoryID:   r.RepositoryID,
 				BaseBranch:     r.BaseBranch,
 				CheckoutBranch: r.CheckoutBranch,
+				BranchPolicyID: r.BranchPolicyID,
 				PRNumber:       r.PRNumber,
 				LocalPath:      r.LocalPath,
 				Name:           r.Name,
@@ -312,6 +315,8 @@ func (h *TaskHandlers) wsUpdateTask(ctx context.Context, msg *ws.Message) (*ws.M
 				GitHubURL:      r.GitHubURL,
 				RemoteURL:      r.RemoteURL,
 				Provider:       r.Provider,
+				ProviderHost:   r.ProviderHost,
+				ProviderScope:  r.ProviderScope,
 				ProviderRepoID: r.ProviderRepoID,
 				ProviderOwner:  r.ProviderOwner,
 				ProviderName:   r.ProviderName,
@@ -343,6 +348,9 @@ func (h *TaskHandlers) wsUpdateTask(ctx context.Context, msg *ws.Message) (*ws.M
 	})
 	if err != nil {
 		h.logger.Error("failed to update task", zap.Error(err))
+		if code, ok := repositorySelectionWSCode(err); ok {
+			return ws.NewError(msg.ID, msg.Action, code, err.Error(), taskErrorDetails(err))
+		}
 		if isValidationError(err) {
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, err.Error(), nil)
 		}

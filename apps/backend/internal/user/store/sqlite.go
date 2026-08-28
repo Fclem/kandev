@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -272,6 +273,7 @@ func (r *sqliteRepository) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	ctx context.Context,
 	settings *models.UserSettings,
 	patch *models.TaskCreateLastUsed,
+	expectedRevision int64,
 ) (*models.UserSettings, error) {
 	settings.UpdatedAt = time.Now().UTC()
 	if settings.CreatedAt.IsZero() {
@@ -282,7 +284,7 @@ func (r *sqliteRepository) UpsertUserSettingsPreservingTaskCreateLastUsed(
 		return nil, err
 	}
 	if dialect.IsPostgres(r.db.DriverName()) {
-		return r.upsertUserSettingsPreservingTaskCreateLastUsedPostgres(ctx, settings, settingsPayload, patch)
+		return r.upsertUserSettingsPreservingTaskCreateLastUsedPostgres(ctx, settings, settingsPayload, patch, expectedRevision)
 	}
 	settingsExpr := `json_set(
 		json(?),
@@ -304,29 +306,30 @@ func (r *sqliteRepository) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	query := fmt.Sprintf(`
 		UPDATE users
 		SET settings = %s, updated_at = ?, settings_revision = settings_revision + 1
-		WHERE id = ?
+		WHERE id = ? AND settings_revision = ?
 		RETURNING settings, updated_at, settings_revision
 	`, settingsExpr)
-	args = append(args, settings.UpdatedAt, settings.UserID)
-	return scanUpdatedUserSettings(
+	args = append(args, settings.UpdatedAt, settings.UserID, expectedRevision)
+	return r.scanConditionalSettingsUpdate(
+		ctx,
 		r.db.QueryRowContext(ctx, r.db.Rebind(query), args...),
 		settings.UserID,
 	)
 }
 
-// upsertUserSettingsPreservingTaskCreateLastUsedPostgres writes settings via
-// a jsonb_set expression so task_create_last_used merges instead of
-// replacing.
+// upsertUserSettingsPreservingTaskCreateLastUsedPostgres writes the settings via a Postgres jsonb_set UPDATE that merges the task_create_last_used patch.
 func (r *sqliteRepository) upsertUserSettingsPreservingTaskCreateLastUsedPostgres(
 	ctx context.Context,
 	settings *models.UserSettings,
 	settingsPayload []byte,
 	patch *models.TaskCreateLastUsed,
+	expectedRevision int64,
 ) (*models.UserSettings, error) {
 	query, patchArgs := buildPostgresUserSettingsPreservingTaskCreateLastUsedUpdate(patch)
 	args := append([]any{string(settingsPayload)}, patchArgs...)
-	args = append(args, settings.UpdatedAt, settings.UserID)
-	return scanUpdatedUserSettings(
+	args = append(args, settings.UpdatedAt, settings.UserID, expectedRevision)
+	return r.scanConditionalSettingsUpdate(
+		ctx,
 		r.db.QueryRowContext(ctx, r.db.Rebind(query), args...),
 		settings.UserID,
 	)
@@ -471,7 +474,7 @@ func buildPostgresUserSettingsPreservingTaskCreateLastUsedUpdate(patch *models.T
 	query := fmt.Sprintf(`
 		UPDATE users
 		SET settings = %s::text, updated_at = ?, settings_revision = settings_revision + 1
-		WHERE id = ?
+		WHERE id = ? AND settings_revision = ?
 		RETURNING settings, updated_at, settings_revision
 	`, expr)
 	return query, args
@@ -559,6 +562,7 @@ func marshalUserSettingsPayload(settings *models.UserSettings) ([]byte, error) {
 	if keyboardShortcuts == nil {
 		keyboardShortcuts = map[string]interface{}{}
 	}
+	quickChatTabOrderByWorkspace := CloneStringSliceMap(settings.QuickChatTabOrderByWorkspace)
 	return json.Marshal(map[string]interface{}{
 		"workspace_id":                             settings.WorkspaceID,
 		"kanban_view_mode":                         settings.KanbanViewMode,
@@ -611,10 +615,13 @@ func marshalUserSettingsPayload(settings *models.UserSettings) ([]byte, error) {
 		"terminal_font_family":                     settings.TerminalFontFamily,
 		"terminal_font_size":                       settings.TerminalFontSize,
 		"changes_panel_layout":                     settings.ChangesPanelLayout,
+		"last_seen_display":                        models.NormalizeLastSeenDisplay(settings.LastSeenDisplay),
 		"system_metrics_display":                   settings.SystemMetricsDisplay,
 		"app_status_bar_enabled":                   settings.AppStatusBarEnabled,
 		"app_status_bar_order":                     normalizeAppStatusBarOrder(settings.AppStatusBarOrder),
+		"quick_chat_tab_order_by_workspace":        quickChatTabOrderByWorkspace,
 		"kanban_hidden_step_ids":                   settings.KanbanHiddenStepIDs,
+		"workflow_ids_with_auto_hide_empty_steps":  settings.WorkflowIDsWithAutoHideEmptySteps,
 	})
 }
 
@@ -626,6 +633,26 @@ func scanUpdatedUserSettings(scanner interface{ Scan(dest ...any) error }, userI
 		return nil, fmt.Errorf("user not found: %s", userID)
 	}
 	return settings, err
+}
+
+// scanConditionalSettingsUpdate scans a revision-conditional settings UPDATE,
+// mapping a zero-row result to either a missing user (user-not-found) or a
+// stale revision (ErrUserSettingsRevisionConflict).
+func (r *sqliteRepository) scanConditionalSettingsUpdate(ctx context.Context, scanner interface{ Scan(dest ...any) error }, userID string) (*models.UserSettings, error) {
+	settings, err := scanUserSettings(scanner, userID)
+	if err == nil {
+		return settings, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if _, uerr := r.getUserFromWriter(ctx, userID); uerr != nil {
+		if errors.Is(uerr, sql.ErrNoRows) {
+			return nil, fmt.Errorf("user not found: %s", userID)
+		}
+		return nil, uerr
+	}
+	return nil, ErrUserSettingsRevisionConflict
 }
 
 // scanUser scans a single user row into a models.User.
@@ -667,12 +694,15 @@ func defaultUserSettings(userID string) *models.UserSettings {
 		KeyboardShortcuts:                 map[string]interface{}{},
 		TerminalLinkBehavior:              "new_tab",
 		ChangesPanelLayout:                defaultChangesPanelLayout,
+		LastSeenDisplay:                   models.LastSeenDisplayAbsolute,
 		SidebarViews:                      DefaultSidebarViews(),
 		SidebarActiveViewID:               DefaultSidebarViewID,
 		SidebarTaskPrefs:                  normalizeSidebarTaskPrefs(models.SidebarTaskPrefs{}),
 		AppStatusBarEnabled:               false,
 		AppStatusBarOrder:                 normalizeAppStatusBarOrder(models.AppStatusBarOrder{}),
+		QuickChatTabOrderByWorkspace:      map[string][]string{},
 		KanbanHiddenStepIDs:               map[string][]string{},
+		WorkflowIDsWithAutoHideEmptySteps: []string{},
 	}
 }
 
@@ -685,6 +715,7 @@ func DefaultSidebarViews() []models.SidebarView {
 		Sort:            models.SidebarViewSort{Key: "state", Direction: "asc"},
 		Group:           "repository",
 		CollapsedGroups: []string{},
+		TaskRow:         models.DefaultSidebarTaskRowPresentation(),
 	}}
 }
 
@@ -751,10 +782,13 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 		TerminalFontFamily                string                              `json:"terminal_font_family"`
 		TerminalFontSize                  int                                 `json:"terminal_font_size"`
 		ChangesPanelLayout                string                              `json:"changes_panel_layout"`
+		LastSeenDisplay                   json.RawMessage                     `json:"last_seen_display"`
 		SystemMetricsDisplay              models.SystemMetricsDisplaySettings `json:"system_metrics_display"`
 		AppStatusBarEnabled               *bool                               `json:"app_status_bar_enabled"`
 		AppStatusBarOrder                 models.AppStatusBarOrder            `json:"app_status_bar_order"`
+		QuickChatTabOrderByWorkspace      map[string][]string                 `json:"quick_chat_tab_order_by_workspace"`
 		KanbanHiddenStepIDs               json.RawMessage                     `json:"kanban_hidden_step_ids"`
+		WorkflowIDsWithAutoHideEmptySteps json.RawMessage                     `json:"workflow_ids_with_auto_hide_empty_steps"`
 	}
 	if err := json.Unmarshal([]byte(settingsRaw), &payload); err != nil {
 		return nil, err
@@ -879,13 +913,46 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 		settings.AppStatusBarEnabled = *payload.AppStatusBarEnabled
 	}
 	settings.AppStatusBarOrder = normalizeAppStatusBarOrder(payload.AppStatusBarOrder)
+	settings.QuickChatTabOrderByWorkspace = payload.QuickChatTabOrderByWorkspace
+	if settings.QuickChatTabOrderByWorkspace == nil {
+		settings.QuickChatTabOrderByWorkspace = map[string][]string{}
+	}
 	if payload.ChangesPanelLayout == "flat" {
 		settings.ChangesPanelLayout = "flat"
 	} else {
 		settings.ChangesPanelLayout = defaultChangesPanelLayout
 	}
+	settings.LastSeenDisplay = normalizeLastSeenDisplayStored(payload.LastSeenDisplay)
 	settings.KanbanHiddenStepIDs = decodeKanbanHiddenStepIDs(payload.KanbanHiddenStepIDs)
+	settings.WorkflowIDsWithAutoHideEmptySteps = decodeStringIDs(payload.WorkflowIDsWithAutoHideEmptySteps)
 	return settings, nil
+}
+
+func decodeStringIDs(raw json.RawMessage) []string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return []string{}
+	}
+	var ids []string
+	if err := json.Unmarshal(raw, &ids); err != nil || ids == nil {
+		return []string{}
+	}
+	return ids
+}
+
+// normalizeLastSeenDisplayStored maps a stored JSON value to the canonical
+// display mode: only a string exactly equal to "relative" is accepted. Every
+// other JSON type (number, object, boolean, null) and every other string
+// coerces to "absolute", so a hand-edited blob can never fail the settings
+// read or produce a broken column.
+func normalizeLastSeenDisplayStored(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return models.LastSeenDisplayAbsolute
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return models.LastSeenDisplayAbsolute
+	}
+	return models.NormalizeLastSeenDisplay(value)
 }
 
 // decodeKanbanHiddenStepIDs parses the persisted per-workflow hidden-step-id
@@ -919,6 +986,20 @@ func normalizeSidebarTaskPrefs(prefs models.SidebarTaskPrefs) models.SidebarTask
 		prefs.SubtaskOrderByParentID = map[string][]string{}
 	}
 	return prefs
+}
+
+// CloneStringSliceMap copies a per-workspace string-list map before it is
+// encoded or assigned so callers cannot mutate the settings model through the
+// payload.
+func CloneStringSliceMap(source map[string][]string) map[string][]string {
+	if source == nil {
+		return map[string][]string{}
+	}
+	clone := make(map[string][]string, len(source))
+	for key, values := range source {
+		clone[key] = append([]string{}, values...)
+	}
+	return clone
 }
 
 // normalizeAppStatusBarOrder defaults nil status bar item lists so the stored

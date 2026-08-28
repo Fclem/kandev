@@ -77,6 +77,37 @@ type RepositorySecretBindingDTO struct {
 	SecretID string `json:"secret_id"`
 }
 
+// RepositorySetDTO is a named group of workspace repositories on the wire.
+// Repositories is always an array, never null: the web store indexes it without
+// a nil check, and a set whose members were all deleted is legitimately empty.
+type RepositorySetDTO struct {
+	ID           string                 `json:"id"`
+	WorkspaceID  string                 `json:"workspace_id"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	Repositories []RepositorySetItemDTO `json:"repositories"`
+	CreatedAt    time.Time              `json:"created_at"`
+	UpdatedAt    time.Time              `json:"updated_at"`
+}
+
+// RepositorySetItemDTO is one repository's membership, in apply order.
+type RepositorySetItemDTO struct {
+	RepositoryID string `json:"repository_id"`
+	Position     int    `json:"position"`
+}
+
+type RepositoryBranchPolicyDTO struct {
+	ID                string    `json:"id"`
+	RepositoryID      string    `json:"repository_id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	BaseBranch        string    `json:"base_branch"`
+	BranchTemplate    string    `json:"branch_template"`
+	PullRequestTarget string    `json:"pull_request_target"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
 type RepositoryScriptDTO struct {
 	ID           string    `json:"id"`
 	RepositoryID string    `json:"repository_id"`
@@ -188,6 +219,11 @@ type TaskDTO struct {
 	// died and has not been resumed since. Derived from the interrupted_at
 	// metadata key at DTO conversion time (see FromTaskWithSessionInfo).
 	Interrupted bool `json:"interrupted,omitempty"`
+	// AutoStartFailed reports that a workflow step's auto_start_agent on_enter
+	// action failed to launch a run for this task. Derived from the
+	// auto_start_failed metadata key at DTO conversion time (see
+	// FromTaskWithSessionInfo).
+	AutoStartFailed bool `json:"auto_start_failed,omitempty"`
 
 	// Dependency projection. Derived on every read from task_blockers plus each
 	// related task's own state — never persisted, because a stale copy would be
@@ -212,7 +248,7 @@ type TaskDTO struct {
 	Labels                 string `json:"labels,omitempty"`
 	Identifier             string `json:"identifier,omitempty"`
 	// ExternalID is a caller-supplied identity used for task create-
-	// idempotency (docs/specs/tasks/external-id-idempotency/spec.md). Omitted
+	// idempotency (docs/specs/tasks/requirements/external-id-idempotency.md). Omitted
 	// when the task holds none.
 	ExternalID string `json:"external_id,omitempty"`
 	// IsFromOffice is the authoritative "this task is owned by office"
@@ -233,18 +269,27 @@ type TaskDTO struct {
 	// It is loaded in batches and is absent when no projection exists yet; the
 	// existing coarse fields above remain the compatibility fallback.
 	StatusSummary *statussummary.TaskStatusSummary `json:"status_summary,omitempty"`
+	// StatusSummaryInvalidated distinguishes a known-stale summary from an
+	// ordinarily omitted partial projection so clients clear their cache and
+	// expose the coarse compatibility fallback.
+	StatusSummaryInvalidated bool `json:"status_summary_invalidated,omitempty"`
 }
 
 type TaskRepositoryDTO struct {
-	ID             string                 `json:"id"`
-	TaskID         string                 `json:"task_id"`
-	RepositoryID   string                 `json:"repository_id"`
-	BaseBranch     string                 `json:"base_branch"`
-	CheckoutBranch string                 `json:"checkout_branch,omitempty"`
-	Position       int                    `json:"position"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
+	ID                            string                 `json:"id"`
+	TaskID                        string                 `json:"task_id"`
+	RepositoryID                  string                 `json:"repository_id"`
+	BaseBranch                    string                 `json:"base_branch"`
+	CheckoutBranch                string                 `json:"checkout_branch,omitempty"`
+	BranchPolicyID                string                 `json:"branch_policy_id,omitempty"`
+	BranchPolicyName              string                 `json:"branch_policy_name,omitempty"`
+	BranchPolicyBaseBranch        string                 `json:"branch_policy_base_branch,omitempty"`
+	BranchPolicyBranchTemplate    string                 `json:"branch_policy_branch_template,omitempty"`
+	BranchPolicyPullRequestTarget string                 `json:"branch_policy_pull_request_target,omitempty"`
+	Position                      int                    `json:"position"`
+	Metadata                      map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt                     time.Time              `json:"created_at"`
+	UpdatedAt                     time.Time              `json:"updated_at"`
 }
 
 // TaskWorkspaceFolderDTO is the API projection of a durable non-Git source.
@@ -321,12 +366,20 @@ type TaskSessionDTO struct {
 	SupportsSteering bool `json:"supports_steering,omitempty"`
 	// PendingAction is the compact per-session projection used when the
 	// session transcript is not loaded in the client.
-	PendingAction       *string `json:"pending_action,omitempty"`
-	ActiveSubagentCount int     `json:"active_subagent_count"`
+	PendingAction         *string                       `json:"pending_action"`
+	PendingActionRevision *models.PendingActionRevision `json:"pending_action_revision,omitempty"`
+	ActiveSubagentCount   int                           `json:"active_subagent_count"`
 	// LastReadMessageID is the session's Slack-style read cursor — the id of
 	// the newest message the frontend has marked as read. Used by the
 	// transcript to position the unread ("New") divider.
 	LastReadMessageID string `json:"last_read_message_id,omitempty"`
+	// Usage/cost rollup (docs/specs/task-cost-ledger/spec.md AC-28, AC-29).
+	// Deliberately not on TaskSessionSummaryDTO - the summary projection used
+	// by cross-task views is not widened by this card.
+	CostSubcents   int64 `json:"cost_subcents"`
+	TokensIn       int64 `json:"tokens_in"`
+	TokensCachedIn int64 `json:"tokens_cached_in"`
+	TokensOut      int64 `json:"tokens_out"`
 }
 
 // TaskSessionSummaryDTO is a lightweight version of TaskSessionDTO without snapshot fields.
@@ -379,9 +432,10 @@ type TaskSessionSummaryDTO struct {
 	SupportsSteering bool `json:"supports_steering,omitempty"`
 	// PendingAction is the compact per-session projection used when the
 	// session transcript is not loaded in the client.
-	PendingAction       *string `json:"pending_action"`
-	ActiveSubagentCount int     `json:"active_subagent_count"`
-	LastReadMessageID   string  `json:"last_read_message_id,omitempty"`
+	PendingAction         *string                       `json:"pending_action"`
+	PendingActionRevision *models.PendingActionRevision `json:"pending_action_revision,omitempty"`
+	ActiveSubagentCount   int                           `json:"active_subagent_count"`
+	LastReadMessageID     string                        `json:"last_read_message_id,omitempty"`
 	// CommandCount is the number of tool_call messages on this session,
 	// surfaced inline in the timeline entry header ("ran N commands").
 	// Populated by ListTaskSessions; defaults to 0 for callers that don't
@@ -472,6 +526,16 @@ type ListWorkspacesResponse struct {
 type ListRepositoriesResponse struct {
 	Repositories []RepositoryDTO `json:"repositories"`
 	Total        int             `json:"total"`
+}
+
+type ListRepositorySetsResponse struct {
+	RepositorySets []RepositorySetDTO `json:"repository_sets"`
+	Total          int                `json:"total"`
+}
+
+type ListRepositoryBranchPoliciesResponse struct {
+	Policies []RepositoryBranchPolicyDTO `json:"repository_branch_policies"`
+	Total    int                         `json:"total"`
 }
 
 type ListRepositoryScriptsResponse struct {
@@ -628,6 +692,34 @@ func FromRepository(repository *models.Repository) RepositoryDTO {
 	}
 }
 
+func FromRepositorySet(set *models.RepositorySet) RepositorySetDTO {
+	items := make([]RepositorySetItemDTO, 0, len(set.Items))
+	for _, item := range set.Items {
+		items = append(items, RepositorySetItemDTO{
+			RepositoryID: item.RepositoryID,
+			Position:     item.Position,
+		})
+	}
+	return RepositorySetDTO{
+		ID:           set.ID,
+		WorkspaceID:  set.WorkspaceID,
+		Name:         set.Name,
+		Description:  set.Description,
+		Repositories: items,
+		CreatedAt:    set.CreatedAt,
+		UpdatedAt:    set.UpdatedAt,
+	}
+}
+
+func FromRepositoryBranchPolicy(policy *models.RepositoryBranchPolicy) RepositoryBranchPolicyDTO {
+	return RepositoryBranchPolicyDTO{
+		ID: policy.ID, RepositoryID: policy.RepositoryID, Name: policy.Name,
+		Description: policy.Description, BaseBranch: policy.BaseBranch,
+		BranchTemplate: policy.BranchTemplate, PullRequestTarget: policy.PullRequestTarget,
+		CreatedAt: policy.CreatedAt, UpdatedAt: policy.UpdatedAt,
+	}
+}
+
 func FromRepositoryScript(script *models.RepositoryScript) RepositoryScriptDTO {
 	return RepositoryScriptDTO{
 		ID:           script.ID,
@@ -730,15 +822,20 @@ func FromTaskWithSessionInfo(
 	var repositories []TaskRepositoryDTO
 	for _, repo := range task.Repositories {
 		repositories = append(repositories, TaskRepositoryDTO{
-			ID:             repo.ID,
-			TaskID:         repo.TaskID,
-			RepositoryID:   repo.RepositoryID,
-			BaseBranch:     repo.BaseBranch,
-			CheckoutBranch: repo.CheckoutBranch,
-			Position:       repo.Position,
-			Metadata:       repo.Metadata,
-			CreatedAt:      repo.CreatedAt,
-			UpdatedAt:      repo.UpdatedAt,
+			ID:                            repo.ID,
+			TaskID:                        repo.TaskID,
+			RepositoryID:                  repo.RepositoryID,
+			BaseBranch:                    repo.BaseBranch,
+			CheckoutBranch:                repo.CheckoutBranch,
+			BranchPolicyID:                repo.BranchPolicyID,
+			BranchPolicyName:              repo.BranchPolicyName,
+			BranchPolicyBaseBranch:        repo.BranchPolicyBaseBranch,
+			BranchPolicyBranchTemplate:    repo.BranchPolicyBranchTemplate,
+			BranchPolicyPullRequestTarget: repo.BranchPolicyPullRequestTarget,
+			Position:                      repo.Position,
+			Metadata:                      repo.Metadata,
+			CreatedAt:                     repo.CreatedAt,
+			UpdatedAt:                     repo.UpdatedAt,
 		})
 	}
 	var workspaceFolders []TaskWorkspaceFolderDTO
@@ -787,6 +884,7 @@ func FromTaskWithSessionInfo(
 		UpdatedAt:                   task.UpdatedAt,
 		Metadata:                    task.Metadata,
 		Interrupted:                 task.Metadata[models.MetaKeyInterruptedAt] != nil,
+		AutoStartFailed:             task.Metadata[models.MetaKeyAutoStartFailed] != nil,
 		// Office extensions. AssigneeAgentProfileID is a read-time
 		// projection from workflow_step_participants (ADR 0005 Wave F);
 		// the repo's task SELECTs hydrate it via a correlated subquery.
@@ -868,6 +966,10 @@ func FromTaskSession(session *models.TaskSession) TaskSessionDTO {
 		ReviewStatus:      session.ReviewStatus,
 		TaskEnvironmentID: session.TaskEnvironmentID,
 		LastReadMessageID: session.LastReadMessageID,
+		CostSubcents:      session.CostSubcents,
+		TokensIn:          session.TokensIn,
+		TokensCachedIn:    session.TokensCachedIn,
+		TokensOut:         session.TokensOut,
 	}
 	if worktrees := session.WorktreesAPI(); len(worktrees) > 0 {
 		result.WorktreeID = session.Worktrees[0].WorktreeID
@@ -1099,11 +1201,13 @@ func TaskPlanRevisionMetaFromModel(rev *models.TaskPlanRevision) *TaskPlanRevisi
 	return meta
 }
 
+const turnTimestampLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
 // FromTurn converts a Turn model to a TurnDTO.
 func FromTurn(turn *models.Turn) TurnDTO {
 	var completedAt *string
 	if turn.CompletedAt != nil {
-		formatted := turn.CompletedAt.UTC().Format(time.RFC3339)
+		formatted := turn.CompletedAt.UTC().Format(turnTimestampLayout)
 		completedAt = &formatted
 	}
 
@@ -1111,10 +1215,10 @@ func FromTurn(turn *models.Turn) TurnDTO {
 		ID:          turn.ID,
 		SessionID:   turn.TaskSessionID,
 		TaskID:      turn.TaskID,
-		StartedAt:   turn.StartedAt.UTC().Format(time.RFC3339),
+		StartedAt:   turn.StartedAt.UTC().Format(turnTimestampLayout),
 		CompletedAt: completedAt,
 		Metadata:    turn.Metadata,
-		CreatedAt:   turn.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:   turn.UpdatedAt.UTC().Format(time.RFC3339),
+		CreatedAt:   turn.CreatedAt.UTC().Format(turnTimestampLayout),
+		UpdatedAt:   turn.UpdatedAt.UTC().Format(turnTimestampLayout),
 	}
 }

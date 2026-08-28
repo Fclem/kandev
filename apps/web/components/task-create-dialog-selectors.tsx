@@ -122,7 +122,7 @@ type BranchOption = {
   value: string;
   label: string;
   keywords?: string[];
-  renderLabel: () => React.ReactNode;
+  renderLabel?: () => React.ReactNode;
 };
 
 type BranchSelectorProps = {
@@ -139,6 +139,10 @@ type BranchSelectorProps = {
   fetchedAt?: string;
   fetchError?: string;
   loading?: boolean;
+  ariaLabel?: string;
+  testId?: string;
+  dropdownTestId?: string;
+  dropdownLabel?: string;
 };
 
 export const BranchSelector = memo(function BranchSelector({
@@ -155,6 +159,10 @@ export const BranchSelector = memo(function BranchSelector({
   fetchedAt,
   fetchError,
   loading,
+  ariaLabel,
+  testId = "branch-selector",
+  dropdownTestId,
+  dropdownLabel = t("task:baseBranch2"),
 }: BranchSelectorProps) {
   const headerAction = onRefresh ? (
     <BranchRefreshButton
@@ -173,10 +181,12 @@ export const BranchSelector = memo(function BranchSelector({
       searchPlaceholder={searchPlaceholder}
       emptyMessage={emptyMessage}
       disabled={disabled}
-      dropdownLabel={t("task:baseBranch2")}
+      ariaLabel={ariaLabel}
+      dropdownLabel={dropdownLabel}
       className={disabled ? undefined : CURSOR_POINTER_CLASS}
       triggerClassName={triggerClassName}
-      testId="branch-selector"
+      testId={testId}
+      dropdownTestId={dropdownTestId}
       filter={scoreBranch}
       headerAction={headerAction}
       loading={loading}
@@ -829,15 +839,18 @@ function useTextareaHandlers(
       mentionHandleChange(e.target.value, e.target.selectionStart),
     [mentionHandleChange],
   );
+  const handleKeyDownCapture = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => mentionHandleKeyDown(e),
+    [mentionHandleKeyDown],
+  );
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      mentionHandleKeyDown(e);
       if (e.defaultPrevented) return;
       onKeyDown?.(e);
     },
-    [mentionHandleKeyDown, onKeyDown],
+    [onKeyDown],
   );
-  return { handleChange, handleKeyDown };
+  return { handleChange, handleKeyDownCapture, handleKeyDown };
 }
 
 function useFileInputClick(addFiles: (files: File[]) => Promise<void> | void) {
@@ -935,7 +948,10 @@ export const TaskFormInputs = memo(function TaskFormInputs({
     value: description,
     onChange: setDescriptionValue,
   });
-  const { handleChange, handleKeyDown } = useTextareaHandlers(mention, onKeyDown);
+  const { handleChange, handleKeyDownCapture, handleKeyDown } = useTextareaHandlers(
+    mention,
+    onKeyDown,
+  );
   const { fileInputRef, handleAttachClick, handleFileInputChange } = useFileInputClick(addFiles);
   const pluginActions = useCreationComposerPluginActions({
     isSessionMode,
@@ -969,6 +985,7 @@ export const TaskFormInputs = memo(function TaskFormInputs({
           }
           value={description}
           onChange={handleChange}
+          onKeyDownCapture={handleKeyDownCapture}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           data-testid="task-description-input"

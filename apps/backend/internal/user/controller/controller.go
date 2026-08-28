@@ -102,10 +102,13 @@ func (c *Controller) UpdateUserSettings(ctx context.Context, req dto.UpdateUserS
 		TerminalFontFamily:                req.TerminalFontFamily,
 		TerminalFontSize:                  req.TerminalFontSize,
 		ChangesPanelLayout:                req.ChangesPanelLayout,
+		LastSeenDisplay:                   req.LastSeenDisplay,
 		SystemMetricsDisplay:              systemMetricsDisplayPatch(req.SystemMetricsDisplay),
 		AppStatusBarEnabled:               req.AppStatusBarEnabled,
 		AppStatusBarOrder:                 req.AppStatusBarOrder,
+		QuickChatTabOrderByWorkspace:      req.QuickChatTabOrderByWorkspace,
 		KanbanHiddenStepIDs:               req.KanbanHiddenStepIDs,
+		WorkflowIDsWithAutoHideEmptySteps: req.WorkflowIDsWithAutoHideEmptySteps,
 	})
 	if err != nil {
 		return dto.UserSettingsResponse{}, err

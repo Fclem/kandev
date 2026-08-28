@@ -16,6 +16,9 @@ import { IMPROVE_KANDEV_WORKSPACE_NAME } from "@/components/improve-kandev-dialo
 import { linkToTask } from "@/lib/links";
 import type { Task } from "@/lib/types/http";
 import { subscribeNewTaskCreationRequests } from "@/lib/desktop/new-task-request";
+import type { QuickChatActivityState } from "@/lib/state/slices/ui/quick-chat-activity-selectors";
+import { QuickChatActivityIndicator } from "@/components/quick-chat/quick-chat-activity-indicator";
+import { useQuickChatActivity } from "@/components/quick-chat/use-quick-chat-activity";
 import { AppSidebarWorkspaceActions } from "./app-sidebar-workspace-actions";
 
 // The Office "New issue" dialog only renders on `/office` routes, but this item
@@ -42,17 +45,20 @@ type RowActionButtonProps = {
   icon: TablerIcon;
   label: string;
   testId: string;
+  activity?: QuickChatActivityState;
   onClick: () => void;
 };
 
-function RowActionButton({ icon: Icon, label, testId, onClick }: RowActionButtonProps) {
+function RowActionButton({
+  icon: Icon,
+  label,
+  testId,
+  onClick,
+  activity = null,
+}: RowActionButtonProps) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const hoveredRef = useRef(false);
-
   const handleTooltipOpenChange = (nextOpen: boolean) => {
-    // Focus is restored to this action after Quick Terminal closes. Keep the
-    // tooltip pointer-driven so that accessibility focus does not leave a
-    // stale popover behind the dialog.
     if (nextOpen && !hoveredRef.current) return;
     setTooltipOpen(nextOpen);
   };
@@ -79,7 +85,10 @@ function RowActionButton({ icon: Icon, label, testId, onClick }: RowActionButton
           data-testid={testId}
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground cursor-pointer"
         >
-          <Icon className="h-3.5 w-3.5" />
+          <span className="relative flex">
+            <Icon className="h-3.5 w-3.5" />
+            <QuickChatActivityIndicator activity={activity} />
+          </span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">{label}</TooltipContent>
@@ -166,6 +175,7 @@ export function AppSidebarNewTaskItem({ collapsed }: AppSidebarNewTaskItemProps)
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const inOffice = useInOffice();
   const handleOpenQuickChat = useQuickChatLauncher(workspaceId);
+  const { activity: quickChatActivity, label: quickChatLabel } = useQuickChatActivity(workspaceId);
   const handleOpenQuickTerminal = useQuickTerminalLauncher(workspaceId);
   const [open, setOpen] = useState(false);
   const isImproveWorkspace = activeWorkspace?.name === IMPROVE_KANDEV_WORKSPACE_NAME;
@@ -220,9 +230,10 @@ export function AppSidebarNewTaskItem({ collapsed }: AppSidebarNewTaskItemProps)
             />
             <RowActionButton
               icon={IconMessageCircle}
-              label={t("sidebar:quickChat")}
+              label={quickChatLabel}
               testId="sidebar-quick-chat-shortcut"
               onClick={handleOpenQuickChat}
+              activity={quickChatActivity}
             />
             <AppSidebarWorkspaceActions
               workspaceId={workspaceId}

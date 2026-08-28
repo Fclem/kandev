@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable max-lines -- this file intentionally owns the complete mobile session composition. */
+
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SessionMobileTopBar } from "./session-mobile-top-bar";
 import { SessionMobileBottomNav } from "./session-mobile-bottom-nav";
@@ -28,6 +30,7 @@ import { useNormalizedTaskReviewsState } from "../review-panel-provider";
 import type { ReviewItemSummary } from "@/lib/plugins/types";
 import { reviewItemId, useReviewItemSelection } from "../review-selection";
 import { PluginTaskPanel } from "../plugin-task-panel";
+import { PromptHistoryPanelContent } from "../prompt-history-panel-content";
 import { parsePluginPanelId } from "@/lib/state/layout-manager/plugin-panels";
 import { useEffectiveMobilePanel, type MobileReviewSource } from "./mobile-plugin-panel-lifecycle";
 import { useTranslation } from "react-i18next";
@@ -77,6 +80,8 @@ type SessionMobileLayoutProps = {
   baseBranch?: string;
   worktreeBranch?: string | null;
   taskTitle?: string;
+  /** `owner/repo` (or the repository name) of the task's primary repository. */
+  repositoryLabel?: string | null;
   isRemoteExecutor?: boolean;
   remoteExecutorType?: string | null;
   remoteExecutorName?: string | null;
@@ -92,11 +97,15 @@ function MobileChatPanelContent({
   isPassthroughMode,
   effectiveSessionId,
   onOpenFile,
+  scrollToMessageId,
+  onScrollTargetConsumed,
 }: {
   activeTaskId: string | null;
   isPassthroughMode: boolean;
   effectiveSessionId: string | null;
   onOpenFile: (path: string, repo?: string) => void;
+  scrollToMessageId: string | null;
+  onScrollTargetConsumed: (messageId: string) => void;
 }) {
   const { t } = useTranslation();
   if (!activeTaskId) {
@@ -124,6 +133,8 @@ function MobileChatPanelContent({
           sessionId={effectiveSessionId}
           taskId={effectiveSessionId ? activeTaskId : null}
           onOpenFile={onOpenFile}
+          pendingScrollToMessageId={scrollToMessageId}
+          onPendingScrollConsumed={onScrollTargetConsumed}
         />
       )}
     </div>
@@ -142,6 +153,9 @@ type MobilePanelAreaProps = {
   handleClearSelectedDiff: () => void;
   handleOpenFile: (file: OpenFileTab) => void;
   handlePanelChangeAndClearSheet: (panel: MobileSessionPanel) => void;
+  onNavigateToPrompt: (messageId: string) => void;
+  onScrollTargetConsumed?: (messageId: string) => void;
+  mobileScrollTarget: string | null;
   topNavHeight: string;
   bottomNavHeight: string;
   reviews: readonly ReviewItemSummary[];
@@ -175,6 +189,9 @@ export function MobilePanelArea({
   handleClearSelectedDiff,
   handleOpenFile,
   handlePanelChangeAndClearSheet,
+  onNavigateToPrompt,
+  onScrollTargetConsumed = () => {},
+  mobileScrollTarget,
   topNavHeight,
   bottomNavHeight,
   reviews,
@@ -199,13 +216,18 @@ export function MobilePanelArea({
             isPassthroughMode={isPassthroughMode}
             effectiveSessionId={effectiveSessionId}
             onOpenFile={handleOpenFileFromChat}
+            scrollToMessageId={mobileScrollTarget}
+            onScrollTargetConsumed={onScrollTargetConsumed}
           />
         </div>
       )}
-      {currentMobilePanel === "plan" && (
+      {currentMobilePanel === "prompt-history" && (
         <div className="flex-1 min-h-0 flex flex-col p-2">
-          <TaskPlanPanel taskId={activeTaskId} visible={true} />
+          <PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />
         </div>
+      )}
+      {currentMobilePanel === "plan" && (
+        <MobilePlanPanel taskId={activeTaskId} bottomNavHeight={bottomNavHeight} />
       )}
       {currentMobilePanel === "changes" && (
         <div className="flex-1 min-h-0 flex flex-col p-2">
@@ -249,6 +271,20 @@ export function MobilePanelArea({
         onSelectReview={onSelectReview}
       />
       <MobilePluginPanel currentMobilePanel={currentMobilePanel} />
+    </div>
+  );
+}
+
+function MobilePlanPanel({
+  taskId,
+  bottomNavHeight,
+}: {
+  taskId: string | null;
+  bottomNavHeight: string;
+}) {
+  return (
+    <div className="flex-1 min-h-0 flex flex-col p-2">
+      <TaskPlanPanel taskId={taskId} visible={true} mobileBottomOffset={bottomNavHeight} />
     </div>
   );
 }
@@ -330,6 +366,8 @@ type MobileTopBarStickyProps = {
   activeTaskId: string | null;
   workspaceId: string | null;
   taskTitle?: string;
+  /** `owner/repo` (or the repository name) of the task's primary repository. */
+  repositoryLabel?: string | null;
   effectiveSessionId: string | null;
   baseBranch?: string;
   worktreeBranch?: string | null;
@@ -356,6 +394,7 @@ function MobileTopBarSticky(props: MobileTopBarStickyProps) {
         taskId={props.activeTaskId}
         workspaceId={props.workspaceId}
         taskTitle={props.taskTitle}
+        repositoryLabel={props.repositoryLabel}
         sessionId={props.effectiveSessionId}
         baseBranch={props.baseBranch}
         worktreeBranch={props.worktreeBranch}
@@ -477,6 +516,7 @@ type SessionMobileFooterProps = {
   sessionId: string | null;
   activePanel: MobileSessionPanel;
   onPanelChange: (panel: MobileSessionPanel) => void;
+  showPromptHistory: boolean;
   planBadge: boolean;
   changesBadge: number;
   hasReview: boolean;
@@ -489,6 +529,7 @@ function SessionMobileFooter({
   sessionId,
   activePanel,
   onPanelChange,
+  showPromptHistory,
   planBadge,
   changesBadge,
   hasReview,
@@ -506,6 +547,7 @@ function SessionMobileFooter({
       <SessionMobileBottomNav
         activePanel={activePanel}
         onPanelChange={onPanelChange}
+        showPromptHistory={showPromptHistory}
         planBadge={planBadge}
         changesBadge={changesBadge}
         hasReview={hasReview}
@@ -531,6 +573,7 @@ function StatusAwareSessionMobileFooter(
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- coordinates the mobile session panel composition.
 export const SessionMobileLayout = memo(function SessionMobileLayout(
   props: SessionMobileLayoutProps,
 ) {
@@ -557,6 +600,20 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
     handleOpenFile,
     handlePanelChangeAndClearSheet,
   } = useMobilePanelHandlers({ effectiveSessionId, handlePanelChange });
+  const [mobileScrollTarget, setMobileScrollTarget] = useState<string | null>(null);
+  useEffect(() => {
+    setMobileScrollTarget(null);
+  }, [effectiveSessionId]);
+  const handleNavigateToPrompt = useCallback(
+    (messageId: string) => {
+      setMobileScrollTarget(messageId);
+      handlePanelChangeAndClearSheet("chat");
+    },
+    [handlePanelChangeAndClearSheet],
+  );
+  const handleMobileScrollTargetConsumed = useCallback(() => {
+    setMobileScrollTarget(null);
+  }, []);
   const { reviews, selectedReview, selectReview, effectiveMobilePanel, handleMobilePanelChange } =
     useMobileReviewPanelState({
       activeTaskId,
@@ -586,6 +643,9 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
         handleClearSelectedDiff={handleClearSelectedDiff}
         handleOpenFile={handleOpenFile}
         handlePanelChangeAndClearSheet={handlePanelChangeAndClearSheet}
+        onNavigateToPrompt={handleNavigateToPrompt}
+        onScrollTargetConsumed={handleMobileScrollTargetConsumed}
+        mobileScrollTarget={mobileScrollTarget}
         topNavHeight={TOP_NAV_HEIGHT}
         bottomNavHeight={BOTTOM_NAV_HEIGHT}
         reviews={reviews}
@@ -599,6 +659,7 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
         planBadge={hasUnseenPlanUpdate}
         changesBadge={totalChangesCount}
         hasReview={reviews.length > 0}
+        showPromptHistory={!isPassthroughMode && effectiveSessionId !== null}
       />
       <SessionTaskSwitcherSheet
         open={isTaskSwitcherOpen}

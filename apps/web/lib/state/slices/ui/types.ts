@@ -5,6 +5,7 @@ import type {
   FilterClause,
   GroupKey,
   SidebarSliceState,
+  SidebarTaskRowPresentation,
   SidebarView,
   SidebarViewDraft,
   SortSpec,
@@ -54,7 +55,14 @@ export type MobileKanbanState = {
 /** Core, host-defined mobile panels. Kept as a named union (rather than
  *  inlined into MobileSessionPanel) so existing `=== "chat"`-style narrowing
  *  still works unchanged after MobileSessionPanel grew a plugin variant. */
-export type MobileSessionCorePanel = "chat" | "plan" | "changes" | "files" | "terminal" | "review";
+export type MobileSessionCorePanel =
+  | "chat"
+  | "plan"
+  | "changes"
+  | "files"
+  | "terminal"
+  | "review"
+  | "prompt-history";
 
 /** A plugin task panel id on mobile, `plugin:<pluginId>:<panelKey>` — see
  *  lib/state/layout-manager/plugin-panels.ts's pluginPanelId. */
@@ -137,6 +145,16 @@ export type QuickChatSession = {
 
 export type QuickChatActiveKind = "conversation" | "terminal";
 
+export type QuickChatSessionOwnership = {
+  taskId?: string;
+  workspaceId: string;
+};
+
+export type QuickChatSessionTombstone = {
+  workspaceId: string;
+  tombstonedAt: string;
+};
+
 export type QuickChatState = {
   isOpen: boolean;
   sessions: QuickChatSession[];
@@ -145,12 +163,23 @@ export type QuickChatState = {
   activeKind: QuickChatActiveKind;
   activeTerminalTabId: string | null;
   lastTerminalTabIdByWorkspace: Record<string, string>;
+  unseenIdleByWorkspace: Record<string, Record<string, true>>;
+  lastSettledAtBySession: Record<string, string>;
+  sessionOwnership: Record<string, QuickChatSessionOwnership>;
+  syncRevisionByWorkspace: Record<string, number>;
+  tombstonedSessions: Record<string, QuickChatSessionTombstone>;
+  /** Optimistic mixed-tab order keyed by workspace until the save settles. */
+  tabOrderByWorkspace: Record<string, string[]>;
+  tabOrderSyncErrorByWorkspace: Record<string, string | null>;
+  tabOrderSyncPendingByWorkspace: Record<string, boolean>;
 };
 
 export type SessionFailureNotification = {
   sessionId: string;
   taskId: string;
   message: string;
+  /** Typed launch failures point users to the persistent task card. */
+  isLaunchFailure?: boolean;
 };
 
 export type TaskDeletedNotification = {
@@ -203,6 +232,14 @@ export type SettingsMenuState = {
    * open path from the route instead, so it never reads or writes this.
    */
   expandedKeys: string[];
+};
+
+/** Agent rich-output chart motion preference, per device (localStorage). */
+export type RichOutputMotionState = {
+  /** The value rendered now, including an unsaved Appearance preview. */
+  enabled: boolean;
+  /** The persisted value restored when the Appearance draft is discarded. */
+  savedEnabled: boolean;
 };
 
 /** Unified AppSidebar collapse + per-section expand state (localStorage). */
@@ -263,6 +300,8 @@ export type UISliceState = {
   appSidebar: AppSidebarState;
   /** Settings menu shape + open branches (localStorage). */
   settingsMenu: SettingsMenuState;
+  /** Agent rich-output chart animation preference (localStorage). */
+  richOutputMotion: RichOutputMotionState;
   /**
    * Most recently dismissed `last_agent_error` stamp per sessionId. Shared by
    * the chat banner and the sidebar error icon so dismissing the banner also
@@ -335,6 +374,21 @@ export type UISliceActions = {
   upsertQuickChatSessionFromEvent: (session: QuickChatSession) => void;
   /** Drops tabs whose backing task was deleted (possibly on another device). */
   removeQuickChatSessionsForTask: (taskId: string) => void;
+  markQuickChatUnseenIdle: (sessionId: string, workspaceId: string) => void;
+  clearQuickChatUnseenIdle: (sessionId?: string, workspaceId?: string) => void;
+  /** Records a settle generation and returns whether it was not previously observed. */
+  recordQuickChatSettled: (sessionId: string, updatedAt: string) => boolean;
+  /** Removes a server-backed quick-chat session and suppresses late task events. */
+  removeQuickChatSession: (sessionId: string) => void;
+  /** Sets the optimistic mixed conversation/terminal order for a workspace. */
+  setQuickChatTabOrder: (workspaceId: string, order: string[]) => void;
+  /** Clears a matching optimistic order after its authoritative save succeeds. */
+  clearQuickChatTabOrder: (workspaceId: string, expectedOrder: string[]) => void;
+  /** Updates the pending/error state for a workspace order save. */
+  setQuickChatTabOrderSyncState: (
+    workspaceId: string,
+    state: { pending: boolean; error: string | null },
+  ) => void;
   setQuickChatInitialPrompt: (sessionId: string, prompt?: string) => void;
   setSessionFailureNotification: (n: SessionFailureNotification | null) => void;
   setTaskDeletedNotification: (n: TaskDeletedNotification | null) => void;
@@ -345,7 +399,12 @@ export type UISliceActions = {
   setSidebarActiveView: (viewId: string) => void;
   createSidebarView: () => string | null;
   updateSidebarDraft: (
-    patch: Partial<{ filters: FilterClause[]; sort: SortSpec; group: GroupKey }>,
+    patch: Partial<{
+      filters: FilterClause[];
+      sort: SortSpec;
+      group: GroupKey;
+      taskRow: SidebarTaskRowPresentation;
+    }>,
   ) => void;
   saveSidebarDraftAs: (name: string) => void;
   saveSidebarDraftOverwrite: () => void;
@@ -394,6 +453,12 @@ export type UISliceActions = {
   /** Drop an unsaved preview and render the persisted mode again. */
   restoreSettingsMenuMode: () => void;
   setSettingsMenuExpandedKeys: (keys: string[]) => void;
+  /** Preview rich-output chart motion without persisting it. */
+  previewRichOutputAnimations: (enabled: boolean) => void;
+  /** Persist rich-output chart motion for this device. */
+  commitRichOutputAnimations: (enabled: boolean) => void;
+  /** Restore the persisted rich-output chart motion preference. */
+  restoreRichOutputAnimations: () => void;
   /** Record multiple sidebar badge acknowledgements with one localStorage merge. */
   acknowledgeAgentErrors: (stamps: Record<string, string>) => void;
   /** Record that `stamp` has been dismissed for `sessionId`. */

@@ -48,6 +48,7 @@
   "menu": "菜单",
   "moreOptions": "更多选项",
   "moveTo": "移动到",
+  "moveToStep": "移动到 {{step}}",
   "multiSelect": "多选",
   "nextCapacity": "下一容量",
   "nextStep": "下一步",
@@ -94,6 +95,18 @@
   "workflow": "工作流",
   "workflowStepFallback": "工作流步骤 {{stepId}}",
   "columns": "列",
+  "autoHideEmptyColumns": "自动隐藏空列",
+  "allEmptyStepsAutoHidden": "所有空步骤都已隐藏。在“列”中关闭“自动隐藏空列”即可重新显示它们。",
   "columnsForWorkflow": "{{name}} 的列",
-  "needsReassignment": "需要重新分配"
+  "needsReassignment": "需要重新分配",
+  "blockedByCount_one": "被 {{count}} 项阻塞",
+  "blockedByCount_other": "被 {{count}} 项阻塞",
+  "blockedByTasksTitle": "正在等待：{{tasks}}",
+  "blockedFailed": "阻塞项失败",
+  "blockedPredecessorFailed": "该任务依赖的一个任务失败了：{{tasks}}",
+  "noTasksYet": "暂无任务",
+  "noWorkflowsAvailableYet": "暂无可用的工作流。",
+  "pullToRefreshPull": "下拉刷新",
+  "pullToRefreshRefreshing": "正在刷新任务",
+  "pullToRefreshRelease": "松开即可刷新"
 }

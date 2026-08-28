@@ -12,11 +12,15 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/kandev/kandev/internal/agent/agents"
 	"github.com/kandev/kandev/internal/agent/discovery"
 	"github.com/kandev/kandev/internal/agent/hostutility"
 	"github.com/kandev/kandev/internal/agent/managedruntime"
 	"github.com/kandev/kandev/internal/agent/registry"
+	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
+	dynamicruntime "github.com/kandev/kandev/internal/agent/runtime/dynamic"
 	agentsettingscontroller "github.com/kandev/kandev/internal/agent/settings/controller"
+	agentsettingsmodels "github.com/kandev/kandev/internal/agent/settings/models"
 	analyticsservice "github.com/kandev/kandev/internal/analytics/service"
 	"github.com/kandev/kandev/internal/automation"
 	"github.com/kandev/kandev/internal/azuredevops"
@@ -68,6 +72,7 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	}
 	userSecretStore := secrets.NewUserVisibleStore(repos.Secrets)
 	agentSettingsController := agentsettingscontroller.NewController(repos.AgentSettings, discoveryRegistry, agentRegistry, repos.Task, log)
+	agentSettingsController.SetDynamicAgentRoutingEnabled(cfg.Features.DynamicAgentRouting)
 	agentSettingsController.SetSecretStore(userSecretStore)
 	managedRuntimeSettings, err := systemsettings.NewStore(dbPool)
 	if err != nil {
@@ -81,10 +86,41 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	promptSvc := promptservice.NewService(repos.Prompts)
 	utilitySvc := utilityservice.NewService(repos.Utility)
 	utilitySvc.SetProfileResolver(profilebinding.New(repos.AgentSettings, func(agentID string) bool {
+		if agentID == agents.DynamicAgentID {
+			return cfg.Features.DynamicAgentRouting
+		}
 		_, ok := agentRegistry.GetInferenceAgent(agentID)
 		return ok
 	}))
+	dynamicCircuits := dynamicruntime.NewCircuitRegistry(
+		dynamicruntime.WithCircuitPersistence(repos.Task),
+	)
+	if err := dynamicCircuits.Restore(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("restore dynamic routing health: %w", err)
+	}
+	dynamicEngine := dynamicruntime.NewEngine(
+		dynamicruntime.WithPersistence(repos.Task),
+		dynamicruntime.WithStateLoader(repos.Task),
+		dynamicruntime.WithCircuitRegistry(dynamicCircuits),
+	)
+	dynamicBindingResolver, err := dynamicruntime.NewPersistentCredentialBindingResolver(
+		context.Background(), repos.Task,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("initialize dynamic routing installation key: %w", err)
+	}
+	dynamicResolver := agentruntime.NewProfileExecutionResolver(
+		repos.AgentSettings,
+		dynamicEngine,
+		cfg.Features.DynamicAgentRouting,
+	)
+	dynamicResolver.SetCredentialBindingResolver(dynamicBindingResolver)
+	utilitySvc.SetExecutionProfileResolver(dynamicResolver)
 	workflowSvc := workflowservice.NewService(repos.Workflow, log)
+	pendingActionProjectionEpoch, err := repos.Task.NextPendingActionProjectionEpoch(context.Background())
+	if err != nil {
+		return nil, nil, fmt.Errorf("allocate pending-action projection epoch: %w", err)
+	}
 	taskSvc := taskservice.NewService(
 		taskservice.Repos{
 			Workspaces:        repos.Task,
@@ -98,6 +134,8 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 			Sessions:          repos.Task,
 			GitSnapshots:      repos.Task,
 			RepoEntities:      repos.Task,
+			RepositorySets:    repos.Task,
+			BranchPolicies:    repos.Task,
 			RepositoryCleanup: repos.Task,
 			Executors:         repos.Task,
 			Environments:      repos.Task,
@@ -105,7 +143,9 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 			Reviews:           repos.Task,
 			ResourceCleanups:  repos.Task,
 			StatusSummaries:   repos.Task,
+			TaskActivity:      repos.Task,
 			SubagentContexts:  repos.Task,
+			Usage:             repos.Task,
 		},
 		eventBus,
 		log,
@@ -115,6 +155,7 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 			TaskWorktreeRoots: []string{filepath.Join(cfg.ResolvedHomeDir(), "tasks")},
 		},
 	)
+	taskSvc.SetPendingActionProjectionEpoch(pendingActionProjectionEpoch)
 	taskSvc.SetSecretStore(userSecretStore)
 	if deleter, ok := userSecretStore.(taskservice.WorkspaceSecretDeleter); ok {
 		taskSvc.SetWorkspaceSecretDeleter(deleter)
@@ -134,6 +175,14 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	// Session history is owned by workflow service, but access is owned by the
 	// task service. Keep the authorization check at the service boundary.
 	workflowSvc.SetSessionAccessChecker(taskSvc.AuthorizeSessionAccess)
+	// Same split for the rest of the workflow-step surface: the workflow
+	// package owns steps, templates and export/import, but a workflow's owner
+	// is its workspace's owner, which only the task service can resolve.
+	workflowSvc.SetWorkflowAccessChecker(taskSvc.AuthorizeWorkflowAccess)
+	workflowSvc.SetWorkspaceAccessChecker(taskSvc.AuthorizeWorkspaceAccess)
+	// A step's queue_run action names the task it starts work on, so the
+	// step-write API accepts task IDs as well.
+	workflowSvc.SetTaskAccessChecker(taskSvc.AuthorizeTaskAccess)
 
 	// Wire the ADR 0015 audit-trail writer for manual step transitions.
 	// workflowSvc.CreateStepTransition already matches
@@ -148,12 +197,13 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	// Wire agent profile resolver/matcher for workflow export/import
 	workflowSvc.SetAgentProfileFuncs(
 		buildAgentProfileResolver(repos),
-		buildAgentProfileMatcher(repos),
+		buildAgentProfileMatcher(repos, log),
 	)
 
 	githubSvc := initGitHubService(cfg, dbPool, eventBus, repos.Secrets, log)
 	if githubSvc != nil {
 		taskSvc.SetTaskStatusSummaryPRReader(&githubTaskStatusSummaryPRReader{gh: githubSvc})
+		githubSvc.SetComparisonTargetObserver(taskSvc)
 		githubSvc.SetPromptResolver(promptSvc)
 		taskSvc.SetContributionDestinationPreparer(&githubContributionDestinationPreparer{service: githubSvc, taskSvc: taskSvc})
 		if brokerErr := githubSvc.ConfigureCredentialBroker(&githubBrokerScopeAuthorizer{repo: repos.Task, provider: githubSvc}); brokerErr != nil {
@@ -163,6 +213,7 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	gitlabSvc, gitlabCleanup := initGitLabService(dbPool, eventBus, repos.Secrets, log)
 	if gitlabSvc != nil {
 		gitlabSvc.SetPromptResolver(promptSvc)
+		gitlabSvc.SetComparisonTargetObserver(taskSvc)
 	}
 	azureDevOpsSvc := initAzureDevOpsService(dbPool, eventBus, repos.Secrets, log)
 	if azureDevOpsSvc != nil {
@@ -180,16 +231,23 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 		// caller; without it the check stays a no-op. An un-stamped local
 		// build passes "dev", which the service treats as "don't enforce".
 		pluginsSvc.SetKandevVersion(version)
-		pluginsSvc.SetDataSources(taskSvc, taskSvc, workflowSvc, agentSettingsController, analyticsservice.New(repos.Analytics), taskSvc, pluginsTaskWriterAdapter{svc: taskSvc})
+		pluginsSvc.SetDataSources(taskSvc, taskSvc, workflowSvc, agentSettingsController, analyticsservice.New(repos.Analytics), taskSvc, taskSvc, pluginsTaskWriterAdapter{svc: taskSvc})
+		// Separate from SetDataSources: githubSvc is optional (nil when github
+		// is unconfigured), and a nil source leaves tasks with no PullRequests
+		// rather than failing every task read.
+		if githubSvc != nil {
+			pluginsSvc.SetTaskPRSource(githubSvc)
+		}
+		taskSvc.SetRepositorySelectionResolver(pluginRepositorySelectionResolver{inspector: pluginsSvc})
 	}
-	gitCredentialBroker := newGitCredentialBroker(githubSvc, pluginsSvc, repos.Task)
+	gitCredentialBroker := newGitCredentialBroker(githubSvc, pluginsSvc, repos.Task, cfg.GitHubCredentialBroker.ReissueSigningKey)
 	if pluginsSvc != nil {
 		pluginsSvc.SetGitCredentialLeaseRevoker(gitCredentialBroker.RevokeProvider)
 	}
 	if githubSvc != nil {
 		githubSvc.SetCredentialBroker(github.NewCredentialBrokerFromBroker(gitCredentialBroker))
 	}
-	shareHTTP := initShareHandlers(dbPool, repos.Task, githubSvc, log, version)
+	shareHTTP := initShareHandlers(dbPool, repos.Task, taskSvc, githubSvc, log, version)
 
 	// Plumb code-host branch listing into the task service so provider-backed
 	// ("Remote") repos serve branches from their owning provider rather than relying
@@ -221,7 +279,9 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 		automationComponents.Service.SetWorkspaceAuthorizer(taskSvc.AuthorizeWorkspaceAccess)
 		// A UI filter is not an authorization boundary: reject a workflow owned
 		// by another workspace even when a request names it directly.
-		automationComponents.Service.SetWorkflowLocator(&automationWorkflowLocatorAdapter{svc: taskSvc})
+		automationWorkflowLocator := &automationWorkflowLocatorAdapter{svc: taskSvc, workflows: workflowSvc}
+		automationComponents.Service.SetWorkflowLocator(automationWorkflowLocator)
+		automationComponents.Service.SetWorkflowStepLocator(automationWorkflowLocator)
 		automationComponents.Service.SetTaskOriginLookup(&automationTaskOriginLookupAdapter{svc: taskSvc, log: log})
 		// Profile deletion disables the automations bound to a profile before
 		// the row goes, but nothing ever checked that the binding pointed at a
@@ -229,10 +289,22 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 		// that never existed produced the same orphan without any delete
 		// involved.
 		automationComponents.Service.SetAgentProfileLookup(&automationAgentProfileLookupAdapter{store: repos.AgentSettings})
+		// YAML export descriptor resolution (AC-29): each Set* below is
+		// satisfied directly by an existing repository's Tx-accepting method,
+		// so the export's single read transaction can pass straight through
+		// without an adapter shim.
+		automationComponents.Service.SetExportAgentProfileLookup(repos.AgentSettings)
+		automationComponents.Service.SetExportExecutorProfileLookup(repos.Task)
+		automationComponents.Service.SetExportWorkflowLookup(repos.Task)
+		automationComponents.Service.SetExportWorkflowStepLookup(repos.Workflow)
+		automationComponents.Service.SetExportRepositoryLookup(repos.Task)
+		automationComponents.Service.SetExportWorkspaceLookup(&automationExportWorkspaceLookupAdapter{svc: taskSvc})
 	}
 
 	services := &Services{
 		ManagedRuntimeSelections: managedRuntimeSelections,
+		DynamicProfileResolver:   dynamicResolver,
+		DynamicBindingResolver:   dynamicBindingResolver,
 		Task:                     taskSvc,
 		User:                     userSvc,
 		Editor:                   editorSvc,
@@ -389,11 +461,11 @@ func isCanonicalKandevRepositoryInput(
 	repository *taskmodels.Repository,
 ) bool {
 	if repository != nil {
-		return repository.Provider == "github" &&
+		return repository.Provider == gitCredentialGitHubProviderID &&
 			isPublicGitHubProviderHost(repository.ProviderHost) &&
 			repository.ProviderOwner == canonicalKandevOwner && repository.ProviderName == canonicalKandevName
 	}
-	return input != nil && input.Provider == "github" &&
+	return input != nil && input.Provider == gitCredentialGitHubProviderID &&
 		isPublicGitHubProviderHost(input.ProviderHost) &&
 		input.ProviderOwner == canonicalKandevOwner && input.ProviderName == canonicalKandevName
 }
@@ -712,6 +784,15 @@ func (a *startStepResolverAdapter) ResolveFirstStep(ctx context.Context, workflo
 	return step.ID, nil
 }
 
+// ResolveAutoStartStep implements taskservice.StartStepResolver.
+func (a *startStepResolverAdapter) ResolveAutoStartStep(ctx context.Context, workflowID string) (string, error) {
+	step, err := a.svc.ResolveAutoStartStep(ctx, workflowID)
+	if err != nil {
+		return "", err
+	}
+	return step.ID, nil
+}
+
 // githubSecretAdapter adapts secrets.SecretStore to github.SecretProvider and github.SecretManager.
 type githubSecretAdapter struct {
 	store secrets.SecretStore
@@ -973,12 +1054,13 @@ func initSentryService(dbPool *db.Pool, eventBus bus.EventBus, secretsStore secr
 func initShareHandlers(
 	dbPool *db.Pool,
 	taskRepo share.TaskReader,
+	authorizer share.TaskAccessAuthorizer,
 	githubSvc *github.Service,
 	log *logger.Logger,
 	version string,
 ) *share.HTTPHandlers {
 	h, _, err := share.Provide(
-		dbPool.Writer(), dbPool.Reader(), taskRepo, githubSvc, log,
+		dbPool.Writer(), dbPool.Reader(), taskRepo, authorizer, githubSvc, log,
 		share.Config{KandevVersion: version},
 	)
 	if err != nil {
@@ -1097,6 +1179,7 @@ func (a pluginsTaskWriterAdapter) CreateTask(ctx context.Context, in plugins.Tas
 		Metadata:       metadata,
 		Repositories:   repositories,
 		PlanMode:       in.PlanMode,
+		StartAgent:     in.StartAgent,
 	})
 	if err != nil {
 		return nil, err
@@ -1296,26 +1379,93 @@ func buildAgentProfileResolver(repos *Repositories) wfmodels.AgentProfileResolve
 	}
 }
 
-// buildAgentProfileMatcher creates a matcher that finds profiles by agent name, model, and mode for import.
-func buildAgentProfileMatcher(repos *Repositories) wfmodels.AgentProfileMatcher {
-	return func(agentName, model, mode string) string {
-		agents, err := repos.AgentSettings.ListAgents(context.Background())
-		if err != nil {
-			return ""
+// agentProfileStillMatches reports whether the profile with id still has the
+// exact (agent_display_name, model, mode) triple, ignoring Enabled and
+// WorkspaceID - those only gate candidate *selection*, not a binding that
+// already exists.
+func agentProfileStillMatches(repos *Repositories, id, agentName, model, mode string) bool {
+	p, err := repos.AgentSettings.GetAgentProfile(context.Background(), id)
+	if err != nil || p == nil {
+		return false
+	}
+	return p.AgentDisplayName == agentName && p.Model == model && p.Mode == mode
+}
+
+// buildAgentProfileMatcher creates a matcher that finds profiles by agent
+// name, model, and mode for import.
+//
+// The (agent_display_name, model, mode) triple is not unique: duplicating a
+// profile through the UI produces a byte-identical triple for the copy.
+// Candidates are filtered to enabled, global (non-workspace-scoped) profiles,
+// and ties are broken by oldest CreatedAt (then ID for a total order). Oldest
+// wins so that duplicating a profile can never steal an existing synced
+// workflow step's binding - a copy is always newer than its source.
+//
+// currentID, when non-empty, is checked first: if that profile still has the
+// exact descriptor, it's kept as-is without re-running candidate selection -
+// even when it's disabled or workspace-scoped. Reconciliation must not treat
+// "profile got disabled" as "profile needs a new binding" (profile-disable.md
+// promises existing bindings survive disabling); candidate selection only
+// applies when picking a profile for new work.
+func buildAgentProfileMatcher(repos *Repositories, log *logger.Logger) wfmodels.AgentProfileMatcher {
+	return func(agentName, model, mode, currentID string) string {
+		if currentID != "" && agentProfileStillMatches(repos, currentID, agentName, model, mode) {
+			return currentID
 		}
-		for _, agent := range agents {
-			profiles, pErr := repos.AgentSettings.ListAgentProfiles(context.Background(), agent.ID)
-			if pErr != nil {
-				continue
-			}
-			for _, p := range profiles {
-				if p.AgentDisplayName == agentName && p.Model == model && p.Mode == mode {
-					return p.ID
-				}
-			}
-		}
+		return selectAgentProfileCandidate(repos, log, agentName, model, mode)
+	}
+}
+
+// selectAgentProfileCandidate scans enabled, global profiles for an exact
+// (agent_display_name, model, mode) match and returns the oldest one (see
+// buildAgentProfileMatcher), logging when the triple was ambiguous.
+func selectAgentProfileCandidate(repos *Repositories, log *logger.Logger, agentName, model, mode string) string {
+	agents, err := repos.AgentSettings.ListAgents(context.Background())
+	if err != nil {
 		return ""
 	}
+	var best *agentsettingsmodels.AgentProfile
+	matches := 0
+	for _, agent := range agents {
+		profiles, pErr := repos.AgentSettings.ListAgentProfiles(context.Background(), agent.ID)
+		if pErr != nil {
+			continue
+		}
+		for _, p := range profiles {
+			if p.AgentDisplayName != agentName || p.Model != model || p.Mode != mode {
+				continue
+			}
+			if !p.Enabled || p.WorkspaceID != "" {
+				continue
+			}
+			matches++
+			if best == nil || isOlderAgentProfileMatch(p, best) {
+				best = p
+			}
+		}
+	}
+	if best == nil {
+		return ""
+	}
+	if matches > 1 {
+		log.Debug("agent profile matcher: multiple candidates for workflow step sync",
+			zap.String("agent_display_name", agentName),
+			zap.String("model", model),
+			zap.String("mode", mode),
+			zap.Int("candidates", matches),
+			zap.String("selected_profile_id", best.ID))
+	}
+	return best.ID
+}
+
+// isOlderAgentProfileMatch reports whether candidate should replace current
+// as the matcher's selection: earlier CreatedAt wins, ties broken by ID so
+// the result is stable across repeated calls.
+func isOlderAgentProfileMatch(candidate, current *agentsettingsmodels.AgentProfile) bool {
+	if !candidate.CreatedAt.Equal(current.CreatedAt) {
+		return candidate.CreatedAt.Before(current.CreatedAt)
+	}
+	return candidate.ID < current.ID
 }
 
 // codeHostBranchListerAdapter routes first-party GitHub repositories directly

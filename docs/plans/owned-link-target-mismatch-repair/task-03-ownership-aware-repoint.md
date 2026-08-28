@@ -21,28 +21,22 @@ entry intact.
 This is the **single-signature-change** task. Design the new `EnsureOwnedDirectoryLink` contract once
 here — an ownership descriptor input plus a result struct — and have Task 04 and Task 05 build on it.
 
+Current workspace-reuse scope supersedes the original ready-reconcile caller:
+the ownership-aware primitive remains valid, but only creating materialization
+or explicit journaled source mutation may invoke it. Ready reuse is validation
+only and returns unsafe/reset on target mismatch.
+
 ## Acceptance
 
-- `EnsureOwnedDirectoryLink` (`apps/backend/internal/worktree/directory_link.go:92-125`) takes an
-  ownership descriptor (`TaskID`, `TaskDirName`) and returns a result struct
-  (`{Path string; Created bool; PriorTarget string}`) instead of the current `(entry, created)` pair.
-- A repoint proceeds only when `ReadOwnershipMarker(root)`
-  (`apps/backend/internal/system/storage/workspaces/marker.go:120-122`) is **absent**, or is present
-  and its `TaskID` **and** `TaskDirName` match the descriptor. A present marker naming a different
-  task fails closed with a marker-conflict error and neither removes nor repoints the entry. This
-  mirrors `existingMarkerMatches` fail-closed-on-mismatch, allow-on-absent semantics
-  (`marker.go:79-91`).
-- `reconcileWorkspaceSources` / `reconcileWorkspaceRepositories`
-  (`apps/backend/internal/agent/runtime/lifecycle/workspace_sources_reconcile.go:16,40`) thread the
-  identity they already hold (`workspacePath` = root; the launch/resume req carries `TaskID`,
-  `WorkspaceID`, `TaskDirName`) into the `EnsureOwnedDirectoryLink` calls at
-  `workspace_sources_reconcile.go:32,67`.
-- The two `materialize*` call sites (`materializeDirectoryLinks`
-  `apps/backend/internal/backendapp/workspace_source_materializer.go:200-212` and
-  `materializeWorktreeSources` `:569-574`) pass the identity already available to
-  `materializeHostRuntime` (it receives `taskID`).
-- All four call sites compile against the new signature; the two reconcile sites continue to ignore
-  the `Created`/`PriorTarget` result fields (Task 04 consumes them).
+- `ValidateOwnedDirectoryLink` is side-effect-free. `EnsureOwnedDirectoryLink`
+  takes ownership plus workspace-mutation capability and returns
+  `{Path,Created,PriorTarget}`.
+- Repoint requires marker task/workspace/task-dir/layout identity plus exact
+  directory fence and environment projection generation, then revalidates all
+  capability fields.
+- Only initial creating journals absent-marker initialization; ready/source
+  paths treat absent or stale marker generation as unsafe.
+- Creating/explicit source uses Ensure; ready lifecycle validates.
 
 ## Verification
 
@@ -54,19 +48,13 @@ golangci-lint run ./internal/worktree/... ./internal/agent/runtime/lifecycle/...
 
 ## Files likely touched
 
-- `apps/backend/internal/worktree/directory_link.go` (ownership descriptor param + result struct;
-  read/verify marker before the repoint branch)
-- `apps/backend/internal/worktree/directory_link_test.go`:
-  - new: marker absent → repoint allowed (`created=true`)
-  - new: marker present and names this task → repoint allowed
-  - new: marker present and names a **different** task → fails closed with a marker-conflict error,
-    entry unchanged (must fail before this change if the guard is missing)
-- `apps/backend/internal/agent/runtime/lifecycle/workspace_sources_reconcile.go` (thread identity into
-  both calls at `:32,:67`)
-- `apps/backend/internal/agent/runtime/lifecycle/manager_launch.go` (~`:1077-1083`) and
-  `manager_execution.go` (~`:471-477`) if the reconcile signatures must widen to carry identity
-- `apps/backend/internal/backendapp/workspace_source_materializer.go` (pass identity at the two
-  `materialize*` call sites)
+- `apps/backend/internal/worktree/directory_link.go`: separate Validate/Ensure;
+  Ensure requires mutation capability.
+- `apps/backend/internal/worktree/directory_link_test.go`: validation no-op,
+  capability/key/epoch rejection, marker ownership, authorized repoint.
+- lifecycle reconcile/manager launch/execution: ready paths call Validate only.
+- backend workspace source materializer: creating/source paths call Ensure with
+  the exact capability and propagate rollback result.
 
 ## Dependencies
 
@@ -94,20 +82,11 @@ Summary, files changed, tests run (including the marker-mismatch fail-closed reg
 risks, and task/plan status updates in the same conversation. Reconcile **Files likely touched** with
 the actual diff before marking done.
 
-## Results
+## Results and superseding contract
 
-- Added `OwnedDirectoryLinkOwner` and `OwnedDirectoryLinkResult` to `apps/backend/internal/worktree/directory_link.go`, and changed `EnsureOwnedDirectoryLink` to take the owner descriptor and return the result struct in one signature update.
-- The repoint branch now reads `.kandev-workspace.json` via `ReadOwnershipMarker(root)` and allows repoint only when the marker is absent or matches `TaskID` plus `TaskDirName`; a mismatched marker fails closed with `workspace ownership marker conflicts with requested task root` and leaves the existing entry untouched.
-- Threaded the new contract through all four callers:
-  - `apps/backend/internal/agent/runtime/lifecycle/workspace_sources_reconcile.go`
-  - `apps/backend/internal/agent/runtime/lifecycle/manager_launch.go`
-  - `apps/backend/internal/agent/runtime/lifecycle/manager_execution.go`
-  - `apps/backend/internal/backendapp/workspace_source_materializer.go`
-- Tests:
-  - `TestEnsureOwnedDirectoryLinkRepointsOwnedLinkOnMismatch` now covers the marker-absent allow path.
-  - Added `TestEnsureOwnedDirectoryLinkRepointsOwnedLinkWithMatchingMarker`.
-  - Added `TestEnsureOwnedDirectoryLinkRejectsMarkerConflictOnMismatch`.
-  - Updated lifecycle reconcile tests to compile against the new owner-aware signatures.
-- Commands:
-  - `cd apps/backend && go test ./internal/worktree/... ./internal/agent/runtime/lifecycle/... ./internal/backendapp/...` → all `ok`.
-- External side-effect boundary: marker reads plus owned-link repoint/create operations strictly under the Kandev-owned task root; no user-owned repository entries are deleted or overwritten.
+Historical Task 03 allowed absent markers and threaded the mutator through
+lifecycle/materializer callers. Current workspace reuse supersedes both:
+lifecycle/manager ready callers move to `ValidateOwnedDirectoryLink`; authorized
+materializers use capability-gated Ensure; only initial creating may initialize
+an absent marker. Prior marker-conflict/rollback tests remain, with new absent-
+marker and stale/wrong-key capability coverage.

@@ -21,20 +21,14 @@ prior target so rollback restores it.
 
 ## Acceptance
 
-- A per-entry undo record type (e.g. `{Path string; PriorTarget string}`) replaces the bare
-  `created []string`: `PriorTarget == ""` ⇒ genuinely created-new ⇒ delete on rollback; non-empty ⇒
-  repointed ⇒ restore the prior target on rollback.
-- `materializeDirectoryLinks`
-  (`apps/backend/internal/backendapp/workspace_source_materializer.go:200-212`, record at `:207-208`)
-  and `materializeWorktreeSources` (`:569-574`) populate the undo record from the Task 03 result
-  struct (`Created`, `PriorTarget`).
-- `rollbackHostWorkspaceMaterialization` (`:229-244`, current `os.Remove` at `:231-233`) restores each
-  repointed entry to its `PriorTarget` (remove + recreate to the prior target) and deletes only
-  genuinely created-new entries.
-- The `hostWorkspaceMaterialization` struct (`:66-73`, constructed at `:171-174`) carries the undo
-  records in place of `created []string`.
-- The two reconcile call sites (`workspace_sources_reconcile.go:32,67`) still ignore the result and
-  are not part of the rollback slice — this bug is confined to the two `materialize*` sites.
+- Undo records carry path/prior target/key/effect generation plus full marker
+  identity, directory fence, environment/session projection, and owner epochs.
+- Every restore/delete reacquires workspace/resource leases and fresh
+  compensation capability. Exact authorization restores/deletes; CAS or marker
+  equality loss leaves successor state untouched and journal recoverable.
+- Marker initialization uses its directory member with absent before/full
+  intended tuple and the same compensation path.
+- Ready reconcile is validation-only and has no rollback slice.
 
 ## Verification
 
@@ -79,12 +73,9 @@ diff before marking done.
 
 ## Results
 
-- Replaced the bare `created []string` rollback tracking with `ownedDirectoryLinkUndo{Path, PriorTarget}` records carried on `hostWorkspaceMaterialization.linkUndo`.
-- `materializeDirectoryLinks`, `materializeWorktreeSources`, and `materializeHostRuntime` now preserve `PriorTarget` from the Task 03 result struct, so rollback can distinguish a brand-new link from a repointed pre-existing one.
-- `rollbackHostWorkspaceMaterialization` now restores repointed entries to their prior target and deletes only genuinely new links, processing the undo records in reverse order.
-- Added `TestWorkspaceSourceMaterializer_RestoresRepointedLinkWhenAdoptionFails`, which seeds a pre-existing owned link, forces adoption failure, and proves the original target is restored rather than deleted.
-- PR #2253 fixup: `rollbackOwnedDirectoryLink` now delegates pre-existing entries to `worktree.RestoreOwnedDirectoryLink`, so rollback uses the same platform-safe replacement path as owned-link repair instead of doing a raw remove-then-create.
-- Added `TestRestoreOwnedDirectoryLinkKeepsCurrentLinkWhenReplacementTargetIsInvalid`, which proves a failed restore request leaves the current owned link intact.
-- Commands:
-  - `cd apps/backend && go test ./internal/backendapp/... ./internal/worktree/...` → all `ok`.
-- External side-effect boundary: rollback removes or recreates Kandev-owned directory links only under the task root, and restores a prior target only for entries this materialization repointed.
+- Historical undo records distinguished create from repoint and restored prior
+  targets. Current workspace-reuse supersedes the authorization boundary:
+  rollback/`RestoreOwnedDirectoryLink` must take a freshly minted compensation
+  capability under both leases; stale epoch/key/revision performs no physical
+  change. Existing restore safety tests remain, plus takeover/newer-mutation
+  tests prove stale rollback cannot overwrite the successor.

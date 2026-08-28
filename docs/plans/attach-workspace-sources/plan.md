@@ -49,14 +49,14 @@ union or materialization contract.
   exactly one repository locator; provider-neutral URL and identity consistency; canonical explicit
   local Git paths; canonical arbitrary directories; branches; duplicates; display-name collisions;
   and idle session/turn state.
-- Resolve or create repository entities through the existing `ResolveRepositoryRef` path so local
-  trust and remote credential rules stay authoritative. Track newly created repository entities for
-  rollback without deleting pre-existing workspace repositories.
-- Persist the batch, call the runtime materializer synchronously, and compensate database plus owned
-  filesystem/runtime entries on failure with a detached bounded context. Publish `task.updated` only
-  after both persistence and materialization succeed.
-- Refactor `AddBranchToTask` into a compatibility adapter over a one-item repository-source request;
-  retain its existing auto-branch naming, duplicate, and slug-collision behavior.
+- Provider/local resolution returns a candidate without inserting. The source
+  transaction atomically persists any new Repository entity, exact task link,
+  and durable repository-entity/link effect members.
+- Materialization uses an environment/projection/attempt/admission/worker/
+  binding/key/row capability; rollback deletes only exact unreferenced entities
+  created by that attempt.
+- `AddBranchToTask` is a one-key compatibility source attempt with identical
+  durable entity/link ownership and active-turn/CWD behavior.
 
 ### HTTP, WebSocket, and MCP contracts
 
@@ -67,10 +67,9 @@ union or materialization contract.
 - Add `workspace.sources.updated` / `session.workspace_sources_updated` event constants and gateway
   routing in `internal/events/types.go`, `pkg/websocket/actions.go`, and
   `internal/gateway/websocket/task_notifications.go`. Emit only after agentctl has adopted the root.
-- Register `add_workspace_sources_kandev` in `internal/mcp/server/server.go` and its backend handler
-  in `internal/mcp/handlers/handlers.go`; default `task_id` to the current task and accept the same
-  batch union as HTTP. Keep `add_branch_to_task_kandev` externally compatible while routing it
-  through the generalized service.
+- Register `add_workspace_sources_kandev` over the batch contract. Keep
+  `add_branch_to_task_kandev` externally compatible while routing it through a
+  one-key source journal/capability and exact rollback.
 
 ### Host materialization
 

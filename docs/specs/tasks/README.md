@@ -18,16 +18,18 @@ move a task through its configured process.
 ## Ownership
 
 This system owns task identity and metadata, task documents and attachments,
-parent and dependency relationships, task creation and launch behavior, task
-runtime state publication, workflow definitions and transitions, completion
+parent and dependency relationships, task creation and launch behavior,
+task-environment ownership and task-scoped worktree lifetime, session binding,
+task runtime state publication, workflow definitions/transitions, completion
 signals, and task-scoped scheduling contracts.
 
 ## Exclusions
 
 - Agent identity, permissions, and runtime profiles belong to the
   [agent system](../agents).
-- Repository and worktree ownership belongs to the
-  [workspace system](../workspaces).
+- Repository catalog identity and Git worktree creation/removal mechanics belong
+  to the [workspace system](../workspaces); task environments own the resulting
+  task-scoped lifecycle references.
 - Office-specific autonomous agent identities and dashboards belong to the
   [Office system](../office).
 - Presentation-only behavior belongs to the [UI specifications](../ui).
@@ -113,6 +115,7 @@ signals, and task-scoped scheduling contracts.
 
 
 - [Attach Workspace Sources](system-design/attach-workspace-sources.md)
+- [Additional Session Workspace Reuse](system-design/additional-session-workspace-reuse.md)
 - [Active clarification lifecycle](system-design/clarification-active-lifecycle.md)
 - [External task ID idempotency operations](system-design/external-id-idempotency-operations.md)
 - [External task ID idempotency](system-design/external-id-idempotency.md)

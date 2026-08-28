@@ -11,7 +11,7 @@ owners:
 
 ## Purpose and boundaries
 
-This design record preserves the technical source for the capability mapped to REQ-TASKS-ATTACH-WORKSPACE-SOURCES-001 while the task system completes its migration.
+Technical source for `REQ-TASKS-ATTACH-WORKSPACE-SOURCES-001`.
 
 ## Requirement mapping
 
@@ -23,24 +23,14 @@ This design record preserves the technical source for the capability mapped to R
 
 ## Why
 
-Tasks often grow beyond the repositories selected at creation time. Users need to add another
-repository or supporting folder without recreating the task, losing conversation context, or
-manually moving files into the task workspace.
+Tasks may grow by attached repositories/folders without recreating or losing context.
 
 ## What
 
-- A repository-backed task exposes one **Workspace actions** menu in the Files panel on desktop and
-  mobile. The menu contains **Add Repositories to workspace** and **Open workspace folder** rather
-  than separate toolbar controls.
-- **Add sources** uses the same repository-selection language as task creation without adding a
-  second mode switch. One **Add repository** menu offers **Workspace repository**, **Local Git
-  repository**, and **Remote repository**; **Add folder** remains a separate action when supported.
-- Subject to the task executor's capabilities, one submission can add one or more mixed sources.
-  **Workspace repository** combines saved workspace repositories and discovered local Git
-  repositories in the shared repository selector, including its refresh and create-repository
-  actions. **Local Git repository** accepts an existing checkout, **Remote repository** reuses the
-  provider-backed and pasted-URL selector from task creation, and **Add folder** offers an arbitrary
-  local folder when supported.
+- Files exposes desktop/mobile **Workspace actions** with **Add Repositories**
+  and **Open workspace folder**. Its shared task-create selector supports saved,
+  local, and remote repositories; supported executors also offer a folder. One
+  submission may mix them.
 - Adding another repository or folder appends a row without hiding or discarding configured rows,
   so one submission can mix workspace, local, remote, and folder sources.
 - Repository rows choose a base branch with the shared task-creation controls. The add-sources UI
@@ -56,6 +46,29 @@ manually moving files into the task workspace.
   and materialized in the current task environment, or none of the new attachments remain. When an
   attachment repointed a pre-existing Kandev-owned entry, a failed submission restores that entry to
   the target it had before the attachment rather than deleting it.
+`task_sources(id PK,task_id,source_key_v1,kind,UNIQUE(task_id,source_key_v1),
+UNIQUE(id,task_id))` is canonical; repository/folder `(source_id,task_id)` composite
+FK prevents cross-task rows. Migration maps/backfills deterministically, collision
+fails, then writers/readers/rollback cut over; ADR/plan boundary is amended.
+- `ValidateOwnedDirectoryLink` is side-effect-free and exclusive to ready reuse.
+  Mutating `EnsureOwnedDirectoryLink` requires an internal capability containing
+  marker task/workspace/task-dir/layout identity, directory resource fence,
+  environment/session identity and revision/projection, attempt/admission/
+  worker epochs, binding generation, intended key, and row revision. Under the
+  resource lease authorization reloads/CASes all fields before every effect,
+  rescan, publication, and compensation.
+- Capabilities are single-use. Successful after-probe/journal CAS returns the
+  next capability with current environment/projection/binding/row revisions;
+  multi-source effects run sequentially and never weaken expected values.
+  `AuthorizeWorkspaceCompensation` capability for current owner/epoch/key/fence;
+  CAS loss leaves recovery to winner.
+- Delivery holds exclusive consumer claim through idempotent apply, checkpoint and
+ACK in one transaction. Generation/reset tuple CASes before and after apply; GC
+cannot install snapshot concurrently. Crash replays inbox event safely; stale/
+out-of-order/duplicate delivery no-ops. Reset-vs-delivery/crash tests pin it.
+- Reservation references immutable `lease_claim_id,lease_epoch`; deadline/
+  heartbeat are mutable lease data. Renewal changes deadline only; takeover
+  rotates claim/epoch and atomically transfers/replays reservation. Tests pin it.
 - Repository attachment works for every executor that can run the task. Arbitrary folders are
   available only to Local and Worktree tasks, where the selected host paths remain live. Container
   and remote pickers do not offer the folder source kind, and the backend rejects a forged folder
@@ -79,14 +92,18 @@ manually moving files into the task workspace.
 - Existing conversations, task state, plan, sessions, and repository attachments remain intact.
 - Agents receive a batch `add_workspace_sources_kandev` MCP tool that uses the same validation and
   materialization path.
-- The existing worktree-only `add_branch_to_task_kandev` tool remains a live compatibility path
-  for one repository/branch source. It may run during the invoking agent turn, creates the new
-  worktree as a sibling under the Kandev-owned task root, promotes the persisted task workspace
-  path to that root, and refreshes Files and repository trackers without restarting the agent or
-  agentctl-managed workspace processes.
-- A legacy add-branch call does not nest the new worktree inside the current repository and does
-  not change the running agent or terminal working directory. Its MCP result returns the exact new
-  worktree path, the promoted task workspace path, and that the agent CWD did not change.
+- The worktree-only `add_branch_to_task_kandev` compatibility lane is also an
+  explicit source mutation. During the invoking turn it atomically claims a
+  source attempt for exactly
+  `repository:<repository_id>:<base_branch>:<checkout_branch>`, journals the
+  full before row/binding and physical effect, and uses the same capability CAS.
+  It may create/repoint only that key, rolls it back exactly on failure, promotes
+  the persisted root, refreshes trackers, and never changes agent/terminal CWD.
+- Repository resolution performs no durable catalog insert before the source
+  transaction. That transaction writes any new workspace Repository entity,
+  exact task link, and `repository_entity`/link journal members atomically.
+  Recovery/rollback deletes an attempt-created entity only at exact identity/
+  revision with no other references; reused entities are never deleted.
 
 Decisions: [ADR-2026-07-22-runtime-mutable-task-workspace-sources](../../../decisions/2026-07-22-runtime-mutable-task-workspace-sources.md)
 [ADR-2026-07-23-workspace-source-root-move-boundary](../../../decisions/2026-07-23-workspace-source-root-move-boundary.md),
@@ -140,20 +157,71 @@ identity or make folders participate in Git operations.
 }
 ```
 
-The response returns the persisted source projection, the effective task workspace path, and the
-affected session IDs. Validation errors return `400`, ownership/not-found errors return `404`,
-contradictory duplicates or an active turn return `409`, and materialization failures return `422` after rollback. Exact normalized retries succeed as no-ops.
+All lanes use `CanonicalProjectionV1`:
 
-The backend publishes `task.updated` with both `repositories` and `workspace_folders`, then emits a
-session-scoped workspace-sources update after agentctl has adopted the new workspace root. Clients
-refresh the Files tree and repository trackers from those events rather than assuming the POST
-response is the only writer.
+```text
+WorkspaceProjectionEnvelope<T> { order {stream_id,stream_epoch,stream_sequence,
+task_id,environment_id,binding_generation,projection_generation,snapshot_epoch,
+snapshot_id,delete_epoch,source_attempt_id,projection_event_id,lane,
+schema_version,lane_version,lane_key,event_kind,authoritative,resync_of,coverage},
+payload T }
+```
 
-Full and summary task-session responses expose `workspace_path` as the effective task workspace
-root. In a multi-source task this is the parent that contains every repository and folder entry;
-`worktree_path` remains the flattened primary-repository path for backward compatibility. Live
-workspace-source and sibling-materialization events update `workspace_path` without replacing the
-primary `worktree_path`, and a later session refresh returns the same effective root.
+CanonicalProjectionV1 frames domain tags/components as big-endian uint64
+length/value UTF-8 bytes; length overflow rejects. Parser rejects duplicate JSON
+members before model decode and numbers outside IEEE-754 safe I-JSON range.
+Recursive strings NFC-normalize; objects use RFC8785. A set sorts
+`(RFC8785(element),length)` and rejects duplicates; ordered arrays preserve
+order. Declared maps serialize as RFC8785 array pairs `[key,value]`, recursively
+normalized and sorted by RFC8785 pair bytes; post-NFC key collisions reject.
+Payload/envelope digests frame version/header/canonical bytes. Go/TS share golden
+vectors for nested maps, non-BMP/NFC collisions, numeric bounds, duplicate keys.
+
+`Select` is commutative: vector dominance, then equal-vector epoch, capture over
+checkpoint, then exact event/digest tie; stale ACKs without clearing, remaining
+differences conflict/resync. Null `(binding,0)` precedes live; state keys
+`(lane,lane_version,lane_key)`.
+
+`TaskRepository` owns:
+
+```text
+workspace_source_projection_lane_sets(
+ id,stream_id NOT NULL,scope_key NOT NULL,scope_kind NOT NULL CHECK(task|environment),
+ task_id NOT NULL,environment_id nullable,current_epoch,encoding_version,revision,
+ PRIMARY KEY(id),UNIQUE(stream_id,scope_key),FK(stream_id,scope_key) scope,
+ CHECK((scope_kind=task AND environment_id IS NULL) OR
+ (scope_kind=environment AND environment_id IS NOT NULL)),FK task/environment owner)
+workspace_source_projection_lane_set_epochs(
+ lane_set_id NOT NULL,epoch NOT NULL,expected_count,manifest_digest,
+ PRIMARY KEY(lane_set_id,epoch),FK(lane_set_id) RESTRICT)
+workspace_source_projection_lane_set_members(
+ lane_set_id NOT NULL,epoch NOT NULL,lane NOT NULL,lane_version NOT NULL,
+ lane_key NOT NULL,PRIMARY KEY(lane_set_id,epoch,lane,lane_version,lane_key),
+ FK(lane_set_id,epoch) lane-set-epoch CASCADE)
+```
+
+Stream/task/environment consistency and immutable epoch parent reject cross-scope/
+stale members. Current pointer advances without touching pending epochs; writer
+snapshots epoch before outbox. Teardown holds global locks then deletes
+reservation->outbox->members->epochs->lane-set before stream. Migration/replay
+reject ownership/epoch mismatch; rotate-with-pending crash/replay is tested.
+Manifest v1 length-prefixes unsigned-UTF8 sorted lane/version/key tuples.
+Coverage/apply follows the canonical admission->stream->lane-set->lane-member->
+publication-claim->outbox->assignment->consumer-claim->snapshot->conflict->
+tombstone->no-reuse order in Additional Session Workspace Reuse. Writers,
+snapshots, GC and delete take its ordered subsets; coordinator leases remain
+outside the UoW. Interleavings test the same graph.
+
+### Projection delivery
+
+Tombstone `(stream_id,delete_epoch,terminal_sequence,stream_generation,digest,
+retired_at)` is irreversible. Consumer/Compare checks it before vector selection;
+retired-generation frames drop. Terminal invalidates reservations/assignments,
+including delayed higher sequence frames. Schedules cover terminal/reconnect.
+Full/summary task/session payloads expose effective `workspace_path`; for
+multi-source tasks it is the parent containing all entries. `worktree_path`
+remains primary-repository compatibility output and is never promoted over a
+newer ordered workspace projection.
 
 Chat file links resolve against `workspace_path`, so an absolute path under any attached source is
 converted to its task-root-relative Files path before it is opened. Clients may fall back to
@@ -161,33 +229,18 @@ converted to its task-root-relative Files path before it is opened. Clients may 
 outside the effective workspace remain non-actionable and are never rewritten into a workspace
 file request.
 
-`add_workspace_sources_kandev` accepts the same source union and defaults `task_id` to the current
-task. The caller may target only itself or a same-workspace direct child. The task MCP server injects
-the bound caller task/session provenance and the backend verifies it before mutation; provenance is
-not an agent-supplied tool argument. Exact normalized repository and folder retries are idempotent,
-while contradictory source identities remain conflicts. See ADR
-[`2026-08-19-parent-authorized-child-workspace-sources`](../../../decisions/2026-08-19-parent-authorized-child-workspace-sources.md).
+`add_workspace_sources_kandev` accepts the same union/provenance/idempotency
+rules as POST and returns `WorkspaceProjectionEnvelope<WorkspaceSourcesResult>`,
+the shared payload plus environment/vector/attempt/event/authoritative metadata.
+Kandev MCP/session/UI consumers run `Compare`; incomparable or legacy missing
+metadata requests canonical resync before applying. Agent-readable output alone
+is informational and never mutates a client projection.
 
-`add_branch_to_task_kandev` preserves its existing request arguments and returns:
-
-```json
-{
-  "id": "task-repository-id",
-  "task_id": "task-id",
-  "repository_id": "repository-id",
-  "base_branch": "main",
-  "checkout_branch": "feature/example",
-  "position": 1,
-  "worktree_path": "/absolute/task-root/repository-feature-example",
-  "task_workspace_path": "/absolute/task-root",
-  "agent_cwd_changed": false
-}
-```
-
-`worktree_path` and `task_workspace_path` are omitted when a pre-launch attachment succeeds but
-materialization is intentionally deferred until the task launches. `agent_cwd_changed` is always
-false. A live call returns the materialized sibling path so the invoking agent can address it
-without inferring a directory name.
+`add_branch_to_task_kandev` returns `CanonicalProjectionV1`; absent environment/
+snapshot/coverage values are null, never empty/zero. Deferred results retain
+their real binding/attempt/event metadata and null unavailable fields. Every
+result passes registry validation and `Compare`; textual agent output is
+informational only.
 
 ## Permissions
 
@@ -212,11 +265,10 @@ persisted in source URLs or copied into agent-visible metadata.
 | An idle agent must restart to adopt the promoted root          | The intentional stop is not shown as a prior agent failure; the replacement agent uses the promoted task root.                                      |
 | A requested file move or rename crosses canonical source roots | The request is rejected before either source is mutated.                                                                                            |
 | A persisted local folder later disappears                      | The current live environment keeps its existing materialization; a new/reset environment surfaces the missing source and does not silently omit it. |
-| The client disconnects during materialization                  | Rollback runs on a detached bounded context and the eventual task event reflects durable state.                                                     |
-| A Kandev-owned task-root entry already points at a different directory than the current durable spec (e.g. a stale entry left by an earlier launch) | Because the task root is Kandev-owned and the entry is a directory link, reconciliation repoints it to the current spec target and the launch/resume proceeds; it does not fail closed forever. |
-| A Kandev-owned task-root entry's ownership marker names a different task than the one reconciling | Reconciliation does not repoint the entry; it fails closed with a marker-conflict error and leaves the other task's entry pointing at its existing target. |
-| A multi-source attachment that repointed a pre-existing owned entry later fails during materialization | Rollback restores each repointed entry to the target it had before the attachment and deletes only entries this attachment created; no pre-existing entry is left deleted. |
-| A safe replacement would overwrite a non-owned or out-of-root entry, or its recreate fails after removal | A non-owned or changed entry, or a traversal path, is rejected before any removal, and a failed recreate restores the entry to its prior target rather than leaving it missing. |
+| A Kandev-owned task-root link differs from durable spec | Initial materialization or explicit source mutation may repoint under journal/fences; ready reuse fails `workspace_reuse_unsafe`. |
+| Ownership marker names another task | Fail closed marker-conflict; leave its target unchanged. |
+| Repoint batch fails | Journal restores prior targets and deletes only created entries; no pre-existing entry is deleted. |
+| Safe replacement fails | Windows member persists typed prior target/identity/proof, backup path, generation fence and phase `replace_planned->removed->restored|replaced|unsafe`. Recovery probes intended replacement first, restores exact prior only if needed, retains admission on missing/ambiguous, and deletes backup only after verified terminal outcome. Crash/remove/recreate/restore-failure/takeover junction schedules pin it. |
 
 ## Persistence guarantees
 
@@ -300,6 +352,9 @@ persisted; every relaunch and resume of that task reuses the persisted name.
 - **GIVEN** a live legacy add-branch materialization fails, **WHEN** the MCP call returns an error,
   **THEN** the new `task_repositories` row and any newly created repository entity are rolled back
   while the agent and existing processes continue running.
+- **GIVEN** the marker changes after the cheap preflight, **WHEN** ready source
+  mutation reaches its lease-held check, **THEN** it returns unsafe/reset with no
+  admission, journal, catalog/link, outbox, physical, or response-projection row.
 - **GIVEN** a source identity conflicts with an already attached repository/branch or canonical folder,
   **WHEN** it is submitted, **THEN** the request returns a conflict and leaves the task unchanged.
 - **GIVEN** the same normalized repository/branch or canonical folder is already attached, **WHEN** it is
@@ -318,11 +373,17 @@ persisted; every relaunch and resume of that task reuses the persisted name.
   different task-root directory names; if a residual suffix collision occurs, the ownership marker
   rejects cross-task repointing with a marker-conflict error rather than redirecting the other task's
   entries.
-- **GIVEN** a local task whose persisted task root already contains a Kandev-owned directory-link
-  entry for a repository that points at a different directory than the current durable spec target,
-  **WHEN** the task launches or resumes, **THEN** reconciliation repoints the owned entry to the
-  current spec target and the launch/resume proceeds instead of failing with an owned-link target
-  mismatch on every attempt.
+- **GIVEN** a ready environment and POST/MCP add-sources request whose
+  request-touched owned link differs from its intended target, **WHEN** the
+  source attempt owns admission and validates marker/generation, **THEN** it
+  journals and atomically repoints that link.
+- **GIVEN** the same mismatch during session attach, ready launch/resume, or
+  restore, **WHEN** reuse validation runs, **THEN** no physical repair occurs and
+  it returns `workspace_reuse_unsafe` with reset action.
+- **GIVEN** legacy `add_branch_to_task_kandev` creates a catalog Repository,
+  **WHEN** crash/cancellation occurs before link completion, **THEN** the durable
+  repository-entity/link members resume or delete only the exact unreferenced
+  entity and retry is idempotent.
 - **GIVEN** a Kandev-owned task-root entry that is not a directory link (a real file or directory a
   reconcile did not create), **WHEN** the task launches or resumes, **THEN** reconciliation does not
   delete or overwrite it and the launch surfaces an error identifying the conflicting entry.
@@ -333,9 +394,10 @@ persisted; every relaunch and resume of that task reuses the persisted name.
 - **GIVEN** a multi-source attachment that repointed a pre-existing Kandev-owned entry, **WHEN** a
   later source in the same submission fails to materialize, **THEN** rollback restores the repointed
   entry to its prior target and no pre-existing entry is left deleted.
-- **GIVEN** a Kandev-owned entry whose recreate could fail after the old link is removed, **WHEN**
-  reconciliation replaces it, **THEN** a traversal or out-of-root name is rejected before any removal
-  and a failed recreate leaves the original entry intact rather than missing.
+- **GIVEN** initial materialization or an explicit source attempt replaces an
+  owned entry, **WHEN** recreate can fail after old-link removal, **THEN**
+  containment rejects before removal and the durable replacement protocol
+  restores or enters reset-required unsafe state, never ready reuse repair.
 
 ## Out of scope
 

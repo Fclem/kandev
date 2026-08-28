@@ -11,18 +11,21 @@ owners:
 
 ## Purpose
 
-The workspace system owns workspace lifecycle, repositories, worktrees,
-branches, workspace secrets, and workspace-scoped execution context.
+The workspace system owns workspace lifecycle, repository catalog identity, Git
+worktree creation/removal mechanics, branches, workspace secrets, and
+workspace-scoped execution context.
 
 ## Ownership
 
-This system owns workspace creation and deletion, repository attachment,
-repository sets, local repositories, branch templates, secrets, and workspace
-Git state.
+This system owns workspace creation/deletion, repository attachment and sets,
+local repository records, branch templates, secrets, workspace Git state, and
+the filesystem/Git operations used when the task system materializes or cleans
+task-owned worktrees.
 
 ## Exclusions
 
-- Task-owned worktree lifetime belongs to the [task system](../tasks/README.md).
+- Task environments, session binding, and task-scoped worktree lifetime belong
+  to the [task system](../tasks/README.md).
 - Provider credentials belong to the [integration system](../integrations/README.md).
 - Workspace settings presentation belongs to the [UI system](../ui/README.md).
 

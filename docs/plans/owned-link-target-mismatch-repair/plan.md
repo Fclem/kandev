@@ -23,10 +23,11 @@ This fix has two parts, in dependency order:
    ID so distinct tasks normally resolve to different task roots, while the ownership marker guards
    the residual collision case; the persisted name remains reproducible across launch/resume without
    relying on a stored random value.
-2. **Self-heal (defense in depth):** inside a Kandev-owned task root, `EnsureOwnedDirectoryLink`
-   repoints an existing Kandev-owned *directory-link* entry on target mismatch instead of failing
-   closed forever. A non-link entry still fails closed. This is scoped to the owned task root and does
-   **not** change the self-referential-entry behavior inside a user's own repository.
+2. **Owned-link primitive (defense in depth):** `EnsureOwnedDirectoryLink` can
+   safely repoint an owned directory-link. The current workspace-reuse contract
+   supersedes the original caller scope: only creating materialization or an
+   explicit journaled source mutation may call the mutating path; ready
+   attach/launch/resume/restore validates and returns unsafe/reset on mismatch.
 
 ## Confirmed root cause
 
@@ -61,18 +62,14 @@ This fix has two parts, in dependency order:
 - Persisted `task_dir_name` reuse on resume is unchanged; the deterministic suffix simply makes the
   fallback reproducible and collision-resistant across tasks.
 
-### Area 2 — Owned-link self-heal on mismatch (Task 02)
+### Area 2 — Owned-link mutation primitive (Task 02)
 
-- In `apps/backend/internal/worktree/directory_link.go`, change `EnsureOwnedDirectoryLink` so that when
-  the existing entry **is** a platform directory link (`isPlatformDirectoryLink`) but `os.SameFile`
-  reports a different target, it removes the link and recreates it via `CreateOwnedDirectoryLink`
-  (returning `created=true`), rather than returning `owned link target mismatch`. A non-link entry
-  still returns the existing `owned link entry already exists` error (never deleted/overwritten).
-- Removal is safe here: the entry lives under a Kandev-owned task root (built by `mkdirOwned` through
-  real, non-symlink ancestors), and a directory link is a pointer, not content. This is distinct from
-  `IsSelfReferentialDirectoryLink` / `warnSelfReferentialEntry`, which stay report-only because they
-  concern entries inside the **user's own** repository — leave that path unchanged.
-- Keep the doc comment on `EnsureOwnedDirectoryLink` accurate to the new repoint-on-mismatch behavior.
+- `EnsureOwnedDirectoryLink` safely replaces a mismatched platform-owned link
+  and returns its prior target for rollback; non-link entries remain untouched.
+- Caller authorization is external and mandatory. Creating materialization or
+  explicit source mutation holds admission/journal/resource fences and may call
+  it only for intended resource keys. Ready reuse paths must not call it.
+- The primitive remains distinct from report-only entries inside user repos.
 
 ---
 

@@ -30,80 +30,44 @@ preserving independent session runtime state.
   modify the shared workspace.
 - **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.3:** Each attached session
   shall receive independent execution identity and runtime state.
-- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.4:** Unsafe or unsupported
-  reuse shall fail with a typed, recoverable API error without creating a
-  session or replacement workspace.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.4:** Unsafe reuse shall
+  return a typed recoverable reset error; unsupported reuse shall return a typed
+  non-retryable `choose_executor` error. Neither shall create a session or
+  replacement workspace.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.5:** The materializing
+  session, Files surface, Changes surface, terminals, and later attached or
+  restored sessions shall resolve the same canonical task-environment workspace
+  and repository worktree paths before and after a backend restart.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.6:** A successful worktree
+  launch shall persist its complete physical repository tuple before the
+  environment is reusable. Session launch or recovery shall not replace a
+  concrete worktree path with the source repository checkout or an
+  inventory-only row.
 
-## Migrated source detail
-
-## Why
-
-An additional session belongs to an existing task workspace. Treating it as a
-new worktree materialization can collide with the branch already checked out by
-the task and can hide or modify uncommitted work from the new agent.
-
-## What
-
-- `task_environments` owns the workspace. `task_environment_repos` is the sole
-  physical worktree inventory; sessions only reference `task_environment_id`.
-- The first eligible launch may materialize a workspace. Every later session
-  attaches to the ready canonical environment and its exact repository/branch
-  inventory.
-- Attach-only preparation does not create, recreate, clone, fetch, pull,
-  checkout, reset, run repository setup, configure contribution state, or copy
-  files. It preserves both tracked and untracked working-tree changes.
-- Multiple agents may write the shared workspace concurrently. This does not
-  imply a task-wide writer lock or a filesystem read-only capability.
-- A session name, review state, or reviewer profile does not grant a special
-  filesystem mode. Workspace-only restore/view may attach without launching an
-  additional mutating agent.
-
-## Workspace state matrix
-
-| Mode | Canonical environment | Result |
-| --- | --- | --- |
-| `new_workspace` | none | Elect one initial materializer. |
-| `new_workspace` | `creating` | Return recoverable `workspace_preparing`; do not create a session or workspace. |
-| `new_workspace` | ready and complete | Attach with `reuse_required`. |
-| `inherit_parent` | parent/group ready and complete | Attach to that environment. |
-| `inherit_parent` | missing or unsafe | Return a reuse error; never create a child environment. |
-| `shared_group` | none | Atomically elect one group materializer. |
-| `shared_group` | creating | Return recoverable `workspace_preparing`. |
-| `shared_group` | ready and complete | Attach to the group environment. |
-
-An incomplete, failed, deleted, path-mismatched, branch-mismatched, or
-duplicate repository slot is `workspace_reuse_unsafe`. An executor that cannot
-create an independent session runtime against the validated environment returns
-`workspace_reuse_unsupported`.
-
-## Executor boundary
-
-The environment contributes only stable workspace handles. A new session always
-gets independent execution identity: agentctl/process and ACP state for host
-execution; agentctl instance for Docker; session directory, PID, port and
-forward for SSH; and corresponding per-session runtime state for Sprites.
-Sibling `PreviousExecutionID` data is never a workspace identity.
-
-## API failure contract
-
-`spawn_session_kandev` maps typed workspace state errors to `CONFLICT` with a
-stable `reason`, `recoverable` boolean, and bounded retry guidance. It never
-includes a path, branch, secret, token, or executor credential in those
-details. Its successful response shape and profile precedence do not change;
-an optional session name remains best effort after a successful launch.
-
-## Scenarios
-
-- A named or unnamed additional session sees the same uncommitted tracked and
-  untracked files as the task's first session.
-- Git worktree inventory, HEAD, index, branch and status remain unchanged by
-  an additional launch.
-- A terminal primary or zero-session task can reuse its retained ready
-  environment.
-- A preparing or unsafe environment fails before lifecycle preparation and does
-  not silently repair or replace the workspace.
-- Every current repository/branch slot must have exactly one active canonical
-  row before an attach-only launch begins.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.7:** Attaching an
+  additional session shall not change the canonical workspace's Git HEAD,
+  branch, index, tracked files, untracked files, or repository registration.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.8:** A canonical
+  persistence failure or process crash shall leave no permanently ready partial
+  environment or runnable session. Recovery shall complete or roll back the
+  interrupted attempt before new launches, and a stale attempt shall not
+  overwrite or fail a newer successful attempt.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.9:** A failed resume shall
+  restore the prior session and credential state. A failed prepare-only launch
+  shall preserve its prior non-running session state.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.10:** Failure compensation
+  shall durably remove resources created by the failed attempt, restore
+  resources that the attempt recreated, and leave reused resources unchanged,
+  including mixed multi-repository workspaces and backend restart during the
+  attempt.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.11:** Reuse errors shall
+  expose stable `reason`, `recoverable`, `retry_after_ms`, and `action` details
+  without revealing filesystem paths, branches, credentials, tokens, or
+  executor secrets.
+- **AC-TASKS-ADDITIONAL-SESSION-WORKSPACE-REUSE-001.12:** An explicit source
+  mutation may claim an idle ready environment and complete while concurrent
+  reuse receives the typed preparing result. Derived projection repair shall
+  remain physically read-only and bind only after its fenced update succeeds.
 
 ## Out of scope
 

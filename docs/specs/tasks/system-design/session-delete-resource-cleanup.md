@@ -237,10 +237,15 @@ stopped session -> quiesced runtime -> session/reference deletion -> task retain
 Task lifecycle cleanup follows:
 
 ```text
-active task -> prepared cleanup barrier -> complete inventory snapshot
-            -> archive/delete mutation -> pending durable worker
-            -> running -> succeeded | retry_wait | failed
+active -> prepared barrier -> inventory -> archive/delete -> pending -> running
+       -> succeeded | retry_wait | failed
+unarchive/task-active + cancellation(cancelling) -> cancelled | retry_wait
+eighth failure -> recovery_required(outcome failed_unarchive)
+       -> reset_resolved | manual_resolution
 ```
+
+One admission->job->member->cancellation UoW owns those atomic changes; launch/
+source mutation remains gated until resolution and recovery uses fresh claim.
 
 Session creation and canonical environment-repository persistence serialize with
 the owning task row and check for an active prepared task cleanup barrier.

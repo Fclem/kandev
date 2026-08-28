@@ -118,9 +118,12 @@ worktrees, or executor rows behind and the machine slowly runs out of memory.
   for 1 minute, 5 minutes, 15 minutes, 1 hour, 3 hours, 6 hours, and 12 hours
   before the next claim. An eighth failed attempt becomes terminal `failed`
   instead of scheduling another retry.
-- Archive cleanup revalidates that the task remains archived before every
-  destructive step. Unarchiving a task cancels its pending archive cleanup so a
-  delayed retry cannot remove the newly active task's resources.
+Cancellation and job transition atomically under job/admission/worker/cancellation/
+barrier CAS: cancel terminalizes job as cancelled and excludes scheduler; retry
+sets both retry_wait; attempt eight sets job failed plus cancellation
+recovery_required/failed_unarchive with barrier retained. Recovery fresh-claims
+same tuple and becomes reset_resolved/manual_resolution. Restart/takeover never
+claims cancelled job; schedules cover worker-before/after cancel and attempt eight.
 - Cleanup preserves historical archived-task worktree records and branch metadata
   used by unarchive recovery. Filesystem removal does not imply recovery-history
   removal.
@@ -193,20 +196,35 @@ migration lock. The migration never performs filesystem or Git cleanup.
 
 ### `task_resource_cleanup_jobs`
 
-`task_resource_cleanup_jobs` is the durable task-lifecycle cleanup intent. It has
-no foreign key to `tasks`, so delete cleanup survives deletion of the owning row.
-It stores the trigger, state, retry timing, last error, and a JSON snapshot of the
-runtime, environment, worktree, and path handles captured before task mutation.
-Only one non-terminal row exists for an operation ID; repeated event delivery
-reuses the same cleanup job. `attempts` counts successful worker claims. A
-terminal `failed` row retains its final error and completion timestamp for
-diagnosis but is not selected by the automatic worker.
+`task_resource_cleanup_jobs` is durable task-lifecycle cleanup intent without a
+task FK. Besides trigger/state/retry/error/resource snapshot, it stores admission
+owner token/generation, cleanup worker token/incarnation/claim epoch, DB-clock
+deadline/heartbeat, and required integration ack set. One nonterminal operation
+ID exists; retries retain identity. `attempts` counts successful fenced claims;
+terminal failure retains error/completion.
 
-A prepared task-lifecycle cleanup job also acts as a durable creation barrier.
-The barrier is reserved before resource inventory is captured. Session creation
-and physical worktree persistence serialize against the task row and refuse new
-ownership while archive/delete preparation is active. The barrier transaction
-never holds filesystem, target-path, or repository Git locks.
+Every cleanup/recovery operation selects identities without DB locks, takes
+sorted coordinator leases, then opens global-order UoW admission->job->member->
+cancellation before any projection relation, revalidates and journals. It
+releases DB locks before physical effect, then repeats lease/UoW/CAS. No DB lock
+waits on coordinator lease. Takeover rotates admission/job/cancellation epochs;
+final CAS includes all three plus member/barrier. Schedules pin stale rejection.
+
+All keys use stable `WorkspaceResourceCoordinator` identity with fence separate:
+environment ID fenced by revision/projection; executor/runtime ID by generation;
+manager/worktree ID by manager generation; canonical directory path by marker
+generation; daemon/container ID by runtime/bootstrap generation; provider/
+sandbox ID by runtime generation; integration/task/intent by barrier revision.
+Keys never contain these mutable generations. The namespace is global across
+tasks/jobs/processes. Under exclusive lease owner CAS allocates cleanup/tombstone
+generation; mismatch supersedes without effect.
+
+A cleanup job is a durable creation barrier reserved before inventory capture;
+creation/worktree persistence refuse new ownership while active. Owner-delete
+uses select->sorted coordinator leases->admission/job/member/cancellation UoW,
+never holding DB/filesystem/Git locks across a lease/effect. `restore_pending|
+unsafe` defers archive/delete as reset-required; only reset_resolved|compensated
+releases barrier. Crash/delete/reset/takeover recheck exact member CAS.
 
 ## API Surface
 
@@ -255,16 +273,20 @@ Allowed transitions:
 - `stop_requested` -> `retryable_failure` on timeout or uncertain runtime state.
 - `retryable_failure` -> `stop_requested` on the next cleanup attempt.
 
-The durable cleanup job wraps that resource lifecycle:
+The cleanup job wraps each effect in a fenced member:
 
-- `pending` -> `running` when the cleanup worker claims the job.
-- `running` -> `succeeded` when runtime and owned resource cleanup finish.
-- `running` -> `retry_wait` when bounded cleanup fails and the resource snapshot
-  must be retried and fewer than eight claims have run.
-- `running` -> `failed` when the eighth claimed attempt fails.
-- `retry_wait` -> `running` on the next scheduled retry or manual storage run.
-- `pending|running|retry_wait` -> `cancelled` when an archive-triggered cleanup
-  observes that its task has been unarchived.
+- claim pending/retry/expired-running by rotating worker epoch/deadline;
+- acquire globally keyed `CleanupResourceLease`; CAS exact owner-side generation
+  plus admission/job/member identities; allocate intended generation and record
+  `effect_pending`; hold through effect, after-probe, and member CAS;
+- takeover uses the same lease, exact before/intended/after probe, and either
+  adopts to its epoch or supersedes on generation mismatch;
+- success requires terminal members/acks; bounded failure retries, eighth fails,
+  and unarchive may cancel archive cleanup.
+
+A delayed worker that passed precheck cannot race takeover: takeover waits on
+the lease and reconciles its after-state; stale after-probe/ack/job callbacks
+fail epoch CAS and cannot touch a successor generation.
 
 ## Failure Modes
 

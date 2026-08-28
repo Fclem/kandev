@@ -25,11 +25,16 @@ containment before any removal and make the replacement safe against create-fail
 - **Unix**: the new link is created at a temp sibling name and `os.Rename`d over the target — a single
   atomic swap that also closes the check→remove→create window. The temp+rename helper lives in
   `directory_link_unix.go` beside the existing `os.Symlink` path.
-- **Windows**: because a junction cannot be atomically renamed over an existing target, keep
-  remove-then-create but restore the prior link (best-effort recreate to `PriorTarget` from the Task
-  03/04 result) if the create fails, so the entry is never left missing when the prior target is
-  known. This lives in `directory_link_windows.go` beside `createPlatformDirectoryLink`
-  (`os.Mkdir` + `CreateFile` + `DeviceIoControl FSCTL_SET_REPARSE_POINT`).
+- **Windows**: junctions cannot atomically overwrite. Before removal, persist a
+  verified prior-link backup in the source journal. The exclusive coordinator
+  path lease is non-stealable while remove/create runs; takeover cancels/joins the
+  effect before recovery, so a stale syscall cannot remove successor state.
+- Protected `restore_pending|unsafe` reset claims the exact member under the
+  physical admission, transitions it reset-owned, and may restore/retire only
+  after exact member/attachment CAS, no references, and owned root empty.
+  Nonrecoverable prior absence needs explicit authorization; otherwise retain
+  unsafe. Reset-after-restart, pause-before-remove/recreate, crash, stale owner,
+  archive/delete blocking schedules pin it.
 - `CreateOwnedDirectoryLink`'s canonicalize / `mkdirOwned` / `verifyCreatedOwnedDirectoryLink` path
   is unchanged for the genuine create-new case.
 
@@ -40,19 +45,20 @@ cd apps/backend
 go test ./internal/worktree/... ./internal/agent/runtime/lifecycle/...
 golangci-lint run ./internal/worktree/... --timeout=5m
 ```
+(Required `backend-tests` Windows gate probes `New-Item -ItemType Junction` in a
+junction-capable temp root and runs `go test ./internal/worktree/...`, including
+interrupted replacement/recovery; missing junction support fails the gate.)
 
 ## Files likely touched
 
 - `apps/backend/internal/worktree/directory_link.go` (reorder containment ahead of the destructive
   remove; call into the platform atomic-replace helper)
 - `apps/backend/internal/worktree/directory_link_unix.go` (temp-sibling + `os.Rename` helper)
-- `apps/backend/internal/worktree/directory_link_windows.go` (remove-then-create with restore-on-
-  failure to the prior target)
-- `apps/backend/internal/worktree/directory_link_test.go`:
-  - traversal name (`../x`) rejected before any removal
-  - recreate-failure leaves the **original** link intact (restored)
-  - the deterministic swap-race (already partly covered by `removeInspectedDirectoryLink`) still fails
-    closed
+- `apps/backend/internal/worktree/directory_link_windows.go` (remove/create plus durable restore)
+- `apps/backend/internal/worktree/directory_link_test.go`: traversal-before-remove, original-link
+  restoration, swap race, crash-after-remove, repeated failure, vanished target,
+  stale takeover, admission retention, and restart each hold `restore_pending`
+  until verified restoration.
 
 ## Dependencies
 
@@ -79,6 +85,11 @@ blockers, risks, and task/plan status updates in the same conversation. Reconcil
 touched** with the actual diff before marking done.
 
 ## Results
+> Historical completion record. It predates the later durable Windows
+> `restore_pending|unsafe` protocol above and is not evidence that those new
+> acceptance criteria are implemented; the updated work order and Windows CI
+> verification are authoritative for the next implementation.
+
 
 - `EnsureOwnedDirectoryLink` now resolves the owned entry path through `ownedDirectoryLinkPath(root, name)` before any filesystem mutation, so traversal and out-of-root names fail before a repoint can touch an existing entry.
 - The repoint path now canonicalizes the replacement target before acting, then delegates to platform-specific replacement helpers:

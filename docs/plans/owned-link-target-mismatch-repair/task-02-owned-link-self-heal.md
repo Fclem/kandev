@@ -11,20 +11,23 @@ parallelism: sequential
 
 # Task 02: Self-heal owned directory-link on target mismatch
 
-Inside a Kandev-owned task root, an existing Kandev-owned directory-link whose target differs from the
-current durable spec must be repointed, not treated as a permanent failure. This is defense in depth
-so a task that already wedged on a stale entry self-heals on the next launch/resume.
+Inside a Kandev-owned task root, the primitive safely repoints a mismatched
+platform-owned directory link. Current caller scope supersedes the original
+next-launch/resume self-heal: only creating materialization or an explicit
+journaled source mutation may mutate; ready reuse validates and fails unsafe.
 
 ## Acceptance
 
-- `EnsureOwnedDirectoryLink` (`apps/backend/internal/worktree/directory_link.go`) repoints an existing
-  entry when it **is** a platform directory link but `os.SameFile(actual, expected)` is false: it
-  removes the link and recreates it to the current target, returning `created=true` with no error.
+- Mutating `EnsureOwnedDirectoryLink` requires current workspace-mutation
+  capability plus ownership, repoints only the authorized key, and returns
+  `created=true`; stale or wrong-key capability leaves the link unchanged.
 - A non-link entry (real file/directory) at the same path still returns an error and is neither
   deleted nor overwritten.
 - The self-referential-entry path (`IsSelfReferentialDirectoryLink` / `warnSelfReferentialEntry`) is
   unchanged — those concern entries inside a user's own repository and stay report-only.
 - The `EnsureOwnedDirectoryLink` doc comment reflects the new repoint-on-mismatch behavior.
+- Caller tests prove ready attach/launch/resume/restore uses the side-effect-free
+  validator; explicit source mutation requires matching capability/key.
 
 ## Verification
 

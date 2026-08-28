@@ -441,16 +441,18 @@ its own origin-contract and webview verification.
   tables; ceremony endpoints with the explicit verification contract
   (expected origin, RP ID, stored challenge, ceremony type, user binding);
   atomic single-use challenge consumption; counter/credential-flag rules;
-  reauthentication gate for enrollment/removal; unit tests for all of the
-  above. No UI change yet.
+  reauthentication gate for enrollment/removal; login rate limiting on the
+  public passkey endpoints from day one (extending the existing
+  password-login limiter, since these routes are public); unit tests for all
+  of the above. No UI change yet.
 - **Phase 2 (frontend, ~2-3 days)**: `passkeysAvailable` in `StatePayload` /
   boot payload; login-page passkey button; Settings > Account passkey
   enrollment/management with reauthentication; i18n; E2E
   `auth/passkeys.spec.ts` with a virtual authenticator.
 - **Phase 3 (desktop, hosted, docs; ~2-3 days)**: desktop origin-contract
   change to a valid loopback hostname + per-platform webview verification;
-  hosted TLS guidance and RP ID/origin configuration docs; rate limiting;
-  `security.md` correction; feature-status docs.
+  hosted TLS guidance and RP ID/origin configuration docs; `security.md`
+  correction; feature-status docs.
 - Total: roughly 2 to 3 weeks of focused effort by one engineer, using the
   standard Go/TS test conventions. No new infra, no new long-lived secrets.
 

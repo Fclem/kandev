@@ -33,11 +33,12 @@ import { findUnreadDividerItemId, lastRenderedMessageId } from "@/lib/session-un
 import { useDockviewStore } from "@/lib/state/dockview-store";
 import { useSessionReadTracking } from "./chat/use-session-read-tracking";
 import { useDrainOlderMessages } from "@/components/task/chat/use-drain-older-messages";
-import { useAppStore } from "@/components/state-provider";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { getSessionWorkspacePath } from "@/lib/session-workspace-path";
 import { routePanelMouseDown } from "./chat/route-panel-mouse-down";
 import { useTranslation } from "react-i18next";
 
+import { loadMessageWindowAround } from "@/hooks/domains/session/load-message-window";
 /**
  * Cap on how many extra pages the last-prompt background lookup will fetch
  * (see the `lastPromptLookupPagesRef` effect below) before giving up and
@@ -276,6 +277,9 @@ export function useScrollTargetConsumption({
   const scrollTarget = useDockviewStore((state) => state.scrollTarget);
   const clearScrollTarget = useDockviewStore((state) => state.clearScrollTarget);
   const clearScrollTargetForOwner = useDockviewStore((state) => state.clearScrollTargetForOwner);
+  const appStore = useAppStoreApi();
+  const [jumpLoading, setJumpLoading] = useState(false);
+  const jumpRequestCount = useRef(0);
   const previousSessionId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -321,11 +325,35 @@ export function useScrollTargetConsumption({
         if (!latest || latest.token !== scrollTarget.token) return;
         if (messageListRef.current?.scrollToMessage(scrollTarget.messageId, { align: "start" })) {
           clearScrollTarget(scrollTarget.token);
+          return;
         }
+        const loaded = appStore
+          .getState()
+          .messages.bySession[
+            scrollTarget.sessionId
+          ]?.some((message) => message.id === scrollTarget.messageId);
+        if (loaded) return;
+        jumpRequestCount.current += 1;
+        setJumpLoading(true);
+        void loadMessageWindowAround(
+          scrollTarget.sessionId,
+          scrollTarget.messageId,
+          () => useDockviewStore.getState().scrollTarget?.token === scrollTarget.token,
+          appStore,
+        )
+          .then((result) => {
+            if (result.kind !== "merged") clearScrollTarget(scrollTarget.token);
+          })
+          .catch(() => clearScrollTarget(scrollTarget.token))
+          .finally(() => {
+            jumpRequestCount.current -= 1;
+            setJumpLoading(jumpRequestCount.current > 0);
+          });
       });
     });
     return () => cancelAnimationFrame(frame);
   }, [
+    appStore,
     clearScrollTarget,
     isInitialMessagesLoading,
     isVisible,
@@ -335,6 +363,7 @@ export function useScrollTargetConsumption({
     resolvedSessionId,
     scrollTarget,
   ]);
+  return jumpLoading;
 }
 
 // eslint-disable-next-line complexity, max-lines-per-function -- composes many sub-panels; each concern already factored into its own hook
@@ -356,6 +385,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
   const isArchived = useIsTaskArchived();
   const chatInputRef = useRef<ChatInputContainerHandle>(null);
 
+  const { t } = useTranslation();
   useSettingsData(true);
   const panelState = useChatPanelState({
     sessionId,
@@ -380,12 +410,6 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     pendingClarification,
     pendingClarificationGroup,
   } = panelState;
-  const dividerBeforeItemKey = useUnreadDividerBeforeItemKey(
-    resolvedSessionId,
-    isVisible,
-    groupedItems,
-    isInitialMessagesLoading,
-  );
   const showAgentStartHint = useComposerAgentStartHint(
     resolvedSessionId,
     session?.state,
@@ -397,7 +421,13 @@ export const TaskChatPanel = memo(function TaskChatPanel({
 
   const panelRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<MessageListHandle>(null);
-  useScrollTargetConsumption({
+  const dividerBeforeItemKey = useUnreadDividerBeforeItemKey(
+    resolvedSessionId,
+    isVisible,
+    groupedItems,
+    isInitialMessagesLoading,
+  );
+  const isJumpLoading = useScrollTargetConsumption({
     resolvedSessionId,
     isVisible,
     panelId,
@@ -563,6 +593,14 @@ export const TaskChatPanel = memo(function TaskChatPanel({
             ) : undefined
           }
         />
+        {isJumpLoading && (
+          <div
+            data-testid="transcript-jump-loading"
+            className="absolute right-3 top-3 rounded-md bg-background px-2 py-1 text-xs text-muted-foreground shadow"
+          >
+            {t("task:loading")}
+          </div>
+        )}
         <SessionSearchOverlay search={search} agentLabel={agentLabel} agentName={agentName} />
       </PanelBody>
       {!isArchived && (

@@ -167,38 +167,64 @@ func (h *MessageHandlers) registerWS(dispatcher *ws.Dispatcher) {
 }
 
 type listMessagesParams struct {
-	before    string
-	after     string
-	sort      string
-	limit     int
-	paginated bool
+	before     string
+	after      string
+	around     string
+	sort       string
+	authorType string
+	limit      int
+	paginated  bool
 }
 
 func (h *MessageHandlers) parseListMessageParams(c *gin.Context) (listMessagesParams, bool) {
 	before := c.Query("before")
 	after := c.Query("after")
+	around := c.Query("around")
 	sort := strings.ToLower(strings.TrimSpace(c.Query("sort")))
-	limitProvided := strings.TrimSpace(c.Query("limit")) != ""
+	authorType, authorTypeProvided := c.GetQuery("author_type")
+	authorType = strings.TrimSpace(authorType)
+	rawLimit, limitProvided := c.GetQuery("limit")
 	if before != "" && after != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "only one of before or after can be set"})
+		return listMessagesParams{}, false
+	}
+	if around != "" && (before != "" || after != "") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only one of before, after or around can be set"})
+		return listMessagesParams{}, false
+	}
+	if authorTypeProvided && authorType != string(models.MessageAuthorUser) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": `author_type must be "user"`})
+		return listMessagesParams{}, false
+	}
+	if around != "" && authorType != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "author_type cannot be combined with around"})
 		return listMessagesParams{}, false
 	}
 	if sort != "" && sort != "asc" && sort != "desc" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "sort must be asc or desc"})
 		return listMessagesParams{}, false
 	}
+	if around != "" && sort != "" && sort != "desc" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sort must be desc with around"})
+		return listMessagesParams{}, false
+	}
 	limit := 0
-	if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
-		if parsed, err := strconv.Atoi(rawLimit); err == nil {
-			limit = parsed
+	if limitProvided {
+		parsed, err := strconv.Atoi(strings.TrimSpace(rawLimit))
+		if err != nil || parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			return listMessagesParams{}, false
 		}
+		limit = parsed
 	}
 	return listMessagesParams{
-		before:    before,
-		after:     after,
-		sort:      sort,
-		limit:     limit,
-		paginated: limitProvided || before != "" || after != "" || sort != "",
+		before:     before,
+		after:      after,
+		around:     around,
+		sort:       sort,
+		authorType: authorType,
+		limit:      limit,
+		paginated:  limitProvided || before != "" || after != "" || around != "" || sort != "" || authorTypeProvided,
 	}, true
 }
 
@@ -228,10 +254,15 @@ func (h *MessageHandlers) fetchMessagesPaginated(
 		Limit:         params.limit,
 		Before:        params.before,
 		After:         params.after,
+		Around:        params.around,
 		Sort:          params.sort,
+		AuthorType:    params.authorType,
 	})
 	if err != nil {
 		return dto.ListMessagesResponse{}, err
+	}
+	if params.around != "" {
+		hasMore = false
 	}
 	result := messagesToAPI(messages)
 	cursor := ""

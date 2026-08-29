@@ -9,8 +9,8 @@ import {
   IconRobot,
 } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
-import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
-import { useLazyLoadMessages } from "@/hooks/use-lazy-load-messages";
+import { useSessionPrompts } from "@/hooks/domains/session/use-session-prompts";
+import { useLazyLoadPrompts } from "@/hooks/use-lazy-load-prompts";
 import { useLazyLoadSentinel } from "@/hooks/use-lazy-load-sentinel";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
 import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
@@ -39,14 +39,14 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const rootRef = useRef<HTMLDivElement>(null);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
-  const { messages, isLoading: messagesLoading } = useSessionMessages(sessionId);
-  const { loadMore, hasMore, isLoadingMore } = useLazyLoadMessages(sessionId);
+  const { prompts, isLoading: messagesLoading } = useSessionPrompts(sessionId);
+  const { loadMore, hasMore, isLoadingMore } = useLazyLoadPrompts(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
   const entries = useMemo(() => {
-    const derived = buildPromptHistoryEntries(messages, turns);
+    const derived = buildPromptHistoryEntries(prompts, turns);
     if (turnsHydrated) return derived;
     return derived.map((entry) => ({ ...entry, durationSeconds: null }));
-  }, [messages, turns, turnsHydrated]);
+  }, [prompts, turns, turnsHydrated]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxHeight = usePanelRowMaxHeight(rootRef);
 

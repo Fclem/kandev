@@ -35,6 +35,20 @@ vi.mock("@/lib/state/dockview-store", () => ({
   ),
 }));
 
+vi.mock("@/components/state-provider", () => ({
+  useAppStore: vi.fn(),
+  useAppStoreApi: () => ({
+    getState: () => ({
+      messages: { bySession: { "session-1": [{ id: "message-1" }] } },
+      mergeMessages: vi.fn(),
+    }),
+  }),
+}));
+
+vi.mock("@/hooks/domains/session/load-message-window", () => ({
+  loadMessageWindowAround: vi.fn(),
+}));
+
 import { useScrollTargetConsumption } from "./task-chat-panel";
 
 let pendingFrames: Array<(() => void) | undefined> = [];

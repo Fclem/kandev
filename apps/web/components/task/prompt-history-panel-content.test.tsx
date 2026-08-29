@@ -27,15 +27,15 @@ vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state),
 }));
 
-vi.mock("@/hooks/domains/session/use-session-messages", () => ({
-  useSessionMessages: (sessionId: string | null) => ({
-    messages: sessionId ? (messagesBySession[sessionId] ?? []) : [],
+vi.mock("@/hooks/domains/session/use-session-prompts", () => ({
+  useSessionPrompts: (sessionId: string | null) => ({
+    prompts: sessionId ? (messagesBySession[sessionId] ?? []) : [],
     isLoading: pagination.messagesLoading,
   }),
 }));
 
-vi.mock("@/hooks/use-lazy-load-messages", () => ({
-  useLazyLoadMessages: () => ({
+vi.mock("@/hooks/use-lazy-load-prompts", () => ({
+  useLazyLoadPrompts: () => ({
     loadMore: pagination.loadMore,
     hasMore: pagination.hasMore,
     isLoadingMore: pagination.isLoadingMore,

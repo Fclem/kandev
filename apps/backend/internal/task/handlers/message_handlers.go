@@ -176,16 +176,25 @@ type listMessagesParams struct {
 	paginated  bool
 }
 
+const (
+	messageSortAsc  = "asc"
+	messageSortDesc = "desc"
+)
+
 func (h *MessageHandlers) parseListMessageParams(c *gin.Context) (listMessagesParams, bool) {
 	before := c.Query("before")
 	after := c.Query("after")
-	around := c.Query("around")
+	around, aroundProvided := c.GetQuery("around")
 	sort := strings.ToLower(strings.TrimSpace(c.Query("sort")))
 	authorType, authorTypeProvided := c.GetQuery("author_type")
 	authorType = strings.TrimSpace(authorType)
 	rawLimit, limitProvided := c.GetQuery("limit")
 	if before != "" && after != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "only one of before or after can be set"})
+		return listMessagesParams{}, false
+	}
+	if aroundProvided && strings.TrimSpace(around) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "around must not be empty"})
 		return listMessagesParams{}, false
 	}
 	if around != "" && (before != "" || after != "") {
@@ -200,12 +209,12 @@ func (h *MessageHandlers) parseListMessageParams(c *gin.Context) (listMessagesPa
 		c.JSON(http.StatusBadRequest, gin.H{"error": "author_type cannot be combined with around"})
 		return listMessagesParams{}, false
 	}
-	if sort != "" && sort != "asc" && sort != "desc" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sort must be asc or desc"})
+	if around != "" && sort != "" && sort != messageSortDesc {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sort must be desc with around"})
 		return listMessagesParams{}, false
 	}
-	if around != "" && sort != "" && sort != "desc" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sort must be desc with around"})
+	if sort != "" && sort != messageSortAsc && sort != messageSortDesc {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sort must be asc or desc"})
 		return listMessagesParams{}, false
 	}
 	limit := 0
@@ -224,7 +233,7 @@ func (h *MessageHandlers) parseListMessageParams(c *gin.Context) (listMessagesPa
 		sort:       sort,
 		authorType: authorType,
 		limit:      limit,
-		paginated:  limitProvided || before != "" || after != "" || around != "" || sort != "" || authorTypeProvided,
+		paginated:  limitProvided || before != "" || after != "" || aroundProvided || sort != "" || authorTypeProvided,
 	}, true
 }
 
@@ -1105,7 +1114,7 @@ func (h *MessageHandlers) wsListMessages(ctx context.Context, msg *ws.Message) (
 	if req.Before != "" && req.After != "" {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "only one of before or after can be set", nil)
 	}
-	if req.Sort != "" && req.Sort != "asc" && req.Sort != "desc" {
+	if req.Sort != "" && req.Sort != messageSortAsc && req.Sort != messageSortDesc {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "sort must be asc or desc", nil)
 	}
 

@@ -1,13 +1,53 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { listTaskSessionMessages } from "@/lib/api/domains/session-api";
 import type { Message } from "@/lib/types/http";
 import { getWebSocketClient } from "@/lib/ws/connection";
-
 const EMPTY_PROMPTS: Message[] = [];
 
+type PromptListResponse = {
+  messages?: Message[];
+  has_more?: boolean;
+  cursor?: string | null;
+};
+
+type PromptRequest = { promise: Promise<PromptListResponse> };
+const inFlightPromptRequests = new Map<string, PromptRequest>();
+
+function requestPromptMessages(
+  sessionId: string,
+  readiness: Promise<unknown> | null,
+): Promise<PromptListResponse> {
+  const existing = inFlightPromptRequests.get(sessionId);
+  if (existing) return existing.promise;
+  const promise = (readiness ?? Promise.resolve()).then(() =>
+    listTaskSessionMessages(sessionId, { author_type: "user", limit: 20, sort: "desc" }),
+  );
+  const entry = { promise };
+  inFlightPromptRequests.set(sessionId, entry);
+  void promise.then(
+    () => {
+      if (inFlightPromptRequests.get(sessionId) === entry) inFlightPromptRequests.delete(sessionId);
+    },
+    () => {
+      if (inFlightPromptRequests.get(sessionId) === entry) inFlightPromptRequests.delete(sessionId);
+    },
+  );
+  return promise;
+}
+
+export type UseSessionPromptsResult = {
+  prompts: Message[];
+  isLoading: boolean;
+  hasMore: boolean;
+  oldestCursor: string | null;
+  isLoadingMore: boolean;
+  fetchFailed: boolean;
+  retryPrompts: () => void;
+};
+
 /** Loads the prompt-only window without initializing the transcript cache. */
-export function useSessionPrompts(sessionId: string | null) {
+export function useSessionPrompts(sessionId: string | null): UseSessionPromptsResult {
   const prompts = useAppStore((state) =>
     sessionId ? (state.messagePrompts.bySession[sessionId] ?? EMPTY_PROMPTS) : EMPTY_PROMPTS,
   );
@@ -25,6 +65,8 @@ export function useSessionPrompts(sessionId: string | null) {
   const connectionStatus = useAppStore((state) => state.connection.status);
   const readinessRef = useRef<Promise<unknown> | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const retryPrompts = useCallback(() => setRetryVersion((version) => version + 1), []);
 
   useEffect(() => {
     if (!sessionId || connectionStatus !== "connected") return;
@@ -39,14 +81,11 @@ export function useSessionPrompts(sessionId: string | null) {
   }, [connectionStatus, sessionId]);
 
   useEffect(() => {
-    if (!sessionId || connectionStatus !== "connected") return;
+    if (!sessionId) return;
     let current = true;
     setFetchFailed(false);
     store.getState().setPromptMessagesLoading(sessionId, true);
-    void (readinessRef.current ?? Promise.resolve())
-      .then(() =>
-        listTaskSessionMessages(sessionId, { author_type: "user", limit: 20, sort: "desc" }),
-      )
+    void requestPromptMessages(sessionId, readinessRef.current)
       .then((response) => {
         if (!current) return;
         store
@@ -65,16 +104,26 @@ export function useSessionPrompts(sessionId: string | null) {
     return () => {
       current = false;
     };
-  }, [connectionStatus, sessionId, store]);
+  }, [connectionStatus, retryVersion, sessionId, store]);
 
   return useMemo(
     () => ({
       prompts,
-      isLoading: meta.isLoading || fetchFailed,
+      isLoading: meta.isLoading,
       hasMore: meta.hasMore,
       oldestCursor: meta.oldestCursor,
       isLoadingMore: meta.isLoadingMore,
+      fetchFailed,
+      retryPrompts,
     }),
-    [fetchFailed, meta.hasMore, meta.isLoading, meta.isLoadingMore, meta.oldestCursor, prompts],
+    [
+      fetchFailed,
+      meta.hasMore,
+      meta.isLoading,
+      meta.isLoadingMore,
+      meta.oldestCursor,
+      prompts,
+      retryPrompts,
+    ],
   );
 }

@@ -28,6 +28,41 @@ type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string)
 const SENTINEL_TEST_ID = "prompt-history-sentinel";
 const LOADING_OLDER_TEST_ID = "prompt-history-loading-older";
 
+function PromptHistoryLoadError({
+  rootRef,
+  onRetry,
+}: {
+  rootRef: RefObject<HTMLDivElement | null>;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <PanelRoot
+      ref={rootRef}
+      data-testid="prompt-history-panel"
+      className="flex flex-col items-center gap-3 p-4 text-sm text-muted-foreground"
+    >
+      <span>{t("task:error")}</span>
+      <Button data-testid="prompt-history-retry" onClick={onRetry} variant="outline">
+        {t("task:retry")}
+      </Button>
+    </PanelRoot>
+  );
+}
+
+function PromptHistoryPassthrough({ rootRef }: { rootRef: RefObject<HTMLDivElement | null> }) {
+  const { t } = useTranslation();
+  return (
+    <PanelRoot
+      ref={rootRef}
+      data-testid="prompt-history-panel"
+      className="p-4 text-sm text-muted-foreground"
+    >
+      {t("task:promptHistoryEmpty")}
+    </PanelRoot>
+  );
+}
+
 /** The prompt-history panel: builds entries from the session's messages and
  * turns and renders one expandable row per prompt. Older pages auto-load via
  * the shared lazy-load sentinel (like the transcript's scroll-up sentinel),
@@ -39,7 +74,12 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const rootRef = useRef<HTMLDivElement>(null);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
-  const { prompts, isLoading: messagesLoading } = useSessionPrompts(sessionId);
+  const {
+    prompts,
+    isLoading: messagesLoading,
+    fetchFailed,
+    retryPrompts,
+  } = useSessionPrompts(sessionId);
   const { loadMore, hasMore, isLoadingMore } = useLazyLoadPrompts(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
   const entries = useMemo(() => {
@@ -49,10 +89,6 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   }, [prompts, turns, turnsHydrated]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxHeight = usePanelRowMaxHeight(rootRef);
-
-  // Pagination continues while the server reports older messages and no loaded
-  // entry is the session's first prompt (#1). If payloads omit ordinals, the
-  // hasMore term alone drives exhaustion.
   const shouldPaginate = hasMore && !entries.some((entry) => entry.promptNumber === 1);
   const { sentinelRef, onUserGesture } = useLazyLoadSentinel(
     rootRef,
@@ -67,21 +103,11 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     },
   );
 
-  // Passthrough sessions render a toolbar instead of a transcript: the panel
-  // is an unconditional no-controls empty state, even when entries/hasMore
-  // exist (a restored layout can leave the tab present after a session switch).
-  if (session?.is_passthrough) {
-    return (
-      <PanelRoot
-        ref={rootRef}
-        data-testid="prompt-history-panel"
-        className="p-4 text-sm text-muted-foreground"
-      >
-        {t("task:promptHistoryEmpty")}
-      </PanelRoot>
-    );
-  }
+  if (session?.is_passthrough) return <PromptHistoryPassthrough rootRef={rootRef} />;
 
+  if (fetchFailed && entries.length === 0) {
+    return <PromptHistoryLoadError rootRef={rootRef} onRetry={retryPrompts} />;
+  }
   if (entries.length === 0) {
     // Keep PanelRoot as the stable top-level element in every branch so the
     // root element (and its ResizeObserver) survives the empty→rows

@@ -205,6 +205,30 @@ func TestHTTPListMessagesRejectsInvalidLimits(t *testing.T) {
 	}
 }
 
+func TestHTTPListMessagesRejectsEmptyAroundAndUsesAroundSortError(t *testing.T) {
+	for name, query := range map[string]string{
+		"empty around":   "?around=",
+		"ascending sort": "?around=message&sort=asc",
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &messageListRepo{}
+			h := newMessageListHandlers(t, repo)
+			c, rec := messageRequestAs(t, "", "/api/v1/task-sessions/sess-b/messages"+query, "sess-b")
+
+			h.httpListMessages(c)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Zero(t, repo.listCalls)
+			require.Empty(t, repo.paginatedOptions)
+			if name == "empty around" {
+				require.JSONEq(t, `{"error":"around must not be empty"}`, rec.Body.String())
+			} else {
+				require.JSONEq(t, `{"error":"sort must be desc with around"}`, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestHTTPListMessagesRejectsUnsupportedAuthorType(t *testing.T) {
 	repo := &messageListRepo{}
 	h := newMessageListHandlers(t, repo)

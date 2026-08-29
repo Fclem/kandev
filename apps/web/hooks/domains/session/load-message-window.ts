@@ -9,13 +9,27 @@ export type LoadMessageWindowResult =
   | { kind: "stale"; merged: false; current: false; targetFound: false };
 
 type SessionStore = StoreApi<AppState>;
+function compareMessageIDs(left: Message, right: Message) {
+  if (left.id < right.id) return -1;
+  if (left.id > right.id) return 1;
+  return 0;
+}
 function mergeWindowRows(existing: Message[], window: Message[]): Message[] {
   const byID = new Map(existing.map((message) => [message.id, message]));
-  for (const message of window) byID.set(message.id, message);
-  return [...byID.values()].sort(
-    (left, right) =>
-      left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
-  );
+  for (const message of window) {
+    const current = byID.get(message.id);
+    const currentUpdated = current?.updated_at ? Date.parse(current.updated_at) : Number.NaN;
+    const incomingUpdated = message.updated_at ? Date.parse(message.updated_at) : Number.NaN;
+    const currentIsNewer =
+      current &&
+      Number.isFinite(currentUpdated) &&
+      (!Number.isFinite(incomingUpdated) || currentUpdated > incomingUpdated);
+    if (!currentIsNewer) byID.set(message.id, message);
+  }
+  return [...byID.values()].sort((left, right) => {
+    const timeDelta = Date.parse(left.created_at) - Date.parse(right.created_at);
+    return timeDelta !== 0 ? timeDelta : compareMessageIDs(left, right);
+  });
 }
 
 /** Fetches and merges the window containing a scroll target without changing transcript pagination. */

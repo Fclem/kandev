@@ -112,7 +112,7 @@ export async function markSessionRead(
 export async function listTaskSessionMessages(
   taskSessionId: string,
   params?: {
-    limit?: number | "all";
+    limit?: number;
     before?: string;
     after?: string;
     around?: string;

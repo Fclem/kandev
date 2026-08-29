@@ -256,38 +256,39 @@ export const defaultSessionState: SessionSliceState = {
 type ImmerSet = Parameters<typeof createSessionSlice>[0];
 type ImmerGet = () => SessionSlice;
 
+function isIncomingPromptAtLeastAsFresh(existing: Message, incoming: Message) {
+  const incomingUpdated = incoming.updated_at ? Date.parse(incoming.updated_at) : Number.NaN;
+  const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : Number.NaN;
+  return (
+    !Number.isFinite(existingUpdated) ||
+    (Number.isFinite(incomingUpdated) && incomingUpdated >= existingUpdated)
+  );
+}
+
+function mergePromptMessage(existing: Message, incoming: Message) {
+  return isIncomingPromptAtLeastAsFresh(existing, incoming)
+    ? { ...existing, ...incoming, created_at: existing.created_at }
+    : existing;
+}
+
 function upsertPromptMessage(state: SessionSliceState, message: Message) {
-  if (message.author_type !== "user") return;
+  if (!isValidPrompt(message)) return;
   const sessionId = message.session_id;
   const prompts = state.messagePrompts.bySession[sessionId] ?? [];
   const index = prompts.findIndex((prompt) => prompt.id === message.id);
   if (index === -1) prompts.push(message);
-  else {
-    mergeMessageFields(
-      prompts[index] as unknown as Record<string, unknown>,
-      message as unknown as Record<string, unknown>,
-    );
-  }
-  prompts.sort(
-    (left, right) =>
-      left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
-  );
-  state.messagePrompts.bySession[sessionId] = prompts;
+  else prompts[index] = mergePromptMessage(prompts[index], message);
+  state.messagePrompts.bySession[sessionId] = sortPromptMessages(prompts);
   ensureMessageMeta(state.messagePrompts.metaBySession, sessionId);
 }
-
 function updatePromptMessage(state: SessionSliceState, message: Message) {
-  if (message.author_type !== "user") return;
+  if (!isValidPrompt(message)) return;
   const prompts = state.messagePrompts.bySession[message.session_id];
   if (!prompts) return;
   const index = prompts.findIndex((entry) => entry.id === message.id);
   if (index === -1) return;
-  const merged = { ...prompts[index] };
-  mergeMessageFields(
-    merged as unknown as Record<string, unknown>,
-    message as unknown as Record<string, unknown>,
-  );
-  prompts[index] = merged;
+  prompts[index] = mergePromptMessage(prompts[index], message);
+  state.messagePrompts.bySession[message.session_id] = sortPromptMessages(prompts);
 }
 
 function fanOutTranscriptPrompts(state: SessionSliceState, messages: Message[]) {
@@ -318,6 +319,22 @@ function removePromptMessage(state: SessionSliceState, sessionId: string, messag
 }
 
 /** Create the message store actions (set, add, update, remove, merge, prepend, metadata) backed by the given Immer setter. */
+function isValidPrompt(message: Message) {
+  return message.author_type === "user" && Number.isFinite(Date.parse(message.created_at));
+}
+
+function sortPromptMessages(messages: Message[]) {
+  return messages.filter(isValidPrompt).sort((left, right) => {
+    const timeDelta = Date.parse(left.created_at) - Date.parse(right.created_at);
+    return timeDelta !== 0 ? timeDelta : comparePromptIDs(left, right);
+  });
+}
+function comparePromptIDs(left: Message, right: Message) {
+  if (left.id < right.id) return -1;
+  if (left.id > right.id) return 1;
+  return 0;
+}
+
 function buildMessageActions(set: ImmerSet) {
   return {
     setMessages: (
@@ -423,15 +440,15 @@ function buildPromptMessageActions(set: ImmerSet) {
       meta?: Parameters<SessionSlice["replacePromptMessages"]>[2],
     ) =>
       set((draft) => {
-        const byID = new Map(
+        const existingByID = new Map(
           (draft.messagePrompts.bySession[sessionId] ?? []).map((message) => [message.id, message]),
         );
-        for (const message of messages) {
-          if (message.author_type === "user") byID.set(message.id, message);
-        }
-        draft.messagePrompts.bySession[sessionId] = [...byID.values()].sort(
-          (left, right) =>
-            left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
+        draft.messagePrompts.bySession[sessionId] = sortPromptMessages(
+          messages.map((message) =>
+            existingByID.get(message.id)
+              ? mergePromptMessage(existingByID.get(message.id)!, message)
+              : message,
+          ),
         );
         ensureMessageMeta(draft.messagePrompts.metaBySession, sessionId);
         if (meta) applyMessageMeta(draft.messagePrompts.metaBySession, sessionId, meta);
@@ -445,12 +462,11 @@ function buildPromptMessageActions(set: ImmerSet) {
         const existing = draft.messagePrompts.bySession[sessionId] ?? [];
         const byID = new Map(existing.map((message) => [message.id, message]));
         for (const message of messages) {
-          if (message.author_type === "user") byID.set(message.id, message);
+          if (!isValidPrompt(message)) continue;
+          const current = byID.get(message.id);
+          byID.set(message.id, current ? mergePromptMessage(current, message) : message);
         }
-        draft.messagePrompts.bySession[sessionId] = [...byID.values()].sort(
-          (left, right) =>
-            left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
-        );
+        draft.messagePrompts.bySession[sessionId] = sortPromptMessages([...byID.values()]);
         ensureMessageMeta(draft.messagePrompts.metaBySession, sessionId);
         if (meta) applyMessageMeta(draft.messagePrompts.metaBySession, sessionId, meta);
       }),

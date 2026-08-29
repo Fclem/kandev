@@ -6,6 +6,7 @@ import type { SessionSlice } from "./types";
 import { sessionId, taskId, type Message } from "@/lib/types/http";
 
 const SESSION = "prompts-session";
+const SECOND_PROMPT_TIME = "2026-08-22T00:00:01Z";
 
 function makeStore() {
   return create<SessionSlice>()(
@@ -58,7 +59,7 @@ it("unions user rows from transcript snapshots without dropping deep prompt page
   store
     .getState()
     .mergeMessages(SESSION, [
-      { ...message("new", "user"), created_at: "2026-08-22T00:00:01Z" },
+      { ...message("new", "user"), created_at: SECOND_PROMPT_TIME },
       message("agent", "agent"),
     ]);
 
@@ -74,7 +75,7 @@ it("repairs the prompt cursor after deleting the oldest cached prompt", () => {
     SESSION,
     [
       { ...message("oldest", "user"), created_at: "2026-08-22T00:00:00Z" },
-      { ...message("newest", "user"), created_at: "2026-08-22T00:00:01Z" },
+      { ...message("newest", "user"), created_at: SECOND_PROMPT_TIME },
     ],
     { hasMore: true, oldestCursor: "oldest" },
   );
@@ -82,4 +83,60 @@ it("repairs the prompt cursor after deleting the oldest cached prompt", () => {
   store.getState().removeMessage(SESSION, "oldest");
 
   expect(store.getState().messagePrompts.metaBySession[SESSION].oldestCursor).toBe("newest");
+});
+
+it("replaces the authoritative prompt window instead of retaining deleted rows", () => {
+  const store = makeStore();
+  store
+    .getState()
+    .replacePromptMessages(SESSION, [
+      message("deleted", "user"),
+      { ...message("kept", "user"), created_at: SECOND_PROMPT_TIME },
+    ]);
+
+  store
+    .getState()
+    .replacePromptMessages(SESSION, [
+      { ...message("kept", "user"), created_at: SECOND_PROMPT_TIME },
+    ]);
+
+  expect(store.getState().messagePrompts.bySession[SESSION].map((entry) => entry.id)).toEqual([
+    "kept",
+  ]);
+});
+
+it("preserves a newer cached row when a replacement response is stale", () => {
+  const store = makeStore();
+  store.getState().addMessage({
+    ...message("prompt", "user"),
+    content: "new",
+    updated_at: "2026-08-22T00:01:00Z",
+  });
+
+  store.getState().replacePromptMessages(SESSION, [
+    {
+      ...message("prompt", "user"),
+      content: "old",
+      updated_at: "2026-08-22T00:00:30Z",
+    },
+  ]);
+
+  expect(store.getState().messagePrompts.bySession[SESSION][0].content).toBe("new");
+});
+
+it("does not regress a prompt when an older update arrives", () => {
+  const store = makeStore();
+  store.getState().addMessage({
+    ...message("prompt", "user"),
+    content: "new",
+    updated_at: "2026-08-22T00:01:00Z",
+  });
+
+  store.getState().updateMessage({
+    ...message("prompt", "user"),
+    content: "old",
+    updated_at: "2026-08-22T00:00:30Z",
+  });
+
+  expect(store.getState().messagePrompts.bySession[SESSION][0].content).toBe("new");
 });

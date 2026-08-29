@@ -4,6 +4,12 @@ import { listTaskSessionMessages } from "@/lib/api/domains/session-api";
 import type { Message } from "@/lib/types/http";
 import { getWebSocketClient } from "@/lib/ws/connection";
 const EMPTY_PROMPTS: Message[] = [];
+const EMPTY_PROMPT_META = {
+  isLoading: false,
+  isLoadingMore: false,
+  hasMore: false,
+  oldestCursor: null,
+};
 
 type PromptListResponse = {
   messages?: Message[];
@@ -53,13 +59,8 @@ export function useSessionPrompts(sessionId: string | null): UseSessionPromptsRe
   );
   const meta = useAppStore((state) =>
     sessionId
-      ? (state.messagePrompts.metaBySession[sessionId] ?? {
-          isLoading: false,
-          isLoadingMore: false,
-          hasMore: false,
-          oldestCursor: null,
-        })
-      : { isLoading: false, isLoadingMore: false, hasMore: false, oldestCursor: null },
+      ? (state.messagePrompts.metaBySession[sessionId] ?? EMPTY_PROMPT_META)
+      : EMPTY_PROMPT_META,
   );
   const store = useAppStoreApi();
   const connectionStatus = useAppStore((state) => state.connection.status);

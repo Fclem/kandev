@@ -10,6 +10,12 @@ import {
 } from "./task-session-projection-actions";
 import { reconcileMessages } from "./message-signature";
 import {
+  buildPromptMessageActions,
+  fanOutTranscriptPrompts,
+  removePromptMessage,
+  updatePromptMessage,
+} from "./prompt-message-actions";
+import {
   migrateEnvKeyedData,
   purgeSessionRuntimeState,
 } from "@/lib/state/slices/session-runtime/session-runtime-slice";
@@ -287,45 +293,6 @@ export const defaultSessionState: SessionSliceState = {
 type ImmerSet = Parameters<typeof createSessionSlice>[0];
 type ImmerGet = () => SessionSlice;
 
-function isIncomingPromptAtLeastAsFresh(existing: Message, incoming: Message) {
-  const incomingUpdated = incoming.updated_at ? Date.parse(incoming.updated_at) : Number.NaN;
-  const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : Number.NaN;
-  return (
-    !Number.isFinite(existingUpdated) ||
-    (Number.isFinite(incomingUpdated) && incomingUpdated >= existingUpdated)
-  );
-}
-
-function mergePromptMessage(existing: Message, incoming: Message) {
-  return isIncomingPromptAtLeastAsFresh(existing, incoming)
-    ? { ...existing, ...incoming, created_at: existing.created_at }
-    : existing;
-}
-
-function upsertPromptMessage(state: SessionSliceState, message: Message) {
-  if (!isValidPrompt(message)) return;
-  const sessionId = message.session_id;
-  const prompts = state.messagePrompts.bySession[sessionId] ?? [];
-  const index = prompts.findIndex((prompt) => prompt.id === message.id);
-  if (index === -1) prompts.push(message);
-  else prompts[index] = mergePromptMessage(prompts[index], message);
-  state.messagePrompts.bySession[sessionId] = sortPromptMessages(prompts);
-  ensureMessageMeta(state.messagePrompts.metaBySession, sessionId);
-}
-function updatePromptMessage(state: SessionSliceState, message: Message) {
-  if (!isValidPrompt(message)) return;
-  const prompts = state.messagePrompts.bySession[message.session_id];
-  if (!prompts) return;
-  const index = prompts.findIndex((entry) => entry.id === message.id);
-  if (index === -1) return;
-  prompts[index] = mergePromptMessage(prompts[index], message);
-  state.messagePrompts.bySession[message.session_id] = sortPromptMessages(prompts);
-}
-
-function fanOutTranscriptPrompts(state: SessionSliceState, messages: Message[]) {
-  for (const message of messages) upsertPromptMessage(state, message);
-}
-
 function buildSetMessagesLoading(set: ImmerSet) {
   return (sessionId: string, loading: boolean) =>
     set((draft) => {
@@ -337,33 +304,6 @@ function buildSetMessagesMetadata(set: ImmerSet) {
     set((draft) => {
       applyMessageMeta(draft.messages.metaBySession, sessionId, meta);
     });
-}
-
-function removePromptMessage(state: SessionSliceState, sessionId: string, messageId: string) {
-  const prompts = state.messagePrompts.bySession[sessionId];
-  if (!prompts) return;
-  state.messagePrompts.bySession[sessionId] = removeMessageByID(prompts, messageId);
-  const meta = state.messagePrompts.metaBySession[sessionId];
-  if (meta?.oldestCursor === messageId) {
-    meta.oldestCursor = state.messagePrompts.bySession[sessionId][0]?.id ?? null;
-  }
-}
-
-/** Create the message store actions (set, add, update, remove, merge, prepend, metadata) backed by the given Immer setter. */
-function isValidPrompt(message: Message) {
-  return message.author_type === "user" && Number.isFinite(Date.parse(message.created_at));
-}
-
-function sortPromptMessages(messages: Message[]) {
-  return messages.filter(isValidPrompt).sort((left, right) => {
-    const timeDelta = Date.parse(left.created_at) - Date.parse(right.created_at);
-    return timeDelta !== 0 ? timeDelta : comparePromptIDs(left, right);
-  });
-}
-function comparePromptIDs(left: Message, right: Message) {
-  if (left.id < right.id) return -1;
-  if (left.id > right.id) return 1;
-  return 0;
 }
 
 function buildUpdateMessage(set: ImmerSet) {
@@ -415,7 +355,7 @@ function buildMessageActions(set: ImmerSet) {
             message as unknown as Record<string, unknown>,
           );
         }
-        upsertPromptMessage(draft, message);
+        fanOutTranscriptPrompts(draft, [message]);
       }),
     updateMessage: buildUpdateMessage(set),
     updateMessages: (messages: Parameters<SessionSlice["updateMessages"]>[0]) =>
@@ -472,56 +412,6 @@ function buildMessageActions(set: ImmerSet) {
       }),
     setMessagesMetadata: buildSetMessagesMetadata(set),
     setMessagesLoading: buildSetMessagesLoading(set),
-  };
-}
-function buildPromptMessageActions(set: ImmerSet) {
-  return {
-    replacePromptMessages: (
-      sessionId: string,
-      messages: Parameters<SessionSlice["replacePromptMessages"]>[1],
-      meta?: Parameters<SessionSlice["replacePromptMessages"]>[2],
-    ) =>
-      set((draft) => {
-        const existingByID = new Map(
-          (draft.messagePrompts.bySession[sessionId] ?? []).map((message) => [message.id, message]),
-        );
-        draft.messagePrompts.bySession[sessionId] = sortPromptMessages(
-          messages.map((message) =>
-            existingByID.get(message.id)
-              ? mergePromptMessage(existingByID.get(message.id)!, message)
-              : message,
-          ),
-        );
-        ensureMessageMeta(draft.messagePrompts.metaBySession, sessionId);
-        if (meta) applyMessageMeta(draft.messagePrompts.metaBySession, sessionId, meta);
-      }),
-    prependPromptMessages: (
-      sessionId: string,
-      messages: Parameters<SessionSlice["prependPromptMessages"]>[1],
-      meta?: Parameters<SessionSlice["prependPromptMessages"]>[2],
-    ) =>
-      set((draft) => {
-        const existing = draft.messagePrompts.bySession[sessionId] ?? [];
-        const byID = new Map(existing.map((message) => [message.id, message]));
-        for (const message of messages) {
-          if (!isValidPrompt(message)) continue;
-          const current = byID.get(message.id);
-          byID.set(message.id, current ? mergePromptMessage(current, message) : message);
-        }
-        draft.messagePrompts.bySession[sessionId] = sortPromptMessages([...byID.values()]);
-        ensureMessageMeta(draft.messagePrompts.metaBySession, sessionId);
-        if (meta) applyMessageMeta(draft.messagePrompts.metaBySession, sessionId, meta);
-      }),
-    setPromptMessagesLoading: (sessionId: string, loading: boolean) =>
-      set((draft) => {
-        applyMessageMeta(draft.messagePrompts.metaBySession, sessionId, { isLoading: loading });
-      }),
-    setPromptMessagesLoadingMore: (sessionId: string, loading: boolean) =>
-      set((draft) => {
-        applyMessageMeta(draft.messagePrompts.metaBySession, sessionId, {
-          isLoadingMore: loading,
-        });
-      }),
   };
 }
 /** Create the task-plan store actions (set, loading, saving, clear, seen, revisions, preview, compare) backed by the given Immer setter and getter. */

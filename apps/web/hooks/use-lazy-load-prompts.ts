@@ -3,18 +3,19 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { listTaskSessionMessages } from "@/lib/api/domains/session-api";
 
 const OLDER_PROMPT_PAGE_LIMIT = 20;
+const EMPTY_PROMPT_META = {
+  isLoading: false,
+  isLoadingMore: false,
+  hasMore: false,
+  oldestCursor: null,
+};
 
 /** Loads older prompt pages independently of transcript pagination. */
 export function useLazyLoadPrompts(sessionId: string | null) {
   const meta = useAppStore((state) =>
     sessionId
-      ? (state.messagePrompts.metaBySession[sessionId] ?? {
-          isLoading: false,
-          isLoadingMore: false,
-          hasMore: false,
-          oldestCursor: null,
-        })
-      : { isLoading: false, isLoadingMore: false, hasMore: false, oldestCursor: null },
+      ? (state.messagePrompts.metaBySession[sessionId] ?? EMPTY_PROMPT_META)
+      : EMPTY_PROMPT_META,
   );
   const stateRef = useRef(meta);
   useEffect(() => {

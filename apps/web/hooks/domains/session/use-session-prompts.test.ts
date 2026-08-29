@@ -37,6 +37,7 @@ import { useSessionPrompts } from "./use-session-prompts";
 describe("useSessionPrompts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.connection.status = "connected";
     listTaskSessionMessages.mockResolvedValue({ messages: [], has_more: false, cursor: null });
   });
 
@@ -73,6 +74,17 @@ describe("useSessionPrompts", () => {
     await waitFor(() =>
       expect(state.setPromptMessagesLoading).toHaveBeenCalledWith("session", false),
     );
+  });
+
+  it("hydrates prompts even while the websocket is disconnected", async () => {
+    state.connection.status = "disconnected";
+    renderHook(() => useSessionPrompts("session"));
+
+    await waitFor(() => expect(listTaskSessionMessages).toHaveBeenCalledTimes(1));
+    expect(state.replacePromptMessages).toHaveBeenCalledWith("session", [], {
+      hasMore: false,
+      oldestCursor: null,
+    });
   });
 
   it("retries after a failed prompt fetch", async () => {

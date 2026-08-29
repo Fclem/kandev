@@ -1,7 +1,17 @@
 import type { StateCreator } from "zustand";
 import { createDefaultUserSettings } from "@/lib/ssr/user-settings";
 import { compareUserSettingsRevisions } from "@/lib/settings/user-settings-revision";
-import type { SettingsSlice, SettingsSliceState } from "./types";
+import {
+  refreshProfileCapabilities,
+  refreshSettingsAgentsCapabilities,
+  isStaleAvailableAgentsSnapshot,
+  type SettingsSlice,
+  type SettingsSliceState,
+} from "./types";
+import {
+  mergeAgentProfileRecentUseState,
+  type AgentProfileRecentUseState,
+} from "@/lib/agent-profile-recent-use";
 
 export const defaultSettingsState: SettingsSliceState = {
   executors: { items: [] },
@@ -25,6 +35,7 @@ export const defaultSettingsState: SettingsSliceState = {
   settingsData: { executorsLoaded: false, agentsLoaded: false },
   sleepInhibition: { response: null, loaded: false, loading: false, error: false },
   userSettings: createDefaultUserSettings(),
+  agentProfileRecentUse: { records: {}, loaded: false },
 };
 
 type ImmerSet = Parameters<
@@ -207,10 +218,27 @@ function createCoreActions(
       }),
     setAvailableAgents: (agents, tools) =>
       set((draft) => {
+        if (isStaleAvailableAgentsSnapshot(draft.availableAgents.items, agents)) {
+          // The request completed, even though its data is stale. Keep the
+          // newer snapshot but do not leave the polling indicator stuck.
+          draft.availableAgents.loading = false;
+          draft.availableAgents.loaded = true;
+          return;
+        }
         draft.availableAgents.items = agents;
         if (tools) draft.availableAgents.tools = tools;
         draft.availableAgents.loading = false;
         draft.availableAgents.loaded = true;
+        // The revalidation poll in use-available-agents.ts is the only place
+        // a probing/not_configured status ever settles outside a WS push
+        // (agents.ts's "agent.available.updated" handler covers that path);
+        // without applying the same refresh here, a settled status never
+        // reaches agentProfiles/settingsAgents on a cold launch.
+        draft.agentProfiles.items = refreshProfileCapabilities(draft.agentProfiles.items, agents);
+        draft.settingsAgents.items = refreshSettingsAgentsCapabilities(
+          draft.settingsAgents.items,
+          agents,
+        );
       }),
     setAvailableAgentsLoading: (loading) =>
       set((draft) => {
@@ -251,6 +279,32 @@ function createCoreActions(
     bumpAgentProfilesVersion: () =>
       set((draft) => {
         draft.agentProfiles.version += 1;
+      }),
+  };
+}
+
+function createAgentProfileRecentUseActions(
+  set: ImmerSet,
+): Pick<SettingsSlice, "setAgentProfileRecentUse" | "applyAgentProfileRecentUse"> {
+  return {
+    setAgentProfileRecentUse: (state) =>
+      set((draft) => {
+        draft.agentProfileRecentUse = mergeAgentProfileRecentUseState(
+          draft.agentProfileRecentUse as unknown as AgentProfileRecentUseState,
+          state,
+        ) as unknown as typeof draft.agentProfileRecentUse;
+      }),
+    applyAgentProfileRecentUse: (context, record) =>
+      set((draft) => {
+        const current = draft.agentProfileRecentUse.records[context];
+        if (!current || record.revision >= current.revision) {
+          draft.agentProfileRecentUse.records[context] = {
+            profileIds: [...record.profileIds],
+            revision: record.revision,
+            updatedAt: record.updatedAt,
+          };
+        }
+        draft.agentProfileRecentUse.loaded = true;
       }),
   };
 }
@@ -364,6 +418,7 @@ export const createSettingsSlice: StateCreator<
 > = (set) => ({
   ...defaultSettingsState,
   ...createCoreActions(set),
+  ...createAgentProfileRecentUseActions(set),
   ...createSleepInhibitionActions(set),
   ...createInstallJobActions(set),
   ...createAgentUpdateJobActions(set),

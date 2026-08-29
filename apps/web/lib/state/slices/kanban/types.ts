@@ -86,6 +86,11 @@ export type KanbanState = {
       repository_id: string;
       base_branch: string;
       checkout_branch?: string;
+      branch_policy_id?: string;
+      branch_policy_name?: string;
+      branch_policy_base_branch?: string;
+      branch_policy_branch_template?: string;
+      branch_policy_pull_request_target?: string;
       position: number;
     }>;
     workspaceFolders?: Array<{
@@ -106,6 +111,9 @@ export type KanbanState = {
     foregroundActivity?: ForegroundActivity | null;
     /** True when the task's session was mid-turn when the backend died. */
     interrupted?: boolean;
+    /** True when a workflow step's auto_start_agent on_enter action failed to
+     *  launch a run for this task. */
+    autoStartFailed?: boolean;
     /** Live subagents across this task's sessions; drives the board count chip. */
     activeSubagentCount?: number;
     sessionCount?: number | null;

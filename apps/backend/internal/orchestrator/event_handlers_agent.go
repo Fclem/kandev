@@ -347,6 +347,7 @@ func (s *Service) handleAgentBootReady(ctx context.Context, data watcher.AgentEv
 			zap.String("session_state", string(session.State)))
 		return
 	}
+	recoveryResolvedAt := s.markRecoveryResolved(ctx, data.SessionID, session)
 
 	// Idempotent: if the session is already WAITING_FOR_INPUT (e.g. revived
 	// from a previously launched session and the boot signal arrived faster
@@ -354,6 +355,18 @@ func (s *Service) handleAgentBootReady(ctx context.Context, data watcher.AgentEv
 	// fall through to the drain below: an orphaned queued message would
 	// otherwise sit forever.
 	if session.State == models.TaskSessionStateWaitingForInput {
+		if recoveryResolvedAt != nil {
+			s.publishTaskSessionStateChanged(
+				ctx,
+				data.TaskID,
+				data.SessionID,
+				session.State,
+				session.State,
+				session.ErrorMessage,
+				recoveryResolvedAt,
+				session,
+			)
+		}
 		s.logger.Debug("agent.boot_ready: session already WAITING_FOR_INPUT, skipping flip",
 			zap.String("session_id", data.SessionID))
 	} else {
@@ -1317,6 +1330,7 @@ func (s *Service) handleAgentFailed(ctx context.Context, data watcher.AgentEvent
 }
 
 func (s *Service) handleAgentFailedLocked(ctx context.Context, data watcher.AgentEventData) {
+	data = s.withDynamicAttemptEvidence(data)
 	s.logger.Warn("handling agent failed",
 		zap.String("task_id", data.TaskID),
 		zap.String("session_id", data.SessionID),
@@ -1342,6 +1356,9 @@ func (s *Service) handleAgentFailedLocked(ctx context.Context, data watcher.Agen
 	// handleTransientFailure returns false (falling through) for non-transient
 	// errors, office tasks, or an exhausted budget.
 	if data.SessionID != "" && s.handleTransientFailure(ctx, data) {
+		return
+	}
+	if data.SessionID != "" && s.routeDynamicAgentFailure(ctx, data, classifyKanbanFailure(data)) {
 		return
 	}
 
@@ -1402,7 +1419,7 @@ func (s *Service) shouldDropSessionFailure(
 		return dropWhenUnavailable, ""
 	}
 	if isTerminalSessionState(session.State) {
-		s.resetTransientRetry(data.SessionID)
+		s.resetTransientRetryWithContext(ctx, data.SessionID, true)
 		s.logger.Debug("dropping session failure for terminal session",
 			zap.String("task_id", data.TaskID),
 			zap.String("session_id", data.SessionID),
@@ -1523,7 +1540,10 @@ func (s *Service) RegisterExecutionStopOwner(sessionID, executionID string, forc
 		return
 	}
 	lock, release := s.acquireCancelInFlightGuard(sessionID)
-	lock.Lock()
+	if !lock.TryLock() {
+		release()
+		return
+	}
 	defer func() {
 		lock.Unlock()
 		release()
@@ -1672,7 +1692,7 @@ func (s *Service) handleRecoverableFailureLocked(ctx context.Context, data watch
 	// working" and the topbar spinner clears. Kanban / quick-chat tasks
 	// keep the legacy WAITING_FOR_INPUT path so the user can resume via
 	// the Resume / Start fresh recovery buttons in the existing chat
-	// surface. (See docs/specs/office-agent-error-handling.)
+	// surface. (See docs/specs/office/requirements/runtime.md.)
 	nextState := models.TaskSessionStateWaitingForInput
 	if s.isOfficeSession(ctx, data.SessionID) {
 		nextState = models.TaskSessionStateFailed
@@ -1680,7 +1700,33 @@ func (s *Service) handleRecoverableFailureLocked(ctx context.Context, data watch
 	s.updateTaskSessionState(ctx, data.TaskID, data.SessionID, nextState, data.ErrorMessage, false)
 
 	// Ensure task is in REVIEW state unless another session is still working.
+	// Unlike the success path (processOnTurnCompleteViaEngine runs first and
+	// skips this write entirely on a transition), REVIEW is written before the
+	// reconciliation below runs. A pending signal that reconciles into a
+	// transition here is a transient REVIEW flash a watching client could
+	// observe; that's accepted as the price of keeping this failure path
+	// simple, since the agent genuinely did fail.
 	s.writeTaskReviewState(ctx, data.TaskID, data.SessionID)
+
+	// Give the ADR 0015 reconciler a second chance: a step_complete_kandev
+	// call that landed mid-turn (session still RUNNING) is never picked up
+	// by processOnTurnCompleteViaEngine when the turn fails instead of
+	// completing successfully, so the signal would otherwise sit inert in
+	// the session's metadata bag until it's silently cleared on resume.
+	// Office sessions go FAILED, not WAITING_FOR_INPUT, and must not
+	// advance the step here.
+	if nextState == models.TaskSessionStateWaitingForInput && data.SessionID != "" {
+		session, err := s.repo.GetTaskSession(ctx, data.SessionID)
+		if err != nil {
+			s.logger.Warn("failed to reload session for step-completion reconciliation; "+
+				"a pending signal may be dropped",
+				zap.String("task_id", data.TaskID),
+				zap.String("session_id", data.SessionID),
+				zap.Error(err))
+		} else if signal, ok := models.LoadPendingStepSignal(session.Metadata); ok {
+			s.reconcileStepCompletionSignalLocked(ctx, data.TaskID, data.SessionID, signal.StepID)
+		}
+	}
 
 	// Clean up the agent execution.
 	go s.cleanupAgentExecution(data.AgentExecutionID, data.TaskID, data.SessionID)
@@ -1792,6 +1838,31 @@ func (s *Service) clearRecoveredAgentError(ctx context.Context, taskID string, s
 			zap.String("session_id", session.ID),
 			zap.Error(err))
 	}
+}
+
+// markRecoveryResolved persists the successful boot timestamp on the session.
+// The boot transcript is useful observability, but its writes are best effort.
+// Session metadata is the authoritative recovery result used by the frontend
+// after a reload when the transcript row is missing or incomplete.
+func (s *Service) markRecoveryResolved(ctx context.Context, sessionID string, session *models.TaskSession) *time.Time {
+	resolvedAt := time.Now().UTC()
+	resolvedAtValue := resolvedAt.Format(time.RFC3339Nano)
+	if err := s.repo.SetSessionMetadataKey(
+		ctx,
+		sessionID,
+		models.SessionMetaKeyRecoveryResolvedAt,
+		resolvedAtValue,
+	); err != nil {
+		s.logger.Warn("failed to persist recovery resolution",
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+		return nil
+	}
+	if session.Metadata == nil {
+		session.Metadata = make(map[string]interface{})
+	}
+	session.Metadata[models.SessionMetaKeyRecoveryResolvedAt] = resolvedAtValue
+	return &resolvedAt
 }
 
 // providerRemediationURL returns the adapter-validated remediation URL from the

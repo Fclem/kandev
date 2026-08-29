@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- this file is the canonical Office entity contract. */
 // --- Office entity types ---
 //
 // Per ADR 0005 Wave E the canonical `AgentProfile`, `AgentRole`, `AgentStatus`,
@@ -19,6 +20,7 @@ export type {
 export type { OfficeAgentProfile as AgentProfile } from "@/lib/types/agent-profile";
 
 import type { OfficeAgentProfile as AgentProfile } from "@/lib/types/agent-profile";
+import type { QuorumResponseDTO, TaskQuorumSliceState } from "./quorum-types";
 
 export type SkillSourceType =
   | "inline"
@@ -254,33 +256,8 @@ export type TaskLabel = {
   color: string;
 };
 
-export type OfficeTask = {
-  id: string;
-  workspaceId: string;
-  identifier: string;
-  title: string;
-  description?: string;
-  status: OfficeTaskStatus;
-  // Pre-normalization backend value (e.g. "SCHEDULING"); read only for a raw
-  // sub-state the canonical union erases (ExecutionIndicator's "Live" dot).
-  rawStatus?: string;
-  priority: OfficeTaskPriority;
-  parentId?: string;
-  projectId?: string;
-  assigneeAgentProfileId?: string;
-  labels?: TaskLabel[] | string[];
-  blockedBy?: string[];
-  children?: OfficeTask[];
-  executionPolicy?: string;
-  executionState?: string;
-  createdAt: string;
-  updatedAt: string;
-  // True when the task lives in a kandev-managed system workflow
-  // (today: standing coordination; future: routine-fired). The Tasks
-  // UI renders a "System" badge for these when the dev toggle reveals
-  // them.
-  isSystem?: boolean;
-};
+import type { OfficeTask } from "./office-task-type";
+export type { OfficeTask } from "./office-task-type";
 
 export type TaskFilterState = {
   statuses: OfficeTaskStatus[];
@@ -482,9 +459,10 @@ export type OfficeMeta = {
 };
 
 // --- Provider routing types ---
-// Extracted to routing-types.ts to keep this file under the file-length
-// lint limit; re-exported here so existing `from ".../office/types"`
-// imports keep working unchanged.
+//
+// Defined in `./routing-types` (kept out of this file to stay under the
+// 600-line cap) and re-exported here so existing
+// `@/lib/state/slices/office/types` imports keep working unchanged.
 
 export type {
   Tier,
@@ -494,6 +472,8 @@ export type {
   ExecutionProfileSummary,
   WakeReason,
   TierPerReason,
+  RoleTierMap,
+  TierSource,
   WorkspaceRouting,
   AgentRoutingOverrides,
   ProviderHealthState,
@@ -509,6 +489,7 @@ export type {
   RunAttemptsState,
   AgentRoutingSliceState,
 } from "./routing-types";
+
 import type {
   AgentRouteData,
   AgentRoutePreview,
@@ -523,8 +504,15 @@ import type {
 
 // --- Slice state & actions ---
 
+/**
+ * One or more refetch types fired together. A single WS event routinely
+ * triggers several types in the same synchronous handler (e.g. `task:<id>`
+ * and `dashboard`); batching them into one trigger object is what lets
+ * `useOfficeRefetch` observe every type instead of only the last write to
+ * survive React's automatic batching of same-tick store updates.
+ */
 export type OfficeRefetchTrigger = {
-  type: string;
+  types: string[];
   timestamp: number;
 };
 
@@ -562,11 +550,17 @@ export type OfficeSliceState = {
     tasks: TasksState;
     meta: OfficeMeta | null;
     isLoading: boolean;
+    // A single WS handler often fires several distinct types in the same
+    // synchronous call (e.g. `task:${id}` then `dashboard`); batching them
+    // into one OfficeRefetchTrigger object per tick is what lets every
+    // matching subscriber observe its type instead of only the last write
+    // surviving React's automatic batching. See useOfficeRefetch.
     refetchTrigger: OfficeRefetchTrigger | null;
     routing: RoutingState;
     providerHealth: ProviderHealthSliceState;
     runAttempts: RunAttemptsState;
     agentRouting: AgentRoutingSliceState;
+    taskQuorum: TaskQuorumSliceState;
   };
 };
 
@@ -613,6 +607,7 @@ export type OfficeSliceActions = {
   setRunAttempts: (runId: string, attempts: RouteAttempt[]) => void;
   appendRunAttempt: (runId: string, attempt: RouteAttempt) => void;
   setAgentRouting: (agentId: string, data: AgentRouteData | undefined) => void;
+  setTaskQuorum: (taskId: string, quorum: QuorumResponseDTO) => void;
 };
 
 export type OfficeSlice = OfficeSliceState & OfficeSliceActions;

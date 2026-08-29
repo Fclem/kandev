@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- slice file is one line over the 600 cap after adding the isLoadingMore metadata flag; splitting the slice would orphan its actions from their state type */
+/* eslint-disable max-lines -- session state intentionally keeps its coordinated actions together. */
 import type { StateCreator } from "zustand";
 import { original } from "immer";
 import type { Message, TaskSession } from "@/lib/types/http";
@@ -68,6 +68,17 @@ function mergeMessageFields(target: Record<string, unknown>, source: Record<stri
       target[key] = source[key];
     }
   }
+}
+
+function mergeMessageAtIndex(messages: Message[], message: Message): void {
+  const index = messages.findIndex((candidate) => candidate.id === message.id);
+  if (index === -1) return;
+  const merged = { ...messages[index] };
+  mergeMessageFields(
+    merged as unknown as Record<string, unknown>,
+    message as unknown as Record<string, unknown>,
+  );
+  messages[index] = merged;
 }
 
 /** Return a new messages array with the message matching `messageId` removed. */
@@ -152,11 +163,31 @@ function mergeCancellationProjection(
 /** Merge an incoming session update with an existing session, preserving nullable fields. */
 function mergeTaskSession(existing: TaskSession, incoming: TaskSession): TaskSession {
   const cancellation = mergeCancellationProjection(existing, incoming);
+  const incomingRouteGeneration = incoming.route_generation;
+  const existingRouteGeneration = existing.route_generation;
+  const routeIsStale =
+    existingRouteGeneration !== undefined &&
+    (incomingRouteGeneration === undefined || incomingRouteGeneration < existingRouteGeneration);
   const pendingAction = mergePendingActionProjection(existing, incoming);
   return {
     ...existing,
     ...incoming,
     ...cancellation,
+    ...(routeIsStale
+      ? {
+          execution_profile_id: existing.execution_profile_id,
+          route_generation: existing.route_generation,
+          route_state: existing.route_state,
+          route_reason: existing.route_reason,
+          route_error_code: existing.route_error_code,
+          route_error_class: existing.route_error_class,
+          route_catalogue_version: existing.route_catalogue_version,
+          route_retry_ordinal: existing.route_retry_ordinal,
+          route_deadline: existing.route_deadline,
+          route_pending_outcome: existing.route_pending_outcome,
+          downstream_acp_session_id: existing.downstream_acp_session_id,
+        }
+      : {}),
     ...pendingAction,
     agent_profile_snapshot: incoming.agent_profile_snapshot ?? existing.agent_profile_snapshot,
     worktree_id: incoming.worktree_id ?? existing.worktree_id,
@@ -335,6 +366,25 @@ function comparePromptIDs(left: Message, right: Message) {
   return 0;
 }
 
+function buildUpdateMessage(set: ImmerSet) {
+  return (message: Parameters<SessionSlice["updateMessage"]>[0]) =>
+    set((draft) => {
+      const messages = draft.messages.bySession[message.session_id];
+      if (messages) {
+        const index = messages.findIndex((entry) => entry.id === message.id);
+        if (index !== -1) {
+          const merged = { ...messages[index] };
+          mergeMessageFields(
+            merged as unknown as Record<string, unknown>,
+            message as unknown as Record<string, unknown>,
+          );
+          messages[index] = merged;
+        }
+      }
+      updatePromptMessage(draft, message);
+    });
+}
+
 function buildMessageActions(set: ImmerSet) {
   return {
     setMessages: (
@@ -367,21 +417,13 @@ function buildMessageActions(set: ImmerSet) {
         }
         upsertPromptMessage(draft, message);
       }),
-    updateMessage: (message: Parameters<SessionSlice["updateMessage"]>[0]) =>
+    updateMessage: buildUpdateMessage(set),
+    updateMessages: (messages: Parameters<SessionSlice["updateMessages"]>[0]) =>
       set((draft) => {
-        const messages = draft.messages.bySession[message.session_id];
-        if (messages) {
-          const index = messages.findIndex((entry) => entry.id === message.id);
-          if (index !== -1) {
-            const merged = { ...messages[index] };
-            mergeMessageFields(
-              merged as unknown as Record<string, unknown>,
-              message as unknown as Record<string, unknown>,
-            );
-            messages[index] = merged;
-          }
+        for (const message of messages) {
+          const sessionMessages = draft.messages.bySession[message.session_id];
+          if (sessionMessages) mergeMessageAtIndex(sessionMessages, message);
         }
-        updatePromptMessage(draft, message);
       }),
     removeMessage: (
       sessionId: Parameters<SessionSlice["removeMessage"]>[0],

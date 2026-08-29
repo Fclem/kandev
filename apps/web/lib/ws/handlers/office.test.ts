@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoreApi } from "zustand";
 import type { AppState } from "@/lib/state/store";
 import { registerOfficeHandlers } from "./office";
+import {
+  __resetOfficeTaskContentSyncForTests,
+  beginWrite,
+  openFieldEditor,
+} from "@/lib/state/office-task-content-sync";
 
 /**
  * Minimal in-memory store for the office WS handler tests.
@@ -13,7 +18,15 @@ function makeStore(activeWorkspaceId: string | null) {
   const upsertProviderHealth = vi.fn();
   const appendRunAttempt = vi.fn();
   const setWorkspaceRouting = vi.fn();
-  const patchTaskInStore = vi.fn();
+  // Mirrors the real patchTaskInStore action's field-merge behavior (minus
+  // status normalization, which these handler tests don't exercise) so the
+  // content-editing guard tests can assert on actual post-patch item state,
+  // not just on how the mock was called.
+  const patchTaskInStore = vi.fn((taskId: string, patch: Record<string, unknown>) => {
+    const items = state.office.tasks.items as Array<{ id: string } & Record<string, unknown>>;
+    const idx = items.findIndex((t) => t.id === taskId);
+    if (idx >= 0) Object.assign(items[idx], patch);
+  });
   let state = {
     workspaces: { items: [], activeId: activeWorkspaceId },
     office: { tasks: { items: [] } },
@@ -54,6 +67,7 @@ function makeStore(activeWorkspaceId: string | null) {
 }
 
 const ACTIVE_WS = "ws-current";
+const ACTION_TASK_UPDATED = "office.task.updated";
 
 describe("office WS handler — workspace filter", () => {
   beforeEach(() => {
@@ -134,7 +148,7 @@ describe("office WS handler — workspace filter", () => {
   });
 });
 
-describe("office WS handler — task field updates delegate to patchTaskInStore", () => {
+describe("office WS handler — task field updates", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -142,11 +156,11 @@ describe("office WS handler — task field updates delegate to patchTaskInStore"
   it("maps the producer state field on office.task.updated", () => {
     const { store, patchTaskInStore } = makeStore(ACTIVE_WS);
     const handlers = registerOfficeHandlers(store);
-    const handler = handlers["office.task.updated"]!;
+    const handler = handlers[ACTION_TASK_UPDATED]!;
 
     handler({
       type: "notification",
-      action: "office.task.updated",
+      action: ACTION_TASK_UPDATED,
       payload: { workspace_id: ACTIVE_WS, task_id: "t-1", state: "SCHEDULING" },
     } as Parameters<typeof handler>[0]);
 
@@ -156,7 +170,7 @@ describe("office WS handler — task field updates delegate to patchTaskInStore"
     );
   });
 
-  it("refreshes tasks for a producer task.moved payload without a status", () => {
+  it("refreshes the task detail and activity for a producer task.moved payload without a status", () => {
     const { store, patchTaskInStore, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
     const handlers = registerOfficeHandlers(store);
     const handler = handlers["office.task.moved"]!;
@@ -176,6 +190,8 @@ describe("office WS handler — task field updates delegate to patchTaskInStore"
     expect(patchTaskInStore).not.toHaveBeenCalled();
     expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("tasks");
     expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("dashboard");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("task:t-1");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("activity");
   });
 
   it("passes the raw new_status through on office.task.status_changed", () => {
@@ -190,6 +206,206 @@ describe("office WS handler — task field updates delegate to patchTaskInStore"
     } as Parameters<typeof handler>[0]);
 
     expect(patchTaskInStore).toHaveBeenCalledWith("t-1", { status: "CREATED" });
+  });
+
+  it("refreshes the per-task DTO and dashboard on office.task.status_changed", () => {
+    const { store, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers["office.task.status_changed"]!;
+
+    handler({
+      type: "notification",
+      action: "office.task.status_changed",
+      payload: { workspace_id: ACTIVE_WS, task_id: "t-42", new_status: "done" },
+    } as Parameters<typeof handler>[0]);
+
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("task:t-42");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("dashboard");
+  });
+
+  it("refreshes the per-task DTO, dashboard, and activity on office.task.moved", () => {
+    const { store, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers["office.task.moved"]!;
+
+    handler({
+      type: "notification",
+      action: "office.task.moved",
+      payload: { workspace_id: ACTIVE_WS, task_id: "t-99", new_status: "in_progress" },
+    } as Parameters<typeof handler>[0]);
+
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("task:t-99");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("dashboard");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("activity");
+  });
+});
+
+const REMOTE_TITLE = "Remote title";
+const REMOTE_DESCRIPTION = "Remote description";
+
+describe("office WS handler — content-editing guard (AC-61)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    __resetOfficeTaskContentSyncForTests();
+  });
+
+  function seedTaskItem(store: StoreApi<AppState>) {
+    store.setState(
+      () =>
+        ({
+          office: {
+            tasks: {
+              items: [
+                { id: "t-1", title: "Old title", description: "Old description", status: "todo" },
+              ],
+            },
+          },
+        }) as unknown as Partial<AppState>,
+    );
+  }
+
+  it("leaves a guarded field's store entry unchanged, including when the write originates in this handler", () => {
+    const { store } = makeStore(ACTIVE_WS);
+    seedTaskItem(store);
+    openFieldEditor("t-1", "title");
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers[ACTION_TASK_UPDATED]!;
+
+    handler({
+      type: "notification",
+      action: ACTION_TASK_UPDATED,
+      payload: {
+        workspace_id: ACTIVE_WS,
+        task_id: "t-1",
+        title: REMOTE_TITLE,
+        description: REMOTE_DESCRIPTION,
+        status: "in_progress",
+      },
+    } as Parameters<typeof handler>[0]);
+
+    const item = store.getState().office.tasks.items[0] as {
+      title: string;
+      description: string;
+      status: string;
+    };
+    expect(item.title).toBe("Old title");
+    expect(item.description).toBe("Remote description");
+    expect(item.status).toBe("in_progress");
+  });
+
+  it("leaves both fields' store entries unchanged while a write is in flight for each", () => {
+    const { store } = makeStore(ACTIVE_WS);
+    seedTaskItem(store);
+    beginWrite("t-1", "title", 1);
+    beginWrite("t-1", "description", 1);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers[ACTION_TASK_UPDATED]!;
+
+    handler({
+      type: "notification",
+      action: ACTION_TASK_UPDATED,
+      payload: {
+        workspace_id: ACTIVE_WS,
+        task_id: "t-1",
+        title: REMOTE_TITLE,
+        description: REMOTE_DESCRIPTION,
+      },
+    } as Parameters<typeof handler>[0]);
+
+    const item = store.getState().office.tasks.items[0] as { title: string; description: string };
+    expect(item.title).toBe("Old title");
+    expect(item.description).toBe("Old description");
+  });
+
+  it("applies both fields normally when neither is guarded", () => {
+    const { store } = makeStore(ACTIVE_WS);
+    seedTaskItem(store);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers[ACTION_TASK_UPDATED]!;
+
+    handler({
+      type: "notification",
+      action: ACTION_TASK_UPDATED,
+      payload: {
+        workspace_id: ACTIVE_WS,
+        task_id: "t-1",
+        title: REMOTE_TITLE,
+        description: REMOTE_DESCRIPTION,
+      },
+    } as Parameters<typeof handler>[0]);
+
+    const item = store.getState().office.tasks.items[0] as { title: string; description: string };
+    expect(item.title).toBe("Remote title");
+    expect(item.description).toBe("Remote description");
+  });
+});
+
+describe("office WS handler — costs refetch gating on office.task.updated", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Cost-by-project breakdown groups by the task's live project_id (see
+  // costs.go), so only a project_id field change should bump "costs" — the
+  // generic kanban task.updated forward carries no `fields` at all and must
+  // not refetch costs on every unrelated task touch.
+  it.each([
+    { fields: ["project_id"], expectCosts: true },
+    { fields: ["project_id", "title"], expectCosts: true },
+    { fields: ["priority"], expectCosts: false },
+    { fields: [], expectCosts: false },
+    { fields: undefined, expectCosts: false },
+  ])("gates the costs trigger by fields=$fields", ({ fields, expectCosts }) => {
+    const { store, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers[ACTION_TASK_UPDATED]!;
+
+    handler({
+      type: "notification",
+      action: ACTION_TASK_UPDATED,
+      payload: { workspace_id: ACTIVE_WS, task_id: "t-1", fields },
+    } as Parameters<typeof handler>[0]);
+
+    if (expectCosts) {
+      expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("costs");
+    } else {
+      expect(setOfficeRefetchTrigger).not.toHaveBeenCalledWith("costs");
+    }
+  });
+
+  it("refreshes tasks when a task project changes", () => {
+    const { store, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers[ACTION_TASK_UPDATED]!;
+
+    handler({
+      type: "notification",
+      action: ACTION_TASK_UPDATED,
+      payload: { workspace_id: ACTIVE_WS, task_id: "t-1", fields: ["project_id"] },
+    } as Parameters<typeof handler>[0]);
+
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("tasks");
+  });
+
+  it("maps a project_id update to the task store field", () => {
+    const { store, patchTaskInStore } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers[ACTION_TASK_UPDATED]!;
+
+    handler({
+      type: "notification",
+      action: ACTION_TASK_UPDATED,
+      payload: {
+        workspace_id: ACTIVE_WS,
+        task_id: "t-1",
+        project_id: "project-2",
+      },
+    } as Parameters<typeof handler>[0]);
+
+    expect(patchTaskInStore).toHaveBeenCalledWith("t-1", { projectId: "project-2" });
   });
 });
 
@@ -351,5 +567,56 @@ describe("office WS handler — provider routing events", () => {
     } as Parameters<typeof handler>[0]);
 
     expect(upsertProviderHealth).not.toHaveBeenCalled();
+  });
+});
+
+describe("office WS handler — office.run.processed inbox refetch", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("triggers an inbox refetch when a run finishes with status failed", () => {
+    const { store, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers["office.run.processed"]!;
+
+    handler({
+      type: "notification",
+      action: "office.run.processed",
+      payload: { workspace_id: ACTIVE_WS, status: "failed", run_id: "run-1" },
+    } as Parameters<typeof handler>[0]);
+
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("inbox");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("runs");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("agents");
+  });
+
+  it("does NOT trigger an inbox refetch when a run finishes with a non-failed status", () => {
+    const { store, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers["office.run.processed"]!;
+
+    handler({
+      type: "notification",
+      action: "office.run.processed",
+      payload: { workspace_id: ACTIVE_WS, status: "finished", run_id: "run-1" },
+    } as Parameters<typeof handler>[0]);
+
+    expect(setOfficeRefetchTrigger).not.toHaveBeenCalledWith("inbox");
+    expect(setOfficeRefetchTrigger).toHaveBeenCalledWith("runs");
+  });
+
+  it("does NOT trigger any refetch for a failed run in another workspace", () => {
+    const { store, setOfficeRefetchTrigger } = makeStore(ACTIVE_WS);
+    const handlers = registerOfficeHandlers(store);
+    const handler = handlers["office.run.processed"]!;
+
+    handler({
+      type: "notification",
+      action: "office.run.processed",
+      payload: { workspace_id: "ws-other", status: "failed", run_id: "run-1" },
+    } as Parameters<typeof handler>[0]);
+
+    expect(setOfficeRefetchTrigger).not.toHaveBeenCalled();
   });
 });

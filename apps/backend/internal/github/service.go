@@ -112,6 +112,7 @@ type Service struct {
 	eventBus                 bus.EventBus
 	logger                   *logger.Logger
 	taskDeleter              TaskDeleter
+	comparisonTargetObserver ComparisonTargetObserver
 	taskIssueStore           TaskIssueStore
 	// cascadeTaskDeleter is the cascade-delete entry point used by the
 	// watch reset flow. It is distinct from taskDeleter (which only deletes
@@ -330,6 +331,17 @@ func (s *Service) ListTaskPRsByTaskIDs(ctx context.Context, taskIDs []string) (m
 		return map[string][]*TaskPR{}, nil
 	}
 	return s.store.ListTaskPRsByTaskIDs(ctx, taskIDs)
+}
+
+// ListTaskPRAutomationOptionsByTaskIDs forwards bounded per-PR automation
+// hydration for task-summary projection without exposing the GitHub store.
+func (s *Service) ListTaskPRAutomationOptionsByTaskIDs(
+	ctx context.Context, taskIDs []string,
+) (map[string][]*TaskPRAutomationOptions, error) {
+	if s.store == nil {
+		return map[string][]*TaskPRAutomationOptions{}, nil
+	}
+	return s.store.ListTaskPRAutomationOptionsByTaskIDs(ctx, taskIDs)
 }
 
 // TestEventBus returns the event bus for test/mock use only.

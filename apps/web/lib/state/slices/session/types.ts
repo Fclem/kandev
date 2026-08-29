@@ -218,6 +218,7 @@ export type SessionSliceActions = {
   ) => void;
   addMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
+  updateMessages: (messages: Message[]) => void;
   removeMessage: (sessionId: string, messageId: string) => void;
   /**
    * Idempotent full-snapshot merge: reconciles `messages` against the current

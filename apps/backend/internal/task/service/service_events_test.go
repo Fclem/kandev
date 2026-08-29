@@ -603,6 +603,80 @@ func TestPublishTaskUpdated_EmitsAutopilot(t *testing.T) {
 	}
 }
 
+func TestPublishTaskUpdatedRedactsDeferredLaunchAttribution(t *testing.T) {
+	svc, eventBus, _ := createTestService(t)
+	task := &models.Task{
+		ID: "task-private-attribution", WorkspaceID: "ws-1", WorkflowID: "wf-1", WorkflowStepID: "step-1",
+		Metadata: map[string]interface{}{
+			models.MetaKeyDeferredLaunch: map[string]interface{}{
+				models.DeferredLaunchUserIDKey:          "user-private",
+				models.DeferredLaunchRecordRecentUseKey: true,
+			},
+		},
+	}
+
+	svc.PublishTaskUpdated(context.Background(), task)
+
+	data := singlePublishedEventData(t, eventBus)
+	metadata, ok := data["metadata"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("event metadata = %#v, want a map", data["metadata"])
+	}
+	launch, ok := metadata[models.MetaKeyDeferredLaunch].(map[string]interface{})
+	if !ok {
+		t.Fatalf("event deferred launch metadata = %#v, want a map", metadata[models.MetaKeyDeferredLaunch])
+	}
+	if _, exists := launch[models.DeferredLaunchUserIDKey]; exists {
+		t.Fatalf("event exposed deferred launch user_id = %v", launch[models.DeferredLaunchUserIDKey])
+	}
+	if _, exists := launch[models.DeferredLaunchRecordRecentUseKey]; exists {
+		t.Fatalf("event exposed deferred launch recency marker = %v", launch[models.DeferredLaunchRecordRecentUseKey])
+	}
+	if got := task.Metadata[models.MetaKeyDeferredLaunch].(map[string]interface{})[models.DeferredLaunchUserIDKey]; got != "user-private" {
+		t.Fatalf("redacting the event mutated the source task user_id = %v", got)
+	}
+}
+
+// TestPublishTaskUpdated_EmitsAutoStartFailed regression-tests the WS gap
+// found in Review round 2: setTaskAutoStartFailedMarker /
+// clearTaskAutoStartFailedMarker both call PublishTaskUpdated expecting open
+// clients to see the flip, but publishTaskEventNow hand-builds the payload
+// map and never carried auto_start_failed, so the publishes were dead code
+// and the badge only ever appeared after a reload (REST snapshot).
+func TestPublishTaskUpdated_EmitsAutoStartFailed(t *testing.T) {
+	svc, eventBus, _ := createTestService(t)
+	svc.PublishTaskUpdated(context.Background(), &models.Task{
+		ID: "task-auto-start-failed", WorkspaceID: "ws-1", WorkflowID: "wf-1", WorkflowStepID: "step-1",
+		Metadata: map[string]interface{}{models.MetaKeyAutoStartFailed: true},
+	})
+
+	data := singlePublishedEventData(t, eventBus)
+	if got, ok := data["auto_start_failed"].(bool); !ok || !got {
+		t.Fatalf("auto_start_failed payload = %#v, want true", data["auto_start_failed"])
+	}
+}
+
+// TestPublishTaskUpdated_EmitsAutoStartFailedFalseWhenCleared proves the
+// clear path also propagates: a task with no MetaKeyAutoStartFailed key
+// publishes an explicit `false`, not an omitted field, so
+// preserveOmittedField on the frontend does not pin the stale `true` from a
+// previous failure.
+func TestPublishTaskUpdated_EmitsAutoStartFailedFalseWhenCleared(t *testing.T) {
+	svc, eventBus, _ := createTestService(t)
+	svc.PublishTaskUpdated(context.Background(), &models.Task{
+		ID: "task-auto-start-cleared", WorkspaceID: "ws-1", WorkflowID: "wf-1", WorkflowStepID: "step-1",
+	})
+
+	data := singlePublishedEventData(t, eventBus)
+	got, ok := data["auto_start_failed"].(bool)
+	if !ok {
+		t.Fatalf("auto_start_failed payload missing or wrong type: %#v", data["auto_start_failed"])
+	}
+	if got {
+		t.Fatalf("auto_start_failed payload = true, want false for a task without the marker")
+	}
+}
+
 func TestPublishWorkspaceSourcesAdoptedPublishesSessionScopedPayload(t *testing.T) {
 	svc, eventBus, _ := createTestService(t)
 	eventBus.ClearEvents()

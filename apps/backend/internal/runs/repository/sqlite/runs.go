@@ -9,33 +9,61 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/kandev/kandev/internal/db/dialect"
 	"github.com/kandev/kandev/internal/office/models"
 	"github.com/kandev/kandev/internal/runs/commentkeys"
 )
 
-// CreateRun creates a new run queue entry.
-func (r *Repository) CreateRun(ctx context.Context, req *models.Run) error {
+// CreateRunTx creates a new run queue entry using a transaction the caller
+// owns. Callers that need to combine the insert with other transactional
+// writes (for example the parent-wake reconciler's receipt upsert) use
+// this directly; CreateRun wraps it with a private transaction for the
+// common single-statement case.
+//
+// ContinuationScope is decided here, once, before the row exists to be
+// coalesced into — never at read or write time downstream. A routine
+// wakeup that later coalesces into this run (MarkWakeupRequestCoalesced)
+// only ever patches context_snapshot, so every later reader/writer of
+// this run's continuation summary reads the value persisted here instead
+// of re-deriving it against a snapshot that may have drifted.
+func (r *Repository) CreateRunTx(ctx context.Context, tx *sqlx.Tx, req *models.Run) error {
 	if req.ID == "" {
 		req.ID = uuid.New().String()
 	}
 	ensureRunDefaults(req)
 	req.RequestedAt = time.Now().UTC()
+	req.ContinuationScope = models.ContinuationScopeForRun(req, req.AgentProfileID)
 
-	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	_, err := tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO runs (
 			id, agent_profile_id, reason, payload, status, coalesced_count,
 			idempotency_key, context_snapshot, capabilities, input_snapshot,
 			output_summary, failure_reason, session_id, retry_count, scheduled_retry_at,
-			requested_at, error_message, cancel_reason
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			requested_at, error_message, cancel_reason, continuation_scope
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`), req.ID, req.AgentProfileID, req.Reason, req.Payload, req.Status,
 		req.CoalescedCount, req.IdempotencyKey, req.ContextSnapshot,
 		req.Capabilities, req.InputSnapshot, req.OutputSummary, req.FailureReason,
 		req.SessionID, req.RetryCount, req.ScheduledRetryAt, req.RequestedAt,
-		req.ErrorMessage, req.CancelReason)
+		req.ErrorMessage, req.CancelReason, req.ContinuationScope)
 	return err
+}
+
+// CreateRun creates a new run queue entry in a transaction owned by this
+// method. See CreateRunTx for the field-defaulting / continuation-scope
+// derivation this delegates to.
+func (r *Repository) CreateRun(ctx context.Context, req *models.Run) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.CreateRunTx(ctx, tx, req); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func ensureRunDefaults(req *models.Run) {
@@ -156,12 +184,16 @@ func (r *Repository) ClaimRun(ctx context.Context, agentInstanceID string) (*mod
 	return &req, nil
 }
 
-// FinishRun marks a run as finished.
-func (r *Repository) FinishRun(ctx context.Context, id, status string) error {
+// FinishRun marks a run as terminal (status) and records its outcome in the
+// same statement, so the row can never hold a terminal status with a stale
+// outcome from a different transition. outcome is nil for the failed path
+// and for callers with no established semantic label (docs/specs/
+// task-delivery-ledger/spec.md, "Office run outcome").
+func (r *Repository) FinishRun(ctx context.Context, id, status string, outcome *string) error {
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
-		UPDATE runs SET status = ?, finished_at = ? WHERE id = ?
-	`), status, now, id)
+		UPDATE runs SET status = ?, outcome = ?, finished_at = ? WHERE id = ?
+	`), status, outcome, now, id)
 	return err
 }
 
@@ -170,6 +202,39 @@ func (r *Repository) GetRunByID(ctx context.Context, id string) (*models.Run, er
 	var run models.Run
 	err := r.ro.QueryRowxContext(ctx, r.ro.Rebind(`
 		SELECT * FROM runs WHERE id = ?
+	`), id).StructScan(&run)
+	if err != nil {
+		return nil, err
+	}
+	return &run, nil
+}
+
+// GetRunWorkspaceID resolves a run's owning workspace via its agent
+// profile, the same join idiom ListRuns uses. A raw join, not
+// GetAgentInstance: GetAgentInstance filters deleted_at IS NULL, which
+// would make a run under a soft-deleted agent profile permanently
+// unresolvable (and so permanently deniable) to its own owner. Returns
+// sql.ErrNoRows for an unknown run.
+func (r *Repository) GetRunWorkspaceID(ctx context.Context, runID string) (string, error) {
+	var workspaceID string
+	err := r.ro.QueryRowxContext(ctx, r.ro.Rebind(`
+		SELECT a.workspace_id FROM runs r
+		JOIN agent_profiles a ON a.id = r.agent_profile_id
+		WHERE r.id = ?
+	`), runID).Scan(&workspaceID)
+	if err != nil {
+		return "", err
+	}
+	return workspaceID, nil
+}
+
+// GetClaimedRunByID returns a run only while it is still claimed. Lifecycle
+// events carry this immutable run identity so a delayed predecessor event
+// cannot finish a newer claimed run for the same task and agent.
+func (r *Repository) GetClaimedRunByID(ctx context.Context, id string) (*models.Run, error) {
+	var run models.Run
+	err := r.ro.QueryRowxContext(ctx, r.ro.Rebind(`
+		SELECT * FROM runs WHERE id = ? AND status = 'claimed'
 	`), id).StructScan(&run)
 	if err != nil {
 		return nil, err
@@ -340,6 +405,33 @@ func (r *Repository) GetClaimedRunByTaskID(ctx context.Context, taskID string) (
 	return &req, nil
 }
 
+// GetClaimedRunByTaskAndAgent returns the claimed run for a task that
+// belongs to a specific agent. Unlike GetClaimedRunByTaskID, this is scoped
+// to the agent as well as the task: ClaimNextEligibleRun's busy-lock is
+// per-agent, not per-task, so two different agents can each have a claimed
+// run on the same task at once. Callers that already know which agent's
+// lifecycle event they are handling (AgentCompleted/AgentFailed) must use
+// this instead of the unscoped lookup, which prefers whichever row was
+// claimed most recently regardless of which agent actually sent the event
+// (Review round 4, BLOCKING FINDING 2).
+func (r *Repository) GetClaimedRunByTaskAndAgent(
+	ctx context.Context, taskID, agentProfileID string,
+) (*models.Run, error) {
+	var req models.Run
+	err := r.ro.QueryRowxContext(ctx, r.ro.Rebind(`
+		SELECT * FROM runs
+		WHERE status = 'claimed'
+		  AND agent_profile_id = ?
+		  AND json_extract(payload, '$.task_id') = ?
+		ORDER BY claimed_at DESC
+		LIMIT 1
+	`), agentProfileID, taskID).StructScan(&req)
+	if err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
 // CheckIdempotencyKey returns true if the key already exists within the window.
 func (r *Repository) CheckIdempotencyKey(ctx context.Context, key string, windowHours int) (bool, error) {
 	cutoff := time.Now().UTC().Add(-time.Duration(windowHours) * time.Hour)
@@ -360,7 +452,18 @@ func (r *Repository) CoalesceRun(
 	ctx context.Context, agentInstanceID, reason string, windowSecs int, payload string,
 ) (bool, error) {
 	cutoff := time.Now().UTC().Add(-time.Duration(windowSecs) * time.Second)
-	res, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	taskID := taskIDFromPayload(payload)
+	taskPredicate := ""
+	args := []interface{}{payload, agentInstanceID, reason, cutoff, commentkeys.TaskCommentPrefix + "%"}
+	// Assignment wakes are task-specific: merging two tasks for the same
+	// agent would replace the first task's payload and silently drop its
+	// launch. Other reasons, such as task comments, intentionally retain
+	// their existing cross-task coalescing behaviour.
+	if taskID != "" && reason == "task_assigned" {
+		taskPredicate = fmt.Sprintf(" AND %s = ?", dialect.JSONExtract(r.db.DriverName(), "payload", "task_id"))
+		args = append(args, taskID)
+	}
+	query := fmt.Sprintf(`
 		UPDATE runs
 		SET coalesced_count = coalesced_count + 1, payload = ?
 		WHERE id = (
@@ -368,10 +471,12 @@ func (r *Repository) CoalesceRun(
 			WHERE agent_profile_id = ? AND reason = ? AND status = 'queued'
 			  AND requested_at > ?
 			  AND (idempotency_key IS NULL OR idempotency_key NOT LIKE ?)
+			%s
 			ORDER BY requested_at DESC
 			LIMIT 1
 		)
-	`), payload, agentInstanceID, reason, cutoff, commentkeys.TaskCommentPrefix+"%")
+	`, taskPredicate)
+	res, err := r.db.ExecContext(ctx, r.db.Rebind(query), args...)
 	if err != nil {
 		return false, err
 	}
@@ -380,6 +485,15 @@ func (r *Repository) CoalesceRun(
 		return false, err
 	}
 	return rows > 0, nil
+}
+
+func taskIDFromPayload(payload string) string {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+		return ""
+	}
+	taskID, _ := raw["task_id"].(string)
+	return taskID
 }
 
 // ClaimNextEligibleRun atomically claims the next queued run,
@@ -596,16 +710,29 @@ func (r *Repository) SetRunRequestedAtForTest(
 // SetRunStatusForTest forces the status + timing fields for a seeded
 // run. Test-only: lets the E2E harness land non-queued rows
 // (claimed/finished/failed/cancelled) without going through the
-// production state machine.
+// production state machine. A "finished" status defaults outcome to
+// "processed", mirroring the ordinary production call site
+// (event_subscribers.go's agent-completed path) that "finished" almost
+// always represents — the same default already applied by
+// office/dashboard's seedSummaryRun test helper (docs/specs/
+// task-delivery-ledger/spec.md, "Office run outcome"). Every other
+// status writes a NULL outcome, matching FailRun and the dormant
+// SchedulerService paths. Existing callers that only cared about
+// status keep reading as succeeded under the outcome-aware bucketing
+// with no call-site changes.
 func (r *Repository) SetRunStatusForTest(
 	ctx context.Context, runID, status string,
 	claimedAt, finishedAt *time.Time,
 ) error {
+	var outcome interface{}
+	if status == "finished" {
+		outcome = "processed"
+	}
 	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		UPDATE runs
-		SET status = ?, claimed_at = ?, finished_at = ?
+		SET status = ?, outcome = ?, claimed_at = ?, finished_at = ?
 		WHERE id = ?
-	`), status, claimedAt, finishedAt, runID)
+	`), status, outcome, claimedAt, finishedAt, runID)
 	return err
 }
 

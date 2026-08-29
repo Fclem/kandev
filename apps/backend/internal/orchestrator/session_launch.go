@@ -240,10 +240,12 @@ func (s *Service) isPassthroughProfile(ctx context.Context, profileID string) bo
 
 // launchStart creates a new session and launches the agent.
 // If the request is an auto-start and the task's current workflow step does not
-// have auto_start_agent, the request is downgraded to a prepare (workspace-only,
-// no agent) to prevent unwanted auto-starts from the frontend's useAutoStartSession hook.
+// have auto_start_agent, or the task has unresolved dependencies, the request
+// is downgraded to a prepare (workspace-only, no agent) to prevent unwanted
+// auto-starts from the frontend's useAutoStartSession hook.
 func (s *Service) launchStart(ctx context.Context, req *LaunchSessionRequest) (*LaunchSessionResponse, error) {
-	if req.AutoStart && s.shouldBlockAutoStart(ctx, req) {
+	if req.AutoStart && (s.shouldBlockAutoStart(ctx, req) ||
+		s.dependencyBlocksAutoStart(ctx, req.TaskID, "session.launch")) {
 		req.LaunchWorkspace = true
 		return s.launchPrepare(ctx, req)
 	}
@@ -256,6 +258,16 @@ func (s *Service) launchStart(ctx context.Context, req *LaunchSessionRequest) (*
 	)
 	if err != nil {
 		return nil, err
+	}
+	if execution == nil {
+		// The automatic terminal-PR gate intentionally skips session creation.
+		// Return a successful no-op response so session.ensure and WS callers do
+		// not dereference a nil execution while the task-owned error card remains
+		// the recovery surface.
+		return &LaunchSessionResponse{
+			Success: true,
+			TaskID:  req.TaskID,
+		}, nil
 	}
 	return executionToLaunchResponse(req.TaskID, execution), nil
 }
@@ -424,6 +436,12 @@ func isMissingProfileResumeError(err error) bool {
 
 // executionToLaunchResponse converts a TaskExecution to a LaunchSessionResponse.
 func executionToLaunchResponse(taskID string, exec *executor.TaskExecution) *LaunchSessionResponse {
+	if exec == nil {
+		return &LaunchSessionResponse{
+			Success: true,
+			TaskID:  taskID,
+		}
+	}
 	resp := &LaunchSessionResponse{
 		Success:          true,
 		TaskID:           taskID,

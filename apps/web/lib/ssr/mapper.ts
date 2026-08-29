@@ -10,6 +10,21 @@ import {
 
 type KanbanTask = KanbanState["tasks"][number];
 
+// Split out so the snapshot->task mapper (already at the complexity limit
+// from its long list of `??` fallbacks) doesn't need to absorb one more.
+function resolveAutoStartFailed(task: WorkflowSnapshot["tasks"][number]): boolean {
+  return task.auto_start_failed ?? false;
+}
+
+function primaryExecutorFields(task: Task) {
+  return {
+    primaryExecutorId: task.primary_executor_id ?? undefined,
+    primaryExecutorType: task.primary_executor_type ?? undefined,
+    primaryExecutorName: task.primary_executor_name ?? undefined,
+    isRemoteExecutor: task.is_remote_executor ?? false,
+  };
+}
+
 export function snapshotToState(snapshot: WorkflowSnapshot): Partial<AppState> {
   // Handle empty snapshot (ephemeral tasks have no workflow)
   if (!snapshot.workflow) {
@@ -54,13 +69,20 @@ export function snapshotToState(snapshot: WorkflowSnapshot): Partial<AppState> {
           repository_id: r.repository_id,
           base_branch: r.base_branch,
           checkout_branch: r.checkout_branch,
+          branch_policy_id: r.branch_policy_id,
+          branch_policy_name: r.branch_policy_name,
+          branch_policy_base_branch: r.branch_policy_base_branch,
+          branch_policy_branch_template: r.branch_policy_branch_template,
+          branch_policy_pull_request_target: r.branch_policy_pull_request_target,
           position: r.position,
         })),
         primarySessionId: task.primary_session_id ?? undefined,
         primarySessionState: task.primary_session_state ?? undefined,
+        ...primaryExecutorFields(task),
         primarySessionPendingAction: pickPendingAction(task.primary_session_pending_action),
         taskPendingAction: pickPendingAction(task.task_pending_action),
         foregroundActivity: task.foreground_activity ?? undefined,
+        autoStartFailed: resolveAutoStartFailed(task),
         activeSubagentCount: task.active_subagent_count ?? undefined,
         sessionCount: task.session_count ?? undefined,
         reviewStatus: task.review_status ?? undefined,

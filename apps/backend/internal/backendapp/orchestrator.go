@@ -20,6 +20,7 @@ import (
 	"github.com/kandev/kandev/internal/common/gitref"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/db"
+	"github.com/kandev/kandev/internal/delivery"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/gitcredentials"
 	githubpkg "github.com/kandev/kandev/internal/github"
@@ -97,7 +98,7 @@ func provideOrchestrator(
 	if err != nil {
 		return nil, nil, fmt.Errorf("init message queue repo: %w", err)
 	}
-	queueSettings := resolveQueueSettings(pool, log).Effective
+	queueSettings := resolveQueueSettings(pool, log, queueConfiguration(cfg)).Effective
 	maxPerSession := queueSettings.MaxPerSession
 	mergeEnabled := queueSettings.MergeEnabled
 	autoMergeEnabled := queueSettings.AutoMergeEnabled
@@ -122,6 +123,7 @@ func provideOrchestrator(
 	}
 
 	orchestratorSvc := orchestrator.NewService(serviceCfg, eventBus, agentManagerClient, taskRepoAdapter, taskRepo, userSvc, secretStore, msgQueue, log)
+	orchestratorSvc.SetAgentProfileRecentUseRecorder(userSvc)
 	if gitCredentialBroker != nil {
 		orchestratorSvc.SetGitHubCredentialBroker(gitCredentialBroker, githubCredentialBrokerEndpoint(cfg))
 	}
@@ -140,9 +142,11 @@ func provideOrchestrator(
 	// them the one task kind nothing else ever cleans up; the orchestrator needs
 	// the manager to enforce the per-automation retention window.
 	orchestratorSvc.SetWorktreeManager(lifecycleMgr.WorktreeManager())
+	orchestratorSvc.SetTaskLaunchRecoveryService(taskSvc)
 
 	msgCreator := &messageCreatorAdapter{svc: taskSvc, logger: log}
 	orchestratorSvc.SetMessageCreator(msgCreator)
+	orchestratorSvc.SetTransientRetryMessageService(taskSvc)
 	orchestratorSvc.SetSubagentContextRecorder(&subagentContextAdapter{svc: taskSvc})
 
 	orchestratorSvc.SetTurnService(newTurnServiceAdapter(taskSvc))
@@ -230,15 +234,18 @@ func provideOrchestrator(
 	// Wire repository resolver for auto-cloning repos during review task creation
 	if repoCloner != nil {
 		orchestratorSvc.SetRepositoryResolver(&repositoryResolverAdapter{
-			cloner:   repoCloner,
-			protocol: repoclone.DetectGitProtocol(),
-			taskSvc:  taskSvc,
-			logger:   log,
+			cloner:  repoCloner,
+			taskSvc: taskSvc,
+			logger:  log,
 		})
 
 		// Wire repo cloner into executor for provider-backed repos with no local path
 		orchestratorSvc.SetRepoCloner(repoCloner, &repoLocalPathUpdater{svc: taskSvc})
 	}
+	// Worktree fallback self-healing updates the exact task repository row
+	// after a successful launch. Keep this seam on the task service so the
+	// lifecycle and worktree packages remain task-agnostic.
+	orchestratorSvc.SetTaskRepositoryBaseBranchUpdater(&repoLocalPathUpdater{svc: taskSvc})
 
 	return orchestratorSvc, msgCreator, nil
 }
@@ -269,21 +276,21 @@ func (a githubExecutorCredentialPolicyAdapter) ResolveTaskGitCredentialPolicy(
 func githubCredentialBrokerEndpoint(cfg *config.Config) string {
 	if cfg != nil {
 		if publicBaseURL := strings.TrimRight(strings.TrimSpace(cfg.GitHubCredentialBroker.PublicBaseURL), "/"); publicBaseURL != "" {
-			return publicBaseURL + "/api/v1/github/credentials/resolve"
+			return publicBaseURL + "/api/v1/git/credentials/resolve"
 		}
 		if cfg.Server.Port != 0 {
-			return fmt.Sprintf("http://localhost:%d/api/v1/github/credentials/resolve", cfg.Server.Port)
+			return fmt.Sprintf("http://localhost:%d/api/v1/git/credentials/resolve", cfg.Server.Port)
 		}
 	}
-	return fmt.Sprintf("http://localhost:%d/api/v1/github/credentials/resolve", portsBackendDefault)
+	return fmt.Sprintf("http://localhost:%d/api/v1/git/credentials/resolve", portsBackendDefault)
 }
 
 // resolveQueueMaxPerSession honors the KANDEV_QUEUE_MAX_PER_SESSION env var,
 // falling back to messagequeue.DefaultMaxPerSession (10) when unset or invalid.
 // Values <= 0 disable the cap entirely (callers can still flood queues — only
 // useful in tests / specialized deployments).
-func resolveQueueMaxPerSession(pool *db.Pool, log *logger.Logger) int {
-	return resolveQueueSettings(pool, log).Effective.MaxPerSession
+func resolveQueueMaxPerSession(pool *db.Pool, log *logger.Logger, startup ...queuesettings.Configuration) int {
+	return resolveQueueSettings(pool, log, startup...).Effective.MaxPerSession
 }
 
 // resolveQueueMergeEnabled honors the persisted message queue setting,
@@ -303,7 +310,11 @@ func resolveQueueAutoMergeEnabled(pool *db.Pool, log *logger.Logger) bool {
 // back to defaults when unset, invalid, or the store is unavailable — and
 // resolves them against the KANDEV_QUEUE_MAX_PER_SESSION environment
 // override.
-func resolveQueueSettings(pool *db.Pool, log *logger.Logger) queuesettings.Resolution {
+func resolveQueueSettings(
+	pool *db.Pool,
+	log *logger.Logger,
+	startup ...queuesettings.Configuration,
+) queuesettings.Resolution {
 	var configured *queuesettings.Settings
 	if pool != nil {
 		rawStore, err := systemsettings.NewStore(pool)
@@ -317,7 +328,7 @@ func resolveQueueSettings(pool *db.Pool, log *logger.Logger) queuesettings.Resol
 			}
 		}
 	}
-	resolution, err := queuesettings.Resolve(configured, queuesettings.ReadEnvironment())
+	resolution, err := queuesettings.Resolve(configured, queuesettings.ReadEnvironment(), startup...)
 	if err != nil {
 		log.Warn("Failed to resolve message queue settings, using defaults", zap.Error(err))
 		return queuesettings.Resolution{Response: queuesettings.Response{
@@ -334,6 +345,13 @@ func resolveQueueSettings(pool *db.Pool, log *logger.Logger) queuesettings.Resol
 			zap.String("environment_variable", queuesettings.EnvironmentVariable))
 	}
 	return resolution
+}
+
+func queueConfiguration(cfg *config.Config) queuesettings.Configuration {
+	if cfg == nil || cfg.SourceFor("messageQueue.maxPerSession") != config.SourceConfiguration {
+		return queuesettings.Configuration{}
+	}
+	return queuesettings.Configuration{Value: cfg.MessageQueue.MaxPerSession, Present: true}
 }
 
 func resolveEventNamespace(cfg *config.Config) string {
@@ -944,12 +962,25 @@ func (u *repoLocalPathUpdater) UpdateRepositoryDefaultBranch(ctx context.Context
 	return err
 }
 
+func (u *repoLocalPathUpdater) UpdateTaskRepositoryBaseBranch(ctx context.Context, taskID, taskRepositoryID, baseBranch string) error {
+	_, err := u.svc.UpdateRepositoryBaseBranch(ctx, taskservice.UpdateRepositoryBaseBranchRequest{
+		TaskID:           taskID,
+		TaskRepositoryID: taskRepositoryID,
+		BaseBranch:       baseBranch,
+	})
+	return err
+}
+
 // repositoryResolverAdapter resolves GitHub repos by cloning + finding/creating DB records.
 type repositoryResolverAdapter struct {
-	cloner   *repoclone.Cloner
-	protocol string
-	taskSvc  *taskservice.Service
-	logger   *logger.Logger
+	cloner  reviewRepositoryCloner
+	taskSvc *taskservice.Service
+	logger  *logger.Logger
+}
+
+type reviewRepositoryCloner interface {
+	EnsureWorkspaceCloned(context.Context, string, string, string, string, string) (string, error)
+	BuildCloneURLWithHost(context.Context, string, string, string, string) (string, error)
 }
 
 // ResolveForReview implements orchestrator.RepositoryResolver.
@@ -975,7 +1006,7 @@ func (a *repositoryResolverAdapter) ResolveForReview(
 		return existing.ID, baseBranch, nil
 	}
 
-	cloneURL, err := repoclone.CloneURL(provider, owner, name, a.protocol)
+	cloneURL, err := a.cloner.BuildCloneURLWithHost(ctx, provider, providerHost, owner, name)
 	if err != nil {
 		return "", "", fmt.Errorf("unsupported provider: %w", err)
 	}
@@ -1054,10 +1085,26 @@ func (a *repositoryResolverAdapter) persistDetectedDefaultBranch(
 	if strings.TrimSpace(repo.DefaultBranch) == detected {
 		return detected
 	}
+	// detected is still the correct base branch for the review in progress
+	// even when the write below fails, so it is always returned. But a
+	// failure here is not a transient blip to shrug off: it leaves
+	// repositories.default_branch empty, which (per spec "Degraded
+	// evaluation") permanently degrades every future delivery-ledger
+	// evaluation of this repository to default_branch_unknown until some
+	// later write succeeds — and this call site retries with the same
+	// detected value on every future invocation, so a rejection driven by
+	// validation (as opposed to a transient DB error) will repeat forever.
+	// Review round 3, finding #4: this used to log at Warn and nothing
+	// else, making that permanent degradation invisible. Error level plus
+	// the dedicated counter make it observable the same way ancestry/write
+	// failures already are in internal/delivery/metrics.go.
 	if _, err := a.taskSvc.UpdateRepository(ctx, repo.ID, &taskservice.UpdateRepositoryRequest{
 		DefaultBranch: &detected,
 	}); err != nil {
-		a.logger.Warn("failed to persist detected default branch",
+		delivery.RecordDefaultBranchPersistError()
+		a.logger.Error("failed to persist detected default branch: repository row keeps its prior "+
+			"default_branch and will read as default_branch_unknown in the delivery ledger until a "+
+			"future write succeeds",
 			zap.String("repository_id", repo.ID),
 			zap.String(branchFieldKey, detected),
 			zap.Error(err))

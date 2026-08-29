@@ -1,17 +1,37 @@
 "use client";
 
-import { use, useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
+import {
+  use,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  Suspense,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useRouter, useSearchParams } from "@/lib/routing/client-router";
-import { useAppStore } from "@/components/state-provider";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { useOfficeRefetch } from "@/hooks/use-office-refetch";
+import { useLatestOnly } from "@/hooks/use-latest-only";
 import { TaskOptimisticContextProvider } from "@/hooks/use-optimistic-task-mutation";
 import {
   getTask,
   listActivityForTarget,
   listComments,
   type TaskCommentResponse,
-  type TaskDecisionDTO,
 } from "@/lib/api/domains/office-api";
+import { fetchTask } from "@/lib/api/domains/kanban-api";
+import {
+  endAllEditorsForTask,
+  getCanonicalValue,
+  isFieldGuarded,
+  nextTaskSequence,
+  recordRefetchCandidate,
+  seedInitialCanonical,
+  subscribeField,
+} from "@/lib/state/office-task-content-sync";
 import { listTaskSessions } from "@/lib/api/domains/session-api";
 import {
   liveSessionMetadataFromStore,
@@ -21,19 +41,13 @@ import { OfficeSimplePane } from "@/components/task/simple/OfficeSimplePane";
 import { TaskAdvancedMode } from "./task-advanced-mode";
 import { IssueDetailSkeleton } from "./task-detail-skeleton";
 import { TaskBody, resolveTaskBodyMode, type TaskBodyMode } from "@/components/task/TaskBody";
-import type {
-  Task,
-  TaskComment,
-  TaskActivityEntry,
-  TaskDecision,
-  TaskSession,
-  TimelineEvent,
-} from "./types";
-import type { ActivityEntry, OfficeTask } from "@/lib/state/slices/office/types";
+import type { Task, TaskComment, TaskActivityEntry, TaskSession, TimelineEvent } from "./types";
+import type { ActivityEntry } from "@/lib/state/slices/office/types";
 import type { TaskSession as ApiTaskSession } from "@/lib/types/http";
 import { useSessionLiveSyncSubscriptions } from "./use-session-live-sync";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
+import { mapOfficeTaskToTask } from "./map-office-task";
 
 type IssueDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -43,66 +57,6 @@ type IssueDetailPageProps = {
 // (keep the initial fetch) from an explicit server-side null (metadata was
 // cleared and must not be resurrected).
 const SESSION_METADATA_ABSENT = "\u0000absent\u0000";
-
-function mapDecisionDTO(d: TaskDecisionDTO): TaskDecision {
-  return {
-    id: d.id,
-    taskId: d.task_id,
-    deciderType: d.decider_type,
-    deciderId: d.decider_id,
-    deciderName: d.decider_name ?? "",
-    role: d.role,
-    decision: d.decision,
-    comment: d.comment ?? "",
-    createdAt: d.created_at,
-  };
-}
-
-export function mapOfficeTaskToTask(raw: OfficeTask): Task {
-  // The server DTO includes reviewers/approvers/decisions even though the
-  // strongly-typed OfficeTask only declares the cross-cutting fields. We
-  // read those extra props off the raw object.
-  const extra = raw as OfficeTask & {
-    reviewers?: string[];
-    approvers?: string[];
-    decisions?: TaskDecisionDTO[];
-    blockedBy?: string[];
-  };
-  return {
-    id: raw.id,
-    workspaceId: raw.workspaceId,
-    identifier: raw.identifier,
-    title: raw.title,
-    description: raw.description,
-    status: raw.status as Task["status"],
-    rawStatus: raw.rawStatus ?? raw.status,
-    priority: (raw.priority || "medium") as Task["priority"],
-    labels: (raw.labels ?? []).map((l) =>
-      typeof l === "string" ? { name: l, color: "#6b7280" } : l,
-    ),
-    assigneeAgentProfileId: raw.assigneeAgentProfileId,
-    parentId: raw.parentId,
-    projectId: raw.projectId,
-    blockedBy: extra.blockedBy ?? [],
-    blocking: [],
-    children: (raw.children ?? []).map((child) => ({
-      id: child.id,
-      identifier: child.identifier,
-      title: child.title,
-      status: child.status as Task["status"],
-      blockedBy: child.blockedBy ?? [],
-      createdAt: child.createdAt,
-    })),
-    reviewers: extra.reviewers ?? [],
-    approvers: extra.approvers ?? [],
-    decisions: (extra.decisions ?? []).map(mapDecisionDTO),
-    createdBy: "",
-    createdAt: raw.createdAt,
-    updatedAt: raw.updatedAt,
-    executionPolicy: raw.executionPolicy,
-    executionState: raw.executionState,
-  };
-}
 
 function mapCommentResponse(c: TaskCommentResponse): TaskComment {
   return {
@@ -292,9 +246,24 @@ function useSessionLiveSync({
   const taskId = task?.id;
   useEffect(() => {
     if (!taskId || !sessionStatesKey) return;
+    // AC-52: the sequence marks when this refetch was *issued*, so a slow
+    // response can still be recognized as stale against a write issued
+    // after it but resolved before it.
+    const sequence = nextTaskSequence(taskId);
     getTask(taskId)
       .then((res) => {
-        if (res.task) onTaskRefetch(mapOfficeTaskToTask(res.task), res.timeline ?? []);
+        if (res.task) {
+          const mapped = mapOfficeTaskToTask(res.task);
+          onTaskRefetch(mapped, res.timeline ?? []);
+          recordRefetchCandidate(taskId, "title", mapped.title, mapped.updatedAt, sequence);
+          recordRefetchCandidate(
+            taskId,
+            "description",
+            mapped.description,
+            mapped.updatedAt,
+            sequence,
+          );
+        }
       })
       .catch(() => {});
     void onCommentsRefetch();
@@ -307,59 +276,218 @@ function useSessionLiveSync({
 // Optimistic update helpers
 // ---------------------------------------------------------------------------
 
-function useTaskOptimisticHelpers(
+// Exported (in addition to being used internally by `useIssueData`) so unit
+// tests can drive the real guard-cleanup and restore behavior directly,
+// rather than only through a fully-rendered page.
+export function useTaskOptimisticHelpers(
   id: string,
   setTask: React.Dispatch<React.SetStateAction<Task | null>>,
   setTimeline: React.Dispatch<React.SetStateAction<TimelineEvent[]>>,
 ) {
+  const storeApi = useAppStoreApi();
+
+  const applyTaskPatch = useCallback(
+    (patch: Partial<Task>) => {
+      setTask((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
+    },
+    [id, setTask],
+  );
+
+  // AC-27/49/50/71: apply a field's canonical value to the displayed task
+  // (and the Office task store entry) the instant it becomes unguarded —
+  // either because a candidate was recorded while already unguarded, or
+  // because the last open editor / in-flight write for that field just
+  // cleared. `notifyField` fires unconditionally on every guard release
+  // (office-task-content-sync.ts), so these listeners own the "if the two
+  // differ" comparison against what's currently displayed/stored (AC-71):
+  // without it, a no-op editor open/close on a task with no description
+  // would write "" over an `undefined` description, since the canonical
+  // value is always normalised to "" but the store never held one.
+  useEffect(() => {
+    let unmounted = false;
+    const unsubTitle = subscribeField(id, "title", (value) => {
+      setTask((prev) =>
+        prev && prev.id === id && prev.title !== value ? { ...prev, title: value } : prev,
+      );
+      const current = storeApi.getState().office.tasks.items.find((t) => t.id === id);
+      if (current && current.title !== value) {
+        storeApi.getState().patchTaskInStore(id, { title: value });
+      }
+      if (unmounted && !isFieldGuarded(id, "title")) unsubTitle();
+    });
+    const unsubDescription = subscribeField(id, "description", (value) => {
+      setTask((prev) =>
+        prev && prev.id === id && (prev.description ?? "") !== value
+          ? { ...prev, description: value }
+          : prev,
+      );
+      const current = storeApi.getState().office.tasks.items.find((t) => t.id === id);
+      if (current && (current.description ?? "") !== value) {
+        storeApi.getState().patchTaskInStore(id, { description: value });
+      }
+      if (unmounted && !isFieldGuarded(id, "description")) unsubDescription();
+    });
+    return () => {
+      // AC-68/69: ending the open-editor contribution can synchronously flush
+      // a canonical value that was recorded while guarded (deferred-apply),
+      // and that flush needs the listeners above still registered to reach
+      // the Office task store. A write issued before unmount is deliberately
+      // left pending by endAllEditorsForTask and must still be able to reach
+      // the store once it resolves, so a field with a write still in flight
+      // keeps its listener alive past this cleanup; each listener retires
+      // itself once that field's guard finally clears.
+      unmounted = true;
+      endAllEditorsForTask(id);
+      if (!isFieldGuarded(id, "title")) unsubTitle();
+      if (!isFieldGuarded(id, "description")) unsubDescription();
+    };
+  }, [id, setTask, storeApi]);
+
   // Refetch the canonical task DTO when the backend broadcasts an update
   // (priority / project / parent / blockers / participants / assignee).
   // The optimistic patch we applied locally gets reconciled with server
-  // state.
+  // state. Title/description are excluded from this merge — the
+  // subscribeField effect above governs them so a guarded field's
+  // optimistic/in-flight value survives an unrelated refetch (AC-38/39).
+  //
+  // A WS-driven trigger can fire again before a prior GET resolves (two
+  // status changes in quick succession, ordinary network jitter). Without
+  // a guard, a slower earlier response can land after a faster later one
+  // and overwrite fresher task state with stale data. useLatestOnly
+  // discards a response once a newer refetchTask call has started,
+  // regardless of arrival order.
+  const { begin, isCurrent } = useLatestOnly();
   const refetchTask = useCallback(async () => {
+    const token = begin();
+    // AC-52: the sequence marks when this refetch was *issued*.
+    const sequence = nextTaskSequence(id);
     try {
-      const res = await getTask(id);
+      const [res, genericTask] = await Promise.all([getTask(id), fetchTask(id).catch(() => null)]);
+      if (!isCurrent(token)) return;
       if (res.task) {
-        setTask(mapOfficeTaskToTask(res.task));
+        const mapped = mapOfficeTaskToTask(res.task, genericTask ?? undefined);
+        setTask((prev) =>
+          prev ? { ...mapped, title: prev.title, description: prev.description } : mapped,
+        );
         if (res.timeline) setTimeline(res.timeline);
+        recordRefetchCandidate(id, "title", mapped.title, mapped.updatedAt, sequence);
+        recordRefetchCandidate(id, "description", mapped.description, mapped.updatedAt, sequence);
       }
     } catch {
       /* swallow — next user action will retry */
     }
-  }, [id, setTask, setTimeline]);
+  }, [id, setTask, setTimeline, begin, isCurrent]);
   useOfficeRefetch(`task:${id}`, () => {
     void refetchTask();
   });
 
-  const applyTaskPatch = useCallback(
-    (patch: Partial<Task>) => {
-      setTask((prev) => (prev ? { ...prev, ...patch } : prev));
-    },
-    [setTask],
-  );
-
+  // `restoreTask` backs `TaskOptimisticContextValue.restore`, the failure
+  // rollback for the generic picker mutation hook (status/priority/project/
+  // parent/labels/blockedBy/assignee). Title/description are excluded from
+  // the restored snapshot and always kept at their live value — those two
+  // fields are governed exclusively by the guard above, and this generic
+  // rollback never patches them optimistically in the first place (AC-61:
+  // only two writers may touch a guarded field, and this isn't one of them).
   const restoreTask = useCallback(
     (snapshot: Task) => {
-      setTask(snapshot);
+      setTask((prev) =>
+        prev && prev.id === id
+          ? { ...snapshot, title: prev.title, description: prev.description }
+          : prev,
+      );
     },
-    [setTask],
+    [id, setTask],
   );
 
   return { applyTaskPatch, restoreTask };
+}
+
+function useTaskDetailRefetch(
+  setTask: Dispatch<SetStateAction<Task | null>>,
+  setTimeline: Dispatch<SetStateAction<TimelineEvent[]>>,
+) {
+  return useCallback(
+    (updated: Task, updatedTimeline: TimelineEvent[]) => {
+      setTask((previous) =>
+        previous
+          ? {
+              ...updated,
+              // Office's live refetch endpoint does not carry the generic
+              // status summary or repository rows. Preserve the supplement
+              // loaded by the initial detail request until the next full load.
+              statusSummary: updated.statusSummary ?? previous.statusSummary,
+              repositories: updated.repositories ?? previous.repositories,
+              // AC-27/28/38/39/49/50: title/description must not be blindly
+              // overwritten by this whole-task refetch merge — they're
+              // governed exclusively by the subscribeField-driven
+              // deferred-apply effect in useTaskOptimisticHelpers, which
+              // respects the open-editor/in-flight-write guard. Every other
+              // field applies immediately.
+              title: previous.title,
+              description: previous.description,
+            }
+          : updated,
+      );
+      setTimeline(updatedTimeline);
+    },
+    [setTask, setTimeline],
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Primary data hook
 // ---------------------------------------------------------------------------
 
-function useIssueData(id: string) {
+// Snapshot storeIssues in a ref so the load effect can seed `task` from the
+// store without re-running on every store update. Re-running the GET
+// on store changes would race with in-flight optimistic mutations (the WS-
+// driven refetch in useTaskOptimisticHelpers handles canonical refresh after
+// a property mutation commits).
+// `errorKey` remains a catalog key so locale changes do not re-issue the load.
+
+// AC-59: seeds each field's canonical value from a loaded task.
+function seedCanonicalTitleAndDescription(taskId: string, task: Task): void {
+  seedInitialCanonical(taskId, "title", task.title, task.updatedAt);
+  seedInitialCanonical(taskId, "description", task.description ?? "", task.updatedAt);
+}
+
+// P1 review fix: the store-cache fast path can observe an unpersisted
+// optimistic value (a title/description write still in flight when the user
+// last navigated away). Seeding from it unconditionally would let that value
+// win an equal-timestamp tiebreak against the already-recorded canonical
+// value on a revisit before the authoritative GET resolves. Only seed a
+// field from the cache when nothing is recorded for it yet; once a canonical
+// value exists, only the authoritative GET response may supersede it.
+function seedCanonicalTitleAndDescriptionIfAbsent(taskId: string, task: Task): void {
+  if (getCanonicalValue(taskId, "title") === undefined) {
+    seedInitialCanonical(taskId, "title", task.title, task.updatedAt);
+  }
+  if (getCanonicalValue(taskId, "description") === undefined) {
+    seedInitialCanonical(taskId, "description", task.description ?? "", task.updatedAt);
+  }
+}
+
+// AC-59/AC-72: if the authoritative GET fails but the page is already
+// rendering this task interactively from the store cache, seed canonical
+// from it — otherwise a commit issued before the load ever succeeds (or if
+// it never does) would have no restore target on failure (AC-9/AC-64). In
+// practice this is now redundant with the synchronous seed in `load()`
+// below, but is kept as a defensive fallback for the store-miss case.
+function handleInitialLoadFailure(
+  taskId: string,
+  fromStoreTask: Task | null,
+  setErrorKey: (key: string | null) => void,
+): void {
+  if (fromStoreTask) {
+    seedCanonicalTitleAndDescription(taskId, fromStoreTask);
+  } else {
+    setErrorKey("office:failedToLoadTask");
+  }
+}
+
+export function useIssueData(id: string) {
   const storeIssues = useAppStore((s) => s.office.tasks.items);
   const setTaskSessionsForTask = useAppStore((s) => s.setTaskSessionsForTask);
-  // Snapshot storeIssues in a ref so the load effect can seed `task` from
-  // the store without re-running on every store update. Re-running the GET
-  // on store changes would race with in-flight optimistic mutations (the
-  // WS-driven refetch in useTaskOptimisticHelpers handles canonical
-  // refresh after a property mutation commits).
   const storeIssuesRef = useRef(storeIssues);
   useEffect(() => {
     storeIssuesRef.current = storeIssues;
@@ -371,9 +499,6 @@ function useIssueData(id: string) {
   const [activity, setActivity] = useState<TaskActivityEntry[]>([]);
   const [baseSessions, setBaseSessions] = useState<TaskSession[]>([]);
   const [loading, setLoading] = useState(true);
-  // Holds a catalog KEY, not a message: the load effect must not take `t` in
-  // its dep array (a locale switch would re-issue the task fetch), so the key is
-  // stored and resolved at render instead.
   const [errorKey, setErrorKey] = useState<string | null>(null);
 
   const applyDetail = useCallback(
@@ -393,22 +518,45 @@ function useIssueData(id: string) {
       setLoading(true);
       setErrorKey(null);
       const fromStore = storeIssuesRef.current.find((i) => i.id === id);
-      if (fromStore && !cancelled) setTask(mapOfficeTaskToTask(fromStore));
+      const fromStoreTask = fromStore ? mapOfficeTaskToTask(fromStore) : null;
+      if (fromStoreTask && !cancelled) {
+        setTask(fromStoreTask);
+        // AC-59/AC-9/AC-64: the page is interactive from here, so a commit
+        // issued before the GET below resolves needs a canonical value to
+        // restore to on failure. Seeded only if absent (see the function's
+        // doc comment): the later GET-success seed below is what's allowed
+        // to supersede an existing canonical value.
+        seedCanonicalTitleAndDescriptionIfAbsent(id, fromStoreTask);
+      }
 
       try {
-        const res = await getTask(id);
+        const [res, genericTask] = await Promise.all([
+          getTask(id),
+          fetchTask(id).catch(() => null),
+        ]);
         if (cancelled) return;
         if (!res.task) {
           if (!fromStore) setErrorKey("office:taskNotFound");
         } else {
-          const freshTask = mapOfficeTaskToTask(res.task);
-          setTask(freshTask);
+          const freshTask = mapOfficeTaskToTask(res.task, genericTask ?? undefined);
+          // AC-27/28/38/39: this GET can resolve after a title/description
+          // commit has already landed (the page renders interactively from
+          // `fromStore` before this request settles), so it must not blindly
+          // overwrite those two fields — same merge pattern as `refetchTask`
+          // and `onTaskRefetch` below.
+          setTask((prev) =>
+            prev && prev.id === id
+              ? { ...freshTask, title: prev.title, description: prev.description }
+              : freshTask,
+          );
           if (res.timeline) setTimeline(res.timeline);
+          // AC-59: the initial load seeds each field's canonical value.
+          seedCanonicalTitleAndDescription(id, freshTask);
           const detail = await fetchIssueDetailData(freshTask.workspaceId, id);
           if (!cancelled) applyDetail(detail);
         }
       } catch {
-        if (!cancelled && !fromStore) setErrorKey("office:failedToLoadTask");
+        if (!cancelled) handleInitialLoadFailure(id, fromStoreTask, setErrorKey);
       }
 
       if (!cancelled) setLoading(false);
@@ -425,10 +573,7 @@ function useIssueData(id: string) {
     setComments(result);
   }, [id]);
 
-  const onTaskRefetch = useCallback((updated: Task, updatedTimeline: TimelineEvent[]) => {
-    setTask(updated);
-    setTimeline(updatedTimeline);
-  }, []);
+  const onTaskRefetch = useTaskDetailRefetch(setTask, setTimeline);
 
   const { sessionStoreStates, sessionStoreMetadata } = useSessionLiveSync({
     task,
@@ -448,7 +593,6 @@ function useIssueData(id: string) {
     [baseSessions, sessionStoreStates, sessionStoreMetadata],
   );
 
-  // Refetch comments when a new comment is created via office WS event
   useOfficeRefetch("comments", fetchComments);
 
   const { applyTaskPatch, restoreTask } = useTaskOptimisticHelpers(id, setTask, setTimeline);

@@ -2,6 +2,10 @@ import type { StoreApi } from "zustand";
 import type { AppState } from "@/lib/state/store";
 import { listTaskSessionMessages } from "@/lib/api/domains/session-api";
 import type { Message } from "@/lib/types/http";
+import {
+  compareMessageTimestamps,
+  isIncomingMessageAtLeastAsFresh,
+} from "@/lib/state/slices/session/message-timestamp";
 
 export type LoadMessageWindowResult =
   | { kind: "merged"; merged: true; current: true; targetFound: true }
@@ -20,17 +24,12 @@ function mergeWindowRows(existing: Message[], window: Message[]): Message[] {
   const byID = new Map(existing.map((message) => [message.id, message]));
   for (const message of window) {
     const current = byID.get(message.id);
-    const currentUpdated = current?.updated_at ? Date.parse(current.updated_at) : Number.NaN;
-    const incomingUpdated = message.updated_at ? Date.parse(message.updated_at) : Number.NaN;
-    const currentIsNewer =
-      current &&
-      Number.isFinite(currentUpdated) &&
-      (!Number.isFinite(incomingUpdated) || currentUpdated > incomingUpdated);
-    if (!currentIsNewer) byID.set(message.id, message);
+    if (!current || isIncomingMessageAtLeastAsFresh(current, message))
+      byID.set(message.id, message);
   }
   return [...byID.values()].sort((left, right) => {
-    const timeDelta = Date.parse(left.created_at) - Date.parse(right.created_at);
-    return timeDelta !== 0 ? timeDelta : compareMessageIDs(left, right);
+    const timeDelta = compareMessageTimestamps(left.created_at, right.created_at);
+    return timeDelta !== null && timeDelta !== 0 ? timeDelta : compareMessageIDs(left, right);
   });
 }
 

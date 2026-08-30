@@ -57,7 +57,12 @@ function PromptHistoryLoadError({
       className="flex flex-col items-center gap-3 p-4 text-sm text-muted-foreground"
     >
       <span>{t("task:error")}</span>
-      <Button data-testid="prompt-history-retry" onClick={onRetry} variant="outline">
+      <Button
+        data-testid="prompt-history-retry"
+        className="min-h-11 md:min-h-0"
+        onClick={onRetry}
+        variant="outline"
+      >
         {t("task:retry")}
       </Button>
     </PanelRoot>
@@ -565,6 +570,7 @@ function PromptHistoryRow({
         <div
           role="button"
           tabIndex={0}
+          data-message-id={entry.messageId}
           className={cn(
             "markdown-body markdown-body-user group relative flex min-h-11 cursor-pointer items-center overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",

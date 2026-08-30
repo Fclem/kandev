@@ -254,7 +254,7 @@ function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: Ta
 
 export const defaultSessionState: SessionSliceState = {
   messages: { bySession: {}, metaBySession: {} },
-  messagePrompts: { bySession: {}, metaBySession: {} },
+  messagePrompts: { bySession: {}, metaBySession: {}, generationBySession: {} },
   turns: {
     bySession: {},
     activeBySession: {},
@@ -364,6 +364,7 @@ function buildMessageActions(set: ImmerSet) {
         for (const message of messages) {
           const sessionMessages = draft.messages.bySession[message.session_id];
           if (sessionMessages) mergeMessageAtIndex(sessionMessages, message);
+          updatePromptMessage(draft, message);
         }
       }),
     removeMessage: (
@@ -641,6 +642,8 @@ function buildTaskSessionActions(set: ImmerSet) {
         delete draft.messages.metaBySession[sessionId];
         delete draft.messagePrompts.bySession[sessionId];
         delete draft.messagePrompts.metaBySession[sessionId];
+        const generations = (draft.messagePrompts.generationBySession ??= {});
+        generations[sessionId] = (generations[sessionId] ?? 0) + 1;
         delete draft.turns.bySession[sessionId];
         delete draft.turns.activeBySession[sessionId];
         delete draft.turns.loadedBySession[sessionId];

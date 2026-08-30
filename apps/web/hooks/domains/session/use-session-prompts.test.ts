@@ -9,6 +9,7 @@ const { listTaskSessionMessages, state, storeApi } = vi.hoisted(() => {
       metaBySession: {
         session: { isLoading: false, isLoadingMore: false, hasMore: false, oldestCursor: null },
       },
+      generationBySession: { session: 0 },
     },
     connection: { status: "connected" },
     setPromptMessagesLoading: vi.fn(),

@@ -1,6 +1,11 @@
 import type { StateCreator } from "zustand";
 import type { Message } from "@/lib/types/http";
 import type { SessionSlice, SessionSliceState } from "./types";
+import {
+  compareMessageTimestamps,
+  isIncomingMessageAtLeastAsFresh,
+  messageTimestampNanoseconds,
+} from "./message-timestamp";
 
 type ImmerSet = Parameters<
   StateCreator<SessionSlice, [["zustand/immer", never]], [], SessionSlice>
@@ -42,7 +47,7 @@ function applyPromptMeta(
 
 /** Returns whether a row is a valid user prompt with a parseable timestamp. */
 function isValidPrompt(message: Message) {
-  return message.author_type === "user" && Number.isFinite(Date.parse(message.created_at));
+  return message.author_type === "user" && messageTimestampNanoseconds(message.created_at) !== null;
 }
 
 /** Orders prompt IDs for stable ties on identical timestamps. */
@@ -55,19 +60,14 @@ function comparePromptIDs(left: Message, right: Message) {
 /** Filters invalid rows and sorts prompts by creation order. */
 function sortPromptMessages(messages: Message[]) {
   return messages.filter(isValidPrompt).sort((left, right) => {
-    const timeDelta = Date.parse(left.created_at) - Date.parse(right.created_at);
-    return timeDelta !== 0 ? timeDelta : comparePromptIDs(left, right);
+    const timeDelta = compareMessageTimestamps(left.created_at, right.created_at);
+    return timeDelta !== null && timeDelta !== 0 ? timeDelta : comparePromptIDs(left, right);
   });
 }
 
 /** Reports whether an incoming prompt update is at least as fresh as cached data. */
 function isIncomingPromptAtLeastAsFresh(existing: Message, incoming: Message) {
-  const incomingUpdated = incoming.updated_at ? Date.parse(incoming.updated_at) : Number.NaN;
-  const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : Number.NaN;
-  return (
-    !Number.isFinite(existingUpdated) ||
-    (Number.isFinite(incomingUpdated) && incomingUpdated >= existingUpdated)
-  );
+  return isIncomingMessageAtLeastAsFresh(existing, incoming);
 }
 
 /** Merges a prompt update without regressing its immutable creation order. */

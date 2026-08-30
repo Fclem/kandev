@@ -10,6 +10,18 @@ const EMPTY_PROMPT_META = {
   oldestCursor: null,
 };
 
+type PromptRequestState = {
+  bySession: Record<string, unknown>;
+  generationBySession?: Record<string, number>;
+};
+
+function isCurrentPromptState(state: PromptRequestState, sessionId: string, generation: number) {
+  return (
+    (state.generationBySession?.[sessionId] ?? 0) === generation &&
+    state.bySession[sessionId] !== undefined
+  );
+}
+
 /** Loads older prompt pages independently of transcript pagination. */
 export function useLazyLoadPrompts(sessionId: string | null) {
   const meta = useAppStore((state) =>
@@ -26,6 +38,7 @@ export function useLazyLoadPrompts(sessionId: string | null) {
   const loadMore = useCallback(async () => {
     const { hasMore, oldestCursor, isLoadingMore } = stateRef.current;
     if (!sessionId || !hasMore || !oldestCursor || isLoadingMore) return 0;
+    const generation = store.getState().messagePrompts.generationBySession?.[sessionId] ?? 0;
     store.getState().setPromptMessagesLoadingMore(sessionId, true);
     try {
       const response = await listTaskSessionMessages(sessionId, {
@@ -35,13 +48,19 @@ export function useLazyLoadPrompts(sessionId: string | null) {
         sort: "desc",
       });
       const rows = [...(response.messages ?? [])].reverse();
-      store.getState().prependPromptMessages(sessionId, rows, {
-        hasMore: response.has_more ?? false,
-        oldestCursor: response.cursor ?? oldestCursor,
-      });
+      const current = store.getState().messagePrompts;
+      if (isCurrentPromptState(current, sessionId, generation)) {
+        store.getState().prependPromptMessages(sessionId, rows, {
+          hasMore: response.has_more ?? false,
+          oldestCursor: response.cursor ?? oldestCursor,
+        });
+      }
       return rows.length;
     } finally {
-      store.getState().setPromptMessagesLoadingMore(sessionId, false);
+      const current = store.getState().messagePrompts;
+      if (isCurrentPromptState(current, sessionId, generation)) {
+        store.getState().setPromptMessagesLoadingMore(sessionId, false);
+      }
     }
   }, [sessionId, store]);
 

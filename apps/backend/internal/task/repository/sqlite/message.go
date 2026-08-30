@@ -195,6 +195,9 @@ func (r *Repository) ListMessagesPaginated(ctx context.Context, sessionID string
 	if cursor != nil {
 		cursorKey, err = r.messageCursorKey(ctx, cursor.ID)
 		if err != nil {
+			if opts.Around != "" && errors.Is(err, sql.ErrNoRows) {
+				return nil, false, fmt.Errorf("%w: %s", ErrMessageNotFound, cursor.ID)
+			}
 			return nil, false, err
 		}
 	}
@@ -333,10 +336,13 @@ func (r *Repository) resolveMessageCursor(ctx context.Context, sessionID string,
 func (r *Repository) resolveAroundTarget(ctx context.Context, sessionID, id string) (*models.Message, error) {
 	target, err := r.GetMessage(ctx, id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: %s", ErrMessageNotFound, id)
+		}
 		return nil, err
 	}
 	if target.TaskSessionID != sessionID {
-		return nil, fmt.Errorf("message cursor not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", ErrMessageNotFound, id)
 	}
 	return target, nil
 }

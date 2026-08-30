@@ -25,8 +25,11 @@ export type MessagesState = {
   >;
 };
 
-/** Prompts are fetched independently from the transcript but share page metadata. */
-export type PromptsState = MessagesState;
+/** Prompts are fetched independently from the transcript with their own page metadata. */
+export type PromptsState = MessagesState & {
+  /** Incremented when a session is removed to reject stale prompt requests. */
+  generationBySession: Record<string, number>;
+};
 
 export type TurnsState = {
   bySession: Record<string, Turn[]>;

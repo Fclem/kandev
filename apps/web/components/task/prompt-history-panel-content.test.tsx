@@ -20,6 +20,8 @@ const pagination = vi.hoisted(() => ({
   hasMore: false,
   isLoadingMore: false,
   messagesLoading: false,
+  fetchFailed: false,
+  retryPrompts: vi.fn(),
   loadMore: vi.fn(async () => 0),
 }));
 
@@ -31,6 +33,8 @@ vi.mock("@/hooks/domains/session/use-session-prompts", () => ({
   useSessionPrompts: (sessionId: string | null) => ({
     prompts: sessionId ? (messagesBySession[sessionId] ?? []) : [],
     isLoading: pagination.messagesLoading,
+    fetchFailed: pagination.fetchFailed,
+    retryPrompts: pagination.retryPrompts,
   }),
 }));
 
@@ -256,6 +260,8 @@ beforeEach(() => {
   pagination.hasMore = false;
   pagination.isLoadingMore = false;
   pagination.messagesLoading = false;
+  pagination.fetchFailed = false;
+  pagination.retryPrompts.mockReset();
   pagination.loadMore.mockResolvedValue(0);
   state.tasks.activeSessionId = SESSION_A;
   state.taskSessions.items = {
@@ -358,6 +364,17 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
 
     expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe(EMPTY_TEXT);
     expect(screen.queryByTestId(/^prompt-history-row-/)).toBeNull();
+  });
+
+  it("keeps the mobile retry control at the touch-target minimum", () => {
+    pagination.fetchFailed = true;
+
+    render(<PromptHistoryPanelContent />);
+
+    const retry = screen.getByTestId("prompt-history-retry");
+    expect(retry.className).toContain("min-h-11");
+    fireEvent.click(retry);
+    expect(pagination.retryPrompts).toHaveBeenCalledOnce();
   });
 });
 

@@ -77,6 +77,7 @@ describe("removeTaskSession cleanup cascade", () => {
     const after = store.getState();
     expect(after.messages.bySession[SESSION_ID]).toBeUndefined();
     expect(after.messagePrompts.bySession[SESSION_ID]).toBeUndefined();
+    expect(after.messagePrompts.generationBySession[SESSION_ID]).toBe(1);
     expect(after.turns.bySession[SESSION_ID]).toBeUndefined();
     expect(after.turns.loadedBySession[SESSION_ID]).toBeUndefined();
     expect(after.turns.settledBoundaryBySession[SESSION_ID]).toBeUndefined();

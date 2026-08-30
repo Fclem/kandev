@@ -11,6 +11,8 @@ const SESSION = "session";
 const TARGET_TIME = "2026-08-22T00:00:00Z";
 const MIDDLE_TIME = "2026-08-22T00:00:01Z";
 const NEW_TIME = "2026-08-22T00:00:02Z";
+const NEWER_UPDATED_TIME = "2026-08-22T00:00:00.123500000Z";
+const OLDER_UPDATED_TIME = "2026-08-22T00:00:00.123400000Z";
 
 function message(id: string, created_at: string): Message {
   return { id, created_at } as Message;
@@ -64,6 +66,49 @@ describe("loadMessageWindowAround", () => {
 
     expect(mergeMessages).toHaveBeenCalledWith(SESSION, [
       { ...message("target", TARGET_TIME), content: "new", updated_at: "2026-08-22T00:01:00Z" },
+    ]);
+  });
+
+  it("preserves a newer row when timestamps differ below one millisecond", async () => {
+    existingMessages = [
+      {
+        ...message("target", TARGET_TIME),
+        content: "new",
+        updated_at: NEWER_UPDATED_TIME,
+      },
+    ];
+    listTaskSessionMessages.mockResolvedValue({
+      messages: [
+        {
+          ...message("target", TARGET_TIME),
+          content: "old",
+          updated_at: OLDER_UPDATED_TIME,
+        },
+      ],
+    });
+
+    await loadMessageWindowAround(SESSION, "target", () => true, store);
+
+    expect(mergeMessages).toHaveBeenCalledWith(SESSION, [
+      {
+        ...message("target", TARGET_TIME),
+        content: "new",
+        updated_at: NEWER_UPDATED_TIME,
+      },
+    ]);
+  });
+
+  it("orders same-millisecond rows by their microsecond creation time", async () => {
+    listTaskSessionMessages.mockResolvedValue({
+      messages: [message("later", NEWER_UPDATED_TIME), message("earlier", OLDER_UPDATED_TIME)],
+    });
+
+    await loadMessageWindowAround(SESSION, "earlier", () => true, store);
+
+    expect(mergeMessages).toHaveBeenCalledWith(SESSION, [
+      message("earlier", OLDER_UPDATED_TIME),
+      message("later", NEWER_UPDATED_TIME),
+      message("new", NEW_TIME),
     ]);
   });
 });

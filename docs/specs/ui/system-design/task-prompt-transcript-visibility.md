@@ -14,7 +14,7 @@ owners:
 
 This design defines the visible start of a task transcript. The first user prompt is the visible start, even when internal rows exist before it.
 
-The design changes no backend query, message order, persistence rule, or API field. It uses the existing `prompt_index` message field.
+The design keeps transcript pagination separate from Prompt History pagination. Prompt History can request user messages with the `author_type=user` filter, and transcript navigation can request an around window for a message that is not loaded. Both projections use the existing `prompt_index` message field and the same message API.
 
 ## Requirement mapping
 
@@ -28,12 +28,12 @@ The design changes no backend query, message order, persistence rule, or API fie
 - The session message fetch owns one bounded initial request for the newest message window.
 - `messages.metaBySession[sessionId].hasMore` keeps the raw backend `has_more` value.
 - `messages.bySession[sessionId]` supplies the loaded messages and their prompt ordinals.
-- The native transcript and Prompt History panel consume the shared hook result.
+- The native transcript consumes `useLazyLoadMessages`. Prompt History consumes its own user-message request and pagination state.
 - The native transcript owns the upward-navigation intent and the visible top-boundary key.
 - `useLazyLoadSentinel` owns observer lifecycle and request serialization.
-- Transcript navigation uses only the messages that the transcript already loaded.
+- Transcript navigation first uses loaded messages. When a selected prompt is absent, it requests an around window and merges the result before scrolling.
 - The hook also exposes an explicit raw-pagination loader for direct recovery consumers, such as session search.
-- `requestOlderMessages` keeps request coordination and raw cursor metadata unchanged.
+- `requestOlderMessages` keeps transcript request coordination and raw cursor metadata unchanged. Prompt History has a separate request coordinator and cursor metadata.
 
 The Prompt History panel already uses prompt `#1` as its terminal boundary. The transcript uses the same boundary through the shared hook.
 
@@ -108,7 +108,11 @@ The settle reason distinguishes collapsed-group continuation from visible-bounda
 
 ## Responsive behavior
 
-Desktop and mobile use the same native transcript and one vertical scroll owner. This change adds no mobile surface, control, or touch behavior.
+Desktop and mobile use the same native transcript and one vertical scroll owner. Prompt History uses the same row selection callback on both surfaces. A selected prompt returns the phone to Chat and uses the around-window path when the row is not loaded.
+
+## Around-window navigation
+
+The chat panel sends `GET /api/v1/task-sessions/:id/messages?around=<message-id>&sort=desc&limit=N` after it confirms that the target belongs to the active session. The backend returns the target and newer rows in newest-first order. The chat panel merges the response into `messages.bySession`, waits for the target row to render, and then scrolls to it. The target token is session-scoped and is cleared only after a successful scroll or a confirmed missing target. A stale response cannot consume a newer selection.
 
 The existing full-height mobile task layout remains the nearest mobile exemplar. The mobile pagination scenario proves the same load-cycle boundary.
 

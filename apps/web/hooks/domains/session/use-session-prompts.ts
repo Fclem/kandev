@@ -25,20 +25,26 @@ const inFlightPromptRequests = new Map<string, PromptRequest>();
 function requestPromptMessages(
   sessionId: string,
   readiness: Promise<unknown> | null,
+  generation: number,
 ): Promise<PromptListResponse> {
-  const existing = inFlightPromptRequests.get(sessionId);
+  // A removed session can be recreated with the same ID. Keep the old
+  // request isolated so the new session does not join a stale snapshot.
+  const requestKey = `${sessionId}\u0000${generation}`;
+  const existing = inFlightPromptRequests.get(requestKey);
   if (existing) return existing.promise;
   const promise = (readiness ?? Promise.resolve()).then(() =>
     listTaskSessionMessages(sessionId, { author_type: "user", limit: 20, sort: "desc" }),
   );
   const entry = { promise };
-  inFlightPromptRequests.set(sessionId, entry);
+  inFlightPromptRequests.set(requestKey, entry);
   void promise.then(
     () => {
-      if (inFlightPromptRequests.get(sessionId) === entry) inFlightPromptRequests.delete(sessionId);
+      if (inFlightPromptRequests.get(requestKey) === entry)
+        inFlightPromptRequests.delete(requestKey);
     },
     () => {
-      if (inFlightPromptRequests.get(sessionId) === entry) inFlightPromptRequests.delete(sessionId);
+      if (inFlightPromptRequests.get(requestKey) === entry)
+        inFlightPromptRequests.delete(requestKey);
     },
   );
   return promise;
@@ -64,6 +70,9 @@ export function useSessionPrompts(sessionId: string | null): UseSessionPromptsRe
       : EMPTY_PROMPT_META,
   );
   const store = useAppStoreApi();
+  const generation = useAppStore((state) =>
+    sessionId ? (state.messagePrompts.generationBySession?.[sessionId] ?? 0) : 0,
+  );
   const connectionStatus = useAppStore((state) => state.connection.status);
   const readinessRef = useRef<Promise<unknown> | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
@@ -86,10 +95,13 @@ export function useSessionPrompts(sessionId: string | null): UseSessionPromptsRe
     if (!sessionId) return;
     let current = true;
     setFetchFailed(false);
+    const generation = store.getState().messagePrompts.generationBySession?.[sessionId] ?? 0;
     store.getState().setPromptMessagesLoading(sessionId, true);
-    void requestPromptMessages(sessionId, readinessRef.current)
+    void requestPromptMessages(sessionId, readinessRef.current, generation)
       .then((response) => {
         if (!current) return;
+        const promptState = store.getState().messagePrompts;
+        if ((promptState.generationBySession?.[sessionId] ?? 0) !== generation) return;
         store
           .getState()
           .replacePromptMessages(sessionId, [...(response.messages ?? [])].reverse(), {
@@ -98,15 +110,22 @@ export function useSessionPrompts(sessionId: string | null): UseSessionPromptsRe
           });
       })
       .catch(() => {
-        if (current) setFetchFailed(true);
+        const promptState = store.getState().messagePrompts;
+        if (current && (promptState.generationBySession?.[sessionId] ?? 0) === generation) {
+          setFetchFailed(true);
+        }
       })
       .finally(() => {
-        if (current) store.getState().setPromptMessagesLoading(sessionId, false);
+        if (!current) return;
+        const promptState = store.getState().messagePrompts;
+        if ((promptState.generationBySession?.[sessionId] ?? 0) === generation) {
+          store.getState().setPromptMessagesLoading(sessionId, false);
+        }
       });
     return () => {
       current = false;
     };
-  }, [connectionStatus, retryVersion, sessionId, store]);
+  }, [connectionStatus, generation, retryVersion, sessionId, store]);
 
   return useMemo(
     () => ({

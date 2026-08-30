@@ -140,3 +140,37 @@ it("does not regress a prompt when an older update arrives", () => {
 
   expect(store.getState().messagePrompts.bySession[SESSION][0].content).toBe("new");
 });
+
+it("does not regress a prompt when an update is older by less than one millisecond", () => {
+  const store = makeStore();
+  store.getState().addMessage({
+    ...message("prompt", "user"),
+    content: "new",
+    updated_at: "2026-08-22T00:00:00.123500000Z",
+  });
+
+  store.getState().updateMessage({
+    ...message("prompt", "user"),
+    content: "old",
+    updated_at: "2026-08-22T00:00:00.123400000Z",
+  });
+
+  expect(store.getState().messagePrompts.bySession[SESSION][0].content).toBe("new");
+});
+
+it("orders prompts by microsecond creation time before using the id tie-break", () => {
+  const store = makeStore();
+  store.getState().addMessage({
+    ...message("later", "user"),
+    created_at: "2026-08-22T00:00:00.123500000Z",
+  });
+  store.getState().addMessage({
+    ...message("earlier", "user"),
+    created_at: "2026-08-22T00:00:00.123400000Z",
+  });
+
+  expect(store.getState().messagePrompts.bySession[SESSION].map((entry) => entry.id)).toEqual([
+    "earlier",
+    "later",
+  ]);
+});

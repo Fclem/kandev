@@ -378,11 +378,7 @@ export function mergeInitialState(initialState?: HydrationState): DefaultState {
     taskSessions: { ...defaultState.taskSessions, ...initialState.taskSessions },
     taskSessionsByTask: { ...defaultState.taskSessionsByTask, ...initialState.taskSessionsByTask },
     sessionAgentctl: { ...defaultState.sessionAgentctl, ...initialState.sessionAgentctl },
-    worktrees: { ...defaultState.worktrees, ...initialState.worktrees },
-    sessionWorktreesBySessionId: {
-      ...defaultState.sessionWorktreesBySessionId,
-      ...initialState.sessionWorktreesBySessionId,
-    },
+    ...mergeWorktreeState(initialState),
     pendingModel: { ...defaultState.pendingModel, ...initialState.pendingModel },
     activeModel: { ...defaultState.activeModel, ...initialState.activeModel },
     taskPlans: { ...defaultState.taskPlans, ...initialState.taskPlans },
@@ -430,12 +426,30 @@ export function mergeInitialState(initialState?: HydrationState): DefaultState {
     office: { ...defaultState.office, ...initialState.office },
     features: { ...defaultState.features, ...initialState.features },
     auth: { ...defaultState.auth, ...initialState.auth },
-    sessionHostnames: { ...defaultState.sessionHostnames, ...initialState.sessionHostnames },
-    sessionHostnamesEpoch: initialState.sessionHostnamesEpoch ?? defaultState.sessionHostnamesEpoch,
+    ...mergeSessionHostnamesState(initialState),
     automations: { ...defaultState.automations, ...initialState.automations },
     automationRuns: { ...defaultState.automationRuns, ...initialState.automationRuns },
     system: { ...defaultState.system, ...initialState.system },
     ...mergeUIPanelState(initialState),
+  };
+}
+
+/** Merge the worktree state fields (worktrees, session worktrees) from hydration state over defaults. */
+function mergeWorktreeState(initialState: HydrationState) {
+  return {
+    worktrees: { ...defaultState.worktrees, ...initialState.worktrees },
+    sessionWorktreesBySessionId: {
+      ...defaultState.sessionWorktreesBySessionId,
+      ...initialState.sessionWorktreesBySessionId,
+    },
+  };
+}
+
+/** Merge the session-hostname resolution fields from hydration state over defaults. */
+function mergeSessionHostnamesState(initialState: HydrationState) {
+  return {
+    sessionHostnames: { ...defaultState.sessionHostnames, ...initialState.sessionHostnames },
+    sessionHostnamesEpoch: initialState.sessionHostnamesEpoch ?? defaultState.sessionHostnamesEpoch,
   };
 }
 

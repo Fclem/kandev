@@ -329,6 +329,7 @@ func (r *Repository) resolveMessageCursor(ctx context.Context, sessionID string,
 	return nil, nil
 }
 
+// resolveAroundTarget validates and loads the target message for an around-window read.
 func (r *Repository) resolveAroundTarget(ctx context.Context, sessionID, id string) (*models.Message, error) {
 	target, err := r.GetMessage(ctx, id)
 	if err != nil {
@@ -340,6 +341,8 @@ func (r *Repository) resolveAroundTarget(ctx context.Context, sessionID, id stri
 	return target, nil
 }
 
+// listMessagesAround returns the target and newer messages in newest-first order,
+// along with whether the bounded window was truncated.
 func (r *Repository) listMessagesAround(
 	ctx context.Context,
 	sessionID string,

@@ -8,6 +8,7 @@ type ImmerSet = Parameters<
 
 type PromptMeta = SessionSliceState["messagePrompts"]["metaBySession"][string];
 
+/** Ensures prompt loading metadata exists for a session. */
 function ensurePromptMeta(
   metaBySession: SessionSliceState["messagePrompts"]["metaBySession"],
   sessionId: string,
@@ -22,6 +23,7 @@ function ensurePromptMeta(
   }
 }
 
+/** Applies partial loading metadata to a prompt session. */
 function applyPromptMeta(
   metaBySession: SessionSliceState["messagePrompts"]["metaBySession"],
   sessionId: string,
@@ -38,16 +40,19 @@ function applyPromptMeta(
   }
 }
 
+/** Returns whether a row is a valid user prompt with a parseable timestamp. */
 function isValidPrompt(message: Message) {
   return message.author_type === "user" && Number.isFinite(Date.parse(message.created_at));
 }
 
+/** Orders prompt IDs for stable ties on identical timestamps. */
 function comparePromptIDs(left: Message, right: Message) {
   if (left.id < right.id) return -1;
   if (left.id > right.id) return 1;
   return 0;
 }
 
+/** Filters invalid rows and sorts prompts by creation order. */
 function sortPromptMessages(messages: Message[]) {
   return messages.filter(isValidPrompt).sort((left, right) => {
     const timeDelta = Date.parse(left.created_at) - Date.parse(right.created_at);
@@ -55,6 +60,7 @@ function sortPromptMessages(messages: Message[]) {
   });
 }
 
+/** Reports whether an incoming prompt update is at least as fresh as cached data. */
 function isIncomingPromptAtLeastAsFresh(existing: Message, incoming: Message) {
   const incomingUpdated = incoming.updated_at ? Date.parse(incoming.updated_at) : Number.NaN;
   const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : Number.NaN;
@@ -64,12 +70,14 @@ function isIncomingPromptAtLeastAsFresh(existing: Message, incoming: Message) {
   );
 }
 
+/** Merges a prompt update without regressing its immutable creation order. */
 function mergePromptMessage(existing: Message, incoming: Message) {
   return isIncomingPromptAtLeastAsFresh(existing, incoming)
     ? { ...existing, ...incoming, created_at: existing.created_at }
     : existing;
 }
 
+/** Inserts or refreshes one prompt in the independent prompt cache. */
 function upsertPromptMessage(state: SessionSliceState, message: Message) {
   if (!isValidPrompt(message)) return;
   const sessionId = message.session_id;
@@ -81,6 +89,7 @@ function upsertPromptMessage(state: SessionSliceState, message: Message) {
   ensurePromptMeta(state.messagePrompts.metaBySession, sessionId);
 }
 
+/** Applies a live user-message update to the prompt cache when present. */
 export function updatePromptMessage(state: SessionSliceState, message: Message) {
   if (!isValidPrompt(message)) return;
   const prompts = state.messagePrompts.bySession[message.session_id];
@@ -91,10 +100,12 @@ export function updatePromptMessage(state: SessionSliceState, message: Message) 
   state.messagePrompts.bySession[message.session_id] = sortPromptMessages(prompts);
 }
 
+/** Fans transcript message events into the prompt cache. */
 export function fanOutTranscriptPrompts(state: SessionSliceState, messages: Message[]) {
   for (const message of messages) upsertPromptMessage(state, message);
 }
 
+/** Removes a prompt and repairs the cached oldest cursor. */
 export function removePromptMessage(
   state: SessionSliceState,
   sessionId: string,
@@ -109,6 +120,7 @@ export function removePromptMessage(
   }
 }
 
+/** Builds the prompt-cache actions consumed by the session slice. */
 export function buildPromptMessageActions(set: ImmerSet) {
   return {
     replacePromptMessages: (

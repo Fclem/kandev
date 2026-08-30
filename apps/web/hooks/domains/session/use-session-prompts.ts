@@ -4,6 +4,7 @@ import { listTaskSessionMessages } from "@/lib/api/domains/session-api";
 import type { Message } from "@/lib/types/http";
 import { getWebSocketClient } from "@/lib/ws/connection";
 const EMPTY_PROMPTS: Message[] = [];
+/** Stable empty prompt metadata fallback reused by both prompt selectors. */
 const EMPTY_PROMPT_META = {
   isLoading: false,
   isLoadingMore: false,
@@ -20,6 +21,7 @@ type PromptListResponse = {
 type PromptRequest = { promise: Promise<PromptListResponse> };
 const inFlightPromptRequests = new Map<string, PromptRequest>();
 
+/** Joins concurrent initial prompt reads and waits for subscription readiness. */
 function requestPromptMessages(
   sessionId: string,
   readiness: Promise<unknown> | null,
@@ -41,7 +43,6 @@ function requestPromptMessages(
   );
   return promise;
 }
-
 export type UseSessionPromptsResult = {
   prompts: Message[];
   isLoading: boolean;

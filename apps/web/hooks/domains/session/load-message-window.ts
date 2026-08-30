@@ -9,11 +9,13 @@ export type LoadMessageWindowResult =
   | { kind: "stale"; merged: false; current: false; targetFound: false };
 
 type SessionStore = StoreApi<AppState>;
+/** Compares message IDs using deterministic code-unit ordering. */
 function compareMessageIDs(left: Message, right: Message) {
   if (left.id < right.id) return -1;
   if (left.id > right.id) return 1;
   return 0;
 }
+/** Merges an around-window response without regressing newer transcript rows. */
 function mergeWindowRows(existing: Message[], window: Message[]): Message[] {
   const byID = new Map(existing.map((message) => [message.id, message]));
   for (const message of window) {

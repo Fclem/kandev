@@ -306,6 +306,7 @@ function buildSetMessagesMetadata(set: ImmerSet) {
     });
 }
 
+/** Builds the transcript update action and keeps the prompt cache in sync. */
 function buildUpdateMessage(set: ImmerSet) {
   return (message: Parameters<SessionSlice["updateMessage"]>[0]) =>
     set((draft) => {

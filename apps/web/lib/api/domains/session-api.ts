@@ -109,6 +109,7 @@ export async function markSessionRead(
   });
 }
 
+/** Lists session messages with optional prompt filtering and around-window lookup. */
 export async function listTaskSessionMessages(
   taskSessionId: string,
   params?: {

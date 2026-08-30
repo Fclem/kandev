@@ -253,6 +253,7 @@ const (
 	messageSortDesc = "desc"
 )
 
+// parseListMessageParams validates message-list query parameters and selects pagination mode.
 func (h *MessageHandlers) parseListMessageParams(c *gin.Context) (listMessagesParams, bool) {
 	before := c.Query("before")
 	after := c.Query("after")
@@ -325,6 +326,7 @@ func (h *MessageHandlers) fetchMessages(
 	return dto.ListMessagesResponse{Messages: result, Total: len(result)}, nil
 }
 
+// fetchMessagesPaginated loads a filtered or around-window message page.
 func (h *MessageHandlers) fetchMessagesPaginated(
 	ctx context.Context,
 	sessionID string,
@@ -1167,6 +1169,7 @@ func (h *MessageHandlers) wsSearchMessages(ctx context.Context, msg *ws.Message)
 	return ws.NewResponse(msg.ID, msg.Action, dto.SearchMessagesResponse{Hits: hits, Total: len(hits)})
 }
 
+// wsListMessages handles a WebSocket request for a message page.
 func (h *MessageHandlers) wsListMessages(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var req wsListMessagesRequest
 	if err := msg.ParsePayload(&req); err != nil {

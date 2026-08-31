@@ -14,7 +14,13 @@ const mockState = {
   messages: {
     bySession: { "sess-1": [] as Message[] },
     metaBySession: {
-      "sess-1": { hasMore: false, oldestCursor: null, isLoading: false, isLoadingMore: false },
+      "sess-1": {
+        historyInitialized: false,
+        hasMore: false,
+        oldestCursor: null,
+        isLoading: false,
+        isLoadingMore: false,
+      },
     },
   },
   taskSessions: { items: { "sess-1": { state: "RUNNING" } } },
@@ -63,6 +69,7 @@ beforeEach(() => {
   mockWebSocketClient.subscribeSession.mockReturnValue(vi.fn());
   mockState.messages.bySession["sess-1"] = [];
   mockState.messages.metaBySession["sess-1"] = {
+    historyInitialized: false,
     hasMore: false,
     oldestCursor: null,
     isLoading: false,
@@ -342,7 +349,7 @@ describe("session subscription hydration ordering", () => {
     expect(mockState.mergeMessages).toHaveBeenCalledWith(
       "sess-1",
       [fetchedOldest, fetchedNewest, liveDuringFetch],
-      { hasMore: true, oldestCursor: "fetched-3" },
+      { historyInitialized: true, hasMore: true, oldestCursor: "fetched-3" },
     );
     unmount();
   });
@@ -551,7 +558,7 @@ describe("deduplicated message request baselines", () => {
     expect(mockState.mergeMessages).toHaveBeenLastCalledWith(
       "sess-1",
       [fetchedOldest, fetchedNewest, liveDuringFetch],
-      { hasMore: true, oldestCursor: "fetched-3" },
+      { historyInitialized: true, hasMore: true, oldestCursor: "fetched-3" },
     );
     first.unmount();
     second.unmount();

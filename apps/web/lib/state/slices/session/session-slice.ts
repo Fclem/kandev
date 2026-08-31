@@ -39,6 +39,7 @@ function ensureMessageMeta(
     metaBySession[sessionId] = {
       isLoading: false,
       isLoadingMore: false,
+      historyInitialized: false,
       hasMore: false,
       oldestCursor: null,
     };
@@ -50,6 +51,7 @@ function applyMessageMeta(
   metaBySession: SessionSliceState["messages"]["metaBySession"],
   sessionId: string,
   meta: {
+    historyInitialized?: boolean;
     hasMore?: boolean;
     oldestCursor?: string | null;
     isLoading?: boolean;
@@ -57,6 +59,9 @@ function applyMessageMeta(
   },
 ) {
   ensureMessageMeta(metaBySession, sessionId);
+  if (meta.historyInitialized !== undefined) {
+    metaBySession[sessionId].historyInitialized = meta.historyInitialized;
+  }
   if (meta.hasMore !== undefined) metaBySession[sessionId].hasMore = meta.hasMore;
   if (meta.isLoading !== undefined) metaBySession[sessionId].isLoading = meta.isLoading;
   if (meta.isLoadingMore !== undefined) metaBySession[sessionId].isLoadingMore = meta.isLoadingMore;

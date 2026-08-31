@@ -389,14 +389,22 @@ export type AppState = KanbanSlice & {
   setMessages: (
     sessionId: string,
     messages: Message[],
-    meta?: { hasMore?: boolean; oldestCursor?: string | null },
+    meta?: {
+      historyInitialized?: boolean;
+      hasMore?: boolean;
+      oldestCursor?: string | null;
+    },
   ) => void;
   /** Adds a message to a session, merging fields when the message already exists. */
   addMessage: (message: Message) => void;
   mergeMessages: (
     sessionId: string,
     messages: Message[],
-    meta?: { hasMore?: boolean; oldestCursor?: string | null },
+    meta?: {
+      historyInitialized?: boolean;
+      hasMore?: boolean;
+      oldestCursor?: string | null;
+    },
   ) => void;
   /** Upserts a turn row, rejecting stale updates (see shouldApplyTurnUpdate). */
   addTurn: (turn: Turn) => void;

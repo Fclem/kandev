@@ -276,13 +276,19 @@ type mockRepository struct {
 
 	// Optional hook to inject behavior into GetTaskSession (e.g. simulate a
 	// transient DB error); if nil, the default map lookup is used.
-	getTaskSessionFunc                 func(ctx context.Context, id string) (*models.TaskSession, error)
-	getTaskFunc                        func(ctx context.Context, id string) (*models.Task, error)
-	getTaskEnvironmentFunc             func(ctx context.Context, id string) (*models.TaskEnvironment, error)
-	getTaskEnvironmentByTaskIDFunc     func(ctx context.Context, taskID string) (*models.TaskEnvironment, error)
-	createTaskEnvironmentRepoErr       error
-	finalizeTaskEnvironmentErr         error
-	createTaskSessionFunc              func(ctx context.Context, session *models.TaskSession) error
+	getTaskSessionFunc             func(ctx context.Context, id string) (*models.TaskSession, error)
+	getTaskFunc                    func(ctx context.Context, id string) (*models.Task, error)
+	getTaskEnvironmentFunc         func(ctx context.Context, id string) (*models.TaskEnvironment, error)
+	getTaskEnvironmentByTaskIDFunc func(ctx context.Context, taskID string) (*models.TaskEnvironment, error)
+	createTaskEnvironmentRepoErr   error
+	finalizeTaskEnvironmentErr     error
+	createTaskSessionFunc          func(ctx context.Context, session *models.TaskSession) error
+	// getTaskSessionByTaskAndAgentFunc, when non-nil, overrides
+	// GetTaskSessionByTaskAndAgent entirely — used to simulate a transient
+	// lookup failure (e.g. the AC-003.7 re-read-after-conflict arm in
+	// createOfficeSessionWithBoundedRecovery), which the default map lookup
+	// can never produce on its own.
+	getTaskSessionByTaskAndAgentFunc   func(ctx context.Context, taskID, agentInstanceID string) (*models.TaskSession, error)
 	updateTaskSessionStateFunc         func(ctx context.Context, sessionID string, state models.TaskSessionState, errorMessage string) error
 	listActiveTaskSessionsByTaskIDFunc func(ctx context.Context, taskID string) ([]*models.TaskSession, error)
 	// Optional hook invoked at the top of UpdateTaskStateIfCurrentIn, before
@@ -300,20 +306,23 @@ type mockRepository struct {
 	updateTaskStateIfNotArchivedCh chan struct{}
 
 	// Track calls for verification
-	createTaskSessionCalls            []*models.TaskSession
-	updateTaskSessionCalls            []*models.TaskSession
-	updateTaskSessionSnapshots        []*models.TaskSession
-	updateTaskSessionIfCurrentCalls   int
-	updateTaskSessionIfCurrentFailOn  int
-	updateTaskSessionIfCurrentFailErr error
-	setSessionMetadataKeyCalls        []setSessionMetadataKeyCall
-	setSessionPrimaryCalls            []string
-	createTaskEnvironmentCalls        []*models.TaskEnvironment
-	sharedWorkspaceBindingCalls       []sharedWorkspaceBindingCall
-	updateTaskEnvironmentCalls        []*models.TaskEnvironment
-	finalizeTaskEnvironmentCalls      []*models.TaskEnvironment
-	updateTaskStateIfCurrentInCalls   []updateTaskStateIfCurrentInCall
-	updateTaskStateIfNotArchivedCalls []updateTaskStateIfNotArchivedCall
+	createTaskSessionCalls                 []*models.TaskSession
+	updateTaskSessionCalls                 []*models.TaskSession
+	updateTaskSessionSnapshots             []*models.TaskSession
+	updateTaskSessionIfCurrentCalls        int
+	updateTaskSessionIfCurrentFailOn       int
+	updateTaskSessionIfCurrentFailErr      error
+	updateTaskSessionStateIfCurrentCalls   int
+	updateTaskSessionStateIfCurrentFailOn  int
+	updateTaskSessionStateIfCurrentFailErr error
+	setSessionMetadataKeyCalls             []setSessionMetadataKeyCall
+	setSessionPrimaryCalls                 []string
+	createTaskEnvironmentCalls             []*models.TaskEnvironment
+	sharedWorkspaceBindingCalls            []sharedWorkspaceBindingCall
+	updateTaskEnvironmentCalls             []*models.TaskEnvironment
+	finalizeTaskEnvironmentCalls           []*models.TaskEnvironment
+	updateTaskStateIfCurrentInCalls        []updateTaskStateIfCurrentInCall
+	updateTaskStateIfNotArchivedCalls      []updateTaskStateIfNotArchivedCall
 
 	// writeCallLog records the relative order of environment-row and
 	// environment-status writes (e.g. "create_repo", "update_env") so tests
@@ -459,6 +468,43 @@ func (m *mockRepository) UpdateTaskSessionIfCurrentState(
 	m.updateTaskSessionCalls = append(m.updateTaskSessionCalls, session)
 	m.sessions[session.ID] = session
 	return true, nil
+}
+
+// UpdateTaskSessionStateIfCurrent mirrors the production narrow-CAS
+// semantics: only state/error_message/completed_at/updated_at change, so a
+// concurrent update to any other field on the stored session survives.
+func (m *mockRepository) UpdateTaskSessionStateIfCurrent(
+	_ context.Context,
+	id string,
+	expected, status models.TaskSessionState,
+	errorMessage string,
+) (bool, time.Time, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, ok := m.sessions[id]
+	if !ok {
+		return false, time.Time{}, models.ErrTaskSessionNotFound
+	}
+	if current.State != expected {
+		return false, time.Time{}, nil
+	}
+	m.updateTaskSessionStateIfCurrentCalls++
+	if m.updateTaskSessionStateIfCurrentFailOn > 0 &&
+		m.updateTaskSessionStateIfCurrentCalls == m.updateTaskSessionStateIfCurrentFailOn {
+		return false, time.Time{}, m.updateTaskSessionStateIfCurrentFailErr
+	}
+	now := time.Now().UTC()
+	current.State = status
+	current.ErrorMessage = errorMessage
+	current.UpdatedAt = now
+	if status == models.TaskSessionStateCompleted ||
+		status == models.TaskSessionStateFailed ||
+		status == models.TaskSessionStateCancelled {
+		current.CompletedAt = &now
+	} else {
+		current.CompletedAt = nil
+	}
+	return true, now, nil
 }
 
 func (m *mockRepository) UpdateTaskSessionIfCurrentStateRemovingMetadataKeys(
@@ -875,6 +921,12 @@ func (m *mockRepository) GetActiveTaskSessionByTaskID(ctx context.Context, taskI
 }
 func (m *mockRepository) GetTaskSessionByTaskAndAgent(ctx context.Context, taskID, agentInstanceID string) (*models.TaskSession, error) {
 	m.mu.Lock()
+	fn := m.getTaskSessionByTaskAndAgentFunc
+	m.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, taskID, agentInstanceID)
+	}
+	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, s := range m.sessions {
 		if s.TaskID == taskID && s.AgentProfileID == agentInstanceID {
@@ -1287,7 +1339,7 @@ func (m *mockCapabilities) ShouldApplyPreferredShell(executorType string) bool {
 }
 
 // Helper to create a test executor
-func newTestExecutor(t *testing.T, agentManager AgentManagerClient, repo *mockRepository) *Executor {
+func newTestExecutor(t *testing.T, agentManager AgentManagerClient, repo executorStore) *Executor {
 	t.Helper()
 	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json"})
 	if err != nil {

@@ -85,6 +85,20 @@ type QueueEditLeaseController interface {
 	UpdateMessageWithLease(context.Context, string, string, string, string, string, int64, string, []messagequeue.MessageAttachment, map[string]interface{}) (int64, error)
 }
 
+// queueEditAdmissionController lets attachment claims and their fenced queue
+// update share the same per-session admission boundary.
+type queueEditAdmissionController interface {
+	WithSessionAdmission(context.Context, string, func(context.Context) error) error
+}
+
+type queueBatchCanceller interface {
+	CancelAllWithEntries(context.Context, string) ([]messagequeue.QueuedMessage, error)
+}
+
+type queueEditAttachmentController interface {
+	UpdateMessageWithLeaseAfterValidation(context.Context, string, string, string, string, string, int64, string, []messagequeue.MessageAttachment, map[string]interface{}, func(context.Context) error, func(context.Context) error) (int64, error)
+}
+
 // QueueSendNowDispatcher is implemented by the orchestrator service. It is
 // kept separate from QueueDrainer so queue-focused handlers can retain their
 // small test doubles while the new action gets the replacement-turn contract.
@@ -329,9 +343,26 @@ func (h *QueueHandlers) wsCancelAll(ctx context.Context, msg *ws.Message) (*ws.M
 		return denied, nil
 	}
 
-	removed, err := h.queueService.CancelAll(ctx, req.SessionID)
+	var removed int
+	var removedEntries []messagequeue.QueuedMessage
+	var err error
+	if batchCanceller, ok := h.queueService.(queueBatchCanceller); ok {
+		removedEntries, err = batchCanceller.CancelAllWithEntries(ctx, req.SessionID)
+		removed = len(removedEntries)
+	} else {
+		status := h.queueService.GetStatus(ctx, req.SessionID)
+		removed, err = h.queueService.CancelAll(ctx, req.SessionID)
+		if err == nil && status != nil {
+			removedEntries = status.Entries
+		}
+	}
 	if err != nil {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
+	}
+	for i := range removedEntries {
+		if !removedEntries[i].IsReservedInFlight() {
+			h.releaseQueuedAttachments(ctx, &removedEntries[i])
+		}
 	}
 
 	h.publishStatus(ctx, req.SessionID)
@@ -693,20 +724,37 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
 		}
 		newlyAdded = newlyAddedQueueAttachments(previous.Attachments, req.Attachments)
-		if err := h.attachmentClaimer.ClaimMessageAttachments(ctx, previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); err != nil {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "Attachment is no longer available", nil)
-		}
 		releaseClaims, _ = h.attachmentClaimer.(QueueAttachmentReleaser)
 	}
 	var revision int64
 	var updateErr error
-	if connectionID != "" {
-		revision, updateErr = h.queueEdit.UpdateMessageWithLease(ctx, req.SessionID, req.EntryID,
-			req.LeaseID, req.OperationID, connectionID, *req.ExpectedRevision, req.Content,
-			req.Attachments, metadataUpdates)
+	applyUpdate := func(updateCtx context.Context) (int64, error) {
+		if h.attachmentClaimer != nil {
+			if err := h.attachmentClaimer.ClaimMessageAttachments(updateCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); err != nil {
+				newlyAdded = nil
+				return 0, fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
+			}
+		}
+		if connectionID != "" {
+			revision, updateErr = h.queueEdit.UpdateMessageWithLease(updateCtx, req.SessionID, req.EntryID,
+				req.LeaseID, req.OperationID, connectionID, *req.ExpectedRevision, req.Content,
+				req.Attachments, metadataUpdates)
+		} else {
+			updateErr = h.queueService.UpdateMessageWithMetadata(updateCtx, req.SessionID, req.EntryID,
+				req.Content, req.Attachments, metadataUpdates, queuedBy)
+		}
+		if updateErr != nil && h.attachmentClaimer != nil {
+			h.releaseQueuedAttachmentUpdateFailure(updateCtx, previous, req.SessionID, newlyAdded, releaseClaims)
+			newlyAdded = nil
+		}
+		return revision, updateErr
+	}
+	if connectionID != "" && h.attachmentClaimer != nil {
+		revision, updateErr = h.updateMessageWithAttachmentLease(
+			ctx, req, connectionID, previous, releaseClaims, &newlyAdded, metadataUpdates, applyUpdate,
+		)
 	} else {
-		updateErr = h.queueService.UpdateMessageWithMetadata(ctx, req.SessionID, req.EntryID,
-			req.Content, req.Attachments, metadataUpdates, queuedBy)
+		revision, updateErr = applyUpdate(ctx)
 	}
 	if updateErr != nil {
 		return h.queueUpdateFailure(ctx, msg, req, updateErr, releaseClaims, previous, newlyAdded)
@@ -727,7 +775,20 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 	return ws.NewResponse(msg.ID, msg.Action, response)
 }
 
-// newlyAddedQueueAttachments returns attachment descriptors that were not present before.
+func (h *QueueHandlers) releaseQueuedAttachmentUpdateFailure(
+	ctx context.Context,
+	previous *messagequeue.QueuedMessage,
+	sessionID string,
+	newlyAdded []messagequeue.MessageAttachment,
+	releaseClaims QueueAttachmentReleaser,
+) {
+	if releaseClaims == nil || previous == nil || len(newlyAdded) == 0 {
+		return
+	}
+	if releaseErr := releaseClaims.ReleaseMessageAttachments(ctx, previous.TaskID, sessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
+		h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
+	}
+}
 func newlyAddedQueueAttachments(previous, replacement []messagequeue.MessageAttachment) []messagequeue.MessageAttachment {
 	retained := make(map[string]struct{}, len(previous))
 	for _, attachment := range previous {
@@ -747,6 +808,45 @@ func newlyAddedQueueAttachments(previous, replacement []messagequeue.MessageAtta
 	}
 	return newlyAdded
 }
+
+func (h *QueueHandlers) updateMessageWithAttachmentLease(
+	ctx context.Context,
+	req wsUpdateMessageRequest,
+	connectionID string,
+	previous *messagequeue.QueuedMessage,
+	releaseClaims QueueAttachmentReleaser,
+	newlyAdded *[]messagequeue.MessageAttachment,
+	metadataUpdates map[string]interface{},
+	applyUpdate func(context.Context) (int64, error),
+) (int64, error) {
+	controller, ok := h.queueEdit.(queueEditAttachmentController)
+	if ok {
+		return controller.UpdateMessageWithLeaseAfterValidation(
+			ctx, req.SessionID, req.EntryID, req.LeaseID, req.OperationID, connectionID,
+			*req.ExpectedRevision, req.Content, req.Attachments, metadataUpdates,
+			func(prepareCtx context.Context) error {
+				if err := h.attachmentClaimer.ClaimMessageAttachments(prepareCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(*newlyAdded)); err != nil {
+					*newlyAdded = nil
+					return fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
+				}
+				return nil
+			},
+			func(rollbackCtx context.Context) error {
+				h.releaseQueuedAttachmentUpdateFailure(rollbackCtx, previous, req.SessionID, *newlyAdded, releaseClaims)
+				*newlyAdded = nil
+				return nil
+			},
+		)
+	}
+	admission, ok := h.queueEdit.(queueEditAdmissionController)
+	if ok {
+		return 0, admission.WithSessionAdmission(ctx, req.SessionID, func(admittedCtx context.Context) error {
+			_, err := applyUpdate(admittedCtx)
+			return err
+		})
+	}
+	return applyUpdate(ctx)
+}
 func (h *QueueHandlers) queueUpdateFailure(
 	ctx context.Context,
 	msg *ws.Message,
@@ -760,6 +860,9 @@ func (h *QueueHandlers) queueUpdateFailure(
 		if releaseErr := releaseClaims.ReleaseMessageAttachments(ctx, previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
 			h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
 		}
+	}
+	if errors.Is(updateErr, errQueuedAttachmentUnavailable) {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "Attachment is no longer available", nil)
 	}
 	if errors.Is(updateErr, messagequeue.ErrEditConflict) ||
 		errors.Is(updateErr, messagequeue.ErrEditLeaseNotFound) ||
@@ -821,6 +924,22 @@ func (h *QueueHandlers) rollbackQueuedAttachmentClaim(ctx context.Context, sessi
 	}
 	_, _, err := taker.TakeQueuedEntry(ctx, sessionID, entryID)
 	return err
+}
+
+// releaseQueuedAttachments releases descriptors owned exclusively by a deleted
+// queue entry. The queue entry has already been removed, so no replacement can
+// retain these claims.
+func (h *QueueHandlers) releaseQueuedAttachments(ctx context.Context, entry *messagequeue.QueuedMessage) {
+	if entry == nil || len(entry.Attachments) == 0 || h.attachmentClaimer == nil {
+		return
+	}
+	releaser, ok := h.attachmentClaimer.(QueueAttachmentReleaser)
+	if !ok {
+		return
+	}
+	if err := releaser.ReleaseMessageAttachments(ctx, entry.TaskID, entry.SessionID, queueAttachmentsToV1(entry.Attachments)); err != nil {
+		h.logger.Warn("failed to release attachments after queue entry removal", zap.Error(err))
+	}
 }
 
 // firstInvalidDeliveryMode returns the index of the first attachment with an unknown delivery mode.
@@ -918,12 +1037,20 @@ func (h *QueueHandlers) wsRemoveEntry(ctx context.Context, msg *ws.Message) (*ws
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "entry_id is required", nil)
 	}
 
+	entry, err := h.queueService.GetEntry(ctx, req.SessionID, req.EntryID)
+	if err != nil {
+		if errors.Is(err, messagequeue.ErrEntryNotFound) {
+			return ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound, "Queue entry is no longer pending", nil)
+		}
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
+	}
 	if err := h.queueService.RemoveEntry(ctx, req.SessionID, req.EntryID); err != nil {
 		if errors.Is(err, messagequeue.ErrEntryNotFound) {
 			return ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound, "Queue entry is no longer pending", nil)
 		}
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
 	}
+	h.releaseQueuedAttachments(ctx, entry)
 
 	h.publishStatus(ctx, req.SessionID)
 	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{fieldEntryID: req.EntryID})

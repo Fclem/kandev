@@ -1,0 +1,132 @@
+package handlers
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
+	v1 "github.com/kandev/kandev/pkg/api/v1"
+	ws "github.com/kandev/kandev/pkg/websocket"
+	"github.com/stretchr/testify/require"
+)
+
+func TestWsRemoveEntryReleasesClaimedAttachments(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &recordingQueueAttachmentClaimer{}
+	handlers.SetAttachmentClaimer(claimer)
+	entry, err := queue.QueueMessage(context.Background(), "session", "task", "queued", "", "user", false, []messagequeue.MessageAttachment{{
+		Type:         "resource",
+		AttachmentID: "attachment",
+		Name:         "report.txt",
+		MimeType:     "text/plain",
+	}})
+	require.NoError(t, err)
+
+	response, err := handlers.wsRemoveEntry(context.Background(), createTestMessage(t, ws.ActionMessageQueueRemove, map[string]string{
+		"session_id": "session",
+		"entry_id":   entry.ID,
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Equal(t, []string{"attachment"}, claimer.releases)
+}
+
+func TestWsCancelAllReleasesClaimedAttachments(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &recordingQueueAttachmentClaimer{}
+	handlers.SetAttachmentClaimer(claimer)
+	for _, attachmentID := range []string{"first", "second"} {
+		_, err := queue.QueueMessage(context.Background(), "session-cancel", "task-cancel", "queued", "", "user", false, []messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: attachmentID, Name: attachmentID + ".txt", MimeType: "text/plain",
+		}})
+		require.NoError(t, err)
+	}
+
+	response, err := handlers.wsCancelAll(context.Background(), createTestMessage(t, ws.ActionMessageQueueCancel, map[string]string{
+		"session_id": "session-cancel",
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.ElementsMatch(t, []string{"first", "second"}, claimer.releases)
+}
+
+func TestWsUpdateMessageRollsBackBeforeSuccessorCanAcquireEdit(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(ctx, "session", "task", "original", "", "user", false, []messagequeue.MessageAttachment{{
+		Type:         "resource",
+		AttachmentID: "new-attachment",
+		Name:         "new.txt",
+		MimeType:     "text/plain",
+	}})
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	claimer := &successorEditRaceClaimer{
+		queue:         queue,
+		sessionID:     entry.SessionID,
+		entryID:       entry.ID,
+		leaseID:       lease.LeaseID,
+		successorID:   "connection-b",
+		successorDone: make(chan struct{}),
+	}
+	handlers.SetAttachmentClaimer(claimer)
+	response, err := handlers.wsUpdateMessage(ws.WithConnectionID(ctx, "connection-a"),
+		createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id":               "session",
+			"entry_id":                 entry.ID,
+			"lease_id":                 lease.LeaseID,
+			"operation_id":             "operation-1",
+			"expected_target_revision": lease.TargetRevision,
+			"content":                  "edited",
+			"attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new-attachment", Name: "new.txt", MimeType: "text/plain",
+			}},
+		}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeError, response.Type)
+	<-claimer.successorDone
+	require.False(t, claimer.successBeforeRelease.Load())
+	require.True(t, claimer.releaseObserved.Load())
+}
+
+type successorEditRaceClaimer struct {
+	queue                *messagequeue.Service
+	sessionID            string
+	entryID              string
+	leaseID              string
+	successorID          string
+	successorDone        chan struct{}
+	successBeforeRelease atomic.Bool
+	releaseObserved      atomic.Bool
+}
+
+func (c *successorEditRaceClaimer) ClaimMessageAttachments(ctx context.Context, _, _ string, _ []v1.MessageAttachment) error {
+	if err := c.queue.EndEdit(ctx, c.sessionID, c.entryID, c.leaseID, "connection-a"); err != nil {
+		return err
+	}
+	go func() {
+		defer close(c.successorDone)
+		lease, err := c.queue.BeginEdit(context.Background(), c.sessionID, c.entryID, c.successorID)
+		if err != nil {
+			return
+		}
+		if !c.releaseObserved.Load() {
+			c.successBeforeRelease.Store(true)
+		}
+		_ = c.queue.EndEdit(context.Background(), c.sessionID, c.entryID, lease.LeaseID, c.successorID)
+	}()
+	select {
+	case <-c.successorDone:
+	case <-time.After(100 * time.Millisecond):
+	}
+	return nil
+}
+
+func (c *successorEditRaceClaimer) ReleaseMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
+	c.releaseObserved.Store(true)
+	return nil
+}

@@ -281,33 +281,57 @@ func (s *Service) EndEdit(ctx context.Context, sessionID, entryID, leaseID, conn
 
 // UpdateMessageWithLease updates content only through the live target lease.
 func (s *Service) UpdateMessageWithLease(ctx context.Context, sessionID, entryID, leaseID, operationID, connectionID string, expectedRevision int64, content string, attachments []MessageAttachment, metadataUpdates map[string]interface{}) (int64, error) {
+	return s.UpdateMessageWithLeaseAfterValidation(ctx, sessionID, entryID, leaseID, operationID, connectionID,
+		expectedRevision, content, attachments, metadataUpdates, nil, nil)
+}
+
+// UpdateMessageWithLeaseAfterValidation runs prepare after all rejectable edit
+// preconditions pass and before the queue row is changed. Both callbacks run
+// inside the session admission boundary, so rejected prepared state can be
+// rolled back before another editor can acquire the target.
+func (s *Service) UpdateMessageWithLeaseAfterValidation(
+	ctx context.Context,
+	sessionID, entryID, leaseID, operationID, connectionID string,
+	expectedRevision int64,
+	content string,
+	attachments []MessageAttachment,
+	metadataUpdates map[string]interface{},
+	prepare func(context.Context) error,
+	rollback func(context.Context) error,
+) (int64, error) {
 	if operationID == "" {
 		return 0, ErrEditLeaseNotFound
 	}
+	key := s.editLeaseKey(sessionID, entryID)
+	operationHash := editOperationHash(content, attachments, metadataUpdates)
 	var revision int64
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		key := s.editLeaseKey(sessionID, entryID)
-		now := time.Now().UTC()
-		s.editLeaseMu.Lock()
-		defer s.editLeaseMu.Unlock()
-		s.expireEditLeaseLocked(key, now)
-		lease := s.editLeases[key]
-		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
-			return ErrEditLeaseNotFound
+		initialRevision, initialOperationID, duplicate, err := s.beginEditMutation(
+			key, leaseID, operationID, connectionID, expectedRevision, operationHash,
+		)
+		if err != nil {
+			return err
 		}
-		operationHash := editOperationHash(content, attachments, metadataUpdates)
-		if lease.lastOperationID == operationID {
-			if lease.lastOperationHash == operationHash {
-				revision = lease.lastOperationResult
-				return nil
+		if duplicate {
+			revision = initialRevision
+			return nil
+		}
+		revision = initialRevision
+
+		if prepare != nil {
+			if err := prepare(admittedCtx); err != nil {
+				return err
 			}
-			return ErrEditRevisionConflict
 		}
-		revision = s.editRevisions[key]
-		if expectedRevision != revision {
-			return ErrEditRevisionConflict
+
+		lease, err := s.relockEditMutation(key, leaseID, connectionID, revision, initialOperationID)
+		if err != nil {
+			s.rollbackPreparedEdit(admittedCtx, rollback)
+			return err
 		}
 		if err := s.repo.UpdateContentAndMetadata(admittedCtx, sessionID, entryID, content, attachments, metadataUpdates, QueuedByUser); err != nil {
+			s.editLeaseMu.Unlock()
+			s.rollbackPreparedEdit(admittedCtx, rollback)
 			return err
 		}
 		revision++
@@ -316,9 +340,67 @@ func (s *Service) UpdateMessageWithLease(ctx context.Context, sessionID, entryID
 		lease.lastOperationID = operationID
 		lease.lastOperationHash = operationHash
 		lease.lastOperationResult = revision
+		s.editLeaseMu.Unlock()
 		return nil
 	})
 	return revision, err
+}
+
+func (s *Service) beginEditMutation(
+	key editLeaseKey,
+	leaseID, operationID, connectionID string,
+	expectedRevision int64,
+	operationHash string,
+) (int64, string, bool, error) {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
+	s.expireEditLeaseLocked(key, time.Now().UTC())
+	lease := s.editLeases[key]
+	if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+		return 0, "", false, ErrEditLeaseNotFound
+	}
+	if lease.lastOperationID == operationID {
+		if lease.lastOperationHash == operationHash {
+			return lease.lastOperationResult, lease.lastOperationID, true, nil
+		}
+		return 0, "", false, ErrEditRevisionConflict
+	}
+	revision := s.editRevisions[key]
+	if expectedRevision != revision {
+		return 0, "", false, ErrEditRevisionConflict
+	}
+	return revision, lease.lastOperationID, false, nil
+}
+
+// relockEditMutation validates the lease again after attachment preparation and
+// leaves editLeaseMu held for the repository update.
+func (s *Service) relockEditMutation(
+	key editLeaseKey,
+	leaseID, connectionID string,
+	revision int64,
+	initialOperationID string,
+) (*QueueEditLease, error) {
+	s.editLeaseMu.Lock()
+	s.expireEditLeaseLocked(key, time.Now().UTC())
+	lease := s.editLeases[key]
+	if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+		s.editLeaseMu.Unlock()
+		return nil, ErrEditLeaseNotFound
+	}
+	if s.editRevisions[key] != revision || lease.lastOperationID != initialOperationID {
+		s.editLeaseMu.Unlock()
+		return nil, ErrEditRevisionConflict
+	}
+	return lease, nil
+}
+
+func (s *Service) rollbackPreparedEdit(ctx context.Context, rollback func(context.Context) error) {
+	if rollback == nil {
+		return
+	}
+	if err := rollback(ctx); err != nil {
+		s.logger.Warn("failed to roll back prepared queue edit state", zap.Error(err))
+	}
 }
 
 func cloneEditLease(lease *QueueEditLease) *QueueEditLease {
@@ -878,20 +960,42 @@ func (s *Service) insertLifecycleMessageWithCoalesceKey(ctx context.Context, ses
 	return queued, replaced, true, nil
 }
 
-// PurgeTask is a backend-only task lifecycle operation. Client deletion APIs
-// retain their reserved-entry protections.
-func (s *Service) PurgeTask(ctx context.Context, taskID string) (int, error) {
-	removed, err := s.repo.PurgeTask(ctx, taskID)
-	if err != nil {
-		return 0, err
-	}
+// InvalidateEditLeasesForTask drops process-local edit leases after the task
+// repository has purged its durable queue rows in the same lifecycle operation.
+func (s *Service) InvalidateEditLeasesForTask(taskID string) {
 	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
+	s.invalidateEditLeasesForTaskLocked(taskID)
+}
+
+func (s *Service) invalidateEditLeasesForTaskLocked(taskID string) {
 	for key, lease := range s.editLeases {
 		if lease.taskID == taskID {
 			delete(s.editLeases, key)
 		}
 	}
-	s.editLeaseMu.Unlock()
+}
+
+// InvalidateEditLeasesForSession drops process-local edit leases after a task
+// repository deletes that session's durable queue rows.
+func (s *Service) InvalidateEditLeasesForSession(sessionID string) {
+	s.invalidateEditLeasesLocked(sessionID)
+}
+
+// PurgeTask is a backend-only task lifecycle operation. Client deletion APIs
+// retain their reserved-entry protections.
+func (s *Service) PurgeTask(ctx context.Context, taskID string) (int, error) {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
+
+	// Serialize the persistent purge with queue reads that may acquire a new
+	// lease. Otherwise BeginEdit can observe a row after the purge starts and
+	// publish a lease that is invalidated only after the row is deleted.
+	removed, err := s.repo.PurgeTask(ctx, taskID)
+	if err != nil {
+		return 0, err
+	}
+	s.invalidateEditLeasesForTaskLocked(taskID)
 	return removed, nil
 }
 
@@ -1339,6 +1443,28 @@ func (s *Service) CancelAll(ctx context.Context, sessionID string) (int, error) 
 		zap.String("session_id", sessionID),
 		zap.Int("removed", n))
 	return n, nil
+}
+
+// CancelAllWithEntries clears a session queue and returns the deleted rows so
+// callers can release resources owned by those entries.
+func (s *Service) CancelAllWithEntries(ctx context.Context, sessionID string) ([]QueuedMessage, error) {
+	var entries []QueuedMessage
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		var err error
+		entries, err = s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		_, err = s.repo.DeleteAllBySession(admittedCtx, sessionID)
+		if err == nil {
+			s.invalidateEditLeasesLocked(sessionID)
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // GetStatus returns the full pending list and capacity info for a session.

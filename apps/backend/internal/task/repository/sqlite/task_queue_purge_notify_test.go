@@ -138,6 +138,26 @@ func TestDeleteTaskSessionPurgesQueuedMessages(t *testing.T) {
 	}
 }
 
+func TestDeleteTaskSessionNotifiesQueueSessionPurge(t *testing.T) {
+	repo := newRepoForArchiveTests(t, "task-session-queue-purge-notify")
+	ctx := context.Background()
+	seedLiveSessionForQueue(t, repo, "session-drop", "task-session-queue-purge-notify")
+
+	var notifiedTask, notifiedSession string
+	repo.SetTaskSessionQueuePurgeNotifier(func(_ context.Context, taskID, sessionID string) {
+		notifiedTask = taskID
+		notifiedSession = sessionID
+	})
+
+	if err := repo.DeleteTaskSession(ctx, "session-drop"); err != nil {
+		t.Fatalf("DeleteTaskSession: %v", err)
+	}
+	if notifiedTask != "task-session-queue-purge-notify" || notifiedSession != "session-drop" {
+		t.Fatalf("session purge notification = (%q, %q), want (%q, %q)",
+			notifiedTask, notifiedSession, "task-session-queue-purge-notify", "session-drop")
+	}
+}
+
 func TestDeleteTaskSessionPurgesPendingMove(t *testing.T) {
 	repo := newRepoForArchiveTests(t, "task-session-pending-move")
 	ctx := context.Background()

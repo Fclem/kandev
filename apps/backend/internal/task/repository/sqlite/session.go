@@ -2884,13 +2884,15 @@ func (r *Repository) DeleteTaskSession(ctx context.Context, id string) error {
 			return fmt.Errorf("lock queue session %s: %w", id, err)
 		}
 	}
-	result, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM task_sessions WHERE id = ?`), id)
-	if err != nil {
-		return err
+	var taskID string
+	if err := tx.GetContext(ctx, &taskID, r.db.Rebind(`SELECT task_id FROM task_sessions WHERE id = ?`), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("agent session not found: %s", id)
+		}
+		return fmt.Errorf("load task for session %s: %w", id, err)
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("agent session not found: %s", id)
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM task_sessions WHERE id = ?`), id); err != nil {
+		return err
 	}
 	// task_session_prompt_seq intentionally has no foreign key because it was
 	// added by a replay-safe migration. Remove its session-scoped admission
@@ -2914,7 +2916,11 @@ func (r *Repository) DeleteTaskSession(ctx context.Context, id string) error {
 			return fmt.Errorf("purge pending move for session %s: %w", id, err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.notifyTaskSessionQueuePurged(ctx, taskID, id)
+	return nil
 }
 
 // Task Session Worktree operations

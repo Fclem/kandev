@@ -1434,7 +1434,20 @@ func NewService(
 		SetTaskQueuePurgeNotifier(func(context.Context, string))
 	}); ok {
 		registrar.SetTaskQueuePurgeNotifier(func(ctx context.Context, taskID string) {
+			// SQLite task lifecycle purges the durable queue in its own
+			// transaction, so invalidate only the process-local edit leases
+			// here. Calling PurgeTask would race with the next queue generation.
+			msgQueue.InvalidateEditLeasesForTask(taskID)
 			s.publishTaskQueueStatusEvent(ctx, taskID, "")
+		})
+	}
+
+	if registrar, ok := repo.(interface {
+		SetTaskSessionQueuePurgeNotifier(func(context.Context, string, string))
+	}); ok {
+		registrar.SetTaskSessionQueuePurgeNotifier(func(ctx context.Context, taskID, sessionID string) {
+			msgQueue.InvalidateEditLeasesForSession(sessionID)
+			s.publishTaskQueueStatusEvent(ctx, taskID, sessionID)
 		})
 	}
 	exec.SetOnContextWindowReset(s.clearContextWindowForReset)

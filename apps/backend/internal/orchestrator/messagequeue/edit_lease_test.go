@@ -53,6 +53,21 @@ func TestEditLeaseProtectsTargetWithoutPausingQueuePolicy(t *testing.T) {
 	require.Equal(t, second.ID, got.ID)
 }
 
+func TestReserveQueuedWithAutoRunReportsPolicyWhenEditBlocksHead(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session-lease-policy", "task", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	require.NoError(t, svc.SetAutoRun(ctx, entry.SessionID, false))
+	_, err = svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	got, ok, autoRun := svc.ReserveQueuedWithAutoRun(ctx, entry.SessionID)
+	require.False(t, autoRun)
+	require.False(t, ok)
+	require.Nil(t, got)
+}
+
 func TestEditLeaseRejectsForeignReleaseAndUpdate(t *testing.T) {
 	svc := setupService(t)
 	ctx := context.Background()

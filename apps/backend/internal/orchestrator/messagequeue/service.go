@@ -1063,11 +1063,16 @@ func (s *Service) ReserveQueuedWithAutoRun(ctx context.Context, sessionID string
 	var msg *QueuedMessage
 	autoRun := true
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		var err error
+		autoRun, err = s.repo.GetAutoRun(admittedCtx, sessionID)
+		if err != nil || !autoRun {
+			return err
+		}
 		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
 		if err != nil || blocked {
 			return err
 		}
-		msg, autoRun, err = s.repo.ReserveHeadIfAutoRun(admittedCtx, sessionID)
+		msg, _, err = s.repo.ReserveHeadIfAutoRun(admittedCtx, sessionID)
 		return err
 	})
 	if err != nil {

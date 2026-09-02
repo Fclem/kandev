@@ -2558,19 +2558,25 @@ func (s *Service) reuseSessionForStepWithEndPolicy(
 	} else if task != nil {
 		s.publishTaskUpdated(ctx, task)
 	}
-	s.tagSessionAsWorkflowSwitched(ctx, existing.ID)
 
 	// Transfer any queued message and pending move from the session being
 	// switched away from to the reused session — without this, a hand-off
 	// prompt queued via move_task_kandev on the previous session is orphaned
-	// and gets delivered to the wrong agent the next time that previous
-	// session is reused (e.g. on the on_turn_complete bounce back).
+	// and gets delivered to the wrong agent the next time that session is reused
+	// (e.g. on the on_turn_complete bounce back).
 	if err := s.transferQueuedSessionState(ctx, taskID, currentSession.ID, existing.ID); err != nil {
-		// Fail closed: the workflow switch reuses an existing session, but
-		// orphaning a queued hand-off prompt on the previous session would
-		// silently misroute the next prompt the next time that session is reused.
+		// The workflow switch has already promoted the candidate. Restore the
+		// previous primary before returning, otherwise a failed queue transfer
+		// leaves the task pointing at a session that never received its hand-off.
+		if restoreErr := s.SetPrimarySession(ctx, currentSession.ID); restoreErr != nil {
+			s.logger.Warn("failed to restore current session as primary after queue transfer failure",
+				zap.String("task_id", taskID),
+				zap.String("session_id", currentSession.ID),
+				zap.Error(restoreErr))
+		}
 		return nil, fmt.Errorf("transfer queued state to reused session: %w", err)
 	}
+	s.tagSessionAsWorkflowSwitched(ctx, existing.ID)
 
 	parked, err := s.finishWorkflowProfileSwitchSource(ctx, taskID, currentSession, endPolicy)
 	if err != nil {
@@ -2709,20 +2715,26 @@ func (s *Service) prepareWorkflowReplacementSession(
 		return nil, fmt.Errorf("failed to attach workflow replacement workspace: %w", err)
 	}
 
-	// Tag the session as workflow-spawned for provenance: its agent profile
-	// was selected by the workflow step override rather than direct user choice.
-	s.tagSessionAsWorkflowSwitched(ctx, newSession.ID)
+	newSession, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new session: %w", err)
+	}
 
 	// Transfer any queued message (e.g. a move_task_kandev hand-off prompt) and
-	// pending move from the old session to the new one — the queue is keyed by
-	// session ID, and without this the prompt would never reach the new agent.
+	// pending move from the old session to the new session before changing
+	// primary ownership.
 	if err := s.transferQueuedSessionState(ctx, taskID, currentSession.ID, newSession.ID); err != nil {
-		// The replacement session is already persisted, but the current session
-		// must remain primary and active when its queue cannot be transferred.
-		// Continuing would stop the current session and strand the hand-off on
-		// the old session while the new session has no recoverable prompt.
+		// The replacement is already persisted and launched. Retire it before
+		// returning so a failed queue hand-off does not leak an agent execution
+		// or leave an unusable session for later workflow selection.
+		s.completeAndStopSession(ctx, taskID, newSession)
+		// The current session remains primary and active because promotion and
+		// completion happen only after the queue transfer succeeds.
 		return nil, fmt.Errorf("transfer queue to new session: %w", err)
 	}
+	// Tag the session as workflow-spawned for provenance only after the queue
+	// hand-off has succeeded.
+	s.tagSessionAsWorkflowSwitched(ctx, newSession.ID)
 
 	return newSession, nil
 }

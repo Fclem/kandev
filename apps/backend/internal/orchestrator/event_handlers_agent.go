@@ -185,7 +185,7 @@ func (s *Service) requeueMessage(ctx context.Context, queuedMsg *messagequeue.Qu
 	if queuedMsg.QueuedBy != "" && coalesceKey != "" {
 		queuedBy = queuedMsg.QueuedBy
 	}
-	if isLifecycleAutomationOrigin(queuedMsg.Metadata["origin"]) {
+	if isLifecycleAutomationMessage(queuedMsg) {
 		s.requeueLifecycleMessage(ctx, queuedMsg, queuedBy, coalesceKey)
 		return
 	}
@@ -763,15 +763,12 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 
 const githubPRAutomationOrigin = "github_pr_automation"
 
-// isLifecycleAutomationOrigin reports whether a queued message's "origin"
-// metadata identifies it as a durable lifecycle prompt (GitHub PR or GitLab
-// MR automation) rather than an ordinary queued message. Both producers
-// share the same durable-queue contract (QueueLifecycleMessageWithCoalesceKey,
-// AcknowledgeQueued on accepted delivery); this is the single place that
-// recognizes the set of origins entitled to that treatment, so adding a
-// future provider only needs a change here.
-func isLifecycleAutomationOrigin(origin interface{}) bool {
-	return origin == githubPRAutomationOrigin || origin == mrAutomationOrigin || origin == ciAutomationOrigin
+// isLifecycleAutomationMessage reports whether a queued message is a durable
+// lifecycle prompt. The durable marker is authoritative for legacy rows whose
+// provider origin is absent, while IsDurableLifecycle also recognizes known
+// provider origins written by older versions.
+func isLifecycleAutomationMessage(msg *messagequeue.QueuedMessage) bool {
+	return msg != nil && msg.IsDurableLifecycle()
 }
 
 func (s *Service) recordQueuedUserMessage(ctx context.Context, queuedMsg *messagequeue.QueuedMessage, attachments []v1.MessageAttachment) error {
@@ -822,7 +819,7 @@ func (s *Service) executeQueuedMessageWithReservation(
 			s.onQueuedMessageExecutionComplete()
 		}
 	}()
-	lifecyclePrompt := isLifecycleAutomationOrigin(queuedMsg.Metadata["origin"])
+	lifecyclePrompt := isLifecycleAutomationMessage(queuedMsg)
 
 	claimEntryID, handoffDone := s.claimQueuedMessageHandoff(
 		promptCtx, callerSessionID, queuedMsg, reservation,
@@ -1010,9 +1007,12 @@ func (s *Service) handleQueuedMessageExecutionError(
 			zap.String("task_id", queuedMsg.TaskID),
 			zap.String("queue_id", queuedMsg.ID),
 			zap.Bool("manual_recovery", manualRecovery))
-		if manualRecovery {
+		switch {
+		case manualRecovery && lifecyclePrompt:
+			s.requeueLifecycleMessage(ctx, queuedMsg, queuedMsg.QueuedBy, messageCoalesceKey(queuedMsg))
+		case manualRecovery:
 			s.restoreQueuedMessage(ctx, queuedMsg)
-		} else {
+		default:
 			s.requeueMessage(ctx, queuedMsg, "workflow-auto-start-retry")
 		}
 		return

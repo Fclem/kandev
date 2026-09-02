@@ -181,6 +181,15 @@ func TestCreateNewSessionForStepFailsClosedWhenQueueTransferFails(t *testing.T) 
 	if got := svc.messageQueue.GetStatus(ctx, current.ID).Count; got != 1 {
 		t.Fatalf("queued hand-off after failed transfer = %d, want 1", got)
 	}
+	sessions, err := repo.ListTaskSessions(ctx, current.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, session := range sessions {
+		if session.ID != current.ID && session.State != models.TaskSessionStateCompleted {
+			t.Fatalf("replacement session after failed transfer = %s, want completed cleanup", session.State)
+		}
+	}
 }
 
 // terminalizeCandidateBeforePromotionRepo pauses a profile-switch promotion

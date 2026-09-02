@@ -345,9 +345,11 @@ func (h *QueueHandlers) wsCancelAll(ctx context.Context, msg *ws.Message) (*ws.M
 
 	var removed int
 	var removedEntries []messagequeue.QueuedMessage
+	var countRemovedEntries bool
 	var err error
 	if batchCanceller, ok := h.queueService.(queueBatchCanceller); ok {
 		removedEntries, err = batchCanceller.CancelAllWithEntries(ctx, req.SessionID)
+		countRemovedEntries = true
 	} else {
 		status := h.queueService.GetStatus(ctx, req.SessionID)
 		removed, err = h.queueService.CancelAll(ctx, req.SessionID)
@@ -360,7 +362,9 @@ func (h *QueueHandlers) wsCancelAll(ctx context.Context, msg *ws.Message) (*ws.M
 	}
 	for i := range removedEntries {
 		if !removedEntries[i].IsReservedInFlight() {
-			removed++
+			if countRemovedEntries {
+				removed++
+			}
 			h.releaseQueuedAttachments(ctx, &removedEntries[i])
 		}
 	}

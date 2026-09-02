@@ -1012,7 +1012,11 @@ func (s *Service) handleQueuedMessageExecutionError(
 		zap.Error(err))
 
 	manualRecovery := isManualRecoveryPromptError(err)
-	if lifecyclePrompt || errors.Is(err, errLifecyclePromptClaim) ||
+	passthroughAttachmentRecovery := !lifecyclePrompt &&
+		len(queuedMsg.Attachments) > 0 &&
+		s.agentManager != nil &&
+		s.agentManager.IsPassthroughSession(ctx, queuedMsg.SessionID)
+	if passthroughAttachmentRecovery || lifecyclePrompt || errors.Is(err, errLifecyclePromptClaim) ||
 		errors.Is(err, errLifecyclePromptMessagePersistence) ||
 		isSessionBusyError(err) || isTransientPromptError(err) || manualRecovery ||
 		errors.Is(err, lifecycle.ErrCancelEscalated) || isSessionResetInProgressError(err) {
@@ -1025,6 +1029,8 @@ func (s *Service) handleQueuedMessageExecutionError(
 			zap.String("queue_id", queuedMsg.ID),
 			zap.Bool("manual_recovery", manualRecovery))
 		switch {
+		case passthroughAttachmentRecovery:
+			s.restoreQueuedMessage(ctx, queuedMsg)
 		case manualRecovery && lifecyclePrompt:
 			s.requeueLifecycleMessage(ctx, queuedMsg, queuedMsg.QueuedBy, messageCoalesceKey(queuedMsg))
 		case manualRecovery:

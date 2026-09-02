@@ -3868,9 +3868,14 @@ func (s *Service) dispatchTakenQueuedMessage(ctx context.Context, sessionID stri
 	}
 	s.publishQueueStatusEvent(ctx, sessionID)
 	if queuedMsg.Content == "" && len(queuedMsg.Attachments) == 0 {
-		s.logger.Warn("skipping empty queued message after transition",
+		s.logger.Warn("discarding empty queued message after transition",
 			zap.String("session_id", sessionID),
 			zap.String("queue_id", queuedMsg.ID))
+		if queuedMsg.IsDurableLifecycle() {
+			s.acknowledgeLifecycleQueueEntry(ctx, sessionID, queuedMsg)
+		} else {
+			s.restoreQueuedMessage(ctx, queuedMsg)
+		}
 		return false
 	}
 	// Reserve entryID before handing off to the async goroutine. The worker
@@ -4421,7 +4426,14 @@ func (s *Service) takeAndMergeHandoffMessage(ctx context.Context, sessionID, bas
 		return nil, basePrompt, nil, nil
 	}
 	msg, ok := s.messageQueue.TakeQueuedIfAutoRun(ctx, sessionID)
-	if !ok || msg == nil || (msg.Content == "" && len(msg.Attachments) == 0) {
+	if !ok || msg == nil {
+		return nil, basePrompt, nil, nil
+	}
+	if msg.Content == "" && len(msg.Attachments) == 0 {
+		s.logger.Warn("restoring empty hand-off queue entry",
+			zap.String("session_id", sessionID),
+			zap.String("queue_id", msg.ID))
+		s.restoreQueuedMessage(ctx, msg)
 		return nil, basePrompt, nil, nil
 	}
 	prompt := basePrompt

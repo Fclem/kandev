@@ -10,6 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
+  IconArrowUp,
   IconChevronDown,
   IconChevronUp,
   IconClock,
@@ -18,6 +19,8 @@ import {
 } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
 import { useSessionPrompts } from "@/hooks/domains/session/use-session-prompts";
+import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
+import { PromptMentionText } from "./chat/messages/prompt-mention-components";
 import { useLazyLoadPrompts } from "@/hooks/use-lazy-load-prompts";
 import { useLazyLoadSentinel } from "@/hooks/use-lazy-load-sentinel";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
@@ -90,6 +93,8 @@ function PromptHistoryPassthrough({ rootRef }: { rootRef: RefObject<HTMLDivEleme
  * the transcript the arrow would jump to does not exist. */
 export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryPanelContentProps) {
   const { t } = useTranslation();
+  const { prompts: customPrompts } = useCustomPrompts();
+  const promptNames = useMemo(() => customPrompts.map((prompt) => prompt.name), [customPrompts]);
   const rootRef = useRef<HTMLDivElement>(null);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
@@ -181,6 +186,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
           contentRef={contentRef}
           entries={entries}
           sessionId={sessionId}
+          promptNames={promptNames}
           expanded={expanded}
           maxHeight={maxHeight}
           onToggle={(messageId) => setExpanded(expanded === messageId ? null : messageId)}
@@ -260,6 +266,7 @@ function PromptHistoryRowList({
   contentRef,
   entries,
   sessionId,
+  promptNames,
   expanded,
   maxHeight,
   onToggle,
@@ -270,6 +277,7 @@ function PromptHistoryRowList({
   contentRef: RefObject<HTMLDivElement | null>;
   entries: PromptHistoryEntry[];
   sessionId: string | null;
+  promptNames: string[];
   expanded: string | null;
   maxHeight: string;
   onToggle: (messageId: string) => void;
@@ -283,6 +291,7 @@ function PromptHistoryRowList({
         <PromptHistoryRow
           key={entry.messageId}
           sessionId={sessionId}
+          promptNames={promptNames}
           entry={entry}
           index={index}
           expanded={expanded === entry.messageId}
@@ -521,15 +530,54 @@ function PromptNumberLabel({ index, promptNumber }: { index: number; promptNumbe
   );
 }
 
+function usePromptHistoryOverflow(textRef: RefObject<HTMLSpanElement | null>) {
+  const [overflow, setOverflow] = useState(false);
+  useEffect(() => {
+    const text = textRef.current;
+    if (!text) return;
+    const update = () => setOverflow(text.scrollWidth > text.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(text);
+    return () => observer.disconnect();
+  }, [textRef]);
+  return overflow;
+}
+
 type PromptHistoryRowProps = {
   sessionId: string | null;
   entry: PromptHistoryEntry;
   index: number;
+  promptNames: string[];
   expanded: boolean;
   maxHeight: string;
   onToggle: () => void;
   onNavigate?: (messageId: string) => void;
 };
+function PromptHistoryNavigateButton({
+  index,
+  messageId,
+  onNavigate,
+}: {
+  index: number;
+  messageId: string;
+  onNavigate: NonNullable<PromptHistoryRowProps["onNavigate"]>;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      aria-label={t("task:scrollToPrompt")}
+      data-testid={`prompt-history-navigate-${index}`}
+      className="h-11 w-11 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground sm:h-6 sm:w-6"
+      onClick={() => onNavigate(messageId)}
+    >
+      <IconArrowUp className="h-3.5 w-3.5" />
+    </Button>
+  );
+}
 
 /** One prompt-history row: the prompt text (truncated, or expanded into a
  * scrollable box) inside the transcript-style bubble, its relative time and
@@ -540,6 +588,7 @@ function PromptHistoryRow({
   sessionId,
   entry,
   index,
+  promptNames,
   expanded,
   maxHeight,
   onToggle,
@@ -548,28 +597,14 @@ function PromptHistoryRow({
   const { t } = useTranslation();
   const { isFavorite } = useMessageFavorite(sessionId ?? "", entry.messageId);
   const textRef = useRef<HTMLSpanElement>(null);
-  const [overflow, setOverflow] = useState(false);
-  useEffect(() => {
-    const text = textRef.current;
-    if (!text) return;
-    /** Recomputes whether the prompt text overflows its single-line span. */
-    const update = () => setOverflow(text.scrollWidth > text.clientWidth);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(text);
-    return () => observer.disconnect();
-  }, []);
+  const overflow = usePromptHistoryOverflow(textRef);
   const showToggle = overflow || expanded;
   return (
     <div data-testid={`prompt-history-row-${index}`} className="flex items-start gap-1 py-1">
       <div className="min-w-0 flex-1">
-        {/* Same bubble as the transcript's user message: markdown-body
-            font, rounded-2xl, blue when not favorited / yellow when the
-            message is starred — with lighter padding. The prompt bubble is
-            directly clickable for transcript navigation. */}
+        {/* Transcript-style bubble; direct taps navigate while prompt chips own
+            keyboard preview interaction without nested interactive semantics. */}
         <div
-          role="button"
-          tabIndex={0}
           data-message-id={entry.messageId}
           className={cn(
             "markdown-body markdown-body-user group relative flex min-h-11 cursor-pointer items-center overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
@@ -579,13 +614,14 @@ function PromptHistoryRow({
             if (event.target instanceof HTMLElement && event.target.closest("button")) return;
             onNavigate?.(entry.messageId);
           }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-            event.preventDefault();
-            onNavigate?.(entry.messageId);
-          }}
         >
+          {onNavigate && (
+            <PromptHistoryNavigateButton
+              index={index}
+              messageId={entry.messageId}
+              onNavigate={onNavigate}
+            />
+          )}
           {entry.promptNumber !== null && (
             <PromptNumberLabel index={index} promptNumber={entry.promptNumber} />
           )}
@@ -596,7 +632,11 @@ function PromptHistoryRow({
             />
           )}
           <span ref={textRef} className={expanded ? "hidden" : "min-w-0 flex-1 truncate"}>
-            {entry.content}
+            <PromptMentionText
+              text={entry.content}
+              promptNames={promptNames}
+              keyPrefix={`history-${index}`}
+            />
           </span>
           {expanded && (
             <div
@@ -604,7 +644,11 @@ function PromptHistoryRow({
               className="min-w-0 flex-1 overflow-y-auto whitespace-normal"
               style={{ maxHeight }}
             >
-              {entry.content}
+              <PromptMentionText
+                text={entry.content}
+                promptNames={promptNames}
+                keyPrefix={`history-expanded-${index}`}
+              />
             </div>
           )}
           {showToggle && (

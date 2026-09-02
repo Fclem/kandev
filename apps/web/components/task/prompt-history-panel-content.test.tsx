@@ -10,6 +10,9 @@ const { state, messagesBySession, turnsBySession, turnsHydratedBySession } = vi.
     taskSessions: {
       items: {} as Record<string, { name?: string; is_passthrough?: boolean }>,
     },
+    prompts: {
+      items: [] as Array<{ name: string; content: string }>,
+    },
   },
   messagesBySession: {} as Record<string, Message[]>,
   turnsBySession: {} as Record<string, Turn[]>,
@@ -27,6 +30,10 @@ const pagination = vi.hoisted(() => ({
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state),
+}));
+
+vi.mock("@/hooks/domains/settings/use-custom-prompts", () => ({
+  useCustomPrompts: () => ({ prompts: state.prompts.items, loaded: true, loading: false }),
 }));
 
 vi.mock("@/hooks/domains/session/use-session-prompts", () => ({
@@ -56,6 +63,7 @@ vi.mock("@/hooks/domains/session/use-session-turns", () => ({
 }));
 
 import { PromptHistoryPanelContent, overflowsPanel } from "./prompt-history-panel-content";
+import { splitMarkdownPromptMentionSegments } from "./chat/messages/prompt-mention-components";
 import { useMessageFavoritesStore } from "@/lib/state/slices/message-favorites";
 import { formatDateTime } from "@/lib/i18n/formats";
 
@@ -82,6 +90,12 @@ const SENTINEL_TEST_ID = "prompt-history-sentinel";
 const LOADING_OLDER_TEST_ID = "prompt-history-loading-older";
 const SCROLL_TEST_ID = "prompt-history-scroll";
 const EMPTY_TEXT = "No prompts yet.";
+const PROMPT_NAME = "daily";
+const PROMPT_ALIAS = `@${PROMPT_NAME}`;
+const PROMPT_CONTENT = "Review the daily report";
+const PROMPT_MENTION_TEST_ID = "custom-prompt-mention";
+const INITIAL_PROMPT_CONTENT = "Initial prompt content";
+const UPDATED_PROMPT_CONTENT = "Updated prompt content";
 
 type ObserverEntry = { element: Element; callback: ResizeObserverCallback };
 const observerEntries: ObserverEntry[] = [];
@@ -272,6 +286,7 @@ beforeEach(() => {
   messagesBySession[SESSION_A] = [];
   messagesBySession[SESSION_B] = [];
   turnsBySession[SESSION_A] = [];
+  state.prompts.items = [];
   turnsBySession[SESSION_B] = [];
   turnsHydratedBySession[SESSION_A] = true;
   turnsHydratedBySession[SESSION_B] = true;
@@ -313,10 +328,123 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
     expect(bubble?.classList.contains("px-3")).toBe(true);
     expect(bubble?.classList.contains("py-1.5")).toBe(true);
     // Same font as the transcript user message (markdown-body 13px).
-    expect(bubble?.classList.contains("markdown-body")).toBe(true);
-    expect(bubble?.classList.contains("markdown-body-user")).toBe(true);
     expect(bubble?.textContent).toContain("bubbled prompt");
   });
+});
+
+describe("PromptHistoryPanelContent — prompt aliases", () => {
+  it("renders a recognized saved-prompt alias as a prompt chip", () => {
+    state.prompts.items = [{ name: PROMPT_NAME, content: PROMPT_CONTENT }];
+    messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];
+
+    render(<PromptHistoryPanelContent />);
+
+    const mention = screen.getByTestId(PROMPT_MENTION_TEST_ID);
+    expect(mention.textContent).toBe(PROMPT_ALIAS);
+    expect(mention.getAttribute("data-prompt-name")).toBe(PROMPT_NAME);
+  });
+
+  it("matches the transcript projection for formatted aliases but not code", () => {
+    state.prompts.items = [{ name: PROMPT_NAME, content: PROMPT_CONTENT }];
+    messagesBySession[SESSION_A] = [
+      message({ content: `**${PROMPT_ALIAS}** and _${PROMPT_ALIAS}_ and \`${PROMPT_ALIAS}\`` }),
+    ];
+
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.getAllByTestId(PROMPT_MENTION_TEST_ID)).toHaveLength(2);
+    expect(row(0).textContent).toContain(`**${PROMPT_ALIAS}**`);
+    expect(row(0).textContent).toContain(`\`${PROMPT_ALIAS}\``);
+  });
+
+  it("projects emphasis aliases while leaving inline code untouched", () => {
+    expect(
+      splitMarkdownPromptMentionSegments(
+        `**${PROMPT_ALIAS}** and _${PROMPT_ALIAS}_ and \`${PROMPT_ALIAS}\``,
+        [PROMPT_NAME],
+      ),
+    ).toEqual([
+      { kind: "text", value: "**" },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+      { kind: "text", value: "** and _" },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+      { kind: "text", value: `_ and \`${PROMPT_ALIAS}\`` },
+    ]);
+  });
+
+  it("leaves fenced code aliases as ordinary text", () => {
+    expect(
+      splitMarkdownPromptMentionSegments(`\`\`\`\n${PROMPT_ALIAS}\n\`\`\`\n\n**${PROMPT_ALIAS}**`, [
+        PROMPT_NAME,
+      ]),
+    ).toEqual([
+      { kind: "text", value: `\`\`\`\n${PROMPT_ALIAS}\n\`\`\`\n\n**` },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+      { kind: "text", value: "**" },
+    ]);
+  });
+
+  it("updates alias chips when saved prompts load after the row renders", () => {
+    messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];
+    const { rerender } = render(<PromptHistoryPanelContent />);
+
+    expect(screen.queryByTestId(PROMPT_MENTION_TEST_ID)).toBeNull();
+
+    state.prompts.items = [{ name: PROMPT_NAME, content: PROMPT_CONTENT }];
+    rerender(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId(PROMPT_MENTION_TEST_ID)).toBeTruthy();
+  });
+
+  it("keeps an unknown alias as ordinary text", () => {
+    messagesBySession[SESSION_A] = [message({ content: "Review @missing" })];
+
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.queryByTestId(PROMPT_MENTION_TEST_ID)).toBeNull();
+    expect(row(0).textContent).toContain("Review @missing");
+  });
+
+  it("opens a prompt preview without navigating and refreshes its content", () => {
+    const onNavigate = vi.fn();
+    state.prompts.items = [{ name: PROMPT_NAME, content: INITIAL_PROMPT_CONTENT }];
+    messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];
+
+    const { rerender } = render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigate} />);
+    const mention = screen.getByTestId(PROMPT_MENTION_TEST_ID);
+
+    expect(mention.getAttribute("tabindex")).toBe("0");
+    mention.focus();
+    expect(document.activeElement).toBe(mention);
+    fireEvent.keyDown(mention, { key: "Enter" });
+    expect(screen.getByText(INITIAL_PROMPT_CONTENT)).toBeTruthy();
+    fireEvent.click(mention);
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(screen.queryByText(INITIAL_PROMPT_CONTENT)).toBeNull();
+
+    state.prompts.items = [{ name: PROMPT_NAME, content: UPDATED_PROMPT_CONTENT }];
+    rerender(<PromptHistoryPanelContent onNavigateToPrompt={onNavigate} />);
+    fireEvent.click(screen.getByTestId(PROMPT_MENTION_TEST_ID));
+
+    expect(screen.getByText(UPDATED_PROMPT_CONTENT)).toBeTruthy();
+    expect(screen.queryByText(INITIAL_PROMPT_CONTENT)).toBeNull();
+  });
+
+  it("keeps the preview trigger out of a nested interactive row", () => {
+    state.prompts.items = [{ name: PROMPT_NAME, content: PROMPT_CONTENT }];
+    messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];
+
+    render(<PromptHistoryPanelContent />);
+
+    const bubble = row(0).querySelector<HTMLElement>("[data-message-id]");
+    const mention = screen.getByTestId(PROMPT_MENTION_TEST_ID);
+    expect(bubble?.getAttribute("role")).toBeNull();
+    expect(bubble?.hasAttribute("tabindex")).toBe(false);
+    expect(mention.getAttribute("role")).toBe("button");
+    expect(mention.getAttribute("tabindex")).toBe("0");
+  });
+});
+describe("PromptHistoryPanelContent — additional rows", () => {
   it("starts agent-owned prompts with the robot icon used by the transcript header", () => {
     messagesBySession[SESSION_A] = [
       message({

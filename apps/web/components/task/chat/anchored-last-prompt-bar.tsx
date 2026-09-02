@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,8 @@ import { stripSystemTags } from "@/lib/utils/system-tags";
 import { MemoizedMarkdown } from "@/components/shared/memoized-markdown";
 import { ScrollToLastPromptButton } from "./scroll-to-last-prompt-button";
 import { useTranslation } from "react-i18next";
+import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
+import { usePromptMentionMarkdownComponents } from "./messages/prompt-mention-components";
 
 type AnchoredLastPromptBarProps = {
   /** Raw content of the user's last prompt. */
@@ -28,6 +30,7 @@ type AnchoredLastPromptBarProps = {
    * of it actually opening (see resolveLastPromptControls). */
   onHeightChange?: (height: number) => void;
 };
+const NO_ENTITY_REFERENCES: readonly never[] = [];
 
 /** Reports `contentRef`'s rendered height to `onHeightChange` on mount and
  * on every subsequent resize, and 0 once unmounted. */
@@ -128,6 +131,12 @@ export function AnchoredLastPromptBar({
   onHeightChange,
 }: AnchoredLastPromptBarProps) {
   const { t } = useTranslation();
+  const { prompts } = useCustomPrompts();
+  const promptNames = useMemo(() => prompts.map((prompt) => prompt.name), [prompts]);
+  const promptMentionComponents = usePromptMentionMarkdownComponents(
+    promptNames,
+    NO_ENTITY_REFERENCES,
+  );
   const [expanded, setExpanded] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -185,7 +194,11 @@ export function AnchoredLastPromptBar({
               )}
             >
               <div className="markdown-body markdown-body-user max-w-none">
-                <MemoizedMarkdown content={visible} />
+                <MemoizedMarkdown
+                  key={isVisible ? "visible" : "hidden"}
+                  content={visible}
+                  components={promptMentionComponents}
+                />
               </div>
             </div>
             {canExpand && (

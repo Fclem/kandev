@@ -153,7 +153,7 @@ test.describe("Prompt history panel", () => {
       el.scrollTop = el.scrollHeight;
     });
     await session.clickTab("Prompt history");
-    await sentinelRow.locator('[role="button"]').first().click();
+    await sentinelRow.getByTestId("prompt-history-navigate-0").click();
 
     await expect(session.activeChat()).toBeVisible();
     const msg = chat.locator(`#msg-${sentinelMessageId}`);

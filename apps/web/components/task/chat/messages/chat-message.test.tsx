@@ -1,7 +1,9 @@
+/* eslint-disable max-lines -- ChatMessage integration coverage stays in one spec. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { StateProvider } from "@/components/state-provider";
+import { ToastProvider } from "@/components/toast-provider";
 import { ChatMessage } from "./chat-message";
 import { entityReferenceMarkdown } from "@/lib/entity-references/message-references";
 import type { EntityReference } from "@/lib/types/entity-reference";
@@ -179,6 +181,24 @@ describe("ChatMessage prompt mentions", () => {
     expect(checkbox.checked).toBe(true);
     expect(checkbox.closest("li")?.className).toContain("task-list-item");
     expect(screen.getByRole("cell").getAttribute("style")).toContain("text-align: center");
+  });
+  it("renders aliases nested in formatted Markdown nodes", () => {
+    const Wrapper = wrapper([], [customPrompt("hello")]);
+    render(
+      <ToastProvider>
+        <Wrapper>
+          <ChatMessage
+            comment={userMessage({
+              content: "**@hello** and _@hello_ and [**@hello**](https://example.com) and `@hello`",
+            })}
+            label="Message"
+            className=""
+          />
+        </Wrapper>
+      </ToastProvider>,
+    );
+
+    expect(screen.getAllByTestId(PROMPT_MENTION_TESTID)).toHaveLength(3);
   });
 });
 

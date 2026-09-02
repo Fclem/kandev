@@ -199,6 +199,11 @@ describe("ChatMessage prompt mentions", () => {
     );
 
     expect(screen.getAllByTestId(PROMPT_MENTION_TESTID)).toHaveLength(3);
+    const linkedMention = screen
+      .getByRole("link", { name: "@hello" })
+      .querySelector<HTMLElement>(`[data-testid="${PROMPT_MENTION_TESTID}"]`);
+    expect(linkedMention?.getAttribute("role")).toBeNull();
+    expect(linkedMention?.getAttribute("tabindex")).toBeNull();
   });
 });
 

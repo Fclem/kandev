@@ -436,12 +436,13 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 			zap.String("task_id", data.TaskID))
 		return
 	}
-	// A passthrough lifecycle reservation cannot be executed while this ready
-	// handler holds the per-session guard: executeQueuedMessage performs its
-	// own final claim through that guard. Register the deferred dispatch before
-	// acquiring it, so LIFO defer ordering releases the guard first. Keeping
-	// execution in this handler preserves the legacy ready-event completion
-	// boundary while still using the normal lifecycle delivery pipeline.
+	// A passthrough queue entry requiring the executor path (a lifecycle
+	// reservation or an attachment-bearing ordinary entry) cannot be executed
+	// while this ready handler holds the per-session guard: executeQueuedMessage
+	// performs its own final claim through that guard. Register the deferred
+	// dispatch before acquiring it, so LIFO defer ordering releases the guard
+	// first. Keeping execution in this handler preserves the legacy ready-event
+	// completion boundary while still using the normal delivery pipeline.
 	var deferredLifecycleDispatch *messagequeue.QueuedMessage
 	var deferredLifecycleReservation *queuedDispatchReservation
 	defer func() {
@@ -721,12 +722,19 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 		// the final active-task/session claim, records the visible message, and
 		// only acknowledges the reservation after Executor.Prompt accepts it.
 		// Executor.Prompt itself is passthrough-aware and writes to PTY stdin.
-		// Ordinary entries retain the historical direct PTY behavior below.
+		// Attachment-bearing ordinary entries use that same path so their
+		// attachments are materialized and included in the prompt. Ordinary
+		// text-only entries retain the historical direct PTY behavior below.
 		if queuedMsg.IsDurableLifecycle() {
 			// Reserve the durable row's dispatch token while this ready handler
 			// still owns the same guard used by all drains. Deferring this mark
 			// until after guard release lets a competing manual drain reserve the
 			// same durable row and begin a duplicate delivery attempt.
+			deferredLifecycleReservation = s.markQueuedDispatchInFlightWithSourceLocked(data.SessionID, queuedMsg.ID, queuedMsg)
+			deferredLifecycleDispatch = queuedMsg
+			return
+		}
+		if len(queuedMsg.Attachments) > 0 {
 			deferredLifecycleReservation = s.markQueuedDispatchInFlightWithSourceLocked(data.SessionID, queuedMsg.ID, queuedMsg)
 			deferredLifecycleDispatch = queuedMsg
 			return
@@ -755,14 +763,12 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 				s.restoreQueuedMessage(ctx, queuedMsg)
 				return
 			}
-			// Passthrough has no direct attachment-only delivery path. Keep an
-			// ordinary attachment-only entry queued rather than acknowledging it
-			// without sending anything.
-			if queuedMsg.Content == "" {
-				s.restoreQueuedMessage(ctx, queuedMsg)
-				return
-			}
+			return
 		}
+		// Passthrough has no direct attachment-only delivery path. Keep an
+		// ordinary attachment-only entry queued rather than acknowledging it
+		// without sending anything.
+		s.restoreQueuedMessage(ctx, queuedMsg)
 		return
 	}
 

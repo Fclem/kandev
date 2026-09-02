@@ -675,12 +675,19 @@ func (r *memoryRepository) AcknowledgeSendNowClaim(_ context.Context, claim *Sen
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	sessionID := claim.Sources[0].SessionID
+	if claim.SessionGeneration != r.sessionGeneration[sessionID] {
+		return ErrSendNowClaimChanged
+	}
+	generations := make(map[string]int64)
 	requested := make(map[string]struct{})
 	for _, source := range claim.Sources {
 		if source.SessionID != sessionID {
 			return ErrSendNowClaimChanged
 		}
-		if !source.IsDurableLifecycle() {
+		if source.TaskID != "" {
+			generations[source.TaskID] = r.generation[source.TaskID]
+		}
+		if !source.IsDurableLifecycle() || sendNowSourceGenerationChanged(claim, source, generations[source.TaskID]) {
 			continue
 		}
 		requested[source.ID] = struct{}{}

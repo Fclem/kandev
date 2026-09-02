@@ -65,7 +65,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
         return true;
       } catch (err) {
         console.error("Failed to acquire queued message edit lease:", err);
-        toast.error(t("chat:failedToSetQueueAutoRun"));
+        toast.error(t("chat:queueEditSaveFailed"));
         return false;
       } finally {
         if (acquiringEditRef.current === acquisition) acquiringEditRef.current = null;
@@ -110,7 +110,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
         if (activeEditRef.current?.lease.lease_id !== leaseID) return;
         console.error("Queued message edit lease renewal failed:", err);
         await completeEdit(activeEdit.entryId);
-        toast.error(t("chat:failedToSetQueueAutoRun"));
+        toast.error(t("chat:queueEditSaveFailed"));
       }
     };
     const timer = window.setInterval(() => void renew(), EDIT_RENEW_INTERVAL_MS);

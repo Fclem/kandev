@@ -312,6 +312,141 @@ func TestSendNowRestoreFencesSessionTransferAndReplacement(t *testing.T) {
 	}
 }
 
+func TestSendNowAcknowledgeFencesSessionChanges(t *testing.T) {
+	tests := []struct {
+		name string
+		new  func(*testing.T) Repository
+	}{
+		{name: "memory", new: func(*testing.T) Repository { return NewMemoryRepository() }},
+		{name: "sqlite", new: newTestSQLiteRepo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, change := range []struct {
+				name string
+				run  func(*testing.T, Repository, *SendNowClaim)
+			}{
+				{
+					name: "transfer",
+					run: func(t *testing.T, repo Repository, claim *SendNowClaim) {
+						ctx := context.Background()
+						if err := repo.TransferSession(ctx, "session-1", "session-2"); err != nil {
+							t.Fatalf("transfer: %v", err)
+						}
+						if err := repo.AcknowledgeSendNowClaim(ctx, claim); !errors.Is(err, ErrSendNowClaimChanged) {
+							t.Fatalf("acknowledge after transfer error = %v, want ErrSendNowClaimChanged", err)
+						}
+						entries, err := repo.ListBySession(ctx, "session-2")
+						if err != nil {
+							t.Fatalf("list transferred entries: %v", err)
+						}
+						if len(entries) != 1 || !entries[0].IsReservedInFlight() {
+							t.Fatalf("transferred entries = %#v, want reserved source preserved", entries)
+						}
+					},
+				},
+				{
+					name: "replacement",
+					run: func(t *testing.T, repo Repository, claim *SendNowClaim) {
+						ctx := context.Background()
+						replacement, err := repo.ListBySession(ctx, "session-1")
+						if err != nil {
+							t.Fatalf("list reserved replacement: %v", err)
+						}
+						if err := repo.ReplaceSession(ctx, "session-1", replacement, nil); err != nil {
+							t.Fatalf("replace: %v", err)
+						}
+						if err := repo.AcknowledgeSendNowClaim(ctx, claim); !errors.Is(err, ErrSendNowClaimChanged) {
+							t.Fatalf("acknowledge after replacement error = %v, want ErrSendNowClaimChanged", err)
+						}
+						entries, err := repo.ListBySession(ctx, "session-1")
+						if err != nil {
+							t.Fatalf("list replaced entries: %v", err)
+						}
+						if len(entries) != 1 || !entries[0].IsReservedInFlight() {
+							t.Fatalf("replaced entries = %#v, want reserved replacement preserved", entries)
+						}
+					},
+				},
+				{
+					name: "purge",
+					run: func(t *testing.T, repo Repository, claim *SendNowClaim) {
+						ctx := context.Background()
+						if _, err := repo.PurgeSession(ctx, "session-1"); err != nil {
+							t.Fatalf("purge session: %v", err)
+						}
+						if err := repo.AcknowledgeSendNowClaim(ctx, claim); !errors.Is(err, ErrSendNowClaimChanged) {
+							t.Fatalf("acknowledge after purge error = %v, want ErrSendNowClaimChanged", err)
+						}
+					},
+				},
+			} {
+				t.Run(change.name, func(t *testing.T) {
+					repo := tt.new(t)
+					ctx := context.Background()
+					entry := insertTestEntry(t, repo, "session-1", "task-1", "durable source", QueuedByWorkflow, nil,
+						map[string]interface{}{MetadataLifecycleDurable: true})
+					claim, err := repo.ClaimSendNow(ctx, "session-1", []QueuedMessage{*entry})
+					if err != nil {
+						t.Fatalf("claim: %v", err)
+					}
+					change.run(t, repo, claim)
+				})
+			}
+		})
+	}
+}
+
+func TestSendNowAcknowledgeIgnoresPurgedTaskGeneration(t *testing.T) {
+	tests := []struct {
+		name string
+		new  func(*testing.T) Repository
+	}{
+		{name: "memory", new: func(*testing.T) Repository { return NewMemoryRepository() }},
+		{name: "sqlite", new: newTestSQLiteRepo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := tt.new(t)
+			ctx := context.Background()
+			entry := insertTestEntry(t, repo, "session-1", "task-1", "durable source", QueuedByWorkflow, nil,
+				map[string]interface{}{MetadataLifecycleDurable: true})
+			claim, err := repo.ClaimSendNow(ctx, "session-1", []QueuedMessage{*entry})
+			if err != nil {
+				t.Fatalf("claim: %v", err)
+			}
+			if _, err := repo.PurgeTask(ctx, "task-1"); err != nil {
+				t.Fatalf("purge task: %v", err)
+			}
+
+			replacement := claim.Sources[0]
+			replacement.Metadata = map[string]interface{}{
+				MetadataLifecycleDurable:  true,
+				MetadataLifecycleReserved: true,
+			}
+			replacement.reservedLifecycleDelivery = true
+			replacement.SessionID = "session-1"
+			if err := repo.ReplaceSession(ctx, "session-1", []QueuedMessage{replacement}, nil); err != nil {
+				t.Fatalf("replace with successor: %v", err)
+			}
+			// The replacement changes the session generation, so isolate the
+			// task-generation fence to the purged task generation itself.
+			claim.SessionGeneration++
+			if err := repo.AcknowledgeSendNowClaim(ctx, claim); err != nil {
+				t.Fatalf("acknowledge stale task claim: %v", err)
+			}
+			entries, err := repo.ListBySession(ctx, "session-1")
+			if err != nil {
+				t.Fatalf("list successor: %v", err)
+			}
+			if len(entries) != 1 || !entries[0].IsReservedInFlight() {
+				t.Fatalf("successor after stale acknowledge = %#v, want reserved successor preserved", entries)
+			}
+		})
+	}
+}
 func TestSendNowRestoreKeepsCurrentDurableMetadataAndRecordedMarker(t *testing.T) {
 	repo := NewMemoryRepository().(*memoryRepository)
 	ctx := context.Background()

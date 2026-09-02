@@ -1574,10 +1574,31 @@ func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *S
 	if err != nil {
 		return err
 	}
-	if err := validateSQLiteSendNowAcknowledge(claim, sessionID, stored); err != nil {
+	sessionGeneration, err := r.getSendNowGenerationTx(ctx, tx, sessionID)
+	if err != nil {
+		return err
+	}
+	if claim.SessionGeneration != sessionGeneration {
+		return ErrSendNowClaimChanged
+	}
+	generations := make(map[string]int64)
+	for _, source := range claim.Sources {
+		if source.TaskID == "" {
+			continue
+		}
+		generation, generationErr := lifecycleGenerationInTx(ctx, tx, r.db, source.TaskID)
+		if generationErr != nil {
+			return generationErr
+		}
+		generations[source.TaskID] = generation
+	}
+	if err := validateSQLiteSendNowAcknowledge(claim, sessionID, stored, generations); err != nil {
 		return err
 	}
 	for _, source := range claim.Sources {
+		if sendNowSourceGenerationChanged(claim, source, generations[source.TaskID]) {
+			continue
+		}
 		if err := r.acknowledgeSQLiteSendNowSource(ctx, tx, sessionID, source, stored); err != nil {
 			return err
 		}
@@ -1855,10 +1876,18 @@ func (r *sqliteRepository) insertSQLiteSendNowSource(ctx context.Context, tx *sq
 }
 
 // validateSQLiteSendNowAcknowledge verifies every durable source is still reserved before acknowledgement.
-func validateSQLiteSendNowAcknowledge(claim *SendNowClaim, sessionID string, stored map[string]storedQueueEntry) error {
+func validateSQLiteSendNowAcknowledge(
+	claim *SendNowClaim,
+	sessionID string,
+	stored map[string]storedQueueEntry,
+	generations map[string]int64,
+) error {
 	for _, source := range claim.Sources {
 		if source.SessionID != sessionID {
 			return ErrSendNowClaimChanged
+		}
+		if sendNowSourceGenerationChanged(claim, source, generations[source.TaskID]) {
+			continue
 		}
 		if !source.IsDurableLifecycle() {
 			continue

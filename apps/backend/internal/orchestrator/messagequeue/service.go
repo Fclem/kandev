@@ -1256,7 +1256,9 @@ func (s *Service) RemoveEntry(ctx context.Context, sessionID, entryID string) er
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		err := s.repo.DeleteByID(admittedCtx, sessionID, entryID)
 		if err == nil {
+			s.editLeaseMu.Lock()
 			delete(s.editLeases, s.editLeaseKey(sessionID, entryID))
+			s.editLeaseMu.Unlock()
 		}
 		return err
 	})

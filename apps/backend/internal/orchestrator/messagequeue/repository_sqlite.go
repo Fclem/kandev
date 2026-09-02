@@ -781,6 +781,9 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	if err != nil {
 		return 0, fmt.Errorf("purge queued task entries rows affected: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, db.Rebind(`DELETE FROM pending_moves WHERE task_id = ?`), taskID); err != nil {
+		return 0, fmt.Errorf("purge pending task moves: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, db.Rebind(`
 		INSERT INTO lifecycle_queue_generations (task_id, generation) VALUES (?, 1)
 		ON CONFLICT(task_id) DO UPDATE SET generation = lifecycle_queue_generations.generation + 1

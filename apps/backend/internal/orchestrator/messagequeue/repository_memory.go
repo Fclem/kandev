@@ -60,6 +60,11 @@ func (r *memoryRepository) PurgeTask(_ context.Context, taskID string) (int, err
 		}
 		r.entries[sessionID] = kept
 	}
+	for sessionID, move := range r.pendingMoves {
+		if move.TaskID == taskID {
+			delete(r.pendingMoves, sessionID)
+		}
+	}
 	r.generation[taskID]++
 	return removed, nil
 }

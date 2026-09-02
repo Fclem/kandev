@@ -28,15 +28,22 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editLease, setEditLease] = useState<QueueEditLease | null>(null);
   const activeEditRef = useRef<ActiveEdit | null>(null);
+  const mountedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const beginEdit = useCallback(
     async (entryId: string): Promise<boolean> => {
       if (!sessionId || editingEntryId || activeEditRef.current) return false;
       try {
         const lease = await beginQueuedMessageEdit(sessionId, entryId);
-        if (sessionIdRef.current !== sessionId) {
+        if (!mountedRef.current || sessionIdRef.current !== sessionId) {
           await endQueuedMessageEdit(lease).catch(() => undefined);
           return false;
         }
@@ -76,12 +83,17 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
     const activeEdit = activeEditRef.current;
     if (!activeEdit) return;
     const renew = async () => {
+      const leaseID = activeEdit.lease.lease_id;
       try {
         const lease = await renewQueuedMessageEdit(activeEdit.lease);
         if (activeEditRef.current?.lease.lease_id !== lease.lease_id) return;
         activeEditRef.current.lease = lease;
         setEditLease(lease);
       } catch (err) {
+        // A renewal can reject after this edit has been completed and a new
+        // lease has been acquired for the same row. Only the lease that
+        // started this renewal may be cleared.
+        if (activeEditRef.current?.lease.lease_id !== leaseID) return;
         console.error("Queued message edit lease renewal failed:", err);
         await completeEdit(activeEdit.entryId);
         toast.error(t("chat:failedToSetQueueAutoRun"));

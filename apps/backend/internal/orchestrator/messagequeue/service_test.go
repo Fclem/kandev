@@ -675,6 +675,18 @@ func TestRemoveEntry(t *testing.T) {
 		assert.ErrorIs(t, err, ErrEntryNotFound)
 	})
 
+	t.Run("invalidates an edit lease for the removed entry", func(t *testing.T) {
+		svc := setupService(t)
+		ctx := context.Background()
+		entry, err := svc.QueueMessage(ctx, "s", "t", "editable", "", QueuedByUser, false, nil)
+		require.NoError(t, err)
+		lease, err := svc.BeginEdit(ctx, "s", entry.ID, "connection-a")
+		require.NoError(t, err)
+
+		require.NoError(t, svc.RemoveEntry(ctx, "s", entry.ID))
+		assert.ErrorIs(t, svc.EndEdit(ctx, "s", entry.ID, lease.LeaseID, "connection-a"), ErrEditLeaseNotFound)
+	})
+
 	t.Run("rejects deletion from a foreign session", func(t *testing.T) {
 		svc := setupService(t)
 		ctx := context.Background()

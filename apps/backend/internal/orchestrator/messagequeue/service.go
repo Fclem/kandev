@@ -320,6 +320,7 @@ func (s *Service) UpdateMessageWithLeaseAfterValidation(
 
 		if prepare != nil {
 			if err := prepare(admittedCtx); err != nil {
+				s.rollbackPreparedEdit(admittedCtx, rollback)
 				return err
 			}
 		}
@@ -793,6 +794,9 @@ func (s *Service) insertQueueMessageWithCoalesceKey(ctx context.Context, session
 		}
 		return nil, false, err
 	}
+	if replaced && queued != nil {
+		s.invalidateEditLease(sessionID, queued.ID)
+	}
 	s.logger.Info("message queued with coalesce key",
 		zap.String("session_id", sessionID),
 		zap.String("task_id", taskID),
@@ -980,6 +984,32 @@ func (s *Service) invalidateEditLeasesForTaskLocked(taskID string) {
 // repository deletes that session's durable queue rows.
 func (s *Service) InvalidateEditLeasesForSession(sessionID string) {
 	s.invalidateEditLeasesLocked(sessionID)
+}
+
+func (s *Service) invalidateEditLease(sessionID, entryID string) {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
+	delete(s.editLeases, s.editLeaseKey(sessionID, entryID))
+}
+
+// ReleaseEditLeasesForConnection drops all edit leases owned by a disconnected
+// WebSocket connection. Lease IDs remain unusable because they are removed
+// before a later connection can acquire the same target.
+func (s *Service) ReleaseEditLeasesForConnection(connectionID string) int {
+	if connectionID == "" {
+		return 0
+	}
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
+	released := 0
+	for key, lease := range s.editLeases {
+		if lease.connectionID != connectionID {
+			continue
+		}
+		delete(s.editLeases, key)
+		released++
+	}
+	return released
 }
 
 // PurgeTask is a backend-only task lifecycle operation. Client deletion APIs
@@ -1182,6 +1212,13 @@ func (s *Service) TakeQueuedIfAutoRun(ctx context.Context, sessionID string) (*Q
 		autoRun, err := s.repo.GetAutoRun(admittedCtx, sessionID)
 		if err != nil || !autoRun {
 			return err
+		}
+		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 || entries[0].IsDurableLifecycle() || entries[0].IsReservedInFlight() {
+			return nil
 		}
 		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
 		if err != nil || blocked {

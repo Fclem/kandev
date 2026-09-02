@@ -119,6 +119,39 @@ it("allows only one lease acquisition while a begin request is pending", async (
   });
 });
 
+it("releases a lease when the target disappears during acquisition", async () => {
+  let resolveBegin!: (lease: QueueEditLease) => void;
+  const pendingBegin = new Promise<QueueEditLease>((resolve) => {
+    resolveBegin = resolve;
+  });
+  vi.mocked(beginQueuedMessageEdit).mockReturnValueOnce(pendingBegin);
+  const { result, rerender } = renderHook(
+    ({ entries }: { entries: QueuedMessage[] }) =>
+      useQueueEditProtection({ sessionId: SESSION_A, entries }),
+    { initialProps: { entries: [entry()] } },
+  );
+
+  let pendingEdit!: Promise<boolean>;
+  act(() => {
+    pendingEdit = result.current.beginEdit(ENTRY_ID);
+  });
+  rerender({ entries: [] });
+
+  await act(async () => {
+    resolveBegin({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-gone",
+      target_revision: 0,
+    });
+    await expect(pendingEdit).resolves.toBe(false);
+  });
+
+  expect(endQueuedMessageEdit).toHaveBeenCalledWith(
+    expect.objectContaining({ lease_id: "lease-gone" }),
+  );
+});
+
 describe("late queued edit lease operations", () => {
   it("keeps a replacement lease when an older renewal fails", async () => {
     vi.useFakeTimers();

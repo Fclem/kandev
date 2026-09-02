@@ -166,6 +166,11 @@ func provideGateway(
 	)
 	queueHandlers.SetAttachmentClaimer(taskSvc)
 	queueHandlers.RegisterHandlers(gateway.Dispatcher)
+	if queue := orchestratorSvc.GetMessageQueue(); queue != nil {
+		gateway.Hub.SetClientDisconnectListener(func(connectionID string) {
+			queue.ReleaseEditLeasesForConnection(connectionID)
+		})
+	}
 
 	if lifecycleMgr != nil && agentRegistry != nil {
 		agentCtrl := agentcontroller.NewController(lifecycleMgr, agentRegistry)

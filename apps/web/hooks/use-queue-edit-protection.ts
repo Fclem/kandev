@@ -33,6 +33,8 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
   const mountedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -49,7 +51,11 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
       acquiringEditRef.current = acquisition;
       try {
         const lease = await beginQueuedMessageEdit(sessionId, entryId);
-        if (!mountedRef.current || sessionIdRef.current !== sessionId) {
+        if (
+          !mountedRef.current ||
+          sessionIdRef.current !== sessionId ||
+          !entriesRef.current.some((entry) => entry.id === entryId)
+        ) {
           await endQueuedMessageEdit(lease).catch(() => undefined);
           return false;
         }
@@ -65,7 +71,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
         if (acquiringEditRef.current === acquisition) acquiringEditRef.current = null;
       }
     },
-    [editingEntryId, sessionId, t],
+    [editingEntryId, entries, sessionId, t],
   );
 
   const completeEdit = useCallback(async (entryId: string): Promise<void> => {

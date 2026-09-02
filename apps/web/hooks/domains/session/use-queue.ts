@@ -16,7 +16,7 @@ import {
   type QueueEditLease,
 } from "@/lib/api/domains/queue-api";
 import type { QueueMessageParams } from "@/lib/api/domains/queue-api";
-import type { QueuedMessage } from "@/lib/state/slices/session/types";
+import type { QueueMeta, QueuedMessage } from "@/lib/state/slices/session/types";
 import type { EntityReference } from "@/lib/types/entity-reference";
 
 import { generateUUID } from "@/lib/utils";
@@ -77,6 +77,7 @@ type QueueActionsArgs = {
   setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"];
   removeQueueEntry: ReturnType<typeof useQueueState>["removeQueueEntry"];
   setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"];
+  queueMeta: QueueMeta | undefined;
   metaMax: number | undefined;
   metaMergeEnabled: boolean | undefined;
   metaAutoRun: boolean | undefined;
@@ -156,11 +157,15 @@ function useSetAutoRunAction(
 
 /** Fetches the authoritative queue snapshot and writes it into the slice,
  * discarding a response that arrives after a newer request for the same
- * session was already issued (out-of-order network resolution). */
+ * or a newer queue event has already updated this session.
+ */
 function useQueueRefetch(
   setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"],
   setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"],
+  queueMeta: QueueMeta | undefined,
 ) {
+  const queueMetaRef = useRef(queueMeta);
+  queueMetaRef.current = queueMeta;
   const refetchVersion = useRef<Record<string, number>>({});
   const invalidate = useCallback((sid: string) => {
     refetchVersion.current[sid] = (refetchVersion.current[sid] ?? 0) + 1;
@@ -169,10 +174,13 @@ function useQueueRefetch(
     async (sid: string) => {
       const version = (refetchVersion.current[sid] ?? 0) + 1;
       refetchVersion.current[sid] = version;
+      const requestMeta = queueMetaRef.current;
       try {
         setQueueLoading(sid, true);
         const status = await getQueueStatus(sid);
-        if (refetchVersion.current[sid] !== version) return;
+        if (refetchVersion.current[sid] !== version || queueMetaRef.current !== requestMeta) {
+          return;
+        }
         setQueueEntries(sid, status.entries ?? [], {
           count: status.count,
           max: status.max,
@@ -195,6 +203,7 @@ function useQueueActions({
   setQueueEntries,
   removeQueueEntry,
   setQueueLoading,
+  queueMeta,
   metaMax,
   metaMergeEnabled,
   metaAutoRun,
@@ -202,6 +211,7 @@ function useQueueActions({
   const { refetch, invalidate: invalidateRefetch } = useQueueRefetch(
     setQueueEntries,
     setQueueLoading,
+    queueMeta,
   );
 
   const queue = useCallback(
@@ -550,6 +560,7 @@ export function useQueue(sessionId: string | null) {
     setQueueEntries: state.setQueueEntries,
     removeQueueEntry: state.removeQueueEntry,
     setQueueLoading: state.setQueueLoading,
+    queueMeta: meta,
     metaMax: meta?.max,
     metaMergeEnabled: meta?.mergeEnabled,
     metaAutoRun: meta?.autoRun,

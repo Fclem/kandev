@@ -99,3 +99,90 @@ func TestEditLeaseBlocksTargetedDrains(t *testing.T) {
 	_, err = svc.ClaimSendNow(ctx, entry.SessionID, []QueuedMessage{*entry})
 	require.ErrorIs(t, err, ErrEditConflict)
 }
+func TestEditLeaseReleaseForDisconnectedConnectionUnblocksTarget(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session-lease-disconnect", "task", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	_, err = svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	require.Equal(t, 1, svc.ReleaseEditLeasesForConnection("connection-a"))
+
+	got, ok := svc.TakeQueued(ctx, entry.SessionID)
+	require.True(t, ok)
+	require.Equal(t, entry.ID, got.ID)
+}
+
+func TestTakeQueuedIfAutoRunDoesNotDeleteDurableLifecycleEntry(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, _, accepted, err := svc.QueueLifecycleMessageWithCoalesceKey(
+		ctx, "session-lifecycle-auto-run", "task", "lifecycle", "", QueuedByWorkflow,
+		false, nil, map[string]interface{}{"origin": "github_pr_automation"}, "lifecycle-key", true,
+	)
+	require.NoError(t, err)
+	require.True(t, accepted)
+
+	got, ok := svc.TakeQueuedIfAutoRun(ctx, entry.SessionID)
+	require.False(t, ok)
+	require.Nil(t, got)
+
+	status := svc.GetStatus(ctx, entry.SessionID)
+	require.Len(t, status.Entries, 1)
+	require.Equal(t, entry.ID, status.Entries[0].ID)
+}
+
+func TestLeasedUpdateRollsBackPreparedStateOnPreparationError(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session-lease-prepare", "task", "before", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err := svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	claimed, rolledBack := false, false
+	_, err = svc.UpdateMessageWithLeaseAfterValidation(
+		ctx, entry.SessionID, entry.ID, lease.LeaseID, "operation-1", "connection-a",
+		lease.TargetRevision, "after", nil, nil,
+		func(context.Context) error {
+			claimed = true
+			return errors.New("attachment claim failed")
+		},
+		func(context.Context) error {
+			rolledBack = true
+			return nil
+		},
+	)
+	require.Error(t, err)
+	require.True(t, claimed)
+	require.True(t, rolledBack)
+
+	status := svc.GetStatus(ctx, entry.SessionID)
+	require.Equal(t, "before", status.Entries[0].Content)
+}
+
+func TestQueueCoalesceReplacementInvalidatesEditLease(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, replaced, err := svc.QueueMessageWithCoalesceKey(
+		ctx, "session-lease-replace", "task", "before", "", QueuedByUser,
+		false, nil, nil, "coalesce-key", true,
+	)
+	require.NoError(t, err)
+	require.False(t, replaced)
+	lease, err := svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	replacement, replaced, err := svc.QueueMessageWithCoalesceKey(
+		ctx, entry.SessionID, "task", "replacement", "", QueuedByUser,
+		false, nil, nil, "coalesce-key", true,
+	)
+	require.NoError(t, err)
+	require.True(t, replaced)
+	require.Equal(t, entry.ID, replacement.ID)
+
+	_, err = svc.UpdateMessageWithLease(ctx, entry.SessionID, entry.ID, lease.LeaseID,
+		"operation-1", "connection-a", lease.TargetRevision, "stale", nil, nil)
+	require.ErrorIs(t, err, ErrEditLeaseNotFound)
+}

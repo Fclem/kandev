@@ -767,6 +767,27 @@ func TestWsUpdateMessage(t *testing.T) {
 		assert.Equal(t, []string{"new-attachment"}, claimer.releases)
 	})
 
+	t.Run("releases attachments when claim reports an error", func(t *testing.T) {
+		handlers, svc := setupQueueHandlers(t)
+		claimer := &recordingQueueAttachmentClaimer{claimErr: errors.New("claim failed")}
+		handlers.SetAttachmentClaimer(claimer)
+		ctx := context.Background()
+		queued, err := svc.QueueMessage(ctx, "s", "task-1", "original", "", "u", false, nil)
+		require.NoError(t, err)
+
+		response, err := handlers.wsUpdateMessage(ctx,
+			createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+				"session_id": "s", "entry_id": queued.ID, "content": "edited", "user_id": "u",
+				"attachments": []messagequeue.MessageAttachment{{
+					Type: "resource", AttachmentID: "new-attachment", Name: "new.txt", MimeType: "text/plain",
+				}},
+			}))
+		require.NoError(t, err)
+		assert.Equal(t, ws.MessageTypeError, response.Type)
+		assert.Equal(t, []string{"new-attachment"}, claimer.claims)
+		assert.Equal(t, []string{"new-attachment"}, claimer.releases)
+	})
+
 	t.Run("updates an entry", func(t *testing.T) {
 		handlers, svc := setupQueueHandlers(t)
 		ctx := context.Background()

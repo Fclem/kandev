@@ -220,6 +220,49 @@ describe("useQueue", () => {
   });
 });
 
+describe("queue refetch races", () => {
+  beforeEach(() => {
+    resetMockState();
+    setDocumentVisibility("visible");
+    queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("does not let a stale refetch overwrite a newer queue event", async () => {
+    const pendingSnapshot = Promise.withResolvers<{
+      entries: QueuedMessage[];
+      count: number;
+      max: number;
+    }>();
+    queueApiMock.getQueueStatus.mockReturnValueOnce(pendingSnapshot.promise);
+    const { rerender } = renderHook(() => useQueue(SESSION_ID));
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledTimes(1));
+
+    const eventEntry = entry({ id: "event-entry", content: "newer event" });
+    mockState.queue.bySessionId[SESSION_ID] = [eventEntry];
+    mockState.queue.metaBySessionId[SESSION_ID] = { count: 1, max: 10 };
+    rerender();
+
+    await act(async () => {
+      pendingSnapshot.resolve({
+        entries: [entry({ id: "stale-entry" })],
+        count: 1,
+        max: 10,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockState.setQueueEntries).not.toHaveBeenCalledWith(
+      SESSION_ID,
+      [expect.objectContaining({ id: "stale-entry" })],
+      expect.anything(),
+    );
+  });
+});
 describe("useQueue context file metadata and Send Now", () => {
   beforeEach(() => {
     resetMockState();

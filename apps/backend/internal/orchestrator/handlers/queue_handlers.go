@@ -735,7 +735,6 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 	applyUpdate := func(updateCtx context.Context) (int64, error) {
 		if h.attachmentClaimer != nil {
 			if err := h.attachmentClaimer.ClaimMessageAttachments(updateCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); err != nil {
-				newlyAdded = nil
 				return 0, fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
 			}
 		}
@@ -830,7 +829,6 @@ func (h *QueueHandlers) updateMessageWithAttachmentLease(
 			*req.ExpectedRevision, req.Content, req.Attachments, metadataUpdates,
 			func(prepareCtx context.Context) error {
 				if err := h.attachmentClaimer.ClaimMessageAttachments(prepareCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(*newlyAdded)); err != nil {
-					*newlyAdded = nil
 					return fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
 				}
 				return nil

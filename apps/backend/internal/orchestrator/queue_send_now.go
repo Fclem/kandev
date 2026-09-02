@@ -316,8 +316,8 @@ func (s *Service) claimAndDispatchSendNow(ctx context.Context, sessionID, scope 
 
 func mapSendNowClaimError(scope string, err error) error {
 	switch {
-	case errors.Is(err, messagequeue.ErrSendNowEmpty):
-		return ErrSendNowQueueChanged
+	case errors.Is(err, messagequeue.ErrEditConflict):
+		return ErrSendNowConflict
 	case errors.Is(err, messagequeue.ErrSendNowReservationConflict):
 		return ErrSendNowConflict
 	case errors.Is(err, messagequeue.ErrSendNowClaimChanged):

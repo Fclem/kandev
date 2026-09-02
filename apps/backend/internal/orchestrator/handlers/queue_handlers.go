@@ -647,15 +647,20 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 	if messagequeue.IsReservedQueuedBy(req.UserID) {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, reservedIdentityError(req.UserID), nil)
 	}
+	connectionID := ws.ConnectionID(ctx)
+	if connectionID != "" && (h.queueEdit == nil || req.LeaseID == "" || req.OperationID == "" || req.ExpectedRevision == nil) {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation,
+			"lease_id, operation_id, and expected_target_revision are required", nil)
+	}
 	referencesProvided := req.EntityReferences != nil
 	references, err := h.validateSubmittedReferences(ctx, req.SessionID, "", req.EntityReferences)
 	if err != nil {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, queueInvalidReferences, nil)
 	}
-	req.EntityReferences = references
 	// Default empty user_id to QueuedByUser so the UpdateContent guard always
 	// runs against a non-empty owner. Agent entries (queued_by="agent") then
 	// fail the filter, mirroring the canEdit UI gate at the WS layer.
+	req.EntityReferences = references
 	queuedBy := req.UserID
 	if queuedBy == "" {
 		queuedBy = messagequeue.QueuedByUser
@@ -688,11 +693,7 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 	}
 	var revision int64
 	var updateErr error
-	if connectionID := ws.ConnectionID(ctx); connectionID != "" {
-		if h.queueEdit == nil || req.LeaseID == "" || req.OperationID == "" || req.ExpectedRevision == nil {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation,
-				"lease_id, operation_id, and expected_target_revision are required", nil)
-		}
+	if connectionID != "" {
 		revision, updateErr = h.queueEdit.UpdateMessageWithLease(ctx, req.SessionID, req.EntryID,
 			req.LeaseID, req.OperationID, connectionID, *req.ExpectedRevision, req.Content,
 			req.Attachments, metadataUpdates)

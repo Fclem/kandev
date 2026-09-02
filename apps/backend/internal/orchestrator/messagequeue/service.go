@@ -323,6 +323,12 @@ func (s *Service) editLeaseBlocksHeadLocked(ctx context.Context, sessionID strin
 	return false, nil
 }
 
+func (s *Service) editLeaseBlocksEntryLocked(sessionID, entryID string) bool {
+	key := s.editLeaseKey(sessionID, entryID)
+	s.expireEditLeaseLocked(key, time.Now().UTC())
+	return s.editLeases[key] != nil
+}
+
 // QueueMessage appends a new entry to the session's FIFO queue. Returns
 // ErrQueueFull when the cap is exceeded.
 func (s *Service) QueueMessage(ctx context.Context, sessionID, taskID, content, model, userID string, planMode bool, attachments []MessageAttachment) (*QueuedMessage, error) {
@@ -893,7 +899,10 @@ func (s *Service) AppendContent(ctx context.Context, sessionID, taskID, content,
 func (s *Service) TakeQueued(ctx context.Context, sessionID string) (*QueuedMessage, bool) {
 	var msg *QueuedMessage
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		var err error
+		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
+		if err != nil || blocked {
+			return err
+		}
 		msg, err = s.repo.TakeHead(admittedCtx, sessionID)
 		return err
 	})
@@ -959,6 +968,9 @@ func (s *Service) TakeQueuedIfAutoRun(ctx context.Context, sessionID string) (*Q
 func (s *Service) TakeQueuedEntry(ctx context.Context, sessionID, entryID string) (*QueuedMessage, bool, error) {
 	var msg *QueuedMessage
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		if s.editLeaseBlocksEntryLocked(sessionID, entryID) {
+			return ErrEditConflict
+		}
 		var err error
 		msg, err = s.repo.TakeByID(admittedCtx, sessionID, entryID)
 		return err
@@ -1013,6 +1025,11 @@ func (s *Service) GetEntry(ctx context.Context, sessionID, entryID string) (*Que
 func (s *Service) ClaimSendNow(ctx context.Context, sessionID string, expected []QueuedMessage) (*SendNowClaim, error) {
 	var claim *SendNowClaim
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		for _, entry := range expected {
+			if s.editLeaseBlocksEntryLocked(sessionID, entry.ID) {
+				return ErrEditConflict
+			}
+		}
 		var err error
 		claim, err = s.repo.ClaimSendNow(admittedCtx, sessionID, expected)
 		return err

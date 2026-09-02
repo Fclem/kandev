@@ -176,7 +176,7 @@ export function splitMarkdownPromptMentionSegments(
 
   const segments: PromptMentionSegment[] = [];
   let lastIndex = 0;
-  const codeState: MarkdownCodeState = { delimiter: null, fence: null };
+  const codeState: MarkdownCodeState = { delimiter: null, fence: null, destinationDepth: 0 };
 
   for (let index = 0; index < content.length; ) {
     const codeIndex = skipMarkdownCode(content, index, codeState);
@@ -216,29 +216,54 @@ export function splitMarkdownPromptMentionSegments(
 type MarkdownCodeState = {
   delimiter: string | null;
   fence: { marker: string; length: number } | null;
+  destinationDepth: number;
 };
 
 function skipMarkdownCode(content: string, index: number, state: MarkdownCodeState): number | null {
-  if (state.fence) {
-    if (
-      isMarkdownFenceAt(content, index, state.fence.marker, state.fence.length) &&
-      content[index - 1] !== "\\"
-    ) {
-      const nextIndex = index + runLength(content, index, state.fence.marker);
-      state.fence = null;
-      return nextIndex;
-    }
-    return index + 1;
+  if (state.destinationDepth > 0) return skipMarkdownDestination(content, index, state);
+  if (state.fence) return skipMarkdownFence(content, index, state);
+  if (state.delimiter) return skipMarkdownDelimiter(content, index, state);
+  if (content[index] === "]" && content[index + 1] === "(") {
+    state.destinationDepth = 1;
+    return index + 2;
   }
-  if (state.delimiter) {
-    if (content.startsWith(state.delimiter, index)) {
-      const nextIndex = index + state.delimiter.length;
-      state.delimiter = null;
-      return nextIndex;
-    }
-    return index + 1;
-  }
+  return startMarkdownCode(content, index, state);
+}
 
+function skipMarkdownDestination(content: string, index: number, state: MarkdownCodeState): number {
+  const marker = content[index];
+  if (marker === "(" && content[index - 1] !== "\\") state.destinationDepth += 1;
+  if (marker === ")" && content[index - 1] !== "\\") state.destinationDepth -= 1;
+  return index + 1;
+}
+
+function skipMarkdownFence(content: string, index: number, state: MarkdownCodeState): number {
+  const fence = state.fence;
+  if (
+    fence &&
+    isMarkdownFenceAt(content, index, fence.marker, fence.length) &&
+    content[index - 1] !== "\\"
+  ) {
+    state.fence = null;
+    return index + runLength(content, index, fence.marker);
+  }
+  return index + 1;
+}
+
+function skipMarkdownDelimiter(content: string, index: number, state: MarkdownCodeState): number {
+  if (state.delimiter && content.startsWith(state.delimiter, index)) {
+    const nextIndex = index + state.delimiter.length;
+    state.delimiter = null;
+    return nextIndex;
+  }
+  return index + 1;
+}
+
+function startMarkdownCode(
+  content: string,
+  index: number,
+  state: MarkdownCodeState,
+): number | null {
   const marker = content[index];
   const length = marker === "`" || marker === "~" ? runLength(content, index, marker) : 0;
   if (length === 0) return null;

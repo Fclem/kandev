@@ -383,6 +383,16 @@ describe("PromptHistoryPanelContent — prompt aliases", () => {
       { kind: "text", value: "**" },
     ]);
   });
+  it("chips link labels but leaves link destinations untouched", () => {
+    const content = `[label ${PROMPT_ALIAS}](/docs "title ${PROMPT_ALIAS}") and ${PROMPT_ALIAS}`;
+
+    expect(splitMarkdownPromptMentionSegments(content, [PROMPT_NAME])).toEqual([
+      { kind: "text", value: "[label " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+      { kind: "text", value: `](/docs "title ${PROMPT_ALIAS}") and ` },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ]);
+  });
 
   it("updates alias chips when saved prompts load after the row renders", () => {
     messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];

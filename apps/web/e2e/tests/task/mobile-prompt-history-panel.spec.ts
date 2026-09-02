@@ -104,6 +104,8 @@ test.describe("Prompt history panel on mobile", () => {
     const chip = row.getByTestId("custom-prompt-mention");
     await expect(chip).toBeVisible({ timeout: 15_000 });
     await expect(chip).toHaveAttribute("data-prompt-name", MOBILE_ALIAS);
+    await chip.tap();
+    await expect(testPage.getByText("Mobile history alias content")).toBeVisible();
     // The single seeded prompt is the session's very first: #1.
     await expect(row.getByTestId("prompt-history-number-0")).toHaveText("#1");
     const prompt = row.getByTestId("prompt-history-navigate-0");

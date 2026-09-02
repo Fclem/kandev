@@ -572,14 +572,17 @@ function PromptHistoryNavigateButton({
       aria-label={t("task:scrollToPrompt")}
       data-testid={`prompt-history-navigate-${index}`}
       className="h-11 w-11 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground sm:h-6 sm:w-6"
-      onClick={() => onNavigate(messageId)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onNavigate(messageId);
+      }}
     >
       <IconArrowUp className="h-3.5 w-3.5" />
     </Button>
   );
 }
 function isNestedInteractiveTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement && target.closest('button,[role="button"]') !== null;
+  return target instanceof Element && target.closest('button,[role="button"]') !== null;
 }
 
 /** One prompt-history row: the prompt text (truncated, or expanded into a

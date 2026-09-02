@@ -33,6 +33,55 @@ func TestWsRemoveEntryReleasesClaimedAttachments(t *testing.T) {
 	require.Equal(t, ws.MessageTypeResponse, response.Type)
 	require.Equal(t, []string{"attachment"}, claimer.releases)
 }
+func TestWsRemoveEntryUsesAtomicRemovedEntryForAttachmentCleanup(t *testing.T) {
+	handlers, _ := setupQueueHandlers(t)
+	stale := &messagequeue.QueuedMessage{
+		ID: "entry", SessionID: "session", TaskID: "task",
+		Attachments: []messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "stale", Name: "stale.txt", MimeType: "text/plain",
+		}},
+	}
+	current := *stale
+	current.Attachments = []messagequeue.MessageAttachment{{
+		Type: "resource", AttachmentID: "current", Name: "current.txt", MimeType: "text/plain",
+	}}
+	queue := &atomicRemoveQueueService{
+		QueueService: handlers.queueService,
+		stale:        stale,
+		removed:      &current,
+	}
+	handlers.queueService = queue
+	claimer := &recordingQueueAttachmentClaimer{}
+	handlers.SetAttachmentClaimer(claimer)
+
+	response, err := handlers.wsRemoveEntry(context.Background(), createTestMessage(t, ws.ActionMessageQueueRemove, map[string]string{
+		"session_id": "session",
+		"entry_id":   "entry",
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Equal(t, 1, queue.atomicCalls)
+	require.Equal(t, []string{"current"}, claimer.releases)
+}
+
+type atomicRemoveQueueService struct {
+	QueueService
+	stale, removed *messagequeue.QueuedMessage
+	atomicCalls    int
+}
+
+func (s *atomicRemoveQueueService) GetEntry(context.Context, string, string) (*messagequeue.QueuedMessage, error) {
+	return s.stale, nil
+}
+
+func (s *atomicRemoveQueueService) RemoveEntry(context.Context, string, string) error {
+	return nil
+}
+
+func (s *atomicRemoveQueueService) RemoveEntryWithEntry(context.Context, string, string) (*messagequeue.QueuedMessage, error) {
+	s.atomicCalls++
+	return s.removed, nil
+}
 
 func TestWsCancelAllReleasesClaimedAttachments(t *testing.T) {
 	handlers, queue := setupQueueHandlers(t)

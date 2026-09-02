@@ -95,6 +95,10 @@ type queueBatchCanceller interface {
 	CancelAllWithEntries(context.Context, string) ([]messagequeue.QueuedMessage, error)
 }
 
+type queueEntryRemover interface {
+	RemoveEntryWithEntry(context.Context, string, string) (*messagequeue.QueuedMessage, error)
+}
+
 type queueEditAttachmentController interface {
 	UpdateMessageWithLeaseAfterValidation(context.Context, string, string, string, string, string, int64, string, []messagequeue.MessageAttachment, map[string]interface{}, func(context.Context) error, func(context.Context) error) (int64, error)
 }
@@ -1039,14 +1043,17 @@ func (h *QueueHandlers) wsRemoveEntry(ctx context.Context, msg *ws.Message) (*ws
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "entry_id is required", nil)
 	}
 
-	entry, err := h.queueService.GetEntry(ctx, req.SessionID, req.EntryID)
-	if err != nil {
-		if errors.Is(err, messagequeue.ErrEntryNotFound) {
-			return ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound, "Queue entry is no longer pending", nil)
+	var entry *messagequeue.QueuedMessage
+	var err error
+	if remover, ok := h.queueService.(queueEntryRemover); ok {
+		entry, err = remover.RemoveEntryWithEntry(ctx, req.SessionID, req.EntryID)
+	} else {
+		entry, err = h.queueService.GetEntry(ctx, req.SessionID, req.EntryID)
+		if err == nil {
+			err = h.queueService.RemoveEntry(ctx, req.SessionID, req.EntryID)
 		}
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
 	}
-	if err := h.queueService.RemoveEntry(ctx, req.SessionID, req.EntryID); err != nil {
+	if err != nil {
 		if errors.Is(err, messagequeue.ErrEntryNotFound) {
 			return ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound, "Queue entry is no longer pending", nil)
 		}

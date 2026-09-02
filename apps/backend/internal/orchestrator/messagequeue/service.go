@@ -1400,19 +1400,44 @@ func (s *Service) UpdateMessageWithMetadata(ctx context.Context, sessionID, entr
 	return nil
 }
 
+// RemoveEntryWithEntry deletes a single entry and returns the exact snapshot
+// removed under the same session admission lock. Callers that release
+// entry-owned resources must use this method instead of GetEntry followed by
+// RemoveEntry, because an edit between those calls can change attachments.
+func (s *Service) RemoveEntryWithEntry(ctx context.Context, sessionID, entryID string) (*QueuedMessage, error) {
+	var removed *QueuedMessage
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		for i := range entries {
+			if entries[i].ID != entryID {
+				continue
+			}
+			entry := entries[i]
+			if err := s.repo.DeleteByID(admittedCtx, sessionID, entryID); err != nil {
+				return err
+			}
+			removed = &entry
+			s.editLeaseMu.Lock()
+			delete(s.editLeases, s.editLeaseKey(sessionID, entryID))
+			s.editLeaseMu.Unlock()
+			return nil
+		}
+		return ErrEntryNotFound
+	})
+	if err != nil {
+		return nil, err
+	}
+	return removed, nil
+}
+
 // RemoveEntry deletes a single entry. The sessionID scope is mandatory — see
 // the rationale on the Repository.DeleteByID contract for why. Returns
 // ErrEntryNotFound when no entry matches.
 func (s *Service) RemoveEntry(ctx context.Context, sessionID, entryID string) error {
-	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		err := s.repo.DeleteByID(admittedCtx, sessionID, entryID)
-		if err == nil {
-			s.editLeaseMu.Lock()
-			delete(s.editLeases, s.editLeaseKey(sessionID, entryID))
-			s.editLeaseMu.Unlock()
-		}
-		return err
-	})
+	_, err := s.RemoveEntryWithEntry(ctx, sessionID, entryID)
 	if err != nil {
 		return err
 	}

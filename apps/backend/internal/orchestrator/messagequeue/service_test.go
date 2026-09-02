@@ -878,6 +878,13 @@ func TestTakeQueuedDoesNotDeleteReservedLifecycleHead(t *testing.T) {
 	require.True(t, ok, "destructive head cleanup must not consume a reserved lifecycle row")
 	require.Equal(t, reserved.ID, restored.ID)
 }
+func TestQueuedMessageLegacyGitLabLifecycleOriginIsDurable(t *testing.T) {
+	message := &QueuedMessage{Metadata: map[string]interface{}{
+		"origin": "gitlab_mr_automation",
+	}}
+
+	require.True(t, message.IsDurableLifecycle())
+}
 
 func TestTransferSession(t *testing.T) {
 	t.Run("moves entries and pending move", func(t *testing.T) {

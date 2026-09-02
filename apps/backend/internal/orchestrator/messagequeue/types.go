@@ -157,6 +157,11 @@ type QueuedMessage struct {
 	reservedLifecycleDelivery bool
 }
 
+const (
+	lifecycleOriginGitHubPR = "github_pr_automation"
+	lifecycleOriginGitLabMR = "gitlab_mr_automation"
+)
+
 // IsDurableLifecycle reports whether this entry uses reserve/ack delivery.
 // The origin fallback keeps lifecycle rows queued by older builds safe across
 // a rolling restart before the explicit marker was introduced.
@@ -168,7 +173,7 @@ func (m *QueuedMessage) IsDurableLifecycle() bool {
 		return true
 	}
 	origin, _ := m.Metadata["origin"].(string)
-	return origin == "github_pr_automation" || origin == "ci_automation"
+return origin == lifecycleOriginGitHubPR || origin == "ci_automation" || origin == lifecycleOriginGitLabMR
 }
 
 // IsReservedInFlight reports whether this durable row was already reserved for

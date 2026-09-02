@@ -2717,13 +2717,11 @@ func (s *Service) prepareWorkflowReplacementSession(
 	// pending move from the old session to the new one — the queue is keyed by
 	// session ID, and without this the prompt would never reach the new agent.
 	if err := s.transferQueuedSessionState(ctx, taskID, currentSession.ID, newSession.ID); err != nil {
-		s.logger.Error("transfer queue to new session failed; queued prompts on the previous session will not be drained",
-			zap.String("from_session_id", currentSession.ID),
-			zap.String("to_session_id", newSession.ID),
-			zap.Error(err))
-		// Continue anyway: the new session is already created and committed
-		// upstream. The helper rolls attachment bindings back when queue
-		// transfer fails, leaving the old session recoverable.
+		// The replacement session is already persisted, but the current session
+		// must remain primary and active when its queue cannot be transferred.
+		// Continuing would stop the current session and strand the hand-off on
+		// the old session while the new session has no recoverable prompt.
+		return nil, fmt.Errorf("transfer queue to new session: %w", err)
 	}
 
 	return newSession, nil

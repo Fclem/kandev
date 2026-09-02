@@ -163,9 +163,12 @@ function useQueueRefetch(
   setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"],
   setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"],
   queueMeta: QueueMeta | undefined,
+  activeSessionId: string | null,
 ) {
   const queueMetaRef = useRef(queueMeta);
   queueMetaRef.current = queueMeta;
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
   const refetchVersion = useRef<Record<string, number>>({});
   const invalidate = useCallback((sid: string) => {
     refetchVersion.current[sid] = (refetchVersion.current[sid] ?? 0) + 1;
@@ -178,7 +181,11 @@ function useQueueRefetch(
       try {
         setQueueLoading(sid, true);
         const status = await getQueueStatus(sid);
-        if (refetchVersion.current[sid] !== version || queueMetaRef.current !== requestMeta) {
+        if (
+          refetchVersion.current[sid] !== version ||
+          activeSessionIdRef.current !== sid ||
+          queueMetaRef.current !== requestMeta
+        ) {
           return;
         }
         setQueueEntries(sid, status.entries ?? [], {
@@ -201,8 +208,8 @@ function useQueueActions({
   sessionId,
   entries,
   setQueueEntries,
-  removeQueueEntry,
   setQueueLoading,
+  removeQueueEntry,
   queueMeta,
   metaMax,
   metaMergeEnabled,
@@ -212,6 +219,7 @@ function useQueueActions({
     setQueueEntries,
     setQueueLoading,
     queueMeta,
+    sessionId,
   );
 
   const queue = useCallback(

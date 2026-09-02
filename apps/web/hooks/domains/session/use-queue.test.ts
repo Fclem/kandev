@@ -50,6 +50,7 @@ vi.mock("@/lib/api/domains/queue-api", () => queueApiMock);
 import { useQueue } from "./use-queue";
 
 const SESSION_ID = "sess-1";
+const STALE_ENTRY_ID = "stale-entry";
 const TASK_ID = "task-1";
 const reference: EntityReference = {
   version: 1,
@@ -249,7 +250,7 @@ describe("queue refetch races", () => {
 
     await act(async () => {
       pendingSnapshot.resolve({
-        entries: [entry({ id: "stale-entry" })],
+        entries: [entry({ id: STALE_ENTRY_ID })],
         count: 1,
         max: 10,
       });
@@ -258,7 +259,39 @@ describe("queue refetch races", () => {
 
     expect(mockState.setQueueEntries).not.toHaveBeenCalledWith(
       SESSION_ID,
-      [expect.objectContaining({ id: "stale-entry" })],
+      [expect.objectContaining({ id: STALE_ENTRY_ID })],
+      expect.anything(),
+    );
+  });
+  it("drops a delayed response from a previous session when both snapshots lack metadata", async () => {
+    const previousSessionId = SESSION_ID;
+    const pendingSnapshot = Promise.withResolvers<{
+      entries: QueuedMessage[];
+      count: number;
+      max: number;
+    }>();
+    queueApiMock.getQueueStatus.mockReturnValueOnce(pendingSnapshot.promise);
+    const { rerender } = renderHook(({ sessionId }: { sessionId: string }) => useQueue(sessionId), {
+      initialProps: { sessionId: previousSessionId },
+    });
+    await waitFor(() =>
+      expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(previousSessionId),
+    );
+
+    rerender({ sessionId: "sess-2" });
+
+    await act(async () => {
+      pendingSnapshot.resolve({
+        entries: [entry({ session_id: previousSessionId, id: STALE_ENTRY_ID })],
+        count: 1,
+        max: 10,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockState.setQueueEntries).not.toHaveBeenCalledWith(
+      previousSessionId,
+      [expect.objectContaining({ id: STALE_ENTRY_ID })],
       expect.anything(),
     );
   });

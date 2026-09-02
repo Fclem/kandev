@@ -11,12 +11,15 @@ package messagequeue
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kandev/kandev/internal/common/logger"
 	"go.uber.org/zap"
 )
@@ -30,6 +33,8 @@ type Service struct {
 	logger           *logger.Logger
 	admissionMu      sync.Mutex
 	admissions       map[string]*sessionAdmission
+	editLeases       map[editLeaseKey]*QueueEditLease
+	editRevisions    map[editLeaseKey]int64
 }
 
 type sessionAdmission struct {
@@ -49,9 +54,11 @@ type sessionAdmissionToken struct {
 // pass 0 to disable the cap.
 func NewService(repo Repository, maxPerSession int, log *logger.Logger) *Service {
 	service := &Service{
-		repo:       repo,
-		logger:     log.WithFields(zap.String("component", "message-queue")),
-		admissions: make(map[string]*sessionAdmission),
+		repo:          repo,
+		logger:        log.WithFields(zap.String("component", "message-queue")),
+		admissions:    make(map[string]*sessionAdmission),
+		editLeases:    make(map[editLeaseKey]*QueueEditLease),
+		editRevisions: make(map[editLeaseKey]int64),
 	}
 	service.SetMaxPerSession(maxPerSession)
 	service.mergeEnabled.Store(true)
@@ -149,6 +156,171 @@ func (s *Service) WithSessionAdmission(ctx context.Context, sessionID string, fn
 		sessionID: sessionID,
 	})
 	return fn(admittedCtx)
+}
+
+type editLeaseKey struct {
+	sessionID string
+	entryID   string
+}
+
+func (s *Service) editLeaseKey(sessionID, entryID string) editLeaseKey {
+	return editLeaseKey{sessionID: sessionID, entryID: entryID}
+}
+
+func editOperationHash(content string, attachments []MessageAttachment, metadata map[string]interface{}) string {
+	payload, _ := json.Marshal(struct {
+		Content     string
+		Attachments []MessageAttachment
+		Metadata    map[string]interface{}
+	}{content, attachments, metadata})
+	return fmt.Sprintf("%x", sha256.Sum256(payload))
+}
+
+func (s *Service) expireEditLeaseLocked(key editLeaseKey, now time.Time) {
+	if lease := s.editLeases[key]; lease != nil && !lease.ExpiresAt.After(now) {
+		delete(s.editLeases, key)
+	}
+}
+
+// BeginEdit acquires a target-bound lease for a visible user-owned entry.
+func (s *Service) BeginEdit(ctx context.Context, sessionID, entryID, connectionID string) (*QueueEditLease, error) {
+	if sessionID == "" || entryID == "" || connectionID == "" {
+		return nil, ErrEditLeaseNotFound
+	}
+	var lease *QueueEditLease
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		var entry *QueuedMessage
+		for i := range entries {
+			if entries[i].ID == entryID {
+				entry = &entries[i]
+				break
+			}
+		}
+		if entry == nil || entry.QueuedBy != QueuedByUser || entry.IsReservedInFlight() {
+			return ErrEditLeaseNotFound
+		}
+		key := s.editLeaseKey(sessionID, entryID)
+		now := time.Now().UTC()
+		s.expireEditLeaseLocked(key, now)
+		if existing := s.editLeases[key]; existing != nil {
+			return ErrEditConflict
+		}
+		lease = &QueueEditLease{
+			SessionID: sessionID, EntryID: entryID, LeaseID: uuid.NewString(),
+			TargetRevision: s.editRevisions[key], LeaseGeneration: 1,
+			ExpiresAt: now.Add(QueueEditLeaseTTL), connectionID: connectionID,
+		}
+		s.editLeases[key] = lease
+		return nil
+	})
+	return cloneEditLease(lease), err
+}
+
+// RenewEdit extends a live lease owned by connectionID.
+func (s *Service) RenewEdit(ctx context.Context, sessionID, entryID, leaseID, connectionID string) (*QueueEditLease, error) {
+	var renewed *QueueEditLease
+	err := s.WithSessionAdmission(ctx, sessionID, func(context.Context) error {
+		key := s.editLeaseKey(sessionID, entryID)
+		now := time.Now().UTC()
+		s.expireEditLeaseLocked(key, now)
+		lease := s.editLeases[key]
+		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+			return ErrEditLeaseNotFound
+		}
+		lease.LeaseGeneration++
+		lease.ExpiresAt = now.Add(QueueEditLeaseTTL)
+		renewed = cloneEditLease(lease)
+		return nil
+	})
+	return renewed, err
+}
+
+// EndEdit releases a live lease owned by connectionID.
+func (s *Service) EndEdit(ctx context.Context, sessionID, entryID, leaseID, connectionID string) error {
+	return s.WithSessionAdmission(ctx, sessionID, func(context.Context) error {
+		key := s.editLeaseKey(sessionID, entryID)
+		lease := s.editLeases[key]
+		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+			return ErrEditLeaseNotFound
+		}
+		delete(s.editLeases, key)
+		return nil
+	})
+}
+
+// UpdateMessageWithLease updates content only through the live target lease.
+func (s *Service) UpdateMessageWithLease(ctx context.Context, sessionID, entryID, leaseID, operationID, connectionID string, expectedRevision int64, content string, attachments []MessageAttachment, metadataUpdates map[string]interface{}) (int64, error) {
+	if operationID == "" {
+		return 0, ErrEditLeaseNotFound
+	}
+	var revision int64
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		key := s.editLeaseKey(sessionID, entryID)
+		now := time.Now().UTC()
+		s.expireEditLeaseLocked(key, now)
+		lease := s.editLeases[key]
+		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+			return ErrEditLeaseNotFound
+		}
+		operationHash := editOperationHash(content, attachments, metadataUpdates)
+		if lease.lastOperationID == operationID {
+			if lease.lastOperationHash == operationHash {
+				revision = lease.lastOperationResult
+				return nil
+			}
+			return ErrEditRevisionConflict
+		}
+		revision = s.editRevisions[key]
+		if expectedRevision != revision {
+			return ErrEditRevisionConflict
+		}
+		if err := s.repo.UpdateContentAndMetadata(admittedCtx, sessionID, entryID, content, attachments, metadataUpdates, QueuedByUser); err != nil {
+			return err
+		}
+		revision++
+		s.editRevisions[key] = revision
+		lease.TargetRevision = revision
+		lease.lastOperationID = operationID
+		lease.lastOperationHash = operationHash
+		lease.lastOperationResult = revision
+		return nil
+	})
+	return revision, err
+}
+
+func cloneEditLease(lease *QueueEditLease) *QueueEditLease {
+	if lease == nil {
+		return nil
+	}
+	copy := *lease
+	return &copy
+}
+
+// leaseConnection is intentionally process-local. The connection binding is
+// stored beside the lease rather than exposed in the wire response.
+func leaseConnection(lease *QueueEditLease) string {
+	return lease.connectionID
+}
+
+func (s *Service) editLeaseBlocksHeadLocked(ctx context.Context, sessionID string) (bool, error) {
+	entries, err := s.repo.ListBySession(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	now := time.Now().UTC()
+	for _, entry := range entries {
+		if entry.IsReservedInFlight() {
+			continue
+		}
+		key := s.editLeaseKey(sessionID, entry.ID)
+		s.expireEditLeaseLocked(key, now)
+		return s.editLeases[key] != nil, nil
+	}
+	return false, nil
 }
 
 // QueueMessage appends a new entry to the session's FIFO queue. Returns
@@ -609,7 +781,10 @@ func (s *Service) ReserveQueuedWithAutoRun(ctx context.Context, sessionID string
 	var msg *QueuedMessage
 	autoRun := true
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		var err error
+		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
+		if err != nil || blocked {
+			return err
+		}
 		msg, autoRun, err = s.repo.ReserveHeadIfAutoRun(admittedCtx, sessionID)
 		return err
 	})
@@ -745,6 +920,10 @@ func (s *Service) TakeQueuedIfAutoRun(ctx context.Context, sessionID string) (*Q
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		autoRun, err := s.repo.GetAutoRun(admittedCtx, sessionID)
 		if err != nil || !autoRun {
+			return err
+		}
+		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
+		if err != nil || blocked {
 			return err
 		}
 		msg, err = s.repo.TakeHead(admittedCtx, sessionID)

@@ -545,6 +545,48 @@ test.describe("Task session queue", () => {
       .toEqual({ scrollable: true, maxHeight: "200px", overflowY: "auto" });
   });
 
+  test("editing a later queued entry does not pause earlier FIFO delivery", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    test.setTimeout(90_000);
+
+    const session = await seedTaskAndWaitForIdle(
+      testPage,
+      apiClient,
+      seedData,
+      "Queue edit lease ordering test",
+    );
+    await session.sendMessage("/slow 10s");
+    await expect(session.agentStatus()).toBeVisible({ timeout: 15_000 });
+    await waitForComposerQueueMode(testPage);
+
+    await queueMessages(apiClient, session.taskId, session.sessionId, [
+      scriptedQueueMessage("first queued"),
+      scriptedQueueMessage("second queued"),
+    ]);
+    await openQueuePanel(testPage);
+
+    const rows = testPage.getByTestId("queue-entry");
+    await expect(rows).toHaveCount(2, { timeout: 10_000 });
+    await rows.nth(1).getByTestId("queue-entry-edit").click();
+
+    const textarea = testPage.getByTestId("queue-edit-textarea");
+    await expect(textarea).toBeVisible({ timeout: 5_000 });
+    await textarea.fill(scriptedQueueMessage("second edited"));
+    await rows.nth(1).getByRole("button", { name: "Save" }).click();
+
+    // The first entry is still eligible to drain while the later target is held.
+    await expect(
+      testPage
+        .locator("[data-agent-message-body][data-message-id]")
+        .filter({ hasText: "first queued" }),
+    ).toHaveCount(1, { timeout: 45_000 });
+    await expect(rows).toHaveCount(1, { timeout: 15_000 });
+    await expect(testPage.getByTestId("queue-entry-text")).toContainText("second edited");
+  });
+
   test("merges a queued message into the message above it", async ({
     testPage,
     apiClient,

@@ -12,11 +12,13 @@ import {
   QueueEntryNotFoundError,
   sendQueuedNow,
   setQueueAutoRun,
+  type QueueEditLease,
 } from "@/lib/api/domains/queue-api";
 import type { QueueMessageParams } from "@/lib/api/domains/queue-api";
 import type { QueuedMessage } from "@/lib/state/slices/session/types";
 import type { EntityReference } from "@/lib/types/entity-reference";
 
+import { generateUUID } from "@/lib/utils";
 const EMPTY_ENTRIES: QueuedMessage[] = [];
 
 export type MessageAttachment = {
@@ -440,17 +442,24 @@ function useEntryMutations({ sessionId, removeQueueEntry, refetch }: EntryMutati
       content: string,
       attachments?: MessageAttachment[],
       entityReferences: EntityReference[] = [],
+      lease?: QueueEditLease | null,
     ) => {
       if (!sessionId) return;
       try {
         await updateQueuedMessage({
           session_id: sessionId,
           entry_id: entryId,
+          ...(lease
+            ? {
+                lease_id: lease.lease_id,
+                operation_id: generateUUID(),
+                expected_target_revision: lease.target_revision,
+              }
+            : {}),
           content,
           attachments,
           entity_references: entityReferences,
         });
-        await refetch(sessionId);
       } catch (err) {
         if (err instanceof QueueEntryNotFoundError) {
           await refetch(sessionId);

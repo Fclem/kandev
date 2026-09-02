@@ -110,7 +110,31 @@ var (
 	// ErrLifecycleCancelled means an archive/delete purge invalidated a
 	// previously accepted lifecycle entry before it could be retried.
 	ErrLifecycleCancelled = errors.New("lifecycle queue entry cancelled")
+	// ErrEditConflict means a queue entry is currently held by another editor.
+	ErrEditConflict = errors.New("queue entry edit conflict")
+	// ErrEditLeaseNotFound means a lease is missing, expired, or owned by
+	// another WebSocket connection.
+	ErrEditLeaseNotFound = errors.New("queue edit lease not found")
+	// ErrEditRevisionConflict means the target changed since edit.begin.
+	ErrEditRevisionConflict = errors.New("queue edit target revision conflict")
 )
+
+const QueueEditLeaseTTL = 60 * time.Second
+
+// QueueEditLease is the server-issued, connection-bound hold for one entry.
+type QueueEditLease struct {
+	SessionID       string    `json:"session_id"`
+	EntryID         string    `json:"entry_id"`
+	LeaseID         string    `json:"lease_id"`
+	TargetRevision  int64     `json:"target_revision"`
+	LeaseGeneration int64     `json:"lease_generation,omitempty"`
+	ExpiresAt       time.Time `json:"expires_at,omitempty"`
+	// connectionID and operation fields are server-side fencing state.
+	connectionID        string
+	lastOperationID     string
+	lastOperationHash   string
+	lastOperationResult int64
+}
 
 // QueuedMessage represents a single FIFO entry queued for a session.
 type QueuedMessage struct {

@@ -45,9 +45,11 @@ recognize referenced prompts while reviewing any surface.
   prompt-name matching rules; rendering shall not invent a chip for an unknown
   name.
 - **AC-UI-PROMPT-ALIAS-001.3:** Alias chips shall continue to render inside the
-  existing Markdown structures supported by the transcript renderer, and the
-  pinned and history surfaces shall preserve their current compact, expandable,
-  and scrollable behavior.
+  existing Markdown structures supported by the transcript renderer. Rich
+  Markdown code spans and link destinations shall remain ordinary rendered
+  content, while aliases in link labels may use the chip's visual treatment
+  without creating nested interactive controls. The pinned and history surfaces
+  shall preserve their current compact, expandable, and scrollable behavior.
 - **AC-UI-PROMPT-ALIAS-001.4:** Updating the saved prompt collection shall update
   alias chip recognition and hover content in mounted pinned or history views;
   the fix shall not alter persisted message text, prompt expansion semantics, or

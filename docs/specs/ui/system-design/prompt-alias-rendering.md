@@ -42,7 +42,9 @@ Agent-facing prompt expansion and persistence are unchanged.
   the collapsed and expanded row content. The row keeps its current text span,
   truncation measurement, expansion cap, navigation, and touch sizing. Content-
   bearing chips remain keyboard-focusable and intercept activation so keyboard
-  and touch preview access does not navigate the row.
+  and touch preview access does not navigate the row. Chips rendered inside
+  Markdown links are visual-only, avoiding nested interactive semantics while
+  preserving link activation.
 - `MemoizedMarkdown` remains the common Markdown renderer and continues to
   normalize content through its existing cache. The change does not add raw HTML
   or alter the Markdown safety policy.
@@ -63,7 +65,7 @@ set.
 
 1. Each mounted surface derives prompt names from the current prompt store.
 2. The shared matcher identifies only recognized aliases using the existing
-   boundary and name rules.
+   boundary and name rules, excluding code spans and link destinations.
 3. Rich Markdown surfaces pass the shared component map to `MemoizedMarkdown`,
    which injects prompt chips into supported Markdown block children.
 4. Prompt history passes each plain row text through the shared segment renderer,

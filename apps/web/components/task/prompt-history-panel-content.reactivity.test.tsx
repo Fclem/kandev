@@ -21,6 +21,7 @@ const harness = vi.hoisted(() => {
     },
   };
 });
+const MENTION_TEST_ID = "custom-prompt-mention";
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: <T,>(selector: (state: typeof harness.state) => T) =>
@@ -79,6 +80,7 @@ vi.mock("@/hooks/domains/session/use-message-favorite", () => ({
 }));
 
 import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
+import { PromptMentionText } from "./chat/messages/prompt-mention-components";
 
 afterEach(() => {
   cleanup();
@@ -87,7 +89,7 @@ afterEach(() => {
 describe("PromptHistoryPanelContent prompt mention reactivity", () => {
   it("updates recognition and preview content from mounted store changes", () => {
     render(<PromptHistoryPanelContent />);
-    expect(screen.queryByTestId("custom-prompt-mention")).toBeNull();
+    expect(screen.queryByTestId(MENTION_TEST_ID)).toBeNull();
 
     act(() => {
       harness.updatePrompts([
@@ -102,7 +104,7 @@ describe("PromptHistoryPanelContent prompt mention reactivity", () => {
       ]);
     });
 
-    const mention = screen.getByTestId("custom-prompt-mention");
+    const mention = screen.getByTestId(MENTION_TEST_ID);
     expect(mention.getAttribute("data-prompt-name")).toBe("daily");
     fireEvent.click(mention);
     expect(screen.getByText("Initial prompt content")).toBeTruthy();
@@ -122,5 +124,19 @@ describe("PromptHistoryPanelContent prompt mention reactivity", () => {
 
     expect(screen.getByText("Updated prompt content")).toBeTruthy();
     expect(screen.queryByText("Initial prompt content")).toBeNull();
+  });
+  it("resets preview state when the mention identity changes", () => {
+    const promptNames = ["daily", "weekly"];
+    harness.updatePrompts([
+      { name: "daily", content: "Daily prompt" },
+      { name: "weekly", content: "Weekly prompt" },
+    ]);
+    const { rerender } = render(<PromptMentionText text="@daily" promptNames={promptNames} />);
+
+    fireEvent.click(screen.getByTestId(MENTION_TEST_ID));
+    expect(screen.getByText("Daily prompt")).toBeTruthy();
+
+    rerender(<PromptMentionText text="@weekly" promptNames={promptNames} />);
+    expect(screen.getByTestId(MENTION_TEST_ID).getAttribute("aria-expanded")).toBe("false");
   });
 });

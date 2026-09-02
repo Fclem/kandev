@@ -393,7 +393,34 @@ describe("PromptHistoryPanelContent — prompt aliases", () => {
       { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
     ]);
   });
+  it("recovers aliases after malformed and escaped link destinations", () => {
+    const malformed = "[label](/docs\\) and @daily";
+    const escapedBackslash = "[label](/docs\\\\) and @daily";
+    const expected = (prefix: string) => [
+      { kind: "text" as const, value: `${prefix} and ` },
+      { kind: "prompt" as const, value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ];
 
+    expect(splitMarkdownPromptMentionSegments(malformed, [PROMPT_NAME])).toEqual(
+      expected("[label](/docs\\)"),
+    );
+    expect(splitMarkdownPromptMentionSegments(escapedBackslash, [PROMPT_NAME])).toEqual(
+      expected("[label](/docs\\\\)"),
+    );
+  });
+  it("recognizes aliases after escaped Markdown delimiters", () => {
+    const content = "\\` @daily\\` and @daily";
+
+    expect(splitMarkdownPromptMentionSegments(content, [PROMPT_NAME])).toEqual([
+      { kind: "text", value: "\\` " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+      { kind: "text", value: "\\` and " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ]);
+  });
+});
+
+describe("PromptHistoryPanelContent — prompt alias state", () => {
   it("updates alias chips when saved prompts load after the row renders", () => {
     messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];
     const { rerender } = render(<PromptHistoryPanelContent />);

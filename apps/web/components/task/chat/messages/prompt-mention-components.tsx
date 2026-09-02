@@ -224,6 +224,7 @@ function skipMarkdownCode(content: string, index: number, state: MarkdownCodeSta
   if (state.fence) return skipMarkdownFence(content, index, state);
   if (state.delimiter) return skipMarkdownDelimiter(content, index, state);
   if (content[index] === "]" && content[index + 1] === "(") {
+    if (!hasMarkdownDestinationEnd(content, index)) return null;
     state.destinationDepth = 1;
     return index + 2;
   }
@@ -232,9 +233,27 @@ function skipMarkdownCode(content: string, index: number, state: MarkdownCodeSta
 
 function skipMarkdownDestination(content: string, index: number, state: MarkdownCodeState): number {
   const marker = content[index];
-  if (marker === "(" && content[index - 1] !== "\\") state.destinationDepth += 1;
-  if (marker === ")" && content[index - 1] !== "\\") state.destinationDepth -= 1;
+  if (marker === "(" && !isEscapedMarkdownCharacter(content, index)) state.destinationDepth += 1;
+  if (marker === ")" && !isEscapedMarkdownCharacter(content, index)) state.destinationDepth -= 1;
   return index + 1;
+}
+function hasMarkdownDestinationEnd(content: string, linkEndIndex: number) {
+  let depth = 1;
+  for (let index = linkEndIndex + 2; index < content.length; index += 1) {
+    if (isEscapedMarkdownCharacter(content, index)) continue;
+    if (content[index] === "(") depth += 1;
+    if (content[index] !== ")" || --depth > 0) continue;
+    return true;
+  }
+  return false;
+}
+
+function isEscapedMarkdownCharacter(content: string, index: number) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && content[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function skipMarkdownFence(content: string, index: number, state: MarkdownCodeState): number {
@@ -242,7 +261,7 @@ function skipMarkdownFence(content: string, index: number, state: MarkdownCodeSt
   if (
     fence &&
     isMarkdownFenceAt(content, index, fence.marker, fence.length) &&
-    content[index - 1] !== "\\"
+    !isEscapedMarkdownCharacter(content, index)
   ) {
     state.fence = null;
     return index + runLength(content, index, fence.marker);
@@ -265,6 +284,7 @@ function startMarkdownCode(
   state: MarkdownCodeState,
 ): number | null {
   const marker = content[index];
+  if (isEscapedMarkdownCharacter(content, index)) return null;
   const length = marker === "`" || marker === "~" ? runLength(content, index, marker) : 0;
   if (length === 0) return null;
   if (length >= 3 && isMarkdownFenceAt(content, index, marker, length)) {
@@ -320,7 +340,7 @@ export function renderTextWithPromptMentions(
     if (segment.kind === "text") return segment.value;
     return (
       <PromptMentionChip
-        key={`${keyPrefix}-prompt-${index}`}
+        key={`${keyPrefix}-prompt-${segment.name}-${index}`}
         name={segment.name}
         value={segment.value}
         interactive={interactive}
@@ -348,7 +368,7 @@ export function PromptMentionText({
           segment.value
         ) : (
           <PromptMentionChip
-            key={`${keyPrefix}-prompt-${index}`}
+            key={`${keyPrefix}-prompt-${segment.name}-${index}`}
             name={segment.name}
             value={segment.value}
             focusable={focusable}

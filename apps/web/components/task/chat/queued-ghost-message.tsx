@@ -10,15 +10,13 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
-import { IconCheck, IconInfoCircle, IconRobot, IconUser } from "@tabler/icons-react";
+import { IconInfoCircle, IconRobot, IconUser } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { toast } from "@/lib/toast/sonner";
 import { useTranslation } from "react-i18next";
-import { Button } from "@kandev/ui";
-import { Textarea } from "@kandev/ui/textarea";
 import { cn } from "@/lib/utils";
 import { QueueEntryNotFoundError } from "@/lib/api/domains/queue-api";
 import { stripSystemTags } from "@/lib/utils/system-tags";
@@ -42,6 +40,7 @@ import { buildEntityReferenceMarkdownComponents } from "@/components/task/chat/m
 import { QueuedGhostRowActions } from "@/components/task/chat/queued-ghost-row-actions";
 import { useQueuedMessageOverflow } from "@/components/task/chat/use-queued-message-overflow";
 import { AttachmentRow, type QueuedAttachment } from "@/components/task/chat/queued-attachment-row";
+import { QueuedGhostEditView } from "@/components/task/chat/queued-ghost-edit-view";
 import { QueuedGhostRowActions } from "@/components/task/chat/queued-ghost-row-actions";
 import { t } from "@/lib/i18n";
 import { useClarificationEscapeGuard } from "@/hooks/use-clarification-escape-guard";
@@ -171,82 +170,6 @@ function getWorkflowMessageInfo(entry: QueuedMessage): WorkflowStepMessageInfo |
   const info = workflowMessageInfoFromMetadata(entry.metadata);
   if (info) return info;
   return entry.queued_by === "workflow" || entry.queued_by === "workflow-auto-start" ? {} : null;
-}
-
-type EditViewProps = {
-  value: string;
-  saving: boolean;
-  attachments: QueuedAttachment[];
-  onChange: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-};
-
-function EditView({
-  value,
-  saving,
-  attachments,
-  onChange,
-  onSave,
-  onCancel,
-  textareaRef,
-}: EditViewProps) {
-  const { t } = useTranslation();
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      // Claim the key here: once this edit is cancelled, nothing further up
-      // the tree (e.g. a clarification panel's own Escape-collapses handler)
-      // should also react to the same keypress.
-      event.stopPropagation();
-      onCancel();
-    } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      onSave();
-    }
-  };
-  return (
-    <div className="space-y-2 py-2">
-      <AttachmentRow attachments={attachments} interactive={false} />
-      <Textarea
-        ref={textareaRef}
-        data-testid="queue-edit-textarea"
-        value={value}
-        disabled={saving}
-        placeholder={t("task:enterMessageContent")}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        className={cn(
-          "min-h-[60px] max-h-[200px] resize-none overflow-y-auto bg-background border-border",
-        )}
-      />
-      <div className="flex items-center gap-2">
-        <Button
-          size="sm"
-          variant="default"
-          onClick={onSave}
-          disabled={saving || !value.trim()}
-          className="h-7 cursor-pointer"
-        >
-          <IconCheck className="mr-1 h-3.5 w-3.5" />
-          {t("common:save")}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onCancel}
-          disabled={saving}
-          className="h-7 cursor-pointer"
-        >
-          {t("common:cancel")}
-        </Button>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {t("task:pressEscToCancelCmdEnter")}
-        </span>
-      </div>
-    </div>
-  );
 }
 
 type DisplayViewProps = {
@@ -673,7 +596,7 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
         isDragging={isDragging}
       >
         {editing ? (
-          <EditView
+          <QueuedGhostEditView
             value={value}
             saving={saving}
             attachments={(entry.attachments ?? []) as QueuedAttachment[]}

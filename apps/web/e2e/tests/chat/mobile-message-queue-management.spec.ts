@@ -83,6 +83,27 @@ async function seedBusyQueueTask(
   if (!loadedTask.primary_session_id) throw new Error("task did not have a primary session");
   return { session, taskId: task.id, sessionId: loadedTask.primary_session_id };
 }
+test("mobile queued-message editing keeps save and cancel touch-safe", async ({
+  testPage,
+  apiClient,
+  seedData,
+}) => {
+  const { session } = await seedFullQueueTask(
+    testPage,
+    apiClient,
+    seedData,
+    "Mobile queue editing",
+  );
+  const chat = session.activeChat();
+  const panel = chat.getByTestId("queued-ghost-list");
+  await chat.getByTestId("queue-chip").tap();
+  await expect(panel.getByTestId("queue-entry")).toHaveCount(10);
+
+  const row = panel.getByTestId("queue-entry").filter({ hasText: "Queued item 10" });
+  await row.getByTestId("queue-entry-edit").tap();
+  await expectTouchTarget(panel.getByRole("button", { name: "Save", exact: true }));
+  await expectTouchTarget(panel.getByRole("button", { name: "Cancel", exact: true }));
+});
 
 test("mobile full queue stays usable while removing and clearing messages", async ({
   testPage,

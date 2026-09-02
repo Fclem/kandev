@@ -1109,17 +1109,22 @@ func (s *Service) UpdateMessage(ctx context.Context, sessionID, entryID, content
 // lifecycle-aware callers that must inspect the trusted task ID and previous
 // attachment descriptors before replacing an entry.
 func (s *Service) GetEntry(ctx context.Context, sessionID, entryID string) (*QueuedMessage, error) {
-	entries, err := s.repo.ListBySession(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	for i := range entries {
-		if entries[i].ID == entryID {
-			entry := entries[i]
-			return &entry, nil
+	var entry *QueuedMessage
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
 		}
-	}
-	return nil, ErrEntryNotFound
+		for i := range entries {
+			if entries[i].ID == entryID {
+				found := entries[i]
+				entry = &found
+				return nil
+			}
+		}
+		return ErrEntryNotFound
+	})
+	return entry, err
 }
 
 // ClaimSendNow atomically claims the exact pending source snapshot for an
@@ -1152,14 +1157,17 @@ func (s *Service) ClaimSendNow(ctx context.Context, sessionID string, expected [
 // dispatch. Durable lifecycle reservations are cleared as part of the same
 // repository operation.
 func (s *Service) RestoreSendNowClaim(ctx context.Context, claim *SendNowClaim) error {
-	if err := s.repo.RestoreSendNowClaim(ctx, claim); err != nil {
+	if claim == nil {
+		return s.repo.RestoreSendNowClaim(ctx, claim)
+	}
+	if err := s.WithSessionAdmission(ctx, claim.Dispatch.SessionID, func(admittedCtx context.Context) error {
+		return s.repo.RestoreSendNowClaim(admittedCtx, claim)
+	}); err != nil {
 		return err
 	}
-	if claim != nil {
-		s.logger.Info("restored send-now queue claim",
-			zap.String("session_id", claim.Dispatch.SessionID),
-			zap.Int("source_count", len(claim.Sources)))
-	}
+	s.logger.Info("restored send-now queue claim",
+		zap.String("session_id", claim.Dispatch.SessionID),
+		zap.Int("source_count", len(claim.Sources)))
 	return nil
 }
 
@@ -1167,14 +1175,17 @@ func (s *Service) RestoreSendNowClaim(ctx context.Context, claim *SendNowClaim) 
 // replacement prompt has been accepted. Ordinary sources were deleted at
 // claim time and therefore need no second acknowledgement.
 func (s *Service) AcknowledgeSendNowClaim(ctx context.Context, claim *SendNowClaim) error {
-	if err := s.repo.AcknowledgeSendNowClaim(ctx, claim); err != nil {
+	if claim == nil {
+		return s.repo.AcknowledgeSendNowClaim(ctx, claim)
+	}
+	if err := s.WithSessionAdmission(ctx, claim.Dispatch.SessionID, func(admittedCtx context.Context) error {
+		return s.repo.AcknowledgeSendNowClaim(admittedCtx, claim)
+	}); err != nil {
 		return err
 	}
-	if claim != nil {
-		s.logger.Info("acknowledged send-now queue claim",
-			zap.String("session_id", claim.Dispatch.SessionID),
-			zap.Int("source_count", len(claim.Sources)))
-	}
+	s.logger.Info("acknowledged send-now queue claim",
+		zap.String("session_id", claim.Dispatch.SessionID),
+		zap.Int("source_count", len(claim.Sources)))
 	return nil
 }
 
@@ -1419,7 +1430,9 @@ func (s *Service) RestoreSession(ctx context.Context, sessionID string, entries 
 // SetPendingMove records a pending move for a session (replaces any existing one).
 // The move is applied by handleAgentReady when the agent's current turn completes.
 func (s *Service) SetPendingMove(ctx context.Context, sessionID string, move *PendingMove) {
-	if err := s.repo.SetPendingMove(ctx, sessionID, move); err != nil {
+	if err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		return s.repo.SetPendingMove(admittedCtx, sessionID, move)
+	}); err != nil {
 		s.logger.Error("set pending move failed",
 			zap.String("session_id", sessionID),
 			zap.Error(err))
@@ -1435,7 +1448,12 @@ func (s *Service) SetPendingMove(ctx context.Context, sessionID string, move *Pe
 // removing it. It distinguishes an empty queue from a storage failure so
 // callers that must preserve deferred workflow state can fail closed.
 func (s *Service) GetPendingMoveWithError(ctx context.Context, sessionID string) (*PendingMove, bool, error) {
-	move, err := s.repo.GetPendingMove(ctx, sessionID)
+	var move *PendingMove
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		var err error
+		move, err = s.repo.GetPendingMove(admittedCtx, sessionID)
+		return err
+	})
 	if err != nil {
 		return nil, false, err
 	}
@@ -1459,7 +1477,12 @@ func (s *Service) GetPendingMove(ctx context.Context, sessionID string) (*Pendin
 
 // TakePendingMove retrieves and removes the pending move for a session.
 func (s *Service) TakePendingMove(ctx context.Context, sessionID string) (*PendingMove, bool) {
-	move, err := s.repo.TakePendingMove(ctx, sessionID)
+	var move *PendingMove
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		var err error
+		move, err = s.repo.TakePendingMove(admittedCtx, sessionID)
+		return err
+	})
 	if err != nil {
 		s.logger.Error("take pending move failed",
 			zap.String("session_id", sessionID),

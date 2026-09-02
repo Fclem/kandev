@@ -17,9 +17,11 @@ import (
 // so tests can assert the task_id enrichment on the published event.
 type capturingQueueEventBus struct {
 	lastData map[string]interface{}
+	lastCtx  context.Context
 }
 
-func (m *capturingQueueEventBus) Publish(_ context.Context, _ string, event *bus.Event) error {
+func (m *capturingQueueEventBus) Publish(ctx context.Context, _ string, event *bus.Event) error {
+	m.lastCtx = ctx
 	if data, ok := event.Data.(map[string]interface{}); ok {
 		m.lastData = data
 	}
@@ -125,6 +127,17 @@ func TestPublishStatusIncludesTaskIDWhenResolvable(t *testing.T) {
 	require.Equal(t, "s1", events.lastData["session_id"])
 	require.Equal(t, false, events.lastData["auto_run"])
 	require.Equal(t, true, events.lastData["merge_enabled"])
+}
+
+func TestPublishStatusDetachesCancelledRequest(t *testing.T) {
+	handlers, _, events := setupQueueHandlersWithResolver(t, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handlers.publishStatus(ctx, "s1")
+
+	require.NotNil(t, events.lastCtx)
+	require.NoError(t, events.lastCtx.Err(), "queue status publication must not inherit a cancelled request")
 }
 
 func TestWsQueueMessagePublishesUserPromptActivity(t *testing.T) {

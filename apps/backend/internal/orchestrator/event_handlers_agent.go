@@ -105,6 +105,10 @@ func (s *Service) publishQueueStatusEvent(ctx context.Context, sessionID string)
 	if s.eventBus == nil || s.messageQueue == nil {
 		return
 	}
+	// Queue mutations may succeed after the request context is cancelled.
+	// Status snapshots are authoritative post-commit notifications, not
+	// request-scoped work.
+	ctx = context.WithoutCancel(ctx)
 	_ = s.messageQueue.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		s.publishQueueStatusEventSnapshot(admittedCtx, sessionID)
 		return nil

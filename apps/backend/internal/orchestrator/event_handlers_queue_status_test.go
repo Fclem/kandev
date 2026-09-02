@@ -56,3 +56,19 @@ func TestHandleAgentReadyPassthroughPublishesStatusAfterReservation(t *testing.T
 		t.Fatalf("queue status events after passthrough reservation = %d, want 1", queueStatusEvents)
 	}
 }
+func TestPublishQueueStatusDetachesCancelledRequest(t *testing.T) {
+	svc := createTestService(setupTestRepo(t), newMockStepGetter(), newMockTaskRepo())
+	recorded := &recordingEventBus{}
+	svc.eventBus = recorded
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc.PublishQueueStatusEvent(ctx, "session-cancelled-status")
+
+	if len(recorded.events) != 1 {
+		t.Fatalf("queue status events = %d, want 1", len(recorded.events))
+	}
+	if err := recorded.events[0].ctx.Err(); err != nil {
+		t.Fatalf("queue status event context error = %v, want nil", err)
+	}
+}

@@ -1284,6 +1284,9 @@ func (h *QueueHandlers) publishStatus(ctx context.Context, sessionID string, adm
 	if h.eventBus == nil {
 		return
 	}
+	// A committed queue mutation still needs an authoritative snapshot when
+	// the initiating request has already been cancelled.
+	ctx = context.WithoutCancel(ctx)
 	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
 		_ = admission.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 			h.publishStatusSnapshot(admittedCtx, sessionID, admitted...)

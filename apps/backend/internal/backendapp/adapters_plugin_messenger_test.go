@@ -61,14 +61,16 @@ type fakeMessengerOrch struct {
 	promptCalls         int
 	resumeCalls         int
 	queueStatusCalls    int
+	queueStatusCtx      context.Context
 	promptErr           error
 	promptFailFirstOnly bool
 }
 
 func (f *fakeMessengerOrch) GetMessageQueue() *messagequeue.Service { return f.queue }
 
-func (f *fakeMessengerOrch) PublishQueueStatusEvent(context.Context, string) {
+func (f *fakeMessengerOrch) PublishQueueStatusEvent(ctx context.Context, _ string) {
 	f.queueStatusCalls++
+	f.queueStatusCtx = ctx
 }
 
 func (f *fakeMessengerOrch) StartCreatedSession(_ context.Context, _, _, _, _ string, _, _, _ bool, _ []v1.MessageAttachment, _ []v1.EntityReference) (*orchexecutor.TaskExecution, error) {
@@ -113,6 +115,19 @@ func TestPluginsMessenger_RunningSessionQueues(t *testing.T) {
 	require.Nil(t, tasks.created, "queued path records via the queue, not CreateMessage")
 	require.Zero(t, orch.startCalls+orch.promptCalls)
 	require.Equal(t, 1, orch.queueStatusCalls, "queued message should publish queue status")
+}
+
+func TestPluginsMessenger_QueueStatusSurvivesCancelledRequest(t *testing.T) {
+	tasks := &fakeMessengerTaskSvc{primary: &taskmodels.TaskSession{ID: "s1", TaskID: "t1", State: taskmodels.TaskSessionStateRunning}}
+	orch := &fakeMessengerOrch{}
+	a := newMessengerAdapter(t, tasks, orch)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := a.SendMessage(ctx, "t1", "", "do the thing", "plugin:p")
+	require.NoError(t, err)
+	require.NotNil(t, orch.queueStatusCtx)
+	require.NoError(t, orch.queueStatusCtx.Err(), "queue status publication must not inherit a cancelled request")
 }
 
 func TestPluginsMessenger_CreatedSessionStarts(t *testing.T) {

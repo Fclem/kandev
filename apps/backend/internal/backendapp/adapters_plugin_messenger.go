@@ -105,7 +105,7 @@ func (a pluginsTaskMessengerAdapter) queueMessage(ctx context.Context, taskID st
 	if _, err := queue.QueueMessageWithMetadata(ctx, session.ID, taskID, text, "", messagequeue.QueuedByUser, false, nil, metadata); err != nil {
 		return plugins.PluginMessageResult{}, fmt.Errorf("failed to queue message: %w", err)
 	}
-	a.orch.PublishQueueStatusEvent(ctx, session.ID)
+	a.orch.PublishQueueStatusEvent(context.WithoutCancel(ctx), session.ID)
 	return plugins.PluginMessageResult{SessionID: session.ID, Status: "queued"}, nil
 }
 

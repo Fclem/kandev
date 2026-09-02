@@ -3703,6 +3703,9 @@ func (h *Handlers) publishQueueStatusEvent(ctx context.Context, sessionID string
 	if h.eventBus == nil {
 		return
 	}
+	// The queue mutation may have committed after the MCP request was
+	// cancelled. Publish the authoritative post-commit snapshot anyway.
+	ctx = context.WithoutCancel(ctx)
 	_ = queue.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		status := queue.GetStatus(admittedCtx, sessionID)
 		_ = h.eventBus.Publish(admittedCtx, events.MessageQueueStatusChanged, bus.NewEvent(

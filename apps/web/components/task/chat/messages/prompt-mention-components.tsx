@@ -176,7 +176,12 @@ export function splitMarkdownPromptMentionSegments(
 
   const segments: PromptMentionSegment[] = [];
   let lastIndex = 0;
-  const codeState: MarkdownCodeState = { delimiter: null, fence: null, destinationDepth: 0 };
+  const codeState: MarkdownCodeState = {
+    delimiter: null,
+    fence: null,
+    destinationDepth: 0,
+    destinationQuote: null,
+  };
 
   for (let index = 0; index < content.length; ) {
     const codeIndex = skipMarkdownCode(content, index, codeState);
@@ -217,6 +222,7 @@ type MarkdownCodeState = {
   delimiter: string | null;
   fence: { marker: string; length: number } | null;
   destinationDepth: number;
+  destinationQuote: '"' | "'" | null;
 };
 
 function skipMarkdownCode(content: string, index: number, state: MarkdownCodeState): number | null {
@@ -226,6 +232,7 @@ function skipMarkdownCode(content: string, index: number, state: MarkdownCodeSta
   if (content[index] === "]" && content[index + 1] === "(") {
     if (!hasMarkdownDestinationEnd(content, index)) return null;
     state.destinationDepth = 1;
+    state.destinationQuote = null;
     return index + 2;
   }
   return startMarkdownCode(content, index, state);
@@ -233,16 +240,38 @@ function skipMarkdownCode(content: string, index: number, state: MarkdownCodeSta
 
 function skipMarkdownDestination(content: string, index: number, state: MarkdownCodeState): number {
   const marker = content[index];
+  if (state.destinationQuote) {
+    if (marker === state.destinationQuote && !isEscapedMarkdownCharacter(content, index)) {
+      state.destinationQuote = null;
+    }
+    return index + 1;
+  }
+  if ((marker === '"' || marker === "'") && !isEscapedMarkdownCharacter(content, index)) {
+    state.destinationQuote = marker;
+    return index + 1;
+  }
   if (marker === "(" && !isEscapedMarkdownCharacter(content, index)) state.destinationDepth += 1;
   if (marker === ")" && !isEscapedMarkdownCharacter(content, index)) state.destinationDepth -= 1;
   return index + 1;
 }
+
 function hasMarkdownDestinationEnd(content: string, linkEndIndex: number) {
   let depth = 1;
+  let quote: '"' | "'" | null = null;
   for (let index = linkEndIndex + 2; index < content.length; index += 1) {
-    if (isEscapedMarkdownCharacter(content, index)) continue;
-    if (content[index] === "(") depth += 1;
-    if (content[index] !== ")" || --depth > 0) continue;
+    const marker = content[index];
+    const escaped = isEscapedMarkdownCharacter(content, index);
+    if (quote) {
+      if (marker === quote && !escaped) quote = null;
+      continue;
+    }
+    if ((marker === '"' || marker === "'") && !escaped) {
+      quote = marker;
+      continue;
+    }
+    if (escaped) continue;
+    if (marker === "(") depth += 1;
+    if (marker !== ")" || --depth > 0) continue;
     return true;
   }
   return false;

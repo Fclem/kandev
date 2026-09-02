@@ -393,6 +393,15 @@ describe("PromptHistoryPanelContent — prompt aliases", () => {
       { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
     ]);
   });
+
+  it("ignores aliases in quoted link titles with parentheses", () => {
+    const content = `[label](/docs "title) with ${PROMPT_ALIAS}") and ${PROMPT_ALIAS}`;
+
+    expect(splitMarkdownPromptMentionSegments(content, [PROMPT_NAME])).toEqual([
+      { kind: "text", value: `[label](/docs "title) with ${PROMPT_ALIAS}") and ` },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ]);
+  });
   it("recovers aliases after malformed and escaped link destinations", () => {
     const malformed = "[label](/docs\\) and @daily";
     const escapedBackslash = "[label](/docs\\\\) and @daily";

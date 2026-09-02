@@ -1181,6 +1181,16 @@ func (s *Service) AppendContent(ctx context.Context, sessionID, taskID, content,
 func (s *Service) TakeQueued(ctx context.Context, sessionID string) (*QueuedMessage, bool) {
 	var msg *QueuedMessage
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		// TakeQueued is a destructive legacy cleanup path. Never let it
+		// consume a durable lifecycle row that is already reserved for an
+		// in-flight dispatch; that row must remain available for ack/retry.
+		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		if len(entries) > 0 && entries[0].IsReservedInFlight() {
+			return nil
+		}
 		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
 		if err != nil || blocked {
 			return err

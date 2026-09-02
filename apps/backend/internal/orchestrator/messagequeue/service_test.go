@@ -853,6 +853,31 @@ func TestGetStatus(t *testing.T) {
 		assert.False(t, taken.IsReservedLifecycleDelivery())
 	})
 }
+func TestTakeQueuedDoesNotDeleteReservedLifecycleHead(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+
+	_, _, accepted, err := svc.QueueLifecycleMessageWithCoalesceKey(
+		ctx, "s", "t", "pr merged", "", QueuedByWorkflow, false, nil,
+		map[string]interface{}{"origin": "github_pr_automation"},
+		"github-pr:repo:1:merged", true,
+	)
+	require.NoError(t, err)
+	require.True(t, accepted)
+
+	reserved, ok := svc.ReserveQueued(ctx, "s")
+	require.True(t, ok)
+	require.NotNil(t, reserved)
+
+	taken, ok := svc.TakeQueued(ctx, "s")
+	assert.False(t, ok)
+	assert.Nil(t, taken)
+
+	restored, ok, err := svc.TakeQueuedEntry(ctx, "s", reserved.ID)
+	require.NoError(t, err)
+	require.True(t, ok, "destructive head cleanup must not consume a reserved lifecycle row")
+	require.Equal(t, reserved.ID, restored.ID)
+}
 
 func TestTransferSession(t *testing.T) {
 	t.Run("moves entries and pending move", func(t *testing.T) {

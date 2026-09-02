@@ -135,6 +135,19 @@ type TransientRetryMessageService interface {
 	DeleteMessage(ctx context.Context, id string) error
 }
 
+// SessionAttachmentCleaner removes file-backed prompt attachments after a
+// task session has been deleted. The task service owns storage and authorization
+// details; the orchestrator only coordinates the post-commit lifecycle hook.
+type SessionAttachmentCleaner interface {
+	DeleteSessionMessageAttachments(ctx context.Context, taskID, sessionID string) error
+}
+
+// SessionAttachmentTransferer keeps claimed prompt attachments bound to the
+// session that owns their queued message.
+type SessionAttachmentTransferer interface {
+	TransferSessionMessageAttachments(ctx context.Context, taskID, oldSessionID, newSessionID string) error
+}
+
 // SubagentContextRecorder persists a durable relational record of a subagent
 // (Task tool) invocation observed on a tool-call frame. It returns nothing —
 // a repository failure never fails the enclosing message write, turn, or
@@ -567,6 +580,10 @@ type Service struct {
 	// transientRetryMessages owns durable cleanup of persisted retry notices.
 	// It is optional for focused tests and pre-composition callers.
 	transientRetryMessages TransientRetryMessageService
+	// sessionAttachmentCleaner is optional because focused orchestrator
+	// compositions may not configure file-backed prompt attachments.
+	sessionAttachmentCleaner    SessionAttachmentCleaner
+	sessionAttachmentTransferer SessionAttachmentTransferer
 
 	// subagentContexts optionally persists a relational record of subagent
 	// (Task tool) invocations recognized on the tool-call frame paths. Nil is
@@ -1581,6 +1598,18 @@ func (s *Service) SetCanvasesEnabled(enabled bool) {
 // unified session launch boundary.
 func (s *Service) SetLaunchAttachmentClaimer(claimer LaunchAttachmentClaimer) {
 	s.launchAttachmentClaimer = claimer
+}
+
+// SetSessionAttachmentCleaner wires post-delete cleanup for claimed prompt
+// attachments belonging to a task session.
+func (s *Service) SetSessionAttachmentCleaner(cleaner SessionAttachmentCleaner) {
+	s.sessionAttachmentCleaner = cleaner
+}
+
+// SetSessionAttachmentTransferer wires the attachment registry update required
+// when queued work moves between task sessions.
+func (s *Service) SetSessionAttachmentTransferer(transfer SessionAttachmentTransferer) {
+	s.sessionAttachmentTransferer = transfer
 }
 
 // SetOnPrimarySessionSet sets a callback on the executor for when the first session

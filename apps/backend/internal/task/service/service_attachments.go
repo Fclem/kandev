@@ -67,3 +67,21 @@ func (s *Service) ReleaseMessageAttachments(ctx context.Context, taskID, session
 	}
 	return s.attachmentSvc.Release(ctx, identity.UserID, taskID, sessionID, ids)
 }
+
+// DeleteSessionMessageAttachments removes file-backed prompt attachments
+// claimed by a task session that has already been deleted.
+func (s *Service) DeleteSessionMessageAttachments(ctx context.Context, taskID, sessionID string) error {
+	if s.attachmentSvc == nil {
+		return nil
+	}
+	return s.attachmentSvc.DeleteBySession(ctx, taskID, sessionID)
+}
+
+// TransferSessionMessageAttachments keeps claimed prompt attachments aligned
+// with a queued session transfer.
+func (s *Service) TransferSessionMessageAttachments(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
+	if s.attachmentSvc == nil {
+		return nil
+	}
+	return s.attachmentSvc.TransferSession(ctx, taskID, oldSessionID, newSessionID)
+}

@@ -2503,6 +2503,34 @@ func (s *Service) findReusableSessionForProfile(ctx context.Context, taskID, pro
 	return best, nil
 }
 
+// transferQueuedSessionState keeps queue rows and their claimed attachment
+// bindings aligned when workflow session ownership changes.
+func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
+	if s.messageQueue == nil {
+		return nil
+	}
+	attachmentsTransferred := false
+	if s.sessionAttachmentTransferer != nil {
+		if err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(ctx, taskID, oldSessionID, newSessionID); err != nil {
+			return fmt.Errorf("transfer session attachments: %w", err)
+		}
+		attachmentsTransferred = true
+	}
+	if err := s.messageQueue.TransferSession(ctx, oldSessionID, newSessionID); err != nil {
+		if attachmentsTransferred {
+			if reverseErr := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(ctx, taskID, newSessionID, oldSessionID); reverseErr != nil {
+				s.logger.Warn("failed to roll back session attachment transfer",
+					zap.String("task_id", taskID),
+					zap.String("old_session_id", oldSessionID),
+					zap.String("new_session_id", newSessionID),
+					zap.Error(reverseErr))
+			}
+		}
+		return fmt.Errorf("transfer queued state: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) reuseSessionForStepWithEndPolicy(
 	ctx context.Context,
 	taskID string,
@@ -2537,14 +2565,11 @@ func (s *Service) reuseSessionForStepWithEndPolicy(
 	// prompt queued via move_task_kandev on the previous session is orphaned
 	// and gets delivered to the wrong agent the next time that previous
 	// session is reused (e.g. on the on_turn_complete bounce back).
-	if s.messageQueue != nil {
-		if err := s.messageQueue.TransferSession(ctx, currentSession.ID, existing.ID); err != nil {
-			// Fail closed: the workflow switch reuses an existing session, but
-			// orphaning a queued hand-off prompt on the previous session would
-			// silently misroute the next prompt. Stop here and surface the
-			// error so the caller can decide whether to retry.
-			return nil, fmt.Errorf("transfer queued state to reused session: %w", err)
-		}
+	if err := s.transferQueuedSessionState(ctx, taskID, currentSession.ID, existing.ID); err != nil {
+		// Fail closed: the workflow switch reuses an existing session, but
+		// orphaning a queued hand-off prompt on the previous session would
+		// silently misroute the next prompt the next time that session is reused.
+		return nil, fmt.Errorf("transfer queued state to reused session: %w", err)
 	}
 
 	parked, err := s.finishWorkflowProfileSwitchSource(ctx, taskID, currentSession, endPolicy)
@@ -2682,6 +2707,23 @@ func (s *Service) prepareWorkflowReplacementSession(
 		// only fires while that generation is still "starting" or "retrying".
 		s.markDynamicRouteActionRequired(ctx, sessionID, newSession.RouteGeneration, "workflow_replacement_launch_failed")
 		return nil, fmt.Errorf("failed to attach workflow replacement workspace: %w", err)
+	}
+
+	// Tag the session as workflow-spawned for provenance: its agent profile
+	// was selected by the workflow step override rather than direct user choice.
+	s.tagSessionAsWorkflowSwitched(ctx, newSession.ID)
+
+	// Transfer any queued message (e.g. a move_task_kandev hand-off prompt) and
+	// pending move from the old session to the new one — the queue is keyed by
+	// session ID, and without this the prompt would never reach the new agent.
+	if err := s.transferQueuedSessionState(ctx, taskID, currentSession.ID, newSession.ID); err != nil {
+		s.logger.Error("transfer queue to new session failed; queued prompts on the previous session will not be drained",
+			zap.String("from_session_id", currentSession.ID),
+			zap.String("to_session_id", newSession.ID),
+			zap.Error(err))
+		// Continue anyway: the new session is already created and committed
+		// upstream. The helper rolls attachment bindings back when queue
+		// transfer fails, leaving the old session recoverable.
 	}
 
 	return newSession, nil

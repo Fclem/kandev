@@ -313,6 +313,68 @@ func (r *Repository) DeleteMessageAttachmentsByTask(ctx context.Context, taskID 
 	return attachments, nil
 }
 
+// DeleteMessageAttachmentsBySession removes claimed attachment descriptors
+// owned by a deleted task session. Staged uploads have no session binding and
+// remain governed by their expiry cleanup.
+func (r *Repository) DeleteMessageAttachmentsBySession(ctx context.Context, taskID, sessionID string) ([]*models.TaskMessageAttachment, error) {
+	if taskID == "" || sessionID == "" {
+		return nil, nil
+	}
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin session attachment cleanup: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryxContext(ctx, tx.Rebind(`
+		SELECT `+attachmentSelectColumns+` FROM task_message_attachments
+		WHERE task_id = ? AND session_id = ?
+	`), taskID, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("list session attachments for cleanup: %w", err)
+	}
+	var attachments []*models.TaskMessageAttachment
+	for rows.Next() {
+		attachment := &models.TaskMessageAttachment{}
+		if err := rows.StructScan(attachment); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("scan session attachment for cleanup: %w", err)
+		}
+		attachments = append(attachments, attachment)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("iterate session attachments for cleanup: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close session attachments for cleanup: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		DELETE FROM task_message_attachments WHERE task_id = ? AND session_id = ?
+	`), taskID, sessionID); err != nil {
+		return nil, fmt.Errorf("delete session attachments: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit session attachment cleanup: %w", err)
+	}
+	return attachments, nil
+}
+
+func (r *Repository) TransferMessageAttachments(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
+	if taskID == "" || oldSessionID == "" || newSessionID == "" || oldSessionID == newSessionID {
+		return nil
+	}
+	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE task_message_attachments
+		SET session_id = ?, updated_at = ?
+		WHERE task_id = ? AND session_id = ? AND state = ?
+	`), newSessionID, time.Now().UTC(), taskID, oldSessionID, models.AttachmentStateClaimed)
+	if err != nil {
+		return fmt.Errorf("transfer session attachments: %w", err)
+	}
+	_, err = result.RowsAffected()
+	return err
+}
+
 func (r *Repository) MarkExpiredMessageAttachments(ctx context.Context, now time.Time) ([]*models.TaskMessageAttachment, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {

@@ -196,3 +196,67 @@ func TestDeleteMessageAttachmentsByTask_RemovesRegistryRows(t *testing.T) {
 		t.Fatal("task attachment still exists")
 	}
 }
+
+func TestDeleteMessageAttachmentsBySession_RemovesOnlySessionClaims(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	now := time.Now().UTC()
+	attachments := []*models.TaskMessageAttachment{
+		{ID: "session-cleanup", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-session", SessionID: "session-delete", Name: "one", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "session-cleanup", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+		{ID: "session-keep", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-session", SessionID: "session-keep", Name: "two", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "session-keep", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+	}
+	for _, attachment := range attachments {
+		if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	removed, err := repo.DeleteMessageAttachmentsBySession(ctx, "task-session", "session-delete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 || removed[0].ID != "session-cleanup" {
+		t.Fatalf("removed = %+v", removed)
+	}
+	if _, err := repo.GetMessageAttachment(ctx, "session-cleanup"); err == nil {
+		t.Fatal("deleted session attachment still exists")
+	}
+	if _, err := repo.GetMessageAttachment(ctx, "session-keep"); err != nil {
+		t.Fatalf("other session attachment was removed: %v", err)
+	}
+}
+
+func TestTransferMessageAttachments_RebindsClaimedRows(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	now := time.Now().UTC()
+	attachments := []*models.TaskMessageAttachment{
+		{ID: "transfer-one", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-transfer", SessionID: "session-old", Name: "one", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-one", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+		{ID: "transfer-other-task", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "other-task", SessionID: "session-old", Name: "two", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-other-task", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+	}
+	for _, attachment := range attachments {
+		if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := repo.TransferMessageAttachments(ctx, "task-transfer", "session-old", "session-new"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.GetMessageAttachment(ctx, "transfer-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SessionID != "session-new" {
+		t.Fatalf("transferred attachment session = %q", got.SessionID)
+	}
+	other, err := repo.GetMessageAttachment(ctx, "transfer-other-task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.SessionID != "session-old" {
+		t.Fatalf("unrelated attachment session = %q", other.SessionID)
+	}
+}

@@ -3603,16 +3603,25 @@ func (s *Service) publishTaskSessionErrorEvent(
 // cancelDeletedSessionQueue removes pending prompts left on a deleted session
 // and publishes a task-scoped queue status event for the live badge path.
 func (s *Service) cancelDeletedSessionQueue(ctx context.Context, taskID, sessionID string) {
+	cleanupCtx := context.WithoutCancel(ctx)
+	if s.sessionAttachmentCleaner != nil {
+		if err := s.sessionAttachmentCleaner.DeleteSessionMessageAttachments(cleanupCtx, taskID, sessionID); err != nil {
+			s.logger.Warn("failed to remove session attachment bytes after session delete",
+				zap.String("session_id", sessionID),
+				zap.String("task_id", taskID),
+				zap.Error(err))
+		}
+	}
 	if s.messageQueue == nil {
 		return
 	}
-	if _, err := s.messageQueue.CancelAll(ctx, sessionID); err != nil {
+	if _, err := s.messageQueue.CancelAll(cleanupCtx, sessionID); err != nil {
 		s.logger.Warn("failed to cancel queued prompts after session delete",
 			zap.String("session_id", sessionID),
 			zap.String("task_id", taskID),
 			zap.Error(err))
 	}
-	s.publishTaskQueueStatusEvent(ctx, taskID, sessionID)
+	s.publishTaskQueueStatusEvent(cleanupCtx, taskID, sessionID)
 }
 
 // quiesceSessionExecutionBeforeDeletion stops the in-memory lifecycle

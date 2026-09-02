@@ -306,6 +306,26 @@ func (s *AttachmentService) DeleteByTask(ctx context.Context, taskID string) err
 	return nil
 }
 
+// DeleteBySession removes all claimed attachment descriptors and private bytes
+// owned by a deleted task session. Staged uploads are intentionally excluded
+// because they are not bound to a session and expire independently.
+func (s *AttachmentService) DeleteBySession(ctx context.Context, taskID, sessionID string) error {
+	attachments, err := s.repo.DeleteMessageAttachmentsBySession(ctx, taskID, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, attachment := range attachments {
+		s.removeBytes(attachment)
+	}
+	return nil
+}
+
+// TransferSession rebinds claimed prompt attachments when queued work moves
+// between task sessions.
+func (s *AttachmentService) TransferSession(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
+	return s.repo.TransferMessageAttachments(ctx, taskID, oldSessionID, newSessionID)
+}
+
 func (s *AttachmentService) Descriptor(attachment *models.TaskMessageAttachment) AttachmentDescriptor {
 	return AttachmentDescriptor{
 		ID: attachment.ID, Name: attachment.Name, MimeType: attachment.MimeType,

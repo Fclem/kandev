@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -50,6 +51,31 @@ func TestWsCancelAllReleasesClaimedAttachments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ws.MessageTypeResponse, response.Type)
 	require.ElementsMatch(t, []string{"first", "second"}, claimer.releases)
+}
+func TestWsCancelAllReportsOnlyRemovedEntries(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	ctx := context.Background()
+
+	_, _, accepted, err := queue.QueueLifecycleMessageWithCoalesceKey(
+		ctx, "session-cancel-count", "task", "lifecycle", "", "", false, nil,
+		nil, "lifecycle", true,
+	)
+	require.NoError(t, err)
+	require.True(t, accepted)
+	_, ok := queue.ReserveQueued(ctx, "session-cancel-count")
+	require.True(t, ok)
+	_, err = queue.QueueMessage(ctx, "session-cancel-count", "task", "ordinary", "", "user", false, nil)
+	require.NoError(t, err)
+
+	response, err := handlers.wsCancelAll(ctx, createTestMessage(t, ws.ActionMessageQueueCancel, map[string]string{
+		"session_id": "session-cancel-count",
+	}))
+	require.NoError(t, err)
+
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal(response.Payload, &payload))
+	require.EqualValues(t, 1, payload["removed"])
+	require.Equal(t, 0, queue.GetStatus(ctx, "session-cancel-count").Count)
 }
 
 func TestWsUpdateMessageRollsBackBeforeSuccessorCanAcquireEdit(t *testing.T) {

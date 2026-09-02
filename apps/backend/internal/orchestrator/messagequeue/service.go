@@ -1457,6 +1457,13 @@ func (s *Service) CancelAllWithEntries(ctx context.Context, sessionID string) ([
 		}
 		_, err = s.repo.DeleteAllBySession(admittedCtx, sessionID)
 		if err == nil {
+			deleted := entries[:0]
+			for i := range entries {
+				if !entries[i].IsReservedInFlight() {
+					deleted = append(deleted, entries[i])
+				}
+			}
+			entries = deleted
 			s.invalidateEditLeasesLocked(sessionID)
 		}
 		return err

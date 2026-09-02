@@ -2405,6 +2405,41 @@ func (r *sqliteRepository) DeleteAllBySession(ctx context.Context, sessionID str
 	return removed, nil
 }
 
+// PurgeSession removes all queue rows for a deleted session, including
+// reserved lifecycle deliveries, and its pending workflow move.
+func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (int, error) {
+	unlock := r.withSessionLock(sessionID)
+	defer unlock()
+
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin purge session queue tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, r.db.Rebind(`
+		DELETE FROM queued_messages WHERE session_id = ?
+	`), sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("purge session queued messages: %w", err)
+	}
+	removed, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("purge session queue rows affected: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		DELETE FROM pending_moves WHERE session_id = ?
+	`), sessionID); err != nil {
+		return 0, fmt.Errorf("purge session pending move: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return int(removed), nil
+}
+
 type cancellationCandidate struct {
 	id           string
 	metadataJSON string

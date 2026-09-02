@@ -455,6 +455,7 @@ type EntryMutationsArgs = {
 /** Entry-level mutations (edit / remove / merge) that refetch on success and
  * resync on a drain race (QueueEntryNotFoundError). */
 function useEntryMutations({ sessionId, removeQueueEntry, refetch }: EntryMutationsArgs) {
+  const editOperation = useRef<{ key: string; id: string } | null>(null);
   const editEntry = useCallback(
     async (
       entryId: string,
@@ -465,20 +466,36 @@ function useEntryMutations({ sessionId, removeQueueEntry, refetch }: EntryMutati
     ) => {
       if (!sessionId) return;
       try {
-        await updateQueuedMessage({
+        const request = {
           session_id: sessionId,
           entry_id: entryId,
           ...(lease
             ? {
                 lease_id: lease.lease_id,
-                operation_id: generateUUID(),
+                operation_id: "",
                 expected_target_revision: lease.target_revision,
               }
             : {}),
           content,
           attachments,
           entity_references: entityReferences,
-        });
+        };
+        if (lease) {
+          const key = JSON.stringify([
+            sessionId,
+            entryId,
+            lease.lease_id,
+            lease.target_revision,
+            content,
+            attachments,
+            entityReferences,
+          ]);
+          const operationId =
+            editOperation.current?.key === key ? editOperation.current.id : generateUUID();
+          editOperation.current = { key, id: operationId };
+          request.operation_id = operationId;
+        }
+        await updateQueuedMessage(request);
       } catch (err) {
         if (err instanceof QueueEntryNotFoundError || err instanceof QueueEditConflictError) {
           await refetch(sessionId);

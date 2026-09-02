@@ -1464,6 +1464,12 @@ func NewService(
 	}); ok {
 		registrar.SetTaskSessionQueuePurgeNotifier(func(ctx context.Context, taskID, sessionID string) {
 			msgQueue.InvalidateEditLeasesForSession(sessionID)
+			if _, err := msgQueue.PurgeSession(ctx, sessionID); err != nil {
+				svcLogger.Warn("failed to purge queue after task session deletion",
+					zap.String("task_id", taskID),
+					zap.String("session_id", sessionID),
+					zap.Error(err))
+			}
 			s.publishTaskQueueStatusEvent(ctx, taskID, sessionID)
 		})
 	}

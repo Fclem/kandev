@@ -999,6 +999,19 @@ func (r *memoryRepository) DeleteAllBySession(_ context.Context, sessionID strin
 	return removed, nil
 }
 
+// PurgeSession removes all queue rows for a deleted session, including
+// reserved lifecycle deliveries, and clears its pending move and policy.
+func (r *memoryRepository) PurgeSession(_ context.Context, sessionID string) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	removed := len(r.entries[sessionID])
+	delete(r.entries, sessionID)
+	delete(r.nextPosition, sessionID)
+	delete(r.pendingMoves, sessionID)
+	delete(r.autoRun, sessionID)
+	return removed, nil
+}
+
 // TransferSession moves all entries (and any pending move) from one session to another.
 func (r *memoryRepository) TransferSession(_ context.Context, oldSessionID, newSessionID string) error {
 	r.mu.Lock()

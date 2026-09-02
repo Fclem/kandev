@@ -1522,6 +1522,25 @@ func (s *Service) CancelAll(ctx context.Context, sessionID string) (int, error) 
 	return n, nil
 }
 
+// PurgeSession removes all queue rows for a deleted session, including
+// reserved lifecycle deliveries. It is intentionally distinct from
+// CancelAll, which preserves in-flight durable rows for executor recovery.
+func (s *Service) PurgeSession(ctx context.Context, sessionID string) (int, error) {
+	var removed int
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		var err error
+		removed, err = s.repo.PurgeSession(admittedCtx, sessionID)
+		if err == nil {
+			s.invalidateEditLeasesLocked(sessionID)
+		}
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return removed, nil
+}
+
 // CancelAllWithEntries clears a session queue and returns the deleted rows so
 // callers can release resources owned by those entries.
 func (s *Service) CancelAllWithEntries(ctx context.Context, sessionID string) ([]QueuedMessage, error) {

@@ -195,6 +195,11 @@ type Repository interface {
 	// Returns the exact count removed.
 	DeleteAllBySession(ctx context.Context, sessionID string) (int, error)
 
+	// PurgeSession removes every queue row for a deleted session, including
+	// durable lifecycle rows reserved in flight, and its pending workflow move.
+	// Returns the exact number of queue rows removed.
+	PurgeSession(ctx context.Context, sessionID string) (int, error)
+
 	// TransferSession moves all entries (and any pending move) from oldSessionID
 	// to newSessionID. Used on workflow session switches.
 	TransferSession(ctx context.Context, oldSessionID, newSessionID string) error

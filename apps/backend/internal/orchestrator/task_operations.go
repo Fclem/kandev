@@ -3615,8 +3615,8 @@ func (s *Service) cancelDeletedSessionQueue(ctx context.Context, taskID, session
 	if s.messageQueue == nil {
 		return
 	}
-	if _, err := s.messageQueue.CancelAll(cleanupCtx, sessionID); err != nil {
-		s.logger.Warn("failed to cancel queued prompts after session delete",
+	if _, err := s.messageQueue.PurgeSession(cleanupCtx, sessionID); err != nil {
+		s.logger.Warn("failed to purge queued prompts after session delete",
 			zap.String("session_id", sessionID),
 			zap.String("task_id", taskID),
 			zap.Error(err))

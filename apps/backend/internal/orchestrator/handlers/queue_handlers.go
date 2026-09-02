@@ -1284,6 +1284,17 @@ func (h *QueueHandlers) publishStatus(ctx context.Context, sessionID string, adm
 	if h.eventBus == nil {
 		return
 	}
+	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
+		_ = admission.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+			h.publishStatusSnapshot(admittedCtx, sessionID, admitted...)
+			return nil
+		})
+		return
+	}
+	h.publishStatusSnapshot(ctx, sessionID, admitted...)
+}
+
+func (h *QueueHandlers) publishStatusSnapshot(ctx context.Context, sessionID string, admitted ...*messagequeue.QueuedMessage) {
 	status := h.queueService.GetStatus(ctx, sessionID)
 	eventData := map[string]interface{}{
 		fieldSessionID:  sessionID,

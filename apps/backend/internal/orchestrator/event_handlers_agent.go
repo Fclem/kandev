@@ -100,12 +100,18 @@ func (s *Service) handleAgentRunning(ctx context.Context, data watcher.AgentEven
 	s.setSessionRunning(ctx, data.TaskID, data.SessionID, session)
 }
 
-// publishQueueStatusEvent publishes a queue status changed event for the given session
+// publishQueueStatusEvent publishes a queue status changed event for the given session.
 func (s *Service) publishQueueStatusEvent(ctx context.Context, sessionID string) {
 	if s.eventBus == nil || s.messageQueue == nil {
 		return
 	}
+	_ = s.messageQueue.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		s.publishQueueStatusEventSnapshot(admittedCtx, sessionID)
+		return nil
+	})
+}
 
+func (s *Service) publishQueueStatusEventSnapshot(ctx context.Context, sessionID string) {
 	queueStatus := s.messageQueue.GetStatus(ctx, sessionID)
 	eventData := map[string]interface{}{
 		metaKeySessionID:    sessionID,
@@ -147,6 +153,17 @@ func (s *Service) publishTaskQueueStatusEvent(ctx context.Context, taskID, sessi
 	// Detach so a client disconnect cannot cancel projector recount (which would
 	// leave queued_prompt_count stale on every live sidebar).
 	ctx = context.WithoutCancel(ctx)
+	if sessionID != "" && s.messageQueue != nil {
+		_ = s.messageQueue.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+			s.publishTaskQueueStatusEventSnapshot(admittedCtx, taskID, sessionID)
+			return nil
+		})
+		return
+	}
+	s.publishTaskQueueStatusEventSnapshot(ctx, taskID, sessionID)
+}
+
+func (s *Service) publishTaskQueueStatusEventSnapshot(ctx context.Context, taskID, sessionID string) {
 	eventData := map[string]interface{}{
 		"task_id": taskID,
 	}

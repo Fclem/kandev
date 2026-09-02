@@ -150,6 +150,16 @@ func TestServiceQueueOperationsWaitForAdmission(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:  "get status",
+			probe: func(repo *admissionProbeRepository) <-chan struct{} { return repo.listCalled },
+			prepare: func(_ context.Context, svc *Service, _ *admissionProbeRepository) func(context.Context) error {
+				return func(operationCtx context.Context) error {
+					_ = svc.GetStatus(operationCtx, "session")
+					return nil
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

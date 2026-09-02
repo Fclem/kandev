@@ -54,6 +54,56 @@ func setupQueueHandlersWithResolver(
 	return handlers, svc, events
 }
 
+type blockingQueueEventBus struct {
+	capturingQueueEventBus
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingQueueEventBus) Publish(context.Context, string, *bus.Event) error {
+	b.entered <- struct{}{}
+	<-b.release
+	return nil
+}
+
+func TestPublishStatusSerializesSnapshotAndPublish(t *testing.T) {
+	log, err := logger.NewLogger(logger.LoggingConfig{
+		Level:      "error",
+		Format:     "console",
+		OutputPath: "stderr",
+	})
+	require.NoError(t, err)
+	events := &blockingQueueEventBus{
+		entered: make(chan struct{}, 2),
+		release: make(chan struct{}),
+	}
+	svc := messagequeue.NewServiceMemory(log)
+	handlers := NewQueueHandlers(svc, events, log, nil, allowQueueAccess{}, nil)
+	ctx := context.Background()
+
+	firstDone := make(chan struct{})
+	go func() {
+		handlers.publishStatus(ctx, "s1")
+		close(firstDone)
+	}()
+	<-events.entered
+
+	secondDone := make(chan struct{})
+	go func() {
+		handlers.publishStatus(ctx, "s1")
+		close(secondDone)
+	}()
+	select {
+	case <-events.entered:
+		t.Fatal("second queue status reached the event bus before the first publish completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(events.release)
+	<-firstDone
+	<-secondDone
+}
+
 func TestPublishStatusIncludesTaskIDWhenResolvable(t *testing.T) {
 	handlers, svc, events := setupQueueHandlersWithResolver(t, func(_ context.Context, sessionID string) (string, error) {
 		if sessionID == "s1" {

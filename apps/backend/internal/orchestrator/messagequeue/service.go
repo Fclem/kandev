@@ -1574,37 +1574,55 @@ func (s *Service) CancelAllWithEntries(ctx context.Context, sessionID string) ([
 func (s *Service) GetStatus(ctx context.Context, sessionID string) *QueueStatus {
 	maxPerSession := s.MaxPerSession()
 	mergeEnabled := s.MergeEnabled()
-	autoRun, autoRunErr := s.repo.GetAutoRun(ctx, sessionID)
-	if autoRunErr != nil {
-		s.logger.Error("get queue auto-run failed",
-			zap.String("session_id", sessionID),
-			zap.Error(autoRunErr))
-		// Preserve pre-policy behavior if status storage is temporarily unreadable.
-		autoRun = true
-	}
-	entries, err := s.repo.ListBySession(ctx, sessionID)
-	if err != nil {
-		s.logger.Error("list queued failed",
-			zap.String("session_id", sessionID),
-			zap.Error(err))
-		return &QueueStatus{Entries: []QueuedMessage{}, Count: 0, Max: maxPerSession, AutoRun: autoRun, MergeEnabled: mergeEnabled}
-	}
-	pending := make([]QueuedMessage, 0, len(entries))
-	for _, entry := range entries {
-		// A reserved lifecycle row is already being delivered; listing it next
-		// to the message it produced reads as a stuck duplicate.
-		if entry.IsReservedInFlight() {
-			continue
-		}
-		pending = append(pending, entry)
-	}
-	return &QueueStatus{
-		Entries:      pending,
-		Count:        len(pending),
+	status := &QueueStatus{
+		Entries:      []QueuedMessage{},
+		Count:        0,
 		Max:          maxPerSession,
-		AutoRun:      autoRun,
+		AutoRun:      true,
 		MergeEnabled: mergeEnabled,
 	}
+	_ = s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		autoRun, autoRunErr := s.repo.GetAutoRun(admittedCtx, sessionID)
+		if autoRunErr != nil {
+			s.logger.Error("get queue auto-run failed",
+				zap.String("session_id", sessionID),
+				zap.Error(autoRunErr))
+			// Preserve pre-policy behavior if status storage is temporarily unreadable.
+			autoRun = true
+		}
+		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			s.logger.Error("list queued failed",
+				zap.String("session_id", sessionID),
+				zap.Error(err))
+			status = &QueueStatus{
+				Entries:      []QueuedMessage{},
+				Count:        0,
+				Max:          maxPerSession,
+				AutoRun:      autoRun,
+				MergeEnabled: mergeEnabled,
+			}
+			return nil
+		}
+		pending := make([]QueuedMessage, 0, len(entries))
+		for _, entry := range entries {
+			// A reserved lifecycle row is already being delivered; listing it next
+			// to the message it produced reads as a stuck duplicate.
+			if entry.IsReservedInFlight() {
+				continue
+			}
+			pending = append(pending, entry)
+		}
+		status = &QueueStatus{
+			Entries:      pending,
+			Count:        len(pending),
+			Max:          maxPerSession,
+			AutoRun:      autoRun,
+			MergeEnabled: mergeEnabled,
+		}
+		return nil
+	})
+	return status
 }
 
 // CountPendingByTaskIDs returns the pending prompt count per task, keyed by

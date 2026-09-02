@@ -3703,19 +3703,22 @@ func (h *Handlers) publishQueueStatusEvent(ctx context.Context, sessionID string
 	if h.eventBus == nil {
 		return
 	}
-	status := queue.GetStatus(ctx, sessionID)
-	_ = h.eventBus.Publish(ctx, events.MessageQueueStatusChanged, bus.NewEvent(
-		events.MessageQueueStatusChanged,
-		"mcp-handlers",
-		map[string]interface{}{
-			"session_id":    sessionID,
-			"entries":       status.Entries,
-			"count":         status.Count,
-			"max":           status.Max,
-			"auto_run":      status.AutoRun,
-			"merge_enabled": status.MergeEnabled,
-		},
-	))
+	_ = queue.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		status := queue.GetStatus(admittedCtx, sessionID)
+		_ = h.eventBus.Publish(admittedCtx, events.MessageQueueStatusChanged, bus.NewEvent(
+			events.MessageQueueStatusChanged,
+			"mcp-handlers",
+			map[string]interface{}{
+				"session_id":    sessionID,
+				"entries":       status.Entries,
+				"count":         status.Count,
+				"max":           status.Max,
+				"auto_run":      status.AutoRun,
+				"merge_enabled": status.MergeEnabled,
+			},
+		))
+		return nil
+	})
 }
 
 // handleAskUserQuestion creates a clarification request and blocks until the user responds.

@@ -137,7 +137,7 @@ export function useQueuedGhostStartEdit({
     if (!canEdit || editing || saving || editStartingRef.current) return;
     editStartingRef.current = true;
     try {
-      if ((await onEditStart?.()) === false) return;
+      if (onEditStart && (await onEditStart()) === false) return;
       onStart();
     } finally {
       editStartingRef.current = false;

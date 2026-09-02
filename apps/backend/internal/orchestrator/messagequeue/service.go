@@ -33,6 +33,7 @@ type Service struct {
 	logger           *logger.Logger
 	admissionMu      sync.Mutex
 	admissions       map[string]*sessionAdmission
+	editLeaseMu      sync.Mutex
 	editLeases       map[editLeaseKey]*QueueEditLease
 	editRevisions    map[editLeaseKey]int64
 }
@@ -208,6 +209,10 @@ func (s *Service) BeginEdit(ctx context.Context, sessionID, entryID, connectionI
 	}
 	var lease *QueueEditLease
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		key := s.editLeaseKey(sessionID, entryID)
+		now := time.Now().UTC()
+		s.editLeaseMu.Lock()
+		defer s.editLeaseMu.Unlock()
 		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
 		if err != nil {
 			return err
@@ -222,8 +227,6 @@ func (s *Service) BeginEdit(ctx context.Context, sessionID, entryID, connectionI
 		if entry == nil || entry.QueuedBy != QueuedByUser || entry.IsReservedInFlight() {
 			return ErrEditLeaseNotFound
 		}
-		key := s.editLeaseKey(sessionID, entryID)
-		now := time.Now().UTC()
 		s.expireEditLeaseLocked(key, now)
 		if existing := s.editLeases[key]; existing != nil {
 			return ErrEditConflict
@@ -232,6 +235,7 @@ func (s *Service) BeginEdit(ctx context.Context, sessionID, entryID, connectionI
 			SessionID: sessionID, EntryID: entryID, LeaseID: uuid.NewString(),
 			TargetRevision: s.editRevisions[key], LeaseGeneration: 1,
 			ExpiresAt: now.Add(QueueEditLeaseTTL), connectionID: connectionID,
+			taskID: entry.TaskID,
 		}
 		s.editLeases[key] = lease
 		return nil
@@ -245,6 +249,8 @@ func (s *Service) RenewEdit(ctx context.Context, sessionID, entryID, leaseID, co
 	err := s.WithSessionAdmission(ctx, sessionID, func(context.Context) error {
 		key := s.editLeaseKey(sessionID, entryID)
 		now := time.Now().UTC()
+		s.editLeaseMu.Lock()
+		defer s.editLeaseMu.Unlock()
 		s.expireEditLeaseLocked(key, now)
 		lease := s.editLeases[key]
 		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
@@ -258,10 +264,12 @@ func (s *Service) RenewEdit(ctx context.Context, sessionID, entryID, leaseID, co
 	return renewed, err
 }
 
-// EndEdit releases a live lease owned by connectionID.
 func (s *Service) EndEdit(ctx context.Context, sessionID, entryID, leaseID, connectionID string) error {
 	return s.WithSessionAdmission(ctx, sessionID, func(context.Context) error {
 		key := s.editLeaseKey(sessionID, entryID)
+		s.editLeaseMu.Lock()
+		defer s.editLeaseMu.Unlock()
+		s.expireEditLeaseLocked(key, time.Now().UTC())
 		lease := s.editLeases[key]
 		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
 			return ErrEditLeaseNotFound
@@ -280,6 +288,8 @@ func (s *Service) UpdateMessageWithLease(ctx context.Context, sessionID, entryID
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		key := s.editLeaseKey(sessionID, entryID)
 		now := time.Now().UTC()
+		s.editLeaseMu.Lock()
+		defer s.editLeaseMu.Unlock()
 		s.expireEditLeaseLocked(key, now)
 		lease := s.editLeases[key]
 		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
@@ -326,6 +336,8 @@ func leaseConnection(lease *QueueEditLease) string {
 }
 
 func (s *Service) editLeaseBlocksHeadLocked(ctx context.Context, sessionID string) (bool, error) {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	entries, err := s.repo.ListBySession(ctx, sessionID)
 	if err != nil {
 		return false, err
@@ -344,11 +356,15 @@ func (s *Service) editLeaseBlocksHeadLocked(ctx context.Context, sessionID strin
 
 func (s *Service) editLeaseBlocksEntryLocked(sessionID, entryID string) bool {
 	key := s.editLeaseKey(sessionID, entryID)
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	s.expireEditLeaseLocked(key, time.Now().UTC())
 	return s.editLeases[key] != nil
 }
 
 func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excludedEntryID string) (bool, error) {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	entries, err := s.repo.ListBySession(ctx, sessionID)
 	if err != nil {
 		return false, err
@@ -366,10 +382,14 @@ func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excl
 	if tail == nil {
 		return false, nil
 	}
-	return s.editLeaseBlocksEntryLocked(sessionID, tail.ID), nil
+	key := s.editLeaseKey(sessionID, tail.ID)
+	s.expireEditLeaseLocked(key, time.Now().UTC())
+	return s.editLeases[key] != nil, nil
 }
 
 func (s *Service) editLeaseBlocksMergeLocked(ctx context.Context, sessionID, sourceID string) (bool, error) {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	entries, err := s.repo.ListBySession(ctx, sessionID)
 	if err != nil {
 		return false, err
@@ -393,11 +413,23 @@ func (s *Service) editLeaseBlocksMergeLocked(ctx context.Context, sessionID, sou
 			target = entry
 		}
 	}
-	return s.editLeaseBlocksEntryLocked(sessionID, source.ID) ||
-		(target != nil && s.editLeaseBlocksEntryLocked(sessionID, target.ID)), nil
+	now := time.Now().UTC()
+	sourceKey := s.editLeaseKey(sessionID, source.ID)
+	s.expireEditLeaseLocked(sourceKey, now)
+	if s.editLeases[sourceKey] != nil {
+		return true, nil
+	}
+	if target == nil {
+		return false, nil
+	}
+	targetKey := s.editLeaseKey(sessionID, target.ID)
+	s.expireEditLeaseLocked(targetKey, now)
+	return s.editLeases[targetKey] != nil, nil
 }
 
 func (s *Service) invalidateEditLeasesLocked(sessionIDs ...string) {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	for key := range s.editLeases {
 		for _, sessionID := range sessionIDs {
 			if key.sessionID == sessionID {
@@ -849,7 +881,18 @@ func (s *Service) insertLifecycleMessageWithCoalesceKey(ctx context.Context, ses
 // PurgeTask is a backend-only task lifecycle operation. Client deletion APIs
 // retain their reserved-entry protections.
 func (s *Service) PurgeTask(ctx context.Context, taskID string) (int, error) {
-	return s.repo.PurgeTask(ctx, taskID)
+	removed, err := s.repo.PurgeTask(ctx, taskID)
+	if err != nil {
+		return 0, err
+	}
+	s.editLeaseMu.Lock()
+	for key, lease := range s.editLeases {
+		if lease.taskID == taskID {
+			delete(s.editLeases, key)
+		}
+	}
+	s.editLeaseMu.Unlock()
+	return removed, nil
 }
 
 // lifecycleGenerationFromMetadata reads the lifecycle generation captured on an entry.

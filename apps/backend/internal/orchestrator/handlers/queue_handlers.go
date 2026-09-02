@@ -535,6 +535,13 @@ func queueEditError(msg *ws.Message, err error) *ws.Message {
 	response, _ := ws.NewError(msg.ID, msg.Action, code, message, nil)
 	return response
 }
+func queueEditLeaseError(msg *ws.Message, err error) *ws.Message {
+	if errors.Is(err, messagequeue.ErrEditLeaseNotFound) {
+		response, _ := ws.NewError(msg.ID, msg.Action, "edit_conflict", "Queue entry edit lease is no longer valid", nil)
+		return response
+	}
+	return queueEditError(msg, err)
+}
 
 func (h *QueueHandlers) wsBeginEdit(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var req wsQueueEditRequest
@@ -573,7 +580,7 @@ func (h *QueueHandlers) wsRenewEdit(ctx context.Context, msg *ws.Message) (*ws.M
 	}
 	lease, err := h.queueEdit.RenewEdit(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx))
 	if err != nil {
-		return queueEditError(msg, err), nil
+		return queueEditLeaseError(msg, err), nil
 	}
 	return ws.NewResponse(msg.ID, msg.Action, lease)
 }
@@ -593,7 +600,7 @@ func (h *QueueHandlers) wsEndEdit(ctx context.Context, msg *ws.Message) (*ws.Mes
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeForbidden, "Queue editing requires a WebSocket connection", nil)
 	}
 	if err := h.queueEdit.EndEdit(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx)); err != nil {
-		return queueEditError(msg, err), nil
+		return queueEditLeaseError(msg, err), nil
 	}
 	return ws.NewResponse(msg.ID, msg.Action, map[string]string{fieldSessionID: req.SessionID, fieldEntryID: req.EntryID})
 }
@@ -757,7 +764,7 @@ func (h *QueueHandlers) queueUpdateFailure(
 	if errors.Is(updateErr, messagequeue.ErrEditConflict) ||
 		errors.Is(updateErr, messagequeue.ErrEditLeaseNotFound) ||
 		errors.Is(updateErr, messagequeue.ErrEditRevisionConflict) {
-		return queueEditError(msg, updateErr), nil
+		return queueEditLeaseError(msg, updateErr), nil
 	}
 	if errors.Is(updateErr, messagequeue.ErrEntryNotFound) {
 		return ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound, "Queue entry was already drained or not owned by caller", nil)

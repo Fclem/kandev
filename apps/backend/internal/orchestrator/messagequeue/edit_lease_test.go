@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +67,22 @@ func TestEditLeaseRejectsForeignReleaseAndUpdate(t *testing.T) {
 		"operation-1", "connection-b", 0, "tampered", nil, nil)
 	require.ErrorIs(t, err, ErrEditLeaseNotFound)
 	require.False(t, errors.Is(err, ErrEditRevisionConflict))
+}
+func TestEditLeaseEndRejectsExpiredLease(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session-lease-expiry", "task", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err := svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	svc.editLeases[svc.editLeaseKey(entry.SessionID, entry.ID)].ExpiresAt = time.Now().UTC().Add(-time.Second)
+
+	err = svc.EndEdit(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection-a")
+	require.ErrorIs(t, err, ErrEditLeaseNotFound)
+
+	_, ok := svc.TakeQueued(ctx, entry.SessionID)
+	require.True(t, ok, "an expired lease must not continue blocking delivery")
 }
 
 func TestEditLeaseBlocksTargetedDrains(t *testing.T) {

@@ -131,6 +131,7 @@ type QueueEditLease struct {
 	ExpiresAt       time.Time `json:"expires_at,omitempty"`
 	// connectionID and operation fields are server-side fencing state.
 	connectionID        string
+	taskID              string
 	lastOperationID     string
 	lastOperationHash   string
 	lastOperationResult int64

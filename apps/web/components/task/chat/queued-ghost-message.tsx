@@ -491,7 +491,12 @@ function useQueuedGhostSave({
     }
     setSaving(true);
     try {
-      await onSave(trimmed, survivingEntityReferences(trimmed, entityReferences), attachments);
+      const updatedReferences = survivingEntityReferences(trimmed, entityReferences);
+      if (attachments === undefined) {
+        await onSave(trimmed, updatedReferences);
+      } else {
+        await onSave(trimmed, updatedReferences, attachments);
+      }
       setEditing(false);
       await onEditComplete?.();
     } catch (err) {

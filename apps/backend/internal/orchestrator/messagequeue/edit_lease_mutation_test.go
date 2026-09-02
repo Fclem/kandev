@@ -94,3 +94,41 @@ func TestEditLeaseAllowsAppendToOtherEntry(t *testing.T) {
 	require.True(t, appended)
 	require.Equal(t, "second\n\n---\n\n appended", merged.Content)
 }
+func TestPurgeTaskInvalidatesEditLeases(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session-lease-purge", "task-purge", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	_, err = svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	removed, err := svc.PurgeTask(ctx, entry.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, 1, removed)
+	require.Empty(t, svc.editLeases)
+}
+func TestPurgeTaskPreservesOtherEditRevisions(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	live, err := svc.QueueMessage(ctx, "session-live-edit", "task-live", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	other, err := svc.QueueMessage(ctx, "session-other-edit", "task-other", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err := svc.BeginEdit(ctx, live.SessionID, live.ID, "connection-a")
+	require.NoError(t, err)
+	_, err = svc.BeginEdit(ctx, other.SessionID, other.ID, "connection-b")
+	require.NoError(t, err)
+
+	revision, err := svc.UpdateMessageWithLease(ctx, live.SessionID, live.ID, lease.LeaseID,
+		"operation-live", "connection-a", lease.TargetRevision, "edited", nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), revision)
+
+	_, err = svc.PurgeTask(ctx, other.TaskID)
+	require.NoError(t, err)
+
+	revision, err = svc.UpdateMessageWithLease(ctx, live.SessionID, live.ID, lease.LeaseID,
+		"operation-live-2", "connection-a", revision, "edited again", nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), revision)
+}

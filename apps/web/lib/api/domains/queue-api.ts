@@ -28,6 +28,16 @@ export class QueueEntryNotFoundError extends Error {
   }
 }
 
+/** Error thrown when a queued edit lost its lease or expected revision. */
+export class QueueEditConflictError extends Error {
+  readonly code = "edit_conflict" as const;
+
+  constructor() {
+    super("The queued entry changed before the edit could be saved.");
+    this.name = "QueueEditConflictError";
+  }
+}
+
 /** Error thrown when a merge would push the combined entity references past
  * the per-message cap; the server rejects the merge atomically instead of
  * dropping references that were already persisted. */
@@ -114,9 +124,10 @@ function knownQueueError(wsErr: WSError): Error | undefined {
       return new QueueFullError(size, max);
     }
     case "entry_not_found":
+      return new QueueEntryNotFoundError();
     case "edit_conflict":
     case "queue_conflict":
-      return new QueueEntryNotFoundError();
+      return new QueueEditConflictError();
     case "merge_reference_overflow":
       return new MergeReferenceOverflowError();
     default:

@@ -10,6 +10,7 @@ import {
   mergeQueuedEntry,
   reorderQueuedEntries,
   QueueEntryNotFoundError,
+  QueueEditConflictError,
   sendQueuedNow,
   setQueueAutoRun,
   type QueueEditLease,
@@ -461,7 +462,7 @@ function useEntryMutations({ sessionId, removeQueueEntry, refetch }: EntryMutati
           entity_references: entityReferences,
         });
       } catch (err) {
-        if (err instanceof QueueEntryNotFoundError) {
+        if (err instanceof QueueEntryNotFoundError || err instanceof QueueEditConflictError) {
           await refetch(sessionId);
         }
         throw err;

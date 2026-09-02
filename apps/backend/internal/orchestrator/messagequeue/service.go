@@ -158,6 +158,25 @@ func (s *Service) WithSessionAdmission(ctx context.Context, sessionID string, fn
 	return fn(admittedCtx)
 }
 
+// withSessionAdmissions holds both queue admission locks in stable order.
+// Transfer and replacement operations otherwise allow opposite-direction
+// transfers to deadlock while each session is waiting for the other lock.
+func (s *Service) withSessionAdmissions(
+	ctx context.Context,
+	firstSessionID, secondSessionID string,
+	fn func(context.Context) error,
+) error {
+	if firstSessionID == secondSessionID {
+		return s.WithSessionAdmission(ctx, firstSessionID, fn)
+	}
+	if firstSessionID > secondSessionID {
+		firstSessionID, secondSessionID = secondSessionID, firstSessionID
+	}
+	return s.WithSessionAdmission(ctx, firstSessionID, func(admittedCtx context.Context) error {
+		return s.WithSessionAdmission(admittedCtx, secondSessionID, fn)
+	})
+}
+
 type editLeaseKey struct {
 	sessionID string
 	entryID   string
@@ -329,6 +348,66 @@ func (s *Service) editLeaseBlocksEntryLocked(sessionID, entryID string) bool {
 	return s.editLeases[key] != nil
 }
 
+func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excludedEntryID string) (bool, error) {
+	entries, err := s.repo.ListBySession(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	var tail *QueuedMessage
+	for i := range entries {
+		entry := &entries[i]
+		if entry.ID == excludedEntryID || entry.IsReservedInFlight() {
+			continue
+		}
+		if tail == nil || entry.Position > tail.Position {
+			tail = entry
+		}
+	}
+	if tail == nil {
+		return false, nil
+	}
+	return s.editLeaseBlocksEntryLocked(sessionID, tail.ID), nil
+}
+
+func (s *Service) editLeaseBlocksMergeLocked(ctx context.Context, sessionID, sourceID string) (bool, error) {
+	entries, err := s.repo.ListBySession(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	var source, target *QueuedMessage
+	for i := range entries {
+		if entries[i].ID == sourceID {
+			source = &entries[i]
+			break
+		}
+	}
+	if source == nil {
+		return false, nil
+	}
+	for i := range entries {
+		entry := &entries[i]
+		if entry.IsReservedInFlight() || entry.Position >= source.Position {
+			continue
+		}
+		if target == nil || entry.Position > target.Position {
+			target = entry
+		}
+	}
+	return s.editLeaseBlocksEntryLocked(sessionID, source.ID) ||
+		(target != nil && s.editLeaseBlocksEntryLocked(sessionID, target.ID)), nil
+}
+
+func (s *Service) invalidateEditLeasesLocked(sessionIDs ...string) {
+	for key := range s.editLeases {
+		for _, sessionID := range sessionIDs {
+			if key.sessionID == sessionID {
+				delete(s.editLeases, key)
+				break
+			}
+		}
+	}
+}
+
 // QueueMessage appends a new entry to the session's FIFO queue. Returns
 // ErrQueueFull when the cap is exceeded.
 func (s *Service) QueueMessage(ctx context.Context, sessionID, taskID, content, model, userID string, planMode bool, attachments []MessageAttachment) (*QueuedMessage, error) {
@@ -383,6 +462,13 @@ func (s *Service) queueMessageWithMetadataAdmission(ctx context.Context, session
 					Metadata:    copyMessageMetadata(metadata, 0),
 					QueuedAt:    time.Now().UTC(),
 					QueuedBy:    userID,
+				}
+				blocked, leaseErr := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "")
+				if leaseErr != nil {
+					return leaseErr
+				}
+				if blocked {
+					return err
 				}
 				merged, didMerge, mergeErr := s.repo.AutoMergeCandidateIntoAbove(admittedCtx, candidate)
 				switch {
@@ -448,8 +534,21 @@ func (s *Service) queueMessageWithMetadataSeparate(ctx context.Context, sessionI
 	return queued, err
 }
 
+// finalizeAutoMerge preserves a separate entry while the current tail is
+// held by an editor.
 func (s *Service) finalizeAutoMerge(ctx context.Context, source *QueuedMessage, enabled bool) *QueuedMessage {
 	if !enabled {
+		return source
+	}
+	blocked, err := s.editLeaseBlocksTailLocked(ctx, source.SessionID, source.ID)
+	if err != nil {
+		s.logger.Error("automatic queue merge lease check failed; preserving separate admission",
+			zap.String("session_id", source.SessionID),
+			zap.String("source_entry_id", source.ID),
+			zap.Error(err))
+		return source
+	}
+	if blocked {
 		return source
 	}
 	merged, didMerge, err := s.repo.AutoMergeIntoAbove(ctx, source.SessionID, source.ID)
@@ -880,7 +979,13 @@ func (s *Service) AppendContent(ctx context.Context, sessionID, taskID, content,
 	var msg *QueuedMessage
 	var appended bool
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		var err error
+		blocked, err := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "")
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrEditConflict
+		}
 		msg, appended, err = s.repo.AppendOrInsertTail(admittedCtx, sessionID, taskID, content, model, userID, planMode, attachments, nil, s.MaxPerSession())
 		return err
 	})
@@ -1077,6 +1182,9 @@ func (s *Service) AcknowledgeSendNowClaim(ctx context.Context, claim *SendNowCla
 // metadata replacements while retaining unrelated metadata keys.
 func (s *Service) UpdateMessageWithMetadata(ctx context.Context, sessionID, entryID, content string, attachments []MessageAttachment, metadataUpdates map[string]interface{}, queuedBy string) error {
 	if err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		if s.editLeaseBlocksEntryLocked(sessionID, entryID) {
+			return ErrEditConflict
+		}
 		return s.repo.UpdateContentAndMetadata(admittedCtx, sessionID, entryID, content, attachments, metadataUpdates, queuedBy)
 	}); err != nil {
 		return err
@@ -1091,9 +1199,14 @@ func (s *Service) UpdateMessageWithMetadata(ctx context.Context, sessionID, entr
 // the rationale on the Repository.DeleteByID contract for why. Returns
 // ErrEntryNotFound when no entry matches.
 func (s *Service) RemoveEntry(ctx context.Context, sessionID, entryID string) error {
-	if err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		return s.repo.DeleteByID(admittedCtx, sessionID, entryID)
-	}); err != nil {
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		err := s.repo.DeleteByID(admittedCtx, sessionID, entryID)
+		if err == nil {
+			delete(s.editLeases, s.editLeaseKey(sessionID, entryID))
+		}
+		return err
+	})
+	if err != nil {
 		return err
 	}
 	s.logger.Info("queued entry removed",
@@ -1111,9 +1224,16 @@ func (s *Service) MergeIntoAbove(ctx context.Context, sessionID, entryID, queued
 	}
 	var merged *QueuedMessage
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		var err error
-		merged, err = s.repo.MergeIntoAbove(admittedCtx, sessionID, entryID, queuedBy)
-		return err
+		blocked, err := s.editLeaseBlocksMergeLocked(admittedCtx, sessionID, entryID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrEditConflict
+		}
+		var mergeErr error
+		merged, mergeErr = s.repo.MergeIntoAbove(admittedCtx, sessionID, entryID, queuedBy)
+		return mergeErr
 	})
 	if err != nil {
 		return nil, err
@@ -1151,6 +1271,9 @@ func (s *Service) CancelAll(ctx context.Context, sessionID string) (int, error) 
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		var err error
 		n, err = s.repo.DeleteAllBySession(admittedCtx, sessionID)
+		if err == nil {
+			s.invalidateEditLeasesLocked(sessionID)
+		}
 		return err
 	})
 	if err != nil {
@@ -1227,15 +1350,21 @@ func (s *Service) CountPendingByTask(ctx context.Context, taskID string) (int, e
 // Unlike GetStatus, it includes durable lifecycle rows reserved by an in-flight
 // delivery so a later restore cannot erase them before acknowledgement.
 func (s *Service) SnapshotSession(ctx context.Context, sessionID string) ([]QueuedMessage, *PendingMove, error) {
-	entries, err := s.repo.ListBySession(ctx, sessionID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("snapshot queued messages: %w", err)
-	}
-	move, err := s.repo.GetPendingMove(ctx, sessionID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("snapshot pending move: %w", err)
-	}
-	return entries, move, nil
+	var entries []QueuedMessage
+	var move *PendingMove
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		var err error
+		entries, err = s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return fmt.Errorf("snapshot queued messages: %w", err)
+		}
+		move, err = s.repo.GetPendingMove(admittedCtx, sessionID)
+		if err != nil {
+			return fmt.Errorf("snapshot pending move: %w", err)
+		}
+		return nil
+	})
+	return entries, move, err
 }
 
 // TransferSession moves any queued messages and pending move from one session
@@ -1244,7 +1373,14 @@ func (s *Service) SnapshotSession(ctx context.Context, sessionID string) ([]Queu
 // old session — a transfer that no-ops without a signal would let the workflow
 // step move forward while the queue sticks behind.
 func (s *Service) TransferSession(ctx context.Context, oldSessionID, newSessionID string) error {
-	if err := s.repo.TransferSession(ctx, oldSessionID, newSessionID); err != nil {
+	err := s.withSessionAdmissions(ctx, oldSessionID, newSessionID, func(admittedCtx context.Context) error {
+		if err := s.repo.TransferSession(admittedCtx, oldSessionID, newSessionID); err != nil {
+			return err
+		}
+		s.invalidateEditLeasesLocked(oldSessionID, newSessionID)
+		return nil
+	})
+	if err != nil {
 		s.logger.Error("transfer session failed",
 			zap.String("from_session_id", oldSessionID),
 			zap.String("to_session_id", newSessionID),
@@ -1260,7 +1396,14 @@ func (s *Service) TransferSession(ctx context.Context, oldSessionID, newSessionI
 // RestoreSession replaces a session's queue and pending move from a snapshot,
 // preserving queued-message identity fields.
 func (s *Service) RestoreSession(ctx context.Context, sessionID string, entries []QueuedMessage, pendingMove *PendingMove) error {
-	if err := s.repo.ReplaceSession(ctx, sessionID, entries, pendingMove); err != nil {
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		if err := s.repo.ReplaceSession(admittedCtx, sessionID, entries, pendingMove); err != nil {
+			return err
+		}
+		s.invalidateEditLeasesLocked(sessionID)
+		return nil
+	})
+	if err != nil {
 		s.logger.Error("restore session queue failed",
 			zap.String("session_id", sessionID),
 			zap.Error(err))

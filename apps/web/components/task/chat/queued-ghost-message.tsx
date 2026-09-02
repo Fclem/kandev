@@ -42,8 +42,10 @@ import { buildEntityReferenceMarkdownComponents } from "@/components/task/chat/m
 import { QueuedGhostRowActions } from "@/components/task/chat/queued-ghost-row-actions";
 import { useQueuedMessageOverflow } from "@/components/task/chat/use-queued-message-overflow";
 import { AttachmentRow, type QueuedAttachment } from "@/components/task/chat/queued-attachment-row";
+import { QueuedGhostRowActions } from "@/components/task/chat/queued-ghost-row-actions";
 import { t } from "@/lib/i18n";
 import { useClarificationEscapeGuard } from "@/hooks/use-clarification-escape-guard";
+import { useQueuedGhostStartEdit } from "@/hooks/use-queue-edit-protection";
 
 /** Imperative handle for the ghost row, used by chat input "edit last queued" affordance. */
 export type QueuedGhostMessageHandle = {
@@ -484,7 +486,11 @@ type QueuedGhostMessageProps = {
   showDragHandle?: boolean;
   /** Set while this row is the active drag target, for dimming/z-index. */
   isDragging?: boolean;
-  onSave: (content: string, entityReferences: EntityReference[]) => Promise<void>;
+  onSave: (
+    content: string,
+    entityReferences: EntityReference[],
+    attachments?: QueuedMessage["attachments"],
+  ) => Promise<void>;
   onRemove: () => void | Promise<void>;
   /** Fold this entry into the one above it. */
   onMerge?: () => void | Promise<void>;
@@ -492,8 +498,10 @@ type QueuedGhostMessageProps = {
   onSendNow?: () => void;
   /** Disable while the queue mutation or backend cancellation is in flight. */
   sendNowDisabled?: boolean;
-  /** Called after edit save/cancel so the parent can refocus the chat input. */
-  onEditComplete?: () => void;
+  /** Called before edit activation; returning false keeps the row read-only. */
+  onEditStart?: () => void | Promise<boolean | void>;
+  /** Called after edit save/cancel so the parent can restore queue policy. */
+  onEditComplete?: () => void | Promise<void>;
 };
 
 function useFocusQueuedEdit(
@@ -526,17 +534,15 @@ function useQueuedGhostEditEscapeGuard(
     },
     [editing, textareaRef],
   );
-  // Radix dialogs inspect Escape during document capture, before the
-  // textarea's bubble-phase handler can cancel the edit.
   useClarificationEscapeGuard(editing ? editEscapeGuard : null);
 }
-
 type QueuedGhostSaveArgs = {
   value: string;
   entryContent: string;
   entityReferences: readonly EntityReference[];
+  attachments?: QueuedMessage["attachments"];
   onSave: QueuedGhostMessageProps["onSave"];
-  onEditComplete?: () => void;
+  onEditComplete?: () => void | Promise<void>;
   setEditing: (editing: boolean) => void;
   setSaving: (saving: boolean) => void;
   t: (key: string) => string;
@@ -546,6 +552,7 @@ function useQueuedGhostSave({
   value,
   entryContent,
   entityReferences,
+  attachments,
   onSave,
   onEditComplete,
   setEditing,
@@ -556,14 +563,14 @@ function useQueuedGhostSave({
     const trimmed = value.trim();
     if (!trimmed || trimmed === entryContent) {
       setEditing(false);
-      onEditComplete?.();
+      await onEditComplete?.();
       return;
     }
     setSaving(true);
     try {
-      await onSave(trimmed, survivingEntityReferences(trimmed, entityReferences));
+      await onSave(trimmed, survivingEntityReferences(trimmed, entityReferences), attachments);
       setEditing(false);
-      onEditComplete?.();
+      await onEditComplete?.();
     } catch (err) {
       console.error("Failed to update queued entry:", err);
       if (err instanceof QueueEntryNotFoundError) {
@@ -572,11 +579,21 @@ function useQueuedGhostSave({
         toast.error(t("chat:queueEditSaveFailed"));
       }
       setEditing(false);
-      onEditComplete?.();
+      await onEditComplete?.();
     } finally {
       setSaving(false);
     }
-  }, [value, entryContent, onSave, onEditComplete, entityReferences, setEditing, setSaving, t]);
+  }, [
+    value,
+    entryContent,
+    onSave,
+    onEditComplete,
+    entityReferences,
+    attachments,
+    setEditing,
+    setSaving,
+    t,
+  ]);
 }
 
 export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGhostMessageProps>(
@@ -595,6 +612,7 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
       onMerge,
       onSendNow = () => undefined,
       sendNowDisabled = false,
+      onEditStart,
       onEditComplete,
     },
     ref,
@@ -614,24 +632,29 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
     useEffect(() => {
       if (!editing) setValue(entry.content);
     }, [entry.content, editing]);
-
-    const startEdit = useCallback(() => {
-      if (!canEdit) return;
-      setValue(entry.content);
-      setEditing(true);
-    }, [entry.content, canEdit]);
+    const startEdit = useQueuedGhostStartEdit({
+      canEdit,
+      editing,
+      saving,
+      onEditStart,
+      onStart: () => {
+        setValue(entry.content);
+        setEditing(true);
+      },
+    });
 
     useImperativeHandle(ref, () => ({ startEdit }), [startEdit]);
-    const handleCancel = useCallback(() => {
+    const handleCancel = useCallback(async () => {
       setValue(entry.content);
       setEditing(false);
-      onEditComplete?.();
+      await onEditComplete?.();
     }, [entry.content, onEditComplete]);
 
     const handleSave = useQueuedGhostSave({
       value,
       entryContent: entry.content,
       entityReferences,
+      attachments: entry.attachments,
       onSave,
       onEditComplete,
       setEditing,

@@ -32,7 +32,7 @@ import {
   QueueReorderError,
   QueueSendNowError,
 } from "@/lib/api/domains/queue-api";
-import { useQueue } from "@/hooks/domains/session/use-queue";
+import { useQueue, type MessageAttachment } from "@/hooks/domains/session/use-queue";
 import { useQueueEditProtection } from "@/hooks/use-queue-edit-protection";
 import { useQueuePinned } from "@/hooks/use-queue-pinned";
 import { canMergeWithAbove, QueuedGhostMessage } from "./queued-ghost-message";
@@ -102,7 +102,7 @@ type QueuePanelHandlerArgs = {
   editEntry: (
     entryId: string,
     content: string,
-    attachments?: undefined,
+    attachments?: MessageAttachment[],
     entityReferences?: EntityReference[],
     lease?: QueueEditLease | null,
   ) => Promise<void>;
@@ -166,13 +166,14 @@ function useQueuePanelHandlers({
     async (
       entryId: string,
       content: string,
+      attachments: MessageAttachment[] | undefined,
       entityReferences: EntityReference[],
       lease?: QueueEditLease | null,
     ) => {
       if (lease) {
-        await editEntry(entryId, content, undefined, entityReferences, lease);
+        await editEntry(entryId, content, attachments, entityReferences, lease);
       } else {
-        await editEntry(entryId, content, undefined, entityReferences);
+        await editEntry(entryId, content, attachments, entityReferences);
       }
     },
     [editEntry],
@@ -273,6 +274,7 @@ type QueuePanelDisclosureProps = {
     entryId: string,
     content: string,
     refs: EntityReference[],
+    attachments?: MessageAttachment[],
     lease?: QueueEditLease | null,
   ) => Promise<void>;
   onRemove: (entryId: string) => Promise<void>;
@@ -397,11 +399,16 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
   });
 
   const handleSave = useCallback(
-    (entryId: string, content: string, refs: EntityReference[]) => {
+    (
+      entryId: string,
+      content: string,
+      refs: EntityReference[],
+      attachments?: MessageAttachment[],
+    ) => {
       if (editLease) {
-        return handlePanelSave(entryId, content, refs, editLease);
+        return handlePanelSave(entryId, content, attachments, refs, editLease);
       }
-      return handlePanelSave(entryId, content, refs);
+      return handlePanelSave(entryId, content, attachments, refs);
     },
     [editLease, handlePanelSave],
   );
@@ -536,6 +543,7 @@ type QueuePanelProps = {
     entryId: string,
     content: string,
     refs: EntityReference[],
+    attachments?: MessageAttachment[],
     lease?: QueueEditLease | null,
   ) => Promise<void>;
   onRemove: (entryId: string) => Promise<void>;
@@ -680,7 +688,9 @@ function QueuePanel({
                 canDrag={canReorder}
                 showDragHandle={entries.length > 1}
                 isDragging={activeId === entry.id}
-                onSave={(content, entityReferences) => onSave(entry.id, content, entityReferences)}
+                onSave={(content, entityReferences, attachments) =>
+                  onSave(entry.id, content, entityReferences, attachments)
+                }
                 onRemove={() => onRemove(entry.id)}
                 onMerge={() => onMerge(entry.id)}
                 onSendNow={() => onSendEntryNow(entry.id)}

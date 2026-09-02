@@ -345,6 +345,47 @@ it("does not activate the editor when the target lease cannot be acquired", asyn
   await waitFor(() => expect(screen.queryByTestId(QUEUE_EDIT_TEXTAREA_ID)).toBeNull());
 });
 
+it("preserves queued attachments when saving a text edit", async () => {
+  const attachments = [
+    {
+      type: "resource",
+      attachment_id: "attachment-1",
+      mime_type: "text/plain",
+      name: "notes.txt",
+    },
+  ];
+  const state = queueState([entry({ attachments })]);
+  state.editEntry = vi.fn(async () => {});
+  useQueueMock.mockReturnValue(state);
+  useQueueEditProtectionMock.mockReturnValue({
+    editingEntryId: null,
+    editLease: {
+      session_id: SESSION_ID,
+      entry_id: "q-1",
+      lease_id: "lease-1",
+      target_revision: 0,
+    },
+    beginEdit: vi.fn(async () => true),
+    completeEdit: vi.fn(async () => {}),
+  });
+  render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+  fireEvent.click(screen.getByTestId(CHIP_ID));
+  fireEvent.click(screen.getByTestId(EDIT_BUTTON_ID));
+  await waitFor(() => expect(screen.getByTestId(QUEUE_EDIT_TEXTAREA_ID)).toBeTruthy());
+  fireEvent.change(screen.getByTestId(QUEUE_EDIT_TEXTAREA_ID), { target: { value: "edited" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await waitFor(() =>
+    expect(state.editEntry).toHaveBeenCalledWith(
+      "q-1",
+      "edited",
+      attachments,
+      [],
+      expect.objectContaining({ lease_id: "lease-1" }),
+    ),
+  );
+});
+
 describe("QueueAffordance positions", () => {
   it("compacts displayed positions when persisted queue positions contain gaps", () => {
     const initialEntries = [

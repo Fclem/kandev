@@ -12,6 +12,7 @@ import {
   QueueSendNowError,
   QueueFullError,
   QueueEntryNotFoundError,
+  QueueEditConflictError,
   QueueReorderError,
   beginQueuedMessageEdit,
   endQueuedMessageEdit,
@@ -85,6 +86,15 @@ describe("rethrowQueueError", () => {
         message: "Already drained",
       }),
     ).toThrow(QueueEntryNotFoundError);
+  });
+
+  it("maps edit lease conflicts to QueueEditConflictError", () => {
+    expect(() =>
+      rethrowQueueError({
+        code: "edit_conflict",
+        message: "Edit lease expired",
+      }),
+    ).toThrow(QueueEditConflictError);
   });
 
   it("maps merge_reference_overflow errors to MergeReferenceOverflowError", () => {

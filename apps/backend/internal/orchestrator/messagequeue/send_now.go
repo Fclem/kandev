@@ -49,6 +49,10 @@ type SendNowClaim struct {
 	Sources           []QueuedMessage  `json:"sources"`
 	Dispatch          QueuedMessage    `json:"dispatch"`
 	SourceGenerations map[string]int64 `json:"source_generations,omitempty"`
+	// SessionGeneration fences a restore after the session queue was purged.
+	// Ordinary sources are absent from storage while claimed, so task
+	// generations alone cannot prevent them from being resurrected.
+	SessionGeneration int64 `json:"session_generation"`
 }
 
 func sendNowSourceGenerationChanged(claim *SendNowClaim, source QueuedMessage, current int64) bool {

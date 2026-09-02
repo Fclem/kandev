@@ -217,6 +217,100 @@ func TestSendNowRestoreDiscardsSourcesFromPurgedTaskGeneration(t *testing.T) {
 		})
 	}
 }
+func TestSendNowRestoreDoesNotResurrectSourcesFromPurgedSession(t *testing.T) {
+	tests := []struct {
+		name string
+		new  func(*testing.T) Repository
+	}{
+		{name: "memory", new: func(*testing.T) Repository { return NewMemoryRepository() }},
+		{name: "sqlite", new: newTestSQLiteRepo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := tt.new(t)
+			ctx := context.Background()
+			entry := insertTestEntry(t, repo, "session-1", "task-1", "discard after session purge", QueuedByUser, nil, nil)
+			claim, err := repo.ClaimSendNow(ctx, "session-1", []QueuedMessage{*entry})
+			if err != nil {
+				t.Fatalf("claim: %v", err)
+			}
+			if _, err := repo.PurgeSession(ctx, "session-1"); err != nil {
+				t.Fatalf("purge session: %v", err)
+			}
+			if err := repo.RestoreSendNowClaim(ctx, claim); !errors.Is(err, ErrSendNowClaimChanged) {
+				t.Fatalf("restore after session purge error = %v, want ErrSendNowClaimChanged", err)
+			}
+			entries, err := repo.ListBySession(ctx, "session-1")
+			if err != nil {
+				t.Fatalf("list after restore: %v", err)
+			}
+			if len(entries) != 0 {
+				t.Fatalf("restored entries after session purge = %#v, want none", entries)
+			}
+		})
+	}
+}
+
+func TestSendNowRestoreFencesSessionTransferAndReplacement(t *testing.T) {
+	tests := []struct {
+		name string
+		new  func(*testing.T) Repository
+	}{
+		{name: "memory", new: func(*testing.T) Repository { return NewMemoryRepository() }},
+		{name: "sqlite", new: newTestSQLiteRepo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Run("transfer", func(t *testing.T) {
+				repo := tt.new(t)
+				ctx := context.Background()
+				entry := insertTestEntry(t, repo, "session-1", "task-1", "transferred", QueuedByUser, nil, nil)
+				claim, err := repo.ClaimSendNow(ctx, "session-1", []QueuedMessage{*entry})
+				if err != nil {
+					t.Fatalf("claim: %v", err)
+				}
+				if err := repo.TransferSession(ctx, "session-1", "session-2"); err != nil {
+					t.Fatalf("transfer: %v", err)
+				}
+				if err := repo.RestoreSendNowClaim(ctx, claim); !errors.Is(err, ErrSendNowClaimChanged) {
+					t.Fatalf("restore after transfer error = %v, want ErrSendNowClaimChanged", err)
+				}
+				entries, err := repo.ListBySession(ctx, "session-2")
+				if err != nil {
+					t.Fatalf("list transferred entries: %v", err)
+				}
+				if len(entries) != 0 {
+					t.Fatalf("transferred entries = %#v, want none", entries)
+				}
+			})
+
+			t.Run("replacement", func(t *testing.T) {
+				repo := tt.new(t)
+				ctx := context.Background()
+				entry := insertTestEntry(t, repo, "session-1", "task-1", "replaced", QueuedByUser, nil, nil)
+				claim, err := repo.ClaimSendNow(ctx, "session-1", []QueuedMessage{*entry})
+				if err != nil {
+					t.Fatalf("claim: %v", err)
+				}
+				if err := repo.ReplaceSession(ctx, "session-1", nil, nil); err != nil {
+					t.Fatalf("replace: %v", err)
+				}
+				if err := repo.RestoreSendNowClaim(ctx, claim); !errors.Is(err, ErrSendNowClaimChanged) {
+					t.Fatalf("restore after replacement error = %v, want ErrSendNowClaimChanged", err)
+				}
+				entries, err := repo.ListBySession(ctx, "session-1")
+				if err != nil {
+					t.Fatalf("list replaced entries: %v", err)
+				}
+				if len(entries) != 0 {
+					t.Fatalf("replaced entries = %#v, want none", entries)
+				}
+			})
+		})
+	}
+}
 
 func TestSendNowRestoreKeepsCurrentDurableMetadataAndRecordedMarker(t *testing.T) {
 	repo := NewMemoryRepository().(*memoryRepository)

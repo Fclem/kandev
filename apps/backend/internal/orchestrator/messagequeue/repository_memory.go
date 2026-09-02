@@ -13,22 +13,24 @@ import (
 // memoryRepository is an in-memory Repository implementation used in tests and
 // any deployment that explicitly opts into ephemeral queueing.
 type memoryRepository struct {
-	mu           sync.Mutex
-	entries      map[string][]*QueuedMessage // sessionID -> ordered list (head = index 0)
-	nextPosition map[string]int64            // sessionID -> monotonic counter
-	pendingMoves map[string]*PendingMove
-	generation   map[string]int64
-	autoRun      map[string]bool
+	mu                sync.Mutex
+	entries           map[string][]*QueuedMessage // sessionID -> ordered list (head = index 0)
+	nextPosition      map[string]int64            // sessionID -> monotonic counter
+	pendingMoves      map[string]*PendingMove
+	generation        map[string]int64
+	sessionGeneration map[string]int64
+	autoRun           map[string]bool
 }
 
 // NewMemoryRepository returns an in-memory Repository. Suitable for tests.
 func NewMemoryRepository() Repository {
 	return &memoryRepository{
-		entries:      make(map[string][]*QueuedMessage),
-		nextPosition: make(map[string]int64),
-		pendingMoves: make(map[string]*PendingMove),
-		generation:   make(map[string]int64),
-		autoRun:      make(map[string]bool),
+		entries:           make(map[string][]*QueuedMessage),
+		nextPosition:      make(map[string]int64),
+		pendingMoves:      make(map[string]*PendingMove),
+		generation:        make(map[string]int64),
+		sessionGeneration: make(map[string]int64),
+		autoRun:           make(map[string]bool),
 	}
 }
 
@@ -566,6 +568,7 @@ func (r *memoryRepository) ClaimSendNow(_ context.Context, sessionID string, exp
 			generations[source.TaskID] = r.generation[source.TaskID]
 		}
 	}
+	sessionGeneration := r.sessionGeneration[sessionID]
 
 	remaining := make([]*QueuedMessage, 0, len(list))
 	for _, entry := range list {
@@ -585,7 +588,12 @@ func (r *memoryRepository) ClaimSendNow(_ context.Context, sessionID string, exp
 		r.entries[sessionID] = remaining
 	}
 	r.autoRun[sessionID] = true
-	return &SendNowClaim{Sources: sources, Dispatch: *envelope, SourceGenerations: generations}, nil
+	return &SendNowClaim{
+		Sources:           sources,
+		Dispatch:          *envelope,
+		SourceGenerations: generations,
+		SessionGeneration: sessionGeneration,
+	}, nil
 }
 
 // RestoreSendNowClaim puts every claimed source back at its original position.
@@ -597,6 +605,9 @@ func (r *memoryRepository) RestoreSendNowClaim(_ context.Context, claim *SendNow
 	defer r.mu.Unlock()
 
 	sessionID := claim.Sources[0].SessionID
+	if claim.SessionGeneration != r.sessionGeneration[sessionID] {
+		return ErrSendNowClaimChanged
+	}
 	list := r.entries[sessionID]
 	existing := make(map[string]*QueuedMessage, len(list))
 	for _, entry := range list {
@@ -996,6 +1007,7 @@ func (r *memoryRepository) DeleteAllBySession(_ context.Context, sessionID strin
 	} else {
 		r.entries[sessionID] = kept
 	}
+	r.sessionGeneration[sessionID]++
 	return removed, nil
 }
 
@@ -1009,6 +1021,7 @@ func (r *memoryRepository) PurgeSession(_ context.Context, sessionID string) (in
 	delete(r.nextPosition, sessionID)
 	delete(r.pendingMoves, sessionID)
 	delete(r.autoRun, sessionID)
+	r.sessionGeneration[sessionID]++
 	return removed, nil
 }
 
@@ -1019,6 +1032,8 @@ func (r *memoryRepository) TransferSession(_ context.Context, oldSessionID, newS
 	if oldSessionID == newSessionID {
 		return nil
 	}
+	r.sessionGeneration[oldSessionID]++
+	r.sessionGeneration[newSessionID]++
 	destinationAutoRun := r.autoRunLocked(oldSessionID) && r.autoRunLocked(newSessionID)
 	if list, ok := r.entries[oldSessionID]; ok {
 		// Mirror the SQLite repo: shift transferred positions past the
@@ -1061,6 +1076,7 @@ func (r *memoryRepository) TransferSession(_ context.Context, oldSessionID, newS
 func (r *memoryRepository) ReplaceSession(_ context.Context, sessionID string, entries []QueuedMessage, pendingMove *PendingMove) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.sessionGeneration[sessionID]++
 	if len(entries) == 0 {
 		delete(r.entries, sessionID)
 		delete(r.nextPosition, sessionID)

@@ -223,8 +223,9 @@ func (r *sqliteRepository) initSchema() error {
 	);
 
 	CREATE TABLE IF NOT EXISTS queue_session_state (
-		session_id TEXT PRIMARY KEY,
-		auto_run   INTEGER NOT NULL DEFAULT 1
+		session_id          TEXT PRIMARY KEY,
+		auto_run            INTEGER NOT NULL DEFAULT 1,
+		send_now_generation INTEGER NOT NULL DEFAULT 0
 	);
 	`)
 	if err != nil {
@@ -240,6 +241,9 @@ func (r *sqliteRepository) initSchema() error {
 		return alterErr
 	}
 	if _, alterErr := r.db.Exec(`ALTER TABLE pending_moves ADD COLUMN move_id TEXT NOT NULL DEFAULT ''`); alterErr != nil && !internaldb.IsDuplicateColumnError(alterErr) {
+		return alterErr
+	}
+	if _, alterErr := r.db.Exec(`ALTER TABLE queue_session_state ADD COLUMN send_now_generation INTEGER NOT NULL DEFAULT 0`); alterErr != nil && !internaldb.IsDuplicateColumnError(alterErr) {
 		return alterErr
 	}
 	return nil
@@ -1210,6 +1214,31 @@ func (r *sqliteRepository) setAutoRunTx(ctx context.Context, tx *sqlx.Tx, sessio
 	}
 	return nil
 }
+func (r *sqliteRepository) getSendNowGenerationTx(ctx context.Context, tx *sqlx.Tx, sessionID string) (int64, error) {
+	var generation int64
+	err := tx.GetContext(ctx, &generation, r.db.Rebind(`
+		SELECT send_now_generation FROM queue_session_state WHERE session_id = ?
+	`), sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get send-now generation: %w", err)
+	}
+	return generation, nil
+}
+
+func (r *sqliteRepository) bumpSendNowGenerationTx(ctx context.Context, tx *sqlx.Tx, sessionID string) error {
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		INSERT INTO queue_session_state (session_id, send_now_generation)
+		VALUES (?, 1)
+		ON CONFLICT(session_id) DO UPDATE
+		SET send_now_generation = queue_session_state.send_now_generation + 1
+	`), sessionID); err != nil {
+		return fmt.Errorf("advance send-now generation: %w", err)
+	}
+	return nil
+}
 
 func (r *sqliteRepository) getAutoRunTx(ctx context.Context, tx *sqlx.Tx, sessionID string) (bool, error) {
 	var enabled int
@@ -1455,6 +1484,10 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 	if err != nil {
 		return nil, err
 	}
+	sessionGeneration, err := r.getSendNowGenerationTx(ctx, tx, sessionID)
+	if err != nil {
+		return nil, err
+	}
 	generations := make(map[string]int64)
 	for _, source := range sources {
 		if source.TaskID == "" {
@@ -1476,7 +1509,12 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &SendNowClaim{Sources: sources, Dispatch: *envelope, SourceGenerations: generations}, nil
+	return &SendNowClaim{
+		Sources:           sources,
+		Dispatch:          *envelope,
+		SourceGenerations: generations,
+		SessionGeneration: sessionGeneration,
+	}, nil
 }
 
 // RestoreSendNowClaim puts every claimed source back at its original position.
@@ -1490,6 +1528,13 @@ func (r *sqliteRepository) RestoreSendNowClaim(ctx context.Context, claim *SendN
 	stored, err := r.listStoredSessionEntries(ctx, tx, sessionID)
 	if err != nil {
 		return err
+	}
+	sessionGeneration, err := r.getSendNowGenerationTx(ctx, tx, sessionID)
+	if err != nil {
+		return err
+	}
+	if claim.SessionGeneration != sessionGeneration {
+		return ErrSendNowClaimChanged
 	}
 	generations := make(map[string]int64)
 	for _, source := range claim.Sources {
@@ -2399,6 +2444,9 @@ func (r *sqliteRepository) DeleteAllBySession(ctx context.Context, sessionID str
 		}
 		removed += int(affected)
 	}
+	if err := r.bumpSendNowGenerationTx(ctx, tx, sessionID); err != nil {
+		return 0, err
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -2433,6 +2481,9 @@ func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (
 		DELETE FROM pending_moves WHERE session_id = ?
 	`), sessionID); err != nil {
 		return 0, fmt.Errorf("purge session pending move: %w", err)
+	}
+	if err := r.bumpSendNowGenerationTx(ctx, tx, sessionID); err != nil {
+		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
@@ -2574,6 +2625,12 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 	`), oldSessionID); err != nil {
 		return fmt.Errorf("clear source queue auto-run: %w", err)
 	}
+	if err := r.bumpSendNowGenerationTx(ctx, tx, oldSessionID); err != nil {
+		return err
+	}
+	if err := r.bumpSendNowGenerationTx(ctx, tx, newSessionID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -2637,6 +2694,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 		); err != nil {
 			return fmt.Errorf("restore pending move: %w", err)
 		}
+	}
+	if err := r.bumpSendNowGenerationTx(ctx, tx, sessionID); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

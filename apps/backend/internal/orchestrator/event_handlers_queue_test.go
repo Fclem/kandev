@@ -520,9 +520,9 @@ func TestHandleAgentReady_PassthroughAcknowledgesLifecycleOnlyAfterPTYAcceptance
 			wantQueued: 0,
 		},
 		{
-			name:           "ordinary PTY failure keeps legacy destructive dequeue",
+			name:           "ordinary PTY failure retains queued entry",
 			passthroughErr: errors.New("PTY write failed"),
-			wantQueued:     0,
+			wantQueued:     1,
 		},
 	}
 

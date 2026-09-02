@@ -749,6 +749,17 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 				s.logger.Warn("failed to deliver queued message to passthrough",
 					zap.String("session_id", data.SessionID),
 					zap.Error(err))
+				// ReserveQueued removes ordinary entries before delivery. Restore
+				// the exact snapshot when PTY acceptance fails so a transient
+				// passthrough failure cannot silently drop user input.
+				s.restoreQueuedMessage(ctx, queuedMsg)
+				return
+			}
+			// Passthrough has no direct attachment-only delivery path. Keep an
+			// ordinary attachment-only entry queued rather than acknowledging it
+			// without sending anything.
+			if queuedMsg.Content == "" {
+				s.restoreQueuedMessage(ctx, queuedMsg)
 				return
 			}
 		}

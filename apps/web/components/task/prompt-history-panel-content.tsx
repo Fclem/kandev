@@ -578,6 +578,9 @@ function PromptHistoryNavigateButton({
     </Button>
   );
 }
+function isNestedInteractiveTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && target.closest('button,[role="button"]') !== null;
+}
 
 /** One prompt-history row: the prompt text (truncated, or expanded into a
  * scrollable box) inside the transcript-style bubble, its relative time and
@@ -611,7 +614,7 @@ function PromptHistoryRow({
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
           onClick={(event) => {
-            if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+            if (isNestedInteractiveTarget(event.target)) return;
             onNavigate?.(entry.messageId);
           }}
         >

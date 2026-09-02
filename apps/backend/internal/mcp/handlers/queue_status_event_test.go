@@ -24,3 +24,18 @@ func TestPublishQueueStatusEventIncludesQueuePolicy(t *testing.T) {
 	require.Equal(t, false, data["auto_run"])
 	require.Equal(t, false, data["merge_enabled"])
 }
+
+func TestQueueMoveTaskPromptPublishesQueueStatus(t *testing.T) {
+	ctx := context.Background()
+	queue := messagequeue.NewServiceMemory(testLogger(t))
+	eventBus := &mcpRecordingEventBus{}
+	handlers := &Handlers{eventBus: eventBus, messageQueue: queue}
+
+	require.NoError(t, handlers.queueMoveTaskPrompt(ctx, "task-move", "session-move", "continue"))
+
+	require.Len(t, eventBus.events, 1)
+	data, ok := eventBus.events[0].Data.(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, "session-move", data["session_id"])
+	require.Equal(t, 1, data["count"])
+}

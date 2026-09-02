@@ -232,6 +232,7 @@ func (h *Handlers) applyMoveTaskImmediate(
 			if _, ok := h.messageQueue.TakeQueued(ctx, queuedSessionID); ok {
 				h.logger.Warn("move_task: dropped queued hand-off prompt after MoveTask failure",
 					zap.String("task_id", req.TaskID), zap.String("session_id", queuedSessionID))
+				h.publishQueuedMessageStatus(ctx, queuedSessionID)
 			}
 		}
 		h.logger.Error("failed to move task", zap.Error(err))
@@ -343,12 +344,22 @@ func (h *Handlers) queueMoveTaskPromptWithMoveID(ctx context.Context, taskID, se
 		if _, err := queueWithMetadata.QueueMessageWithMetadata(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil, metadata); err != nil {
 			return fmt.Errorf("queue message: %w", err)
 		}
+		h.publishQueuedMessageStatus(ctx, sessionID)
 		return nil
 	}
 	if _, err := h.messageQueue.QueueMessage(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil); err != nil {
 		return fmt.Errorf("queue message: %w", err)
 	}
+	h.publishQueuedMessageStatus(ctx, sessionID)
 	return nil
+}
+
+func (h *Handlers) publishQueuedMessageStatus(ctx context.Context, sessionID string) {
+	queue, ok := h.messageQueue.(*messagequeue.Service)
+	if !ok {
+		return
+	}
+	h.publishQueueStatusEvent(ctx, sessionID, queue)
 }
 
 func (h *Handlers) handleDeleteTask(ctx context.Context, msg *ws.Message) (*ws.Message, error) {

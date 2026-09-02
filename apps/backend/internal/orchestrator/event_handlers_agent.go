@@ -111,6 +111,12 @@ func (s *Service) publishQueueStatusEvent(ctx context.Context, sessionID string)
 	})
 }
 
+// PublishQueueStatusEvent publishes the authoritative queue snapshot after a
+// queue mutation performed by an integration adapter.
+func (s *Service) PublishQueueStatusEvent(ctx context.Context, sessionID string) {
+	s.publishQueueStatusEvent(ctx, sessionID)
+}
+
 func (s *Service) publishQueueStatusEventSnapshot(ctx context.Context, sessionID string) {
 	queueStatus := s.messageQueue.GetStatus(ctx, sessionID)
 	eventData := map[string]interface{}{
@@ -734,6 +740,10 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 		if !exists {
 			return
 		}
+		// ReserveQueued changes the visible queue immediately. Publish before
+		// any passthrough delivery so ordinary, attachment, and lifecycle
+		// reservations all reach clients, including the deferred async path.
+		s.publishQueueStatusEvent(ctx, data.SessionID)
 		// A durable lifecycle reservation must take the same guarded delivery
 		// path as an ACP session. In particular, executeQueuedMessage performs
 		// the final active-task/session claim, records the visible message, and

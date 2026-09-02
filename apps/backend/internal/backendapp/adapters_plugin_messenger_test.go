@@ -60,11 +60,16 @@ type fakeMessengerOrch struct {
 	startCalls          int
 	promptCalls         int
 	resumeCalls         int
+	queueStatusCalls    int
 	promptErr           error
 	promptFailFirstOnly bool
 }
 
 func (f *fakeMessengerOrch) GetMessageQueue() *messagequeue.Service { return f.queue }
+
+func (f *fakeMessengerOrch) PublishQueueStatusEvent(context.Context, string) {
+	f.queueStatusCalls++
+}
 
 func (f *fakeMessengerOrch) StartCreatedSession(_ context.Context, _, _, _, _ string, _, _, _ bool, _ []v1.MessageAttachment, _ []v1.EntityReference) (*orchexecutor.TaskExecution, error) {
 	f.startCalls++
@@ -107,6 +112,7 @@ func TestPluginsMessenger_RunningSessionQueues(t *testing.T) {
 	require.Equal(t, 1, orch.queue.GetStatus(context.Background(), "s1").Count, "message should be enqueued")
 	require.Nil(t, tasks.created, "queued path records via the queue, not CreateMessage")
 	require.Zero(t, orch.startCalls+orch.promptCalls)
+	require.Equal(t, 1, orch.queueStatusCalls, "queued message should publish queue status")
 }
 
 func TestPluginsMessenger_CreatedSessionStarts(t *testing.T) {

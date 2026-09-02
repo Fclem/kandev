@@ -29,7 +29,8 @@ type sqliteRepository struct {
 	// OUTSIDE any transaction because a failed statement on PostgreSQL aborts
 	// the whole transaction — the guard must never issue its UPDATE against a
 	// missing table inside a tx.
-	tasksTablePresent bool
+	tasksTablePresent        bool
+	taskSessionsTablePresent bool
 }
 
 // NewSQLiteRepository creates a SQLite-backed Repository. The supplied writer
@@ -50,6 +51,15 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 		return nil, fmt.Errorf("messagequeue: resolve tasks table presence: %w", err)
 	}
 	r.tasksTablePresent = present
+	if writer.DriverName() == "pgx" {
+		err = writer.Get(&present, `SELECT to_regclass('task_sessions') IS NOT NULL`)
+	} else {
+		err = writer.Get(&present, `SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'task_sessions')`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("messagequeue: resolve task_sessions table presence: %w", err)
+	}
+	r.taskSessionsTablePresent = present
 	return r, nil
 }
 
@@ -96,6 +106,37 @@ func (r *sqliteRepository) guardActiveTaskTx(ctx context.Context, tx *sqlx.Tx, t
 		return ErrTaskInactive
 	}
 	return nil
+}
+
+// guardSessionTx rejects queue writes for sessions that were deleted while a
+// task remained live. It runs after lockSessionTx so a session deletion and a
+// queue admission cannot pass the existence check on opposite sides of the
+// same session lock.
+func (r *sqliteRepository) guardSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID, taskID string) error {
+	if !r.tasksTablePresent || !r.taskSessionsTablePresent {
+		return nil
+	}
+	query := `SELECT EXISTS (SELECT 1 FROM task_sessions WHERE id = ?`
+	args := []interface{}{sessionID}
+	if taskID != "" {
+		query += ` AND task_id = ?`
+		args = append(args, taskID)
+	}
+	query += `)`
+	var present bool
+	if err := tx.GetContext(ctx, &present, r.db.Rebind(query), args...); err != nil {
+		return fmt.Errorf("guard task session for queue write: %w", err)
+	}
+	if !present {
+		return ErrTaskInactive
+	}
+	return nil
+}
+
+// LockSessionInTransaction acquires the queue's cross-process session lock
+// inside an existing transaction owned by another repository.
+func LockSessionInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) error {
+	return lockSessionTxIn(ctx, tx, db, sessionID)
 }
 
 // lockSessionTxIn takes the per-session cross-process lock inside an existing
@@ -217,6 +258,9 @@ func (r *sqliteRepository) Insert(ctx context.Context, msg *QueuedMessage, maxPe
 	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
 		return err
 	}
+	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
+		return err
+	}
 
 	if maxPerSession > 0 {
 		var count int
@@ -289,6 +333,9 @@ func (r *sqliteRepository) RequeuePreservingFIFO(ctx context.Context, msg *Queue
 		return err
 	}
 	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
+		return err
+	}
+	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
 		return err
 	}
 
@@ -427,6 +474,9 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
 		return err
 	}
+	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
+		return err
+	}
 
 	if maxPerSession > 0 {
 		var count int
@@ -474,6 +524,9 @@ func (r *sqliteRepository) AppendOrInsertTail(ctx context.Context, sessionID, ta
 		return nil, false, err
 	}
 	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, false, err
+	}
+	if err := r.guardSessionTx(ctx, tx, sessionID, taskID); err != nil {
 		return nil, false, err
 	}
 
@@ -558,6 +611,9 @@ func (r *sqliteRepository) InsertOrReplaceByCoalesceKey(ctx context.Context, msg
 	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
 		return nil, false, err
 	}
+	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
+		return nil, false, err
+	}
 
 	existing, err := r.findCoalesced(ctx, tx, msg.SessionID, msg.QueuedBy, coalesceKey)
 	if err != nil {
@@ -617,6 +673,9 @@ func (r *sqliteRepository) InsertOrReplaceLifecycleByCoalesceKey(ctx context.Con
 		return nil, false, ErrTaskInactive
 	}
 	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
+		return nil, false, err
+	}
+	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
 		return nil, false, err
 	}
 	expectedGeneration, ok := lifecycleGenerationFromMetadata(msg.Metadata)
@@ -1986,6 +2045,9 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 	if err := r.lockSessionTx(ctx, tx, candidate.SessionID); err != nil {
 		return nil, false, err
 	}
+	if err := r.guardSessionTx(ctx, tx, candidate.SessionID, candidate.TaskID); err != nil {
+		return nil, false, err
+	}
 
 	target, storedContent, storedAttachmentsJSON, storedMetadataJSON, err := r.scanTailWithRawJSON(ctx, tx, candidate.SessionID)
 	if err != nil {
@@ -2425,6 +2487,14 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 			return err
 		}
 	}
+	if err := r.guardSessionTx(ctx, tx, oldSessionID, ""); err != nil {
+		return err
+	}
+	if oldSessionID != newSessionID {
+		if err := r.guardSessionTx(ctx, tx, newSessionID, ""); err != nil {
+			return err
+		}
+	}
 	if oldSessionID == newSessionID {
 		return tx.Commit()
 	}
@@ -2480,6 +2550,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
+	if err := r.guardSessionTx(ctx, tx, sessionID, ""); err != nil {
 		return err
 	}
 
@@ -2548,6 +2621,9 @@ func (r *sqliteRepository) SetPendingMove(ctx context.Context, sessionID string,
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
+	if err := r.guardSessionTx(ctx, tx, sessionID, ""); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, r.db.Rebind(`

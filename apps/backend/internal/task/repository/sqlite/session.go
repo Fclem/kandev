@@ -17,6 +17,7 @@ import (
 	"github.com/kandev/kandev/internal/agentctl/tracing"
 	"github.com/kandev/kandev/internal/db"
 	"github.com/kandev/kandev/internal/db/dialect"
+	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	"github.com/kandev/kandev/internal/task/models"
 )
 
@@ -2850,16 +2851,39 @@ func unmarshalSessionSnapshots(
 	return unmarshalSessionJSON(repositorySnapshotJSON, &session.RepositorySnapshot, "repository snapshot")
 }
 
+// queueSessionLockTablePresent reports whether queue mutations can participate
+// in this task transaction. Some repository unit tests intentionally omit the
+// message queue schema; production databases always include it.
+func (r *Repository) queueSessionLockTablePresent(ctx context.Context) (bool, error) {
+	var present bool
+	var err error
+	if dialect.IsPostgres(r.db.DriverName()) {
+		err = r.db.GetContext(ctx, &present, `SELECT to_regclass('queue_session_locks') IS NOT NULL`)
+	} else {
+		err = r.db.GetContext(ctx, &present, `SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'queue_session_locks')`)
+	}
+	return present, err
+}
+
 // DeleteTaskSession deletes an agent session by ID and any pending queue rows
 // keyed to that session. Without the queue purge, orphan rows keep inflating
 // task-scoped queued_prompt_count after the session is gone.
 func (r *Repository) DeleteTaskSession(ctx context.Context, id string) error {
+	queueLockPresent, err := r.queueSessionLockTablePresent(ctx)
+	if err != nil {
+		return fmt.Errorf("check queue session lock schema: %w", err)
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if queueLockPresent {
+		if err := messagequeue.LockSessionInTransaction(ctx, tx, r.db, id); err != nil {
+			return fmt.Errorf("lock queue session %s: %w", id, err)
+		}
+	}
 	result, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM task_sessions WHERE id = ?`), id)
 	if err != nil {
 		return err
@@ -2883,6 +2907,11 @@ func (r *Repository) DeleteTaskSession(ctx context.Context, id string) error {
 		// always has queued_messages; treat a missing table as already-purged.
 		if !db.IsMissingTableError(err) {
 			return fmt.Errorf("purge queued messages for session %s: %w", id, err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM pending_moves WHERE session_id = ?`), id); err != nil {
+		if !db.IsMissingTableError(err) {
+			return fmt.Errorf("purge pending move for session %s: %w", id, err)
 		}
 	}
 	return tx.Commit()

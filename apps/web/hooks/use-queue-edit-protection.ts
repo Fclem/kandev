@@ -23,11 +23,13 @@ type ActiveEdit = {
 const EDIT_RENEW_INTERVAL_MS = 20_000;
 
 /** Acquires a target-bound server lease before activating a queue editor. */
+// eslint-disable-next-line max-lines-per-function -- coordinates the full lease lifecycle.
 export function useQueueEditProtection({ sessionId, entries }: QueueEditProtectionArgs) {
   const { t } = useTranslation();
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editLease, setEditLease] = useState<QueueEditLease | null>(null);
   const activeEditRef = useRef<ActiveEdit | null>(null);
+  const acquiringEditRef = useRef<{ sessionId: string; entryId: string } | null>(null);
   const mountedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
@@ -40,7 +42,11 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
   }, []);
   const beginEdit = useCallback(
     async (entryId: string): Promise<boolean> => {
-      if (!sessionId || editingEntryId || activeEditRef.current) return false;
+      if (!sessionId || editingEntryId || activeEditRef.current || acquiringEditRef.current) {
+        return false;
+      }
+      const acquisition = { sessionId, entryId };
+      acquiringEditRef.current = acquisition;
       try {
         const lease = await beginQueuedMessageEdit(sessionId, entryId);
         if (!mountedRef.current || sessionIdRef.current !== sessionId) {
@@ -55,6 +61,8 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
         console.error("Failed to acquire queued message edit lease:", err);
         toast.error(t("chat:failedToSetQueueAutoRun"));
         return false;
+      } finally {
+        if (acquiringEditRef.current === acquisition) acquiringEditRef.current = null;
       }
     },
     [editingEntryId, sessionId, t],

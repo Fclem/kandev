@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -134,6 +135,58 @@ func TestDeleteTaskSessionPurgesQueuedMessages(t *testing.T) {
 	}
 	if got, err := queue.CountPendingByTask(ctx, "task-session-queue-purge"); err != nil || got != 1 {
 		t.Fatalf("pending after session delete = %d err=%v, want 1 (kept session)", got, err)
+	}
+}
+
+func TestDeleteTaskSessionPurgesPendingMove(t *testing.T) {
+	repo := newRepoForArchiveTests(t, "task-session-pending-move")
+	ctx := context.Background()
+	seedLiveSessionForQueue(t, repo, "session-drop", "task-session-pending-move")
+
+	mqRepo, err := messagequeue.NewSQLiteRepository(repo.db, repo.db)
+	if err != nil {
+		t.Fatalf("NewSQLiteRepository: %v", err)
+	}
+	if err := mqRepo.SetPendingMove(ctx, "session-drop", &messagequeue.PendingMove{
+		TaskID: "task-session-pending-move",
+	}); err != nil {
+		t.Fatalf("SetPendingMove: %v", err)
+	}
+
+	if err := repo.DeleteTaskSession(ctx, "session-drop"); err != nil {
+		t.Fatalf("DeleteTaskSession: %v", err)
+	}
+	move, err := mqRepo.GetPendingMove(ctx, "session-drop")
+	if err != nil {
+		t.Fatalf("GetPendingMove: %v", err)
+	}
+	if move != nil {
+		t.Fatalf("pending move after session delete = %#v, want nil", move)
+	}
+
+	err = mqRepo.Insert(ctx, &messagequeue.QueuedMessage{
+		SessionID: "session-drop",
+		TaskID:    "task-session-pending-move",
+		Content:   "must reject deleted session",
+		QueuedBy:  "user",
+	}, 0)
+	if !errors.Is(err, messagequeue.ErrTaskInactive) {
+		t.Fatalf("queue admission after session delete error = %v, want ErrTaskInactive", err)
+	}
+	if err := mqRepo.SetPendingMove(ctx, "session-drop", &messagequeue.PendingMove{
+		TaskID: "task-session-pending-move",
+	}); !errors.Is(err, messagequeue.ErrTaskInactive) {
+		t.Fatalf("pending move after session delete error = %v, want ErrTaskInactive", err)
+	}
+	err = mqRepo.ReplaceSession(ctx, "session-drop", []messagequeue.QueuedMessage{{
+		ID:        "restored-after-delete",
+		SessionID: "session-drop",
+		TaskID:    "task-session-pending-move",
+		Content:   "must not restore",
+		QueuedBy:  "user",
+	}}, nil)
+	if !errors.Is(err, messagequeue.ErrTaskInactive) {
+		t.Fatalf("session restore after delete error = %v, want ErrTaskInactive", err)
 	}
 }
 

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- queue ghost behavior is covered in one focused suite. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueuedGhostMessage, canMergeEntry, canMergeWithAbove } from "./queued-ghost-message";
@@ -453,6 +454,26 @@ describe("QueuedGhostMessage entity references", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith("reference removed", []));
+  });
+
+  it("allows clearing text while retaining attachments", async () => {
+    const attachments = [{ type: "resource", data: "ZmlsZQ==", mime_type: "text/plain" }];
+    const onSave = vi.fn(async () => {});
+
+    renderWithProviders(
+      <QueuedGhostMessage
+        entry={entry({ attachments })}
+        canEdit
+        onSave={onSave}
+        onRemove={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle(EDIT_TITLE));
+    fireEvent.change(screen.getByTestId("queue-edit-textarea"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith("", [], attachments));
   });
 });
 

@@ -37,6 +37,9 @@ function entry(): QueuedMessage {
 
 beforeEach(() => {
   vi.mocked(toast.error).mockReset();
+  vi.mocked(beginQueuedMessageEdit).mockClear();
+  vi.mocked(endQueuedMessageEdit).mockClear();
+  vi.mocked(renewQueuedMessageEdit).mockClear();
   vi.mocked(beginQueuedMessageEdit).mockResolvedValue({
     session_id: SESSION_A,
     entry_id: ENTRY_ID,
@@ -77,6 +80,42 @@ describe("useQueueEditProtection", () => {
         target_revision: 0,
       }),
     );
+  });
+});
+
+it("allows only one lease acquisition while a begin request is pending", async () => {
+  let resolveBegin!: (lease: QueueEditLease) => void;
+  const pendingBegin = new Promise<QueueEditLease>((resolve) => {
+    resolveBegin = resolve;
+  });
+  vi.mocked(beginQueuedMessageEdit).mockReturnValueOnce(pendingBegin);
+  const { result } = renderHook(() =>
+    useQueueEditProtection({
+      sessionId: SESSION_A,
+      entries: [entry()],
+    }),
+  );
+
+  let firstEdit!: Promise<boolean>;
+  act(() => {
+    firstEdit = result.current.beginEdit(ENTRY_ID);
+  });
+  let secondEdit!: Promise<boolean>;
+  act(() => {
+    secondEdit = result.current.beginEdit("entry-2");
+  });
+
+  await expect(secondEdit).resolves.toBe(false);
+  expect(beginQueuedMessageEdit).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    resolveBegin({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-pending",
+      target_revision: 0,
+    });
+    await expect(firstEdit).resolves.toBe(true);
   });
 });
 

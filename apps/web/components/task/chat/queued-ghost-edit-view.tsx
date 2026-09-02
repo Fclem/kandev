@@ -61,7 +61,7 @@ export function QueuedGhostEditView({
           size="sm"
           variant="default"
           onClick={onSave}
-          disabled={saving || !value.trim()}
+          disabled={saving || (!value.trim() && attachments.length === 0)}
           className="h-7 cursor-pointer [@media(pointer:coarse)]:h-11"
         >
           <IconCheck className="mr-1 h-3.5 w-3.5" />

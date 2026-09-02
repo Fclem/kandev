@@ -484,7 +484,8 @@ function useQueuedGhostSave({
 }: QueuedGhostSaveArgs) {
   return useCallback(async () => {
     const trimmed = value.trim();
-    if (!trimmed || trimmed === entryContent) {
+    const hasAttachments = (attachments?.length ?? 0) > 0;
+    if ((!trimmed && !hasAttachments) || trimmed === entryContent) {
       setEditing(false);
       await onEditComplete?.();
       return;

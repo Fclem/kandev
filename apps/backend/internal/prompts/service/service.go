@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	ErrPromptNotFound      = errors.New("prompt not found")
-	ErrInvalidPrompt       = errors.New("invalid prompt")
-	ErrPromptAlreadyExists = errors.New("prompt with this name already exists")
+	ErrPromptNotFound       = errors.New("prompt not found")
+	ErrInvalidPrompt        = errors.New("invalid prompt")
+	ErrPromptAlreadyExists  = errors.New("prompt with this name already exists")
+	ErrPromptReferenceLimit = errors.New("prompt reference limit exceeded")
 )
 
 type Service struct {
@@ -197,14 +198,16 @@ func (s *Service) ResolvePromptReferences(ctx context.Context, content string) (
 		return len(names[i]) > len(names[j])
 	})
 	if len(names) > maxPromptReferenceNames {
-		names = names[:maxPromptReferenceNames]
+		return nil, ErrPromptReferenceLimit
 	}
 	expansions := make([]PromptReferenceExpansion, 0)
-	collectPromptReferences(content, byName, names, map[string]bool{}, map[string]bool{}, &expansions, 0)
+	if err := collectPromptReferences(content, byName, names, map[string]bool{}, map[string]bool{}, &expansions, 0); err != nil {
+		return nil, err
+	}
 	return expansions, nil
 }
 
-func collectPromptReferences(content string, byName map[string]*models.Prompt, names []string, stack, seen map[string]bool, expansions *[]PromptReferenceExpansion, depth int) {
+func collectPromptReferences(content string, byName map[string]*models.Prompt, names []string, stack, seen map[string]bool, expansions *[]PromptReferenceExpansion, depth int) error {
 	for index := 0; index < len(content); {
 		if content[index] != '@' || !isPromptReferenceStart(content, index) {
 			index++
@@ -217,23 +220,26 @@ func collectPromptReferences(content string, byName map[string]*models.Prompt, n
 		}
 		if !seen[prompt.Name] {
 			if len(*expansions) >= maxPromptReferenceExpansions {
-				return
+				return ErrPromptReferenceLimit
 			}
 			expansionBytes := 0
 			for _, expansion := range *expansions {
 				expansionBytes += len(expansion.Name) + len(expansion.Content)
 			}
 			if expansionBytes+len(prompt.Name)+len(prompt.Content) > maxPromptExpansionBytes {
-				return
+				return ErrPromptReferenceLimit
 			}
 			seen[prompt.Name] = true
 			*expansions = append(*expansions, PromptReferenceExpansion{Name: prompt.Name, Content: prompt.Content})
 			stack[prompt.Name] = true
-			collectPromptReferences(prompt.Content, byName, names, stack, seen, expansions, depth+1)
+			if err := collectPromptReferences(prompt.Content, byName, names, stack, seen, expansions, depth+1); err != nil {
+				return err
+			}
 			delete(stack, prompt.Name)
 		}
 		index = referenceEnd
 	}
+	return nil
 }
 
 func matchPromptReference(content string, index int, byName map[string]*models.Prompt, names []string) (*models.Prompt, int, bool) {

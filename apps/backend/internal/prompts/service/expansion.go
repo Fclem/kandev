@@ -145,5 +145,11 @@ func FormatPromptReferenceExpansions(expansions []PromptReferenceExpansion) stri
 // sanitizePromptExpansionSystemText strips any embedded sysprompt.TagEnd from
 // a value before it is written into a <kandev-system>-wrapped block.
 func sanitizePromptExpansionSystemText(value string) string {
-	return strings.ReplaceAll(value, sysprompt.TagEnd, "")
+	for {
+		cleaned := strings.ReplaceAll(value, sysprompt.TagEnd, "")
+		if cleaned == value {
+			return value
+		}
+		value = cleaned
+	}
 }

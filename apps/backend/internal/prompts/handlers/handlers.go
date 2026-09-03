@@ -45,6 +45,7 @@ func (h *Handlers) httpListPrompts(c *gin.Context) {
 }
 
 func (h *Handlers) httpCreatePrompt(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	var req dto.CreatePromptRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
@@ -67,6 +68,7 @@ func (h *Handlers) httpCreatePrompt(c *gin.Context) {
 }
 
 func (h *Handlers) httpUpdatePrompt(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	var req dto.UpdatePromptRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})

@@ -28,10 +28,23 @@ type PromptReferenceExpansion struct {
 	Content string
 }
 
-const maxPromptReferenceDepth = 8
+const (
+	maxPromptReferenceDepth      = 8
+	maxPromptNameBytes           = 512
+	maxPromptContentBytes        = 1 << 20
+	maxPromptReferenceNames      = 2000
+	maxPromptReferenceExpansions = 128
+	maxPromptExpansionBytes      = 4 << 20
+)
 
 func NewService(repo promptstore.Repository) *Service {
 	return &Service{repo: repo}
+}
+func validPromptFields(name, content string) bool {
+	return name != "" &&
+		len(name) <= maxPromptNameBytes &&
+		content != "" &&
+		len(content) <= maxPromptContentBytes
 }
 
 func (s *Service) ListPrompts(ctx context.Context) ([]*models.Prompt, error) {
@@ -59,7 +72,7 @@ func (s *Service) GetPromptByName(ctx context.Context, name string) (*models.Pro
 func (s *Service) CreatePrompt(ctx context.Context, name, content string) (*models.Prompt, error) {
 	name = strings.TrimSpace(name)
 	content = strings.TrimSpace(content)
-	if name == "" || content == "" {
+	if !validPromptFields(name, content) {
 		return nil, ErrInvalidPrompt
 	}
 	if err := s.assertNameAvailable(ctx, name, ""); err != nil {
@@ -111,7 +124,7 @@ func (s *Service) UpdatePrompt(ctx context.Context, promptID string, name *strin
 	}
 	if name != nil {
 		trimmed := strings.TrimSpace(*name)
-		if trimmed == "" {
+		if trimmed == "" || len(trimmed) > maxPromptNameBytes {
 			return nil, ErrInvalidPrompt
 		}
 		if trimmed != prompt.Name {
@@ -123,7 +136,7 @@ func (s *Service) UpdatePrompt(ctx context.Context, promptID string, name *strin
 	}
 	if content != nil {
 		trimmed := strings.TrimSpace(*content)
-		if trimmed == "" {
+		if trimmed == "" || len(trimmed) > maxPromptContentBytes {
 			return nil, ErrInvalidPrompt
 		}
 		prompt.Content = trimmed
@@ -159,6 +172,9 @@ func (s *Service) ResolvePromptReferences(ctx context.Context, content string) (
 	if !strings.Contains(content, "@") {
 		return nil, nil
 	}
+	if len(content) > maxPromptContentBytes {
+		return nil, ErrInvalidPrompt
+	}
 	prompts, err := s.repo.ListPrompts(ctx)
 	if err != nil {
 		return nil, err
@@ -166,7 +182,9 @@ func (s *Service) ResolvePromptReferences(ctx context.Context, content string) (
 	byName := make(map[string]*models.Prompt, len(prompts))
 	names := make([]string, 0, len(prompts))
 	for _, prompt := range prompts {
-		if prompt == nil || prompt.Name == "" {
+		if prompt == nil || prompt.Name == "" ||
+			len(prompt.Name) > maxPromptNameBytes ||
+			len(prompt.Content) > maxPromptContentBytes {
 			continue
 		}
 		byName[prompt.Name] = prompt
@@ -178,6 +196,9 @@ func (s *Service) ResolvePromptReferences(ctx context.Context, content string) (
 		}
 		return len(names[i]) > len(names[j])
 	})
+	if len(names) > maxPromptReferenceNames {
+		names = names[:maxPromptReferenceNames]
+	}
 	expansions := make([]PromptReferenceExpansion, 0)
 	collectPromptReferences(content, byName, names, map[string]bool{}, map[string]bool{}, &expansions, 0)
 	return expansions, nil
@@ -195,6 +216,16 @@ func collectPromptReferences(content string, byName map[string]*models.Prompt, n
 			continue
 		}
 		if !seen[prompt.Name] {
+			if len(*expansions) >= maxPromptReferenceExpansions {
+				return
+			}
+			expansionBytes := 0
+			for _, expansion := range *expansions {
+				expansionBytes += len(expansion.Name) + len(expansion.Content)
+			}
+			if expansionBytes+len(prompt.Name)+len(prompt.Content) > maxPromptExpansionBytes {
+				return
+			}
 			seen[prompt.Name] = true
 			*expansions = append(*expansions, PromptReferenceExpansion{Name: prompt.Name, Content: prompt.Content})
 			stack[prompt.Name] = true

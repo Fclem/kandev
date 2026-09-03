@@ -163,7 +163,8 @@ function MarkdownFileAnchor({
   openFile: (path: string) => void;
 }) {
   const filePath = resolveMarkdownFileHref(href, worktreePath);
-  const isInternal = !!filePath || href?.startsWith("/") || href?.startsWith("#");
+  const isInternal =
+    !!filePath || (href?.startsWith("/") && !href.startsWith("//")) || href?.startsWith("#");
 
   const handleClick = filePath
     ? (event: MouseEvent<HTMLAnchorElement>) => {

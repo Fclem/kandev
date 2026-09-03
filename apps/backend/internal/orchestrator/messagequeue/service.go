@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1211,14 +1212,57 @@ func copyMessageMetadata(metadata map[string]interface{}, extraCapacity int) map
 }
 
 func copyMessageMetadataValue(value interface{}) interface{} {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		return copyMessageMetadata(typed, 0)
-	case []interface{}:
-		out := make([]interface{}, len(typed))
-		for i, item := range typed {
-			out[i] = copyMessageMetadataValue(item)
+	cloned := copyMessageMetadataReflect(reflect.ValueOf(value))
+	if !cloned.IsValid() {
+		return nil
+	}
+	return cloned.Interface()
+}
+
+func copyMessageMetadataReflect(value reflect.Value) reflect.Value {
+	if !value.IsValid() {
+		return value
+	}
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
 		}
+		cloned := copyMessageMetadataReflect(value.Elem())
+		out := reflect.New(value.Type()).Elem()
+		out.Set(cloned)
+		return out
+	case reflect.Map:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		out := reflect.MakeMapWithSize(value.Type(), value.Len())
+		iter := value.MapRange()
+		for iter.Next() {
+			out.SetMapIndex(iter.Key(), copyMessageMetadataReflect(iter.Value()))
+		}
+		return out
+	case reflect.Slice:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		out := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		for i := range value.Len() {
+			out.Index(i).Set(copyMessageMetadataReflect(value.Index(i)))
+		}
+		return out
+	case reflect.Array:
+		out := reflect.New(value.Type()).Elem()
+		for i := range value.Len() {
+			out.Index(i).Set(copyMessageMetadataReflect(value.Index(i)))
+		}
+		return out
+	case reflect.Pointer:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		out := reflect.New(value.Type().Elem())
+		out.Elem().Set(copyMessageMetadataReflect(value.Elem()))
 		return out
 	default:
 		return value
@@ -1733,14 +1777,21 @@ func (s *Service) SnapshotSession(ctx context.Context, sessionID string) ([]Queu
 	var entries []QueuedMessage
 	var move *PendingMove
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		var err error
-		entries, err = s.repo.ListBySession(admittedCtx, sessionID)
+		rawEntries, err := s.repo.ListBySession(admittedCtx, sessionID)
 		if err != nil {
 			return fmt.Errorf("snapshot queued messages: %w", err)
+		}
+		entries = make([]QueuedMessage, 0, len(rawEntries))
+		for i := range rawEntries {
+			entries = append(entries, *cloneQueuedMessage(&rawEntries[i]))
 		}
 		move, err = s.repo.GetPendingMove(admittedCtx, sessionID)
 		if err != nil {
 			return fmt.Errorf("snapshot pending move: %w", err)
+		}
+		if move != nil {
+			moveCopy := *move
+			move = &moveCopy
 		}
 		return nil
 	})

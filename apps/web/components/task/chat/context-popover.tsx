@@ -76,6 +76,7 @@ function FileResultsList({
             <Checkbox
               checked={isFileSelected(filePath)}
               onCheckedChange={() => onToggle(filePath)}
+              onClick={(event) => event.stopPropagation()}
               className="h-3.5 w-3.5"
             />
             {isDir ? (
@@ -135,6 +136,7 @@ function PromptsSection({ query, prompts, contextFiles, onToggleFile }: PromptsS
               onCheckedChange={() =>
                 onToggleFile({ path: promptPath, name: prompt.name, pinned: true })
               }
+              onClick={(event) => event.stopPropagation()}
               className="h-3.5 w-3.5"
             />
             <IconAt className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -239,6 +241,7 @@ function ContextPopoverList({
           <Checkbox
             checked={planContextEnabled}
             onCheckedChange={() => onToggleFile(planContextFile())}
+            onClick={(event) => event.stopPropagation()}
             className="h-3.5 w-3.5"
           />
           <IconListCheck className="h-4 w-4 text-muted-foreground shrink-0" />

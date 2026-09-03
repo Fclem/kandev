@@ -397,7 +397,11 @@ function emptyEntriesSpec({
   }
   if (messagesLoading) {
     return {
-      content: <div className="p-4 text-sm text-muted-foreground">{loadingText}</div>,
+      content: (
+        <div role="status" aria-live="polite" className="p-4 text-sm text-muted-foreground">
+          {loadingText}
+        </div>
+      ),
       interactive: false,
     };
   }

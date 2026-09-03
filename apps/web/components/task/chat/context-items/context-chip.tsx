@@ -56,6 +56,7 @@ type ContextChipProps = {
   onRemove?: () => void;
 };
 
+// eslint-disable-next-line max-lines-per-function -- chip variants coordinate desktop hover and mobile drawer behavior.
 export const ContextChip = memo(function ContextChip({
   kind,
   label,
@@ -124,32 +125,45 @@ export const ContextChip = memo(function ContextChip({
       <span className="truncate max-w-[120px]">{label}</span>
     </>
   );
+  let labelElement: ReactNode;
+  if (preview) {
+    labelElement = (
+      <ControlledHoverChip preview={preview} label={label} onClick={onClick}>
+        {(open, usesTouchDrawer) => (
+          <button
+            type="button"
+            onClick={usesTouchDrawer ? undefined : onClick}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-label={label}
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-1 text-left"
+          >
+            {labelContent}
+          </button>
+        )}
+      </ControlledHoverChip>
+    );
+  } else if (onClick) {
+    labelElement = (
+      <button
+        type="button"
+        className="flex min-h-11 min-w-0 flex-1 items-center gap-1 text-left"
+        onClick={onClick}
+      >
+        {labelContent}
+      </button>
+    );
+  } else {
+    labelElement = labelContent;
+  }
   const chip = (
     <div
       data-testid={dataTestId}
       data-path={dataPath}
       data-is-directory={dataIsDirectory ? "true" : "false"}
       className={`group flex items-center gap-1 px-2 py-0.5 text-xs text-muted-foreground bg-muted/50 rounded border border-border/50 ${onClick ? "cursor-pointer hover:bg-muted/80" : ""}`}
-      onClick={preview ? undefined : onClick}
     >
-      {preview ? (
-        <ControlledHoverChip preview={preview} label={label} onClick={onClick}>
-          {(open, usesTouchDrawer) => (
-            <button
-              type="button"
-              onClick={usesTouchDrawer ? undefined : onClick}
-              aria-haspopup="dialog"
-              aria-expanded={open}
-              aria-label={label}
-              className="flex min-h-11 min-w-0 flex-1 items-center gap-1 text-left"
-            >
-              {labelContent}
-            </button>
-          )}
-        </ControlledHoverChip>
-      ) : (
-        labelContent
-      )}
+      {labelElement}
       {controls}
     </div>
   );

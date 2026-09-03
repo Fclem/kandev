@@ -451,7 +451,7 @@ func (s *Service) editLeaseBlocksEntryLocked(sessionID, entryID string) bool {
 	return s.editLeases[key] != nil
 }
 
-func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excludedEntryID string) (bool, error) {
+func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excludedEntryID, queuedBy string) (bool, error) {
 	s.editLeaseMu.Lock()
 	defer s.editLeaseMu.Unlock()
 	entries, err := s.repo.ListBySession(ctx, sessionID)
@@ -473,7 +473,7 @@ func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excl
 	}
 	key := s.editLeaseKey(sessionID, tail.ID)
 	s.expireEditLeaseLocked(key, time.Now().UTC())
-	return s.editLeases[key] != nil, nil
+	return s.editLeases[key] != nil && tail.QueuedBy == queuedBy, nil
 }
 
 func (s *Service) editLeaseBlocksMergeLocked(ctx context.Context, sessionID, sourceID string) (bool, error) {
@@ -584,7 +584,7 @@ func (s *Service) queueMessageWithMetadataAdmission(ctx context.Context, session
 					QueuedAt:    time.Now().UTC(),
 					QueuedBy:    userID,
 				}
-				blocked, leaseErr := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "")
+				blocked, leaseErr := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "", candidate.QueuedBy)
 				if leaseErr != nil {
 					return leaseErr
 				}
@@ -661,7 +661,7 @@ func (s *Service) finalizeAutoMerge(ctx context.Context, source *QueuedMessage, 
 	if !enabled {
 		return source
 	}
-	blocked, err := s.editLeaseBlocksTailLocked(ctx, source.SessionID, source.ID)
+	blocked, err := s.editLeaseBlocksTailLocked(ctx, source.SessionID, source.ID, source.QueuedBy)
 	if err != nil {
 		s.logger.Error("automatic queue merge lease check failed; preserving separate admission",
 			zap.String("session_id", source.SessionID),
@@ -1082,16 +1082,35 @@ func (s *Service) ReserveQueuedWithAutoRun(ctx context.Context, sessionID string
 		if err != nil {
 			return err
 		}
+		// Capture the lifecycle generation before reserving. A durable
+		// reservation changes queue visibility immediately; a failed read after
+		// that mutation would strand the row as in-flight with no message to
+		// acknowledge or restore.
+		headEntries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		var headTaskID string
+		for i := range headEntries {
+			if !headEntries[i].IsReservedInFlight() {
+				headTaskID = headEntries[i].TaskID
+				break
+			}
+		}
+		var lifecycleGeneration int64
+		if headTaskID != "" {
+			lifecycleGeneration, err = s.repo.LifecycleGeneration(admittedCtx, headTaskID)
+			if err != nil {
+				return err
+			}
+		}
 		msg, _, err = s.repo.ReserveHeadIfAutoRun(admittedCtx, sessionID)
 		if err != nil || msg == nil {
 			return err
 		}
 		msg.reservationSessionGeneration = sessionGeneration
 		if msg.TaskID != "" {
-			msg.reservationLifecycleGeneration, err = s.repo.LifecycleGeneration(admittedCtx, msg.TaskID)
-			if err != nil {
-				return err
-			}
+			msg.reservationLifecycleGeneration = lifecycleGeneration
 		}
 		msg.reservationGenerationsCaptured = true
 		return nil
@@ -1182,7 +1201,7 @@ func (s *Service) AppendContent(ctx context.Context, sessionID, taskID, content,
 	var msg *QueuedMessage
 	var appended bool
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		blocked, err := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "")
+		blocked, err := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "", userID)
 		if err != nil {
 			return err
 		}

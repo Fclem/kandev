@@ -564,6 +564,7 @@ function matchMarkdownPromptMention(
   const closingMarker = marker === "[" ? "]" : marker;
   for (let closingIndex = index + 1; closingIndex < content.length; closingIndex += 1) {
     if (content[closingIndex] !== closingMarker) continue;
+    if (isEscapedMarkdownCharacter(content, closingIndex)) continue;
     const candidateContent = ` ${content.slice(index, closingIndex)} `;
     const candidate = matchPromptMention(candidateContent, 1, promptNames);
     if (candidate) {

@@ -82,7 +82,12 @@ function isIncomingPromptAtLeastAsFresh(existing: Message, incoming: Message) {
 /** Merges a prompt update without regressing its immutable creation order. */
 function mergePromptMessage(existing: Message, incoming: Message) {
   return isIncomingPromptAtLeastAsFresh(existing, incoming)
-    ? { ...existing, ...incoming, created_at: existing.created_at }
+    ? {
+        ...existing,
+        ...incoming,
+        created_at: existing.created_at,
+        prompt_index: incoming.prompt_index ?? existing.prompt_index,
+      }
     : existing;
 }
 

@@ -70,4 +70,9 @@ describe("splitMarkdownPromptMentionSegments round-two boundaries", () => {
     expect(promptValues("**@daily now**")).toEqual(["@daily"]);
     expect(promptValues("[@daily label](/url)")).toEqual(["@daily"]);
   });
+
+  it("does not close formatted aliases on escaped delimiters", () => {
+    expect(promptValues("**@daily\\*")).toEqual([]);
+    expect(promptValues("[@daily\\]")).toEqual([]);
+  });
 });

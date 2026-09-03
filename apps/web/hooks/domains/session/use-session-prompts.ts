@@ -74,6 +74,9 @@ export function useSessionPrompts(sessionId: string | null): UseSessionPromptsRe
   const generation = useAppStore((state) =>
     sessionId ? (state.messagePrompts.generationBySession?.[sessionId] ?? 0) : 0,
   );
+  const refreshGeneration = useAppStore((state) =>
+    sessionId ? (state.messagePrompts.refreshGenerationBySession?.[sessionId] ?? 0) : 0,
+  );
   const connectionStatus = useAppStore((state) => state.connection.status);
   const readinessRef = useRef<Promise<unknown> | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
@@ -119,7 +122,11 @@ export function useSessionPrompts(sessionId: string | null): UseSessionPromptsRe
       .catch(() => {
         const promptState = store.getState().messagePrompts;
         if (current && (promptState.generationBySession?.[sessionId] ?? 0) === generation) {
-          setFetchFailed(true);
+          if ((promptState.refreshGenerationBySession?.[sessionId] ?? 0) !== refreshGeneration) {
+            setRetryVersion((version) => version + 1);
+          } else {
+            setFetchFailed(true);
+          }
         }
       })
       .finally(() => {
@@ -132,7 +139,7 @@ export function useSessionPrompts(sessionId: string | null): UseSessionPromptsRe
     return () => {
       current = false;
     };
-  }, [connectionStatus, generation, retryVersion, sessionId, store]);
+  }, [connectionStatus, generation, refreshGeneration, retryVersion, sessionId, store]);
 
   return useMemo(
     () => ({

@@ -3528,10 +3528,12 @@ func (h *Handlers) restoreTaskMessageQueues(ctx context.Context, rollback taskMe
 	if queue == nil {
 		return nil
 	}
+	restoreCtx := context.WithoutCancel(ctx)
 	for sessionID, snapshot := range rollback.queues {
-		if err := h.restoreTaskMessageQueue(ctx, queue, sessionID, snapshot); err != nil {
+		if err := h.restoreTaskMessageQueue(restoreCtx, queue, sessionID, snapshot); err != nil {
 			return err
 		}
+		h.publishQueueStatusEvent(restoreCtx, sessionID, queue)
 	}
 	return nil
 }
@@ -3549,7 +3551,13 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, selectedID,
 	if queue == nil {
 		return nil
 	}
-	return queue.TransferSession(ctx, selectedID, primaryID)
+	transferCtx := context.WithoutCancel(ctx)
+	if err := queue.TransferSession(transferCtx, selectedID, primaryID); err != nil {
+		return err
+	}
+	h.publishQueueStatusEvent(transferCtx, selectedID, queue)
+	h.publishQueueStatusEvent(transferCtx, primaryID, queue)
+	return nil
 }
 
 func restoreTaskMessageSessionSnapshot(ctx context.Context, repo taskMessageSessionRollbackRepository, rollback taskMessageSessionRollback) error {

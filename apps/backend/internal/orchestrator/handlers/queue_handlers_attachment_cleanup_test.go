@@ -205,3 +205,36 @@ func (c *successorEditRaceClaimer) ReleaseMessageAttachments(context.Context, st
 	c.releaseObserved.Store(true)
 	return nil
 }
+
+type contextRecordingReleaser struct {
+	err error
+}
+
+func (r *contextRecordingReleaser) ClaimMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
+	return nil
+}
+
+func (r *contextRecordingReleaser) ReleaseMessageAttachments(ctx context.Context, _ string, _ string, _ []v1.MessageAttachment) error {
+	r.err = ctx.Err()
+	return nil
+}
+
+func TestQueueAttachmentCleanupDetachesCancelledContext(t *testing.T) {
+	handlers, _ := setupQueueHandlers(t)
+	releaser := &contextRecordingReleaser{}
+	handlers.SetAttachmentClaimer(releaser)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handlers.releaseQueuedAttachments(ctx, &messagequeue.QueuedMessage{
+		SessionID: "session",
+		TaskID:    "task",
+		Attachments: []messagequeue.MessageAttachment{{
+			AttachmentID: "attachment",
+		}},
+	})
+
+	if releaser.err != nil {
+		t.Fatalf("attachment cleanup context error = %v, want nil", releaser.err)
+	}
+}

@@ -2518,7 +2518,8 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 	}
 	if err := s.messageQueue.TransferSession(ctx, oldSessionID, newSessionID); err != nil {
 		if attachmentsTransferred {
-			if reverseErr := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(ctx, taskID, newSessionID, oldSessionID); reverseErr != nil {
+			rollbackCtx := context.WithoutCancel(ctx)
+			if reverseErr := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(rollbackCtx, taskID, newSessionID, oldSessionID); reverseErr != nil {
 				s.logger.Warn("failed to roll back session attachment transfer",
 					zap.String("task_id", taskID),
 					zap.String("old_session_id", oldSessionID),
@@ -2528,6 +2529,8 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 		}
 		return fmt.Errorf("transfer queued state: %w", err)
 	}
+	s.publishQueueStatusEvent(ctx, oldSessionID)
+	s.publishQueueStatusEvent(ctx, newSessionID)
 	return nil
 }
 

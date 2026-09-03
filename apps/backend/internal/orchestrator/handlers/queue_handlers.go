@@ -768,7 +768,7 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 	}
 	if releaseClaims != nil && previous != nil {
 		if superseded := supersededQueueAttachments(previous.Attachments, req.Attachments); len(superseded) > 0 {
-			if err := releaseClaims.ReleaseMessageAttachments(ctx, previous.TaskID, req.SessionID, queueAttachmentsToV1(superseded)); err != nil {
+			if err := releaseClaims.ReleaseMessageAttachments(context.WithoutCancel(ctx), previous.TaskID, req.SessionID, queueAttachmentsToV1(superseded)); err != nil {
 				h.logger.Warn("failed to release superseded queue attachments", zap.Error(err))
 			}
 		}
@@ -792,7 +792,7 @@ func (h *QueueHandlers) releaseQueuedAttachmentUpdateFailure(
 	if releaseClaims == nil || previous == nil || len(newlyAdded) == 0 {
 		return
 	}
-	if releaseErr := releaseClaims.ReleaseMessageAttachments(ctx, previous.TaskID, sessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
+	if releaseErr := releaseClaims.ReleaseMessageAttachments(context.WithoutCancel(ctx), previous.TaskID, sessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
 		h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
 	}
 }
@@ -863,7 +863,7 @@ func (h *QueueHandlers) queueUpdateFailure(
 	newlyAdded []messagequeue.MessageAttachment,
 ) (*ws.Message, error) {
 	if releaseClaims != nil && previous != nil {
-		if releaseErr := releaseClaims.ReleaseMessageAttachments(ctx, previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
+		if releaseErr := releaseClaims.ReleaseMessageAttachments(context.WithoutCancel(ctx), previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
 			h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
 		}
 	}
@@ -918,7 +918,8 @@ func (h *QueueHandlers) validateSubmittedReferences(
 
 // rollbackQueuedAttachmentClaim releases attachments claimed for a queue entry that failed to persist.
 func (h *QueueHandlers) rollbackQueuedAttachmentClaim(ctx context.Context, sessionID, entryID string) error {
-	if err := h.queueService.RemoveEntry(ctx, sessionID, entryID); err == nil {
+	rollbackCtx := context.WithoutCancel(ctx)
+	if err := h.queueService.RemoveEntry(rollbackCtx, sessionID, entryID); err == nil {
 		return nil
 	} else {
 		h.logger.Error("failed to remove queue entry after attachment claim failure",
@@ -928,7 +929,7 @@ func (h *QueueHandlers) rollbackQueuedAttachmentClaim(ctx context.Context, sessi
 	if !ok {
 		return errors.New("queue service cannot atomically remove a queued entry")
 	}
-	_, _, err := taker.TakeQueuedEntry(ctx, sessionID, entryID)
+	_, _, err := taker.TakeQueuedEntry(rollbackCtx, sessionID, entryID)
 	return err
 }
 
@@ -943,7 +944,7 @@ func (h *QueueHandlers) releaseQueuedAttachments(ctx context.Context, entry *mes
 	if !ok {
 		return
 	}
-	if err := releaser.ReleaseMessageAttachments(ctx, entry.TaskID, entry.SessionID, queueAttachmentsToV1(entry.Attachments)); err != nil {
+	if err := releaser.ReleaseMessageAttachments(context.WithoutCancel(ctx), entry.TaskID, entry.SessionID, queueAttachmentsToV1(entry.Attachments)); err != nil {
 		h.logger.Warn("failed to release attachments after queue entry removal", zap.Error(err))
 	}
 }

@@ -1174,7 +1174,10 @@ func (s *Service) acknowledgeLifecycleQueueEntry(
 }
 
 func (s *Service) restoreQueuedMessage(ctx context.Context, queuedMsg *messagequeue.QueuedMessage) {
-	restored, err := s.messageQueue.RestoreMessage(ctx, queuedMsg)
+	// Restoration follows a completed take and must survive cancellation of
+	// the request that initiated the dispatch.
+	restoreCtx := context.WithoutCancel(ctx)
+	restored, err := s.messageQueue.RestoreMessage(restoreCtx, queuedMsg)
 	if err != nil {
 		s.logger.Error("failed to restore queued message",
 			zap.String("session_id", queuedMsg.SessionID),
@@ -1188,7 +1191,7 @@ func (s *Service) restoreQueuedMessage(ctx context.Context, queuedMsg *messagequ
 		zap.String("task_id", restored.TaskID),
 		zap.String("queue_id", restored.ID),
 		zap.Int64("position", restored.Position))
-	s.publishQueueStatusEvent(ctx, queuedMsg.SessionID)
+	s.publishQueueStatusEvent(restoreCtx, queuedMsg.SessionID)
 }
 
 func markQueuedUserMessageRecorded(queuedMsg *messagequeue.QueuedMessage) {

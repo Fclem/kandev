@@ -351,26 +351,38 @@ func (h *QueueHandlers) wsCancelAll(ctx context.Context, msg *ws.Message) (*ws.M
 	var removedEntries []messagequeue.QueuedMessage
 	var countRemovedEntries bool
 	var err error
-	if batchCanceller, ok := h.queueService.(queueBatchCanceller); ok {
-		removedEntries, err = batchCanceller.CancelAllWithEntries(ctx, req.SessionID)
-		countRemovedEntries = true
-	} else {
-		status := h.queueService.GetStatus(ctx, req.SessionID)
-		removed, err = h.queueService.CancelAll(ctx, req.SessionID)
-		if err == nil && status != nil {
-			removedEntries = status.Entries
+	cancel := func(cancelCtx context.Context) error {
+		var err error
+		if batchCanceller, ok := h.queueService.(queueBatchCanceller); ok {
+			removedEntries, err = batchCanceller.CancelAllWithEntries(cancelCtx, req.SessionID)
+			countRemovedEntries = true
+		} else {
+			status := h.queueService.GetStatus(cancelCtx, req.SessionID)
+			removed, err = h.queueService.CancelAll(cancelCtx, req.SessionID)
+			if err == nil && status != nil {
+				removedEntries = status.Entries
+			}
 		}
+		if err != nil {
+			return err
+		}
+		for i := range removedEntries {
+			if !removedEntries[i].IsReservedInFlight() {
+				if countRemovedEntries {
+					removed++
+				}
+				h.releaseQueuedAttachments(cancelCtx, &removedEntries[i])
+			}
+		}
+		return nil
+	}
+	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
+		err = admission.WithSessionAdmission(ctx, req.SessionID, cancel)
+	} else {
+		err = cancel(ctx)
 	}
 	if err != nil {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
-	}
-	for i := range removedEntries {
-		if !removedEntries[i].IsReservedInFlight() {
-			if countRemovedEntries {
-				removed++
-			}
-			h.releaseQueuedAttachments(ctx, &removedEntries[i])
-		}
 	}
 
 	h.publishStatus(ctx, req.SessionID)
@@ -1087,13 +1099,26 @@ func (h *QueueHandlers) wsRemoveEntry(ctx context.Context, msg *ws.Message) (*ws
 
 	var entry *messagequeue.QueuedMessage
 	var err error
-	if remover, ok := h.queueService.(queueEntryRemover); ok {
-		entry, err = remover.RemoveEntryWithEntry(ctx, req.SessionID, req.EntryID)
-	} else {
-		entry, err = h.queueService.GetEntry(ctx, req.SessionID, req.EntryID)
-		if err == nil {
-			err = h.queueService.RemoveEntry(ctx, req.SessionID, req.EntryID)
+	remove := func(removeCtx context.Context) error {
+		var err error
+		if remover, ok := h.queueService.(queueEntryRemover); ok {
+			entry, err = remover.RemoveEntryWithEntry(removeCtx, req.SessionID, req.EntryID)
+		} else {
+			entry, err = h.queueService.GetEntry(removeCtx, req.SessionID, req.EntryID)
+			if err == nil {
+				err = h.queueService.RemoveEntry(removeCtx, req.SessionID, req.EntryID)
+			}
 		}
+		if err != nil {
+			return err
+		}
+		h.releaseQueuedAttachments(removeCtx, entry)
+		return nil
+	}
+	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
+		err = admission.WithSessionAdmission(ctx, req.SessionID, remove)
+	} else {
+		err = remove(ctx)
 	}
 	if err != nil {
 		if errors.Is(err, messagequeue.ErrEntryNotFound) {
@@ -1101,8 +1126,6 @@ func (h *QueueHandlers) wsRemoveEntry(ctx context.Context, msg *ws.Message) (*ws
 		}
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
 	}
-	h.releaseQueuedAttachments(ctx, entry)
-
 	h.publishStatus(ctx, req.SessionID)
 	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{fieldEntryID: req.EntryID})
 }

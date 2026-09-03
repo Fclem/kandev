@@ -2509,25 +2509,38 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 	if s.messageQueue == nil {
 		return nil
 	}
-	attachmentsTransferred := false
-	if s.sessionAttachmentTransferer != nil {
-		if err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(ctx, taskID, oldSessionID, newSessionID); err != nil {
-			return fmt.Errorf("transfer session attachments: %w", err)
-		}
-		attachmentsTransferred = true
-	}
-	if err := s.messageQueue.TransferSession(ctx, oldSessionID, newSessionID); err != nil {
-		if attachmentsTransferred {
-			rollbackCtx := context.WithoutCancel(ctx)
-			if reverseErr := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(rollbackCtx, taskID, newSessionID, oldSessionID); reverseErr != nil {
-				s.logger.Warn("failed to roll back session attachment transfer",
-					zap.String("task_id", taskID),
-					zap.String("old_session_id", oldSessionID),
-					zap.String("new_session_id", newSessionID),
-					zap.Error(reverseErr))
+	transferErr := s.messageQueue.TransferSessionWithPreparation(
+		ctx,
+		oldSessionID,
+		newSessionID,
+		func(admittedCtx context.Context) error {
+			if s.sessionAttachmentTransferer == nil {
+				return nil
 			}
-		}
-		return fmt.Errorf("transfer queued state: %w", err)
+			if err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
+				admittedCtx,
+				taskID,
+				oldSessionID,
+				newSessionID,
+			); err != nil {
+				return fmt.Errorf("transfer session attachments: %w", err)
+			}
+			return nil
+		},
+		func(rollbackCtx context.Context) error {
+			if s.sessionAttachmentTransferer == nil {
+				return nil
+			}
+			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
+				rollbackCtx,
+				taskID,
+				newSessionID,
+				oldSessionID,
+			)
+		},
+	)
+	if transferErr != nil {
+		return fmt.Errorf("transfer queued state: %w", transferErr)
 	}
 	s.publishQueueStatusEvent(ctx, oldSessionID)
 	s.publishQueueStatusEvent(ctx, newSessionID)

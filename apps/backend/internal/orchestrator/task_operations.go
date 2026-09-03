@@ -3625,24 +3625,37 @@ func (s *Service) purgeDeletedSessionQueue(ctx context.Context, taskID, sessionI
 // compositions without the callback retain the direct queue purge fallback.
 func (s *Service) cancelDeletedSessionQueue(ctx context.Context, taskID, sessionID string) {
 	cleanupCtx := context.WithoutCancel(ctx)
-	if s.sessionAttachmentCleaner != nil {
-		if err := s.sessionAttachmentCleaner.DeleteSessionMessageAttachments(cleanupCtx, taskID, sessionID); err != nil {
-			s.logger.Warn("failed to remove session attachment bytes after session delete",
+	if s.messageQueue == nil {
+		if s.sessionAttachmentCleaner != nil {
+			if err := s.sessionAttachmentCleaner.DeleteSessionMessageAttachments(cleanupCtx, taskID, sessionID); err != nil {
+				s.logger.Warn("failed to remove session attachment bytes after session delete",
+					zap.String("session_id", sessionID),
+					zap.String("task_id", taskID),
+					zap.Error(err))
+			}
+		}
+		return
+	}
+	_ = s.messageQueue.WithSessionAdmission(cleanupCtx, sessionID, func(admittedCtx context.Context) error {
+		if s.sessionAttachmentCleaner != nil {
+			if err := s.sessionAttachmentCleaner.DeleteSessionMessageAttachments(admittedCtx, taskID, sessionID); err != nil {
+				s.logger.Warn("failed to remove session attachment bytes after session delete",
+					zap.String("session_id", sessionID),
+					zap.String("task_id", taskID),
+					zap.Error(err))
+			}
+		}
+		if s.sessionQueuePurgeNotifierRegistered {
+			return nil
+		}
+		if _, err := s.messageQueue.PurgeSession(admittedCtx, sessionID); err != nil {
+			s.logger.Warn("failed to purge queued prompts after session delete",
 				zap.String("session_id", sessionID),
 				zap.String("task_id", taskID),
 				zap.Error(err))
 		}
-	}
-	if s.messageQueue == nil || s.sessionQueuePurgeNotifierRegistered {
-		return
-	}
-	if _, err := s.messageQueue.PurgeSession(cleanupCtx, sessionID); err != nil {
-		s.logger.Warn("failed to purge queued prompts after session delete",
-			zap.String("session_id", sessionID),
-			zap.String("task_id", taskID),
-			zap.Error(err))
-	}
-	s.publishTaskQueueStatusEvent(cleanupCtx, taskID, sessionID)
+		return nil
+	})
 }
 
 // quiesceSessionExecutionBeforeDeletion stops the in-memory lifecycle

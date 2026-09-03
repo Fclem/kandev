@@ -4,12 +4,75 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	"github.com/kandev/kandev/internal/task/models"
 )
+
+type blockingSessionAttachmentCleaner struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (c *blockingSessionAttachmentCleaner) DeleteSessionMessageAttachments(context.Context, string, string) error {
+	close(c.started)
+	<-c.release
+	return nil
+}
+
+func TestDeletedSessionCleanupSerializesAttachmentCleanupWithQueueMutation(t *testing.T) {
+	ctx := context.Background()
+	queue := messagequeue.NewServiceMemory(testLogger())
+	entry, err := queue.QueueMessage(ctx, "session-delete-race", "task-delete-race", "queued", "", messagequeue.QueuedByUser, false, nil)
+	if err != nil {
+		t.Fatalf("queue message: %v", err)
+	}
+	cleaner := &blockingSessionAttachmentCleaner{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	svc := &Service{
+		messageQueue:             queue,
+		sessionAttachmentCleaner: cleaner,
+		logger:                   testLogger(),
+	}
+
+	cleanupDone := make(chan struct{})
+	go func() {
+		svc.cancelDeletedSessionQueue(ctx, entry.TaskID, entry.SessionID)
+		close(cleanupDone)
+	}()
+	select {
+	case <-cleaner.started:
+	case <-time.After(time.Second):
+		t.Fatal("attachment cleanup did not start")
+	}
+
+	mutationDone := make(chan error, 1)
+	go func() {
+		mutationDone <- queue.UpdateMessageWithMetadata(
+			ctx, entry.SessionID, entry.ID, "changed", nil, nil, messagequeue.QueuedByUser,
+		)
+	}()
+	select {
+	case err := <-mutationDone:
+		t.Fatalf("queue mutation completed during attachment cleanup: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(cleaner.release)
+
+	select {
+	case <-cleanupDone:
+	case <-time.After(time.Second):
+		t.Fatal("session cleanup did not complete")
+	}
+	if err := <-mutationDone; err == nil {
+		t.Fatal("queue mutation unexpectedly succeeded after cleanup")
+	}
+}
 
 func TestDeleteSessionPublishesOneQueueStatusNotification(t *testing.T) {
 	ctx := context.Background()

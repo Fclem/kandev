@@ -769,11 +769,7 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 		return h.queueUpdateFailure(ctx, msg, req, updateErr)
 	}
 	if releaseClaims != nil && previous != nil {
-		if superseded := supersededQueueAttachments(previous.Attachments, req.Attachments); len(superseded) > 0 {
-			if err := releaseClaims.ReleaseMessageAttachments(context.WithoutCancel(ctx), previous.TaskID, req.SessionID, queueAttachmentsToV1(superseded)); err != nil {
-				h.logger.Warn("failed to release superseded queue attachments", zap.Error(err))
-			}
-		}
+		h.releaseSupersededQueueAttachments(ctx, req, previous, releaseClaims)
 	}
 	response := map[string]interface{}{fieldEntryID: req.EntryID}
 	if req.OperationID != "" {
@@ -797,6 +793,48 @@ func (h *QueueHandlers) releaseQueuedAttachmentUpdateFailure(
 	if releaseErr := releaseClaims.ReleaseMessageAttachments(context.WithoutCancel(ctx), previous.TaskID, sessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
 		h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
 	}
+}
+
+// releaseSupersededQueueAttachments serializes attachment cleanup with later
+// edits and recomputes the retained set from the current queue row. A second
+// edit may reclaim an attachment after this update commits but before its
+// cleanup runs; releasing from the stale request snapshot would then destroy
+// a claim still referenced by the row.
+func (h *QueueHandlers) releaseSupersededQueueAttachments(
+	ctx context.Context,
+	req wsUpdateMessageRequest,
+	previous *messagequeue.QueuedMessage,
+	releaser QueueAttachmentReleaser,
+) {
+	release := func(admittedCtx context.Context) error {
+		current, err := h.queueService.GetEntry(admittedCtx, req.SessionID, req.EntryID)
+		if err != nil {
+			if !errors.Is(err, messagequeue.ErrEntryNotFound) {
+				h.logger.Warn("failed to reload queue entry before attachment cleanup", zap.Error(err))
+			}
+			return nil
+		}
+		superseded := supersededQueueAttachments(previous.Attachments, current.Attachments)
+		if len(superseded) == 0 {
+			return nil
+		}
+		if err := releaser.ReleaseMessageAttachments(
+			context.WithoutCancel(admittedCtx),
+			previous.TaskID,
+			req.SessionID,
+			queueAttachmentsToV1(superseded),
+		); err != nil {
+			h.logger.Warn("failed to release superseded queue attachments", zap.Error(err))
+		}
+		return nil
+	}
+	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
+		if err := admission.WithSessionAdmission(context.WithoutCancel(ctx), req.SessionID, release); err != nil {
+			h.logger.Warn("failed to serialize superseded queue attachment cleanup", zap.Error(err))
+		}
+		return
+	}
+	_ = release(context.WithoutCancel(ctx))
 }
 
 func newlyAddedQueueAttachments(previous, replacement []messagequeue.MessageAttachment) []messagequeue.MessageAttachment {

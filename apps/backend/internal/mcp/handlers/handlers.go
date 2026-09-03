@@ -3556,25 +3556,38 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, taskID, sel
 		return nil
 	}
 	transferCtx := context.WithoutCancel(ctx)
-	attachmentsTransferred := false
-	if h.taskSvc != nil {
-		if err := h.taskSvc.TransferSessionMessageAttachments(transferCtx, taskID, selectedID, primaryID); err != nil {
-			return fmt.Errorf("transfer session attachments: %w", err)
-		}
-		attachmentsTransferred = true
-	}
-	if err := queue.TransferSession(transferCtx, selectedID, primaryID); err != nil {
-		if attachmentsTransferred {
-			rollbackCtx := context.WithoutCancel(transferCtx)
-			if reverseErr := h.taskSvc.TransferSessionMessageAttachments(rollbackCtx, taskID, primaryID, selectedID); reverseErr != nil {
-				h.logger.Warn("failed to roll back session attachment transfer",
-					zap.String("task_id", taskID),
-					zap.String("old_session_id", selectedID),
-					zap.String("new_session_id", primaryID),
-					zap.Error(reverseErr))
+	transferErr := queue.TransferSessionWithPreparation(
+		transferCtx,
+		selectedID,
+		primaryID,
+		func(admittedCtx context.Context) error {
+			if h.taskSvc == nil {
+				return nil
 			}
-		}
-		return err
+			if err := h.taskSvc.TransferSessionMessageAttachments(
+				admittedCtx,
+				taskID,
+				selectedID,
+				primaryID,
+			); err != nil {
+				return fmt.Errorf("transfer session attachments: %w", err)
+			}
+			return nil
+		},
+		func(rollbackCtx context.Context) error {
+			if h.taskSvc == nil {
+				return nil
+			}
+			return h.taskSvc.TransferSessionMessageAttachments(
+				rollbackCtx,
+				taskID,
+				primaryID,
+				selectedID,
+			)
+		},
+	)
+	if transferErr != nil {
+		return transferErr
 	}
 	h.publishQueueStatusEvent(transferCtx, selectedID, queue)
 	h.publishQueueStatusEvent(transferCtx, primaryID, queue)

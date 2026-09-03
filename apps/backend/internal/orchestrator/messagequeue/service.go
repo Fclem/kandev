@@ -1804,8 +1804,44 @@ func (s *Service) SnapshotSession(ctx context.Context, sessionID string) ([]Queu
 // old session — a transfer that no-ops without a signal would let the workflow
 // step move forward while the queue sticks behind.
 func (s *Service) TransferSession(ctx context.Context, oldSessionID, newSessionID string) error {
+	return s.transferSession(ctx, oldSessionID, newSessionID, nil, nil)
+}
+
+// TransferSessionWithPreparation runs preparation while both session
+// admissions are held, then transfers queued state. If the queue transfer
+// fails, rollback runs under the same admissions before they are released.
+// Callers use this to keep external state, such as attachment ownership,
+// synchronized with the queue move.
+func (s *Service) TransferSessionWithPreparation(
+	ctx context.Context,
+	oldSessionID, newSessionID string,
+	prepare func(context.Context) error,
+	rollback func(context.Context) error,
+) error {
+	return s.transferSession(ctx, oldSessionID, newSessionID, prepare, rollback)
+}
+
+func (s *Service) transferSession(
+	ctx context.Context,
+	oldSessionID, newSessionID string,
+	prepare func(context.Context) error,
+	rollback func(context.Context) error,
+) error {
 	err := s.withSessionAdmissions(ctx, oldSessionID, newSessionID, func(admittedCtx context.Context) error {
+		if prepare != nil {
+			if err := prepare(admittedCtx); err != nil {
+				return err
+			}
+		}
 		if err := s.repo.TransferSession(admittedCtx, oldSessionID, newSessionID); err != nil {
+			if rollback != nil {
+				if rollbackErr := rollback(context.WithoutCancel(admittedCtx)); rollbackErr != nil {
+					s.logger.Warn("failed to roll back transfer preparation",
+						zap.String("from_session_id", oldSessionID),
+						zap.String("to_session_id", newSessionID),
+						zap.Error(rollbackErr))
+				}
+			}
 			return err
 		}
 		s.invalidateEditLeasesLocked(oldSessionID, newSessionID)

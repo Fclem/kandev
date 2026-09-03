@@ -1441,6 +1441,39 @@ func (s *Service) GetEntry(ctx context.Context, sessionID, entryID string) (*Que
 	return entry, err
 }
 
+// ReferencedQueueAttachmentIDs returns attachment IDs referenced by pending
+// entries in a session, excluding one entry. It is admission-aware so callers
+// can use it while already holding the session admission lock.
+func (s *Service) ReferencedQueueAttachmentIDs(
+	ctx context.Context, sessionID, excludedEntryID string, attachmentIDs []string,
+) (map[string]struct{}, error) {
+	referenced := make(map[string]struct{}, len(attachmentIDs))
+	if len(attachmentIDs) == 0 {
+		return referenced, nil
+	}
+	read := func(admittedCtx context.Context) error {
+		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if entry.ID == excludedEntryID {
+				continue
+			}
+			for _, attachment := range entry.Attachments {
+				if attachment.AttachmentID != "" {
+					referenced[attachment.AttachmentID] = struct{}{}
+				}
+			}
+		}
+		return nil
+	}
+	if err := s.WithSessionAdmission(ctx, sessionID, read); err != nil {
+		return nil, err
+	}
+	return referenced, nil
+}
+
 // ClaimSendNow atomically claims the exact pending source snapshot for an
 // interrupt-and-replace dispatch. The repository orders the retained sources
 // by FIFO position and constructs the synthetic dispatch envelope before

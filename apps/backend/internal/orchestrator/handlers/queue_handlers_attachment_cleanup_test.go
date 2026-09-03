@@ -33,6 +33,28 @@ func TestWsRemoveEntryReleasesClaimedAttachments(t *testing.T) {
 	require.Equal(t, ws.MessageTypeResponse, response.Type)
 	require.Equal(t, []string{"attachment"}, claimer.releases)
 }
+
+func TestWsRemoveEntryPreservesAttachmentReferencedByAnotherEntry(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &recordingQueueAttachmentClaimer{}
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := context.Background()
+	attachment := messagequeue.MessageAttachment{
+		Type: "resource", AttachmentID: "shared-attachment", Name: "shared.txt", MimeType: "text/plain",
+	}
+	first, err := queue.QueueMessage(ctx, "session-shared", "task-shared", "first", "", "user", false, []messagequeue.MessageAttachment{attachment})
+	require.NoError(t, err)
+	_, err = queue.QueueMessage(ctx, "session-shared", "task-shared", "second", "", "user", false, []messagequeue.MessageAttachment{attachment})
+	require.NoError(t, err)
+
+	response, err := handlers.wsRemoveEntry(ctx, createTestMessage(t, ws.ActionMessageQueueRemove, map[string]string{
+		"session_id": "session-shared",
+		"entry_id":   first.ID,
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Empty(t, claimer.releases)
+}
 func TestWsRemoveEntryUsesAtomicRemovedEntryForAttachmentCleanup(t *testing.T) {
 	handlers, _ := setupQueueHandlers(t)
 	stale := &messagequeue.QueuedMessage{

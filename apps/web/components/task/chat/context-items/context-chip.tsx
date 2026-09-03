@@ -74,6 +74,7 @@ export const ContextChip = memo(function ContextChip({
   const { isFinePointer } = useResponsiveBreakpoint();
   const { t } = useTranslation();
   const Icon = ICON_BY_KIND[kind];
+  const labelSizingClass = isFinePointer ? "min-h-0" : "min-h-11";
   let iconNode: ReactNode;
   if (leadingIcon) {
     iconNode = leadingIcon;
@@ -135,8 +136,7 @@ export const ContextChip = memo(function ContextChip({
             onClick={usesTouchDrawer ? undefined : onClick}
             aria-haspopup="dialog"
             aria-expanded={open}
-            aria-label={label}
-            className="flex min-h-11 min-w-0 flex-1 items-center gap-1 text-left"
+            className={`flex ${labelSizingClass} min-w-0 flex-1 items-center gap-1 text-left`}
           >
             {labelContent}
           </button>
@@ -146,8 +146,7 @@ export const ContextChip = memo(function ContextChip({
   } else if (onClick) {
     labelElement = (
       <button
-        type="button"
-        className="flex min-h-11 min-w-0 flex-1 items-center gap-1 text-left"
+        className={`flex ${labelSizingClass} min-w-0 flex-1 items-center gap-1 text-left`}
         onClick={onClick}
       >
         {labelContent}

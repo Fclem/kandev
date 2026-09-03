@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -170,50 +169,70 @@ func (s *Service) ResolvePromptContent(ctx context.Context, name, fallback strin
 }
 
 func (s *Service) ResolvePromptReferences(ctx context.Context, content string) ([]PromptReferenceExpansion, error) {
-	if !strings.Contains(content, "@") {
-		return nil, nil
-	}
 	if len(content) > maxPromptContentBytes {
 		return nil, ErrInvalidPrompt
 	}
-	prompts, err := s.repo.ListPrompts(ctx)
+	if !strings.Contains(content, "@") {
+		return nil, nil
+	}
+	prompts, truncated, err := s.repo.ListPromptsForReferenceExpansion(
+		ctx, maxPromptReferenceNames, maxPromptNameBytes, maxPromptContentBytes,
+	)
 	if err != nil {
 		return nil, err
 	}
-	byName := make(map[string]*models.Prompt, len(prompts))
-	names := make([]string, 0, len(prompts))
+	if truncated {
+		return nil, ErrPromptReferenceLimit
+	}
+	trie := &promptReferenceTrieNode{}
+	validPromptCount := 0
 	for _, prompt := range prompts {
 		if prompt == nil || prompt.Name == "" ||
 			len(prompt.Name) > maxPromptNameBytes ||
 			len(prompt.Content) > maxPromptContentBytes {
 			continue
 		}
-		byName[prompt.Name] = prompt
-		names = append(names, prompt.Name)
+		validPromptCount++
+		insertPromptReference(trie, prompt)
 	}
-	sort.Slice(names, func(i, j int) bool {
-		if len(names[i]) == len(names[j]) {
-			return names[i] < names[j]
-		}
-		return len(names[i]) > len(names[j])
-	})
-	if len(names) > maxPromptReferenceNames {
+	if validPromptCount > maxPromptReferenceNames {
 		return nil, ErrPromptReferenceLimit
 	}
 	expansions := make([]PromptReferenceExpansion, 0)
-	if err := collectPromptReferences(content, byName, names, map[string]bool{}, map[string]bool{}, &expansions, 0); err != nil {
+	if err := collectPromptReferences(content, trie, map[string]bool{}, map[string]bool{}, &expansions, 0); err != nil {
 		return nil, err
 	}
 	return expansions, nil
 }
 
-func collectPromptReferences(content string, byName map[string]*models.Prompt, names []string, stack, seen map[string]bool, expansions *[]PromptReferenceExpansion, depth int) error {
+type promptReferenceTrieNode struct {
+	children map[byte]*promptReferenceTrieNode
+	prompt   *models.Prompt
+}
+
+func insertPromptReference(root *promptReferenceTrieNode, prompt *models.Prompt) {
+	node := root
+	for i := 0; i < len(prompt.Name); i++ {
+		if node.children == nil {
+			node.children = make(map[byte]*promptReferenceTrieNode)
+		}
+		child := node.children[prompt.Name[i]]
+		if child == nil {
+			child = &promptReferenceTrieNode{}
+			node.children[prompt.Name[i]] = child
+		}
+		node = child
+	}
+	node.prompt = prompt
+}
+
+func collectPromptReferences(content string, trie *promptReferenceTrieNode, stack, seen map[string]bool, expansions *[]PromptReferenceExpansion, depth int) error {
 	for index := 0; index < len(content); {
 		if content[index] != '@' || !isPromptReferenceStart(content, index) {
 			index++
 			continue
 		}
-		prompt, referenceEnd, ok := matchPromptReference(content, index, byName, names)
+		prompt, referenceEnd, ok := matchPromptReference(content, index, trie)
 		if !ok || stack[prompt.Name] || depth >= maxPromptReferenceDepth {
 			index = referenceEnd
 			continue
@@ -232,7 +251,7 @@ func collectPromptReferences(content string, byName map[string]*models.Prompt, n
 			seen[prompt.Name] = true
 			*expansions = append(*expansions, PromptReferenceExpansion{Name: prompt.Name, Content: prompt.Content})
 			stack[prompt.Name] = true
-			if err := collectPromptReferences(prompt.Content, byName, names, stack, seen, expansions, depth+1); err != nil {
+			if err := collectPromptReferences(prompt.Content, trie, stack, seen, expansions, depth+1); err != nil {
 				return err
 			}
 			delete(stack, prompt.Name)
@@ -242,19 +261,28 @@ func collectPromptReferences(content string, byName map[string]*models.Prompt, n
 	return nil
 }
 
-func matchPromptReference(content string, index int, byName map[string]*models.Prompt, names []string) (*models.Prompt, int, bool) {
+func matchPromptReference(content string, index int, trie *promptReferenceTrieNode) (*models.Prompt, int, bool) {
 	referenceStart := index + 1
-	for _, name := range names {
-		if !strings.HasPrefix(content[referenceStart:], name) {
-			continue
+	node := trie
+	var prompt *models.Prompt
+	referenceEnd := referenceStart
+	for position := referenceStart; position < len(content); position++ {
+		child := node.children[content[position]]
+		if child == nil {
+			break
 		}
-		referenceEnd := referenceStart + len(name)
-		if referenceEnd < len(content) && isPromptReferenceNameCharAt(content, referenceEnd) {
-			continue
+		node = child
+		candidateEnd := position + 1
+		if node.prompt != nil &&
+			(candidateEnd == len(content) || !isPromptReferenceNameCharAt(content, candidateEnd)) {
+			prompt = node.prompt
+			referenceEnd = candidateEnd
 		}
-		return byName[name], referenceEnd, true
 	}
-	return nil, referenceStart, false
+	if prompt == nil {
+		return nil, referenceStart, false
+	}
+	return prompt, referenceEnd, true
 }
 
 func isPromptReferenceStart(content string, index int) bool {

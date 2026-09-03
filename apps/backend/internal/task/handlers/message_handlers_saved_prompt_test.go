@@ -18,6 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestValidateAddMessageRequestRejectsOversizedContent(t *testing.T) {
+	req := wsAddMessageRequest{
+		TaskSessionID: "session",
+		Content:       strings.Repeat("x", (1<<20)+1),
+	}
+
+	require.Equal(t, "content is too long", validateAddMessageRequest(req))
+}
+
 const savedPromptTrustedContext = "EXPANDED PROMPT REFERENCES: current trusted saved prompt"
 
 type savedPromptDeliveryOrchestrator struct {

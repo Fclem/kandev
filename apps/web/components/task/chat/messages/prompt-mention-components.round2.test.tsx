@@ -75,4 +75,11 @@ describe("splitMarkdownPromptMentionSegments round-two boundaries", () => {
     expect(promptValues("**@daily\\*")).toEqual([]);
     expect(promptValues("[@daily\\]")).toEqual([]);
   });
+  it("fails closed for oversized malformed Markdown mention input", () => {
+    const content = `[${"x".repeat(40_000)} [@daily`;
+
+    expect(splitMarkdownPromptMentionSegments(content, promptNames)).toEqual([
+      { kind: "text", value: content },
+    ]);
+  });
 });

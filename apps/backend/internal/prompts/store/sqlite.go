@@ -105,6 +105,47 @@ func (r *sqliteRepository) ListPrompts(ctx context.Context) ([]*models.Prompt, e
 	return prompts, nil
 }
 
+// ListPromptsForReferenceExpansion bounds rows materialized for inline
+// reference resolution while reporting whether additional candidates exist.
+func (r *sqliteRepository) ListPromptsForReferenceExpansion(ctx context.Context, limit, maxNameBytes, maxContentBytes int) ([]*models.Prompt, bool, error) {
+	if limit < 1 {
+		return nil, false, nil
+	}
+	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
+		SELECT id, name, content, builtin, created_at, updated_at
+		FROM custom_prompts
+		WHERE length(CAST(name AS BLOB)) > 0
+			AND length(CAST(name AS BLOB)) <= ?
+			AND length(CAST(content AS BLOB)) <= ?
+		ORDER BY builtin DESC, name ASC
+		LIMIT ?
+	`), maxNameBytes, maxContentBytes, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	prompts := make([]*models.Prompt, 0, limit)
+	for rows.Next() {
+		prompt := &models.Prompt{}
+		var builtinInt int
+		if err := rows.Scan(&prompt.ID, &prompt.Name, &prompt.Content, &builtinInt, &prompt.CreatedAt, &prompt.UpdatedAt); err != nil {
+			return nil, false, err
+		}
+		prompt.Builtin = builtinInt == 1
+		prompts = append(prompts, prompt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(prompts) > limit {
+		return prompts[:limit], true, nil
+	}
+	return prompts, false, nil
+}
+
 func (r *sqliteRepository) GetPromptByID(ctx context.Context, id string) (*models.Prompt, error) {
 	row := r.ro.QueryRowContext(ctx, r.ro.Rebind(`
 		SELECT id, name, content, builtin, created_at, updated_at

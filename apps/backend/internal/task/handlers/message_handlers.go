@@ -743,8 +743,13 @@ func (h *MessageHandlers) errorForBlockedMessageSession(msg *ws.Message, session
 	}
 }
 
+const maxMessageContentBytes = 1 << 20
+
 // validateAddMessageRequest returns a non-empty error string if the request is invalid.
 func validateAddMessageRequest(req wsAddMessageRequest) string {
+	if len(req.Content) > maxMessageContentBytes {
+		return "content is too long"
+	}
 	if req.TaskSessionID == "" {
 		return "session_id is required"
 	}

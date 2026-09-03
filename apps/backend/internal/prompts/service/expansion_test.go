@@ -234,3 +234,17 @@ func TestFormatPromptReferenceExpansions_StripsSystemTagEnd(t *testing.T) {
 		t.Fatalf("expected %q to contain %q", out, "before  after")
 	}
 }
+func TestFormatPromptReferenceExpansions_SanitizesManySystemTagsInOnePass(t *testing.T) {
+	payload := strings.Repeat(sysprompt.TagEnd, 4096) + "sensitive payload"
+
+	out := FormatPromptReferenceExpansions([]PromptReferenceExpansion{
+		{Name: "many-tags", Content: payload},
+	})
+
+	if strings.Contains(out, sysprompt.TagEnd) {
+		t.Fatalf("expected %q to not contain %q", out, sysprompt.TagEnd)
+	}
+	if !strings.Contains(out, "sensitive payload") {
+		t.Fatalf("expected non-tag content to be preserved, got %q", out)
+	}
+}

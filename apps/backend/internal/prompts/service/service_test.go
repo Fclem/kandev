@@ -211,6 +211,14 @@ func TestService_ResolvePromptReferencesSkipsListWithoutAtMention(t *testing.T) 
 		t.Fatalf("got %#v, want empty expansions", got)
 	}
 }
+func TestService_ResolvePromptReferencesRejectsOversizedPlainContent(t *testing.T) {
+	svc := NewService(panicListPromptsRepo{})
+
+	_, err := svc.ResolvePromptReferences(context.Background(), strings.Repeat("x", maxPromptContentBytes+1))
+	if !errors.Is(err, ErrInvalidPrompt) {
+		t.Fatalf("expected ErrInvalidPrompt, got %v", err)
+	}
+}
 
 func TestService_ResolvePromptReferencesSkipsUnknownInlineAndCycles(t *testing.T) {
 	svc, cleanup := createService(t)
@@ -315,6 +323,7 @@ func TestService_ResolvePromptReferencesRejectsOverLimitInputs(t *testing.T) {
 			if !errors.Is(err, ErrPromptReferenceLimit) {
 				t.Fatalf("expected ErrPromptReferenceLimit, got %v", err)
 			}
+
 		})
 	}
 }
@@ -326,6 +335,9 @@ type expansionLimitRepo struct {
 
 func (r expansionLimitRepo) ListPrompts(context.Context) ([]*models.Prompt, error) {
 	return r.prompts, nil
+}
+func (r expansionLimitRepo) ListPromptsForReferenceExpansion(context.Context, int, int, int) ([]*models.Prompt, bool, error) {
+	return r.prompts, false, nil
 }
 
 // raceRepo simulates a TOCTOU loss against the SQLite UNIQUE index: the

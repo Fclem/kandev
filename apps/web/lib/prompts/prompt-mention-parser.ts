@@ -4,12 +4,26 @@ export type PromptMentionMatch = {
   name: string;
 };
 
-export function buildPromptMentionNames(promptNames: string[]) {
-  return Array.from(new Set(promptNames.filter(Boolean))).sort(
-    (a, b) => b.length - a.length || a.localeCompare(b),
-  );
-}
+const MAX_PROMPT_MENTION_NAMES = 2000;
+const MAX_PROMPT_MENTION_NAME_LENGTH = 512;
+const MAX_PROMPT_MENTION_NAME_BYTES = 200_000;
 
+export function buildPromptMentionNames(promptNames: string[]) {
+  const names = Array.from(
+    new Set(
+      promptNames.filter((name) => Boolean(name) && name.length <= MAX_PROMPT_MENTION_NAME_LENGTH),
+    ),
+  ).sort((a, b) => b.length - a.length || a.localeCompare(b));
+  const accepted: string[] = [];
+  let totalLength = 0;
+  for (const name of names) {
+    if (accepted.length >= MAX_PROMPT_MENTION_NAMES) break;
+    if (totalLength + name.length > MAX_PROMPT_MENTION_NAME_BYTES) continue;
+    accepted.push(name);
+    totalLength += name.length;
+  }
+  return accepted;
+}
 type PromptNameTrieNode = {
   children: Map<string, PromptNameTrieNode>;
   name?: string;
@@ -50,19 +64,20 @@ export function matchPromptMention(
 
   const referenceStart = index + 1;
   let node = getPromptNamePrefixIndex(promptNames);
+  let bestMatch: PromptMentionMatch | null = null;
   for (let cursor = referenceStart; cursor < content.length; ) {
     const codePoint = content.codePointAt(cursor);
     if (codePoint === undefined) break;
     const character = String.fromCodePoint(codePoint);
     const child = node.children.get(character);
-    if (!child) return null;
+    if (!child) break;
     node = child;
     cursor += character.length;
     if (node.name && (cursor >= content.length || !isMentionNameCharAt(content, cursor))) {
-      return { start: index, end: cursor, name: node.name };
+      bestMatch = { start: index, end: cursor, name: node.name };
     }
   }
-  return null;
+  return bestMatch;
 }
 
 function isMentionNameCharAt(content: string, index: number) {

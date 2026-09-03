@@ -61,4 +61,8 @@ describe("splitMarkdownPromptMentionSegments round-two boundaries", () => {
   it("recognizes aliases after CR-only fenced code", () => {
     expect(promptValues("~~~\rcode\r~~~\r@daily")).toEqual(["@daily"]);
   });
+
+  it("recognizes aliases in link labels adjacent to ordinary text", () => {
+    expect(promptValues("x[@daily](url)")).toEqual(["@daily"]);
+  });
 });

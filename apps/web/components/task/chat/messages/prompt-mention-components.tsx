@@ -341,6 +341,19 @@ function startMarkdownCode(
   return null;
 }
 
+function isMarkdownCodeRangeAt(ranges: Array<{ start: number; end: number }>, index: number) {
+  let low = 0;
+  let high = ranges.length - 1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const range = ranges[middle];
+    if (index < range.start) high = middle - 1;
+    else if (index >= range.end) low = middle + 1;
+    else return true;
+  }
+  return false;
+}
+
 function findMarkdownDestinationEnd(
   content: string,
   linkEndIndex: number,
@@ -351,7 +364,7 @@ function findMarkdownDestinationEnd(
     labelStart === null ||
     content[linkEndIndex + 1] !== "(" ||
     (labelStart > 0 && content[labelStart - 1] === "]") ||
-    codeRanges.some((range) => labelStart >= range.start && labelStart < range.end)
+    isMarkdownCodeRangeAt(codeRanges, labelStart)
   ) {
     return null;
   }
@@ -515,7 +528,11 @@ function isMarkdownFormattingBoundary(content: string, openingStart: number) {
   ) {
     boundaryStart -= 1;
   }
-  return boundaryStart === 0 || isMarkdownWhitespace(content[boundaryStart - 1]);
+  return (
+    content[boundaryStart] === "[" ||
+    boundaryStart === 0 ||
+    isMarkdownWhitespace(content[boundaryStart - 1])
+  );
 }
 // eslint-disable-next-line complexity -- Markdown boundary cases stay in one ordered matcher.
 function matchMarkdownPromptMention(

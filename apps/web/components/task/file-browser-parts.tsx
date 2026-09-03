@@ -276,7 +276,8 @@ export function TreeNodeItem(props: TreeNodeRowProps) {
       role="treeitem"
       className={cn(
         getTreeNodeRowClass(isActive, isActiveFolder, isSelected, props.isDragging, isDropTarget),
-        showTouchActions && "relative pr-11",
+        showTouchActions &&
+          "relative min-h-11 pr-11 has-[[data-testid=file-delete-inline-confirmation]]:flex-wrap has-[[data-testid=file-delete-inline-confirmation]]:pr-2",
       )}
       style={{ paddingLeft: treeNodePaddingLeft(row.depth, node.is_dir) }}
       onClick={handleClick}
@@ -375,7 +376,7 @@ export function SearchResultsList({
             className={cn(
               "group flex w-full items-center gap-1 px-2 py-0.5 text-left text-sm cursor-pointer",
               "hover:bg-muted",
-              showTouchActions && "relative pr-11",
+              showTouchActions && "relative min-h-11 pr-11",
             )}
             onClick={() => onOpenFile(path)}
           >

@@ -41,14 +41,15 @@ report.
 Update `FileBrowser` in `apps/web/components/task/file-browser.tsx` to retain
 the existing coarse-pointer touch-action gate. Keep `TreeNodeItem` and
 `SearchResultsList` in `apps/web/components/task/file-browser-parts.tsx`
-non-wrapping and mount their 44px triggers as row overlays, so names truncate
-without the touch target increasing row height or escaping its result row.
+non-wrapping. Responsive rows reserve a 44px vertical interaction slot for
+their absolutely positioned trigger, while labels reserve the horizontal action
+space and truncate.
 
 Add focused regression assertions for `FileBrowser` responsive action wiring
 and multi-result search overlays. Extend
 `apps/web/e2e/tests/task/mobile-file-tree-chat-context.spec.ts` with computed
 non-wrapping/truncation geometry, two simultaneous mobile search results, and a
-1280px coarse-pointer context that verifies compact rows and a 44px trigger.
+1280px coarse-pointer context that verifies non-overlapping 44px action slots.
 
 ## Tests
 
@@ -57,16 +58,16 @@ non-wrapping/truncation geometry, two simultaneous mobile search results, and a
   targets.
 - `AC-UI-FILE-TREE-CHAT-CONTEXT-001.9`: focused component coverage verifies
   coarse-pointer desktop action wiring and multi-result search row anchoring;
-  E2E verifies compact rows with a 44px target on wide desktop and no-wrap,
+  E2E verifies non-overlapping 44px action slots on wide desktop and no-wrap,
   truncation, and per-row search actions on mobile.
 
 ## E2E tests
 
 - `apps/web/e2e/tests/task/mobile-file-tree-chat-context.spec.ts` using the
   `mobile-chrome` project: verify long-name no-wrap/truncation and two
-  row-anchored, clipped mobile search results, then create a 1280px
-  coarse-pointer context that proves compact short and long rows, a 44px action
-  target, and Add to chat context.
+  row-anchored mobile search results with non-overlapping action slots, then
+  create a 1280px coarse-pointer context that proves a boundary touch reaches
+  the intended 44px action and can add it to chat context.
 - `apps/web/e2e/tests/task/file-tree-chat-context.spec.ts`: existing desktop
   right-click flow remains unchanged and covers the desktop action path.
 

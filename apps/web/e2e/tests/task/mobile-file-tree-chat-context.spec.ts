@@ -142,8 +142,11 @@ test.describe("Mobile file tree chat context", () => {
         const rowBox = row.getBoundingClientRect();
         const triggerBox = trigger?.getBoundingClientRect();
         return {
+          actionBottom: triggerBox?.bottom ?? null,
           actionCenterX: triggerBox ? triggerBox.x + triggerBox.width / 2 : null,
           actionCenterY: triggerBox ? triggerBox.y + triggerBox.height / 2 : null,
+          actionTop: triggerBox?.top ?? null,
+          path: row.getAttribute("data-path"),
           rowBottom: rowBox.bottom,
           rowLeft: rowBox.left,
           rowRight: rowBox.right,
@@ -153,14 +156,31 @@ test.describe("Mobile file tree chat context", () => {
         };
       }),
     );
-    for (const geometry of searchGeometry) {
+    for (const [index, geometry] of searchGeometry.entries()) {
       expect(geometry.actionCenterX).toBeGreaterThanOrEqual(geometry.rowLeft);
       expect(geometry.actionCenterX).toBeLessThanOrEqual(geometry.rowRight);
       expect(geometry.actionCenterY).toBeGreaterThanOrEqual(geometry.rowTop);
       expect(geometry.actionCenterY).toBeLessThanOrEqual(geometry.rowBottom);
+      expect(geometry.actionTop).toBeGreaterThanOrEqual(geometry.rowTop);
+      expect(geometry.actionBottom).toBeLessThanOrEqual(geometry.rowBottom);
+      expect(geometry.path).toBeTruthy();
       expect(geometry.nameOverflow).toBe("hidden");
       expect(geometry.nameTextOverflow).toBe("ellipsis");
+      if (index > 0) {
+        expect(searchGeometry[index - 1].actionBottom).toBeLessThanOrEqual(geometry.actionTop);
+      }
     }
+    const firstSearchTrigger = searchRows.nth(0).getByTestId("file-tree-node-actions");
+    const firstSearchTriggerBox = await firstSearchTrigger.boundingBox();
+    expect(firstSearchTriggerBox).not.toBeNull();
+    await firstSearchTrigger.tap({
+      position: {
+        x: firstSearchTriggerBox!.width / 2,
+        y: firstSearchTriggerBox!.height - 1,
+      },
+    });
+    await expect(session.fileTreeTouchMenu()).toBeVisible();
+    await testPage.keyboard.press("Escape");
     await session.fileSearchInput().press("Escape");
 
     await expect(testPage.getByTestId("mobile-file-viewer-panel")).toHaveCount(0);
@@ -181,8 +201,7 @@ test.describe("Mobile file tree chat context", () => {
     await expect(session.chatContextFile(directoryPath)).toHaveCount(0);
     await expect(session.chatContextFile(filePath)).toHaveCount(0);
   });
-
-  test("keeps coarse desktop rows compact around their touch actions", async ({
+  test("keeps coarse desktop touch actions in separate 44px rows", async ({
     coarseDesktopTestPage,
     apiClient,
     seedData,
@@ -209,17 +228,28 @@ test.describe("Mobile file tree chat context", () => {
       await expect(row).toBeVisible({ timeout: 15_000 });
       await expect
         .poll(async () => (await row.boundingBox())?.height ?? 0, { timeout: 2_000 })
-        .toBeLessThan(44);
+        .toBeGreaterThanOrEqual(44);
     }
 
-    const trigger = session.fileTreeNodeActions(directoryPath);
-    await expect(trigger).toBeVisible();
-    const triggerBox = await trigger.boundingBox();
-    expect(triggerBox).not.toBeNull();
-    expect(triggerBox!.width).toBeGreaterThanOrEqual(44);
-    expect(triggerBox!.height).toBeGreaterThanOrEqual(44);
+    const triggers = [
+      session.fileTreeNodeActions(directoryPath),
+      session.fileTreeNodeActions(filePath),
+    ];
+    await expect(triggers[0]).toBeVisible();
+    await expect(triggers[1]).toBeVisible();
+    const triggerBoxes = await Promise.all(triggers.map((trigger) => trigger.boundingBox()));
+    expect(triggerBoxes[0]).not.toBeNull();
+    expect(triggerBoxes[1]).not.toBeNull();
+    expect(triggerBoxes[0]!.width).toBeGreaterThanOrEqual(44);
+    expect(triggerBoxes[0]!.height).toBeGreaterThanOrEqual(44);
+    expect(triggerBoxes[0]!.y + triggerBoxes[0]!.height).toBeLessThanOrEqual(triggerBoxes[1]!.y);
 
-    await trigger.tap();
+    await triggers[0].tap({
+      position: {
+        x: triggerBoxes[0]!.width / 2,
+        y: triggerBoxes[0]!.height - 1,
+      },
+    });
     await expect(session.fileTreeTouchAddToChatContextItem()).toBeVisible();
     await session.fileTreeTouchAddToChatContextItem().tap();
     await session.clickSessionChatTab();

@@ -34,11 +34,11 @@ secondary action and does not own row navigation.
 ## Responsive row geometry
 
 A file-tree row remains a compact single flex line when its name and controls
-fit within the panel. The row must not use wrapping or inherit the touch
-trigger's 44px height. The filename portion may shrink and truncate; the action
-trigger is an absolutely positioned row overlay with its existing 44px minimum
-active hit area. This keeps short rows compact and makes long names fit by
-truncation rather than increasing every row's height.
+fit within the panel. Responsive rows that render a 44px touch trigger establish
+an exclusive 44px vertical interaction slot. The absolutely positioned trigger
+stays within that slot while the filename reserves its action space, shrinks,
+and truncates. This prevents adjacent action targets from overlapping without
+allowing row wrapping.
 
 The responsive action remains rendered on phone and coarse-pointer layouts,
 including when the desktop task composition is selected on a phone. Fine-pointer

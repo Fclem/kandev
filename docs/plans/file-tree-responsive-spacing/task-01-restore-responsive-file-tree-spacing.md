@@ -39,7 +39,8 @@ coarse-pointer devices, including desktop-workbench and zoomed-out layouts.
 - Coarse-pointer file trees, including wide desktop workbench viewports, retain
   the visible touch action with its 44px minimum active hitbox.
 - Tree and search-result rows remain compact and non-wrapping; long names
-  truncate rather than increasing row height or extending beneath the action.
+  truncate within reserved action space, and responsive rows provide an
+  exclusive 44px vertical action slot.
 - Existing desktop and mobile file-tree context actions continue to pass.
 
 ## Verification
@@ -65,12 +66,12 @@ None.
 
 ## Risks
 
-- A coarse-pointer desktop must retain the visible action without letting its
-  44px touch target set the row height.
-- Each search result must anchor its overlay independently and reserve its
-  action space before truncating its label.
-- Geometry assertions cover compact desktop rows and the intentional 44px
-  trigger independently.
+- A coarse-pointer desktop must retain the visible action in a 44px row slot so
+  adjacent triggers cannot overlap.
+- Each search result must anchor its overlay independently, reserve its action
+  space, and truncate its label.
+- Geometry assertions cover non-overlapping action slots and a boundary touch
+  that opens the intended row action.
 
 ## Parallelism
 
@@ -78,7 +79,7 @@ None.
 
 ## Inputs
 
-- `REQ-UI-FILE-TREE-CHAT-CONTEXT-001.7` and `.9`.
+- `AC-UI-FILE-TREE-CHAT-CONTEXT-001.7` and `AC-UI-FILE-TREE-CHAT-CONTEXT-001.9`.
 - `docs/specs/ui/system-design/file-tree-chat-context.md`.
 - Existing file-tree component and Playwright tests.
 

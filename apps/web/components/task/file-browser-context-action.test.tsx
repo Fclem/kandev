@@ -1,23 +1,27 @@
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FileTreeNode } from "@/lib/types/backend";
 import type { FileBrowserRow } from "./file-browser-hooks";
+import type * as FileContextMenu from "./file-context-menu";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./file-context-menu", () => ({
-  FileContextMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
-  useFileDeleteAction: () => null,
-  useFileRename: () => ({
-    isRenaming: false,
-    renameValue: "",
-    setRenameValue: vi.fn(),
-    handleStartRename: vi.fn(),
-    handleConfirmRename: vi.fn(),
-    handleRenameKeyDown: vi.fn(),
-  }),
-  TreeNodeName: ({ node }: { node: FileTreeNode }) => <span>{node.name}</span>,
-  getGitStatusTextClass: () => "",
-}));
+vi.mock("./file-context-menu", async (importOriginal) => {
+  const actual = await importOriginal<typeof FileContextMenu>();
+  return {
+    ...actual,
+    FileContextMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
+    useFileDeleteAction: () => null,
+    useFileRename: () => ({
+      isRenaming: false,
+      renameValue: "",
+      setRenameValue: vi.fn(),
+      handleStartRename: vi.fn(),
+      handleConfirmRename: vi.fn(),
+      handleRenameKeyDown: vi.fn(),
+    }),
+    getGitStatusTextClass: () => "",
+  };
+});
 
 import { shouldShowFileTreeTouchActions, TreeNodeItem } from "./file-browser-parts";
 
@@ -128,7 +132,7 @@ describe("FileBrowser touch action gate", () => {
 });
 
 describe("TreeNodeItem row spacing", () => {
-  it("keeps the touch-action row on one flex line", () => {
+  it("keeps the touch-action row single-line with an independent 44px hit area", () => {
     render(
       <TreeNodeItem
         row={ROW}
@@ -144,7 +148,12 @@ describe("TreeNodeItem row spacing", () => {
       />,
     );
 
+    const row = screen.getByTestId("file-tree-node");
+    const name = screen.getByText(FILE_NODE.name);
     // @covers AC-UI-FILE-TREE-CHAT-CONTEXT-001.9
-    expect(screen.getByTestId("file-tree-node").className).not.toContain("flex-wrap");
+    expect(row.className).not.toMatch(/(?:^|\s)flex-wrap(?:\s|$)/);
+    expect(row.className).toContain("min-h-11");
+    expect(name.className).toContain("min-w-0");
+    expect(name.className).toContain("truncate");
   });
 });

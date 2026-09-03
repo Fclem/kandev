@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { FileTreeNode } from "@/lib/types/backend";
 import type * as FileBrowserParts from "./file-browser-parts";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -86,7 +87,7 @@ vi.mock("./file-browser-parts", async (importOriginal) => {
       onAddToChatContext,
     }: {
       showTouchActions: boolean;
-      onAddToChatContext: (treeNode: typeof node) => void;
+      onAddToChatContext: (treeNode: FileTreeNode) => void;
     }) => (
       <actual.FileTreeNodeTouchActions
         node={node}

@@ -167,6 +167,7 @@ export const test = backendFixture.extend<
     testPage: Page;
     tabletTestPage: Page;
     coarseDesktopTestPage: Page;
+    prCapture: PrAssetCapture;
     /**
      * Auto fixture that resets integration mock state and any persisted
      * Jira/Linear configs at the top of every test. Auto fixtures run

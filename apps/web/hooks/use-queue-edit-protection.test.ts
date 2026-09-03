@@ -237,3 +237,48 @@ describe("late queued edit lease operations", () => {
     );
   });
 });
+it("keeps the lease when an overlapping older renewal fails after a newer generation succeeds", async () => {
+  vi.useFakeTimers();
+  try {
+    let rejectOlderRenewal!: (error: Error) => void;
+    const olderRenewal = new Promise<never>((_, reject) => {
+      rejectOlderRenewal = reject;
+    });
+    vi.mocked(renewQueuedMessageEdit).mockReturnValueOnce(olderRenewal).mockResolvedValue({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+      target_revision: 0,
+      lease_generation: 2,
+    });
+    const { result } = renderHook(() =>
+      useQueueEditProtection({
+        sessionId: SESSION_A,
+        entries: [entry()],
+      }),
+    );
+
+    await act(async () => {
+      expect(await result.current.beginEdit(ENTRY_ID)).toBe(true);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(20_000);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(20_000);
+      await Promise.resolve();
+    });
+    expect(renewQueuedMessageEdit).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      rejectOlderRenewal(new Error("older renewal failed"));
+      await Promise.resolve();
+    });
+
+    expect(result.current.editLease?.lease_generation).toBe(2);
+    expect(result.current.editingEntryId).toBe(ENTRY_ID);
+  } finally {
+    vi.useRealTimers();
+  }
+});

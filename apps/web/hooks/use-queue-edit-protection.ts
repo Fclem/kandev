@@ -97,17 +97,17 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
     const activeEdit = activeEditRef.current;
     if (!activeEdit) return;
     const renew = async () => {
-      const leaseID = activeEdit.lease.lease_id;
+      const leaseSnapshot = activeEdit.lease;
       try {
-        const lease = await renewQueuedMessageEdit(activeEdit.lease);
-        if (activeEditRef.current?.lease.lease_id !== lease.lease_id) return;
+        const lease = await renewQueuedMessageEdit(leaseSnapshot);
+        if (activeEditRef.current?.lease !== leaseSnapshot) return;
         activeEditRef.current.lease = lease;
         setEditLease(lease);
       } catch (err) {
-        // A renewal can reject after this edit has been completed and a new
-        // lease has been acquired for the same row. Only the lease that
-        // started this renewal may be cleared.
-        if (activeEditRef.current?.lease.lease_id !== leaseID) return;
+        // A renewal can reject after this edit has been completed or a newer
+        // renewal has replaced its lease snapshot. Only the renewal that
+        // still owns the active snapshot may clear the edit.
+        if (activeEditRef.current?.lease !== leaseSnapshot) return;
         console.error("Queued message edit lease renewal failed:", err);
         await completeEdit(activeEdit.entryId);
         toast.error(t("chat:queueEditSaveFailed"));

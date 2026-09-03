@@ -205,6 +205,7 @@ function renderChildrenWithPromptMentions(
     }
     const visible = getVisibleText(child);
     if (visible.length > 0) previousCharacter = visible.at(-1);
+    else if (isValidElement(child) && child.type === "br") previousCharacter = "\n";
     return rendered;
   });
 }
@@ -563,12 +564,14 @@ function matchMarkdownPromptMention(
   const closingMarker = marker === "[" ? "]" : marker;
   for (let closingIndex = index + 1; closingIndex < content.length; closingIndex += 1) {
     if (content[closingIndex] !== closingMarker) continue;
-    if (isEscapedMarkdownCharacter(content, closingIndex)) continue;
-    const candidateContent =
-      ` ${content.slice(index, closingIndex)} ` + content.slice(closingIndex + 1);
+    const candidateContent = ` ${content.slice(index, closingIndex)} `;
     const candidate = matchPromptMention(candidateContent, 1, promptNames);
-    if (candidate?.end === closingIndex - index + 1) {
-      return { start: index, end: closingIndex, name: candidate.name };
+    if (candidate) {
+      return {
+        start: index,
+        end: index + candidate.end - 1,
+        name: candidate.name,
+      };
     }
     break;
   }

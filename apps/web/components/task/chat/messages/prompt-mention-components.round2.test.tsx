@@ -65,4 +65,9 @@ describe("splitMarkdownPromptMentionSegments round-two boundaries", () => {
   it("recognizes aliases in link labels adjacent to ordinary text", () => {
     expect(promptValues("x[@daily](url)")).toEqual(["@daily"]);
   });
+
+  it("recognizes aliases at the start of formatted text", () => {
+    expect(promptValues("**@daily now**")).toEqual(["@daily"]);
+    expect(promptValues("[@daily label](/url)")).toEqual(["@daily"]);
+  });
 });

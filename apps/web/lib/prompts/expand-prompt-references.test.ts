@@ -67,6 +67,23 @@ describe("collectPromptReferenceExpansions", () => {
       { name: OUTER_PROMPT, content: OUTER_CONTENT },
     ]);
   });
+  it("fails closed when expansion count exceeds the client budget", () => {
+    const prompts = Array.from({ length: 129 }, (_, index) =>
+      prompt(`prompt-${index}`, `content-${index}`),
+    );
+    const content = prompts.map(({ name }) => `@${name}`).join(" ");
+
+    expect(collectPromptReferenceExpansions(content, prompts)).toEqual([]);
+  });
+
+  it("fails closed when expanded content exceeds the client byte budget", () => {
+    const prompts = [
+      prompt("first", "x".repeat(3 * 1024 * 1024)),
+      prompt("second", "y".repeat(2 * 1024 * 1024)),
+    ];
+
+    expect(collectPromptReferenceExpansions("@first @second", prompts)).toEqual([]);
+  });
 });
 
 describe("formatPromptReferenceExpansions", () => {

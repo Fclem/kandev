@@ -86,13 +86,12 @@ func (s *Service) AppendReferenceExpansionsWithContext(
 	// Browser-provided prompt definitions and expansion-shaped input blocks
 	// carry no provenance. Remove them before resolving so stale or forged
 	// content cannot reach the agent or suppress a real saved-prompt lookup.
-	// Keep searching after a literal closing tag embedded in a browser-supplied
-	// definition. The outer block's closing tag is the one followed by another
-	// system block or the end of the prompt; the captured boundary preserves a
-	// following system block for its own canonicalization.
+	// Never preserve a following system opening from untrusted input: an
+	// attacker can inject the same close/open boundary, so retaining it would
+	// allow forged system content to reach downstream prompt preparation.
 	cleanedPrompt := prompt
 	for {
-		replaced := browserPromptContextBlockRegex.ReplaceAllString(cleanedPrompt, "$1")
+		replaced := browserPromptContextBlockRegex.ReplaceAllString(cleanedPrompt, "")
 		if replaced != cleanedPrompt {
 			cleanedPrompt = replaced
 			continue
@@ -105,6 +104,7 @@ func (s *Service) AppendReferenceExpansionsWithContext(
 	}
 	cleanedPrompt = expansionBlockRegex.ReplaceAllString(cleanedPrompt, "")
 	if cleanedPrompt != prompt {
+		cleanedPrompt = strings.ReplaceAll(cleanedPrompt, sysprompt.TagEnd, "")
 		prompt = strings.TrimSpace(cleanedPrompt)
 	}
 	if !strings.Contains(prompt, "@") {

@@ -109,13 +109,12 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   // scrolls); measured from the dedicated content wrapper against the inner
   // scroller's content box, so the loading indicator's own presence can never
   // flip the answer.
-  const isScrollable = usePanelContentScrollable(scrollRef, contentRef);
   // Minimum-display grace so consecutive auto-loads show one continuous
   // indicator instead of a per-page flash (scoped to the active session).
   const showLoadingGrace = useLoadingGrace(sessionId, isLoadingMore);
   const shouldPaginate = hasMore && !entries.some((entry) => entry.promptNumber === 1);
   const showLoading = shouldPaginate && (isLoadingMore || showLoadingGrace);
-  const { sentinelRef, onUserGesture } = usePanelOlderPromptSentinel({
+  const { sentinelRef, onUserGesture, recheck } = usePanelOlderPromptSentinel({
     scrollRef,
     lifecycleKey: promptGeneration,
     shouldPaginate,
@@ -124,6 +123,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     loadMore,
     isRequestCurrent,
   });
+  const isScrollable = usePanelContentScrollable(scrollRef, contentRef, recheck);
   if (session?.is_passthrough) return <PromptHistoryPassthrough rootRef={rootRef} />;
 
   if (fetchFailed && entries.length === 0) {
@@ -210,6 +210,7 @@ function usePanelOlderPromptSentinel(opts: {
 }): {
   sentinelRef: (node: HTMLDivElement | null) => void;
   onUserGesture: () => void;
+  recheck: () => void;
 } {
   return useLazyLoadSentinel(
     opts.scrollRef,
@@ -460,6 +461,7 @@ export function overflowsPanel(
 function usePanelContentScrollable(
   scrollRef: RefObject<HTMLDivElement | null>,
   contentRef: RefObject<HTMLDivElement | null>,
+  onGeometryChange: () => void,
 ): boolean {
   const [isScrollable, setIsScrollable] = useState(false);
   const measure = useCallback(() => {
@@ -473,12 +475,16 @@ function usePanelContentScrollable(
   }, [scrollRef, contentRef]);
   useLayoutEffect(() => {
     setIsScrollable(measure());
+    onGeometryChange();
     const scroller = scrollRef.current;
     if (!scroller) return;
-    const observer = new ResizeObserver(() => setIsScrollable(measure()));
+    const observer = new ResizeObserver(() => {
+      setIsScrollable(measure());
+      onGeometryChange();
+    });
     observer.observe(scroller);
     return () => observer.disconnect();
-  });
+  }, [measure, onGeometryChange]);
   return isScrollable;
 }
 

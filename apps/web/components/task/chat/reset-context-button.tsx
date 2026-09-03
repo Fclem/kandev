@@ -41,7 +41,7 @@ function ResetContextTrigger({
           variant="ghost"
           size="icon"
           aria-label={ariaLabel}
-          className="h-7 w-7 cursor-pointer hover:bg-muted/40 text-muted-foreground"
+          className="h-7 min-h-11 min-w-11 w-7 cursor-pointer text-muted-foreground hover:bg-muted/40 md:min-h-0 md:min-w-0"
           onClick={onOpen}
           disabled={isResetting}
           data-testid="reset-context-button"

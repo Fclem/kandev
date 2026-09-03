@@ -39,7 +39,7 @@ export function EnhancePromptButton({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-7 w-7 cursor-pointer hover:bg-muted/40 text-slate-400"
+              className="h-7 min-h-11 min-w-11 w-7 cursor-pointer text-slate-400 hover:bg-muted/40 md:min-h-0 md:min-w-0"
               onClick={isConfigured ? onClick : undefined}
               disabled={isDisabled}
               aria-label={t("common:enhancePromptWithAi")}

@@ -55,6 +55,7 @@ function DisabledImplementTooltip({
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- split-button markup stays together
 export function ImplementPlanButton({
   onClick,
   disabled,
@@ -69,7 +70,9 @@ export function ImplementPlanButton({
     menuTrigger: testIds?.menuTrigger ?? "implement-plan-menu-trigger",
     freshItem: testIds?.freshItem ?? "implement-fresh-menu-item",
   };
-  const controlHeightClass = framed ? "h-5" : "h-7";
+  const controlHeightClass = framed
+    ? "h-5 min-h-11 min-w-11 md:min-h-0 md:min-w-0"
+    : "h-7 min-h-11 min-w-11 md:min-h-0 md:min-w-0";
   const primaryButton = (
     <span className="inline-flex">
       <Button

@@ -202,6 +202,8 @@ function PromptHistoryBubble({
     <div className="min-w-0 flex-1">
       <div
         data-message-id={entry.messageId}
+        role={onNavigate ? "button" : undefined}
+        tabIndex={onNavigate ? 0 : undefined}
         aria-describedby={onNavigate ? rowLabelId : undefined}
         className={cn(
           "markdown-body markdown-body-user group relative flex min-h-11 cursor-pointer items-center overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
@@ -210,6 +212,17 @@ function PromptHistoryBubble({
         onClick={(event) => {
           if (isNestedInteractiveTarget(event.target, event.currentTarget)) return;
           onNavigate?.(entry.messageId);
+        }}
+        onKeyDown={(event) => {
+          if (
+            !onNavigate ||
+            event.target !== event.currentTarget ||
+            (event.key !== "Enter" && event.key !== " ")
+          ) {
+            return;
+          }
+          event.preventDefault();
+          onNavigate(entry.messageId);
         }}
       >
         {onNavigate && (

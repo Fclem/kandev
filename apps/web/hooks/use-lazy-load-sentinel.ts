@@ -127,7 +127,7 @@ function useSentinelObserver(opts: {
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        if (!entry) return;
+        if (!entry || entry.target !== opts.refs.sentinelNodeRef.current) return;
         opts.refs.intersectingRef.current = entry.isIntersecting;
         if (opts.refs.disarmedRef.current) {
           // Ignore the current intersection; arm only after an observed exit.
@@ -584,6 +584,9 @@ export function useLazyLoadSentinel(
     const previous = sentinelNodeRef.current;
     sentinelNodeRef.current = node;
     const observer = observerRef.current;
+    if (previous !== node) {
+      intersectingRef.current = false;
+    }
     if (!observer) return;
     if (previous && previous !== node) {
       observer.unobserve(previous);

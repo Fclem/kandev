@@ -122,8 +122,22 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     isLoadingMore,
     loadMore,
     isRequestCurrent,
+    isCurrentGeometryEligible: () => {
+      const scroller = scrollRef.current;
+      const sentinel = scroller?.querySelector<HTMLElement>(`[data-testid="${SENTINEL_TEST_ID}"]`);
+      if (!scroller || !sentinel || scroller.clientHeight === 0) return false;
+      const rootRect = scroller.getBoundingClientRect();
+      const sentinelRect = sentinel.getBoundingClientRect();
+      return sentinelRect.bottom >= rootRect.top && sentinelRect.top <= rootRect.bottom + 200;
+    },
   });
-  const isScrollable = usePanelContentScrollable(scrollRef, contentRef, recheck);
+  const scheduleRecheck = useCallback(() => {
+    requestAnimationFrame(() => recheck());
+  }, [recheck]);
+  const isScrollable = usePanelContentScrollable(scrollRef, contentRef, scheduleRecheck);
+  useEffect(() => {
+    scheduleRecheck();
+  }, [scheduleRecheck, promptGeneration, sessionId]);
   if (session?.is_passthrough) return <PromptHistoryPassthrough rootRef={rootRef} />;
 
   if (fetchFailed && entries.length === 0) {
@@ -207,6 +221,7 @@ function usePanelOlderPromptSentinel(opts: {
   isLoadingMore: boolean;
   loadMore: () => Promise<number>;
   isRequestCurrent: () => boolean;
+  isCurrentGeometryEligible: () => boolean;
 }): {
   sentinelRef: (node: HTMLDivElement | null) => void;
   onUserGesture: () => void;
@@ -227,6 +242,7 @@ function usePanelOlderPromptSentinel(opts: {
       // push the sentinel below the viewport and stall the auto-load.
       stickToBottomWhileLoading: true,
       isRequestCurrent: opts.isRequestCurrent,
+      isCurrentGeometryEligible: opts.isCurrentGeometryEligible,
     },
   );
 }
@@ -475,7 +491,6 @@ function usePanelContentScrollable(
   }, [scrollRef, contentRef]);
   useLayoutEffect(() => {
     setIsScrollable(measure());
-    onGeometryChange();
     const scroller = scrollRef.current;
     if (!scroller) return;
     const observer = new ResizeObserver(() => {
@@ -484,7 +499,7 @@ function usePanelContentScrollable(
     });
     observer.observe(scroller);
     return () => observer.disconnect();
-  }, [measure, onGeometryChange]);
+  });
   return isScrollable;
 }
 

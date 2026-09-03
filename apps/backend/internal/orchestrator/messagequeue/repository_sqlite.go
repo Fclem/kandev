@@ -2530,6 +2530,13 @@ func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (
 	`), sessionID); err != nil {
 		return 0, fmt.Errorf("purge session pending move: %w", err)
 	}
+	// A deleted session must not retain an explicit OFF policy if its queue
+	// state is later observed during cleanup or an ID is reused. Keep the
+	// generation row for send-now fencing, but reset the independent policy to
+	// its default ON value before advancing that generation.
+	if err := r.setAutoRunTx(ctx, tx, sessionID, true); err != nil {
+		return 0, err
+	}
 	if err := r.bumpSendNowGenerationTx(ctx, tx, sessionID); err != nil {
 		return 0, err
 	}

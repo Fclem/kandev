@@ -77,7 +77,7 @@ function SendSubmitButton({
           variant="default"
           size="icon"
           className={cn(
-            "h-7 min-h-11 min-w-11 rounded-full cursor-pointer md:min-h-0 md:min-w-0",
+            "h-7 rounded-full cursor-pointer [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11",
             planModeEnabled && "bg-violet-600 hover:bg-violet-500",
           )}
           disabled={isDisabled}
@@ -143,7 +143,7 @@ export function SubmitButton({
               type="button"
               variant="secondary"
               size="icon"
-              className="h-7 min-h-11 min-w-11 rounded-full cursor-pointer bg-destructive/10 text-destructive hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-70 md:min-h-0 md:min-w-0"
+              className="h-7 rounded-full cursor-pointer bg-destructive/10 text-destructive hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-70 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
               onClick={handleCancelClick}
               disabled={isCancelling}
               data-testid="cancel-agent-button"
@@ -200,7 +200,7 @@ export function PlanToggleButton({
           data-plan-available={planModeAvailable}
           data-plan-enabled={planModeEnabled}
           className={cn(
-            "h-7 min-h-11 min-w-11 gap-1.5 px-2 hover:bg-muted/40 cursor-pointer md:min-h-0 md:min-w-0",
+            "h-7 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11",
             planModeEnabled && planModeAvailable && "bg-violet-500/15 text-violet-400",
           )}
           onClick={() => onPlanModeChange(!planModeEnabled)}
@@ -222,7 +222,7 @@ export function AttachFilesButton({ onClick }: { onClick: () => void }) {
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 min-h-11 min-w-11 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 md:min-h-0 md:min-w-0"
+          className="h-7 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
           onClick={onClick}
           data-testid="chat-attachments-button"
         >

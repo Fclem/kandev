@@ -131,8 +131,19 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
       return sentinelRect.bottom >= rootRect.top && sentinelRect.top <= rootRect.bottom + 200;
     },
   });
+  const recheckIdentityRef = useRef({ sessionId, promptGeneration });
+  recheckIdentityRef.current = { sessionId, promptGeneration };
   const scheduleRecheck = useCallback(() => {
-    requestAnimationFrame(() => recheck());
+    const identity = recheckIdentityRef.current;
+    requestAnimationFrame(() => {
+      if (
+        recheckIdentityRef.current.sessionId !== identity.sessionId ||
+        recheckIdentityRef.current.promptGeneration !== identity.promptGeneration
+      ) {
+        return;
+      }
+      recheck();
+    });
   }, [recheck]);
   const isScrollable = usePanelContentScrollable(scrollRef, contentRef, scheduleRecheck);
   useEffect(() => {

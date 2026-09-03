@@ -1205,9 +1205,24 @@ func copyMessageMetadata(metadata map[string]interface{}, extraCapacity int) map
 	}
 	out := make(map[string]interface{}, len(metadata)+extraCapacity)
 	for key, value := range metadata {
-		out[key] = value
+		out[key] = copyMessageMetadataValue(value)
 	}
 	return out
+}
+
+func copyMessageMetadataValue(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return copyMessageMetadata(typed, 0)
+	case []interface{}:
+		out := make([]interface{}, len(typed))
+		for i, item := range typed {
+			out[i] = copyMessageMetadataValue(item)
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 // AppendContent appends content onto the session's tail entry when the tail's
@@ -1670,7 +1685,10 @@ func (s *Service) GetStatus(ctx context.Context, sessionID string) *QueueStatus 
 			if entry.IsReservedInFlight() {
 				continue
 			}
-			pending = append(pending, entry)
+			// Repositories may return shallow copies. The status is also handed to
+			// asynchronous event publishers, so detach maps and slices before the
+			// admission lock is released.
+			pending = append(pending, *cloneQueuedMessage(&entry))
 		}
 		status = &QueueStatus{
 			Entries:      pending,

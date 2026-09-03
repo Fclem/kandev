@@ -737,8 +737,11 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 	var revision int64
 	var updateErr error
 	applyUpdate := func(updateCtx context.Context) (int64, error) {
+		attachmentsToClaim := newlyAdded
+		newlyAdded = nil
 		if h.attachmentClaimer != nil {
-			if err := h.attachmentClaimer.ClaimMessageAttachments(updateCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); err != nil {
+			if err := h.attachmentClaimer.ClaimMessageAttachments(updateCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(attachmentsToClaim)); err != nil {
+				h.releaseQueuedAttachmentUpdateFailure(updateCtx, previous, req.SessionID, attachmentsToClaim, releaseClaims)
 				return 0, fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
 			}
 		}
@@ -751,8 +754,7 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 				req.Content, req.Attachments, metadataUpdates, queuedBy)
 		}
 		if updateErr != nil && h.attachmentClaimer != nil {
-			h.releaseQueuedAttachmentUpdateFailure(updateCtx, previous, req.SessionID, newlyAdded, releaseClaims)
-			newlyAdded = nil
+			h.releaseQueuedAttachmentUpdateFailure(updateCtx, previous, req.SessionID, attachmentsToClaim, releaseClaims)
 		}
 		return revision, updateErr
 	}
@@ -764,7 +766,7 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 		revision, updateErr = applyUpdate(ctx)
 	}
 	if updateErr != nil {
-		return h.queueUpdateFailure(ctx, msg, req, updateErr, releaseClaims, previous, newlyAdded)
+		return h.queueUpdateFailure(ctx, msg, req, updateErr)
 	}
 	if releaseClaims != nil && previous != nil {
 		if superseded := supersededQueueAttachments(previous.Attachments, req.Attachments); len(superseded) > 0 {
@@ -796,6 +798,7 @@ func (h *QueueHandlers) releaseQueuedAttachmentUpdateFailure(
 		h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
 	}
 }
+
 func newlyAddedQueueAttachments(previous, replacement []messagequeue.MessageAttachment) []messagequeue.MessageAttachment {
 	retained := make(map[string]struct{}, len(previous))
 	for _, attachment := range previous {
@@ -807,7 +810,6 @@ func newlyAddedQueueAttachments(previous, replacement []messagequeue.MessageAtta
 	for _, attachment := range replacement {
 		if attachment.AttachmentID == "" {
 			continue
-
 		}
 		if _, ok := retained[attachment.AttachmentID]; !ok {
 			newlyAdded = append(newlyAdded, attachment)
@@ -828,18 +830,27 @@ func (h *QueueHandlers) updateMessageWithAttachmentLease(
 ) (int64, error) {
 	controller, ok := h.queueEdit.(queueEditAttachmentController)
 	if ok {
+		var claimedAttachments []messagequeue.MessageAttachment
+		var claimAttempted bool
 		return controller.UpdateMessageWithLeaseAfterValidation(
 			ctx, req.SessionID, req.EntryID, req.LeaseID, req.OperationID, connectionID,
 			*req.ExpectedRevision, req.Content, req.Attachments, metadataUpdates,
 			func(prepareCtx context.Context) error {
-				if err := h.attachmentClaimer.ClaimMessageAttachments(prepareCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(*newlyAdded)); err != nil {
+				claimedAttachments = append(claimedAttachments[:0], *newlyAdded...)
+				*newlyAdded = nil
+				claimAttempted = true
+				if err := h.attachmentClaimer.ClaimMessageAttachments(prepareCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(claimedAttachments)); err != nil {
 					return fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
 				}
 				return nil
 			},
 			func(rollbackCtx context.Context) error {
-				h.releaseQueuedAttachmentUpdateFailure(rollbackCtx, previous, req.SessionID, *newlyAdded, releaseClaims)
-				*newlyAdded = nil
+				if claimAttempted && releaseClaims != nil && previous != nil {
+					if err := releaseClaims.ReleaseMessageAttachments(context.WithoutCancel(rollbackCtx), previous.TaskID, req.SessionID, queueAttachmentsToV1(claimedAttachments)); err != nil {
+						h.logger.Warn("failed to release attachments after queue update rollback", zap.Error(err))
+					}
+				}
+				claimedAttachments = nil
 				return nil
 			},
 		)
@@ -854,19 +865,11 @@ func (h *QueueHandlers) updateMessageWithAttachmentLease(
 	return applyUpdate(ctx)
 }
 func (h *QueueHandlers) queueUpdateFailure(
-	ctx context.Context,
+	_ context.Context,
 	msg *ws.Message,
 	req wsUpdateMessageRequest,
 	updateErr error,
-	releaseClaims QueueAttachmentReleaser,
-	previous *messagequeue.QueuedMessage,
-	newlyAdded []messagequeue.MessageAttachment,
 ) (*ws.Message, error) {
-	if releaseClaims != nil && previous != nil {
-		if releaseErr := releaseClaims.ReleaseMessageAttachments(context.WithoutCancel(ctx), previous.TaskID, req.SessionID, queueAttachmentsToV1(newlyAdded)); releaseErr != nil {
-			h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
-		}
-	}
 	if errors.Is(updateErr, errQueuedAttachmentUnavailable) {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "Attachment is no longer available", nil)
 	}

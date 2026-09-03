@@ -668,7 +668,7 @@ function PromptHistoryRow({
               aria-expanded={expanded}
               aria-label={t(expanded ? "task:collapsePrompt" : "task:expandPrompt")}
               data-testid={`prompt-history-expand-${index}`}
-              onClick={onToggle}
+              onClick={(event) => (event.stopPropagation(), onToggle())}
             >
               {expanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
             </Button>

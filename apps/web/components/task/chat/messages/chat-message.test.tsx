@@ -202,6 +202,7 @@ describe("ChatMessage prompt mentions", () => {
     const linkedMention = screen
       .getByRole("link", { name: "@hello" })
       .querySelector<HTMLElement>(`[data-testid="${PROMPT_MENTION_TESTID}"]`);
+    expect(linkedMention).not.toBeNull();
     expect(linkedMention?.getAttribute("role")).toBeNull();
     expect(linkedMention?.getAttribute("tabindex")).toBeNull();
   });

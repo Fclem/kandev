@@ -166,7 +166,7 @@ export const test = backendFixture.extend<
   {
     testPage: Page;
     tabletTestPage: Page;
-    prCapture: PrAssetCapture;
+    coarseDesktopTestPage: Page;
     /**
      * Auto fixture that resets integration mock state and any persisted
      * Jira/Linear configs at the top of every test. Auto fixtures run
@@ -408,6 +408,20 @@ export const test = backendFixture.extend<
     const context = await browser.newContext({
       baseURL: backend.frontendUrl,
       viewport: { width: 900, height: 900 },
+      hasTouch: true,
+      isMobile: false,
+    });
+    const page = await context.newPage();
+    await setupPage(page, backend);
+    await use(page);
+    await context.close();
+  },
+
+  coarseDesktopTestPage: async ({ browser, backend, testPage }, use) => {
+    void testPage;
+    const context = await browser.newContext({
+      baseURL: backend.frontendUrl,
+      viewport: { width: 1280, height: 900 },
       hasTouch: true,
       isMobile: false,
     });

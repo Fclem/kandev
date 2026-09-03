@@ -19,7 +19,7 @@ vi.mock("./file-context-menu", () => ({
   getGitStatusTextClass: () => "",
 }));
 
-import { TreeNodeItem } from "./file-browser-parts";
+import { shouldShowFileTreeTouchActions, TreeNodeItem } from "./file-browser-parts";
 
 const FILE_NODE: FileTreeNode = { name: "README.md", path: "README.md", is_dir: false, size: 0 };
 const DIRECTORY_NODE: FileTreeNode = { name: "src", path: "src", is_dir: true, size: 0 };
@@ -113,5 +113,38 @@ describe("TreeNodeItem touch context action", () => {
     fireEvent.click(screen.getByTestId("file-tree-touch-add-to-chat"));
 
     expect(onAddToChatContext).toHaveBeenCalledWith(DIRECTORY_NODE);
+  });
+});
+
+describe("FileBrowser touch action gate", () => {
+  it("keeps the touch action available on a coarse-pointer desktop viewport", () => {
+    expect(shouldShowFileTreeTouchActions(false, false)).toBe(true);
+  });
+
+  it("keeps the touch action available on mobile and hidden on fine-pointer desktop", () => {
+    expect(shouldShowFileTreeTouchActions(true, true)).toBe(true);
+    expect(shouldShowFileTreeTouchActions(false, true)).toBe(false);
+  });
+});
+
+describe("TreeNodeItem row spacing", () => {
+  it("keeps the touch-action row on one flex line", () => {
+    render(
+      <TreeNodeItem
+        row={ROW}
+        activeFolderPath=""
+        visibleLoadingPaths={new Set()}
+        fileStatuses={new Map()}
+        tree={null}
+        onToggleExpand={vi.fn()}
+        onOpenFile={vi.fn()}
+        setTree={() => {}}
+        showTouchActions
+        onAddToChatContext={vi.fn()}
+      />,
+    );
+
+    // @covers AC-UI-FILE-TREE-CHAT-CONTEXT-001.9
+    expect(screen.getByTestId("file-tree-node").className).not.toContain("flex-wrap");
   });
 });

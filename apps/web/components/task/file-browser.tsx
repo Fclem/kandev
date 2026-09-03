@@ -25,7 +25,12 @@ import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { isEditableKeydownTarget } from "@/lib/keyboard/utils";
 import { useContextFilesStore } from "@/lib/state/context-files-store";
 import { FileBrowserHeader } from "./file-browser-header";
-import { insertNodeInTree, removeNodeFromTree, FileBrowserContentArea } from "./file-browser-parts";
+import {
+  insertNodeInTree,
+  removeNodeFromTree,
+  FileBrowserContentArea,
+  shouldShowFileTreeTouchActions,
+} from "./file-browser-parts";
 import {
   useFileBrowserSearch,
   useFileBrowserTree,
@@ -530,7 +535,7 @@ export function FileBrowser({
   addSourcesDisabledReason,
 }: FileBrowserProps) {
   const { isMobile, isFinePointer } = useResponsiveBreakpoint();
-  const showTouchActions = isMobile || !isFinePointer;
+  const showTouchActions = shouldShowFileTreeTouchActions(isMobile, isFinePointer);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { data, handlers, multiSelect, dnd, handleClickOutside } = useFileBrowserViewModel({

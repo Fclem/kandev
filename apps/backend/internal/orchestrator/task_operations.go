@@ -3600,6 +3600,25 @@ func (s *Service) publishTaskSessionErrorEvent(
 	))
 }
 
+// purgeDeletedSessionQueue invalidates in-process edit state and removes the
+// deleted session's queue using a post-commit context. The task repository
+// invokes its queue purge notifier after the session row and durable queue
+// transaction commit, so request cancellation must not prevent cleanup.
+func (s *Service) purgeDeletedSessionQueue(ctx context.Context, taskID, sessionID string) {
+	cleanupCtx := context.WithoutCancel(ctx)
+	if s.messageQueue == nil {
+		return
+	}
+	s.messageQueue.InvalidateEditLeasesForSession(sessionID)
+	if _, err := s.messageQueue.PurgeSession(cleanupCtx, sessionID); err != nil {
+		s.logger.Warn("failed to purge queue after task session deletion",
+			zap.String("task_id", taskID),
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+	}
+	s.publishTaskQueueStatusEvent(cleanupCtx, taskID, sessionID)
+}
+
 // cancelDeletedSessionQueue removes file-backed prompt attachments left on a
 // deleted session. Queue rows and their status notification are owned by the
 // repository's post-commit callback when that callback is registered. Focused

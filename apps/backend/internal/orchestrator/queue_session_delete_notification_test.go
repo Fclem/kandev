@@ -7,6 +7,7 @@ import (
 
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
+	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	"github.com/kandev/kandev/internal/task/models"
 )
 
@@ -38,5 +39,32 @@ func TestDeleteSessionPublishesOneQueueStatusNotification(t *testing.T) {
 	}
 	if got := statusEvents.Load(); got != 1 {
 		t.Fatalf("queue status notifications = %d, want 1", got)
+	}
+}
+
+func TestDeletedSessionQueueCleanupIgnoresCancelledContext(t *testing.T) {
+	queue := messagequeue.NewServiceMemory(testLogger())
+	entry, err := queue.QueueMessage(
+		context.Background(),
+		"session-delete-cancelled",
+		"task-delete-cancelled",
+		"queued",
+		"",
+		messagequeue.QueuedByUser,
+		false,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("queue message: %v", err)
+	}
+
+	svc := &Service{messageQueue: queue, logger: testLogger()}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	svc.purgeDeletedSessionQueue(ctx, entry.TaskID, entry.SessionID)
+
+	if got := queue.GetStatus(context.Background(), entry.SessionID).Count; got != 0 {
+		t.Fatalf("deleted session queue count = %d, want 0", got)
 	}
 }

@@ -73,3 +73,85 @@ func TestMemoryReserveHeadUsesFIFOPositionAfterReplacement(t *testing.T) {
 		t.Fatalf("reserved entry = %q, want head", reserved.ID)
 	}
 }
+
+func TestMemoryInsertAndListOwnQueueSnapshotData(t *testing.T) {
+	repo := NewMemoryRepository()
+	ctx := context.Background()
+	original := &QueuedMessage{
+		ID:        "entry-1",
+		SessionID: "session-1",
+		TaskID:    "task-1",
+		Content:   "original",
+		QueuedBy:  QueuedByUser,
+		Attachments: []MessageAttachment{{
+			AttachmentID: "attachment-1",
+			Name:         "original.txt",
+		}},
+		Metadata: map[string]interface{}{
+			"nested": map[string]interface{}{"value": "original"},
+		},
+	}
+	if err := repo.Insert(ctx, original, 0); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	original.Attachments[0].Name = "caller-mutated.txt"
+	original.Metadata["nested"].(map[string]interface{})["value"] = "caller-mutated"
+	entries, err := repo.ListBySession(ctx, original.SessionID)
+	if err != nil {
+		t.Fatalf("list after caller mutation: %v", err)
+	}
+	if got := entries[0].Attachments[0].Name; got != "original.txt" {
+		t.Fatalf("stored attachment after caller mutation = %q, want original.txt", got)
+	}
+	if got := entries[0].Metadata["nested"].(map[string]interface{})["value"]; got != "original" {
+		t.Fatalf("stored metadata after caller mutation = %q, want original", got)
+	}
+
+	entries[0].Attachments[0].Name = "result-mutated.txt"
+	entries[0].Metadata["nested"].(map[string]interface{})["value"] = "result-mutated"
+	fresh, err := repo.ListBySession(ctx, original.SessionID)
+	if err != nil {
+		t.Fatalf("list after result mutation: %v", err)
+	}
+	if got := fresh[0].Attachments[0].Name; got != "original.txt" {
+		t.Fatalf("stored attachment after result mutation = %q, want original.txt", got)
+	}
+	if got := fresh[0].Metadata["nested"].(map[string]interface{})["value"]; got != "original" {
+		t.Fatalf("stored metadata after result mutation = %q, want original", got)
+	}
+	lifecycle := &QueuedMessage{
+		ID:        "lifecycle-1",
+		SessionID: "lifecycle-session",
+		TaskID:    "task-1",
+		Content:   "lifecycle",
+		QueuedBy:  QueuedByWorkflow,
+		Attachments: []MessageAttachment{{
+			AttachmentID: "lifecycle-attachment",
+			Name:         "lifecycle.txt",
+		}},
+		Metadata: map[string]interface{}{
+			MetadataLifecycleDurable: true,
+			"nested":                 map[string]interface{}{"value": "original"},
+		},
+	}
+	if err := repo.Insert(ctx, lifecycle, 0); err != nil {
+		t.Fatalf("insert lifecycle: %v", err)
+	}
+	reserved, err := repo.ReserveHead(ctx, lifecycle.SessionID)
+	if err != nil {
+		t.Fatalf("reserve lifecycle: %v", err)
+	}
+	reserved.Attachments[0].Name = "result-mutated.txt"
+	reserved.Metadata["nested"].(map[string]interface{})["value"] = "result-mutated"
+	fresh, err = repo.ListBySession(ctx, lifecycle.SessionID)
+	if err != nil {
+		t.Fatalf("list after reserve result mutation: %v", err)
+	}
+	if got := fresh[0].Attachments[0].Name; got != "lifecycle.txt" {
+		t.Fatalf("reserved attachment after result mutation = %q, want lifecycle.txt", got)
+	}
+	if got := fresh[0].Metadata["nested"].(map[string]interface{})["value"]; got != "original" {
+		t.Fatalf("reserved metadata after result mutation = %q, want original", got)
+	}
+}

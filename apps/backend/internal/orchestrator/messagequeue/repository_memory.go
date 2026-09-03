@@ -125,11 +125,11 @@ func (r *memoryRepository) Restore(_ context.Context, msg *QueuedMessage, maxPer
 	if msg.QueuedAt.IsZero() {
 		msg.QueuedAt = time.Now().UTC()
 	}
-	clone := *msg
+	clone := cloneQueuedMessage(msg)
 	index := sort.Search(len(list), func(i int) bool { return list[i].Position > clone.Position })
 	list = append(list, nil)
 	copy(list[index+1:], list[index:])
-	list[index] = &clone
+	list[index] = clone
 	r.entries[msg.SessionID] = list
 	if clone.Position > r.nextPosition[msg.SessionID] {
 		r.nextPosition[msg.SessionID] = clone.Position
@@ -151,8 +151,8 @@ func (r *memoryRepository) insertLocked(msg *QueuedMessage, maxPerSession int) e
 	}
 	r.nextPosition[msg.SessionID]++
 	msg.Position = r.nextPosition[msg.SessionID]
-	clone := *msg
-	r.entries[msg.SessionID] = append(list, &clone)
+	clone := cloneQueuedMessage(msg)
+	r.entries[msg.SessionID] = append(list, clone)
 	return nil
 }
 
@@ -198,8 +198,8 @@ func (r *memoryRepository) RequeuePreservingFIFO(_ context.Context, msg *QueuedM
 			existing.Content = msg.Content
 			existing.Model = msg.Model
 			existing.PlanMode = msg.PlanMode
-			existing.Attachments = msg.Attachments
-			existing.Metadata = msg.Metadata
+			existing.Attachments = append([]MessageAttachment(nil), msg.Attachments...)
+			existing.Metadata = copyMessageMetadata(msg.Metadata, 0)
 			if msg.QueuedAt.IsZero() {
 				existing.QueuedAt = time.Now().UTC()
 			} else {
@@ -217,9 +217,9 @@ func (r *memoryRepository) RequeuePreservingFIFO(_ context.Context, msg *QueuedM
 		msg.QueuedAt = time.Now().UTC()
 	}
 	msg.Position = r.nextRequeuePositionLocked(msg.SessionID, list)
-	clone := *msg
+	clone := cloneQueuedMessage(msg)
 	newList := make([]*QueuedMessage, 0, len(list)+1)
-	newList = append(newList, &clone)
+	newList = append(newList, clone)
 	newList = append(newList, list...)
 	r.entries[msg.SessionID] = newList
 	return nil
@@ -264,8 +264,8 @@ func (r *memoryRepository) AppendOrInsertTail(_ context.Context, sessionID, task
 		tail := list[len(list)-1]
 		if tail.QueuedBy == queuedBy {
 			tail.Content = tail.Content + "\n\n---\n\n" + content
-			out := *tail
-			return &out, true, nil
+			out := cloneQueuedMessage(tail)
+			return out, true, nil
 		}
 	}
 
@@ -304,11 +304,10 @@ func (r *memoryRepository) InsertOrReplaceByCoalesceKey(_ context.Context, msg *
 		existing.Content = msg.Content
 		existing.Model = msg.Model
 		existing.PlanMode = msg.PlanMode
-		existing.Attachments = msg.Attachments
-		existing.Metadata = msg.Metadata
-		existing.QueuedAt = msg.QueuedAt
-		out := *existing
-		return &out, true, nil
+		existing.Attachments = append([]MessageAttachment(nil), msg.Attachments...)
+		existing.Metadata = copyMessageMetadata(msg.Metadata, 0)
+		out := cloneQueuedMessage(existing)
+		return out, true, nil
 	}
 	if !allowInsert {
 		return nil, false, ErrEntryNotFound
@@ -338,12 +337,10 @@ func (r *memoryRepository) InsertOrReplaceLifecycleByCoalesceKey(ctx context.Con
 		existing.TaskID = msg.TaskID
 		existing.Content = msg.Content
 		existing.Model = msg.Model
-		existing.PlanMode = msg.PlanMode
-		existing.Attachments = msg.Attachments
-		existing.Metadata = msg.Metadata
-		existing.QueuedAt = msg.QueuedAt
-		out := *existing
-		return &out, true, nil
+		existing.Attachments = append([]MessageAttachment(nil), msg.Attachments...)
+		existing.Metadata = copyMessageMetadata(msg.Metadata, 0)
+		out := cloneQueuedMessage(existing)
+		return out, true, nil
 	}
 	if !allowInsert {
 		return nil, false, ErrEntryNotFound
@@ -361,7 +358,7 @@ func (r *memoryRepository) ListBySession(_ context.Context, sessionID string) ([
 	list := r.entries[sessionID]
 	out := make([]QueuedMessage, len(list))
 	for i, m := range list {
-		out[i] = *m
+		out[i] = *cloneQueuedMessage(m)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Position < out[j].Position })
 	return out, nil
@@ -422,8 +419,8 @@ func (r *memoryRepository) TakeHead(_ context.Context, sessionID string) (*Queue
 		delete(r.entries, sessionID)
 		delete(r.nextPosition, sessionID)
 	}
-	out := *head
-	return &out, nil
+	out := cloneQueuedMessage(head)
+	return out, nil
 }
 
 // ReserveHead returns the lowest-position entry, deleting ordinary rows and reserving durable lifecycle rows.
@@ -440,22 +437,22 @@ func (r *memoryRepository) reserveHeadLocked(sessionID string) *QueuedMessage {
 	}
 	headIndex := lowestPositionIndex(list)
 	head := list[headIndex]
-	out := *head
+	out := cloneQueuedMessage(head)
 	if head.IsDurableLifecycle() {
 		// Mirror the SQLite reservation: the stored row is flagged in flight so
 		// queue status stops listing it, while the returned copy keeps the
 		// unmarked metadata a requeue would write back.
-		out.Metadata = clearReservedMetadata(head.Metadata)
+		out.Metadata = clearReservedMetadata(out.Metadata)
 		out.reservedLifecycleDelivery = true
-		head.Metadata = markReservedMetadata(out.Metadata)
-		return &out
+		head.Metadata = markReservedMetadata(copyMessageMetadata(out.Metadata, 0))
+		return out
 	}
 	r.entries[sessionID] = append(list[:headIndex], list[headIndex+1:]...)
 	if len(r.entries[sessionID]) == 0 {
 		delete(r.entries, sessionID)
 		delete(r.nextPosition, sessionID)
 	}
-	return &out
+	return out
 }
 
 // GetAutoRun returns true when no explicit policy exists.
@@ -540,8 +537,8 @@ func (r *memoryRepository) TakeByID(_ context.Context, sessionID, entryID string
 			delete(r.entries, sessionID)
 			delete(r.nextPosition, sessionID)
 		}
-		out := *m
-		return &out, nil
+		out := cloneQueuedMessage(m)
+		return out, nil
 	}
 	return nil, nil
 }
@@ -808,7 +805,7 @@ func (r *memoryRepository) UpdateContentAndMetadata(_ context.Context, sessionID
 			return ErrEntryNotFound
 		}
 		m.Content = content
-		m.Attachments = attachments
+		m.Attachments = append([]MessageAttachment(nil), attachments...)
 		m.Metadata = applyMetadataUpdates(m.Metadata, metadataUpdates)
 		return nil
 	}
@@ -875,8 +872,7 @@ func (r *memoryRepository) MergeIntoAbove(_ context.Context, sessionID, sourceID
 		delete(r.nextPosition, sessionID)
 	}
 
-	merged := *target
-	return &merged, nil
+	return cloneQueuedMessage(target), nil
 }
 
 // AutoMergeIntoAbove folds one exact source into its immediate compatible

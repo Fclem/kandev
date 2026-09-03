@@ -2689,6 +2689,24 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 	return tx.Commit()
 }
 
+func queuedSnapshotTaskIDs(entries []QueuedMessage, pendingMove *PendingMove) []string {
+	taskIDs := make(map[string]struct{}, len(entries)+1)
+	for _, entry := range entries {
+		if entry.TaskID != "" {
+			taskIDs[entry.TaskID] = struct{}{}
+		}
+	}
+	if pendingMove != nil && pendingMove.TaskID != "" {
+		taskIDs[pendingMove.TaskID] = struct{}{}
+	}
+	ids := make([]string, 0, len(taskIDs))
+	for taskID := range taskIDs {
+		ids = append(ids, taskID)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 // ReplaceSession replaces a session's queue with the supplied snapshot.
 func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string, entries []QueuedMessage, pendingMove *PendingMove) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -2696,6 +2714,13 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 		return fmt.Errorf("begin replace session tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Lock owning task rows before session locks, matching lifecycle purge's
+	// task-row -> session-lock order and rejecting archived snapshots.
+	for _, taskID := range queuedSnapshotTaskIDs(entries, pendingMove) {
+		if err := r.guardActiveTaskTx(ctx, tx, taskID); err != nil {
+			return err
+		}
+	}
 	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
 		return err
 	}

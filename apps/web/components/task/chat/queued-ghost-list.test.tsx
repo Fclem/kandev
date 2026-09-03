@@ -145,7 +145,12 @@ beforeEach(() => {
   useQueueEditProtectionMock.mockReset();
   useQueueEditProtectionMock.mockReturnValue({
     editingEntryId: null,
-    editLease: null,
+    editLease: {
+      session_id: SESSION_ID,
+      entry_id: "q-1",
+      lease_id: "lease-default",
+      target_revision: 0,
+    },
     beginEdit: vi.fn(async () => true),
     completeEdit: vi.fn(async () => {}),
   });
@@ -523,7 +528,13 @@ describe("QueueAffordance entity-reference edits", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(state.editEntry).toHaveBeenCalledWith("q-1", "reference removed", undefined, []),
+      expect(state.editEntry).toHaveBeenCalledWith(
+        "q-1",
+        "reference removed",
+        undefined,
+        [],
+        expect.objectContaining({ lease_id: "lease-default" }),
+      ),
     );
   });
 });

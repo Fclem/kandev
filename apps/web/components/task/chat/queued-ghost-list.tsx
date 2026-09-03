@@ -266,6 +266,7 @@ type QueuePanelDisclosureProps = {
   mergeEnabled: boolean;
   pinned: boolean;
   editingEntryId: string | null;
+  editLeaseActive: boolean;
   onClose: () => void;
   onClear: () => void;
   onAutoRunChange: (enabled: boolean) => void;
@@ -299,6 +300,7 @@ function QueuePanelDisclosure({
   mergeEnabled,
   pinned,
   editingEntryId,
+  editLeaseActive,
   onClose,
   onClear,
   onAutoRunChange,
@@ -328,6 +330,7 @@ function QueuePanelDisclosure({
           isLoading={isLoading}
           cancellationPending={cancellationPending}
           editingEntryId={editingEntryId}
+          editLeaseActive={editLeaseActive}
           mergeEnabled={mergeEnabled}
           pinned={pinned}
           onClose={onClose}
@@ -452,6 +455,7 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
         mergeEnabled={mergeEnabled}
         pinned={pinned}
         onClose={close}
+        editLeaseActive={editLease !== null}
         onEditStart={beginEdit}
         onEditComplete={completeEdit}
         onClear={handleClear}
@@ -535,6 +539,7 @@ type QueuePanelProps = {
   mergeEnabled: boolean;
   pinned: boolean;
   editingEntryId: string | null;
+  editLeaseActive: boolean;
   onClose: () => void;
   onClear: () => void;
   onAutoRunChange: (enabled: boolean) => void;
@@ -601,6 +606,66 @@ function useQueueReorder({ entries, canReorder, onReorder }: QueueReorderArgs) {
   };
 }
 
+// Reordering is disabled while a queue mutation or backend cancellation is in flight.
+type QueuePanelEntryProps = {
+  entry: QueuedMessage;
+  index: number;
+  editLeaseActive: boolean;
+  canEdit: boolean;
+  canMerge: boolean;
+  canDrag: boolean;
+  showDragHandle: boolean;
+  isDragging: boolean;
+  sendNowDisabled: boolean;
+  onSave: QueuePanelProps["onSave"];
+  onRemove: () => Promise<void>;
+  onMerge: () => Promise<void>;
+  onSendNow: () => void;
+  onEditStart: () => Promise<boolean>;
+  onEditComplete: () => Promise<void>;
+};
+
+function QueuePanelEntry({
+  entry,
+  index,
+  editLeaseActive,
+  canEdit,
+  canMerge,
+  canDrag,
+  showDragHandle,
+  isDragging,
+  sendNowDisabled,
+  onSave,
+  onRemove,
+  onMerge,
+  onSendNow,
+  onEditStart,
+  onEditComplete,
+}: QueuePanelEntryProps) {
+  return (
+    <QueuedGhostMessage
+      entry={entry}
+      index={index}
+      editLeaseActive={editLeaseActive}
+      canEdit={canEdit}
+      canRemove
+      canMerge={canMerge}
+      canDrag={canDrag}
+      showDragHandle={showDragHandle}
+      isDragging={isDragging}
+      onSave={(content, entityReferences, attachments) =>
+        onSave(entry.id, content, entityReferences, attachments)
+      }
+      onRemove={onRemove}
+      onMerge={onMerge}
+      onSendNow={onSendNow}
+      sendNowDisabled={sendNowDisabled}
+      onEditStart={onEditStart}
+      onEditComplete={onEditComplete}
+    />
+  );
+}
+
 function QueuePanel({
   entries,
   count,
@@ -612,6 +677,7 @@ function QueuePanel({
   mergeEnabled,
   pinned,
   editingEntryId,
+  editLeaseActive,
   onClose,
   onClear,
   onAutoRunChange,
@@ -625,9 +691,7 @@ function QueuePanel({
   onEditComplete,
 }: QueuePanelProps) {
   const { t } = useTranslation();
-  // Reordering is disabled while a queue mutation or backend cancellation is
-  // in flight, matching the Send Now gate; the server stays authoritative, so
-  // the optimistic order is reconciled by the refetch after the drop.
+  // The server remains authoritative; drops reconcile through refetch.
   const { ids, sensors, activeId, canReorder, handleDragStart, handleDragEnd, handleDragCancel } =
     useQueueReorder({
       entries,
@@ -673,28 +737,26 @@ function QueuePanel({
         >
           <SortableContext items={ids} strategy={verticalListSortingStrategy}>
             {entries.map((entry, index) => (
-              <QueuedGhostMessage
+              <QueuePanelEntry
                 key={entry.id}
                 entry={entry}
                 index={index}
+                editLeaseActive={editLeaseActive}
                 canEdit={
                   !isLoading &&
                   !cancellationPending &&
                   canUserEditEntry(entry) &&
                   (editingEntryId === null || editingEntryId === entry.id)
                 }
-                canRemove
                 canMerge={mergeEnabled && canMergeWithAbove(entry, entries[index - 1])}
                 canDrag={canReorder}
                 showDragHandle={entries.length > 1}
                 isDragging={activeId === entry.id}
-                onSave={(content, entityReferences, attachments) =>
-                  onSave(entry.id, content, entityReferences, attachments)
-                }
+                sendNowDisabled={isLoading || cancellationPending}
+                onSave={onSave}
                 onRemove={() => onRemove(entry.id)}
                 onMerge={() => onMerge(entry.id)}
                 onSendNow={() => onSendEntryNow(entry.id)}
-                sendNowDisabled={isLoading || cancellationPending}
                 onEditStart={() => onEditStart(entry.id)}
                 onEditComplete={() => onEditComplete(entry.id)}
               />

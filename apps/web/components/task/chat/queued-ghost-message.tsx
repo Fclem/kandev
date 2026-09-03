@@ -391,6 +391,11 @@ type QueuedGhostMessageProps = {
    * entry's queued_by. Inter-task entries are visible but read-only.
    */
   canEdit: boolean;
+  /**
+   * Becomes false when the server-side edit lease is lost, so a row cannot
+   * continue presenting an editor that can no longer submit.
+   */
+  editLeaseActive?: boolean;
   /** Removal is independent from edit ownership and applies to every visible row. */
   canRemove?: boolean;
   /**
@@ -525,12 +530,27 @@ function useQueuedGhostSave({
   ]);
 }
 
+function useQueuedGhostLeaseLoss(
+  editing: boolean,
+  editLeaseActive: boolean,
+  entryContent: string,
+  setValue: (value: string) => void,
+  setEditing: (editing: boolean) => void,
+): void {
+  useEffect(() => {
+    if (!editing || editLeaseActive) return;
+    setValue(entryContent);
+    setEditing(false);
+  }, [editLeaseActive, editing, entryContent, setEditing, setValue]);
+}
+
 export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGhostMessageProps>(
   function QueuedGhostMessage(
     {
       entry,
       index,
       canEdit,
+      editLeaseActive = true,
       canRemove = true,
       canMerge = false,
       canDrag = true,
@@ -561,6 +581,7 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
     useEffect(() => {
       if (!editing) setValue(entry.content);
     }, [entry.content, editing]);
+    useQueuedGhostLeaseLoss(editing, editLeaseActive, entry.content, setValue, setEditing);
     const startEdit = useQueuedGhostStartEdit({
       canEdit,
       editing,
@@ -571,7 +592,6 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
         setEditing(true);
       },
     });
-
     useImperativeHandle(ref, () => ({ startEdit }), [startEdit]);
     const handleCancel = useCallback(async () => {
       setValue(entry.content);
@@ -590,8 +610,6 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
       setSaving,
       t,
     });
-
-    const positionLabel = queuePositionLabel(index, entry.position);
 
     return (
       <SortableRowShell
@@ -615,7 +633,7 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
           <DisplayView
             entry={entry}
             entityReferences={entityReferences}
-            positionLabel={positionLabel}
+            positionLabel={queuePositionLabel(index, entry.position)}
             canEdit={canEdit}
             canRemove={canRemove}
             canMerge={effectiveCanMerge}

@@ -37,6 +37,7 @@ const REMOVE_TESTID = "queue-entry-remove";
 const EDIT_TITLE = "Edit queued message";
 const MERGE_TITLE = "Merge with above";
 
+const QUEUE_EDIT_TEXTAREA_TESTID = "queue-edit-textarea";
 function entry(overrides: Partial<QueuedMessage> = {}): QueuedMessage {
   return {
     id: "q-1",
@@ -196,6 +197,35 @@ describe("QueuedGhostMessage reorder handle", () => {
     renderRow({ queued_by: "user-1" }, { canEdit: true });
     fireEvent.click(screen.getByTestId(EDIT_TESTID));
     expect(screen.queryByTestId(HANDLE_TESTID)).toBeNull();
+  });
+});
+describe("QueuedGhostMessage lease lifecycle", () => {
+  it("leaves edit mode when its lease is lost", () => {
+    const queuedEntry = entry({ queued_by: "user-1" });
+    const view = render(
+      <QueuedGhostMessage
+        entry={queuedEntry}
+        canEdit
+        editLeaseActive
+        onSave={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId(EDIT_TESTID));
+    expect(screen.getByTestId(QUEUE_EDIT_TEXTAREA_TESTID)).toBeTruthy();
+
+    view.rerender(
+      <QueuedGhostMessage
+        entry={queuedEntry}
+        canEdit
+        editLeaseActive={false}
+        onSave={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId(QUEUE_EDIT_TEXTAREA_TESTID)).toBeNull();
   });
 });
 
@@ -425,7 +455,7 @@ describe("QueuedGhostMessage entity references", () => {
     );
 
     fireEvent.click(screen.getByTitle(EDIT_TITLE));
-    fireEvent.change(screen.getByTestId("queue-edit-textarea"), { target: { value: edited } });
+    fireEvent.change(screen.getByTestId(QUEUE_EDIT_TEXTAREA_TESTID), { target: { value: edited } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(edited, [issue, task]));
@@ -448,7 +478,7 @@ describe("QueuedGhostMessage entity references", () => {
     );
 
     fireEvent.click(screen.getByTitle(EDIT_TITLE));
-    fireEvent.change(screen.getByTestId("queue-edit-textarea"), {
+    fireEvent.change(screen.getByTestId(QUEUE_EDIT_TEXTAREA_TESTID), {
       target: { value: "reference removed" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -470,7 +500,7 @@ describe("QueuedGhostMessage entity references", () => {
     );
 
     fireEvent.click(screen.getByTitle(EDIT_TITLE));
-    fireEvent.change(screen.getByTestId("queue-edit-textarea"), { target: { value: "" } });
+    fireEvent.change(screen.getByTestId(QUEUE_EDIT_TEXTAREA_TESTID), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith("", [], attachments));

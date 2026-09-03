@@ -7,16 +7,16 @@ owners:
   - kandev
 ---
 
-# UI system
+# UI
 
-## Ownership
+## Scope
 
-UI owns reusable presentation and responsive interaction.
+UI owns responsive behavior.
 [Tasks](../tasks/README.md), [Agents](../agents/README.md),
 [Plugins](../plugins/README.md), and [Integrations](../integrations/README.md) own
-feature behavior and state.
+behavior/state.
 
-## Specification map
+## Map
 
 ### Requirements
 
@@ -122,6 +122,7 @@ feature behavior and state.
 - [Confirmations](requirements/confirmation-warning-hierarchy.md)
 - [Task Layout Profiles](requirements/task-layout-profiles.md)
 - [Task Agent Tab Reconciliation](requirements/task-agent-tab-reconciliation.md)
+- [Threads Deck](requirements/threads-conversation-deck.md)
 - [Task Listing Display Preferences](requirements/task-listing-display-preferences.md)
 - [Task transcript history visibility](requirements/task-prompt-transcript-visibility.md)
 - [Task Review Shortcut Switcher](requirements/task-review-shortcut.md)
@@ -139,7 +140,7 @@ feature behavior and state.
 - [Active workspace first in settings](requirements/workspace-active-first-order.md)
 - [WebSocket Connectivity Warning](requirements/ws-connectivity-warning.md)
 
-### System design
+### Design
 
 - [Clarification submit feedback](system-design/clarification-submit-feedback.md)
 - [Growing Dialog Content Containment](system-design/dialog-content-containment.md)
@@ -176,6 +177,7 @@ feature behavior and state.
 - [Session](system-design/session-start-composer-readiness.md)
 - [Task Layout Profiles](system-design/task-layout-profiles.md)
 - [Task Agent Tab Reconciliation](system-design/task-agent-tab-reconciliation.md)
+- [Threads Deck](system-design/threads-conversation-deck.md)
 - [Command-panel Sidebar Task Reveal](system-design/command-panel-sidebar-task-reveal.md)
 - [Command Panel Task Activity Icons](system-design/command-panel-task-activity-icons.md)
 - [Terminal Rendering](system-design/terminal-rendering.md)
@@ -183,8 +185,6 @@ feature behavior and state.
 - [Task Transcript History Visibility](system-design/task-prompt-transcript-visibility.md)
 - [Transcript Auto-scroll Stability](system-design/transcript-auto-scroll.md)
 
-## Related systems
+## Related
 
-- [Tasks](../tasks/README.md)
-- [Plugins](../plugins/README.md)
 - [Platform](../platform/README.md)

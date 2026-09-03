@@ -339,6 +339,8 @@ function PromptHistoryScroller({
 function LoadingMoreMessage({ floating, text }: { floating: boolean; text: string }) {
   return floating ? (
     <div
+      role="status"
+      aria-live="polite"
       data-testid={LOADING_OLDER_TEST_ID}
       className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center"
     >
@@ -348,6 +350,8 @@ function LoadingMoreMessage({ floating, text }: { floating: boolean; text: strin
     </div>
   ) : (
     <div
+      role="status"
+      aria-live="polite"
       data-testid={LOADING_OLDER_TEST_ID}
       className="py-2 text-center text-xs text-muted-foreground"
     >

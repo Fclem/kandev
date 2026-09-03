@@ -25,6 +25,7 @@ import { HoverCard, HoverCardTrigger, HoverCardContent } from "@kandev/ui/hover-
 import type { ContextItemKind } from "@/lib/types/context";
 import { useTranslation } from "react-i18next";
 import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
+import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 
 const ICON_BY_KIND: Record<ContextItemKind, TablerIcon> = {
   plan: IconListCheck,
@@ -69,6 +70,7 @@ export const ContextChip = memo(function ContextChip({
   onUnpin,
   onRemove,
 }: ContextChipProps) {
+  const { isFinePointer } = useResponsiveBreakpoint();
   const { t } = useTranslation();
   const Icon = ICON_BY_KIND[kind];
   let iconNode: ReactNode;
@@ -90,7 +92,9 @@ export const ContextChip = memo(function ContextChip({
             onUnpin();
           }}
           aria-label={t("task:unpinWillBeRemovedAfterSend")}
-          className="ml-0.5 min-h-11 min-w-11 text-muted-foreground/70 hover:text-foreground cursor-pointer sm:min-h-0 sm:min-w-0"
+          className={`ml-0.5 ${
+            isFinePointer ? "min-h-0 min-w-0" : "min-h-11 min-w-11"
+          } cursor-pointer text-muted-foreground/70 hover:text-foreground`}
         >
           <IconPinFilled className="mx-auto h-2.5 w-2.5" />
         </button>
@@ -103,7 +107,11 @@ export const ContextChip = memo(function ContextChip({
             onRemove();
           }}
           aria-label={t("task:removeLabeled", { label })}
-          className="ml-0.5 min-h-11 min-w-11 text-muted-foreground hover:text-foreground cursor-pointer sm:min-h-0 sm:min-w-0 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+          className={`ml-0.5 ${
+            isFinePointer
+              ? "min-h-0 min-w-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              : "min-h-11 min-w-11"
+          } cursor-pointer text-muted-foreground hover:text-foreground`}
         >
           <IconX className="mx-auto h-2.5 w-2.5" />
         </button>
@@ -125,10 +133,11 @@ export const ContextChip = memo(function ContextChip({
       onClick={preview ? undefined : onClick}
     >
       {preview ? (
-        <ControlledHoverChip preview={preview} label={label}>
-          {(open) => (
+        <ControlledHoverChip preview={preview} label={label} onClick={onClick}>
+          {(open, usesTouchDrawer) => (
             <button
               type="button"
+              onClick={usesTouchDrawer ? undefined : onClick}
               aria-haspopup="dialog"
               aria-expanded={open}
               aria-label={label}
@@ -147,30 +156,46 @@ export const ContextChip = memo(function ContextChip({
 
   return chip;
 });
-
 function ControlledHoverChip({
   preview,
   label,
+  onClick,
   children,
 }: {
   preview: ReactNode;
   label: string;
-  children: (open: boolean) => ReactNode;
+  onClick?: () => void;
+  children: (open: boolean, usesTouchDrawer: boolean) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
   const suppressRef = useRef(false);
   const usesTouchDrawer = useTouchDrawer();
 
   if (usesTouchDrawer) {
     return (
       <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerTrigger asChild>{children(open)}</DrawerTrigger>
+        <DrawerTrigger asChild>{children(open, true)}</DrawerTrigger>
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{label}</DrawerTitle>
             <DrawerDescription className="sr-only">{label}</DrawerDescription>
           </DrawerHeader>
-          <div className="max-h-[70dvh] overflow-y-auto px-4 pb-4">{preview}</div>
+          <div className="max-h-[70dvh] overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {preview}
+            {onClick && (
+              <button
+                type="button"
+                className="mt-3 min-h-11 w-full rounded-md border border-border px-3 text-sm"
+                onClick={() => {
+                  setOpen(false);
+                  onClick();
+                }}
+              >
+                {t("common:open")}
+              </button>
+            )}
+          </div>
         </DrawerContent>
       </Drawer>
     );
@@ -196,7 +221,7 @@ function ControlledHoverChip({
           }, 300);
         }}
       >
-        {children(open)}
+        {children(open, false)}
       </HoverCardTrigger>
       <HoverCardContent side="top" align="start" className="w-80 max-h-80 overflow-y-auto">
         {preview}

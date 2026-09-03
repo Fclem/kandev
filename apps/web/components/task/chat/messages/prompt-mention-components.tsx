@@ -231,7 +231,9 @@ export function splitMarkdownPromptMentionSegments(
   let lastIndex = 0;
   const codeState: MarkdownCodeState = {
     delimiter: null,
+    delimiterStart: null,
     fence: null,
+    ranges: [],
   };
 
   for (let index = 0; index < content.length; ) {
@@ -270,14 +272,16 @@ export function splitMarkdownPromptMentionSegments(
 
 type MarkdownCodeState = {
   delimiter: string | null;
-  fence: { marker: string; length: number } | null;
+  delimiterStart: number | null;
+  fence: { marker: string; length: number; start: number } | null;
+  ranges: Array<{ start: number; end: number }>;
 };
 
 function skipMarkdownCode(content: string, index: number, state: MarkdownCodeState): number | null {
   if (state.fence) return skipMarkdownFence(content, index, state);
   if (state.delimiter) return skipMarkdownDelimiter(content, index, state);
   if (content[index] === "]" && !isEscapedMarkdownCharacter(content, index)) {
-    const destinationEnd = findMarkdownDestinationEnd(content, index);
+    const destinationEnd = findMarkdownDestinationEnd(content, index, state.ranges);
     if (destinationEnd !== null) return destinationEnd + 1;
   }
   return startMarkdownCode(content, index, state);
@@ -286,13 +290,13 @@ function skipMarkdownCode(content: string, index: number, state: MarkdownCodeSta
 function skipMarkdownFence(content: string, index: number, state: MarkdownCodeState): number {
   const fence = state.fence;
   if (fence && isMarkdownFenceCloserAt(content, index, fence.marker, fence.length)) {
+    state.ranges.push({ start: fence.start, end: index + runLength(content, index, fence.marker) });
     state.fence = null;
     return index + runLength(content, index, fence.marker);
   }
   const marker = content[index];
   return marker === fence?.marker ? index + runLength(content, index, marker) : index + 1;
 }
-
 function skipMarkdownDelimiter(content: string, index: number, state: MarkdownCodeState): number {
   const delimiter = state.delimiter;
   if (
@@ -300,8 +304,11 @@ function skipMarkdownDelimiter(content: string, index: number, state: MarkdownCo
     runLength(content, index, delimiter[0]) === delimiter.length &&
     content.startsWith(delimiter, index)
   ) {
+    const end = index + delimiter.length;
+    state.ranges.push({ start: state.delimiterStart ?? index, end });
     state.delimiter = null;
-    return index + delimiter.length;
+    state.delimiterStart = null;
+    return end;
   }
   const marker = content[index];
   return marker === delimiter?.[0] ? index + runLength(content, index, marker) : index + 1;
@@ -313,26 +320,37 @@ function startMarkdownCode(
   state: MarkdownCodeState,
 ): number | null {
   const marker = content[index];
-  if (isEscapedMarkdownCharacter(content, index)) return null;
   const length = marker === "`" || marker === "~" ? runLength(content, index, marker) : 0;
-  if (length === 0) return null;
-  if (length >= 3 && isMarkdownFenceOpenerAt(content, index, marker, length)) {
-    state.fence = { marker, length };
+  if (
+    length >= 3 &&
+    !isEscapedMarkdownCharacter(content, index) &&
+    isMarkdownFenceOpenerAt(content, index, marker, length)
+  ) {
+    state.fence = { marker, length, start: index };
     return index + length;
   }
-  if (marker === "`" && hasMarkdownDelimiterEnd(content, index, length)) {
+  if (
+    marker === "`" &&
+    !isEscapedMarkdownCharacter(content, index) &&
+    hasMarkdownDelimiterEnd(content, index, length)
+  ) {
     state.delimiter = marker.repeat(length);
+    state.delimiterStart = index;
     return index + length;
   }
   return null;
 }
 
-function findMarkdownDestinationEnd(content: string, linkEndIndex: number): number | null {
+function findMarkdownDestinationEnd(
+  content: string,
+  linkEndIndex: number,
+  codeRanges: Array<{ start: number; end: number }>,
+): number | null {
   const labelStart = findMarkdownLinkLabelStart(content, linkEndIndex);
   if (
     labelStart === null ||
     (labelStart > 0 && content[labelStart - 1] === "]") ||
-    isInsideMarkdownCodeAt(content, labelStart)
+    codeRanges.some((range) => labelStart >= range.start && labelStart < range.end)
   ) {
     return null;
   }
@@ -404,22 +422,6 @@ function findMarkdownLinkLabelStart(content: string, linkEndIndex: number): numb
   return null;
 }
 
-function isInsideMarkdownCodeAt(content: string, target: number) {
-  const state: MarkdownCodeState = { delimiter: null, fence: null };
-  for (let index = 0; index < target; ) {
-    let next: number | null;
-    if (state.fence !== null) {
-      next = skipMarkdownFence(content, index, state);
-    } else if (state.delimiter !== null) {
-      next = skipMarkdownDelimiter(content, index, state);
-    } else {
-      next = startMarkdownCode(content, index, state);
-    }
-    index = next === null ? index + 1 : next;
-  }
-  return state.delimiter !== null || state.fence !== null;
-}
-
 function findQuotedMarkdownTitleEnd(
   content: string,
   start: number,
@@ -488,6 +490,7 @@ function isEscapedMarkdownCharacter(content: string, index: number) {
   return slashCount % 2 === 1;
 }
 
+// eslint-disable-next-line complexity -- Markdown boundary cases stay in one ordered matcher.
 function matchMarkdownPromptMention(
   content: string,
   index: number,
@@ -506,6 +509,11 @@ function matchMarkdownPromptMention(
 
   const marker = content[index - 1];
   if (!marker || !"*_~[".includes(marker) || isEscapedMarkdownCharacter(content, index - 1)) {
+    return null;
+  }
+  let openingStart = index - 1;
+  while (openingStart > 0 && content[openingStart - 1] === marker) openingStart -= 1;
+  if (openingStart > 0 && !isMarkdownWhitespace(content[openingStart - 1])) {
     return null;
   }
   const closingMarker = marker === "[" ? "]" : marker;
@@ -662,7 +670,7 @@ export function PromptMentionChip({
             <DrawerTitle>{label}</DrawerTitle>
             <DrawerDescription className="sr-only">{label}</DrawerDescription>
           </DrawerHeader>
-          <div className="max-h-[70dvh] overflow-y-auto px-4 pb-4">
+          <div className="max-h-[70dvh] overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <PromptPreview content={content} />
           </div>
         </DrawerContent>

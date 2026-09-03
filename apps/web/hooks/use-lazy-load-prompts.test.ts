@@ -25,6 +25,7 @@ const { listTaskSessionMessages, state, storeApi } = vi.hoisted(() => {
         }
       >,
       generationBySession: { session: 0 } as Record<string, number>,
+      refreshGenerationBySession: { session: 0 } as Record<string, number>,
     },
     setPromptMessagesLoadingMore: vi.fn(),
     prependPromptMessages: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("@/components/state-provider", () => ({
 
 import { useLazyLoadPrompts } from "./use-lazy-load-prompts";
 
+// eslint-disable-next-line max-lines-per-function -- pagination race cases share one deterministic harness.
 describe("useLazyLoadPrompts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -50,6 +52,7 @@ describe("useLazyLoadPrompts", () => {
       hasMore: true,
       oldestCursor: "cursor",
     };
+    state.messagePrompts.refreshGenerationBySession.session = 0;
     state.messagePrompts.generationBySession.session = 0;
   });
 
@@ -79,7 +82,7 @@ describe("useLazyLoadPrompts", () => {
     await act(async () => load);
 
     expect(state.prependPromptMessages).not.toHaveBeenCalled();
-    expect(state.setPromptMessagesLoadingMore).toHaveBeenCalledTimes(1);
+    expect(state.setPromptMessagesLoadingMore).not.toHaveBeenCalled();
   });
 
   it("reports an older-page request as stale after session generation changes", async () => {
@@ -114,5 +117,61 @@ describe("useLazyLoadPrompts", () => {
     await act(async () => load);
 
     expect(result.current.isRequestCurrent()).toBe(true);
+  });
+
+  it("rejects an older page after a newer initial refresh completes", async () => {
+    const pending = Promise.withResolvers<{
+      messages: Message[];
+      has_more: boolean;
+      cursor: string;
+    }>();
+    listTaskSessionMessages.mockReturnValueOnce(pending.promise);
+    const { result } = renderHook(() => useLazyLoadPrompts("session"));
+
+    const load = result.current.loadMore();
+    state.messagePrompts.refreshGenerationBySession.session += 1;
+    state.messagePrompts.metaBySession.session.isLoading = false;
+    pending.resolve({ messages: [{ id: "stale" } as Message], has_more: false, cursor: "stale" });
+    await act(async () => load);
+
+    expect(state.prependPromptMessages).not.toHaveBeenCalled();
+  });
+
+  it("reports an older request as stale after switching sessions", async () => {
+    const pending = Promise.withResolvers<{
+      messages: Message[];
+      has_more: boolean;
+      cursor: string;
+    }>();
+    listTaskSessionMessages.mockReturnValueOnce(pending.promise);
+    state.messagePrompts.bySession.other = [];
+    state.messagePrompts.metaBySession.other = {
+      isLoading: false,
+      isLoadingMore: false,
+      hasMore: true,
+      oldestCursor: "other-cursor",
+    };
+    state.messagePrompts.generationBySession.other = 0;
+    state.messagePrompts.refreshGenerationBySession.other = 0;
+    const { result, rerender } = renderHook(
+      ({ sessionId }: { sessionId: string }) => useLazyLoadPrompts(sessionId),
+      { initialProps: { sessionId: "session" } },
+    );
+
+    const load = result.current.loadMore();
+    rerender({ sessionId: "other" });
+    expect(result.current.isRequestCurrent()).toBe(false);
+    pending.resolve({ messages: [], has_more: false, cursor: "next" });
+    await act(async () => load);
+  });
+
+  it("clears the loading state when an older-page request rejects", async () => {
+    const error = new Error("request failed");
+    listTaskSessionMessages.mockRejectedValueOnce(error);
+    const { result } = renderHook(() => useLazyLoadPrompts("session"));
+
+    await expect(result.current.loadMore()).rejects.toThrow(error);
+
+    expect(state.setPromptMessagesLoadingMore).toHaveBeenCalledWith("session", false);
   });
 });

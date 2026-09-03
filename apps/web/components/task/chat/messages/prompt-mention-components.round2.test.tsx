@@ -33,4 +33,13 @@ describe("splitMarkdownPromptMentionSegments round-two boundaries", () => {
   it("rejects escaped whitespace in a bare link destination", () => {
     expect(promptValues('[label](url\\ bar "title @daily")')).toEqual(["@daily"]);
   });
+
+  it("skips titles in adjacent valid inline links", () => {
+    expect(promptValues('[] [label](url "title @daily")')).toEqual([]);
+  });
+
+  it("keeps formatted aliases adjacent to ordinary text as text", () => {
+    expect(promptValues("x**@daily**")).toEqual([]);
+    expect(promptValues("x_@daily_")).toEqual([]);
+  });
 });

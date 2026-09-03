@@ -115,6 +115,10 @@ function useSentinelObserver(opts: {
       return;
     }
     currentObserver?.disconnect();
+    if (currentObserver) {
+      opts.refs.intersectingRef.current = false;
+      opts.refs.disarmedRef.current = false;
+    }
     observerRootRef.current = root;
     observerRootMarginRef.current = opts.rootMargin;
     observerLifecycleKeyRef.current = opts.lifecycleKey;

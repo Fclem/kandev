@@ -151,6 +151,26 @@ describe("useLazyLoadSentinel", () => {
     expect(records[1].targets).toContain(node);
   });
 
+  it("arms a replacement observer after the old one disarmed", async () => {
+    const scrollRef = makeScrollRef();
+    const loadMore = vi.fn(async () => 0);
+    const { result, rerender } = renderHook(
+      ({ lifecycleKey }: { lifecycleKey: number }) =>
+        useLazyLoadSentinel(scrollRef, true, false, false, loadMore, {
+          lifecycleKey,
+          rearmWhileIntersecting: true,
+        }),
+      { initialProps: { lifecycleKey: 0 } },
+    );
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+    await act(async () => fire(records[0], true, node));
+    rerender({ lifecycleKey: 1 });
+    await act(async () => fire(records[1], true, node));
+
+    expect(loadMore).toHaveBeenCalledTimes(2);
+  });
+
   it("fires loadMore on intersection when eligible", async () => {
     const scrollRef = makeScrollRef();
     const loadMore = vi.fn(async () => 20);

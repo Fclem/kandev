@@ -14,6 +14,7 @@ type PromptRequestState = {
   bySession: Record<string, unknown>;
   metaBySession: Record<string, { isLoading: boolean } | undefined>;
   generationBySession?: Record<string, number>;
+  refreshGenerationBySession?: Record<string, number>;
 };
 
 function isCurrentPromptState(state: PromptRequestState, sessionId: string, generation: number) {
@@ -31,18 +32,21 @@ export function useLazyLoadPrompts(sessionId: string | null) {
       : EMPTY_PROMPT_META,
   );
   const stateRef = useRef(meta);
-  const requestGenerationRef = useRef<number | null>(null);
+  const requestGenerationRef = useRef<{ sessionId: string; generation: number } | null>(null);
   useEffect(() => {
     stateRef.current = meta;
   }, [meta]);
   const store = useAppStoreApi();
 
+  // eslint-disable-next-line complexity -- request freshness guards keep session pagination race-free.
   const loadMore = useCallback(async () => {
+    if (!sessionId) return 0;
     const { hasMore, oldestCursor, isLoading, isLoadingMore } = stateRef.current;
-    if (!sessionId || !hasMore || !oldestCursor || isLoading || isLoadingMore) return 0;
+    if (!hasMore || !oldestCursor || isLoading || isLoadingMore) return 0;
     const generation = store.getState().messagePrompts.generationBySession?.[sessionId] ?? 0;
-    requestGenerationRef.current = generation;
-    store.getState().setPromptMessagesLoadingMore(sessionId, true);
+    const refreshGeneration =
+      store.getState().messagePrompts.refreshGenerationBySession?.[sessionId] ?? 0;
+    requestGenerationRef.current = { sessionId, generation };
     try {
       const response = await listTaskSessionMessages(sessionId, {
         author_type: "user",
@@ -54,6 +58,7 @@ export function useLazyLoadPrompts(sessionId: string | null) {
       const current = store.getState().messagePrompts;
       if (
         isCurrentPromptState(current, sessionId, generation) &&
+        (current.refreshGenerationBySession?.[sessionId] ?? 0) === refreshGeneration &&
         !current.metaBySession[sessionId]?.isLoading
       ) {
         store.getState().prependPromptMessages(sessionId, rows, {
@@ -71,12 +76,12 @@ export function useLazyLoadPrompts(sessionId: string | null) {
   }, [sessionId, store]);
 
   const isRequestCurrent = useCallback(() => {
-    const generation = requestGenerationRef.current;
+    const request = requestGenerationRef.current;
     return (
-      generation !== null &&
-      isCurrentPromptState(store.getState().messagePrompts, sessionId ?? "", generation)
+      request !== null &&
+      request.sessionId === sessionId &&
+      isCurrentPromptState(store.getState().messagePrompts, sessionId ?? "", request.generation)
     );
   }, [sessionId, store]);
-
   return { loadMore, hasMore: meta.hasMore, isLoadingMore: meta.isLoadingMore, isRequestCurrent };
 }

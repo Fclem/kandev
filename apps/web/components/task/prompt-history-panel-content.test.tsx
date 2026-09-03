@@ -539,6 +539,17 @@ describe("PromptHistoryPanelContent — prompt alias state", () => {
     expect(screen.queryByText(INITIAL_PROMPT_CONTENT)).toBeNull();
   });
 
+  it("opens a prompt preview with the Space key", () => {
+    state.prompts.items = [{ name: PROMPT_NAME, content: PROMPT_CONTENT }];
+    messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];
+
+    render(<PromptHistoryPanelContent />);
+
+    fireEvent.keyDown(screen.getByTestId(PROMPT_MENTION_TEST_ID), { key: " " });
+
+    expect(screen.getByText(PROMPT_CONTENT)).toBeTruthy();
+  });
+
   it("keeps the preview trigger out of a nested interactive row", () => {
     state.prompts.items = [{ name: PROMPT_NAME, content: PROMPT_CONTENT }];
     messagesBySession[SESSION_A] = [message({ content: `Review ${PROMPT_ALIAS}` })];

@@ -12,9 +12,11 @@ async function setupMobileContextTask(
   apiClient: ApiClient,
   seedData: SeedData,
   backend: BackendContext,
+  viewport?: { width: number; height: number },
 ) {
+  if (viewport) await testPage.setViewportSize(viewport);
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const directoryPath = `mobile-context-directory-${suffix}-with-a-long-name-that-must-truncate-in-the-file-tree-on-a-narrow-touch-viewport`;
+  const directoryPath = `mobile-context-directory-${suffix}-with-a-long-name-that-must-truncate-in-the-file-tree-on-a-narrow-touch-viewport-with-an-extra-long-label-for-overflow-verification`;
   const filePath = `mobile-context-file-${suffix}.md`;
   const searchResultPrefix = `mobile-search-layout-${suffix}`;
   const searchResultPaths = [
@@ -65,6 +67,7 @@ test.describe("Mobile file tree chat context", () => {
       apiClient,
       seedData,
       backend,
+      { width: 393, height: 851 },
     );
 
     await testPage.getByRole("button", { name: "Files" }).tap();
@@ -78,12 +81,17 @@ test.describe("Mobile file tree chat context", () => {
         nameWhiteSpace: name ? getComputedStyle(name).whiteSpace : null,
         nameOverflow: name ? getComputedStyle(name).overflow : null,
         nameTextOverflow: name ? getComputedStyle(name).textOverflow : null,
+        nameScrollWidth: name?.scrollWidth ?? null,
+        nameClientWidth: name?.clientWidth ?? null,
       };
     });
     expect(rowGeometry.flexWrap).toBe("nowrap");
     expect(rowGeometry.nameWhiteSpace).toBe("nowrap");
     expect(rowGeometry.nameOverflow).toBe("hidden");
     expect(rowGeometry.nameTextOverflow).toBe("ellipsis");
+    expect(rowGeometry.nameScrollWidth).not.toBeNull();
+    expect(rowGeometry.nameClientWidth).not.toBeNull();
+    expect(rowGeometry.nameScrollWidth).toBeGreaterThan(rowGeometry.nameClientWidth!);
 
     const trigger = session.fileTreeNodeActions(directoryPath);
     await expect(trigger).toBeVisible();
@@ -153,6 +161,8 @@ test.describe("Mobile file tree chat context", () => {
           rowTop: rowBox.top,
           nameOverflow: name ? getComputedStyle(name).overflow : null,
           nameTextOverflow: name ? getComputedStyle(name).textOverflow : null,
+          nameScrollWidth: name?.scrollWidth ?? null,
+          nameClientWidth: name?.clientWidth ?? null,
         };
       }),
     );
@@ -166,6 +176,9 @@ test.describe("Mobile file tree chat context", () => {
       expect(geometry.path).toBeTruthy();
       expect(geometry.nameOverflow).toBe("hidden");
       expect(geometry.nameTextOverflow).toBe("ellipsis");
+      expect(geometry.nameScrollWidth).not.toBeNull();
+      expect(geometry.nameClientWidth).not.toBeNull();
+      expect(geometry.nameScrollWidth).toBeGreaterThan(geometry.nameClientWidth!);
       if (index > 0) {
         expect(searchGeometry[index - 1].actionBottom).toBeLessThanOrEqual(geometry.actionTop);
       }

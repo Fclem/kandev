@@ -77,10 +77,9 @@ non-wrapping/truncation geometry, two simultaneous mobile search results, and a
 
 ## Verification results
 
-- Focused component TDD: responsive-gate assertions failed before the
-  coarse-pointer gate was restored, then 12 focused tests passed, including
-  FileBrowser-level coarse, mobile, and fine-pointer rendering plus
-  multi-result search-overlay anchoring.
+- Focused component coverage passed, including FileBrowser-level coarse,
+  mobile, and fine-pointer rendering plus multi-result search-overlay
+  anchoring.
 - Mobile Chromium E2E: `pnpm e2e:run --project mobile-chrome
   tests/task/mobile-file-tree-chat-context.spec.ts` passed both Pixel 5
   no-wrap/truncation with two independently anchored search actions and 1280px

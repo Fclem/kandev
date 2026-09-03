@@ -46,8 +46,8 @@ coarse-pointer devices, including desktop-workbench and zoomed-out layouts.
 ## Verification
 
 ```bash
-cd apps && pnpm --filter @kandev/web test -- --run components/task/file-browser-context-action.test.tsx components/task/file-browser-responsive.test.tsx components/task/file-browser-search-context-action.test.tsx
-cd apps/web && pnpm e2e:run --project mobile-chrome tests/task/mobile-file-tree-chat-context.spec.ts
+(cd apps && pnpm --filter @kandev/web test -- --run components/task/file-browser-context-action.test.tsx components/task/file-browser-responsive.test.tsx components/task/file-browser-search-context-action.test.tsx)
+(cd apps/web && pnpm e2e:run --project mobile-chrome tests/task/mobile-file-tree-chat-context.spec.ts)
 ```
 
 ## Files likely touched
@@ -85,9 +85,9 @@ None.
 
 ## Results
 
-- Focused component coverage passed with 12 tests, including FileBrowser-level
-  wide coarse-pointer and mobile action visibility, fine-pointer hiding,
-  no-wrap tree rows, and independently anchored multi-result search actions.
+- Focused component coverage passed, including FileBrowser-level wide
+  coarse-pointer and mobile action visibility, fine-pointer hiding, no-wrap
+  tree rows, and independently anchored multi-result search actions.
 - Mobile Chromium E2E passed Pixel 5 long-name no-wrap/truncation with two
   clipped, row-anchored search actions and a 1280px coarse-pointer desktop
   context with compact short and long rows, a 44px trigger, and Add to chat

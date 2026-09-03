@@ -19,7 +19,12 @@ and message delivery remain owned by their existing task and chat contracts.
 
 | Requirement | Design section |
 | --- | --- |
-| `REQ-UI-FILE-TREE-CHAT-CONTEXT-001` | [Responsive row geometry](#responsive-row-geometry), [Interaction preservation](#interaction-preservation) |
+| `AC-UI-FILE-TREE-CHAT-CONTEXT-001.7` | [Responsive row geometry](#responsive-row-geometry), [Interaction preservation](#interaction-preservation) |
+| `AC-UI-FILE-TREE-CHAT-CONTEXT-001.9` | [Responsive row geometry](#responsive-row-geometry) |
+
+The existing task and chat contracts own the other acceptance criteria for file
+context state and message delivery. This design only records the responsive row
+and action-surface repair.
 
 ## Components and responsibilities
 

@@ -156,4 +156,26 @@ describe("TreeNodeItem row spacing", () => {
     expect(name.className).toContain("min-w-0");
     expect(name.className).toContain("truncate");
   });
+
+  it("keeps fine-pointer rows on the compact layout without touch-action spacing", () => {
+    render(
+      <TreeNodeItem
+        row={ROW}
+        activeFolderPath=""
+        visibleLoadingPaths={new Set()}
+        fileStatuses={new Map()}
+        tree={null}
+        onToggleExpand={vi.fn()}
+        onOpenFile={vi.fn()}
+        setTree={() => {}}
+        showTouchActions={false}
+        onAddToChatContext={vi.fn()}
+      />,
+    );
+
+    const row = screen.getByTestId("file-tree-node");
+    expect(row.className).not.toContain("relative");
+    expect(row.className).not.toContain("min-h-11");
+    expect(row.className).not.toContain("pr-11");
+  });
 });

@@ -580,11 +580,15 @@ type Service struct {
 	// transientRetryMessages owns durable cleanup of persisted retry notices.
 	// It is optional for focused tests and pre-composition callers.
 	transientRetryMessages TransientRetryMessageService
-	// sessionAttachmentCleaner is optional because focused orchestrator
-	// compositions may not configure file-backed prompt attachments.
+	// sessionQueuePurgeNotifierRegistered means the task repository owns
+	// queue cleanup and status publication after DeleteTaskSession commits.
+	// DeleteSession keeps its fallback cleanup for focused compositions that
+	// cannot register the repository callback, but must not publish twice when
+	// the callback is active.
+	sessionQueuePurgeNotifierRegistered bool
+
 	sessionAttachmentCleaner    SessionAttachmentCleaner
 	sessionAttachmentTransferer SessionAttachmentTransferer
-
 	// subagentContexts optionally persists a relational record of subagent
 	// (Task tool) invocations recognized on the tool-call frame paths. Nil is
 	// safe: both call sites guard on it. See SetSubagentContextRecorder.
@@ -1458,10 +1462,10 @@ func NewService(
 			s.publishTaskQueueStatusEvent(ctx, taskID, "")
 		})
 	}
-
 	if registrar, ok := repo.(interface {
 		SetTaskSessionQueuePurgeNotifier(func(context.Context, string, string))
 	}); ok {
+		s.sessionQueuePurgeNotifierRegistered = true
 		registrar.SetTaskSessionQueuePurgeNotifier(func(ctx context.Context, taskID, sessionID string) {
 			msgQueue.InvalidateEditLeasesForSession(sessionID)
 			if _, err := msgQueue.PurgeSession(ctx, sessionID); err != nil {

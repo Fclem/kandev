@@ -3600,8 +3600,10 @@ func (s *Service) publishTaskSessionErrorEvent(
 	))
 }
 
-// cancelDeletedSessionQueue removes pending prompts left on a deleted session
-// and publishes a task-scoped queue status event for the live badge path.
+// cancelDeletedSessionQueue removes file-backed prompt attachments left on a
+// deleted session. Queue rows and their status notification are owned by the
+// repository's post-commit callback when that callback is registered. Focused
+// compositions without the callback retain the direct queue purge fallback.
 func (s *Service) cancelDeletedSessionQueue(ctx context.Context, taskID, sessionID string) {
 	cleanupCtx := context.WithoutCancel(ctx)
 	if s.sessionAttachmentCleaner != nil {
@@ -3612,7 +3614,7 @@ func (s *Service) cancelDeletedSessionQueue(ctx context.Context, taskID, session
 				zap.Error(err))
 		}
 	}
-	if s.messageQueue == nil {
+	if s.messageQueue == nil || s.sessionQueuePurgeNotifierRegistered {
 		return
 	}
 	if _, err := s.messageQueue.PurgeSession(cleanupCtx, sessionID); err != nil {

@@ -1091,11 +1091,12 @@ func (s *Service) ReserveQueuedWithAutoRun(ctx context.Context, sessionID string
 			return err
 		}
 		var headTaskID string
-		for i := range headEntries {
-			if !headEntries[i].IsReservedInFlight() {
-				headTaskID = headEntries[i].TaskID
-				break
-			}
+		if len(headEntries) > 0 {
+			// ReserveHeadIfAutoRun always selects the lowest-position row,
+			// including a durable row already marked in flight during
+			// crash recovery. Capture that row's generation rather than
+			// skipping its marker and fencing against a later entry.
+			headTaskID = headEntries[0].TaskID
 		}
 		var lifecycleGeneration int64
 		if headTaskID != "" {

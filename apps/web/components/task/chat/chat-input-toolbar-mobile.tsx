@@ -67,7 +67,7 @@ function mobileContextButton(contextCount: number) {
       type="button"
       variant="ghost"
       size="sm"
-      className="h-7 min-h-11 min-w-11 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 relative md:min-h-0 md:min-w-0"
+      className="h-7 min-h-11 min-w-11 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 relative [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
       data-testid="chat-context-button"
       aria-label={t("task:sessionContext")}
     >

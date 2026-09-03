@@ -98,10 +98,12 @@ function useSentinelObserver(opts: {
 }) {
   const fireLoadRef = useRef(opts.fireLoad);
   fireLoadRef.current = opts.fireLoad;
+  const requestedLifecycleKeyRef = useRef(opts.lifecycleKey);
+  requestedLifecycleKeyRef.current = opts.lifecycleKey;
   const observerRootRef = useRef<Element | Document | null>(null);
   const observerRootMarginRef = useRef<string | null>(null);
-  const observerLifecycleKeyRef = useRef<string | number | null>(null);
   const observerFireLoadRef = useRef<(() => void) | null>(null);
+  const observerLifecycleKeyRef = useRef<string | number | null>(null);
   useEffect(() => {
     const root = opts.scrollRef.current;
     const currentObserver = opts.refs.observerRef.current;
@@ -127,7 +129,13 @@ function useSentinelObserver(opts: {
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        if (!entry || entry.target !== opts.refs.sentinelNodeRef.current) return;
+        if (
+          !entry ||
+          entry.target !== opts.refs.sentinelNodeRef.current ||
+          observerLifecycleKeyRef.current !== requestedLifecycleKeyRef.current
+        ) {
+          return;
+        }
         opts.refs.intersectingRef.current = entry.isIntersecting;
         if (opts.refs.disarmedRef.current) {
           // Ignore the current intersection; arm only after an observed exit.
@@ -450,9 +458,7 @@ export function useLazyLoadSentinel(
   } = options ?? {};
 
   const stateRef = useRef({ hasMore, blocked, isLoadingMore });
-  useEffect(() => {
-    stateRef.current = { hasMore, blocked, isLoadingMore };
-  }, [hasMore, blocked, isLoadingMore]);
+  stateRef.current = { hasMore, blocked, isLoadingMore };
   const optionsRef = useRef({
     rearmWhileIntersecting,
     joinInFlightWhileLoading,
@@ -462,17 +468,7 @@ export function useLazyLoadSentinel(
     onLoadSettled,
     isRequestCurrent,
   });
-  useEffect(() => {
-    optionsRef.current = {
-      rearmWhileIntersecting,
-      joinInFlightWhileLoading,
-      stickToBottomWhileLoading,
-      shouldContinueWhileIntersecting,
-      isCurrentGeometryEligible,
-      onLoadSettled,
-      isRequestCurrent,
-    };
-  }, [
+  optionsRef.current = {
     rearmWhileIntersecting,
     joinInFlightWhileLoading,
     stickToBottomWhileLoading,
@@ -480,7 +476,7 @@ export function useLazyLoadSentinel(
     isCurrentGeometryEligible,
     onLoadSettled,
     isRequestCurrent,
-  ]);
+  };
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelNodeRef = useRef<HTMLDivElement | null>(null);

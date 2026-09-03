@@ -71,8 +71,8 @@ export function ImplementPlanButton({
     freshItem: testIds?.freshItem ?? "implement-fresh-menu-item",
   };
   const controlHeightClass = framed
-    ? "h-5 min-h-11 min-w-11 md:min-h-0 md:min-w-0"
-    : "h-7 min-h-11 min-w-11 md:min-h-0 md:min-w-0";
+    ? "h-5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+    : "h-7 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11";
   const primaryButton = (
     <span className="inline-flex">
       <Button

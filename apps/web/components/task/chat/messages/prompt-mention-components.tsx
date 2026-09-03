@@ -7,13 +7,24 @@ import {
   isValidElement,
   useCallback,
   useMemo,
+  useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type KeyboardEvent,
+  type MouseEvent,
   type ReactElement,
   type ReactNode,
 } from "react";
 import type { Components, ExtraProps } from "react-markdown";
 import { useTranslation } from "react-i18next";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@kandev/ui/drawer";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@kandev/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { PromptPreview } from "@/components/task/chat/context-items/prompt-preview";
@@ -24,6 +35,7 @@ import {
 } from "@/lib/prompts/prompt-mention-segments";
 import { matchPromptMention, type PromptMentionMatch } from "@/lib/prompts/prompt-mention-parser";
 import type { EntityReference } from "@/lib/types/entity-reference";
+import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
 import { buildEntityReferenceMarkdownComponents } from "./entity-reference-chip";
 
 type PromptMentionMarkdownTag =
@@ -60,9 +72,20 @@ type MarkdownChildrenProps<T extends PromptMentionMarkdownTag> = ComponentPropsW
 export const PROMPT_MENTION_CHIP_CLASS =
   "inline rounded-md border border-emerald-300/35 bg-emerald-400/20 px-1.5 py-0.5 font-mono text-[0.88em] font-semibold text-emerald-950 box-decoration-clone break-all dark:text-emerald-100";
 
+export function useStablePromptMentionNames(promptNames: string[]) {
+  const stableNamesRef = useRef<string[]>([]);
+  if (
+    stableNamesRef.current.length !== promptNames.length ||
+    stableNamesRef.current.some((name, index) => name !== promptNames[index])
+  ) {
+    stableNamesRef.current = promptNames;
+  }
+  return stableNamesRef.current;
+}
+
 export function usePromptMentionNames() {
   const prompts = useAppStore((state) => state.prompts.items);
-  return useMemo(() => prompts.map((prompt) => prompt.name), [prompts]);
+  return useStablePromptMentionNames(prompts.map((prompt) => prompt.name));
 }
 
 export function usePromptMentionMarkdownComponents(
@@ -179,8 +202,6 @@ export function splitMarkdownPromptMentionSegments(
   const codeState: MarkdownCodeState = {
     delimiter: null,
     fence: null,
-    destinationDepth: 0,
-    destinationQuote: null,
   };
 
   for (let index = 0; index < content.length; ) {
@@ -221,75 +242,23 @@ export function splitMarkdownPromptMentionSegments(
 type MarkdownCodeState = {
   delimiter: string | null;
   fence: { marker: string; length: number } | null;
-  destinationDepth: number;
-  destinationQuote: '"' | "'" | null;
 };
 
 function skipMarkdownCode(content: string, index: number, state: MarkdownCodeState): number | null {
-  if (state.destinationDepth > 0) return skipMarkdownDestination(content, index, state);
   if (state.fence) return skipMarkdownFence(content, index, state);
   if (state.delimiter) return skipMarkdownDelimiter(content, index, state);
-  if (content[index] === "]" && content[index + 1] === "(") {
-    if (!hasMarkdownDestinationEnd(content, index)) return null;
-    state.destinationDepth = 1;
-    state.destinationQuote = null;
-    return index + 2;
+  if (content[index] === "]" && !isEscapedMarkdownCharacter(content, index)) {
+    const destinationEnd = findMarkdownDestinationEnd(content, index);
+    if (destinationEnd !== null) return destinationEnd + 1;
   }
   return startMarkdownCode(content, index, state);
-}
-
-function skipMarkdownDestination(content: string, index: number, state: MarkdownCodeState): number {
-  const marker = content[index];
-  if (state.destinationQuote) {
-    if (marker === state.destinationQuote && !isEscapedMarkdownCharacter(content, index)) {
-      state.destinationQuote = null;
-    }
-    return index + 1;
-  }
-  if ((marker === '"' || marker === "'") && !isEscapedMarkdownCharacter(content, index)) {
-    state.destinationQuote = marker;
-    return index + 1;
-  }
-  if (marker === "(" && !isEscapedMarkdownCharacter(content, index)) state.destinationDepth += 1;
-  if (marker === ")" && !isEscapedMarkdownCharacter(content, index)) state.destinationDepth -= 1;
-  return index + 1;
-}
-
-function hasMarkdownDestinationEnd(content: string, linkEndIndex: number) {
-  let depth = 1;
-  let quote: '"' | "'" | null = null;
-  for (let index = linkEndIndex + 2; index < content.length; index += 1) {
-    const marker = content[index];
-    const escaped = isEscapedMarkdownCharacter(content, index);
-    if (quote) {
-      if (marker === quote && !escaped) quote = null;
-      continue;
-    }
-    if ((marker === '"' || marker === "'") && !escaped) {
-      quote = marker;
-      continue;
-    }
-    if (escaped) continue;
-    if (marker === "(") depth += 1;
-    if (marker !== ")" || --depth > 0) continue;
-    return true;
-  }
-  return false;
-}
-
-function isEscapedMarkdownCharacter(content: string, index: number) {
-  let slashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && content[cursor] === "\\"; cursor -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 1;
 }
 
 function skipMarkdownFence(content: string, index: number, state: MarkdownCodeState): number {
   const fence = state.fence;
   if (
     fence &&
-    isMarkdownFenceAt(content, index, fence.marker, fence.length) &&
+    isMarkdownFenceCloserAt(content, index, fence.marker, fence.length) &&
     !isEscapedMarkdownCharacter(content, index)
   ) {
     state.fence = null;
@@ -299,10 +268,15 @@ function skipMarkdownFence(content: string, index: number, state: MarkdownCodeSt
 }
 
 function skipMarkdownDelimiter(content: string, index: number, state: MarkdownCodeState): number {
-  if (state.delimiter && content.startsWith(state.delimiter, index)) {
-    const nextIndex = index + state.delimiter.length;
+  const delimiter = state.delimiter;
+  if (
+    delimiter &&
+    runLength(content, index, delimiter[0]) === delimiter.length &&
+    content.startsWith(delimiter, index) &&
+    !isEscapedMarkdownCharacter(content, index)
+  ) {
     state.delimiter = null;
-    return nextIndex;
+    return index + delimiter.length;
   }
   return index + 1;
 }
@@ -316,12 +290,163 @@ function startMarkdownCode(
   if (isEscapedMarkdownCharacter(content, index)) return null;
   const length = marker === "`" || marker === "~" ? runLength(content, index, marker) : 0;
   if (length === 0) return null;
-  if (length >= 3 && isMarkdownFenceAt(content, index, marker, length)) {
+  if (length >= 3 && isMarkdownFenceOpenerAt(content, index, marker, length)) {
     state.fence = { marker, length };
-  } else if (marker === "`") {
-    state.delimiter = marker.repeat(length);
+    return index + length;
   }
-  return index + length;
+  if (marker === "`" && hasMarkdownDelimiterEnd(content, index, length)) {
+    state.delimiter = marker.repeat(length);
+    return index + length;
+  }
+  return null;
+}
+
+function findMarkdownDestinationEnd(content: string, linkEndIndex: number): number | null {
+  if (!hasMarkdownLinkLabelAt(content, linkEndIndex)) return null;
+  const destinationStart = linkEndIndex + 2;
+  if (content[destinationStart] === ")") return destinationStart;
+
+  const destinationEnd =
+    content[destinationStart] === "<"
+      ? findAngleMarkdownDestinationEnd(content, destinationStart)
+      : findBareMarkdownDestinationEnd(content, destinationStart);
+  if (destinationEnd === null) return null;
+  return findMarkdownLinkSuffixEnd(content, destinationEnd);
+}
+
+function findAngleMarkdownDestinationEnd(content: string, start: number): number | null {
+  for (let index = start + 1; index < content.length; index += 1) {
+    if (isEscapedMarkdownCharacter(content, index)) {
+      index += 1;
+      continue;
+    }
+    if (content[index] === ">") return index + 1;
+    if (content[index] === "\n" || content[index] === "\r") return null;
+  }
+  return null;
+}
+
+function findBareMarkdownDestinationEnd(content: string, start: number): number | null {
+  let depth = 0;
+  for (let index = start; index < content.length; index += 1) {
+    if (isEscapedMarkdownCharacter(content, index)) {
+      index += 1;
+      continue;
+    }
+    const marker = content[index];
+    if (isMarkdownWhitespace(marker)) return depth === 0 ? index : null;
+    if (marker === "(") depth += 1;
+    if (marker === ")" && depth === 0) return index;
+    if (marker === ")") depth -= 1;
+  }
+  return depth === 0 ? content.length : null;
+}
+
+function findMarkdownLinkSuffixEnd(content: string, destinationEnd: number): number | null {
+  let index = destinationEnd;
+  if (content[index] === ")") return index;
+  if (!isMarkdownWhitespace(content[index])) return null;
+  while (isMarkdownWhitespace(content[index])) index += 1;
+  if (content[index] === ")") return index;
+
+  const titleMarker = content[index];
+  if (titleMarker !== '"' && titleMarker !== "'" && titleMarker !== "(") return null;
+  const titleEnd =
+    titleMarker === "("
+      ? findParenthesizedMarkdownTitleEnd(content, index)
+      : findQuotedMarkdownTitleEnd(content, index, titleMarker);
+  if (titleEnd === null) return null;
+  index = titleEnd + 1;
+  while (isMarkdownWhitespace(content[index])) index += 1;
+  return content[index] === ")" ? index : null;
+}
+
+function hasMarkdownLinkLabelAt(content: string, linkEndIndex: number) {
+  if (content[linkEndIndex] !== "]" || isEscapedMarkdownCharacter(content, linkEndIndex)) {
+    return false;
+  }
+  let depth = 1;
+  for (let index = linkEndIndex - 1; index >= 0; index -= 1) {
+    if (isEscapedMarkdownCharacter(content, index)) continue;
+    if (content[index] === "]") {
+      depth += 1;
+    } else if (content[index] === "[") {
+      depth -= 1;
+      if (depth === 0) return true;
+    }
+  }
+  return false;
+}
+
+function findQuotedMarkdownTitleEnd(
+  content: string,
+  start: number,
+  marker: '"' | "'",
+): number | null {
+  for (let index = start + 1; index < content.length; index += 1) {
+    if (content[index] === marker && !isEscapedMarkdownCharacter(content, index)) return index;
+  }
+  return null;
+}
+
+function findParenthesizedMarkdownTitleEnd(content: string, start: number): number | null {
+  let depth = 1;
+  for (let index = start + 1; index < content.length; index += 1) {
+    if (isEscapedMarkdownCharacter(content, index)) {
+      index += 1;
+      continue;
+    }
+    if (content[index] === "(") depth += 1;
+    if (content[index] === ")" && --depth === 0) return index;
+  }
+  return null;
+}
+
+function hasMarkdownDelimiterEnd(content: string, start: number, length: number) {
+  for (let index = start + length; index < content.length; index += 1) {
+    if (content[index] !== "`" || isEscapedMarkdownCharacter(content, index)) continue;
+    const run = runLength(content, index, "`");
+    if (run === length) return true;
+    index += run - 1;
+  }
+  return false;
+}
+
+function isMarkdownFenceOpenerAt(content: string, index: number, marker: string, length: number) {
+  const lineStart = content.lastIndexOf("\n", index - 1) + 1;
+  const indentation = content.slice(lineStart, index);
+  if (!/^ {0,3}$/.test(indentation) || runLength(content, index, marker) < length) {
+    return false;
+  }
+  if (marker !== "`") return true;
+  const lineEnd = content.indexOf("\n", index);
+  const info = content.slice(index + length, lineEnd === -1 ? content.length : lineEnd);
+  return !info.includes("`");
+}
+
+function isMarkdownFenceCloserAt(content: string, index: number, marker: string, length: number) {
+  const lineStart = content.lastIndexOf("\n", index - 1) + 1;
+  const indentation = content.slice(lineStart, index);
+  if (!/^ {0,3}$/.test(indentation) || runLength(content, index, marker) < length) {
+    return false;
+  }
+  const lineEnd = content.indexOf("\n", index);
+  const suffix = content.slice(
+    index + runLength(content, index, marker),
+    lineEnd === -1 ? content.length : lineEnd,
+  );
+  return /^[ \t]*$/.test(suffix);
+}
+
+function isMarkdownWhitespace(value: string | undefined) {
+  return value === " " || value === "\t" || value === "\n" || value === "\r";
+}
+function isEscapedMarkdownCharacter(content: string, index: number) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && content[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function matchMarkdownPromptMention(
@@ -344,13 +469,6 @@ function matchMarkdownPromptMention(
     if (match?.end === closingIndex) return match;
   }
   return null;
-}
-
-function isMarkdownFenceAt(content: string, index: number, marker: string, length: number) {
-  const lineStart = content.lastIndexOf("\n", index - 1) + 1;
-  return (
-    content.slice(lineStart, index).trim() === "" && runLength(content, index, marker) >= length
-  );
 }
 
 function runLength(content: string, index: number, marker: string) {
@@ -377,7 +495,6 @@ export function renderTextWithPromptMentions(
     );
   });
 }
-
 export function PromptMentionText({
   text,
   promptNames,
@@ -407,7 +524,6 @@ export function PromptMentionText({
     </>
   );
 }
-
 export function PromptMentionChip({
   name,
   value,
@@ -427,6 +543,7 @@ export function PromptMentionChip({
     ),
   );
   const [open, setOpen] = useState(false);
+  const usesTouchDrawer = useTouchDrawer();
 
   if (!content || !interactive) {
     return (
@@ -441,6 +558,49 @@ export function PromptMentionChip({
     );
   }
 
+  const label = t("task:customPromptNamed", { name });
+  const handleToggle = () => setOpen((isOpen) => !isOpen);
+  const handleClick = (event: MouseEvent) => {
+    event.stopPropagation();
+    handleToggle();
+  };
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (!focusable || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handleToggle();
+  };
+
+  if (usesTouchDrawer) {
+    return (
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            data-testid="custom-prompt-mention"
+            data-prompt-name={name}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-label={label}
+            className={cn(PROMPT_MENTION_CHIP_CLASS, "h-11 min-w-11 cursor-pointer")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {value}
+          </button>
+        </DrawerTrigger>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>{label}</DrawerTitle>
+            <DrawerDescription className="sr-only">{label}</DrawerDescription>
+          </DrawerHeader>
+          <div className="max-h-[70dvh] overflow-y-auto px-4 pb-4">
+            <PromptPreview content={content} />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
     <HoverCard open={open} onOpenChange={setOpen} openDelay={300} closeDelay={0}>
       <HoverCardTrigger asChild>
@@ -450,18 +610,10 @@ export function PromptMentionChip({
           tabIndex={focusable ? 0 : undefined}
           role={focusable ? "button" : undefined}
           aria-expanded={focusable ? open : undefined}
-          aria-label={focusable ? t("task:customPromptNamed", { name }) : undefined}
+          aria-label={focusable ? label : undefined}
           className={cn(PROMPT_MENTION_CHIP_CLASS, "cursor-pointer")}
-          onClick={(event) => {
-            event.stopPropagation();
-            setOpen((isOpen) => !isOpen);
-          }}
-          onKeyDown={(event) => {
-            if (!focusable || (event.key !== "Enter" && event.key !== " ")) return;
-            event.preventDefault();
-            event.stopPropagation();
-            setOpen((isOpen) => !isOpen);
-          }}
+          onClick={handleClick}
+          onKeyDown={handleKeyDown}
         >
           {value}
         </span>

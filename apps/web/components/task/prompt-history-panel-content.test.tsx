@@ -371,18 +371,81 @@ describe("PromptHistoryPanelContent — prompt aliases", () => {
       { kind: "text", value: `_ and \`${PROMPT_ALIAS}\`` },
     ]);
   });
+});
 
-  it("leaves fenced code aliases as ordinary text", () => {
-    expect(
-      splitMarkdownPromptMentionSegments(`\`\`\`\n${PROMPT_ALIAS}\n\`\`\`\n\n**${PROMPT_ALIAS}**`, [
-        PROMPT_NAME,
-      ]),
-    ).toEqual([
-      { kind: "text", value: `\`\`\`\n${PROMPT_ALIAS}\n\`\`\`\n\n**` },
-      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
-      { kind: "text", value: "**" },
+describe("PromptHistoryPanelContent — Markdown alias boundaries", () => {
+  it("leaves aliases inside fenced code with info strings untouched", () => {
+    const content = `\`\`\`md
+${PROMPT_ALIAS}
+\`\`\`typescript
+${PROMPT_ALIAS}
+\`\`\``;
+
+    expect(splitMarkdownPromptMentionSegments(content, [PROMPT_NAME])).toEqual([
+      { kind: "text", value: content },
     ]);
   });
+
+  it("leaves aliases inside an unmatched or mismatched inline code run visible", () => {
+    expect(
+      splitMarkdownPromptMentionSegments(`Review \`unfinished ${PROMPT_ALIAS}`, [PROMPT_NAME]),
+    ).toEqual([
+      { kind: "text", value: "Review `unfinished " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ]);
+    expect(
+      splitMarkdownPromptMentionSegments(`Review \`unfinished \`\` ${PROMPT_ALIAS}`, [PROMPT_NAME]),
+    ).toEqual([
+      { kind: "text", value: "Review `unfinished `` " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ]);
+  });
+});
+
+describe("PromptHistoryPanelContent — Markdown link boundaries", () => {
+  it("does not close a fenced code block on a non-closing suffix", () => {
+    const content = `\`\`\`
+${PROMPT_ALIAS}
+\`\`\`not-close
+${PROMPT_ALIAS}
+\`\`\``;
+
+    expect(splitMarkdownPromptMentionSegments(content, [PROMPT_NAME])).toEqual([
+      { kind: "text", value: content },
+    ]);
+  });
+
+  it("does not treat ordinary or escaped bracket text as a link destination", () => {
+    const content = `literal ](docs ${PROMPT_ALIAS}) and literal \\](docs ${PROMPT_ALIAS}) and ${PROMPT_ALIAS}`;
+
+    expect(splitMarkdownPromptMentionSegments(content, [PROMPT_NAME])).toEqual([
+      { kind: "text", value: "literal ](docs " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+      { kind: "text", value: ") and literal \\](docs " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+      { kind: "text", value: ") and " },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ]);
+  });
+
+  it("ignores parentheses inside angle-bracket link destinations", () => {
+    const content = `[label](<https://example.test/path)> "title ${PROMPT_ALIAS}") and ${PROMPT_ALIAS}`;
+    expect(splitMarkdownPromptMentionSegments(content, [PROMPT_NAME])).toEqual([
+      { kind: "text", value: `[label](<https://example.test/path)> "title ${PROMPT_ALIAS}") and ` },
+      { kind: "prompt", value: PROMPT_ALIAS, name: PROMPT_NAME },
+    ]);
+  });
+
+  it("chips aliases after Unicode name characters", () => {
+    expect(
+      splitMarkdownPromptMentionSegments(`@dailyé @daily中 @daily\u0301 @daily!`, ["daily"]),
+    ).toEqual([
+      { kind: "text", value: "@dailyé @daily中 @daily\u0301 " },
+      { kind: "prompt", value: "@daily", name: "daily" },
+      { kind: "text", value: "!" },
+    ]);
+  });
+
   it("chips link labels but leaves link destinations untouched", () => {
     const content = `[label ${PROMPT_ALIAS}](/docs "title ${PROMPT_ALIAS}") and ${PROMPT_ALIAS}`;
 

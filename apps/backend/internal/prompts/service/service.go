@@ -6,6 +6,8 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/kandev/kandev/internal/prompts/models"
 	promptstore "github.com/kandev/kandev/internal/prompts/store"
@@ -210,7 +212,7 @@ func matchPromptReference(content string, index int, byName map[string]*models.P
 			continue
 		}
 		referenceEnd := referenceStart + len(name)
-		if referenceEnd < len(content) && isPromptReferenceNameChar(content[referenceEnd]) {
+		if referenceEnd < len(content) && isPromptReferenceNameCharAt(content, referenceEnd) {
 			continue
 		}
 		return byName[name], referenceEnd, true
@@ -230,10 +232,7 @@ func isPromptReferenceStart(content string, index int) bool {
 	}
 }
 
-func isPromptReferenceNameChar(ch byte) bool {
-	return ch >= 'a' && ch <= 'z' ||
-		ch >= 'A' && ch <= 'Z' ||
-		ch >= '0' && ch <= '9' ||
-		ch == '-' ||
-		ch == '_'
+func isPromptReferenceNameCharAt(content string, index int) bool {
+	r, _ := utf8.DecodeRuneInString(content[index:])
+	return unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsNumber(r) || r == '-' || r == '_'
 }

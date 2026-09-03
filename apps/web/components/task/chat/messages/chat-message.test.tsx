@@ -144,7 +144,45 @@ describe("ChatMessage prompt mentions", () => {
     expect(chip.getAttribute("data-slot")).toBe("hover-card-trigger");
     expect(chip.getAttribute("title")).toBeNull();
   });
+});
 
+describe("Prompt mention touch previews", () => {
+  it("uses a touch-sized drawer trigger for prompt previews on coarse pointers", () => {
+    const originalWidth = window.innerWidth;
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => {
+      const listeners = new Set<() => void>();
+      return {
+        media: query,
+        matches: false,
+        onchange: null,
+        addEventListener: (_event: string, listener: () => void) => listeners.add(listener),
+        removeEventListener: (_event: string, listener: () => void) => listeners.delete(listener),
+        dispatchEvent: () => true,
+      } as unknown as MediaQueryList;
+    });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
+
+    try {
+      const Wrapper = wrapper([], [customPrompt("hello")]);
+      render(
+        <Wrapper>
+          <ChatMessage comment={userMessage({ content: "@hello" })} label="Message" className="" />
+        </Wrapper>,
+      );
+
+      const [chip] = screen.getAllByTestId(PROMPT_MENTION_TESTID);
+      expect(chip.tagName).toBe("BUTTON");
+      expect(chip.getAttribute("data-slot")).toBe("drawer-trigger");
+      expect(chip.className).toContain("h-11");
+      fireEvent.click(chip);
+      expect(chip.getAttribute("aria-expanded")).toBe("true");
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+    }
+  });
+});
+
+describe("ChatMessage prompt mention fallbacks", () => {
   it("falls back to a plain chip with a title when the prompt has no contents", () => {
     // A prompt with empty content has nothing to reveal on hover, so keep the
     // lightweight title tooltip instead of a hover card.

@@ -30,6 +30,7 @@ export function useLazyLoadPrompts(sessionId: string | null) {
       : EMPTY_PROMPT_META,
   );
   const stateRef = useRef(meta);
+  const requestGenerationRef = useRef<number | null>(null);
   useEffect(() => {
     stateRef.current = meta;
   }, [meta]);
@@ -39,6 +40,7 @@ export function useLazyLoadPrompts(sessionId: string | null) {
     const { hasMore, oldestCursor, isLoadingMore } = stateRef.current;
     if (!sessionId || !hasMore || !oldestCursor || isLoadingMore) return 0;
     const generation = store.getState().messagePrompts.generationBySession?.[sessionId] ?? 0;
+    requestGenerationRef.current = generation;
     store.getState().setPromptMessagesLoadingMore(sessionId, true);
     try {
       const response = await listTaskSessionMessages(sessionId, {
@@ -61,8 +63,17 @@ export function useLazyLoadPrompts(sessionId: string | null) {
       if (isCurrentPromptState(current, sessionId, generation)) {
         store.getState().setPromptMessagesLoadingMore(sessionId, false);
       }
+      requestGenerationRef.current = null;
     }
   }, [sessionId, store]);
 
-  return { loadMore, hasMore: meta.hasMore, isLoadingMore: meta.isLoadingMore };
+  const isRequestCurrent = useCallback(() => {
+    const generation = requestGenerationRef.current;
+    return (
+      generation !== null &&
+      isCurrentPromptState(store.getState().messagePrompts, sessionId ?? "", generation)
+    );
+  }, [sessionId, store]);
+
+  return { loadMore, hasMore: meta.hasMore, isLoadingMore: meta.isLoadingMore, isRequestCurrent };
 }

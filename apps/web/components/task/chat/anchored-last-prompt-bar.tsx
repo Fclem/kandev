@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,10 @@ import { MemoizedMarkdown } from "@/components/shared/memoized-markdown";
 import { ScrollToLastPromptButton } from "./scroll-to-last-prompt-button";
 import { useTranslation } from "react-i18next";
 import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
-import { usePromptMentionMarkdownComponents } from "./messages/prompt-mention-components";
+import {
+  usePromptMentionMarkdownComponents,
+  useStablePromptMentionNames,
+} from "./messages/prompt-mention-components";
 
 type AnchoredLastPromptBarProps = {
   /** Raw content of the user's last prompt. */
@@ -132,7 +135,7 @@ export function AnchoredLastPromptBar({
 }: AnchoredLastPromptBarProps) {
   const { t } = useTranslation();
   const { prompts } = useCustomPrompts();
-  const promptNames = useMemo(() => prompts.map((prompt) => prompt.name), [prompts]);
+  const promptNames = useStablePromptMentionNames(prompts.map((prompt) => prompt.name));
   const promptMentionComponents = usePromptMentionMarkdownComponents(
     promptNames,
     NO_ENTITY_REFERENCES,

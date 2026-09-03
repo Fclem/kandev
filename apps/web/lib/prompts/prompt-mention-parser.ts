@@ -25,10 +25,17 @@ export function matchPromptMention(
   for (const name of promptNames) {
     if (!content.startsWith(name, referenceStart)) continue;
     const referenceEnd = referenceStart + name.length;
-    if (referenceEnd < content.length && isMentionNameChar(content[referenceEnd])) continue;
+    if (referenceEnd < content.length && isMentionNameCharAt(content, referenceEnd)) {
+      continue;
+    }
     return { start: index, end: referenceEnd, name };
   }
   return null;
+}
+
+function isMentionNameCharAt(content: string, index: number) {
+  const codePoint = content.codePointAt(index);
+  return codePoint !== undefined && /[\p{L}\p{M}\p{N}_-]/u.test(String.fromCodePoint(codePoint));
 }
 
 function isMentionStart(content: string, index: number) {
@@ -37,8 +44,4 @@ function isMentionStart(content: string, index: number) {
 
 function isWhitespace(value: string) {
   return value === " " || value === "\n" || value === "\t" || value === "\r";
-}
-
-function isMentionNameChar(value: string) {
-  return /[A-Za-z0-9_-]/.test(value);
 }

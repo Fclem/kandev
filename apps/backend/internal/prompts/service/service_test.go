@@ -267,6 +267,24 @@ func TestService_ResolvePromptReferencesMatchesStoredNames(t *testing.T) {
 	}
 }
 
+func TestService_ResolvePromptReferencesTreatsUnicodeNameCharactersAsPartOfReference(t *testing.T) {
+	svc, cleanup := createService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	if _, err := svc.CreatePrompt(ctx, "daily", "Daily prompt"); err != nil {
+		t.Fatalf("seed daily: %v", err)
+	}
+
+	got, err := svc.ResolvePromptReferences(ctx, "Ignore @dailyé @daily中 @daily\u0301, run @daily.")
+	if err != nil {
+		t.Fatalf("resolve references: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "daily" {
+		t.Fatalf("got %#v, want one daily expansion", got)
+	}
+}
+
 // raceRepo simulates a TOCTOU loss against the SQLite UNIQUE index: the
 // pre-check sees no row, but the write fails because a concurrent insert
 // landed first. The service must translate that into ErrPromptAlreadyExists

@@ -9,29 +9,15 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
-import {
-  IconArrowUp,
-  IconChevronDown,
-  IconChevronUp,
-  IconClock,
-  IconHourglass,
-  IconRobot,
-} from "@tabler/icons-react";
+import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
 import { useAppStore } from "@/components/state-provider";
 import { useSessionPrompts } from "@/hooks/domains/session/use-session-prompts";
-import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
-import { PromptMentionText } from "./chat/messages/prompt-mention-components";
 import { useLazyLoadPrompts } from "@/hooks/use-lazy-load-prompts";
 import { useLazyLoadSentinel } from "@/hooks/use-lazy-load-sentinel";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
-import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
-import { formatDateTime, formatRelativeCompact } from "@/lib/i18n/formats";
-import { cn } from "@/lib/utils";
-import {
-  buildPromptHistoryEntries,
-  formatPromptDuration,
-  type PromptHistoryEntry,
-} from "@/lib/prompt-history";
+import { buildPromptHistoryEntries, type PromptHistoryEntry } from "@/lib/prompt-history";
+import { useStablePromptMentionNames } from "./chat/messages/prompt-mention-components";
+import { PromptHistoryRow } from "./prompt-history-panel-row";
 import { PanelRoot } from "./panel-primitives";
 
 type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string) => void };
@@ -94,7 +80,7 @@ function PromptHistoryPassthrough({ rootRef }: { rootRef: RefObject<HTMLDivEleme
 export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryPanelContentProps) {
   const { t } = useTranslation();
   const { prompts: customPrompts } = useCustomPrompts();
-  const promptNames = useMemo(() => customPrompts.map((prompt) => prompt.name), [customPrompts]);
+  const promptNames = useStablePromptMentionNames(customPrompts.map((prompt) => prompt.name));
   const rootRef = useRef<HTMLDivElement>(null);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
@@ -104,7 +90,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     fetchFailed,
     retryPrompts,
   } = useSessionPrompts(sessionId);
-  const { loadMore, hasMore, isLoadingMore } = useLazyLoadPrompts(sessionId);
+  const { loadMore, hasMore, isLoadingMore, isRequestCurrent } = useLazyLoadPrompts(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
   const entries = useMemo(() => {
     const derived = buildPromptHistoryEntries(prompts, turns);
@@ -131,8 +117,8 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     messagesLoading,
     isLoadingMore,
     loadMore,
+    isRequestCurrent,
   });
-
   if (session?.is_passthrough) return <PromptHistoryPassthrough rootRef={rootRef} />;
 
   if (fetchFailed && entries.length === 0) {
@@ -214,6 +200,7 @@ function usePanelOlderPromptSentinel(opts: {
   messagesLoading: boolean;
   isLoadingMore: boolean;
   loadMore: () => Promise<number>;
+  isRequestCurrent: () => boolean;
 }): {
   sentinelRef: (node: HTMLDivElement | null) => void;
   onUserGesture: () => void;
@@ -231,6 +218,7 @@ function usePanelOlderPromptSentinel(opts: {
       // Keep loading while the user waits at the bottom: appended rows would
       // push the sentinel below the viewport and stall the auto-load.
       stickToBottomWhileLoading: true,
+      isRequestCurrent: opts.isRequestCurrent,
     },
   );
 }
@@ -513,206 +501,4 @@ function useLoadingGrace(sessionId: string | null, isLoadingMore: boolean): bool
     return () => window.clearTimeout(timer);
   }, [sessionId, isLoadingMore, grace.sessionId]);
   return grace.sessionId === sessionId && grace.show;
-}
-
-/** The small `#N` ordinal label at the start of a prompt bubble. Rendered
- * only when the entry carries a known ordinal; `#N` is not translatable copy
- * (precedent: `#${pr.pr_number}`). */
-function PromptNumberLabel({ index, promptNumber }: { index: number; promptNumber: number }) {
-  return (
-    <span
-      data-testid={`prompt-history-number-${index}`}
-      aria-hidden="true"
-      className="mr-1 shrink-0 text-[10px] font-medium leading-4 text-muted-foreground"
-    >
-      #{promptNumber}
-    </span>
-  );
-}
-
-function usePromptHistoryOverflow(textRef: RefObject<HTMLSpanElement | null>) {
-  const [overflow, setOverflow] = useState(false);
-  useEffect(() => {
-    const text = textRef.current;
-    if (!text) return;
-    const update = () => setOverflow(text.scrollWidth > text.clientWidth);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(text);
-    return () => observer.disconnect();
-  }, [textRef]);
-  return overflow;
-}
-
-type PromptHistoryRowProps = {
-  sessionId: string | null;
-  entry: PromptHistoryEntry;
-  index: number;
-  promptNames: string[];
-  expanded: boolean;
-  maxHeight: string;
-  onToggle: () => void;
-  onNavigate?: (messageId: string) => void;
-};
-function PromptHistoryNavigateButton({
-  index,
-  messageId,
-  onNavigate,
-}: {
-  index: number;
-  messageId: string;
-  onNavigate: NonNullable<PromptHistoryRowProps["onNavigate"]>;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={t("task:scrollToPrompt")}
-      data-testid={`prompt-history-navigate-${index}`}
-      className="h-11 w-11 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground sm:h-6 sm:w-6"
-      onClick={(event) => {
-        event.stopPropagation();
-        onNavigate(messageId);
-      }}
-    >
-      <IconArrowUp className="h-3.5 w-3.5" />
-    </Button>
-  );
-}
-function isNestedInteractiveTarget(target: EventTarget | null) {
-  return target instanceof Element && target.closest('button,[role="button"]') !== null;
-}
-
-/** One prompt-history row: the prompt text (truncated, or expanded into a
- * scrollable box) inside the transcript-style bubble, its relative time and
- * duration. The bubble is directly clickable for transcript navigation; the
- * expand/collapse chevron floats over the truncated text's ellipsis when it
- * overflows. */
-function PromptHistoryRow({
-  sessionId,
-  entry,
-  index,
-  promptNames,
-  expanded,
-  maxHeight,
-  onToggle,
-  onNavigate,
-}: PromptHistoryRowProps) {
-  const { t } = useTranslation();
-  const { isFavorite } = useMessageFavorite(sessionId ?? "", entry.messageId);
-  const textRef = useRef<HTMLSpanElement>(null);
-  const overflow = usePromptHistoryOverflow(textRef);
-  const showToggle = overflow || expanded;
-  return (
-    <div data-testid={`prompt-history-row-${index}`} className="flex items-start gap-1 py-1">
-      <div className="min-w-0 flex-1">
-        {/* Transcript-style bubble; direct taps navigate while prompt chips own
-            keyboard preview interaction without nested interactive semantics. */}
-        <div
-          data-message-id={entry.messageId}
-          className={cn(
-            "markdown-body markdown-body-user group relative flex min-h-11 cursor-pointer items-center overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
-            isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
-          )}
-          onClick={(event) => {
-            if (isNestedInteractiveTarget(event.target)) return;
-            onNavigate?.(entry.messageId);
-          }}
-        >
-          {onNavigate && (
-            <PromptHistoryNavigateButton
-              index={index}
-              messageId={entry.messageId}
-              onNavigate={onNavigate}
-            />
-          )}
-          {entry.promptNumber !== null && (
-            <PromptNumberLabel index={index} promptNumber={entry.promptNumber} />
-          )}
-          {entry.isAgentPrompt && (
-            <IconRobot
-              className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom"
-              aria-hidden="true"
-            />
-          )}
-          <span ref={textRef} className={expanded ? "hidden" : "min-w-0 flex-1 truncate"}>
-            <PromptMentionText
-              text={entry.content}
-              promptNames={promptNames}
-              keyPrefix={`history-${index}`}
-            />
-          </span>
-          {expanded && (
-            <div
-              data-testid={`prompt-history-expanded-box-${index}`}
-              className="min-w-0 flex-1 overflow-y-auto whitespace-normal"
-              style={{ maxHeight }}
-            >
-              <PromptMentionText
-                text={entry.content}
-                promptNames={promptNames}
-                keyPrefix={`history-expanded-${index}`}
-              />
-            </div>
-          )}
-          {showToggle && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "absolute right-1 z-10 size-11 cursor-pointer rounded-md bg-background/70 opacity-0 transition-opacity hover:bg-background/90 group-hover:opacity-100 focus-visible:opacity-100 sm:size-6",
-                expanded ? "top-1" : "top-1/2 -translate-y-1/2",
-              )}
-              aria-expanded={expanded}
-              aria-label={t(expanded ? "task:collapsePrompt" : "task:expandPrompt")}
-              data-testid={`prompt-history-expand-${index}`}
-              onClick={(event) => (event.stopPropagation(), onToggle())}
-            >
-              {expanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-            </Button>
-          )}
-        </div>
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-0.5 text-xs leading-tight text-muted-foreground">
-        <time
-          dateTime={entry.sentAt}
-          title={formatDateTime(entry.sentAt)}
-          className="inline-flex items-center gap-1"
-        >
-          <IconClock className="h-3 w-3 shrink-0" aria-hidden="true" />
-          {formatRelativeCompact(entry.sentAt)}
-        </time>
-        <PromptDuration durationSeconds={entry.durationSeconds} index={index} />
-      </div>
-    </div>
-  );
-}
-
-/** Renders the formatted duration label for a prompt row, or null when the
- * entry has no recorded duration. The hourglass marks it as elapsed time
- * and matches the surrounding text size. */
-function PromptDuration({
-  durationSeconds,
-  index,
-}: {
-  durationSeconds: number | null;
-  index: number;
-}) {
-  const { t } = useTranslation();
-  if (durationSeconds === null) return null;
-  return (
-    <span
-      data-testid={`prompt-history-duration-${index}`}
-      className="inline-flex items-center gap-1"
-    >
-      <IconHourglass className="h-3 w-3 shrink-0" aria-hidden="true" />
-      {formatPromptDuration(durationSeconds, {
-        s: t("task:durationUnitSeconds"),
-        m: t("task:durationUnitMinutes"),
-        h: t("task:durationUnitHours"),
-      })}
-    </span>
-  );
 }

@@ -81,4 +81,22 @@ describe("useLazyLoadPrompts", () => {
     expect(state.prependPromptMessages).not.toHaveBeenCalled();
     expect(state.setPromptMessagesLoadingMore).toHaveBeenCalledTimes(1);
   });
+
+  it("reports an older-page request as stale after session generation changes", async () => {
+    const pending = Promise.withResolvers<{
+      messages: Message[];
+      has_more: boolean;
+      cursor: string;
+    }>();
+    listTaskSessionMessages.mockReturnValueOnce(pending.promise);
+    const { result } = renderHook(() => useLazyLoadPrompts("session"));
+
+    const load = result.current.loadMore();
+    expect(result.current.isRequestCurrent()).toBe(true);
+    state.messagePrompts.generationBySession.session += 1;
+    expect(result.current.isRequestCurrent()).toBe(false);
+
+    pending.resolve({ messages: [], has_more: false, cursor: "next" });
+    await act(async () => load);
+  });
 });

@@ -3,16 +3,37 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@kandev/ui/tooltip";
 
 const promptState = vi.hoisted(() => {
-  const promptName = "daily";
-  const promptContent = "Review the daily report";
-  return { promptName, promptContent, items: [{ name: promptName, content: promptContent }] };
+  const state = {
+    promptName: "daily",
+    promptContent: "Review the daily report",
+    items: [] as Array<{ name: string; content: string }>,
+    snapshot: { prompts: { items: [] as Array<{ name: string; content: string }> } },
+    listeners: new Set<() => void>(),
+  };
+  return Object.assign(state, {
+    notify() {
+      state.snapshot = { prompts: { items: state.items } };
+      state.listeners.forEach((listener) => listener());
+    },
+  });
 });
 const MENTION_TESTID = "custom-prompt-mention";
-
-vi.mock("@/components/state-provider", () => ({
-  useAppStore: (selector: (state: { prompts: { items: typeof promptState.items } }) => unknown) =>
-    selector({ prompts: { items: promptState.items } }),
-}));
+vi.mock("@/components/state-provider", async () => {
+  const { useSyncExternalStore } = await import("react");
+  return {
+    useAppStore: (selector: (state: typeof promptState.snapshot) => unknown) => {
+      const snapshot = useSyncExternalStore(
+        (listener) => {
+          promptState.listeners.add(listener);
+          return () => promptState.listeners.delete(listener);
+        },
+        () => promptState.snapshot,
+        () => promptState.snapshot,
+      );
+      return selector(snapshot);
+    },
+  };
+});
 
 vi.mock("@/hooks/domains/settings/use-custom-prompts", () => ({
   useCustomPrompts: () => ({ prompts: promptState.items, loaded: true, loading: false }),
@@ -50,6 +71,7 @@ function renderBar(
 
 beforeEach(() => {
   promptState.items = [{ name: promptState.promptName, content: promptState.promptContent }];
+  promptState.notify();
 });
 afterEach(() => {
   cleanup();
@@ -150,11 +172,13 @@ describe("AnchoredLastPromptBar", () => {
 
   it("updates alias recognition and the open preview after prompt-store changes", () => {
     promptState.items = [];
+    promptState.notify();
     const { rerender } = renderBar({ promptText: `Review @${promptState.promptName}` });
 
     expect(screen.queryByTestId(MENTION_TESTID)).toBeNull();
 
     promptState.items = [{ name: promptState.promptName, content: "Initial prompt content" }];
+    promptState.notify();
     rerender(
       <TooltipProvider delayDuration={0}>
         <AnchoredLastPromptBar
@@ -171,6 +195,7 @@ describe("AnchoredLastPromptBar", () => {
     expect(screen.getByText("Initial prompt content")).toBeTruthy();
 
     promptState.items = [{ name: promptState.promptName, content: "Updated prompt content" }];
+    promptState.notify();
     rerender(
       <TooltipProvider delayDuration={0}>
         <AnchoredLastPromptBar
@@ -181,7 +206,6 @@ describe("AnchoredLastPromptBar", () => {
       </TooltipProvider>,
     );
 
-    fireEvent.click(screen.getByTestId(MENTION_TESTID));
     expect(screen.getByText("Updated prompt content")).toBeTruthy();
     expect(screen.queryByText("Initial prompt content")).toBeNull();
   });

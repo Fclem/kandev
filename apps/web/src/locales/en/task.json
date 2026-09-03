@@ -1030,6 +1030,7 @@
   "portNumber": "Port number",
   "position": "Position {{positionLabel}}",
   "promptHistory": "Prompt history",
+  "promptHistoryPromptLabel": "Prompt {{number}}",
   "promptHistoryEmpty": "No prompts yet.",
   "expandPrompt": "Expand prompt",
   "collapsePrompt": "Collapse prompt",

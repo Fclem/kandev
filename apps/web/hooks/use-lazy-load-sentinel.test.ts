@@ -150,6 +150,31 @@ describe("useLazyLoadSentinel", () => {
     expect(records).toHaveLength(2);
     expect(records[1].targets).toContain(node);
   });
+  it("ignores queued callbacks from a replaced observer with the same lifecycle key", () => {
+    const scrollRef = makeScrollRef();
+    const firstLoadMore = vi.fn(async () => 20);
+    const secondLoadMore = vi.fn(async () => 20);
+    const { result, rerender } = renderHook(
+      ({ loadMore }: { loadMore: () => Promise<number> }) =>
+        useLazyLoadSentinel(scrollRef, true, false, false, loadMore, {
+          lifecycleKey: 0,
+        }),
+      { initialProps: { loadMore: firstLoadMore } },
+    );
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+    const firstObserver = records[0];
+
+    rerender({ loadMore: secondLoadMore });
+    expect(records).toHaveLength(2);
+
+    fire(firstObserver, true, node);
+    expect(firstLoadMore).not.toHaveBeenCalled();
+    expect(secondLoadMore).not.toHaveBeenCalled();
+
+    fire(records[1], true, node);
+    expect(secondLoadMore).toHaveBeenCalledTimes(1);
+  });
 
   it("arms a replacement observer after the old one disarmed", async () => {
     const scrollRef = makeScrollRef();

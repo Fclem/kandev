@@ -127,10 +127,11 @@ function useSentinelObserver(opts: {
     observerFireLoadRef.current = opts.fireLoad;
     if (!root) return;
     const observer = new IntersectionObserver(
-      (entries) => {
+      (entries, callbackObserver) => {
         const entry = entries[0];
         if (
           !entry ||
+          callbackObserver !== opts.refs.observerRef.current ||
           entry.target !== opts.refs.sentinelNodeRef.current ||
           observerLifecycleKeyRef.current !== requestedLifecycleKeyRef.current
         ) {

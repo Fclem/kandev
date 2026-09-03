@@ -282,7 +282,7 @@ func (r *memoryRepository) AppendOrInsertTail(_ context.Context, sessionID, task
 	if err := r.insertLocked(msg, maxPerSession); err != nil {
 		return nil, false, err
 	}
-	return msg, false, nil
+	return cloneQueuedMessage(msg), false, nil
 }
 
 // InsertOrReplaceByCoalesceKey replaces an entry with the same session/queued_by/coalesce key, or inserts when allowInsert is set.
@@ -306,6 +306,7 @@ func (r *memoryRepository) InsertOrReplaceByCoalesceKey(_ context.Context, msg *
 		existing.PlanMode = msg.PlanMode
 		existing.Attachments = append([]MessageAttachment(nil), msg.Attachments...)
 		existing.Metadata = copyMessageMetadata(msg.Metadata, 0)
+		existing.QueuedAt = msg.QueuedAt
 		out := cloneQueuedMessage(existing)
 		return out, true, nil
 	}
@@ -315,7 +316,7 @@ func (r *memoryRepository) InsertOrReplaceByCoalesceKey(_ context.Context, msg *
 	if err := r.insertLocked(msg, maxPerSession); err != nil {
 		return nil, false, err
 	}
-	return msg, false, nil
+	return cloneQueuedMessage(msg), false, nil
 }
 
 // The memory queue has no task store. Tests which need an archive race wrap
@@ -337,8 +338,10 @@ func (r *memoryRepository) InsertOrReplaceLifecycleByCoalesceKey(ctx context.Con
 		existing.TaskID = msg.TaskID
 		existing.Content = msg.Content
 		existing.Model = msg.Model
+		existing.PlanMode = msg.PlanMode
 		existing.Attachments = append([]MessageAttachment(nil), msg.Attachments...)
 		existing.Metadata = copyMessageMetadata(msg.Metadata, 0)
+		existing.QueuedAt = msg.QueuedAt
 		out := cloneQueuedMessage(existing)
 		return out, true, nil
 	}
@@ -348,7 +351,7 @@ func (r *memoryRepository) InsertOrReplaceLifecycleByCoalesceKey(ctx context.Con
 	if err := r.insertLocked(msg, maxPerSession); err != nil {
 		return nil, false, err
 	}
-	return msg, false, nil
+	return cloneQueuedMessage(msg), false, nil
 }
 
 // ListBySession returns all entries for a session ordered by position ascending.

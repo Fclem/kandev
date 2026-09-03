@@ -155,3 +155,125 @@ func TestMemoryInsertAndListOwnQueueSnapshotData(t *testing.T) {
 		t.Fatalf("reserved metadata after result mutation = %q, want original", got)
 	}
 }
+
+func TestMemoryAppendInsertReturnsOwnedSnapshot(t *testing.T) {
+	repo := NewMemoryRepository()
+	ctx := context.Background()
+	attachments := []MessageAttachment{{AttachmentID: "attachment-1", Name: "original.txt"}}
+	metadata := map[string]interface{}{
+		"nested": map[string]interface{}{"value": "original"},
+	}
+
+	out, appended, err := repo.AppendOrInsertTail(
+		ctx, "session-append-snapshot", "task-1", "content", "", QueuedByUser,
+		false, attachments, metadata, 0,
+	)
+	if err != nil {
+		t.Fatalf("append or insert: %v", err)
+	}
+	if appended {
+		t.Fatal("initial append or insert unexpectedly appended")
+	}
+	out.Attachments[0].Name = "mutated.txt"
+	out.Metadata["nested"].(map[string]interface{})["value"] = "mutated"
+	if got := attachments[0].Name; got != "original.txt" {
+		t.Fatalf("input attachment after returned snapshot mutation = %q, want original.txt", got)
+	}
+	if got := metadata["nested"].(map[string]interface{})["value"]; got != "original" {
+		t.Fatalf("input metadata after returned snapshot mutation = %q, want original", got)
+	}
+
+	entries, err := repo.ListBySession(ctx, "session-append-snapshot")
+	if err != nil {
+		t.Fatalf("list after returned snapshot mutation: %v", err)
+	}
+	if got := entries[0].Attachments[0].Name; got != "original.txt" {
+		t.Fatalf("stored attachment after returned snapshot mutation = %q, want original.txt", got)
+	}
+	if got := entries[0].Metadata["nested"].(map[string]interface{})["value"]; got != "original" {
+		t.Fatalf("stored metadata after returned snapshot mutation = %q, want original", got)
+	}
+}
+
+func TestMemoryCoalesceReplacementPreservesTimestampAndPlanMode(t *testing.T) {
+	repo := NewMemoryRepository()
+	ctx := context.Background()
+	coalesceKey := "coalesce-key"
+	original := &QueuedMessage{
+		SessionID: "session-coalesce-snapshot",
+		TaskID:    "task-1",
+		Content:   "original",
+		PlanMode:  false,
+		QueuedBy:  QueuedByWorkflow,
+		QueuedAt:  time.Unix(10, 0).UTC(),
+		Metadata:  map[string]interface{}{MetadataCoalesceKey: coalesceKey},
+	}
+	if err := repo.Insert(ctx, original, 0); err != nil {
+		t.Fatalf("insert original: %v", err)
+	}
+	replacement := &QueuedMessage{
+		SessionID: "session-coalesce-snapshot",
+		TaskID:    "task-2",
+		Content:   "replacement",
+		PlanMode:  true,
+		QueuedBy:  QueuedByWorkflow,
+		QueuedAt:  time.Unix(20, 0).UTC(),
+		Metadata:  map[string]interface{}{MetadataCoalesceKey: coalesceKey},
+	}
+	updated, replaced, err := repo.InsertOrReplaceByCoalesceKey(
+		ctx, replacement, coalesceKey, 0, true,
+	)
+	if err != nil {
+		t.Fatalf("replace ordinary coalesced entry: %v", err)
+	}
+	if !replaced {
+		t.Fatal("ordinary coalesce unexpectedly inserted")
+	}
+	if !updated.PlanMode || !updated.QueuedAt.Equal(replacement.QueuedAt) {
+		t.Fatalf("ordinary replacement = plan_mode:%t queued_at:%s, want plan_mode:true queued_at:%s",
+			updated.PlanMode, updated.QueuedAt, replacement.QueuedAt)
+	}
+
+	lifecycle := &QueuedMessage{
+		SessionID: "session-lifecycle-coalesce-snapshot",
+		TaskID:    "task-1",
+		Content:   "original lifecycle",
+		PlanMode:  false,
+		QueuedBy:  QueuedByWorkflow,
+		QueuedAt:  time.Unix(30, 0).UTC(),
+		Metadata: map[string]interface{}{
+			MetadataCoalesceKey:         coalesceKey,
+			MetadataLifecycleDurable:    true,
+			MetadataLifecycleGeneration: int64(0),
+		},
+	}
+	if err := repo.Insert(ctx, lifecycle, 0); err != nil {
+		t.Fatalf("insert lifecycle original: %v", err)
+	}
+	lifecycleReplacement := &QueuedMessage{
+		SessionID: "session-lifecycle-coalesce-snapshot",
+		TaskID:    "task-2",
+		Content:   "replacement lifecycle",
+		PlanMode:  true,
+		QueuedBy:  QueuedByWorkflow,
+		QueuedAt:  time.Unix(40, 0).UTC(),
+		Metadata: map[string]interface{}{
+			MetadataCoalesceKey:         coalesceKey,
+			MetadataLifecycleDurable:    true,
+			MetadataLifecycleGeneration: int64(0),
+		},
+	}
+	updated, replaced, err = repo.InsertOrReplaceLifecycleByCoalesceKey(
+		ctx, lifecycleReplacement, coalesceKey, 0, true,
+	)
+	if err != nil {
+		t.Fatalf("replace lifecycle coalesced entry: %v", err)
+	}
+	if !replaced {
+		t.Fatal("lifecycle coalesce unexpectedly inserted")
+	}
+	if !updated.PlanMode || !updated.QueuedAt.Equal(lifecycleReplacement.QueuedAt) {
+		t.Fatalf("lifecycle replacement = plan_mode:%t queued_at:%s, want plan_mode:true queued_at:%s",
+			updated.PlanMode, updated.QueuedAt, lifecycleReplacement.QueuedAt)
+	}
+}

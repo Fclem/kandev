@@ -1918,6 +1918,7 @@
   "expandPrompt": "展開提示",
   "promptHistory": "提示歷史",
   "promptHistoryPromptLabel": "提示 {{number}}",
+  "promptHistoryPromptLabelGeneric": "提示",
   "promptHistoryEmpty": "暫無提示。",
   "scrollToPrompt": "滾動到提示",
   "launchErrorBaseBranchMissing": "任務無法啓動，因為基礎分支不可用。",

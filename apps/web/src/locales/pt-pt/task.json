@@ -1918,6 +1918,7 @@
   "expandPrompt": "Expandir prompt",
   "promptHistory": "Histórico de prompts",
   "promptHistoryPromptLabel": "Indicação {{number}}",
+  "promptHistoryPromptLabelGeneric": "Indicação",
   "promptHistoryEmpty": "Ainda sem prompts.",
   "scrollToPrompt": "Ir para o prompt",
   "launchErrorBaseBranchMissing": "Não foi possível iniciar a tarefa porque o branch base não está disponível.",

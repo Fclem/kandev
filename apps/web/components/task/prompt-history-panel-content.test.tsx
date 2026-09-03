@@ -653,13 +653,14 @@ describe("PromptHistoryPanelContent — prompt numbering", () => {
     expect(row(0).querySelector(BUBBLE_SELECTOR)?.textContent).toContain("#3");
   });
 
-  it("renders no label when prompt_index is absent", () => {
+  it("renders a generic accessible label when prompt_index is absent", () => {
     messagesBySession[SESSION_A] = [message({ content: "unnumbered prompt" })];
 
     render(<PromptHistoryPanelContent />);
 
     expect(screen.queryByTestId(/^prompt-history-number-/)).toBeNull();
     expect(row(0).querySelector(BUBBLE_SELECTOR)?.textContent).not.toContain("#");
+    expect(document.getElementById("prompt-history-label-message-1")?.textContent).toBe("Prompt");
   });
 
   it("keeps the label visible in the expanded state", () => {

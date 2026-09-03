@@ -118,12 +118,14 @@ export function PromptHistoryRow({
 }: PromptHistoryRowProps) {
   const { t } = useTranslation();
   const rowLabelId = `prompt-history-label-${entry.messageId}`;
+  const rowLabel =
+    entry.promptNumber == null
+      ? t("task:promptHistoryPromptLabelGeneric")
+      : t("task:promptHistoryPromptLabel", { number: entry.promptNumber });
   return (
     <div data-testid={`prompt-history-row-${index}`} className="flex items-start gap-1 py-1">
       <div id={rowLabelId} className="sr-only">
-        {t("task:promptHistoryPromptLabel", {
-          number: entry.promptNumber ?? index + 1,
-        })}
+        {rowLabel}
       </div>
       <PromptHistoryBubble
         sessionId={sessionId}

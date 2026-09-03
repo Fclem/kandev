@@ -1031,6 +1031,7 @@
   "position": "Position {{positionLabel}}",
   "promptHistory": "Prompt history",
   "promptHistoryPromptLabel": "Prompt {{number}}",
+  "promptHistoryPromptLabelGeneric": "Prompt",
   "promptHistoryEmpty": "No prompts yet.",
   "expandPrompt": "Expand prompt",
   "collapsePrompt": "Collapse prompt",

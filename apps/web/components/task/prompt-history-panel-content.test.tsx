@@ -696,6 +696,17 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
 
     expect(onNavigateToPrompt).toHaveBeenCalledWith("prompt-1");
   });
+  it.each(["Enter", " "])("navigates from the dedicated control with %s", (key) => {
+    messagesBySession[SESSION_A] = [message({ id: "keyboard-prompt" })];
+    const onNavigateToPrompt = vi.fn();
+
+    render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
+    const navigateButton = screen.getByTestId("prompt-history-navigate-0");
+
+    fireEvent.keyDown(navigateButton, { key });
+
+    expect(onNavigateToPrompt).toHaveBeenCalledWith("keyboard-prompt");
+  });
 
   it("does nothing when the callback is absent", () => {
     messagesBySession[SESSION_A] = [message()];

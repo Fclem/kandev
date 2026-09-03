@@ -56,6 +56,12 @@ function PromptHistoryNavigateButton({
         event.stopPropagation();
         onNavigate(messageId);
       }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        onNavigate(messageId);
+      }}
     >
       <IconArrowUp className="h-3.5 w-3.5" />
     </Button>

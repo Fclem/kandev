@@ -138,14 +138,21 @@ describe("useLazyLoadPrompts", () => {
     expect(state.prependPromptMessages).not.toHaveBeenCalled();
   });
 
-  it("reports an older request as stale after switching sessions", async () => {
-    const pending = Promise.withResolvers<{
+  it("keeps the replacement session request current when the old request settles first", async () => {
+    const pendingA = Promise.withResolvers<{
       messages: Message[];
       has_more: boolean;
       cursor: string;
     }>();
-    listTaskSessionMessages.mockReturnValueOnce(pending.promise);
-    state.messagePrompts.bySession.other = [];
+    const pendingB = Promise.withResolvers<{
+      messages: Message[];
+      has_more: boolean;
+      cursor: string;
+    }>();
+    listTaskSessionMessages
+      .mockReturnValueOnce(pendingA.promise)
+      .mockReturnValueOnce(pendingB.promise);
+    state.messagePrompts.bySession.other = [{ id: "other-existing" } as Message];
     state.messagePrompts.metaBySession.other = {
       isLoading: false,
       isLoadingMore: false,
@@ -159,11 +166,18 @@ describe("useLazyLoadPrompts", () => {
       { initialProps: { sessionId: "session" } },
     );
 
-    const load = result.current.loadMore();
+    const loadA = result.current.loadMore();
     rerender({ sessionId: "other" });
-    expect(result.current.isRequestCurrent()).toBe(false);
-    pending.resolve({ messages: [], has_more: false, cursor: "next" });
-    await act(async () => load);
+    const loadB = result.current.loadMore();
+    expect(listTaskSessionMessages).toHaveBeenNthCalledWith(2, "other", expect.anything());
+
+    pendingA.resolve({ messages: [], has_more: true, cursor: "a-next" });
+    await act(async () => loadA);
+    expect(result.current.isRequestCurrent()).toBe(true);
+
+    pendingB.resolve({ messages: [], has_more: false, cursor: "b-next" });
+    await act(async () => loadB);
+    expect(result.current.isRequestCurrent()).toBe(true);
   });
 
   it("clears the loading state when an older-page request rejects", async () => {

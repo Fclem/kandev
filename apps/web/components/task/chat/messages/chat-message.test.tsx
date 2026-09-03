@@ -144,6 +144,21 @@ describe("ChatMessage prompt mentions", () => {
     expect(chip.getAttribute("data-slot")).toBe("hover-card-trigger");
     expect(chip.getAttribute("title")).toBeNull();
   });
+  it.each(["Enter", " "])("opens a saved prompt preview with the %s key", (key) => {
+    const Wrapper = wrapper([], [customPrompt("hello")]);
+
+    render(
+      <Wrapper>
+        <ChatMessage comment={userMessage({ content: "@hello" })} label="Message" className="" />
+      </Wrapper>,
+    );
+
+    const [chip] = screen.getAllByTestId(PROMPT_MENTION_TESTID);
+    fireEvent.keyDown(chip, { key });
+
+    expect(screen.getByText("hello content")).toBeTruthy();
+    expect(chip.getAttribute("aria-expanded")).toBe("true");
+  });
 });
 
 describe("Prompt mention touch previews", () => {

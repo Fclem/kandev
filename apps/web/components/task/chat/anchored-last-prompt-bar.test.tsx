@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@kandev/ui/tooltip";
 
 const promptState = vi.hoisted(() => {
@@ -51,6 +51,34 @@ const LONG_TEXT =
 const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
 const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
 const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+type AnchoredResizeRecord = {
+  callback: ResizeObserverCallback;
+  elements: Element[];
+};
+const anchoredResizeRecords: AnchoredResizeRecord[] = [];
+class CapturingResizeObserver implements ResizeObserver {
+  readonly root = null;
+  readonly callback: ResizeObserverCallback;
+  readonly elements: Element[] = [];
+  readonly boxOptions = undefined;
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    anchoredResizeRecords.push({ callback, elements: this.elements });
+  }
+  observe(element: Element) {
+    this.elements.push(element);
+  }
+  unobserve() {}
+  disconnect() {}
+}
+
+function fireAnchoredResize(element: Element) {
+  for (const record of anchoredResizeRecords) {
+    if (record.elements.includes(element)) {
+      act(() => record.callback([], {} as ResizeObserver));
+    }
+  }
+}
 
 function renderBar(
   overrides: Partial<Parameters<typeof AnchoredLastPromptBar>[0]> = {},
@@ -70,11 +98,15 @@ function renderBar(
 }
 
 beforeEach(() => {
+  anchoredResizeRecords.length = 0;
+  vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
   promptState.items = [{ name: promptState.promptName, content: promptState.promptContent }];
   promptState.notify();
 });
 afterEach(() => {
   cleanup();
+  anchoredResizeRecords.length = 0;
+  vi.unstubAllGlobals();
   restorePromptMeasurements();
 });
 
@@ -208,6 +240,7 @@ describe("AnchoredLastPromptBar", () => {
 
     expect(screen.getByText("Updated prompt content")).toBeTruthy();
     expect(screen.queryByText("Initial prompt content")).toBeNull();
+    expect(screen.getByTestId(MENTION_TESTID).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("closes an open prompt preview when the anchored bar becomes hidden", () => {
@@ -245,6 +278,21 @@ describe("AnchoredLastPromptBar expanded content", () => {
     setPromptMeasurements(40, 40);
     renderBar({ promptText: LONG_TEXT });
 
+    expect(screen.queryByTestId(EXPAND_TESTID)).toBeNull();
+  });
+  it("updates the expand affordance when mounted text geometry changes", () => {
+    setPromptMeasurements(40, 40);
+    renderBar({ promptText: LONG_TEXT });
+    const textEl = screen.getByTestId(TEXT_TESTID);
+
+    expect(screen.queryByTestId(EXPAND_TESTID)).toBeNull();
+
+    setPromptMeasurements(40, 80);
+    fireAnchoredResize(textEl);
+    expect(screen.getByTestId(EXPAND_TESTID)).toBeTruthy();
+
+    setPromptMeasurements(40, 40);
+    fireAnchoredResize(textEl);
     expect(screen.queryByTestId(EXPAND_TESTID)).toBeNull();
   });
 

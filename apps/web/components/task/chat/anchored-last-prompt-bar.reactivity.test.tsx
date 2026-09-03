@@ -63,8 +63,8 @@ describe("AnchoredLastPromptBar prompt mention reactivity", () => {
         },
       ]);
     });
-    fireEvent.click(screen.getByTestId("custom-prompt-mention"));
     expect(screen.getByText("Updated prompt content")).toBeTruthy();
     expect(screen.queryByText("Initial prompt content")).toBeNull();
+    expect(screen.getByTestId("custom-prompt-mention").getAttribute("aria-expanded")).toBe("true");
   });
 });

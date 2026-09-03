@@ -6,6 +6,39 @@ import (
 	"testing"
 )
 
+func TestSessionGenerationAdvancesForDestructiveQueueChanges(t *testing.T) {
+	tests := []struct {
+		name string
+		new  func(*testing.T) Repository
+	}{
+		{name: "memory", new: func(*testing.T) Repository { return NewMemoryRepository() }},
+		{name: "sqlite", new: newTestSQLiteRepo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := tt.new(t)
+			ctx := context.Background()
+			if got, err := repo.SessionGeneration(ctx, "session-1"); err != nil || got != 0 {
+				t.Fatalf("initial session generation = %d err=%v, want 0", got, err)
+			}
+			insertTestEntry(t, repo, "session-1", "task-1", "pending", QueuedByUser, nil, nil)
+			if _, err := repo.DeleteAllBySession(ctx, "session-1"); err != nil {
+				t.Fatalf("delete session queue: %v", err)
+			}
+			if got, err := repo.SessionGeneration(ctx, "session-1"); err != nil || got != 1 {
+				t.Fatalf("session generation after delete = %d err=%v, want 1", got, err)
+			}
+			if _, err := repo.PurgeSession(ctx, "session-1"); err != nil {
+				t.Fatalf("purge session queue: %v", err)
+			}
+			if got, err := repo.SessionGeneration(ctx, "session-1"); err != nil || got != 2 {
+				t.Fatalf("session generation after purge = %d err=%v, want 2", got, err)
+			}
+		})
+	}
+}
+
 func TestSendNowClaimIsExactAtomicAndRestorable(t *testing.T) {
 	tests := []struct {
 		name string

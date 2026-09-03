@@ -21,6 +21,7 @@ import type { EntityReference } from "@/lib/types/entity-reference";
 
 import { generateUUID } from "@/lib/utils";
 const EMPTY_ENTRIES: QueuedMessage[] = [];
+const queueRefetchEpochs = new Map<string, number>();
 
 export type MessageAttachment = {
   type: string;
@@ -169,20 +170,38 @@ function useQueueRefetch(
   queueMetaRef.current = queueMeta;
   const activeSessionIdRef = useRef(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
+  const mountedRef = useRef(false);
   const refetchVersion = useRef<Record<string, number>>({});
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const invalidate = useCallback((sid: string) => {
     refetchVersion.current[sid] = (refetchVersion.current[sid] ?? 0) + 1;
+    queueRefetchEpochs.set(sid, (queueRefetchEpochs.get(sid) ?? 0) + 1);
   }, []);
+  useEffect(() => {
+    if (!activeSessionId) return;
+    return () => {
+      queueRefetchEpochs.set(activeSessionId, (queueRefetchEpochs.get(activeSessionId) ?? 0) + 1);
+    };
+  }, [activeSessionId]);
   const refetch = useCallback(
     async (sid: string) => {
+      if (!mountedRef.current) return;
       const version = (refetchVersion.current[sid] ?? 0) + 1;
       refetchVersion.current[sid] = version;
+      const epoch = (queueRefetchEpochs.get(sid) ?? 0) + 1;
+      queueRefetchEpochs.set(sid, epoch);
       const requestMeta = queueMetaRef.current;
       try {
         setQueueLoading(sid, true);
         const status = await getQueueStatus(sid);
         if (
           refetchVersion.current[sid] !== version ||
+          queueRefetchEpochs.get(sid) !== epoch ||
           activeSessionIdRef.current !== sid ||
           queueMetaRef.current !== requestMeta
         ) {
@@ -195,7 +214,9 @@ function useQueueRefetch(
           autoRun: status.auto_run ?? true,
         });
       } finally {
-        if (refetchVersion.current[sid] === version) setQueueLoading(sid, false);
+        if (refetchVersion.current[sid] === version && queueRefetchEpochs.get(sid) === epoch) {
+          setQueueLoading(sid, false);
+        }
       }
     },
     [setQueueEntries, setQueueLoading],

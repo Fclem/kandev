@@ -89,6 +89,12 @@ func (s *Service) ListDurableLifecycleEntries(ctx context.Context) ([]QueuedMess
 	return s.repo.ListDurableLifecycleEntries(ctx)
 }
 
+// SessionGeneration returns the session destructive-mutation generation used
+// to fence Send Now restores.
+func (s *Service) SessionGeneration(ctx context.Context, sessionID string) (int64, error) {
+	return s.repo.SessionGeneration(ctx, sessionID)
+}
+
 // SetMaxPerSession applies a new admission cap without pruning existing rows.
 // Non-positive values disable the cap.
 func (s *Service) SetMaxPerSession(maxPerSession int) {

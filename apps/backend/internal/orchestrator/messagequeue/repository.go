@@ -54,6 +54,10 @@ type Repository interface {
 	// task. Lifecycle insertion verifies this generation atomically.
 	LifecycleGeneration(ctx context.Context, taskID string) (int64, error)
 
+	// SessionGeneration returns the current destructive-mutation generation for
+	// a session. Send Now restores use it to reject stale FIFO reservations.
+	SessionGeneration(ctx context.Context, sessionID string) (int64, error)
+
 	// PurgeTask is backend-only cleanup. It removes all task rows, including
 	// reserved server-owned lifecycle rows, and advances its generation.
 	PurgeTask(ctx context.Context, taskID string) (int, error)

@@ -41,6 +41,14 @@ func (r *memoryRepository) LifecycleGeneration(_ context.Context, taskID string)
 	return r.generation[taskID], nil
 }
 
+// SessionGeneration returns the current destructive-mutation generation for a
+// session.
+func (r *memoryRepository) SessionGeneration(_ context.Context, sessionID string) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.sessionGeneration[sessionID], nil
+}
+
 // PurgeTask removes all task rows and advances its generation.
 func (r *memoryRepository) PurgeTask(_ context.Context, taskID string) (int, error) {
 	r.mu.Lock()

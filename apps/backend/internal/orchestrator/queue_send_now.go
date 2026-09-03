@@ -161,6 +161,11 @@ func (s *Service) sendNowRestoreClaimForReservation(
 		Sources:           []messagequeue.QueuedMessage{*reservation.source},
 		SourceGenerations: make(map[string]int64),
 	}
+	sessionGeneration, err := s.messageQueue.SessionGeneration(ctx, reservation.sessionID)
+	if err != nil {
+		return nil, ErrSendNowQueueChanged
+	}
+	restore.SessionGeneration = sessionGeneration
 	if reservation.source.TaskID == "" {
 		return restore, nil
 	}

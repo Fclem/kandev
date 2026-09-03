@@ -210,6 +210,47 @@ func TestSendQueuedNowMissingEntryPreservesAutoRunOff(t *testing.T) {
 		t.Fatalf("rejected Send Now changed queue count to %d", status.Count)
 	}
 }
+func TestSendNowRestoresPendingFIFOWithSessionGeneration(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "task-1", "session-1", "step-1")
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+
+	if _, err := svc.messageQueue.QueueMessage(
+		ctx, "session-1", "task-1", "pending", "", messagequeue.QueuedByUser, false, nil,
+	); err != nil {
+		t.Fatalf("queue message: %v", err)
+	}
+	if _, err := svc.messageQueue.PurgeSession(ctx, "session-1"); err != nil {
+		t.Fatalf("purge session: %v", err)
+	}
+	source, err := svc.messageQueue.QueueMessage(
+		ctx, "session-1", "task-1", "replacement", "", messagequeue.QueuedByUser, false, nil,
+	)
+	if err != nil {
+		t.Fatalf("queue replacement: %v", err)
+	}
+	reserved, ok := svc.messageQueue.ReserveQueued(ctx, "session-1")
+	if !ok {
+		t.Fatal("reserve pending FIFO handoff")
+	}
+	reservation := svc.markQueuedDispatchInFlightWithSource("session-1", reserved.ID, reserved)
+
+	claim, err := svc.sendNowRestoreClaimForReservation(ctx, reservation)
+	if err != nil {
+		t.Fatalf("build pending Send Now restore claim: %v", err)
+	}
+	if claim.SessionGeneration == 0 {
+		t.Fatal("pending Send Now restore claim omitted the session generation")
+	}
+	if err := svc.messageQueue.RestoreSendNowClaim(ctx, claim); err != nil {
+		t.Fatalf("restore pending Send Now claim: %v", err)
+	}
+	status := svc.messageQueue.GetStatus(ctx, "session-1")
+	if len(status.Entries) != 1 || status.Entries[0].ID != source.ID {
+		t.Fatalf("restored queue = %#v, want replacement entry", status.Entries)
+	}
+}
 
 func TestSendQueuedNowSupersedesPendingFIFOHandoff(t *testing.T) {
 	ctx := context.Background()

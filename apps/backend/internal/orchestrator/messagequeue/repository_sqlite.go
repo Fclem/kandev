@@ -735,6 +735,25 @@ func (r *sqliteRepository) LifecycleGeneration(ctx context.Context, taskID strin
 	return generation, nil
 }
 
+// SessionGeneration returns the current destructive-mutation generation for a
+// session.
+func (r *sqliteRepository) SessionGeneration(ctx context.Context, sessionID string) (int64, error) {
+	unlock := r.withSessionLock(sessionID)
+	defer unlock()
+
+	var generation int64
+	err := r.ro.GetContext(ctx, &generation, r.ro.Rebind(`
+		SELECT send_now_generation FROM queue_session_state WHERE session_id = ?
+	`), sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get send-now session generation: %w", err)
+	}
+	return generation, nil
+}
+
 // PurgeTask removes all task rows and advances its generation.
 func (r *sqliteRepository) PurgeTask(ctx context.Context, taskID string) (int, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)

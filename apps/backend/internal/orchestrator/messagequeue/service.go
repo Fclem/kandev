@@ -32,11 +32,15 @@ type Service struct {
 	mergeEnabled     atomic.Bool
 	autoMergeEnabled atomic.Bool
 	logger           *logger.Logger
-	admissionMu      sync.Mutex
-	admissions       map[string]*sessionAdmission
-	editLeaseMu      sync.Mutex
-	editLeases       map[editLeaseKey]*QueueEditLease
-	editRevisions    map[editLeaseKey]int64
+	// lifecycleMu fences task-wide purges against every session-scoped queue
+	// admission. A task purge cannot enumerate every possibly empty session,
+	// so the barrier must cover admissions before they reach the repository.
+	lifecycleMu   sync.RWMutex
+	admissionMu   sync.Mutex
+	admissions    map[string]*sessionAdmission
+	editLeaseMu   sync.Mutex
+	editLeases    map[editLeaseKey]*QueueEditLease
+	editRevisions map[editLeaseKey]int64
 }
 
 type sessionAdmission struct {
@@ -138,6 +142,9 @@ func (s *Service) WithSessionAdmission(ctx context.Context, sessionID string, fn
 		token.service == s && token.sessionID == sessionID {
 		return fn(ctx)
 	}
+
+	s.lifecycleMu.RLock()
+	defer s.lifecycleMu.RUnlock()
 
 	s.admissionMu.Lock()
 	entry := s.admissions[sessionID]
@@ -1037,12 +1044,13 @@ func (s *Service) ReleaseEditLeasesForConnection(connectionID string) int {
 // PurgeTask is a backend-only task lifecycle operation. Client deletion APIs
 // retain their reserved-entry protections.
 func (s *Service) PurgeTask(ctx context.Context, taskID string) (int, error) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	s.editLeaseMu.Lock()
 	defer s.editLeaseMu.Unlock()
 
-	// Serialize the persistent purge with queue reads that may acquire a new
-	// lease. Otherwise BeginEdit can observe a row after the purge starts and
-	// publish a lease that is invalidated only after the row is deleted.
+	// The lifecycle barrier above serializes the persistent purge with all
+	// queue admissions, including writes for sessions absent from the purge.
 	removed, err := s.repo.PurgeTask(ctx, taskID)
 	if err != nil {
 		return 0, err

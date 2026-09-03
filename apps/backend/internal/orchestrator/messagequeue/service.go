@@ -450,6 +450,21 @@ func (s *Service) editLeaseBlocksEntryLocked(sessionID, entryID string) bool {
 	s.expireEditLeaseLocked(key, time.Now().UTC())
 	return s.editLeases[key] != nil
 }
+func (s *Service) editLeaseBlocksReorderLocked(sessionID string) bool {
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
+	now := time.Now().UTC()
+	for key := range s.editLeases {
+		if key.sessionID != sessionID {
+			continue
+		}
+		s.expireEditLeaseLocked(key, now)
+		if s.editLeases[key] != nil {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excludedEntryID, queuedBy string) (bool, error) {
 	s.editLeaseMu.Lock()
@@ -1532,6 +1547,9 @@ func (s *Service) ReorderEntries(ctx context.Context, sessionID string, orderedI
 		return err
 	}
 	if err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		if s.editLeaseBlocksReorderLocked(sessionID) {
+			return ErrEditConflict
+		}
 		return s.repo.ReorderEntries(admittedCtx, sessionID, orderedIDs)
 	}); err != nil {
 		return err

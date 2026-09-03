@@ -1159,6 +1159,9 @@ func (h *QueueHandlers) wsReorder(ctx context.Context, msg *ws.Message) (*ws.Mes
 		if errors.Is(err, messagequeue.ErrQueueChanged) {
 			return ws.NewError(msg.ID, msg.Action, queueErrorCodeQueueChanged, "Queue changed before the reorder could be applied", nil)
 		}
+		if errors.Is(err, messagequeue.ErrEditConflict) {
+			return queueEditLeaseError(msg, err), nil
+		}
 		h.logger.Error("failed to reorder queued messages", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to reorder queued messages", nil)
 	}

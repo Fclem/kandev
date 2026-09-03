@@ -45,6 +45,24 @@ func TestEditLeasePreventsManualMergeIntoTarget(t *testing.T) {
 	require.Equal(t, "second", entries[1].Content)
 	require.False(t, errors.Is(err, ErrEntryNotFound))
 }
+func TestEditLeaseBlocksReorderOfTarget(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	first, err := svc.QueueMessage(ctx, "session-lease-reorder", "task", "first", "", "user", false, nil)
+	require.NoError(t, err)
+	second, err := svc.QueueMessage(ctx, first.SessionID, "task", "second", "", "user", false, nil)
+	require.NoError(t, err)
+	_, err = svc.BeginEdit(ctx, first.SessionID, first.ID, "connection-a")
+	require.NoError(t, err)
+
+	err = svc.ReorderEntries(ctx, first.SessionID, []string{second.ID, first.ID})
+	require.ErrorIs(t, err, ErrEditConflict)
+
+	entries := svc.GetStatus(ctx, first.SessionID).Entries
+	require.Len(t, entries, 2)
+	require.Equal(t, first.ID, entries[0].ID)
+	require.Equal(t, second.ID, entries[1].ID)
+}
 
 func TestEditLeaseInvalidatedBySessionReplacement(t *testing.T) {
 	svc := setupService(t)

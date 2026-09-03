@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
+	"github.com/kandev/kandev/internal/task/models"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +24,27 @@ func TestPublishQueueStatusEventIncludesQueuePolicy(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, false, data["auto_run"])
 	require.Equal(t, false, data["merge_enabled"])
+}
+
+func TestPublishQueueStatusEventUsesOwningSessionTaskForMixedQueue(t *testing.T) {
+	ctx := context.Background()
+	taskSvc, repo := newTestTaskService(t)
+	seedMCPHandlerSession(t, repo, "task-owner", "session-mixed", models.TaskSessionStateWaitingForInput)
+	queue := messagequeue.NewServiceMemory(testLogger(t))
+	eventBus := &mcpRecordingEventBus{}
+	handlers := &Handlers{taskSvc: taskSvc, eventBus: eventBus}
+
+	_, err := queue.QueueMessage(ctx, "session-mixed", "task-other", "from another task", "", messagequeue.QueuedByUser, false, nil)
+	require.NoError(t, err)
+	_, err = queue.QueueMessage(ctx, "session-mixed", "task-owner", "from owner", "", messagequeue.QueuedByUser, false, nil)
+	require.NoError(t, err)
+
+	handlers.publishQueueStatusEvent(ctx, "session-mixed", queue)
+
+	require.Len(t, eventBus.events, 1)
+	data, ok := eventBus.events[0].Data.(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, "task-owner", data["task_id"])
 }
 
 func TestQueueMoveTaskPromptPublishesQueueStatus(t *testing.T) {

@@ -708,7 +708,7 @@ function handleCancellationPendingMessage(
 }
 
 /** Writes a message.queue.status_changed broadcast into the queue slice,
- * preserving known policy values when an older publisher omits them. */
+ * preserving known policy and capacity values when an older publisher omits them. */
 function handleQueueStatusChangedMessage(
   store: StoreApi<AppState>,
   payload: QueueStatusChangedPayload,
@@ -719,8 +719,8 @@ function handleQueueStatusChangedMessage(
   }
   const entries = payload.entries ?? [];
   const count = typeof payload.count === "number" ? payload.count : entries.length;
-  const max = typeof payload.max === "number" ? payload.max : 0;
   const previousMeta = store.getState().queue.metaBySessionId[payload.session_id];
+  const max = typeof payload.max === "number" ? payload.max : (previousMeta?.max ?? 0);
   const mergeEnabled =
     typeof payload.merge_enabled === "boolean"
       ? payload.merge_enabled

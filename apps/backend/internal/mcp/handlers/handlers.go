@@ -3705,6 +3705,32 @@ func (h *Handlers) promptWithAutoResume(ctx context.Context, taskID, sessionID, 
 	return taskMessageStatusSent, nil
 }
 
+func (h *Handlers) queueStatusTaskID(
+	ctx context.Context,
+	sessionID string,
+	entries []messagequeue.QueuedMessage,
+) string {
+	if h.taskSvc == nil {
+		if len(entries) > 0 {
+			return entries[0].TaskID
+		}
+		return ""
+	}
+	session, err := h.taskSvc.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("resolve session task for queue status event",
+				zap.String("session_id", sessionID),
+				zap.Error(err))
+		}
+		return ""
+	}
+	if session == nil {
+		return ""
+	}
+	return session.TaskID
+}
+
 // publishQueueStatusEvent fires a queue.status_changed event so the frontend
 // can update the queue indicator.
 func (h *Handlers) publishQueueStatusEvent(ctx context.Context, sessionID string, queue *messagequeue.Service) {
@@ -3724,20 +3750,7 @@ func (h *Handlers) publishQueueStatusEvent(ctx context.Context, sessionID string
 			"auto_run":      status.AutoRun,
 			"merge_enabled": status.MergeEnabled,
 		}
-		taskID := ""
-		if len(status.Entries) > 0 {
-			taskID = status.Entries[0].TaskID
-		}
-		if taskID == "" && h.taskSvc != nil {
-			session, err := h.taskSvc.GetTaskSession(admittedCtx, sessionID)
-			if err != nil {
-				h.logger.Warn("resolve session task for queue status event",
-					zap.String("session_id", sessionID),
-					zap.Error(err))
-			} else if session != nil {
-				taskID = session.TaskID
-			}
-		}
+		taskID := h.queueStatusTaskID(admittedCtx, sessionID, status.Entries)
 		if taskID != "" {
 			eventData["task_id"] = taskID
 		}

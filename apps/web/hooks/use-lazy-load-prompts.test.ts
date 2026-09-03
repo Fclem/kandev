@@ -82,7 +82,7 @@ describe("useLazyLoadPrompts", () => {
     await act(async () => load);
 
     expect(state.prependPromptMessages).not.toHaveBeenCalled();
-    expect(state.setPromptMessagesLoadingMore).not.toHaveBeenCalled();
+    expect(state.setPromptMessagesLoadingMore).toHaveBeenCalledWith("session", true);
   });
 
   it("reports an older-page request as stale after session generation changes", async () => {

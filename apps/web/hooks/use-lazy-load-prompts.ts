@@ -47,6 +47,7 @@ export function useLazyLoadPrompts(sessionId: string | null) {
     const refreshGeneration =
       store.getState().messagePrompts.refreshGenerationBySession?.[sessionId] ?? 0;
     requestGenerationRef.current = { sessionId, generation };
+    store.getState().setPromptMessagesLoadingMore(sessionId, true);
     try {
       const response = await listTaskSessionMessages(sessionId, {
         author_type: "user",

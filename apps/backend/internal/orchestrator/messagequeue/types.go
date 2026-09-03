@@ -155,6 +155,23 @@ type QueuedMessage struct {
 	// retained this durable row for acknowledgement. It deliberately is not
 	// persisted in metadata, where a restart could leak it into a retry.
 	reservedLifecycleDelivery bool
+
+	// reservationSessionGeneration and reservationLifecycleGeneration fence a
+	// FIFO dispatch source to the generations observed while it was reserved.
+	// They are process-local and only used if reservationGenerationsCaptured is
+	// true.
+	reservationSessionGeneration   int64
+	reservationLifecycleGeneration int64
+	reservationGenerationsCaptured bool
+}
+
+// ReservationGenerations returns the session and lifecycle generations
+// captured when this entry was reserved for FIFO dispatch.
+func (m *QueuedMessage) ReservationGenerations() (int64, int64, bool) {
+	if m == nil {
+		return 0, 0, false
+	}
+	return m.reservationSessionGeneration, m.reservationLifecycleGeneration, m.reservationGenerationsCaptured
 }
 
 const (

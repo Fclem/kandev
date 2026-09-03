@@ -114,6 +114,39 @@ describe("queue refetch lifecycle fencing", () => {
       expect.anything(),
     );
   });
+  it("keeps a surviving hook refetch alive when a sibling unmounts", async () => {
+    const first = renderHook(() => useQueue(SESSION_ID));
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledTimes(1));
+    const second = renderHook(() => useQueue(SESSION_ID));
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledTimes(2));
+    queueApiMock.getQueueStatus.mockClear();
+
+    const pendingSnapshot = Promise.withResolvers<{
+      entries: QueuedMessage[];
+      count: number;
+      max: number;
+    }>();
+    queueApiMock.getQueueStatus.mockReturnValueOnce(pendingSnapshot.promise);
+    let refetchPromise!: Promise<void>;
+    act(() => {
+      refetchPromise = first.result.current.refetch();
+    });
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledTimes(1));
+    second.unmount();
+
+    await act(async () => {
+      pendingSnapshot.resolve({ entries: [entry("surviving-entry")], count: 1, max: 10 });
+      await refetchPromise;
+    });
+
+    expect(mockState.setQueueEntries).toHaveBeenCalledWith(
+      SESSION_ID,
+      [expect.objectContaining({ id: "surviving-entry" })],
+      expect.anything(),
+    );
+    expect(mockState.setQueueLoading).toHaveBeenLastCalledWith(SESSION_ID, false);
+    first.unmount();
+  });
 
   it("does not start reconciliation after an action outlives its hook", async () => {
     const pendingQueue = Promise.withResolvers<QueuedMessage>();

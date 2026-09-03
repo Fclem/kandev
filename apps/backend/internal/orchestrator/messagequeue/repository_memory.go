@@ -397,6 +397,16 @@ func (r *memoryRepository) CountBySession(_ context.Context, sessionID string) (
 	return len(r.entries[sessionID]), nil
 }
 
+func lowestPositionIndex(list []*QueuedMessage) int {
+	index := 0
+	for i := 1; i < len(list); i++ {
+		if list[i].Position < list[index].Position {
+			index = i
+		}
+	}
+	return index
+}
+
 // TakeHead atomically returns and deletes the lowest-position entry for the session.
 func (r *memoryRepository) TakeHead(_ context.Context, sessionID string) (*QueuedMessage, error) {
 	r.mu.Lock()
@@ -405,8 +415,9 @@ func (r *memoryRepository) TakeHead(_ context.Context, sessionID string) (*Queue
 	if len(list) == 0 {
 		return nil, nil
 	}
-	head := list[0]
-	r.entries[sessionID] = list[1:]
+	headIndex := lowestPositionIndex(list)
+	head := list[headIndex]
+	r.entries[sessionID] = append(list[:headIndex], list[headIndex+1:]...)
 	if len(r.entries[sessionID]) == 0 {
 		delete(r.entries, sessionID)
 		delete(r.nextPosition, sessionID)
@@ -427,7 +438,8 @@ func (r *memoryRepository) reserveHeadLocked(sessionID string) *QueuedMessage {
 	if len(list) == 0 {
 		return nil
 	}
-	head := list[0]
+	headIndex := lowestPositionIndex(list)
+	head := list[headIndex]
 	out := *head
 	if head.IsDurableLifecycle() {
 		// Mirror the SQLite reservation: the stored row is flagged in flight so
@@ -438,7 +450,7 @@ func (r *memoryRepository) reserveHeadLocked(sessionID string) *QueuedMessage {
 		head.Metadata = markReservedMetadata(out.Metadata)
 		return &out
 	}
-	r.entries[sessionID] = list[1:]
+	r.entries[sessionID] = append(list[:headIndex], list[headIndex+1:]...)
 	if len(r.entries[sessionID]) == 0 {
 		delete(r.entries, sessionID)
 		delete(r.nextPosition, sessionID)
@@ -760,6 +772,12 @@ func sameQueuedMessageContent(left, right *QueuedMessage) bool {
 	rightCopy.Metadata = clearReservedMetadata(rightCopy.Metadata)
 	leftCopy.reservedLifecycleDelivery = false
 	rightCopy.reservedLifecycleDelivery = false
+	leftCopy.reservationSessionGeneration = 0
+	rightCopy.reservationSessionGeneration = 0
+	leftCopy.reservationLifecycleGeneration = 0
+	rightCopy.reservationLifecycleGeneration = 0
+	leftCopy.reservationGenerationsCaptured = false
+	rightCopy.reservationGenerationsCaptured = false
 	return reflect.DeepEqual(leftCopy, rightCopy)
 }
 
@@ -1099,13 +1117,16 @@ func (r *memoryRepository) ReplaceSession(_ context.Context, sessionID string, e
 		replaced := make([]*QueuedMessage, 0, len(entries))
 		var maxPos int64
 		for _, entry := range entries {
-			clone := entry
+			clone := cloneQueuedMessage(&entry)
 			clone.SessionID = sessionID
 			if clone.Position > maxPos {
 				maxPos = clone.Position
 			}
-			replaced = append(replaced, &clone)
+			replaced = append(replaced, clone)
 		}
+		sort.Slice(replaced, func(i, j int) bool {
+			return replaced[i].Position < replaced[j].Position
+		})
 		r.entries[sessionID] = replaced
 		r.nextPosition[sessionID] = maxPos
 	}

@@ -1078,8 +1078,23 @@ func (s *Service) ReserveQueuedWithAutoRun(ctx context.Context, sessionID string
 		if err != nil || blocked {
 			return err
 		}
+		sessionGeneration, err := s.repo.SessionGeneration(admittedCtx, sessionID)
+		if err != nil {
+			return err
+		}
 		msg, _, err = s.repo.ReserveHeadIfAutoRun(admittedCtx, sessionID)
-		return err
+		if err != nil || msg == nil {
+			return err
+		}
+		msg.reservationSessionGeneration = sessionGeneration
+		if msg.TaskID != "" {
+			msg.reservationLifecycleGeneration, err = s.repo.LifecycleGeneration(admittedCtx, msg.TaskID)
+			if err != nil {
+				return err
+			}
+		}
+		msg.reservationGenerationsCaptured = true
+		return nil
 	})
 	if err != nil {
 		s.logger.Error("reserve head failed",

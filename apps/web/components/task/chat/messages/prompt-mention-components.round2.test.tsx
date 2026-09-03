@@ -42,4 +42,23 @@ describe("splitMarkdownPromptMentionSegments round-two boundaries", () => {
     expect(promptValues("x**@daily**")).toEqual([]);
     expect(promptValues("x_@daily_")).toEqual([]);
   });
+
+  it("keeps the longest prompt name when names share a prefix", () => {
+    expect(
+      splitMarkdownPromptMentionSegments("@Daily Summary", ["Daily", "Daily Summary"]),
+    ).toEqual([{ kind: "prompt", value: "@Daily Summary", name: "Daily Summary" }]);
+  });
+
+  it("recognizes aliases nested in Markdown formatting", () => {
+    expect(promptValues("**_@daily_**")).toEqual(["@daily"]);
+    expect(promptValues("[**@daily**](/url)")).toEqual(["@daily"]);
+  });
+
+  it("does not hide aliases after malformed link-like text", () => {
+    expect(promptValues('[x]foo "title @daily")')).toEqual(["@daily"]);
+  });
+
+  it("recognizes aliases after CR-only fenced code", () => {
+    expect(promptValues("~~~\rcode\r~~~\r@daily")).toEqual(["@daily"]);
+  });
 });

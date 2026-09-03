@@ -349,6 +349,7 @@ function findMarkdownDestinationEnd(
   const labelStart = findMarkdownLinkLabelStart(content, linkEndIndex);
   if (
     labelStart === null ||
+    content[linkEndIndex + 1] !== "(" ||
     (labelStart > 0 && content[labelStart - 1] === "]") ||
     codeRanges.some((range) => labelStart >= range.start && labelStart < range.end)
   ) {
@@ -452,26 +453,41 @@ function hasMarkdownDelimiterEnd(content: string, start: number, length: number)
   }
   return false;
 }
+function findMarkdownLineStart(content: string, index: number) {
+  let lineStart = index;
+  while (lineStart > 0 && content[lineStart - 1] !== "\n" && content[lineStart - 1] !== "\r") {
+    lineStart -= 1;
+  }
+  return lineStart;
+}
+
+function findMarkdownLineEnd(content: string, index: number) {
+  const newlineIndex = content.indexOf("\n", index);
+  const carriageReturnIndex = content.indexOf("\r", index);
+  if (newlineIndex === -1) return carriageReturnIndex;
+  if (carriageReturnIndex === -1) return newlineIndex;
+  return Math.min(newlineIndex, carriageReturnIndex);
+}
 
 function isMarkdownFenceOpenerAt(content: string, index: number, marker: string, length: number) {
-  const lineStart = content.lastIndexOf("\n", index - 1) + 1;
+  const lineStart = findMarkdownLineStart(content, index);
   const indentation = content.slice(lineStart, index);
   if (!/^ {0,3}$/.test(indentation) || runLength(content, index, marker) < length) {
     return false;
   }
   if (marker !== "`") return true;
-  const lineEnd = content.indexOf("\n", index);
+  const lineEnd = findMarkdownLineEnd(content, index);
   const info = content.slice(index + length, lineEnd === -1 ? content.length : lineEnd);
   return !info.includes("`");
 }
 
 function isMarkdownFenceCloserAt(content: string, index: number, marker: string, length: number) {
-  const lineStart = content.lastIndexOf("\n", index - 1) + 1;
+  const lineStart = findMarkdownLineStart(content, index);
   const indentation = content.slice(lineStart, index);
   if (!/^ {0,3}$/.test(indentation) || runLength(content, index, marker) < length) {
     return false;
   }
-  const lineEnd = content.indexOf("\n", index);
+  const lineEnd = findMarkdownLineEnd(content, index);
   const suffix = content.slice(
     index + runLength(content, index, marker),
     lineEnd === -1 ? content.length : lineEnd,
@@ -490,6 +506,17 @@ function isEscapedMarkdownCharacter(content: string, index: number) {
   return slashCount % 2 === 1;
 }
 
+function isMarkdownFormattingBoundary(content: string, openingStart: number) {
+  let boundaryStart = openingStart;
+  while (
+    boundaryStart > 0 &&
+    "*_~[".includes(content[boundaryStart - 1]) &&
+    !isEscapedMarkdownCharacter(content, boundaryStart - 1)
+  ) {
+    boundaryStart -= 1;
+  }
+  return boundaryStart === 0 || isMarkdownWhitespace(content[boundaryStart - 1]);
+}
 // eslint-disable-next-line complexity -- Markdown boundary cases stay in one ordered matcher.
 function matchMarkdownPromptMention(
   content: string,
@@ -513,7 +540,7 @@ function matchMarkdownPromptMention(
   }
   let openingStart = index - 1;
   while (openingStart > 0 && content[openingStart - 1] === marker) openingStart -= 1;
-  if (openingStart > 0 && !isMarkdownWhitespace(content[openingStart - 1])) {
+  if (!isMarkdownFormattingBoundary(content, openingStart)) {
     return null;
   }
   const closingMarker = marker === "[" ? "]" : marker;

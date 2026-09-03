@@ -41,7 +41,11 @@ vi.mock("@kandev/ui/drawer", () => {
     }) => (
       <DrawerContext.Provider value={{ open, onOpenChange }}>{children}</DrawerContext.Provider>
     ),
-    DrawerTrigger: ({ children }: { children: React.ReactElement }) => {
+    DrawerTrigger: ({
+      children,
+    }: {
+      children: React.ReactElement<{ onClick?: (event: React.MouseEvent) => void }>;
+    }) => {
       const { onOpenChange } = React.useContext(DrawerContext);
       return React.cloneElement(children, {
         onClick: (event: React.MouseEvent) => {

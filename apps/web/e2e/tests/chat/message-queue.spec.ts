@@ -162,13 +162,18 @@ test.describe("Quick chat queue", () => {
 // Task session queue tests
 // ---------------------------------------------------------------------------
 
+type SeededSessionPage = SessionPage & {
+  taskId: string;
+  sessionId: string;
+};
+
 async function seedTaskAndWaitForIdle(
   testPage: Page,
   apiClient: ApiClient,
   seedData: SeedData,
   title: string,
   description = "/e2e:simple-message",
-): Promise<SessionPage> {
+): Promise<SeededSessionPage> {
   const task = await apiClient.createTaskWithAgent(
     seedData.workspaceId,
     title,
@@ -186,8 +191,11 @@ async function seedTaskAndWaitForIdle(
   const session = new SessionPage(testPage);
   await session.waitForLoad();
   await session.waitForChatIdle({ timeout: 30_000 });
+  if (!task.session_id) {
+    throw new Error("task did not have a primary session");
+  }
 
-  return session;
+  return Object.assign(session, { taskId: task.id, sessionId: task.session_id });
 }
 
 async function queueMessages(
@@ -575,7 +583,7 @@ test.describe("Task session queue", () => {
     const textarea = testPage.getByTestId("queue-edit-textarea");
     await expect(textarea).toBeVisible({ timeout: 5_000 });
     await textarea.fill(scriptedQueueMessage("second edited"));
-    await rows.nth(1).getByRole("button", { name: "Save" }).click();
+    await testPage.getByRole("button", { name: "Save", exact: true }).click();
 
     // The first entry is still eligible to drain while the later target is held.
     await expect(

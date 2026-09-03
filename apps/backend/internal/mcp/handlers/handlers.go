@@ -3716,17 +3716,35 @@ func (h *Handlers) publishQueueStatusEvent(ctx context.Context, sessionID string
 	ctx = context.WithoutCancel(ctx)
 	_ = queue.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		status := queue.GetStatus(admittedCtx, sessionID)
+		eventData := map[string]interface{}{
+			"session_id":    sessionID,
+			"entries":       status.Entries,
+			"count":         status.Count,
+			"max":           status.Max,
+			"auto_run":      status.AutoRun,
+			"merge_enabled": status.MergeEnabled,
+		}
+		taskID := ""
+		if len(status.Entries) > 0 {
+			taskID = status.Entries[0].TaskID
+		}
+		if taskID == "" && h.taskSvc != nil {
+			session, err := h.taskSvc.GetTaskSession(admittedCtx, sessionID)
+			if err != nil {
+				h.logger.Warn("resolve session task for queue status event",
+					zap.String("session_id", sessionID),
+					zap.Error(err))
+			} else if session != nil {
+				taskID = session.TaskID
+			}
+		}
+		if taskID != "" {
+			eventData["task_id"] = taskID
+		}
 		_ = h.eventBus.Publish(admittedCtx, events.MessageQueueStatusChanged, bus.NewEvent(
 			events.MessageQueueStatusChanged,
 			"mcp-handlers",
-			map[string]interface{}{
-				"session_id":    sessionID,
-				"entries":       status.Entries,
-				"count":         status.Count,
-				"max":           status.Max,
-				"auto_run":      status.AutoRun,
-				"merge_enabled": status.MergeEnabled,
-			},
+			eventData,
 		))
 		return nil
 	})

@@ -37,5 +37,6 @@ func TestQueueMoveTaskPromptPublishesQueueStatus(t *testing.T) {
 	data, ok := eventBus.events[0].Data.(map[string]interface{})
 	require.True(t, ok)
 	require.Equal(t, "session-move", data["session_id"])
+	require.Equal(t, "task-move", data["task_id"])
 	require.Equal(t, 1, data["count"])
 }

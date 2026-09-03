@@ -1162,7 +1162,8 @@ func (s *Service) acknowledgeLifecycleQueueEntry(
 	if s.messageQueue == nil || queuedMsg == nil || !queuedMsg.IsDurableLifecycle() {
 		return
 	}
-	if err := s.messageQueue.AcknowledgeQueued(ctx, sessionID, queuedMsg.ID); err != nil {
+	ackCtx := context.WithoutCancel(ctx)
+	if err := s.messageQueue.AcknowledgeQueued(ackCtx, sessionID, queuedMsg.ID); err != nil {
 		s.logger.Error("failed to acknowledge accepted lifecycle message",
 			zap.String("session_id", sessionID),
 			zap.String("task_id", queuedMsg.TaskID),
@@ -1170,7 +1171,7 @@ func (s *Service) acknowledgeLifecycleQueueEntry(
 			zap.Error(err))
 		return
 	}
-	s.publishQueueStatusEvent(ctx, sessionID)
+	s.publishQueueStatusEvent(ackCtx, sessionID)
 }
 
 func (s *Service) restoreQueuedMessage(ctx context.Context, queuedMsg *messagequeue.QueuedMessage) {

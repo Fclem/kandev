@@ -2,14 +2,18 @@ package orchestrator
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"path/filepath"
 	"testing"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/kandev/kandev/internal/orchestrator/executor"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	"github.com/kandev/kandev/internal/orchestrator/watcher"
 	wfmodels "github.com/kandev/kandev/internal/workflow/models"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestDispatchTakenQueuedMessageRestoresEmptyOrdinaryEntry(t *testing.T) {
@@ -54,6 +58,62 @@ func TestDispatchTakenQueuedMessageAcknowledgesEmptyLifecycleEntry(t *testing.T)
 		t.Fatal("empty lifecycle entry was dispatched")
 	}
 	entries, _, err := svc.messageQueue.SnapshotSession(ctx, "session-empty-lifecycle")
+	if err != nil {
+		t.Fatalf("snapshot empty lifecycle queue: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("empty lifecycle entries after discard = %d, want 0", len(entries))
+	}
+}
+func TestDispatchTakenQueuedMessageAcknowledgesEmptyLifecycleAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	repo := setupTestRepo(t)
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	rawQueueDB, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "queue.db"))
+	if err != nil {
+		t.Fatalf("open queue database: %v", err)
+	}
+	rawQueueDB.SetMaxOpenConns(1)
+	rawQueueDB.SetMaxIdleConns(1)
+	queueDB := sqlx.NewDb(rawQueueDB, "sqlite3")
+	t.Cleanup(func() { _ = queueDB.Close() })
+	if _, err := queueDB.Exec(`CREATE TABLE tasks (id TEXT PRIMARY KEY, archived_at TIMESTAMP NULL, updated_at TIMESTAMP NOT NULL)`); err != nil {
+		t.Fatalf("create queue task stub: %v", err)
+	}
+	if _, err := queueDB.Exec(`INSERT INTO tasks (id, updated_at) VALUES (?, CURRENT_TIMESTAMP)`, "task-empty-lifecycle-cancelled"); err != nil {
+		t.Fatalf("seed queue task stub: %v", err)
+	}
+	queueRepo, err := messagequeue.NewSQLiteRepository(queueDB, queueDB)
+	if err != nil {
+		t.Fatalf("create SQLite queue repository: %v", err)
+	}
+	svc.messageQueue = messagequeue.NewService(queueRepo, messagequeue.DefaultMaxPerSession, testLogger())
+	_, _, accepted, err := svc.messageQueue.QueueLifecycleMessageWithCoalesceKey(
+		ctx, "session-empty-lifecycle-cancelled", "task-empty-lifecycle-cancelled", "", "",
+		messagequeue.QueuedByWorkflow, false, nil,
+		map[string]interface{}{"origin": githubPRAutomationOrigin}, "empty-lifecycle-cancelled", true,
+	)
+	if err != nil || !accepted {
+		t.Fatalf("queue empty lifecycle entry: accepted=%v err=%v", accepted, err)
+	}
+	queued, ok := svc.messageQueue.ReserveQueued(ctx, "session-empty-lifecycle-cancelled")
+	if !ok || queued == nil {
+		t.Fatal("reserve empty lifecycle entry")
+	}
+	cancel()
+
+	if svc.dispatchTakenQueuedMessage(ctx, queued.SessionID, queued, true) {
+		t.Fatal("empty lifecycle entry was dispatched")
+	}
+	var durableCount int
+	if err := queueDB.GetContext(context.Background(), &durableCount, `SELECT COUNT(*) FROM queued_messages WHERE session_id = ?`, queued.SessionID); err != nil {
+		t.Fatalf("count durable lifecycle entries: %v", err)
+	}
+	if durableCount != 0 {
+		t.Fatalf("durable lifecycle entries after discard = %d, want 0", durableCount)
+	}
+	entries, _, err := svc.messageQueue.SnapshotSession(context.Background(), queued.SessionID)
 	if err != nil {
 		t.Fatalf("snapshot empty lifecycle queue: %v", err)
 	}

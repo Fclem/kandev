@@ -197,15 +197,20 @@ func (h *Handlers) applyMoveTaskImmediate(
 	session *models.TaskSession,
 ) (*ws.Message, error) {
 	queuedSessionID := ""
+	queuedEntryID := ""
 	if req.Prompt != "" && session != nil {
 		wrapped := "You were moved to this step with the following message: " + req.Prompt
-		if err := h.queueMoveTaskPrompt(ctx, req.TaskID, session.ID, wrapped); err != nil {
+		queued, err := h.queueMoveTaskPromptEntry(ctx, req.TaskID, session.ID, wrapped)
+		if err != nil {
 			h.logger.Error("move_task: failed to queue hand-off prompt for idle session",
 				zap.String("task_id", req.TaskID), zap.String("session_id", session.ID), zap.Error(err))
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError,
 				"failed to queue move_task hand-off prompt", nil)
 		}
 		queuedSessionID = session.ID
+		if queued != nil {
+			queuedEntryID = queued.ID
+		}
 	}
 
 	// Attribution uses the CALLING session (req.SenderSessionID, injected
@@ -227,12 +232,30 @@ func (h *Handlers) applyMoveTaskImmediate(
 	if err != nil {
 		// Roll back the queued prompt — without this, the next turn would
 		// deliver a "You were moved to this step…" message for a transition
-		// that didn't actually happen.
+		// that didn't actually happen. The move request may already be
+		// cancelled, but cleanup must still remove the durable queue row.
 		if queuedSessionID != "" && h.messageQueue != nil {
-			if _, ok := h.messageQueue.TakeQueued(ctx, queuedSessionID); ok {
+			rollbackCtx := context.WithoutCancel(ctx)
+			removed := false
+			exactRemovalAttempted := false
+			if queuedEntryID != "" {
+				if remover, ok := h.messageQueue.(interface {
+					RemoveEntry(context.Context, string, string) error
+				}); ok {
+					exactRemovalAttempted = true
+					removed = remover.RemoveEntry(rollbackCtx, queuedSessionID, queuedEntryID) == nil
+				}
+			}
+			if !removed && !exactRemovalAttempted {
+				// Alternate queue implementations predate exact entry removal.
+				// Keep their legacy cleanup behavior when no exact remover is
+				// available; production uses the target-scoped path above.
+				_, removed = h.messageQueue.TakeQueued(rollbackCtx, queuedSessionID)
+			}
+			if removed {
 				h.logger.Warn("move_task: dropped queued hand-off prompt after MoveTask failure",
 					zap.String("task_id", req.TaskID), zap.String("session_id", queuedSessionID))
-				h.publishQueuedMessageStatus(ctx, queuedSessionID)
+				h.publishQueuedMessageStatus(rollbackCtx, queuedSessionID)
 			}
 		}
 		h.logger.Error("failed to move task", zap.Error(err))
@@ -326,32 +349,50 @@ func (h *Handlers) lookupSession(ctx context.Context, taskID string) (*models.Ta
 // or proceed (idle path), since a queue failure makes the deferred contract
 // impossible to honor.
 func (h *Handlers) queueMoveTaskPrompt(ctx context.Context, taskID, sessionID, prompt string) error {
-	return h.queueMoveTaskPromptWithMoveID(ctx, taskID, sessionID, prompt, "")
+	_, err := h.queueMoveTaskPromptEntry(ctx, taskID, sessionID, prompt)
+	return err
 }
 
 func (h *Handlers) queueMoveTaskPromptWithMoveID(ctx context.Context, taskID, sessionID, prompt, moveID string) error {
+	_, err := h.queueMoveTaskPromptEntryWithMoveID(ctx, taskID, sessionID, prompt, moveID)
+	return err
+}
+
+func (h *Handlers) queueMoveTaskPromptEntry(
+	ctx context.Context,
+	taskID, sessionID, prompt string,
+) (*messagequeue.QueuedMessage, error) {
+	return h.queueMoveTaskPromptEntryWithMoveID(ctx, taskID, sessionID, prompt, "")
+}
+
+func (h *Handlers) queueMoveTaskPromptEntryWithMoveID(
+	ctx context.Context,
+	taskID, sessionID, prompt, moveID string,
+) (*messagequeue.QueuedMessage, error) {
 	if h.messageQueue == nil {
-		return fmt.Errorf("message queue is unavailable")
+		return nil, fmt.Errorf("message queue is unavailable")
 	}
 	if sessionID == "" {
-		return fmt.Errorf("task has no primary session")
+		return nil, fmt.Errorf("task has no primary session")
 	}
 	metadata := map[string]interface{}(nil)
 	if moveID != "" {
 		metadata = map[string]interface{}{messagequeue.MetadataDeferredMoveID: moveID}
 	}
 	if queueWithMetadata, ok := h.messageQueue.(messageMetadataQueuer); ok {
-		if _, err := queueWithMetadata.QueueMessageWithMetadata(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil, metadata); err != nil {
-			return fmt.Errorf("queue message: %w", err)
+		queued, err := queueWithMetadata.QueueMessageWithMetadata(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil, metadata)
+		if err != nil {
+			return nil, fmt.Errorf("queue message: %w", err)
 		}
 		h.publishQueuedMessageStatus(ctx, sessionID)
-		return nil
+		return queued, nil
 	}
-	if _, err := h.messageQueue.QueueMessage(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil); err != nil {
-		return fmt.Errorf("queue message: %w", err)
+	queued, err := h.messageQueue.QueueMessage(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil)
+	if err != nil {
+		return nil, fmt.Errorf("queue message: %w", err)
 	}
 	h.publishQueuedMessageStatus(ctx, sessionID)
-	return nil
+	return queued, nil
 }
 
 func (h *Handlers) publishQueuedMessageStatus(ctx context.Context, sessionID string) {

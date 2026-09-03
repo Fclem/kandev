@@ -131,3 +131,43 @@ func TestDeletedSessionQueueCleanupIgnoresCancelledContext(t *testing.T) {
 		t.Fatalf("deleted session queue count = %d, want 0", got)
 	}
 }
+
+func TestFallbackDeletedSessionCleanupPublishesQueueStatus(t *testing.T) {
+	queue := messagequeue.NewServiceMemory(testLogger())
+	entry, err := queue.QueueMessage(
+		context.Background(),
+		"session-delete-fallback",
+		"task-delete-fallback",
+		"queued",
+		"",
+		messagequeue.QueuedByUser,
+		false,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("queue message: %v", err)
+	}
+	eventBus := bus.NewMemoryEventBus(testLogger())
+	t.Cleanup(func() { eventBus.Close() })
+	svc := &Service{
+		messageQueue: queue,
+		eventBus:     eventBus,
+		logger:       testLogger(),
+	}
+	var statusEvents atomic.Int32
+	if _, err := eventBus.Subscribe(events.MessageQueueStatusChanged, func(_ context.Context, event *bus.Event) error {
+		data, _ := event.Data.(map[string]interface{})
+		if data["session_id"] == entry.SessionID {
+			statusEvents.Add(1)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("subscribe queue status: %v", err)
+	}
+
+	svc.cancelDeletedSessionQueue(context.Background(), entry.TaskID, entry.SessionID)
+
+	if got := statusEvents.Load(); got != 1 {
+		t.Fatalf("fallback queue status notifications = %d, want 1", got)
+	}
+}

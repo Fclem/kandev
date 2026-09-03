@@ -3656,6 +3656,9 @@ func (s *Service) cancelDeletedSessionQueue(ctx context.Context, taskID, session
 		}
 		return nil
 	})
+	if !s.sessionQueuePurgeNotifierRegistered {
+		s.publishTaskQueueStatusEvent(cleanupCtx, taskID, sessionID)
+	}
 }
 
 // quiesceSessionExecutionBeforeDeletion stops the in-memory lifecycle

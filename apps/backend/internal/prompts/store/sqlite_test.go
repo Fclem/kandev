@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -332,5 +334,24 @@ func TestSQLiteRepository_PreservesUntouchedUnrecognizedChangesWalkthroughPrompt
 	}
 	if got.Content != customContent {
 		t.Fatalf("unrecognized untouched content was overwritten")
+	}
+}
+
+func TestSQLiteRepository_BoundsPromptListMaterialization(t *testing.T) {
+	repo, cleanup := createTestRepo(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	for i := range maxPromptListItems {
+		if _, err := repo.db.Exec(
+			`INSERT INTO custom_prompts (id, name, content, builtin, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)`,
+			"bulk-"+strconv.Itoa(i), "bulk-"+strconv.Itoa(i), "content", now, now,
+		); err != nil {
+			t.Fatalf("insert prompt %d: %v", i, err)
+		}
+	}
+
+	if _, err := repo.ListPrompts(context.Background()); !errors.Is(err, ErrPromptListLimit) {
+		t.Fatalf("expected ErrPromptListLimit, got %v", err)
 	}
 }

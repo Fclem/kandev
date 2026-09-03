@@ -22,6 +22,9 @@ const (
 	changesWalkthroughV1SHA256 = "23a82694ef3b6d0220da2879c1c351cf5ee4926c2bc54a52fa4f7d5182bcb111"
 	changesWalkthroughV2SHA256 = "7a28dc81df4bff75b4fb8d66d6b9118febe5daf7f4b570e3b8ef8c74ac3e3146"
 )
+const maxPromptListItems = 2000
+
+var ErrPromptListLimit = errors.New("prompt list limit exceeded")
 
 type sqliteRepository struct {
 	db     *sqlx.DB // writer
@@ -77,11 +80,12 @@ func (r *sqliteRepository) Close() error {
 }
 
 func (r *sqliteRepository) ListPrompts(ctx context.Context) ([]*models.Prompt, error) {
-	rows, err := r.ro.QueryContext(ctx, `
+	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
 		SELECT id, name, content, builtin, created_at, updated_at
 		FROM custom_prompts
 		ORDER BY builtin DESC, name ASC
-	`)
+		LIMIT ?
+	`), maxPromptListItems+1)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +105,9 @@ func (r *sqliteRepository) ListPrompts(ctx context.Context) ([]*models.Prompt, e
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	if len(prompts) > maxPromptListItems {
+		return nil, ErrPromptListLimit
 	}
 	return prompts, nil
 }

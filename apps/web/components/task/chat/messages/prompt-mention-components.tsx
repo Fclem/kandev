@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable max-lines -- Markdown parsing and React projection share one boundary. */
 
 import {
   Children,
@@ -73,12 +74,13 @@ export const PROMPT_MENTION_CHIP_CLASS =
   "inline rounded-md border border-emerald-300/35 bg-emerald-400/20 px-1.5 py-0.5 font-mono text-[0.88em] font-semibold text-emerald-950 box-decoration-clone break-all dark:text-emerald-100";
 
 export function useStablePromptMentionNames(promptNames: string[]) {
+  const canonicalNames = buildPromptMentionNames(promptNames);
   const stableNamesRef = useRef<string[]>([]);
   if (
-    stableNamesRef.current.length !== promptNames.length ||
-    stableNamesRef.current.some((name, index) => name !== promptNames[index])
+    stableNamesRef.current.length !== canonicalNames.length ||
+    stableNamesRef.current.some((name, index) => name !== canonicalNames[index])
   ) {
-    stableNamesRef.current = promptNames;
+    stableNamesRef.current = canonicalNames;
   }
   return stableNamesRef.current;
 }
@@ -163,35 +165,63 @@ function renderChildrenWithPromptMentions(
   promptNames: string[],
   keyPrefix: string,
   interactive = true,
+  precedingCharacter?: string,
 ): ReactNode[] {
+  let previousCharacter = precedingCharacter;
   return Children.toArray(children).flatMap((child, index) => {
     const childKeyPrefix = `${keyPrefix}-${index}`;
+    let rendered: ReactNode[];
     if (typeof child === "string") {
-      return renderTextWithPromptMentions(child, promptNames, childKeyPrefix, interactive);
-    }
-    if (!isValidElement(child)) return child;
-    const element = child as ReactElement<{ children?: ReactNode }>;
-    if (
-      typeof element.type !== "string" ||
-      PROMPT_MENTION_NESTED_TAGS[element.type] !== true ||
-      element.props.children === undefined
-    ) {
-      return element;
-    }
-    return cloneElement(element, {
-      children: renderChildrenWithPromptMentions(
-        element.props.children,
+      rendered = renderTextWithPromptMentions(
+        child,
         promptNames,
         childKeyPrefix,
         interactive,
-      ),
-    });
+        previousCharacter,
+      );
+    } else if (!isValidElement(child)) {
+      rendered = [child];
+    } else {
+      const element = child as ReactElement<{ children?: ReactNode }>;
+      if (
+        typeof element.type !== "string" ||
+        PROMPT_MENTION_NESTED_TAGS[element.type] !== true ||
+        element.props.children === undefined
+      ) {
+        rendered = [element];
+      } else {
+        rendered = [
+          cloneElement(element, {
+            children: renderChildrenWithPromptMentions(
+              element.props.children,
+              promptNames,
+              childKeyPrefix,
+              interactive,
+              previousCharacter,
+            ),
+          }),
+        ];
+      }
+    }
+    const visible = getVisibleText(child);
+    if (visible.length > 0) previousCharacter = visible.at(-1);
+    return rendered;
   });
+}
+
+function getVisibleText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number" || typeof node === "bigint") {
+    return String(node);
+  }
+  if (!isValidElement(node)) return "";
+  const element = node as ReactElement<{ children?: ReactNode }>;
+  return Children.toArray(element.props.children).map(getVisibleText).join("");
 }
 
 export function splitMarkdownPromptMentionSegments(
   content: string,
   promptNames: string[],
+  precedingCharacter?: string,
 ): PromptMentionSegment[] {
   if (content.length === 0 || promptNames.length === 0) {
     return [{ kind: "text", value: content }];
@@ -215,8 +245,7 @@ export function splitMarkdownPromptMentionSegments(
       index += 1;
       continue;
     }
-
-    const match = matchMarkdownPromptMention(content, index, promptNames);
+    const match = matchMarkdownPromptMention(content, index, promptNames, precedingCharacter);
     if (!match) {
       index += 1;
       continue;
@@ -256,15 +285,12 @@ function skipMarkdownCode(content: string, index: number, state: MarkdownCodeSta
 
 function skipMarkdownFence(content: string, index: number, state: MarkdownCodeState): number {
   const fence = state.fence;
-  if (
-    fence &&
-    isMarkdownFenceCloserAt(content, index, fence.marker, fence.length) &&
-    !isEscapedMarkdownCharacter(content, index)
-  ) {
+  if (fence && isMarkdownFenceCloserAt(content, index, fence.marker, fence.length)) {
     state.fence = null;
     return index + runLength(content, index, fence.marker);
   }
-  return index + 1;
+  const marker = content[index];
+  return marker === fence?.marker ? index + runLength(content, index, marker) : index + 1;
 }
 
 function skipMarkdownDelimiter(content: string, index: number, state: MarkdownCodeState): number {
@@ -272,13 +298,13 @@ function skipMarkdownDelimiter(content: string, index: number, state: MarkdownCo
   if (
     delimiter &&
     runLength(content, index, delimiter[0]) === delimiter.length &&
-    content.startsWith(delimiter, index) &&
-    !isEscapedMarkdownCharacter(content, index)
+    content.startsWith(delimiter, index)
   ) {
     state.delimiter = null;
     return index + delimiter.length;
   }
-  return index + 1;
+  const marker = content[index];
+  return marker === delimiter?.[0] ? index + runLength(content, index, marker) : index + 1;
 }
 
 function startMarkdownCode(
@@ -302,7 +328,14 @@ function startMarkdownCode(
 }
 
 function findMarkdownDestinationEnd(content: string, linkEndIndex: number): number | null {
-  if (!hasMarkdownLinkLabelAt(content, linkEndIndex)) return null;
+  const labelStart = findMarkdownLinkLabelStart(content, linkEndIndex);
+  if (
+    labelStart === null ||
+    (labelStart > 0 && content[labelStart - 1] === "]") ||
+    isInsideMarkdownCodeAt(content, labelStart)
+  ) {
+    return null;
+  }
   const destinationStart = linkEndIndex + 2;
   if (content[destinationStart] === ")") return destinationStart;
 
@@ -316,11 +349,7 @@ function findMarkdownDestinationEnd(content: string, linkEndIndex: number): numb
 
 function findAngleMarkdownDestinationEnd(content: string, start: number): number | null {
   for (let index = start + 1; index < content.length; index += 1) {
-    if (isEscapedMarkdownCharacter(content, index)) {
-      index += 1;
-      continue;
-    }
-    if (content[index] === ">") return index + 1;
+    if (content[index] === ">" && !isEscapedMarkdownCharacter(content, index)) return index + 1;
     if (content[index] === "\n" || content[index] === "\r") return null;
   }
   return null;
@@ -329,12 +358,9 @@ function findAngleMarkdownDestinationEnd(content: string, start: number): number
 function findBareMarkdownDestinationEnd(content: string, start: number): number | null {
   let depth = 0;
   for (let index = start; index < content.length; index += 1) {
-    if (isEscapedMarkdownCharacter(content, index)) {
-      index += 1;
-      continue;
-    }
     const marker = content[index];
     if (isMarkdownWhitespace(marker)) return depth === 0 ? index : null;
+    if (isEscapedMarkdownCharacter(content, index)) continue;
     if (marker === "(") depth += 1;
     if (marker === ")" && depth === 0) return index;
     if (marker === ")") depth -= 1;
@@ -361,9 +387,9 @@ function findMarkdownLinkSuffixEnd(content: string, destinationEnd: number): num
   return content[index] === ")" ? index : null;
 }
 
-function hasMarkdownLinkLabelAt(content: string, linkEndIndex: number) {
+function findMarkdownLinkLabelStart(content: string, linkEndIndex: number): number | null {
   if (content[linkEndIndex] !== "]" || isEscapedMarkdownCharacter(content, linkEndIndex)) {
-    return false;
+    return null;
   }
   let depth = 1;
   for (let index = linkEndIndex - 1; index >= 0; index -= 1) {
@@ -372,10 +398,26 @@ function hasMarkdownLinkLabelAt(content: string, linkEndIndex: number) {
       depth += 1;
     } else if (content[index] === "[") {
       depth -= 1;
-      if (depth === 0) return true;
+      if (depth === 0) return index;
     }
   }
-  return false;
+  return null;
+}
+
+function isInsideMarkdownCodeAt(content: string, target: number) {
+  const state: MarkdownCodeState = { delimiter: null, fence: null };
+  for (let index = 0; index < target; ) {
+    let next: number | null;
+    if (state.fence !== null) {
+      next = skipMarkdownFence(content, index, state);
+    } else if (state.delimiter !== null) {
+      next = skipMarkdownDelimiter(content, index, state);
+    } else {
+      next = startMarkdownCode(content, index, state);
+    }
+    index = next === null ? index + 1 : next;
+  }
+  return state.delimiter !== null || state.fence !== null;
 }
 
 function findQuotedMarkdownTitleEnd(
@@ -392,10 +434,7 @@ function findQuotedMarkdownTitleEnd(
 function findParenthesizedMarkdownTitleEnd(content: string, start: number): number | null {
   let depth = 1;
   for (let index = start + 1; index < content.length; index += 1) {
-    if (isEscapedMarkdownCharacter(content, index)) {
-      index += 1;
-      continue;
-    }
+    if (isEscapedMarkdownCharacter(content, index)) continue;
     if (content[index] === "(") depth += 1;
     if (content[index] === ")" && --depth === 0) return index;
   }
@@ -404,7 +443,7 @@ function findParenthesizedMarkdownTitleEnd(content: string, start: number): numb
 
 function hasMarkdownDelimiterEnd(content: string, start: number, length: number) {
   for (let index = start + length; index < content.length; index += 1) {
-    if (content[index] !== "`" || isEscapedMarkdownCharacter(content, index)) continue;
+    if (content[index] !== "`") continue;
     const run = runLength(content, index, "`");
     if (run === length) return true;
     index += run - 1;
@@ -435,7 +474,7 @@ function isMarkdownFenceCloserAt(content: string, index: number, marker: string,
     index + runLength(content, index, marker),
     lineEnd === -1 ? content.length : lineEnd,
   );
-  return /^[ \t]*$/.test(suffix);
+  return /^[ \t]*\r?$/.test(suffix);
 }
 
 function isMarkdownWhitespace(value: string | undefined) {
@@ -453,22 +492,43 @@ function matchMarkdownPromptMention(
   content: string,
   index: number,
   promptNames: string[],
+  precedingCharacter?: string,
 ): PromptMentionMatch | null {
+  if (
+    index === 0 &&
+    precedingCharacter !== undefined &&
+    !isMarkdownWhitespace(precedingCharacter)
+  ) {
+    return null;
+  }
   const direct = matchPromptMention(content, index, promptNames);
   if (direct) return direct;
 
   const marker = content[index - 1];
-  if (!marker || !"*_~[".includes(marker)) return null;
+  if (!marker || !"*_~[".includes(marker) || isEscapedMarkdownCharacter(content, index - 1)) {
+    return null;
+  }
   const closingMarker = marker === "[" ? "]" : marker;
-  const candidatePrefix = `${content.slice(0, index - 1)} ${content.slice(index)}`;
   for (let closingIndex = index + 1; closingIndex < content.length; closingIndex += 1) {
     if (content[closingIndex] !== closingMarker) continue;
-    const candidate =
-      candidatePrefix.slice(0, closingIndex) + " " + candidatePrefix.slice(closingIndex + 1);
-    const match = matchPromptMention(candidate, index, promptNames);
-    if (match?.end === closingIndex) return match;
+    if (isEscapedMarkdownCharacter(content, closingIndex)) continue;
+    const candidateContent =
+      ` ${content.slice(index, closingIndex)} ` + content.slice(closingIndex + 1);
+    const candidate = matchPromptMention(candidateContent, 1, promptNames);
+    if (candidate?.end === closingIndex - index + 1) {
+      return { start: index, end: closingIndex, name: candidate.name };
+    }
+    break;
   }
   return null;
+}
+
+function promptMentionKey(
+  keyPrefix: string,
+  segment: Extract<PromptMentionSegment, { kind: "prompt" }>,
+  occurrence: number,
+) {
+  return `${keyPrefix}-prompt-${segment.name}-${occurrence}`;
 }
 
 function runLength(content: string, index: number, marker: string) {
@@ -482,18 +542,24 @@ export function renderTextWithPromptMentions(
   promptNames: string[],
   keyPrefix: string,
   interactive = true,
+  precedingCharacter?: string,
 ) {
-  return splitMarkdownPromptMentionSegments(text, promptNames).map((segment, index) => {
-    if (segment.kind === "text") return segment.value;
-    return (
-      <PromptMentionChip
-        key={`${keyPrefix}-prompt-${segment.name}-${index}`}
-        name={segment.name}
-        value={segment.value}
-        interactive={interactive}
-      />
-    );
-  });
+  const occurrences = new Map<string, number>();
+  return splitMarkdownPromptMentionSegments(text, promptNames, precedingCharacter).map(
+    (segment) => {
+      if (segment.kind === "text") return segment.value;
+      const occurrence = occurrences.get(segment.name) ?? 0;
+      occurrences.set(segment.name, occurrence + 1);
+      return (
+        <PromptMentionChip
+          key={promptMentionKey(keyPrefix, segment, occurrence)}
+          name={segment.name}
+          value={segment.value}
+          interactive={interactive}
+        />
+      );
+    },
+  );
 }
 export function PromptMentionText({
   text,
@@ -507,23 +573,26 @@ export function PromptMentionText({
   focusable?: boolean;
 }) {
   const mentionNames = useMemo(() => buildPromptMentionNames(promptNames), [promptNames]);
+  const occurrences = new Map<string, number>();
   return (
     <>
-      {splitMarkdownPromptMentionSegments(text, mentionNames).map((segment, index) =>
-        segment.kind === "text" ? (
-          segment.value
-        ) : (
+      {splitMarkdownPromptMentionSegments(text, mentionNames).map((segment) => {
+        if (segment.kind === "text") return segment.value;
+        const occurrence = occurrences.get(segment.name) ?? 0;
+        occurrences.set(segment.name, occurrence + 1);
+        return (
           <PromptMentionChip
-            key={`${keyPrefix}-prompt-${segment.name}-${index}`}
+            key={promptMentionKey(keyPrefix, segment, occurrence)}
             name={segment.name}
             value={segment.value}
             focusable={focusable}
           />
-        ),
-      )}
+        );
+      })}
     </>
   );
 }
+
 export function PromptMentionChip({
   name,
   value,

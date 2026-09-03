@@ -74,6 +74,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// eslint-disable-next-line max-lines-per-function -- observer lifecycle cases share one deterministic harness.
 describe("useLazyLoadSentinel", () => {
   it("rechecks current geometry when a restored viewport becomes eligible", async () => {
     const scrollRef = makeScrollRef();
@@ -129,6 +130,25 @@ describe("useLazyLoadSentinel", () => {
     expect(record.unobserved).toContain(first);
     expect(record.targets).toContain(second);
     expect(record.disconnected).toBe(false);
+  });
+
+  it("recreates the observer when the owning lifecycle generation changes", () => {
+    const scrollRef = makeScrollRef();
+    const loadMore = vi.fn(async () => 20);
+    const { result, rerender } = renderHook(
+      ({ lifecycleKey }: { lifecycleKey: number }) =>
+        useLazyLoadSentinel(scrollRef, true, false, false, loadMore, { lifecycleKey }),
+      { initialProps: { lifecycleKey: 0 } },
+    );
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+    const first = records[0];
+
+    rerender({ lifecycleKey: 1 });
+
+    expect(first.disconnected).toBe(true);
+    expect(records).toHaveLength(2);
+    expect(records[1].targets).toContain(node);
   });
 
   it("fires loadMore on intersection when eligible", async () => {

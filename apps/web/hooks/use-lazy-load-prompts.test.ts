@@ -99,4 +99,20 @@ describe("useLazyLoadPrompts", () => {
     pending.resolve({ messages: [], has_more: false, cursor: "next" });
     await act(async () => load);
   });
+
+  it("keeps the request marker available until the sentinel consumes completion", async () => {
+    const pending = Promise.withResolvers<{
+      messages: Message[];
+      has_more: boolean;
+      cursor: string;
+    }>();
+    listTaskSessionMessages.mockReturnValueOnce(pending.promise);
+    const { result } = renderHook(() => useLazyLoadPrompts("session"));
+
+    const load = result.current.loadMore();
+    pending.resolve({ messages: [], has_more: false, cursor: "next" });
+    await act(async () => load);
+
+    expect(result.current.isRequestCurrent()).toBe(true);
+  });
 });

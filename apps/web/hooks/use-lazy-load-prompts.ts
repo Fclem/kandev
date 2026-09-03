@@ -12,6 +12,7 @@ const EMPTY_PROMPT_META = {
 
 type PromptRequestState = {
   bySession: Record<string, unknown>;
+  metaBySession: Record<string, { isLoading: boolean } | undefined>;
   generationBySession?: Record<string, number>;
 };
 
@@ -37,8 +38,8 @@ export function useLazyLoadPrompts(sessionId: string | null) {
   const store = useAppStoreApi();
 
   const loadMore = useCallback(async () => {
-    const { hasMore, oldestCursor, isLoadingMore } = stateRef.current;
-    if (!sessionId || !hasMore || !oldestCursor || isLoadingMore) return 0;
+    const { hasMore, oldestCursor, isLoading, isLoadingMore } = stateRef.current;
+    if (!sessionId || !hasMore || !oldestCursor || isLoading || isLoadingMore) return 0;
     const generation = store.getState().messagePrompts.generationBySession?.[sessionId] ?? 0;
     requestGenerationRef.current = generation;
     store.getState().setPromptMessagesLoadingMore(sessionId, true);
@@ -51,7 +52,10 @@ export function useLazyLoadPrompts(sessionId: string | null) {
       });
       const rows = [...(response.messages ?? [])].reverse();
       const current = store.getState().messagePrompts;
-      if (isCurrentPromptState(current, sessionId, generation)) {
+      if (
+        isCurrentPromptState(current, sessionId, generation) &&
+        !current.metaBySession[sessionId]?.isLoading
+      ) {
         store.getState().prependPromptMessages(sessionId, rows, {
           hasMore: response.has_more ?? false,
           oldestCursor: response.cursor ?? oldestCursor,
@@ -63,7 +67,6 @@ export function useLazyLoadPrompts(sessionId: string | null) {
       if (isCurrentPromptState(current, sessionId, generation)) {
         store.getState().setPromptMessagesLoadingMore(sessionId, false);
       }
-      requestGenerationRef.current = null;
     }
   }, [sessionId, store]);
 

@@ -77,6 +77,7 @@ function PromptHistoryPassthrough({ rootRef }: { rootRef: RefObject<HTMLDivEleme
  * with no load-more button. Passthrough sessions are an unconditional
  * empty-state with NO controls (rows, arrows, sentinel, loading indicators):
  * the transcript the arrow would jump to does not exist. */
+// eslint-disable-next-line max-lines-per-function -- coordinates row rendering, pagination, and loading continuity.
 export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryPanelContentProps) {
   const { t } = useTranslation();
   const { prompts: customPrompts } = useCustomPrompts();
@@ -84,14 +85,17 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const rootRef = useRef<HTMLDivElement>(null);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
+  const promptGeneration = useAppStore((state) =>
+    sessionId ? (state.messagePrompts?.generationBySession?.[sessionId] ?? 0) : 0,
+  );
   const {
     prompts,
     isLoading: messagesLoading,
     fetchFailed,
     retryPrompts,
   } = useSessionPrompts(sessionId);
-  const { loadMore, hasMore, isLoadingMore, isRequestCurrent } = useLazyLoadPrompts(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
+  const { loadMore, hasMore, isLoadingMore, isRequestCurrent } = useLazyLoadPrompts(sessionId);
   const entries = useMemo(() => {
     const derived = buildPromptHistoryEntries(prompts, turns);
     if (turnsHydrated) return derived;
@@ -113,6 +117,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const showLoading = shouldPaginate && (isLoadingMore || showLoadingGrace);
   const { sentinelRef, onUserGesture } = usePanelOlderPromptSentinel({
     scrollRef,
+    lifecycleKey: promptGeneration,
     shouldPaginate,
     messagesLoading,
     isLoadingMore,
@@ -193,9 +198,10 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
 
 /** The panel's older-prompt auto-load sentinel configuration: bottom-margin
  * root, re-arm while intersecting, join in-flight requests, and stick to the
- * bottom while the user waits there so appended rows cannot stall the load. */
+ * bottom while the user waits at the bottom. */
 function usePanelOlderPromptSentinel(opts: {
   scrollRef: RefObject<HTMLDivElement | null>;
+  lifecycleKey: number;
   shouldPaginate: boolean;
   messagesLoading: boolean;
   isLoadingMore: boolean;
@@ -213,6 +219,7 @@ function usePanelOlderPromptSentinel(opts: {
     opts.loadMore,
     {
       rootMargin: "0px 0px 200px 0px",
+      lifecycleKey: opts.lifecycleKey,
       rearmWhileIntersecting: true,
       joinInFlightWhileLoading: true,
       // Keep loading while the user waits at the bottom: appended rows would

@@ -244,6 +244,20 @@ describe("ChatMessage prompt mention fallbacks", () => {
     expect(linkedMention?.getAttribute("role")).toBeNull();
     expect(linkedMention?.getAttribute("tabindex")).toBeNull();
   });
+  it("does not chip an alias that follows formatted text without a boundary", () => {
+    const Wrapper = wrapper([], [customPrompt("hello")]);
+    render(
+      <Wrapper>
+        <ChatMessage
+          comment={userMessage({ content: "**bold**@hello" })}
+          label="Message"
+          className=""
+        />
+      </Wrapper>,
+    );
+
+    expect(screen.queryByTestId(PROMPT_MENTION_TESTID)).toBeNull();
+  });
 });
 
 describe("ChatMessage entity references", () => {

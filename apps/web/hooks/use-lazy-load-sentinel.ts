@@ -25,6 +25,9 @@ export type LazyLoadSentinelOptions = {
   /** Fire (and join) even while an older-page request is in flight. Never
    * bypasses `blocked`. Defaults to false. */
   joinInFlightWhileLoading?: boolean;
+  /** Recreates observation when the owning data generation changes without
+   * changing the session or sentinel DOM node. */
+  lifecycleKey?: string | number | null;
   /** After a positive load, if the user is pinned at the bottom of the scroll
    * container, scroll it back to the new bottom so the re-armed sentinel stays
    * in view and the next page keeps loading without a scroll-away/scroll-back.
@@ -89,6 +92,7 @@ type SentinelMutableRefs = {
 function useSentinelObserver(opts: {
   scrollRef: React.RefObject<HTMLDivElement | null>;
   rootMargin: string;
+  lifecycleKey: string | number | null;
   fireLoad: () => void;
   refs: SentinelMutableRefs;
 }) {
@@ -96,8 +100,8 @@ function useSentinelObserver(opts: {
   fireLoadRef.current = opts.fireLoad;
   const observerRootRef = useRef<Element | Document | null>(null);
   const observerRootMarginRef = useRef<string | null>(null);
+  const observerLifecycleKeyRef = useRef<string | number | null>(null);
   const observerFireLoadRef = useRef<(() => void) | null>(null);
-
   useEffect(() => {
     const root = opts.scrollRef.current;
     const currentObserver = opts.refs.observerRef.current;
@@ -105,14 +109,15 @@ function useSentinelObserver(opts: {
       currentObserver &&
       observerRootRef.current === root &&
       observerRootMarginRef.current === opts.rootMargin &&
+      observerLifecycleKeyRef.current === opts.lifecycleKey &&
       observerFireLoadRef.current === opts.fireLoad
     ) {
       return;
     }
     currentObserver?.disconnect();
-    opts.refs.observerRef.current = null;
     observerRootRef.current = root;
     observerRootMarginRef.current = opts.rootMargin;
+    observerLifecycleKeyRef.current = opts.lifecycleKey;
     observerFireLoadRef.current = opts.fireLoad;
     if (!root) return;
     const observer = new IntersectionObserver(
@@ -430,6 +435,7 @@ export function useLazyLoadSentinel(
 } {
   const {
     rootMargin = "200px 0px 0px 0px",
+    lifecycleKey = null,
     rearmWhileIntersecting = false,
     joinInFlightWhileLoading = false,
     stickToBottomWhileLoading = false,
@@ -557,7 +563,7 @@ export function useLazyLoadSentinel(
   }, [loadMore, refreshPinned, settleLoad]);
   fireLoadRef.current = fireLoad;
 
-  useSentinelObserver({ scrollRef, rootMargin, fireLoad, refs });
+  useSentinelObserver({ scrollRef, rootMargin, lifecycleKey, fireLoad, refs });
   useRetryWhenSentinelBecomesEligible({
     hasMore,
     blocked,

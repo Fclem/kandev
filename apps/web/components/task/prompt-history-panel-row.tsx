@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
@@ -198,18 +198,10 @@ function PromptHistoryBubble({
   const textRef = useRef<HTMLSpanElement>(null);
   const overflow = usePromptHistoryOverflow(textRef, entry.content, promptNames, expanded);
   const showToggle = overflow || expanded;
-  const handleBubbleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!onNavigate || isNestedInteractiveTarget(event.target, event.currentTarget)) return;
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    onNavigate(entry.messageId);
-  };
   return (
     <div className="min-w-0 flex-1">
       <div
         data-message-id={entry.messageId}
-        role={onNavigate ? "button" : undefined}
-        tabIndex={onNavigate ? 0 : undefined}
         aria-describedby={onNavigate ? rowLabelId : undefined}
         className={cn(
           "markdown-body markdown-body-user group relative flex min-h-11 cursor-pointer items-center overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
@@ -219,7 +211,6 @@ function PromptHistoryBubble({
           if (isNestedInteractiveTarget(event.target, event.currentTarget)) return;
           onNavigate?.(entry.messageId);
         }}
-        onKeyDown={handleBubbleKeyDown}
       >
         {onNavigate && (
           <PromptHistoryNavigateButton

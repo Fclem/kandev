@@ -9,6 +9,7 @@ import { MemoizedMarkdown } from "@/components/shared/memoized-markdown";
 import { ScrollToLastPromptButton } from "./scroll-to-last-prompt-button";
 import { useTranslation } from "react-i18next";
 import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
+import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import {
   usePromptMentionMarkdownComponents,
   useStablePromptMentionNames,
@@ -135,6 +136,7 @@ export function AnchoredLastPromptBar({
 }: AnchoredLastPromptBarProps) {
   const { t } = useTranslation();
   const { prompts } = useCustomPrompts();
+  const { isFinePointer } = useResponsiveBreakpoint();
   const promptNames = useStablePromptMentionNames(prompts.map((prompt) => prompt.name));
   const promptMentionComponents = usePromptMentionMarkdownComponents(
     promptNames,
@@ -181,7 +183,7 @@ export function AnchoredLastPromptBar({
             {showScrollToLastPrompt && (
               <ScrollToLastPromptButton
                 onClick={onScrollUp}
-                className="mt-0.5 h-6 w-6 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
+                className="mt-0.5 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
               />
             )}
             {/* Mirrors the real user-message bubble (rounded-2xl bg-primary/30)
@@ -213,7 +215,10 @@ export function AnchoredLastPromptBar({
                 aria-label={expanded ? t("task:collapseLastPrompt") : t("task:expandLastPrompt")}
                 aria-expanded={expanded}
                 data-testid="anchored-last-prompt-expand"
-                className="h-6 w-6 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
+                className={cn(
+                  "shrink-0 cursor-pointer text-muted-foreground hover:text-foreground",
+                  isFinePointer ? "h-6 w-6" : "h-11 w-11",
+                )}
               >
                 {expanded ? (
                   <IconChevronUp className="h-3.5 w-3.5" />

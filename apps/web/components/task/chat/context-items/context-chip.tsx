@@ -13,9 +13,18 @@ import {
   IconPinFilled,
 } from "@tabler/icons-react";
 import type { TablerIcon } from "@tabler/icons-react";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@kandev/ui/drawer";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@kandev/ui/hover-card";
 import type { ContextItemKind } from "@/lib/types/context";
 import { useTranslation } from "react-i18next";
+import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
 
 const ICON_BY_KIND: Record<ContextItemKind, TablerIcon> = {
   plan: IconListCheck,
@@ -71,51 +80,101 @@ export const ContextChip = memo(function ContextChip({
     iconNode = <Icon className="h-3 w-3 shrink-0" />;
   }
 
+  const controls = (
+    <>
+      {pinned && onUnpin && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnpin();
+          }}
+          aria-label={t("task:unpinWillBeRemovedAfterSend")}
+          className="ml-0.5 min-h-11 min-w-11 text-muted-foreground/70 hover:text-foreground cursor-pointer sm:min-h-0 sm:min-w-0"
+        >
+          <IconPinFilled className="mx-auto h-2.5 w-2.5" />
+        </button>
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          aria-label={t("task:removeLabeled", { label })}
+          className="ml-0.5 min-h-11 min-w-11 text-muted-foreground hover:text-foreground cursor-pointer sm:min-h-0 sm:min-w-0 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        >
+          <IconX className="mx-auto h-2.5 w-2.5" />
+        </button>
+      )}
+    </>
+  );
+  const labelContent = (
+    <>
+      {iconNode}
+      <span className="truncate max-w-[120px]">{label}</span>
+    </>
+  );
   const chip = (
     <div
       data-testid={dataTestId}
       data-path={dataPath}
       data-is-directory={dataIsDirectory ? "true" : "false"}
       className={`group flex items-center gap-1 px-2 py-0.5 text-xs text-muted-foreground bg-muted/50 rounded border border-border/50 ${onClick ? "cursor-pointer hover:bg-muted/80" : ""}`}
-      onClick={onClick}
+      onClick={preview ? undefined : onClick}
     >
-      {iconNode}
-      <span className="truncate max-w-[120px]">{label}</span>
-      {pinned && onUnpin && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onUnpin();
-          }}
-          className="ml-0.5 text-muted-foreground/70 hover:text-foreground cursor-pointer"
-          title={t("task:unpinWillBeRemovedAfterSend")}
-        >
-          <IconPinFilled className="h-2.5 w-2.5" />
-        </button>
+      {preview ? (
+        <ControlledHoverChip preview={preview} label={label}>
+          {(open) => (
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              aria-label={label}
+              className="flex min-h-11 min-w-0 flex-1 items-center gap-1 text-left"
+            >
+              {labelContent}
+            </button>
+          )}
+        </ControlledHoverChip>
+      ) : (
+        labelContent
       )}
-      {onRemove && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          aria-label={t("task:removeLabeled", { label })}
-          className="min-h-11 min-w-11 opacity-100 ml-0.5 hover:text-foreground cursor-pointer sm:min-h-0 sm:min-w-0 sm:opacity-0 sm:group-hover:opacity-100"
-        >
-          <IconX className="h-2.5 w-2.5" />
-        </button>
-      )}
+      {controls}
     </div>
   );
 
-  if (!preview) return chip;
-
-  return <ControlledHoverChip preview={preview}>{chip}</ControlledHoverChip>;
+  return chip;
 });
 
-function ControlledHoverChip({ preview, children }: { preview: ReactNode; children: ReactNode }) {
+function ControlledHoverChip({
+  preview,
+  label,
+  children,
+}: {
+  preview: ReactNode;
+  label: string;
+  children: (open: boolean) => ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const suppressRef = useRef(false);
+  const usesTouchDrawer = useTouchDrawer();
+
+  if (usesTouchDrawer) {
+    return (
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger asChild>{children(open)}</DrawerTrigger>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>{label}</DrawerTitle>
+            <DrawerDescription className="sr-only">{label}</DrawerDescription>
+          </DrawerHeader>
+          <div className="max-h-[70dvh] overflow-y-auto px-4 pb-4">{preview}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
   return (
     <HoverCard
@@ -137,7 +196,7 @@ function ControlledHoverChip({ preview, children }: { preview: ReactNode; childr
           }, 300);
         }}
       >
-        {children}
+        {children(open)}
       </HoverCardTrigger>
       <HoverCardContent side="top" align="start" className="w-80 max-h-80 overflow-y-auto">
         {preview}

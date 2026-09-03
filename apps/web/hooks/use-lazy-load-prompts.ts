@@ -32,7 +32,11 @@ export function useLazyLoadPrompts(sessionId: string | null) {
       : EMPTY_PROMPT_META,
   );
   const stateRef = useRef(meta);
-  const requestGenerationRef = useRef<{ sessionId: string; generation: number } | null>(null);
+  const requestGenerationRef = useRef<{
+    sessionId: string;
+    generation: number;
+    refreshGeneration: number;
+  } | null>(null);
   useEffect(() => {
     stateRef.current = meta;
   }, [meta]);
@@ -46,7 +50,7 @@ export function useLazyLoadPrompts(sessionId: string | null) {
     const generation = store.getState().messagePrompts.generationBySession?.[sessionId] ?? 0;
     const refreshGeneration =
       store.getState().messagePrompts.refreshGenerationBySession?.[sessionId] ?? 0;
-    requestGenerationRef.current = { sessionId, generation };
+    requestGenerationRef.current = { sessionId, generation, refreshGeneration };
     store.getState().setPromptMessagesLoadingMore(sessionId, true);
     try {
       const response = await listTaskSessionMessages(sessionId, {
@@ -81,6 +85,8 @@ export function useLazyLoadPrompts(sessionId: string | null) {
     return (
       request !== null &&
       request.sessionId === sessionId &&
+      request.refreshGeneration ===
+        (store.getState().messagePrompts.refreshGenerationBySession?.[sessionId ?? ""] ?? 0) &&
       isCurrentPromptState(store.getState().messagePrompts, sessionId ?? "", request.generation)
     );
   }, [sessionId, store]);

@@ -102,11 +102,11 @@ function upsertPromptMessage(state: SessionSliceState, message: Message) {
 /** Applies a live user-message update to the prompt cache when present. */
 export function updatePromptMessage(state: SessionSliceState, message: Message) {
   if (!isValidPrompt(message)) return;
+  bumpPromptRevision(state, message.session_id);
   const prompts = state.messagePrompts.bySession[message.session_id];
   if (!prompts) return;
   const index = prompts.findIndex((entry) => entry.id === message.id);
   if (index === -1) return;
-  bumpPromptRevision(state, message.session_id);
   prompts[index] = mergePromptMessage(prompts[index], message);
   state.messagePrompts.bySession[message.session_id] = sortPromptMessages(prompts);
 }
@@ -122,11 +122,11 @@ export function removePromptMessage(
   sessionId: string,
   messageId: string,
 ) {
+  bumpPromptRevision(state, sessionId);
   const prompts = state.messagePrompts.bySession[sessionId];
   if (!prompts) return;
   const nextPrompts = prompts.filter((message) => message.id !== messageId);
   if (nextPrompts.length === prompts.length) return;
-  bumpPromptRevision(state, sessionId);
   state.messagePrompts.bySession[sessionId] = nextPrompts;
   const meta = state.messagePrompts.metaBySession[sessionId];
   if (meta?.oldestCursor === messageId) {

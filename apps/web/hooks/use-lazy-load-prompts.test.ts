@@ -130,6 +130,7 @@ describe("useLazyLoadPrompts", () => {
 
     const load = result.current.loadMore();
     state.messagePrompts.refreshGenerationBySession.session += 1;
+    expect(result.current.isRequestCurrent()).toBe(false);
     state.messagePrompts.metaBySession.session.isLoading = false;
     pending.resolve({ messages: [{ id: "stale" } as Message], has_more: false, cursor: "stale" });
     await act(async () => load);

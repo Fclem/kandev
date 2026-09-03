@@ -198,3 +198,15 @@ it("advances the refresh revision when an initial prompt load starts", () => {
   store.getState().setPromptMessagesLoading(SESSION, true);
   expect(store.getState().messagePrompts.refreshGenerationBySession[SESSION]).toBe(revision);
 });
+
+it("invalidates refreshes for live updates outside the prompt projection", () => {
+  const store = makeStore();
+  const initialRevision = store.getState().messagePrompts.refreshGenerationBySession[SESSION] ?? 0;
+
+  store.getState().updateMessage(message("uncached", "user"));
+  store.getState().removeMessage(SESSION, "deleted-before-hydration");
+
+  expect(store.getState().messagePrompts.refreshGenerationBySession[SESSION]).toBe(
+    initialRevision + 2,
+  );
+});

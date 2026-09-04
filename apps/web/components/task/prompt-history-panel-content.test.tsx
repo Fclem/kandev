@@ -691,7 +691,7 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
     const onNavigateToPrompt = vi.fn();
 
     render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
-    expect(screen.queryByTestId("prompt-history-navigate-0")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scroll to prompt" })).toBeNull();
     const prompt = row(0).querySelector<HTMLElement>(".cursor-pointer");
     expect(prompt).toBeTruthy();
     fireEvent.click(prompt!);

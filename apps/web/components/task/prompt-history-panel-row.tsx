@@ -95,6 +95,7 @@ export function PromptHistoryRow({
         onToggle={onToggle}
         onNavigate={onNavigate}
         rowLabelId={rowLabelId}
+        rowLabel={rowLabel}
       />
       <div className="flex shrink-0 flex-col items-end gap-0.5 text-xs leading-tight text-muted-foreground">
         <time
@@ -159,13 +160,14 @@ function PromptHistoryBubble({
   onToggle,
   onNavigate,
   rowLabelId,
-}: PromptHistoryRowProps & { rowLabelId: string }) {
+  rowLabel,
+}: PromptHistoryRowProps & { rowLabelId: string; rowLabel: string }) {
   const { isFavorite } = useMessageFavorite(sessionId ?? "", entry.messageId);
   const textRef = useRef<HTMLSpanElement>(null);
   const overflow = usePromptHistoryOverflow(textRef, entry.content, promptNames, expanded);
   const showToggle = overflow || expanded;
   return (
-    <div className="min-w-0 flex-1">
+    <div className="relative min-w-0 flex-1">
       <div
         data-message-id={entry.messageId}
         aria-describedby={onNavigate ? rowLabelId : undefined}
@@ -216,6 +218,21 @@ function PromptHistoryBubble({
           />
         )}
       </div>
+      {onNavigate && (
+        <button
+          type="button"
+          data-testid={`prompt-history-navigate-${index}`}
+          aria-label={rowLabel}
+          aria-describedby={rowLabelId}
+          className="pointer-events-none absolute inset-0 z-0 min-h-11 w-full rounded-2xl opacity-0 outline-none focus-visible:pointer-events-auto focus-visible:z-20 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => onNavigate(entry.messageId)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            onNavigate(entry.messageId);
+          }}
+        />
+      )}
     </div>
   );
 }

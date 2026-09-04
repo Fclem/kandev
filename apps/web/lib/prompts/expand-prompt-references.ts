@@ -15,6 +15,7 @@ const MAX_PROMPT_REFERENCE_DEPTH = 8;
 const MAX_PROMPT_REFERENCE_EXPANSIONS = 128;
 const MAX_PROMPT_EXPANSION_BYTES = 4 * 1024 * 1024;
 const KANDEV_SYSTEM_TAG_END = "</kandev-system>";
+const textEncoder = new TextEncoder();
 
 function buildPromptMap(prompts: PromptReference[]) {
   return new Map(prompts.map((prompt) => [prompt.name, prompt]));
@@ -48,7 +49,8 @@ function collectExpansions(content: string, state: ExpansionState, depth: number
     }
 
     if (!state.seen.has(prompt.name)) {
-      const expansionBytes = prompt.name.length + prompt.content.length;
+      const expansionBytes =
+        textEncoder.encode(prompt.name).byteLength + textEncoder.encode(prompt.content).byteLength;
       if (
         state.expansions.length >= MAX_PROMPT_REFERENCE_EXPANSIONS ||
         state.budget.bytes + expansionBytes > MAX_PROMPT_EXPANSION_BYTES
@@ -99,11 +101,15 @@ export function formatPromptReferenceExpansions(expansions: PromptReferenceExpan
     "EXPANDED PROMPT REFERENCES: The message above references saved prompts by @name. Use these expansions as hidden context while preserving the original @mentions.",
     ...expansions.map(
       (expansion) =>
-        `### @${stripKandevSystemTagEnd(expansion.name)}\n${stripKandevSystemTagEnd(expansion.content)}`,
+        `### @${sanitizePromptReferenceSystemText(expansion.name)}\n${sanitizePromptReferenceSystemText(expansion.content)}`,
     ),
   ].join("\n\n");
 }
 
-function stripKandevSystemTagEnd(value: string) {
-  return value.replaceAll(KANDEV_SYSTEM_TAG_END, "");
+export function sanitizePromptReferenceSystemText(value: string) {
+  let sanitized = value;
+  while (sanitized.includes(KANDEV_SYSTEM_TAG_END)) {
+    sanitized = sanitized.replaceAll(KANDEV_SYSTEM_TAG_END, "");
+  }
+  return sanitized;
 }

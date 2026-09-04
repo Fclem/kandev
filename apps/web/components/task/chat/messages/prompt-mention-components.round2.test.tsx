@@ -75,6 +75,15 @@ describe("splitMarkdownPromptMentionSegments round-two boundaries", () => {
     expect(promptValues("**@daily\\*")).toEqual([]);
     expect(promptValues("[@daily\\]")).toEqual([]);
   });
+  it("recognizes aliases in supported long messages", () => {
+    const content = `${"x".repeat(32_769)} @daily`;
+
+    expect(splitMarkdownPromptMentionSegments(content, promptNames)).toEqual([
+      { kind: "text", value: `${"x".repeat(32_769)} ` },
+      { kind: "prompt", value: "@daily", name: "daily" },
+    ]);
+  });
+
   it("fails closed for oversized malformed Markdown mention input", () => {
     const content = `[${"x".repeat(40_000)} [@daily`;
 

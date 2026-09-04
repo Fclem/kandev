@@ -16,6 +16,7 @@ var (
 	ErrPromptNotFound       = errors.New("prompt not found")
 	ErrInvalidPrompt        = errors.New("invalid prompt")
 	ErrPromptAlreadyExists  = errors.New("prompt with this name already exists")
+	ErrPromptListLimit      = errors.New("prompt list limit exceeded")
 	ErrPromptReferenceLimit = errors.New("prompt reference limit exceeded")
 )
 
@@ -35,6 +36,12 @@ const (
 	maxPromptReferenceNames      = 2000
 	maxPromptReferenceExpansions = 128
 	maxPromptExpansionBytes      = 4 << 20
+	// Candidate budgets cap repository materialization before the resolver
+	// builds its trie. They are larger than the final expansion budget so
+	// unrelated saved prompts can be inspected without allowing multi-gigabyte
+	// allocations.
+	maxPromptReferenceCandidateNameBytes    = 1 << 20
+	maxPromptReferenceCandidateContentBytes = 16 << 20
 )
 
 func NewService(repo promptstore.Repository) *Service {
@@ -83,6 +90,9 @@ func (s *Service) CreatePrompt(ctx context.Context, name, content string) (*mode
 		Content: content,
 	}
 	if err := s.repo.CreatePrompt(ctx, prompt); err != nil {
+		if errors.Is(err, promptstore.ErrPromptListLimit) {
+			return nil, ErrPromptListLimit
+		}
 		return nil, translateNameConflict(err)
 	}
 	return prompt, nil
@@ -176,9 +186,17 @@ func (s *Service) ResolvePromptReferences(ctx context.Context, content string) (
 		return nil, nil
 	}
 	prompts, truncated, err := s.repo.ListPromptsForReferenceExpansion(
-		ctx, maxPromptReferenceNames, maxPromptNameBytes, maxPromptContentBytes,
+		ctx,
+		maxPromptReferenceNames,
+		maxPromptNameBytes,
+		maxPromptContentBytes,
+		maxPromptReferenceCandidateNameBytes,
+		maxPromptReferenceCandidateContentBytes,
 	)
 	if err != nil {
+		if errors.Is(err, promptstore.ErrPromptReferenceCandidateLimit) {
+			return nil, ErrPromptReferenceLimit
+		}
 		return nil, err
 	}
 	if truncated {

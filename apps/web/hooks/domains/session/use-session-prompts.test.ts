@@ -103,4 +103,15 @@ describe("useSessionPrompts", () => {
     await waitFor(() => expect(listTaskSessionMessages).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.fetchFailed).toBe(false));
   });
+
+  it("does not refetch when a live prompt mutation advances the refresh revision", async () => {
+    const { rerender } = renderHook(() => useSessionPrompts("session"));
+
+    await waitFor(() => expect(listTaskSessionMessages).toHaveBeenCalledTimes(1));
+    state.messagePrompts.refreshGenerationBySession.session = 1;
+    rerender();
+
+    await Promise.resolve();
+    expect(listTaskSessionMessages).toHaveBeenCalledTimes(1);
+  });
 });

@@ -328,6 +328,15 @@ func TestService_ResolvePromptReferencesRejectsOverLimitInputs(t *testing.T) {
 	}
 }
 
+func TestService_ResolvePromptReferencesTranslatesCandidateLimit(t *testing.T) {
+	svc := NewService(candidateLimitRepo{})
+
+	_, err := svc.ResolvePromptReferences(context.Background(), "run @daily")
+	if !errors.Is(err, ErrPromptReferenceLimit) {
+		t.Fatalf("expected ErrPromptReferenceLimit, got %v", err)
+	}
+}
+
 type expansionLimitRepo struct {
 	promptstore.Repository
 	prompts []*models.Prompt
@@ -336,8 +345,16 @@ type expansionLimitRepo struct {
 func (r expansionLimitRepo) ListPrompts(context.Context) ([]*models.Prompt, error) {
 	return r.prompts, nil
 }
-func (r expansionLimitRepo) ListPromptsForReferenceExpansion(context.Context, int, int, int) ([]*models.Prompt, bool, error) {
+func (r expansionLimitRepo) ListPromptsForReferenceExpansion(context.Context, int, int, int, int, int) ([]*models.Prompt, bool, error) {
 	return r.prompts, false, nil
+}
+
+type candidateLimitRepo struct {
+	promptstore.Repository
+}
+
+func (candidateLimitRepo) ListPromptsForReferenceExpansion(context.Context, int, int, int, int, int) ([]*models.Prompt, bool, error) {
+	return nil, false, promptstore.ErrPromptReferenceCandidateLimit
 }
 
 // raceRepo simulates a TOCTOU loss against the SQLite UNIQUE index: the

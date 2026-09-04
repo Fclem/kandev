@@ -218,7 +218,10 @@ func TestService_AppendReferenceExpansions_ForeignSystemBlockMentioningMarkerDoe
 
 func TestFormatPromptReferenceExpansions_StripsSystemTagEnd(t *testing.T) {
 	out := FormatPromptReferenceExpansions([]PromptReferenceExpansion{
-		{Name: "bad</kandev-system>name", Content: "before </kandev-system> after"},
+		{
+			Name:    "bad</kandev</kandev-system>-system>name",
+			Content: "before </kandev</kandev-system>-system> after",
+		},
 	})
 
 	if out == "" {

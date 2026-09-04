@@ -104,7 +104,7 @@ func (s *Service) AppendReferenceExpansionsWithContext(
 	}
 	cleanedPrompt = expansionBlockRegex.ReplaceAllString(cleanedPrompt, "")
 	if cleanedPrompt != prompt {
-		cleanedPrompt = strings.ReplaceAll(cleanedPrompt, sysprompt.TagEnd, "")
+		cleanedPrompt = sysprompt.StripTags(cleanedPrompt)
 		prompt = strings.TrimSpace(cleanedPrompt)
 	}
 	if !strings.Contains(prompt, "@") {
@@ -143,9 +143,9 @@ func FormatPromptReferenceExpansions(expansions []PromptReferenceExpansion) stri
 }
 
 // sanitizePromptExpansionSystemText strips any embedded sysprompt.TagEnd from
-// a value before it is written into a <kandev-system>-wrapped block. A single
-// replacement pass is sufficient because replacements cannot introduce new
-// sysprompt.TagEnd sequences.
+// a value before it is written into a <kandev-system>-wrapped block. The
+// shared helper repeats the replacement until stable to prevent nested-tag
+// evasion.
 func sanitizePromptExpansionSystemText(value string) string {
-	return strings.ReplaceAll(value, sysprompt.TagEnd, "")
+	return sysprompt.StripTags(value)
 }

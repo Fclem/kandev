@@ -219,18 +219,12 @@ function getVisibleText(node: ReactNode): string {
   return Children.toArray(element.props.children).map(getVisibleText).join("");
 }
 
-const maxPromptMentionMarkdownScanLength = 32_768;
-
 export function splitMarkdownPromptMentionSegments(
   content: string,
   promptNames: string[],
   precedingCharacter?: string,
 ): PromptMentionSegment[] {
-  if (
-    content.length === 0 ||
-    promptNames.length === 0 ||
-    content.length > maxPromptMentionMarkdownScanLength
-  ) {
+  if (content.length === 0 || promptNames.length === 0) {
     return [{ kind: "text", value: content }];
   }
 

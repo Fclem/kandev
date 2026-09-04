@@ -106,13 +106,16 @@ test.describe("Prompt history panel on mobile", () => {
     await expect(chip).toHaveAttribute("data-prompt-name", MOBILE_ALIAS);
     await chip.tap();
     await expect(testPage.getByText("Mobile history alias content")).toBeVisible();
+    await testPage.keyboard.press("Escape");
+    await expect(testPage.getByText("Mobile history alias content")).toHaveCount(0);
     // The single seeded prompt is the session's very first: #1.
     await expect(row.getByTestId("prompt-history-number-0")).toHaveText("#1");
     const prompt = row.locator("[data-message-id]");
     const promptBox = await prompt.boundingBox();
     expect(promptBox?.height).toBeGreaterThanOrEqual(44);
 
-    await prompt.tap();
+    // Tap the row padding, not the nested alias chip.
+    await prompt.tap({ position: { x: 4, y: 4 } });
     await expect(testPage.locator(`#msg-${promptMessage.id}`)).toBeAttached();
   });
 
@@ -207,7 +210,7 @@ test.describe("Prompt history panel on mobile", () => {
       .locator("[data-message-id]")
       .getAttribute("data-message-id");
     if (!firstPromptMessageId) throw new Error("First prompt row has no message id");
-    await firstRow.locator('[role="button"]').first().tap();
+    await firstRow.locator("[data-message-id]").tap();
     await expect(testPage.locator(`#msg-${firstPromptMessageId}`)).toBeAttached({
       timeout: 10_000,
     });

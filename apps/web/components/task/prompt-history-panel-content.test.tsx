@@ -691,12 +691,29 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
     const onNavigateToPrompt = vi.fn();
 
     render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
-    expect(screen.queryByRole("button", { name: "Scroll to prompt" })).toBeNull();
+    const navigation = screen.getByTestId("prompt-history-navigate-0");
+    expect(navigation.getAttribute("aria-label")).toBe("Prompt");
     const prompt = row(0).querySelector<HTMLElement>(".cursor-pointer");
     expect(prompt).toBeTruthy();
     fireEvent.click(prompt!);
 
     expect(onNavigateToPrompt).toHaveBeenCalledWith("prompt-1");
+  });
+
+  it("supports keyboard activation of the prompt-row navigation control", () => {
+    messagesBySession[SESSION_A] = [message({ id: "prompt-1" })];
+    const onNavigateToPrompt = vi.fn();
+
+    render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
+
+    const navigation = screen.getByTestId("prompt-history-navigate-0");
+    expect(navigation.tagName).toBe("BUTTON");
+    fireEvent.keyDown(navigation, { key: "Enter" });
+    fireEvent.keyDown(navigation, { key: " " });
+
+    expect(onNavigateToPrompt).toHaveBeenCalledTimes(2);
+    expect(onNavigateToPrompt).toHaveBeenNthCalledWith(1, "prompt-1");
+    expect(onNavigateToPrompt).toHaveBeenNthCalledWith(2, "prompt-1");
   });
 
   it("does nothing when the callback is absent", () => {

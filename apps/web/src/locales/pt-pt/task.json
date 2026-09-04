@@ -1920,7 +1920,6 @@
   "promptHistoryPromptLabel": "Indicação {{number}}",
   "promptHistoryPromptLabelGeneric": "Indicação",
   "promptHistoryEmpty": "Ainda sem prompts.",
-  "scrollToPrompt": "Ir para o prompt",
   "launchErrorBaseBranchMissing": "Não foi possível iniciar a tarefa porque o branch base não está disponível.",
   "launchErrorDefaultBranchUnresolved": "Não foi possível resolver o branch predefinido do repositório.",
   "launchErrorPrAlreadyClosed": "A tarefa está associada a um pull request fechado.",

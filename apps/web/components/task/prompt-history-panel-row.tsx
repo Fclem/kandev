@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
-  IconArrowUp,
   IconChevronDown,
   IconChevronUp,
   IconClock,
@@ -26,47 +25,6 @@ export type PromptHistoryRowProps = {
   onToggle: () => void;
   onNavigate?: (messageId: string) => void;
 };
-
-function PromptHistoryNavigateButton({
-  index,
-  messageId,
-  onNavigate,
-  labelId,
-}: {
-  index: number;
-  messageId: string;
-  onNavigate: NonNullable<PromptHistoryRowProps["onNavigate"]>;
-  labelId: string;
-}) {
-  const { isFinePointer } = useResponsiveBreakpoint();
-  const { t } = useTranslation();
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={t("task:scrollToPrompt")}
-      aria-describedby={labelId}
-      data-testid={`prompt-history-navigate-${index}`}
-      className={cn(
-        "shrink-0 cursor-pointer text-muted-foreground hover:text-foreground",
-        isFinePointer ? "h-6 w-6" : "h-11 w-11",
-      )}
-      onClick={(event) => {
-        event.stopPropagation();
-        onNavigate(messageId);
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        event.stopPropagation();
-        onNavigate(messageId);
-      }}
-    >
-      <IconArrowUp className="h-3.5 w-3.5" />
-    </Button>
-  );
-}
 
 function isNestedInteractiveTarget(target: EventTarget | null, currentTarget: Element) {
   const interactiveTarget =
@@ -220,14 +178,6 @@ function PromptHistoryBubble({
           onNavigate?.(entry.messageId);
         }}
       >
-        {onNavigate && (
-          <PromptHistoryNavigateButton
-            index={index}
-            messageId={entry.messageId}
-            onNavigate={onNavigate}
-            labelId={rowLabelId}
-          />
-        )}
         {entry.promptNumber !== null && (
           <PromptNumberLabel index={index} promptNumber={entry.promptNumber} />
         )}

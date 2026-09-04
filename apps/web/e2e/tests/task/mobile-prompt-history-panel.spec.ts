@@ -108,7 +108,7 @@ test.describe("Prompt history panel on mobile", () => {
     await expect(testPage.getByText("Mobile history alias content")).toBeVisible();
     // The single seeded prompt is the session's very first: #1.
     await expect(row.getByTestId("prompt-history-number-0")).toHaveText("#1");
-    const prompt = row.getByTestId("prompt-history-navigate-0");
+    const prompt = row.locator("[data-message-id]");
     const promptBox = await prompt.boundingBox();
     expect(promptBox?.height).toBeGreaterThanOrEqual(44);
 

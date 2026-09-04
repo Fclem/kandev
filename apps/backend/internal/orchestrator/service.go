@@ -1145,6 +1145,17 @@ type Service struct {
 	ciAutomationCancel  context.CancelFunc
 	ciAutomationStopped bool
 	ciAutomationWorkers sync.WaitGroup
+
+	// dynamicSuccessorWorkers owns the detached dynamic fallback launches. The
+	// launch has to leave the agent.failed dispatch to avoid the prompt
+	// lifecycle deadlock, but a detached goroutine must still stop mutating
+	// session state once Stop begins, so it runs under a service-owned context
+	// instead of an unbounded context.WithoutCancel.
+	dynamicSuccessorMu      sync.Mutex
+	dynamicSuccessorCtx     context.Context
+	dynamicSuccessorCancel  context.CancelFunc
+	dynamicSuccessorStopped bool
+	dynamicSuccessorWorkers sync.WaitGroup
 }
 
 func (s *Service) officeStallDependencies() (
@@ -1324,6 +1335,7 @@ func NewService(
 	// Create the service (watcher will be created after we have handlers)
 	sendNowCtx, sendNowCancel := context.WithCancel(context.Background())
 	ciAutomationCtx, ciAutomationCancel := context.WithCancel(context.Background())
+	dynamicSuccessorCtx, dynamicSuccessorCancel := context.WithCancel(context.Background())
 	s := &Service{
 		config:                       cfg,
 		logger:                       svcLogger,
@@ -1345,6 +1357,8 @@ func NewService(
 		sendNowCancel:                sendNowCancel,
 		ciAutomationCtx:              ciAutomationCtx,
 		ciAutomationCancel:           ciAutomationCancel,
+		dynamicSuccessorCtx:          dynamicSuccessorCtx,
+		dynamicSuccessorCancel:       dynamicSuccessorCancel,
 		idleReaper:                   newIdleSessionReaper(),
 	}
 	// Always publish queue-status after a task-scoped queue purge so the
@@ -2497,6 +2511,7 @@ func (s *Service) Start(ctx context.Context) error {
 	s.resetReservedPromptCallbacks()
 	s.resetSendNowWorkers()
 	s.resetCIAutomationWorkers()
+	s.resetDynamicSuccessorWorkers()
 
 	// Reconcile session state from persisted runtime state on startup.
 	// This does NOT launch any agent processes — sessions are recovered lazily
@@ -2610,6 +2625,10 @@ func (s *Service) Stop() error {
 	s.mu.Unlock()
 
 	s.logger.Info("stopping orchestrator service")
+	// Stop detached dynamic successors before the scheduler and watcher. Their
+	// workers can otherwise observe the shutdown only after those components
+	// have already stopped, and may launch or recover a session during teardown.
+	s.stopDynamicSuccessorWorkers()
 	s.stopDynamicPolicyRecovery()
 
 	// Stop components in reverse order

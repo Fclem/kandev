@@ -132,6 +132,70 @@ func TestResolverDeduplicatesLookupsAlreadyInFlight(t *testing.T) {
 	}
 }
 
+func TestResolverDoesNotPublishAfterOptOutDuringLookup(t *testing.T) {
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	eventBus := bus.NewMemoryEventBus(log)
+	t.Cleanup(eventBus.Close)
+	received := make(chan *bus.Event, 1)
+	if _, err := eventBus.Subscribe(events.AuthSessionHostnameResolved, func(_ context.Context, event *bus.Event) error {
+		received <- event
+		return nil
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	cache := &memoryCache{entries: map[string]CacheEntry{}, set: make(chan struct{}, 1)}
+	var enabled atomic.Bool
+	enabled.Store(true)
+	resolver := NewResolver(
+		cache,
+		func(context.Context, string) (bool, error) { return enabled.Load(), nil },
+		nil,
+		eventBus,
+		log,
+	)
+	resolver.ctx = context.Background()
+	lookupStarted := make(chan struct{})
+	releaseLookup := make(chan struct{})
+	resolver.lookupAddr = func(context.Context, string) ([]string, error) {
+		close(lookupStarted)
+		<-releaseLookup
+		return []string{"mail.example.test."}, nil
+	}
+	job := &pendingJob{
+		ip:        "192.0.2.10",
+		interests: []interest{{userID: "user-1", rawIP: "192.0.2.10"}},
+	}
+	resolver.inFlight[job.ip] = job
+
+	done := make(chan struct{})
+	go func() {
+		resolver.resolve(job)
+		close(done)
+	}()
+	select {
+	case <-lookupStarted:
+	case <-time.After(time.Second):
+		t.Fatal("lookup did not start")
+	}
+	enabled.Store(false)
+	close(releaseLookup)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("resolver did not finish")
+	}
+
+	select {
+	case event := <-received:
+		t.Fatalf("received hostname event after opt-out: %#v", event.Data)
+	default:
+	}
+}
+
 func TestResolverStartWaitsForCloseBeforeRestartingWorkers(t *testing.T) {
 	cache := &memoryCache{entries: map[string]CacheEntry{}, set: make(chan struct{}, 1)}
 	firstLookupStarted := make(chan struct{})
@@ -394,8 +458,8 @@ func TestResolverChecksEachUserOncePerResolve(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("hostname lookup did not finish")
 	}
-	if got := settingsReads.Load(); got != 2 {
-		t.Fatalf("settings reads = %d, want one admission read and one resolve read", got)
+	if got := settingsReads.Load(); got != 3 {
+		t.Fatalf("settings reads = %d, want admission, lookup, and publication reads", got)
 	}
 }
 

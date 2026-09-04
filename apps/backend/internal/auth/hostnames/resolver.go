@@ -392,7 +392,7 @@ func (r *Resolver) resolve(job *pendingJob) {
 	if current.ResolvedAt != nil && time.Since(*current.ResolvedAt) < recentResolveWindow {
 		interests := r.finish(job)
 		if current.Hostname != job.observed.Hostname {
-			r.publish(r.enabledInterests(interests, gate.enabled), current.Hostname, current.ResolvedAt)
+			r.publish(r.enabledInterests(interests, make(map[string]bool)), current.Hostname, current.ResolvedAt)
 		}
 		return
 	}
@@ -403,7 +403,7 @@ func (r *Resolver) resolve(job *pendingJob) {
 		r.logError("reverse DNS lookup", lookupErr)
 		interests := r.finish(job)
 		if missing {
-			r.publish(r.enabledInterests(interests, gate.enabled), "", nil)
+			r.publish(r.enabledInterests(interests, make(map[string]bool)), "", nil)
 		}
 		return
 	}
@@ -416,7 +416,7 @@ func (r *Resolver) resolve(job *pendingJob) {
 	}
 	interests := r.finish(job)
 	if current.Hostname != hostname || missing {
-		r.publish(r.enabledInterests(interests, gate.enabled), hostname, &resolvedAt)
+		r.publish(r.enabledInterests(interests, make(map[string]bool)), hostname, &resolvedAt)
 	}
 }
 

@@ -70,9 +70,9 @@ export function ImplementPlanButton({
     menuTrigger: testIds?.menuTrigger ?? "implement-plan-menu-trigger",
     freshItem: testIds?.freshItem ?? "implement-fresh-menu-item",
   };
-  const controlHeightClass = framed
-    ? "h-5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
-    : "h-7 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11";
+  const controlHeightClass = framed ? "h-5" : "h-7";
+  const coarsePointerClass =
+    "[@media(pointer:coarse)]:relative [@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:-inset-3 [@media(pointer:coarse)]:after:content-['']";
   const primaryButton = (
     <span className="inline-flex">
       <Button
@@ -84,6 +84,7 @@ export function ImplementPlanButton({
         className={cn(
           "gap-1.5 px-2 text-violet-400 rounded-r-none pr-1.5 border-transparent",
           controlHeightClass,
+          coarsePointerClass,
           "hover:bg-muted/40 focus-visible:border-transparent focus-visible:ring-violet-400/30",
           disabled ? "pointer-events-none cursor-not-allowed" : "cursor-pointer",
         )}
@@ -126,6 +127,7 @@ export function ImplementPlanButton({
             className={cn(
               "px-1 text-violet-400 rounded-l-none border-y-0 border-r-0 border-l border-violet-400/20",
               controlHeightClass,
+              coarsePointerClass,
               "hover:bg-muted/40 focus-visible:border-y-0 focus-visible:border-r-0 focus-visible:border-l-violet-400/20 focus-visible:ring-0",
               disabled ? "pointer-events-none cursor-not-allowed" : "cursor-pointer",
             )}

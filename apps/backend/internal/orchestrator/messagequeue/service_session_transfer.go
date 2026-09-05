@@ -70,10 +70,29 @@ func (s *Service) prepareDurableSessionTransfer(
 		return fmt.Errorf("snapshot session queue for transfer: %w", err)
 	}
 	entryIDs := make([]string, 0, len(entries))
+	seenEntryIDs := make(map[string]struct{}, len(entries))
 	hasAttachments := false
 	for _, entry := range entries {
 		entryIDs = append(entryIDs, entry.ID)
+		seenEntryIDs[entry.ID] = struct{}{}
 		hasAttachments = hasAttachments || len(entry.Attachments) > 0
+	}
+	if s.PendingQueueDispatchPersistenceAvailable() {
+		pending, listErr := s.ListPendingQueueDispatches(ctx)
+		if listErr != nil {
+			return fmt.Errorf("snapshot in-flight queue dispatches for transfer: %w", listErr)
+		}
+		for _, dispatch := range pending {
+			entry := dispatch.Message
+			if entry.SessionID != oldSessionID {
+				continue
+			}
+			if _, seen := seenEntryIDs[entry.ID]; !seen {
+				entryIDs = append(entryIDs, entry.ID)
+				seenEntryIDs[entry.ID] = struct{}{}
+			}
+			hasAttachments = hasAttachments || len(entry.Attachments) > 0
+		}
 	}
 	if !hasAttachments || prepare == nil {
 		return nil

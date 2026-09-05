@@ -70,6 +70,65 @@ func TestSQLiteTaskPurgeRemovesAttachmentCleanup(t *testing.T) {
 	}
 }
 
+func TestSQLiteTaskPurgePreservesOtherTaskRecoveryInSharedSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t).(*sqliteRepository)
+	const (
+		sessionID = "session-shared-purge"
+		taskA     = "task-shared-purge-a"
+		taskB     = "task-shared-purge-b"
+	)
+	entryA := insertTestEntry(t, repo, sessionID, taskA, "prompt-a", QueuedByUser, nil, nil)
+	entryB := insertTestEntry(t, repo, sessionID, taskB, "prompt-b", QueuedByUser, nil, nil)
+	for _, wantID := range []string{entryA.ID, entryB.ID} {
+		reserved, _, err := repo.ReserveHeadIfAutoRun(ctx, sessionID)
+		if err != nil || reserved == nil || reserved.ID != wantID {
+			t.Fatalf("reserve %s = %#v, err=%v", wantID, reserved, err)
+		}
+	}
+	for _, cleanup := range []AttachmentCleanup{
+		{
+			SessionID: sessionID, EntryID: entryA.ID, OperationID: "cleanup-a", TaskID: taskA,
+			Attachments: []MessageAttachment{{AttachmentID: "attachment-a"}},
+		},
+		{
+			SessionID: sessionID, EntryID: entryB.ID, OperationID: "cleanup-b", TaskID: taskB,
+			Attachments: []MessageAttachment{{AttachmentID: "attachment-b"}},
+		},
+	} {
+		if err := repo.UpsertAttachmentCleanup(ctx, cleanup); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tx, err := repo.db.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PurgeTaskInTransaction(ctx, tx, repo.db, taskA, []string{sessionID}); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	claims, err := repo.ListPendingQueueDispatches(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(claims) != 1 || claims[0].Message.ID != entryB.ID {
+		t.Fatalf("remaining dispatch claims = %#v, want only %s", claims, entryB.ID)
+	}
+	cleanups, err := repo.ListAttachmentCleanups(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleanups) != 1 || cleanups[0].EntryID != entryB.ID {
+		t.Fatalf("remaining attachment cleanups = %#v, want only %s", cleanups, entryB.ID)
+	}
+}
+
 func TestSQLiteTaskPurgeCreatesAbsentRecoveryTables(t *testing.T) {
 	ctx := context.Background()
 	repo := newTestSQLiteRepo(t).(*sqliteRepository)

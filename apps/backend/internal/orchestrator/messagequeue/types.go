@@ -110,6 +110,9 @@ var (
 	// ErrLifecycleCancelled means an archive/delete purge invalidated a
 	// previously accepted lifecycle entry before it could be retried.
 	ErrLifecycleCancelled = errors.New("lifecycle queue entry cancelled")
+	// ErrQueueDispatchClaimChanged means the durable ordinary-dispatch claim
+	// was cleared or transferred before its worker attempted to settle it.
+	ErrQueueDispatchClaimChanged = errors.New("queue dispatch claim changed")
 	// ErrEditConflict means a queue entry is currently held by another editor.
 	ErrEditConflict = errors.New("queue entry edit conflict")
 	// ErrEditLeaseNotFound means a lease is missing, expired, or owned by

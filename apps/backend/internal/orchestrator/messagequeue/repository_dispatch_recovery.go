@@ -2,7 +2,9 @@ package messagequeue
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -91,6 +93,7 @@ func (r *sqliteRepository) ListPendingQueueDispatches(ctx context.Context) ([]Pe
 		`SELECT message_json, accepted FROM queue_dispatch_claims ORDER BY created_at, entry_id`,
 		"queue dispatch",
 		func(msg QueuedMessage, accepted bool) PendingQueueDispatch {
+			msg.reservationGenerationsCaptured = true
 			return PendingQueueDispatch{Message: msg, Accepted: accepted}
 		},
 	)
@@ -148,35 +151,58 @@ func (r *sqliteRepository) transferPendingQueueDispatchesTx(
 	}
 	return nil
 }
-
-func pendingQueueDispatchSessionsForTaskTx(
+func pendingQueueDispatchesForTaskTx(
 	ctx context.Context,
 	tx *sqlx.Tx,
 	taskID string,
-) ([]string, error) {
-	rows, err := tx.QueryxContext(ctx, `SELECT session_id, message_json FROM queue_dispatch_claims`)
+) ([]string, []string, error) {
+	rows, err := tx.QueryxContext(ctx, `SELECT entry_id, session_id, message_json FROM queue_dispatch_claims`)
 	if err != nil {
-		return nil, fmt.Errorf("list task queue dispatch claims: %w", err)
+		return nil, nil, fmt.Errorf("list task queue dispatch claims: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	var entryIDs []string
 	var sessions []string
 	for rows.Next() {
-		var sessionID, messageJSON string
-		if err := rows.Scan(&sessionID, &messageJSON); err != nil {
-			return nil, fmt.Errorf("scan task queue dispatch claim: %w", err)
+		var entryID, sessionID, messageJSON string
+		if err := rows.Scan(&entryID, &sessionID, &messageJSON); err != nil {
+			return nil, nil, fmt.Errorf("scan task queue dispatch claim: %w", err)
 		}
 		var msg QueuedMessage
 		if err := json.Unmarshal([]byte(messageJSON), &msg); err != nil {
-			return nil, fmt.Errorf("unmarshal task queue dispatch claim: %w", err)
+			return nil, nil, fmt.Errorf("unmarshal task queue dispatch claim: %w", err)
 		}
 		if msg.TaskID == taskID {
+			entryIDs = append(entryIDs, entryID)
 			sessions = append(sessions, sessionID)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate task queue dispatch claims: %w", err)
+		return nil, nil, fmt.Errorf("iterate task queue dispatch claims: %w", err)
 	}
-	return sessions, nil
+	return entryIDs, sessions, nil
+}
+
+func (r *sqliteRepository) validatePendingQueueDispatchTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	msg *QueuedMessage,
+) error {
+	var storedSessionID string
+	var accepted int
+	err := tx.QueryRowxContext(ctx, r.db.Rebind(`
+		SELECT session_id, accepted FROM queue_dispatch_claims WHERE entry_id = ?
+	`), msg.ID).Scan(&storedSessionID, &accepted)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrQueueDispatchClaimChanged
+	}
+	if err != nil {
+		return fmt.Errorf("read queue dispatch claim: %w", err)
+	}
+	if storedSessionID != msg.SessionID || accepted != 0 {
+		return ErrQueueDispatchClaimChanged
+	}
+	return nil
 }
 
 func (r *sqliteRepository) deletePendingQueueDispatchTx(

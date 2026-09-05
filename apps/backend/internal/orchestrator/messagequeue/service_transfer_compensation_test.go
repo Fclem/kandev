@@ -80,3 +80,49 @@ func TestDurableSessionTransferPersistsBeforeExternalPreparation(t *testing.T) {
 	require.Len(t, compensations, 1)
 	assert.Equal(t, "session-new", compensations[0].ToSessionID)
 }
+
+func TestDurableSessionTransferIncludesInFlightOrdinaryAttachment(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t)
+	service := newAutoMergeTestServiceWithRepository(t, repo, DefaultMaxPerSession)
+	queued, err := service.QueueMessage(
+		ctx,
+		"session-old",
+		"task",
+		"handoff",
+		"",
+		QueuedByUser,
+		false,
+		[]MessageAttachment{{AttachmentID: "attachment"}},
+	)
+	require.NoError(t, err)
+	reserved, ok := service.ReserveQueued(ctx, queued.SessionID)
+	require.True(t, ok)
+	require.Equal(t, queued.ID, reserved.ID)
+	assert.Empty(t, service.GetStatus(ctx, queued.SessionID).Entries)
+	prepareCalls := 0
+
+	err = service.TransferSessionWithDurablePreparation(
+		ctx,
+		queued.TaskID,
+		queued.SessionID,
+		"session-new",
+		func(context.Context) error {
+			prepareCalls++
+			compensations, listErr := service.ListSessionTransferCompensations(ctx)
+			require.NoError(t, listErr)
+			require.Len(t, compensations, 1)
+			assert.Equal(t, []string{queued.ID}, compensations[0].EntryIDs)
+			return nil
+		},
+		nil,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, prepareCalls)
+	pending, err := service.ListPendingQueueDispatches(ctx)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	assert.Equal(t, "session-new", pending[0].Message.SessionID)
+	assert.Equal(t, queued.ID, pending[0].Message.ID)
+}

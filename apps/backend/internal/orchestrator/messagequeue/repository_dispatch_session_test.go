@@ -2,6 +2,7 @@ package messagequeue
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -45,5 +46,71 @@ func TestSQLiteReplaceSessionInvalidatesOrdinaryDispatchClaims(t *testing.T) {
 	}
 	if len(pending) != 0 {
 		t.Fatalf("dispatch claims after replacement = %#v, want empty", pending)
+	}
+}
+
+func TestSQLiteStaleOrdinarySettlementCannotResurrectAfterSessionMutation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(context.Context, *Service, *QueuedMessage) error
+		settle func(context.Context, *Service, *QueuedMessage) error
+	}{
+		{
+			name: "transfer before restore",
+			mutate: func(ctx context.Context, service *Service, msg *QueuedMessage) error {
+				return service.TransferSession(ctx, msg.SessionID, "session-transfer-destination")
+			},
+			settle: func(ctx context.Context, service *Service, msg *QueuedMessage) error {
+				_, err := service.RestoreMessage(ctx, msg)
+				return err
+			},
+		},
+		{
+			name: "replace before requeue",
+			mutate: func(ctx context.Context, service *Service, msg *QueuedMessage) error {
+				return service.repo.ReplaceSession(ctx, msg.SessionID, nil, nil)
+			},
+			settle: func(ctx context.Context, service *Service, msg *QueuedMessage) error {
+				return service.RequeueAtHead(ctx, msg)
+			},
+		},
+		{
+			name: "clear before restore",
+			mutate: func(ctx context.Context, service *Service, msg *QueuedMessage) error {
+				_, err := service.CancelAll(ctx, msg.SessionID)
+				return err
+			},
+			settle: func(ctx context.Context, service *Service, msg *QueuedMessage) error {
+				_, err := service.RestoreMessage(ctx, msg)
+				return err
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := newTestSQLiteRepo(t)
+			service := setupService(t)
+			service.repo = repo
+			source, err := service.QueueMessage(
+				ctx, "session-stale", "task-stale", "prompt", "", QueuedByUser, false, nil,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reserved, ok := service.ReserveQueued(ctx, source.SessionID)
+			if !ok || reserved.ID != source.ID {
+				t.Fatalf("reserved = %#v, ok=%t", reserved, ok)
+			}
+			if err := tc.mutate(ctx, service, reserved); err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.settle(ctx, service, reserved); !errors.Is(err, ErrQueueDispatchClaimChanged) {
+				t.Fatalf("stale settlement error = %v, want %v", err, ErrQueueDispatchClaimChanged)
+			}
+			if entries, err := repo.ListBySession(ctx, source.SessionID); err != nil || len(entries) != 0 {
+				t.Fatalf("stale source queue = %#v, err=%v", entries, err)
+			}
+		})
 	}
 }

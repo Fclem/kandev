@@ -386,6 +386,11 @@ func (r *sqliteRepository) RequeuePreservingFIFO(ctx context.Context, msg *Queue
 	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
 		return err
 	}
+	if msg.reservationGenerationsCaptured && !msg.IsDurableLifecycle() {
+		if err := r.validatePendingQueueDispatchTx(ctx, tx, msg); err != nil {
+			return err
+		}
+	}
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
 		return err
 	}
@@ -541,6 +546,11 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 	}
 	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
 		return err
+	}
+	if msg.reservationGenerationsCaptured && !msg.IsDurableLifecycle() {
+		if err := r.validatePendingQueueDispatchTx(ctx, tx, msg); err != nil {
+			return err
+		}
 	}
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
 		return err
@@ -913,23 +923,18 @@ func deleteTaskRecoveryRowsTx(
 	tx *sqlx.Tx,
 	db *sqlx.DB,
 	taskID string,
-	sessionIDs []string,
+	dispatchEntryIDs []string,
 ) error {
 	if _, err := tx.ExecContext(ctx, db.Rebind(`
 		DELETE FROM queue_attachment_cleanups WHERE task_id = ?
 	`), taskID); err != nil {
 		return fmt.Errorf("purge task attachment cleanups: %w", err)
 	}
-	for _, sessionID := range sessionIDs {
+	for _, entryID := range dispatchEntryIDs {
 		if _, err := tx.ExecContext(ctx, db.Rebind(`
-			DELETE FROM queue_dispatch_claims WHERE session_id = ?
-		`), sessionID); err != nil {
-			return fmt.Errorf("purge task dispatch claims: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, db.Rebind(`
-			DELETE FROM queue_attachment_cleanups WHERE session_id = ?
-		`), sessionID); err != nil {
-			return fmt.Errorf("purge session attachment cleanups: %w", err)
+			DELETE FROM queue_dispatch_claims WHERE entry_id = ?
+		`), entryID); err != nil {
+			return fmt.Errorf("purge task dispatch claim: %w", err)
 		}
 	}
 	return nil
@@ -962,7 +967,7 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	if err != nil {
 		return 0, err
 	}
-	dispatchSessions, err := pendingQueueDispatchSessionsForTaskTx(ctx, tx, taskID)
+	dispatchEntryIDs, dispatchSessions, err := pendingQueueDispatchesForTaskTx(ctx, tx, taskID)
 	if err != nil {
 		return 0, err
 	}
@@ -995,7 +1000,7 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	if _, err := tx.ExecContext(ctx, db.Rebind(`DELETE FROM pending_moves WHERE task_id = ?`), taskID); err != nil {
 		return 0, fmt.Errorf("purge pending task moves: %w", err)
 	}
-	if err := deleteTaskRecoveryRowsTx(ctx, tx, db, taskID, ordered); err != nil {
+	if err := deleteTaskRecoveryRowsTx(ctx, tx, db, taskID, dispatchEntryIDs); err != nil {
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, db.Rebind(`

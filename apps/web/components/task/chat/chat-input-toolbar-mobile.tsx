@@ -68,7 +68,7 @@ function mobileContextButton(contextCount: number, presentation: "desktop" | "mo
       type="button"
       variant="ghost"
       size="sm"
-      className={`${presentation === "mobile" ? "min-h-11 min-w-11" : "h-7"} gap-1.5 px-2 cursor-pointer hover:bg-muted/40 relative [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11`}
+      className={`${presentation === "mobile" ? "min-h-11 min-w-11" : "h-7"} gap-1.5 px-2 cursor-pointer hover:bg-muted/40 relative`}
       data-testid="chat-context-button"
       aria-label={t("task:sessionContext")}
     >

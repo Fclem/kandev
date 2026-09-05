@@ -54,7 +54,7 @@ function ToolbarExpandToggle(props: { isExpanded: boolean; onToggle: () => void 
           size="icon"
           aria-label={props.isExpanded ? t("task:collapseToolbar") : t("task:moreToolbarActions")}
           aria-expanded={props.isExpanded}
-          className="h-7 w-7 cursor-pointer hover:bg-muted/40 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+          className="h-7 w-7 cursor-pointer hover:bg-muted/40"
           data-testid="toolbar-overflow-menu"
           onClick={props.onToggle}
         >
@@ -235,7 +235,7 @@ export function DesktopChatInputToolbar(props: DesktopToolbarProps) {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 relative [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+              className="h-7 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 relative"
               data-testid="chat-context-button"
               aria-label={t("task:sessionContext")}
             >

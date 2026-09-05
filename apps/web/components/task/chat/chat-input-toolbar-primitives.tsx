@@ -20,9 +20,6 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 
-const coarsePointerSizeClass =
-  "[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11";
-
 type SubmitButtonProps = {
   isAgentBusy: boolean;
   canCancelAgent?: boolean;
@@ -85,7 +82,6 @@ function SendSubmitButton({
             presentation === "mobile"
               ? "min-h-11 min-w-11 rounded-full cursor-pointer"
               : "h-7 w-7 rounded-full cursor-pointer",
-            coarsePointerSizeClass,
             planModeEnabled && "bg-violet-600 hover:bg-violet-500",
           )}
           disabled={isDisabled}
@@ -155,7 +151,6 @@ export function SubmitButton({
               className={cn(
                 presentation === "mobile" ? "min-h-11 min-w-11" : "h-7 w-7",
                 "rounded-full cursor-pointer bg-destructive/10 text-destructive hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-70",
-                coarsePointerSizeClass,
               )}
               onClick={handleCancelClick}
               disabled={isCancelling}
@@ -219,7 +214,6 @@ export function PlanToggleButton({
             presentation === "mobile"
               ? "min-h-11 min-w-11 gap-1.5 px-2 hover:bg-muted/40 cursor-pointer"
               : "h-7 gap-1.5 px-2 hover:bg-muted/40 cursor-pointer",
-            coarsePointerSizeClass,
             planModeEnabled && planModeAvailable && "bg-violet-500/15 text-violet-400",
           )}
           onClick={() => onPlanModeChange(!planModeEnabled)}
@@ -251,7 +245,6 @@ export function AttachFilesButton({
             presentation === "mobile"
               ? "min-h-11 min-w-11 gap-1.5 px-2 cursor-pointer hover:bg-muted/40"
               : "h-7 gap-1.5 px-2 cursor-pointer hover:bg-muted/40",
-            coarsePointerSizeClass,
           )}
           onClick={onClick}
           data-testid="chat-attachments-button"

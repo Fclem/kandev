@@ -42,6 +42,7 @@ class RevokeReadyToMergeWorkflowContractTest(unittest.TestCase):
     # @covers AC-CI-MERGE-APPROVAL-001.2
     def test_reads_and_independently_cleans_active_merge_states(self) -> None:
         self.assertIn("autoMergeRequest { enabledAt }", self.workflow)
+        self.assertNotIn("autoMergeRequest { id }", self.workflow)
         self.assertIn("mergeQueueEntry { id }", self.workflow)
         self.assertIn("disablePullRequestAutoMerge", self.workflow)
         self.assertIn("dequeuePullRequest", self.workflow)
@@ -51,6 +52,7 @@ class RevokeReadyToMergeWorkflowContractTest(unittest.TestCase):
             "currentPullRequest.autoMergeRequest ? currentPullRequest.id : null",
             self.workflow,
         )
+        self.assertNotIn("currentPullRequest.autoMergeRequest?.id", self.workflow)
         self.assertIn("currentPullRequest.mergeQueueEntry?.id", self.workflow)
         self.assertIn("attemptCleanup(\n                'auto-merge',", self.workflow)
         self.assertIn("attemptCleanup(\n                'merge queue',", self.workflow)

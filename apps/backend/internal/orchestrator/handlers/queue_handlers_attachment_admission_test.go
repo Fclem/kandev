@@ -334,6 +334,153 @@ func TestAdmissionCleanupDoesNotMutateReplacementEntryAfterRestart(t *testing.T)
 	require.Zero(t, claimer.claims.Load())
 }
 
+func TestAdmissionCleanupStillRemovesReorderedEntryAfterRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	_, queue, db := newPersistentCleanupQueue(t, dbPath)
+	ctx := context.Background()
+	target, err := queue.QueueMessage(
+		ctx, "session-cleanup-reorder", "task-cleanup-reorder", "target", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "attachment-reorder",
+			Name: "reorder.txt", MimeType: "text/plain", SizeBytes: 1,
+		}},
+	)
+	require.NoError(t, err)
+	other, err := queue.QueueMessage(
+		ctx, target.SessionID, target.TaskID, "other", "",
+		messagequeue.QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	fingerprint, err := queuedMessageFingerprint(target)
+	require.NoError(t, err)
+	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
+		SessionID: target.SessionID, EntryID: target.ID, OperationID: "admission-reordered",
+		TaskID: target.TaskID, OwnerID: "owner", RemoveEntry: true,
+		EntryFingerprint: fingerprint, Attachments: target.Attachments,
+	}))
+	require.NoError(t, queue.ReorderEntries(ctx, target.SessionID, []string{other.ID, target.ID}))
+	require.NoError(t, db.Close())
+
+	restarted, restartedQueue, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	defer func() { _ = restartedDB.Close() }()
+	claimer := &admissionClaimRecoveryClaimer{}
+	restarted.SetAttachmentClaimer(claimer)
+	restarted.Start(context.Background())
+	defer restarted.Stop()
+
+	require.Eventually(t, func() bool {
+		_, getErr := restartedQueue.GetEntry(ctx, target.SessionID, target.ID)
+		return errors.Is(getErr, messagequeue.ErrEntryNotFound) && claimer.releases.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestAdmissionCleanupFollowsTransferredEntryAfterRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	_, queue, db := newPersistentCleanupQueue(t, dbPath)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(
+		ctx, "session-cleanup-transfer-old", "task-cleanup-transfer", "queued", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "attachment-transfer",
+			Name: "transfer.txt", MimeType: "text/plain", SizeBytes: 1,
+		}},
+	)
+	require.NoError(t, err)
+	fingerprint, err := queuedMessageFingerprint(entry)
+	require.NoError(t, err)
+	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
+		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: "admission-transferred",
+		TaskID: entry.TaskID, OwnerID: "owner", RemoveEntry: true,
+		EntryFingerprint: fingerprint, Attachments: entry.Attachments,
+	}))
+	const destinationSessionID = "session-cleanup-transfer-new"
+	require.NoError(t, queue.TransferSession(ctx, entry.SessionID, destinationSessionID))
+	require.NoError(t, db.Close())
+
+	restarted, restartedQueue, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	defer func() { _ = restartedDB.Close() }()
+	claimer := &admissionClaimRecoveryClaimer{}
+	restarted.SetAttachmentClaimer(claimer)
+	restarted.Start(context.Background())
+	defer restarted.Stop()
+
+	require.Eventually(t, func() bool {
+		_, getErr := restartedQueue.GetEntry(ctx, destinationSessionID, entry.ID)
+		return errors.Is(getErr, messagequeue.ErrEntryNotFound) && claimer.releases.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	cleanups, err := restartedQueue.ListAttachmentCleanups(ctx)
+	require.NoError(t, err)
+	require.Empty(t, cleanups)
+}
+
+type transferReadObservingQueue struct {
+	*messagequeue.Service
+	destinationSessionID string
+	destinationReads     atomic.Int32
+}
+
+func (q *transferReadObservingQueue) GetEntry(
+	ctx context.Context,
+	sessionID, entryID string,
+) (*messagequeue.QueuedMessage, error) {
+	if sessionID == q.destinationSessionID {
+		q.destinationReads.Add(1)
+	}
+	return q.Service.GetEntry(ctx, sessionID, entryID)
+}
+
+func TestTransferredAdmissionCleanupRetainsObligationOnContentMismatch(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	_, queue, db := newPersistentCleanupQueue(t, dbPath)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(
+		ctx, "session-cleanup-transfer-mismatch-old", "task-cleanup-transfer-mismatch", "original", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "attachment-transfer-mismatch",
+			Name: "transfer-mismatch.txt", MimeType: "text/plain", SizeBytes: 1,
+		}},
+	)
+	require.NoError(t, err)
+	fingerprint, err := queuedMessageFingerprint(entry)
+	require.NoError(t, err)
+	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
+		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: "admission-transfer-mismatch",
+		TaskID: entry.TaskID, OwnerID: "owner", RemoveEntry: true,
+		EntryFingerprint: fingerprint, Attachments: entry.Attachments,
+	}))
+	const destinationSessionID = "session-cleanup-transfer-mismatch-new"
+	require.NoError(t, queue.TransferSession(ctx, entry.SessionID, destinationSessionID))
+	require.NoError(t, queue.UpdateMessageWithMetadata(
+		ctx, destinationSessionID, entry.ID, "replacement", entry.Attachments, nil, messagequeue.QueuedByUser,
+	))
+	require.NoError(t, db.Close())
+
+	restarted, restartedQueue, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	defer func() { _ = restartedDB.Close() }()
+	observedQueue := &transferReadObservingQueue{
+		Service: restartedQueue, destinationSessionID: destinationSessionID,
+	}
+	restarted.queueService = observedQueue
+	claimer := &admissionClaimRecoveryClaimer{}
+	restarted.SetAttachmentClaimer(claimer)
+	restarted.Start(context.Background())
+	defer restarted.Stop()
+
+	require.Eventually(t, func() bool {
+		return observedQueue.destinationReads.Load() >= 2
+	}, time.Second, 10*time.Millisecond)
+	current, err := restartedQueue.GetEntry(ctx, destinationSessionID, entry.ID)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", current.Content)
+	cleanups, err := restartedQueue.ListAttachmentCleanups(ctx)
+	require.NoError(t, err)
+	require.Len(t, cleanups, 1)
+	require.Zero(t, claimer.releases.Load())
+}
+
 func TestAdmissionCleanupWaitsForAnyActiveEditLease(t *testing.T) {
 	handlers, queue := setupQueueHandlers(t)
 	ctx := context.Background()
@@ -345,11 +492,74 @@ func TestAdmissionCleanupWaitsForAnyActiveEditLease(t *testing.T) {
 	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
 	require.NoError(t, err)
 	pending := &pendingQueueAttachmentCleanup{
-		req:     wsUpdateMessageRequest{SessionID: entry.SessionID, EntryID: entry.ID},
+		req: wsUpdateMessageRequest{
+			SessionID: entry.SessionID, EntryID: entry.ID, LeaseID: "superseded-lease",
+		},
 		authCtx: ctx,
 	}
 
 	require.True(t, handlers.editLeaseActive(pending))
 	require.NoError(t, queue.EndEdit(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection"))
 	require.False(t, handlers.editLeaseActive(pending))
+}
+
+type leaseAfterCleanupPrecheckQueue struct {
+	QueueService
+	service *messagequeue.Service
+	active  atomic.Bool
+}
+
+func (q *leaseAfterCleanupPrecheckQueue) GetEditLease(
+	context.Context,
+	string,
+	string,
+) (*messagequeue.QueueEditLease, error) {
+	if !q.active.Load() {
+		return nil, messagequeue.ErrEditLeaseNotFound
+	}
+	return &messagequeue.QueueEditLease{LeaseID: "successor-lease"}, nil
+}
+
+func (q *leaseAfterCleanupPrecheckQueue) WithSessionAdmission(
+	ctx context.Context,
+	sessionID string,
+	fn func(context.Context) error,
+) error {
+	q.active.Store(true)
+	return q.service.WithSessionAdmission(ctx, sessionID, fn)
+}
+func TestAdmissionCleanupRechecksLeaseInsideAdmission(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner"})
+	entry, err := queue.QueueMessage(
+		ctx, "session-cleanup-toctou", "task-cleanup-toctou", "queued", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "attachment-toctou",
+			Name: "toctou.txt", MimeType: "text/plain", SizeBytes: 1,
+		}},
+	)
+	require.NoError(t, err)
+	fingerprint, err := queuedMessageFingerprint(entry)
+	require.NoError(t, err)
+	releaser := &controlledCleanupClaimer{}
+	wrapped := &leaseAfterCleanupPrecheckQueue{QueueService: queue, service: queue}
+	handlers.queueService = wrapped
+	pending := &pendingQueueAttachmentCleanup{
+		req: wsUpdateMessageRequest{
+			SessionID: entry.SessionID, EntryID: entry.ID, LeaseID: "superseded-lease",
+		},
+		previous: &messagequeue.QueuedMessage{
+			ID: entry.ID, SessionID: entry.SessionID, TaskID: entry.TaskID,
+			Attachments: entry.Attachments,
+		},
+		releaser: releaser, removeEntry: true, claimPending: true,
+		entryFingerprint: fingerprint, authCtx: ctx,
+	}
+
+	require.False(t, handlers.editLeaseActive(pending))
+	require.Error(t, handlers.runPendingAttachmentCleanup(pending))
+	_, err = queue.GetEntry(ctx, entry.SessionID, entry.ID)
+	require.NoError(t, err)
+	require.Zero(t, releaser.released.Load())
 }

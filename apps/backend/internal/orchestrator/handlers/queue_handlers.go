@@ -428,8 +428,10 @@ func (h *QueueHandlers) wsQueueMessage(ctx context.Context, msg *ws.Message) (*w
 }
 
 var (
-	errQueuedAttachmentUnavailable = errors.New("queued attachment unavailable")
-	errQueuedAttachmentRollback    = errors.New("queued attachment rollback failed")
+	errQueuedAttachmentUnavailable   = errors.New("queued attachment unavailable")
+	errQueuedAttachmentRollback      = errors.New("queued attachment rollback failed")
+	errAttachmentCleanupLeaseActive  = errors.New("queue attachment cleanup blocked by edit lease")
+	errAttachmentCleanupEntryChanged = errors.New("queue attachment cleanup entry changed")
 )
 
 func (h *QueueHandlers) admitQueuedMessage(ctx context.Context, req *wsQueueMessageRequest, queuedBy string, metadata map[string]interface{}) (*messagequeue.QueuedMessage, error) {
@@ -1346,7 +1348,7 @@ func (h *QueueHandlers) editLeaseActive(pending *pendingQueueAttachmentCleanup) 
 	if err != nil {
 		return !errors.Is(err, messagequeue.ErrEditLeaseNotFound)
 	}
-	return lease != nil && (pending.req.LeaseID == "" || lease.LeaseID == pending.req.LeaseID)
+	return lease != nil
 }
 
 func (h *QueueHandlers) waitForAttachmentCleanupRetry(delay time.Duration, wake <-chan struct{}) bool {
@@ -1376,13 +1378,57 @@ func (h *QueueHandlers) signalPendingAttachmentCleanup(sessionID, entryID string
 }
 
 func (h *QueueHandlers) runPendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) error {
+	if pending.removeEntry || pending.claimPending {
+		found, err := h.retargetPendingAttachmentCleanup(pending)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return h.releaseSupersededQueueAttachmentsAdmitted(
+				pending.authCtx, pending.req, pending.previous, pending.releaser,
+			)
+		}
+	}
 	cleanup := func(ctx context.Context) error {
+		if h.editLeaseActive(pending) {
+			return errAttachmentCleanupLeaseActive
+		}
 		return h.settlePendingAttachmentCleanupAdmitted(ctx, pending)
 	}
 	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
 		return admission.WithSessionAdmission(pending.authCtx, pending.req.SessionID, cleanup)
 	}
 	return cleanup(pending.authCtx)
+}
+
+func (h *QueueHandlers) retargetPendingAttachmentCleanup(
+	pending *pendingQueueAttachmentCleanup,
+) (bool, error) {
+	current, err := h.queueService.GetEntry(
+		pending.authCtx, pending.req.SessionID, pending.req.EntryID,
+	)
+	if err == nil {
+		return current != nil, nil
+	}
+	if !errors.Is(err, messagequeue.ErrEntryNotFound) {
+		return false, err
+	}
+	locator, ok := h.queueService.(queueEntryLocator)
+	if !ok {
+		return false, nil
+	}
+	current, err = locator.FindEntryByID(pending.authCtx, pending.req.EntryID)
+	if errors.Is(err, messagequeue.ErrEntryNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if current == nil {
+		return false, nil
+	}
+	pending.req.SessionID = current.SessionID
+	return true, nil
 }
 
 func (h *QueueHandlers) settlePendingAttachmentCleanupAdmitted(
@@ -1396,9 +1442,7 @@ func (h *QueueHandlers) settlePendingAttachmentCleanupAdmitted(
 	}
 	current, err := h.queueService.GetEntry(ctx, pending.req.SessionID, pending.req.EntryID)
 	if errors.Is(err, messagequeue.ErrEntryNotFound) {
-		return h.releaseSupersededQueueAttachmentsAdmitted(
-			ctx, pending.req, pending.previous, pending.releaser,
-		)
+		return errAttachmentCleanupEntryChanged
 	}
 	if err != nil {
 		return err
@@ -1408,6 +1452,9 @@ func (h *QueueHandlers) settlePendingAttachmentCleanupAdmitted(
 		return err
 	}
 	if pending.entryFingerprint == "" || currentFingerprint != pending.entryFingerprint {
+		if pending.req.SessionID != pending.key.sessionID {
+			return errAttachmentCleanupEntryChanged
+		}
 		return h.releaseSupersededQueueAttachmentsAdmitted(
 			ctx, pending.req, pending.previous, pending.releaser,
 		)
@@ -1442,9 +1489,7 @@ func queuedMessageFingerprint(msg *messagequeue.QueuedMessage) (string, error) {
 	}
 	encoded, err := json.Marshal(struct {
 		ID          string                           `json:"id"`
-		SessionID   string                           `json:"session_id"`
 		TaskID      string                           `json:"task_id"`
-		Position    int64                            `json:"position"`
 		Content     string                           `json:"content"`
 		Model       string                           `json:"model"`
 		PlanMode    bool                             `json:"plan_mode"`
@@ -1453,8 +1498,7 @@ func queuedMessageFingerprint(msg *messagequeue.QueuedMessage) (string, error) {
 		QueuedAt    time.Time                        `json:"queued_at"`
 		QueuedBy    string                           `json:"queued_by"`
 	}{
-		ID: msg.ID, SessionID: msg.SessionID, TaskID: msg.TaskID, Position: msg.Position,
-		Content: msg.Content, Model: msg.Model, PlanMode: msg.PlanMode,
+		ID: msg.ID, TaskID: msg.TaskID, Content: msg.Content, Model: msg.Model, PlanMode: msg.PlanMode,
 		Attachments: attachments, Metadata: metadata, QueuedAt: msg.QueuedAt.UTC(), QueuedBy: msg.QueuedBy,
 	})
 	if err != nil {

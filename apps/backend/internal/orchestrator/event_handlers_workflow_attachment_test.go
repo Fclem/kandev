@@ -2,10 +2,15 @@ package orchestrator
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type workflowAttachmentTransferStub struct {
@@ -35,7 +40,8 @@ func TestTransferQueuedSessionStateRebindsAttachments(t *testing.T) {
 		messageQueue:                messagequeue.NewServiceMemory(testLogger()),
 		sessionAttachmentTransferer: transfer,
 	}
-	queued, err := svc.messageQueue.QueueMessage(ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false, nil)
+	queued, err := svc.messageQueue.QueueMessage(ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +69,8 @@ func TestTransferQueuedSessionStateSerializesAttachmentTransferWithQueueMutation
 		messageQueue:                messagequeue.NewServiceMemory(testLogger()),
 		sessionAttachmentTransferer: transfer,
 	}
-	queued, err := svc.messageQueue.QueueMessage(ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false, nil)
+	queued, err := svc.messageQueue.QueueMessage(ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,4 +104,96 @@ func TestTransferQueuedSessionStateSerializesAttachmentTransferWithQueueMutation
 	if err := <-mutationDone; err == nil {
 		t.Fatal("queue mutation unexpectedly succeeded after transfer")
 	}
+}
+
+type statefulWorkflowAttachmentTransfer struct {
+	currentSession string
+	rollbackErr    error
+	calls          int
+}
+
+func (s *statefulWorkflowAttachmentTransfer) TransferSessionMessageAttachments(
+	_ context.Context,
+	_ string,
+	oldSessionID, newSessionID string,
+) error {
+	s.calls++
+	if s.currentSession != oldSessionID {
+		return errors.New("attachment session mismatch")
+	}
+	if s.calls > 1 && s.rollbackErr != nil {
+		return s.rollbackErr
+	}
+	s.currentSession = newSessionID
+	return nil
+}
+
+func TestTransferQueuedSessionStateRecoversFailedAttachmentCompensationAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	queue, db := newWorkflowTransferQueue(t, dbPath)
+	_, err := queue.QueueMessage(ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_workflow_queue_transfer
+		BEFORE UPDATE OF session_id ON queued_messages
+		BEGIN
+			SELECT RAISE(ABORT, 'forced queue transfer failure');
+		END
+	`); err != nil {
+		t.Fatal(err)
+	}
+	transfer := &statefulWorkflowAttachmentTransfer{
+		currentSession: "session-old",
+		rollbackErr:    errors.New("forced attachment rollback failure"),
+	}
+	svc := &Service{logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer}
+
+	if err := svc.transferQueuedSessionState(ctx, "task-transfer", "session-old", "session-new"); err == nil {
+		t.Fatal("transfer unexpectedly succeeded")
+	}
+	if transfer.currentSession != "session-new" {
+		t.Fatalf("attachment session after failed compensation = %q, want session-new before recovery", transfer.currentSession)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restartedQueue, restartedDB := newWorkflowTransferQueue(t, dbPath)
+	t.Cleanup(func() { _ = restartedDB.Close() })
+	transfer.rollbackErr = nil
+	restarted := &Service{
+		logger: testLogger(), messageQueue: restartedQueue, sessionAttachmentTransferer: transfer,
+	}
+	reconciler, ok := any(restarted).(interface {
+		reconcileSessionTransferCompensationsOnStartup(context.Context) error
+	})
+	if !ok {
+		t.Fatal("orchestrator has no durable session-transfer compensation reconciler")
+	}
+	if err := reconciler.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if transfer.currentSession != "session-old" {
+		t.Fatalf("attachment session after recovery = %q, want session-old", transfer.currentSession)
+	}
+}
+
+func newWorkflowTransferQueue(t *testing.T, dbPath string) (*messagequeue.Service, *sqlx.DB) {
+	t.Helper()
+	raw, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw.SetMaxOpenConns(1)
+	db := sqlx.NewDb(raw, "sqlite3")
+	repo, err := messagequeue.NewSQLiteRepository(db, db)
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	return messagequeue.NewService(repo, messagequeue.DefaultMaxPerSession, testLogger()), db
 }

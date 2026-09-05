@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/entityrefs"
 	"github.com/kandev/kandev/internal/events"
@@ -267,6 +269,10 @@ func (h *QueueHandlers) loadPendingAttachmentCleanupsLocked(ctx context.Context)
 		if _, exists := h.pendingAttachmentCleanup[key]; exists {
 			continue
 		}
+		authCtx := context.WithoutCancel(ctx)
+		if cleanup.OwnerID != "" {
+			authCtx = authn.WithIdentity(authCtx, authn.Identity{UserID: cleanup.OwnerID})
+		}
 		h.pendingAttachmentCleanup[key] = &pendingQueueAttachmentCleanup{
 			key: key,
 			req: wsUpdateMessageRequest{
@@ -280,7 +286,7 @@ func (h *QueueHandlers) loadPendingAttachmentCleanupsLocked(ctx context.Context)
 				Attachments: cleanup.Attachments,
 			},
 			releaser: releaser,
-			authCtx:  context.WithoutCancel(ctx),
+			authCtx:  authCtx,
 			wake:     make(chan struct{}, 1),
 		}
 	}
@@ -464,18 +470,41 @@ func (h *QueueHandlers) wsCancelAll(ctx context.Context, msg *ws.Message) (*ws.M
 	var countRemovedEntries bool
 	var err error
 	cancel := func(cancelCtx context.Context) error {
+		prepared := make(map[string]*pendingQueueAttachmentCleanup)
+		status := h.queueService.GetStatus(cancelCtx, req.SessionID)
+		if status != nil {
+			for i := range status.Entries {
+				entry := &status.Entries[i]
+				if entry.IsReservedInFlight() {
+					continue
+				}
+				pending, prepareErr := h.prepareEntryRemovalCleanup(cancelCtx, entry, "cancel")
+				if prepareErr != nil {
+					for _, earlier := range prepared {
+						h.settlePendingAttachmentCleanup(earlier, nil)
+					}
+					return prepareErr
+				}
+				if pending != nil {
+					prepared[entry.ID] = pending
+				}
+			}
+		}
+
 		var err error
 		if batchCanceller, ok := h.queueService.(queueBatchCanceller); ok {
 			removedEntries, err = batchCanceller.CancelAllWithEntries(cancelCtx, req.SessionID)
 			countRemovedEntries = true
 		} else {
-			status := h.queueService.GetStatus(cancelCtx, req.SessionID)
 			removed, err = h.queueService.CancelAll(cancelCtx, req.SessionID)
 			if err == nil && status != nil {
 				removedEntries = status.Entries
 			}
 		}
 		if err != nil {
+			for _, pending := range prepared {
+				h.settlePendingAttachmentCleanup(pending, nil)
+			}
 			return err
 		}
 		for i := range removedEntries {
@@ -483,7 +512,7 @@ func (h *QueueHandlers) wsCancelAll(ctx context.Context, msg *ws.Message) (*ws.M
 				if countRemovedEntries {
 					removed++
 				}
-				h.releaseQueuedAttachments(cancelCtx, &removedEntries[i])
+				h.releaseQueuedAttachments(cancelCtx, &removedEntries[i], prepared[removedEntries[i].ID])
 			}
 		}
 		return nil
@@ -859,14 +888,43 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 		newlyAdded = newlyAddedQueueAttachments(previous.Attachments, req.Attachments)
 		releaseClaims, _ = h.attachmentClaimer.(QueueAttachmentReleaser)
 	}
+	var supersededPending *pendingQueueAttachmentCleanup
+	if releaseClaims != nil && previous != nil {
+		cleanupReq := req
+		cleanupReq.OperationID = attachmentCleanupOperationID(req.OperationID, "superseded")
+		var prepareErr error
+		supersededPending, prepareErr = h.preparePendingAttachmentCleanup(
+			ctx,
+			cleanupReq,
+			previous.TaskID,
+			supersededQueueAttachments(previous.Attachments, req.Attachments),
+			releaseClaims,
+		)
+		if prepareErr != nil {
+			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, prepareErr.Error(), nil)
+		}
+	}
 	var revision int64
 	var updateErr error
 	applyUpdate := func(updateCtx context.Context) (int64, error) {
 		attachmentsToClaim := newlyAdded
 		newlyAdded = nil
+		var rollbackPending *pendingQueueAttachmentCleanup
 		if h.attachmentClaimer != nil {
+			rollbackReq := req
+			rollbackReq.OperationID = attachmentCleanupOperationID(req.OperationID, "claim-rollback")
+			var prepareErr error
+			rollbackPending, prepareErr = h.preparePendingAttachmentCleanup(
+				updateCtx, rollbackReq, previous.TaskID, attachmentsToClaim, releaseClaims,
+			)
+			if prepareErr != nil {
+				return 0, prepareErr
+			}
 			if err := h.attachmentClaimer.ClaimMessageAttachments(updateCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(attachmentsToClaim)); err != nil {
-				h.releaseQueuedAttachmentUpdateFailure(updateCtx, previous, req.SessionID, attachmentsToClaim, releaseClaims)
+				releaseErr := h.releaseQueuedAttachmentUpdateFailure(
+					updateCtx, previous, req.SessionID, attachmentsToClaim, releaseClaims,
+				)
+				h.settlePendingAttachmentCleanup(rollbackPending, releaseErr)
 				return 0, fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
 			}
 		}
@@ -879,22 +937,32 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 				req.Content, req.Attachments, metadataUpdates, queuedBy)
 		}
 		if updateErr != nil && h.attachmentClaimer != nil {
-			h.releaseQueuedAttachmentUpdateFailure(updateCtx, previous, req.SessionID, attachmentsToClaim, releaseClaims)
+			releaseErr := h.releaseQueuedAttachmentUpdateFailure(
+				updateCtx, previous, req.SessionID, attachmentsToClaim, releaseClaims,
+			)
+			h.settlePendingAttachmentCleanup(rollbackPending, releaseErr)
+		} else {
+			h.settlePendingAttachmentCleanup(rollbackPending, nil)
 		}
 		return revision, updateErr
 	}
 	if connectionID != "" && h.attachmentClaimer != nil {
 		revision, updateErr = h.updateMessageWithAttachmentLease(
-			ctx, req, connectionID, previous, releaseClaims, &newlyAdded, metadataUpdates, applyUpdate,
+			ctx, req, connectionID, previous, releaseClaims, supersededPending,
+			&newlyAdded, metadataUpdates, applyUpdate,
 		)
 	} else {
 		revision, updateErr = applyUpdate(ctx)
 	}
 	if updateErr != nil {
+		h.settlePendingAttachmentCleanup(supersededPending, nil)
 		return h.queueUpdateFailure(ctx, msg, req, updateErr)
 	}
-	if releaseClaims != nil && previous != nil && (connectionID == "" || h.attachmentClaimer == nil) {
-		h.releaseSupersededQueueAttachments(ctx, req, previous, releaseClaims)
+	if releaseClaims != nil && supersededPending != nil && connectionID == "" {
+		releaseErr := h.releaseSupersededQueueAttachments(
+			ctx, supersededPending.req, supersededPending.previous, releaseClaims,
+		)
+		h.settlePendingAttachmentCleanup(supersededPending, releaseErr)
 	}
 	response := map[string]interface{}{fieldEntryID: req.EntryID}
 	if req.OperationID != "" {
@@ -911,18 +979,20 @@ func (h *QueueHandlers) releaseQueuedAttachmentUpdateFailure(
 	sessionID string,
 	newlyAdded []messagequeue.MessageAttachment,
 	releaseClaims QueueAttachmentReleaser,
-) {
+) error {
 	if releaseClaims == nil || previous == nil || len(newlyAdded) == 0 {
-		return
+		return nil
 	}
 	cleanupCtx := context.WithoutCancel(ctx)
 	candidates := h.unreferencedQueueAttachments(cleanupCtx, sessionID, previous.ID, newlyAdded)
 	if len(candidates) == 0 {
-		return
+		return nil
 	}
 	if releaseErr := releaseClaims.ReleaseMessageAttachments(cleanupCtx, previous.TaskID, sessionID, queueAttachmentsToV1(candidates)); releaseErr != nil {
 		h.logger.Warn("failed to release attachments after queue update failure", zap.Error(releaseErr))
+		return releaseErr
 	}
+	return nil
 }
 
 // unreferencedQueueAttachments prevents cleanup from deleting a claim that a
@@ -985,19 +1055,22 @@ func (h *QueueHandlers) releaseSupersededQueueAttachments(
 	req wsUpdateMessageRequest,
 	previous *messagequeue.QueuedMessage,
 	releaser QueueAttachmentReleaser,
-) {
+) error {
 	release := func(admittedCtx context.Context) error {
 		return h.releaseSupersededQueueAttachmentsAdmitted(admittedCtx, req, previous, releaser)
 	}
 	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
 		if err := admission.WithSessionAdmission(context.WithoutCancel(ctx), req.SessionID, release); err != nil {
 			h.logger.Warn("failed to serialize superseded queue attachment cleanup", zap.Error(err))
+			return err
 		}
-		return
+		return nil
 	}
 	if err := release(context.WithoutCancel(ctx)); err != nil {
 		h.logger.Warn("failed to release superseded queue attachments", zap.Error(err))
+		return err
 	}
+	return nil
 }
 
 func (h *QueueHandlers) releaseSupersededQueueAttachmentsAdmitted(
@@ -1053,40 +1126,58 @@ func (h *QueueHandlers) releaseQueueAttachmentCandidates(
 	}
 	return nil
 }
-func (h *QueueHandlers) queuePendingAttachmentCleanup(
+func (h *QueueHandlers) preparePendingAttachmentCleanup(
 	ctx context.Context,
 	req wsUpdateMessageRequest,
-	previous *messagequeue.QueuedMessage,
+	taskID string,
+	attachments []messagequeue.MessageAttachment,
 	releaser QueueAttachmentReleaser,
-) {
+) (*pendingQueueAttachmentCleanup, error) {
+	if releaser == nil || len(attachments) == 0 {
+		return nil, nil
+	}
 	key := pendingQueueAttachmentCleanupKey{
 		sessionID: req.SessionID, entryID: req.EntryID, operationID: req.OperationID,
 	}
 	cleanupCtx := context.WithoutCancel(ctx)
+	previous := &messagequeue.QueuedMessage{
+		ID: req.EntryID, SessionID: req.SessionID, TaskID: taskID,
+		Attachments: append([]messagequeue.MessageAttachment(nil), attachments...),
+	}
 	if store, ok := h.attachmentCleanupStore(); ok {
+		identity, hasIdentity := authn.IdentityFromContext(cleanupCtx)
+		if !hasIdentity || identity.UserID == "" {
+			return nil, errors.New("queue attachment cleanup requires an owner identity")
+		}
 		if err := store.UpsertAttachmentCleanup(cleanupCtx, messagequeue.AttachmentCleanup{
 			SessionID: req.SessionID, EntryID: req.EntryID, OperationID: req.OperationID,
-			TaskID: previous.TaskID, LeaseID: req.LeaseID,
-			Attachments: append([]messagequeue.MessageAttachment(nil), previous.Attachments...),
+			TaskID: taskID, OwnerID: identity.UserID, LeaseID: req.LeaseID,
+			Attachments: append([]messagequeue.MessageAttachment(nil), attachments...),
 			CreatedAt:   time.Now().UTC(),
 		}); err != nil {
-			h.logger.Error("failed to persist queue attachment cleanup", zap.Error(err))
+			return nil, fmt.Errorf("persist queue attachment cleanup: %w", err)
 		}
 	}
-	pending := &pendingQueueAttachmentCleanup{
+	return &pendingQueueAttachmentCleanup{
 		key: key, req: req, previous: previous, releaser: releaser,
 		authCtx: cleanupCtx, wake: make(chan struct{}, 1),
+	}, nil
+}
+
+func (h *QueueHandlers) queuePendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) {
+	if pending == nil {
+		return
 	}
 	h.attachmentCleanupMu.Lock()
 	if h.attachmentCleanupStopped {
 		h.attachmentCleanupMu.Unlock()
 		return
 	}
-	if _, exists := h.pendingAttachmentCleanup[key]; exists {
+	if _, exists := h.pendingAttachmentCleanup[pending.key]; exists {
 		h.attachmentCleanupMu.Unlock()
 		return
 	}
-	h.pendingAttachmentCleanup[key] = pending
+	h.pendingAttachmentCleanup[pending.key] = pending
 	if !h.attachmentCleanupStarted {
 		h.attachmentCleanupMu.Unlock()
 		return
@@ -1094,6 +1185,23 @@ func (h *QueueHandlers) queuePendingAttachmentCleanup(
 	h.attachmentCleanupWG.Add(1)
 	h.attachmentCleanupMu.Unlock()
 	go h.retryPendingAttachmentCleanup(pending)
+}
+
+func (h *QueueHandlers) settlePendingAttachmentCleanup(
+	pending *pendingQueueAttachmentCleanup,
+	cleanupErr error,
+) {
+	if pending == nil {
+		return
+	}
+	if cleanupErr != nil {
+		h.queuePendingAttachmentCleanup(pending)
+		return
+	}
+	if err := h.deletePendingAttachmentCleanup(pending); err != nil {
+		h.logger.Warn("failed to acknowledge queue attachment cleanup", zap.Error(err))
+		h.queuePendingAttachmentCleanup(pending)
+	}
 }
 
 func (h *QueueHandlers) retryPendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) {
@@ -1195,11 +1303,18 @@ func newlyAddedQueueAttachments(previous, replacement []messagequeue.MessageAtta
 		if attachment.AttachmentID == "" {
 			continue
 		}
+
 		if _, ok := retained[attachment.AttachmentID]; !ok {
 			newlyAdded = append(newlyAdded, attachment)
 		}
 	}
 	return newlyAdded
+}
+func attachmentCleanupOperationID(operationID, kind string) string {
+	if operationID == "" {
+		return kind + "-" + uuid.NewString()
+	}
+	return operationID + ":" + kind
 }
 
 func (h *QueueHandlers) updateMessageWithAttachmentLease(
@@ -1208,6 +1323,7 @@ func (h *QueueHandlers) updateMessageWithAttachmentLease(
 	connectionID string,
 	previous *messagequeue.QueuedMessage,
 	releaseClaims QueueAttachmentReleaser,
+	supersededPending *pendingQueueAttachmentCleanup,
 	newlyAdded *[]messagequeue.MessageAttachment,
 	metadataUpdates map[string]interface{},
 	applyUpdate func(context.Context) (int64, error),
@@ -1215,20 +1331,32 @@ func (h *QueueHandlers) updateMessageWithAttachmentLease(
 	controller, ok := h.queueEdit.(queueEditAttachmentController)
 	if !ok {
 		return h.updateMessageWithAttachmentAdmissionFallback(
-			ctx, req, previous, releaseClaims, applyUpdate,
+			ctx, req, releaseClaims, supersededPending, applyUpdate,
 		)
 	}
 
 	var claimedAttachments []messagequeue.MessageAttachment
 	var claimAttempted bool
+	var rollbackPending *pendingQueueAttachmentCleanup
 	return controller.UpdateMessageWithLeaseAfterValidationAndFinalize(
 		ctx, req.SessionID, req.EntryID, req.LeaseID, req.OperationID, connectionID,
 		*req.ExpectedRevision, req.Content, req.Attachments, metadataUpdates,
 		func(prepareCtx context.Context) error {
 			claimedAttachments = append(claimedAttachments[:0], *newlyAdded...)
 			*newlyAdded = nil
+			rollbackReq := req
+			rollbackReq.OperationID = attachmentCleanupOperationID(req.OperationID, "claim-rollback")
+			var err error
+			rollbackPending, err = h.preparePendingAttachmentCleanup(
+				prepareCtx, rollbackReq, previous.TaskID, claimedAttachments, releaseClaims,
+			)
+			if err != nil {
+				return err
+			}
 			claimAttempted = true
 			if err := h.attachmentClaimer.ClaimMessageAttachments(prepareCtx, previous.TaskID, req.SessionID, queueAttachmentsToV1(claimedAttachments)); err != nil {
+				h.settlePendingAttachmentCleanup(rollbackPending, nil)
+				rollbackPending = nil
 				return fmt.Errorf("%w: %v", errQueuedAttachmentUnavailable, err)
 			}
 			return nil
@@ -1242,22 +1370,28 @@ func (h *QueueHandlers) updateMessageWithAttachmentLease(
 					_ = releaseClaims.ReleaseMessageAttachments(
 						context.WithoutCancel(rollbackCtx), previous.TaskID, req.SessionID, nil,
 					)
+					h.settlePendingAttachmentCleanup(rollbackPending, nil)
 				} else {
-					h.releaseQueuedAttachmentUpdateFailure(
+					releaseErr := h.releaseQueuedAttachmentUpdateFailure(
 						rollbackCtx, previous, req.SessionID, claimedAttachments, releaseClaims,
 					)
+					h.settlePendingAttachmentCleanup(rollbackPending, releaseErr)
 				}
 			}
 			claimedAttachments = nil
+			rollbackPending = nil
 			return nil
 		},
-		func(finalizeCtx context.Context, cleanupPrevious *messagequeue.QueuedMessage) error {
-			if releaseClaims == nil || cleanupPrevious == nil {
+		func(finalizeCtx context.Context, _ *messagequeue.QueuedMessage) error {
+			h.settlePendingAttachmentCleanup(rollbackPending, nil)
+			rollbackPending = nil
+			if releaseClaims == nil || supersededPending == nil {
 				return nil
 			}
-			if err := h.releaseSupersededQueueAttachmentsAdmitted(finalizeCtx, req, cleanupPrevious, releaseClaims); err != nil {
-				h.queuePendingAttachmentCleanup(finalizeCtx, req, cleanupPrevious, releaseClaims)
-			}
+			releaseErr := h.releaseSupersededQueueAttachmentsAdmitted(
+				finalizeCtx, supersededPending.req, supersededPending.previous, releaseClaims,
+			)
+			h.settlePendingAttachmentCleanup(supersededPending, releaseErr)
 			return nil
 		},
 	)
@@ -1266,8 +1400,8 @@ func (h *QueueHandlers) updateMessageWithAttachmentLease(
 func (h *QueueHandlers) updateMessageWithAttachmentAdmissionFallback(
 	ctx context.Context,
 	req wsUpdateMessageRequest,
-	previous *messagequeue.QueuedMessage,
 	releaseClaims QueueAttachmentReleaser,
+	supersededPending *pendingQueueAttachmentCleanup,
 	applyUpdate func(context.Context) (int64, error),
 ) (int64, error) {
 	admission, ok := h.queueEdit.(queueEditAdmissionController)
@@ -1281,10 +1415,11 @@ func (h *QueueHandlers) updateMessageWithAttachmentAdmissionFallback(
 		if err != nil {
 			return err
 		}
-		if cleanupErr := h.releaseSupersededQueueAttachmentsAdmitted(
-			admittedCtx, req, previous, releaseClaims,
-		); cleanupErr != nil {
-			h.queuePendingAttachmentCleanup(admittedCtx, req, previous, releaseClaims)
+		if releaseClaims != nil && supersededPending != nil {
+			cleanupErr := h.releaseSupersededQueueAttachmentsAdmitted(
+				admittedCtx, supersededPending.req, supersededPending.previous, releaseClaims,
+			)
+			h.settlePendingAttachmentCleanup(supersededPending, cleanupErr)
 		}
 		return nil
 	})
@@ -1362,28 +1497,45 @@ func (h *QueueHandlers) rollbackQueuedAttachmentClaim(ctx context.Context, sessi
 	return err
 }
 
-// releaseQueuedAttachments releases descriptors no longer referenced by the
-// remaining queue entries. The queue entry has already been removed.
-func (h *QueueHandlers) releaseQueuedAttachments(ctx context.Context, entry *messagequeue.QueuedMessage) {
+func (h *QueueHandlers) prepareEntryRemovalCleanup(
+	ctx context.Context,
+	entry *messagequeue.QueuedMessage,
+	operationID string,
+) (*pendingQueueAttachmentCleanup, error) {
 	if entry == nil || len(entry.Attachments) == 0 || h.attachmentClaimer == nil {
-		return
+		return nil, nil
 	}
 	releaser, ok := h.attachmentClaimer.(QueueAttachmentReleaser)
 	if !ok {
+		return nil, nil
+	}
+	return h.preparePendingAttachmentCleanup(ctx, wsUpdateMessageRequest{
+		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: operationID,
+	}, entry.TaskID, entry.Attachments, releaser)
+}
+
+// releaseQueuedAttachments releases descriptors no longer referenced by the
+// remaining queue entries. The queue entry has already been removed.
+func (h *QueueHandlers) releaseQueuedAttachments(
+	ctx context.Context,
+	entry *messagequeue.QueuedMessage,
+	pending *pendingQueueAttachmentCleanup,
+) {
+	if entry == nil || pending == nil {
 		return
 	}
 	cleanupCtx := context.WithoutCancel(ctx)
 	candidates := h.unreferencedQueueAttachments(cleanupCtx, entry.SessionID, entry.ID, entry.Attachments)
-	if len(candidates) == 0 {
-		return
+	var releaseErr error
+	if len(candidates) > 0 {
+		releaseErr = pending.releaser.ReleaseMessageAttachments(
+			cleanupCtx, entry.TaskID, entry.SessionID, queueAttachmentsToV1(candidates),
+		)
+		if releaseErr != nil {
+			h.logger.Warn("failed to release attachments after queue entry removal", zap.Error(releaseErr))
+		}
 	}
-	if err := releaser.ReleaseMessageAttachments(cleanupCtx, entry.TaskID, entry.SessionID, queueAttachmentsToV1(candidates)); err != nil {
-		h.logger.Warn("failed to release attachments after queue entry removal", zap.Error(err))
-		h.queuePendingAttachmentCleanup(cleanupCtx, wsUpdateMessageRequest{
-			SessionID: entry.SessionID,
-			EntryID:   entry.ID,
-		}, entry, releaser)
-	}
+	h.settlePendingAttachmentCleanup(pending, releaseErr)
 }
 
 // firstInvalidDeliveryMode returns the index of the first attachment with an unknown delivery mode.
@@ -1484,19 +1636,24 @@ func (h *QueueHandlers) wsRemoveEntry(ctx context.Context, msg *ws.Message) (*ws
 	var entry *messagequeue.QueuedMessage
 	var err error
 	remove := func(removeCtx context.Context) error {
-		var err error
-		if remover, ok := h.queueService.(queueEntryRemover); ok {
-			entry, err = remover.RemoveEntryWithEntry(removeCtx, req.SessionID, req.EntryID)
-		} else {
-			entry, err = h.queueService.GetEntry(removeCtx, req.SessionID, req.EntryID)
-			if err == nil {
-				err = h.queueService.RemoveEntry(removeCtx, req.SessionID, req.EntryID)
-			}
-		}
+		entry, err = h.queueService.GetEntry(removeCtx, req.SessionID, req.EntryID)
 		if err != nil {
 			return err
 		}
-		h.releaseQueuedAttachments(removeCtx, entry)
+		pending, prepareErr := h.prepareEntryRemovalCleanup(removeCtx, entry, "remove")
+		if prepareErr != nil {
+			return prepareErr
+		}
+		if remover, ok := h.queueService.(queueEntryRemover); ok {
+			entry, err = remover.RemoveEntryWithEntry(removeCtx, req.SessionID, req.EntryID)
+		} else {
+			err = h.queueService.RemoveEntry(removeCtx, req.SessionID, req.EntryID)
+		}
+		if err != nil {
+			h.settlePendingAttachmentCleanup(pending, nil)
+			return err
+		}
+		h.releaseQueuedAttachments(removeCtx, entry, pending)
 		return nil
 	}
 	if admission, ok := h.queueService.(queueEditAdmissionController); ok {

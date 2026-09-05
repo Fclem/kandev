@@ -2667,6 +2667,13 @@ func (s *Service) Start(ctx context.Context) error {
 	s.resetCIAutomationWorkers()
 	s.resetDynamicSuccessorWorkers()
 
+	if err := s.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
+		s.logger.Error("failed to reconcile session transfer compensations on startup", zap.Error(err))
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+		return err
+	}
 	// Reconcile session state from persisted runtime state on startup.
 	// This does NOT launch any agent processes — sessions are recovered lazily
 	// when the user opens them (via task.session.status → task.session.resume).

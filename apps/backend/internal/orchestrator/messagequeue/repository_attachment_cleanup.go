@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	internaldb "github.com/kandev/kandev/internal/db"
 )
 
 func (r *sqliteRepository) ensureAttachmentCleanupSchema(ctx context.Context) error {
@@ -14,6 +16,7 @@ func (r *sqliteRepository) ensureAttachmentCleanupSchema(ctx context.Context) er
 			entry_id         TEXT NOT NULL,
 			operation_id     TEXT NOT NULL DEFAULT '',
 			task_id          TEXT NOT NULL,
+			owner_id        TEXT NOT NULL DEFAULT '',
 			lease_id         TEXT NOT NULL DEFAULT '',
 			attachments_json TEXT NOT NULL DEFAULT '[]',
 			created_at       TIMESTAMP NOT NULL,
@@ -21,6 +24,9 @@ func (r *sqliteRepository) ensureAttachmentCleanupSchema(ctx context.Context) er
 		)
 	`); err != nil {
 		return fmt.Errorf("ensure attachment cleanup schema: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_attachment_cleanups ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`); err != nil && !internaldb.IsDuplicateColumnError(err) {
+		return fmt.Errorf("add attachment cleanup owner: %w", err)
 	}
 	return nil
 }
@@ -38,14 +44,15 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 	}
 	if _, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		INSERT INTO queue_attachment_cleanups
-			(session_id, entry_id, operation_id, task_id, lease_id, attachments_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+			(session_id, entry_id, operation_id, task_id, owner_id, lease_id, attachments_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id, entry_id, operation_id) DO UPDATE SET
 			task_id = excluded.task_id,
+			owner_id = excluded.owner_id,
 			lease_id = excluded.lease_id,
 			attachments_json = excluded.attachments_json
 	`), cleanup.SessionID, cleanup.EntryID, cleanup.OperationID, cleanup.TaskID,
-		cleanup.LeaseID, string(attachmentsJSON), cleanup.CreatedAt); err != nil {
+		cleanup.OwnerID, cleanup.LeaseID, string(attachmentsJSON), cleanup.CreatedAt); err != nil {
 		return fmt.Errorf("upsert attachment cleanup: %w", err)
 	}
 	return nil
@@ -72,7 +79,7 @@ func (r *sqliteRepository) ListAttachmentCleanups(ctx context.Context) ([]Attach
 		return nil, err
 	}
 	rows, err := r.db.QueryxContext(ctx, `
-		SELECT session_id, entry_id, operation_id, task_id, lease_id, attachments_json, created_at
+		SELECT session_id, entry_id, operation_id, task_id, owner_id, lease_id, attachments_json, created_at
 		FROM queue_attachment_cleanups
 		ORDER BY created_at, session_id, entry_id, operation_id
 	`)
@@ -89,6 +96,7 @@ func (r *sqliteRepository) ListAttachmentCleanups(ctx context.Context) ([]Attach
 			&cleanup.EntryID,
 			&cleanup.OperationID,
 			&cleanup.TaskID,
+			&cleanup.OwnerID,
 			&cleanup.LeaseID,
 			&attachmentsJSON,
 			&cleanup.CreatedAt,

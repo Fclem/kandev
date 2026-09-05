@@ -2098,21 +2098,26 @@ func (s *Service) transferSession(
 	rollback func(context.Context) error,
 ) error {
 	err := s.withSessionAdmissions(ctx, oldSessionID, newSessionID, func(admittedCtx context.Context) error {
+		rollbackPreparation := func(transferErr error) error {
+			if rollback == nil {
+				return transferErr
+			}
+			rollbackErr := rollback(context.WithoutCancel(admittedCtx))
+			if rollbackErr != nil {
+				s.logger.Warn("failed to roll back transfer preparation",
+					zap.String("from_session_id", oldSessionID),
+					zap.String("to_session_id", newSessionID),
+					zap.Error(rollbackErr))
+			}
+			return errors.Join(transferErr, rollbackErr)
+		}
 		if prepare != nil {
 			if err := prepare(admittedCtx); err != nil {
-				return err
+				return rollbackPreparation(err)
 			}
 		}
 		if err := s.repo.TransferSession(admittedCtx, oldSessionID, newSessionID); err != nil {
-			if rollback != nil {
-				if rollbackErr := rollback(context.WithoutCancel(admittedCtx)); rollbackErr != nil {
-					s.logger.Warn("failed to roll back transfer preparation",
-						zap.String("from_session_id", oldSessionID),
-						zap.String("to_session_id", newSessionID),
-						zap.Error(rollbackErr))
-				}
-			}
-			return err
+			return rollbackPreparation(err)
 		}
 		s.invalidateEditLeasesLocked(oldSessionID, newSessionID)
 		return nil
@@ -2172,6 +2177,55 @@ func (s *Service) ListAttachmentCleanups(ctx context.Context) ([]AttachmentClean
 		return nil, errors.New("attachment cleanup persistence unavailable")
 	}
 	return repo.ListAttachmentCleanups(ctx)
+}
+
+type sessionTransferCompensationRepository interface {
+	UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
+	DeleteSessionTransferCompensation(context.Context, string, string, string) error
+	ListSessionTransferCompensations(context.Context) ([]SessionTransferCompensation, error)
+}
+
+// SessionTransferCompensationPersistenceAvailable reports whether interrupted
+// queue and attachment transfers can be reconciled after process restart.
+func (s *Service) SessionTransferCompensationPersistenceAvailable() bool {
+	_, ok := s.repo.(sessionTransferCompensationRepository)
+	return ok
+}
+
+// UpsertSessionTransferCompensation persists intent before attachment ownership
+// changes outside the queue repository transaction.
+func (s *Service) UpsertSessionTransferCompensation(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+) error {
+	repo, ok := s.repo.(sessionTransferCompensationRepository)
+	if !ok {
+		return errors.New("session transfer compensation persistence unavailable")
+	}
+	return repo.UpsertSessionTransferCompensation(ctx, compensation)
+}
+
+// DeleteSessionTransferCompensation acknowledges a reconciled transfer.
+func (s *Service) DeleteSessionTransferCompensation(
+	ctx context.Context,
+	taskID, fromSessionID, toSessionID string,
+) error {
+	repo, ok := s.repo.(sessionTransferCompensationRepository)
+	if !ok {
+		return errors.New("session transfer compensation persistence unavailable")
+	}
+	return repo.DeleteSessionTransferCompensation(ctx, taskID, fromSessionID, toSessionID)
+}
+
+// ListSessionTransferCompensations reloads interrupted transfers after restart.
+func (s *Service) ListSessionTransferCompensations(
+	ctx context.Context,
+) ([]SessionTransferCompensation, error) {
+	repo, ok := s.repo.(sessionTransferCompensationRepository)
+	if !ok {
+		return nil, errors.New("session transfer compensation persistence unavailable")
+	}
+	return repo.ListSessionTransferCompensations(ctx)
 }
 
 // RestoreSession replaces a session's queue and pending move from a snapshot,

@@ -252,9 +252,20 @@ type AttachmentCleanup struct {
 	EntryID     string
 	OperationID string
 	TaskID      string
+	OwnerID     string
 	LeaseID     string
 	Attachments []MessageAttachment
 	CreatedAt   time.Time
+}
+
+// SessionTransferCompensation records an attachment binding that must be
+// reconciled with the durable queue location after an interrupted transfer.
+type SessionTransferCompensation struct {
+	TaskID        string
+	FromSessionID string
+	ToSessionID   string
+	EntryIDs      []string
+	CreatedAt     time.Time
 }
 
 // QueueStatus is the per-session view returned to clients: full ordered list of

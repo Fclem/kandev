@@ -1,9 +1,9 @@
 import { expect } from "@playwright/test";
 import { test } from "../../fixtures/test-base";
 import { SessionPage } from "../../pages/session-page";
-
 const DONE_STATES = ["COMPLETED", "WAITING_FOR_INPUT"];
 const SENTINEL = "sentinel-jump-token-9f3a";
+
 // `formatPromptDuration` shapes: 0s / 5s / 5m 23s / 1h 2m 3s. Elapsed wall
 // time between seeding and sending is uncontrolled, so only the shape is
 // asserted (exact-`0s` stays in fixed-time unit coverage).

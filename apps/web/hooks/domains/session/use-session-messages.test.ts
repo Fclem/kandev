@@ -12,7 +12,7 @@ const mockWebSocketClient = {
 
 const mockState = {
   messages: {
-    bySession: { "sess-1": [] as Message[] },
+    bySession: {} as Record<string, Message[]>,
     metaBySession: {
       "sess-1": {
         historyInitialized: false,
@@ -23,7 +23,7 @@ const mockState = {
       },
     },
   },
-  taskSessions: { items: { "sess-1": { state: "RUNNING" } } },
+  taskSessions: { items: {} as Record<string, { state: string }> },
   turns: {
     bySession: { "sess-1": [] as unknown[] },
     activeBySession: { "sess-1": null },
@@ -349,12 +349,13 @@ describe("session subscription hydration ordering", () => {
     });
     mockState.messages.bySession["sess-1"] = [staleOldest, staleNewest];
 
-    const { unmount } = renderHook(() => useSessionMessages("sess-1"));
+    const { result, unmount } = renderHook(() => useSessionMessages("sess-1"));
 
     await act(async () => {
       readiness.resolve();
       await readiness.promise;
     });
+    expect(result.current.isInitialMessagesLoading).toBe(true);
 
     const liveDuringFetch = makeMessage({
       id: "live-5",
@@ -377,6 +378,7 @@ describe("session subscription hydration ordering", () => {
       response.resolve({ messages: [fetchedNewest, fetchedOldest], has_more: true });
       await response.promise;
     });
+    expect(result.current.isInitialMessagesLoading).toBe(false);
 
     expect(mockState.mergeMessages).toHaveBeenCalledWith(
       "sess-1",
@@ -602,4 +604,5 @@ describe("deduplicated message request baselines", () => {
     first.unmount();
     second.unmount();
   });
+
 });

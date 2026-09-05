@@ -58,14 +58,24 @@ function useClarificationKey(agentMessageCount: number) {
   return { clarificationKey, handleClarificationResolved };
 }
 
+/** Identity for a prompt-history target owned by a non-Dockview host. */
+export type PendingMessageScrollTarget = {
+  sessionId: string;
+  messageId: string;
+  token: number;
+  hostPanelId: string;
+};
+
 /** Scrolls a non-Dockview host target after the message row becomes rendered. */
 type PendingMessageScrollOptions = {
   messageListRef: RefObject<MessageListHandle | null>;
   sessionId: string | null;
   messageId: string | null | undefined;
+  target?: PendingMessageScrollTarget | null;
   onConsumed: ((messageId: string) => void) | undefined;
   readinessKey: string;
   isInitialMessagesLoading: boolean;
+  isVisible?: boolean;
 };
 
 // eslint-disable-next-line max-lines-per-function -- coordinates the target lifecycle, request guard, and retry state.
@@ -73,99 +83,194 @@ export function usePendingMessageScroll({
   messageListRef,
   sessionId,
   messageId,
+  target,
   onConsumed,
   readinessKey,
   isInitialMessagesLoading,
+  isVisible = true,
 }: PendingMessageScrollOptions) {
   const store = useAppStoreApi();
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [retryVersion, setRetryVersion] = useState(0);
-  const requestedTargetRef = useRef<string | null>(null);
-  const activeRequestRef = useRef<string | null>(null);
+  const requestKeysRef = useRef(new Set<string>());
+  const completedAroundRef = useRef(new Set<string>());
   const targetIdentityRef = useRef<string | null>(null);
+  const scrollSucceededRef = useRef(false);
+  const reassertionTimerRef = useRef<number | null>(null);
+  const reassertionAttemptedRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
+  const lifecycleRef = useRef({ sessionId, messageId, target, isVisible });
   const retry = useCallback(() => setRetryVersion((version) => version + 1), []);
 
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
+  const cancelReassertion = useCallback(() => {
+    if (reassertionTimerRef.current !== null) {
+      window.clearTimeout(reassertionTimerRef.current);
+      reassertionTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
-    if (!sessionId || !messageId) {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelReassertion();
+    };
+  }, [cancelReassertion]);
+
+  const effectiveSessionId = target?.sessionId ?? sessionId;
+  const effectiveMessageId = target?.messageId ?? messageId;
+  const targetToken = target?.token ?? 0;
+  const targetHostPanelId = target?.hostPanelId ?? "pending";
+  const effectiveTargetKey =
+    effectiveSessionId && effectiveMessageId
+      ? `${effectiveSessionId}\u0000${effectiveMessageId}\u0000${targetToken}\u0000${targetHostPanelId}`
+      : null;
+
+  lifecycleRef.current = {
+    sessionId: effectiveSessionId,
+    messageId: effectiveMessageId,
+    target,
+    isVisible,
+  };
+  const targetBelongsToHost = !target || target.sessionId === sessionId;
+  // eslint-disable-next-line max-lines-per-function -- target loading and delayed reassertion share one lifecycle.
+  useEffect(() => {
+    if (!targetBelongsToHost) {
       targetIdentityRef.current = null;
-      requestedTargetRef.current = null;
+      completedAroundRef.current.clear();
+      cancelReassertion();
+      setIsLoading(false);
+      setHasError(false);
+      onConsumed?.(target?.messageId ?? "");
+      return;
+    }
+    if (!effectiveSessionId || !effectiveMessageId || !effectiveTargetKey) {
+      targetIdentityRef.current = null;
+      completedAroundRef.current.clear();
+      cancelReassertion();
       setIsLoading(false);
       setHasError(false);
       return;
     }
-    const targetIdentity = `${sessionId}\u0000${messageId}`;
-    if (targetIdentityRef.current !== targetIdentity) {
-      targetIdentityRef.current = targetIdentity;
-      requestedTargetRef.current = null;
+    if (targetIdentityRef.current !== effectiveTargetKey) {
+      scrollSucceededRef.current = false;
+      targetIdentityRef.current = effectiveTargetKey;
+      completedAroundRef.current.clear();
+      cancelReassertion();
+    }
+    if (!isVisible) {
+      cancelReassertion();
+      completedAroundRef.current.delete(effectiveTargetKey);
     }
     setHasError(false);
-    let attempts = 0;
     let frame = 0;
     const isCurrentTarget = () =>
-      mountedRef.current && targetIdentityRef.current === targetIdentity;
+      mountedRef.current &&
+      lifecycleRef.current.isVisible &&
+      targetIdentityRef.current === effectiveTargetKey &&
+      lifecycleRef.current.sessionId === effectiveSessionId &&
+      lifecycleRef.current.messageId === effectiveMessageId;
+    if (!isVisible) return;
+    const scheduleReassertion = () => {
+      if (
+        reassertionTimerRef.current !== null ||
+        reassertionAttemptedRef.current.has(effectiveTargetKey) ||
+        !isCurrentTarget()
+      )
+        return;
+      reassertionTimerRef.current = window.setTimeout(() => {
+        reassertionTimerRef.current = null;
+        if (!isCurrentTarget()) return;
+        reassertionAttemptedRef.current.add(effectiveTargetKey);
+        if (
+          messageListRef.current?.scrollToMessage(effectiveMessageId, {
+            align: "start",
+            behavior: "auto",
+          })
+        ) {
+          completedAroundRef.current.delete(effectiveTargetKey);
+          onConsumed?.(effectiveMessageId);
+        }
+      }, 250);
+    };
     const attemptScroll = () => {
       if (!isCurrentTarget()) return;
       if (
-        messageListRef.current?.scrollToMessage(messageId, {
+        completedAroundRef.current.has(effectiveTargetKey) &&
+        (reassertionTimerRef.current !== null ||
+          reassertionAttemptedRef.current.has(effectiveTargetKey))
+      ) {
+        return;
+      }
+      if (
+        messageListRef.current?.scrollToMessage(effectiveMessageId, {
           align: "start",
           behavior: "auto",
         })
       ) {
-        requestedTargetRef.current = null;
-        onConsumed?.(messageId);
+        scrollSucceededRef.current = true;
+        if (completedAroundRef.current.has(effectiveTargetKey)) {
+          scheduleReassertion();
+        } else if (!requestKeysRef.current.has(effectiveTargetKey)) {
+          onConsumed?.(effectiveMessageId);
+        }
         return;
       }
       if (isInitialMessagesLoading) return;
       const loaded = store
         .getState()
-        .messages.bySession[sessionId]?.some((message) => message.id === messageId);
-      if (!loaded && requestedTargetRef.current !== messageId) {
-        requestedTargetRef.current = messageId;
-        activeRequestRef.current = targetIdentity;
-        setIsLoading(true);
-        void loadMessageWindowAround(
-          sessionId,
-          messageId,
-          () => isCurrentTarget() && requestedTargetRef.current === messageId,
-          store,
-        )
-          .then((result) => {
-            if (!isCurrentTarget() || activeRequestRef.current !== targetIdentity) return;
-            if (result.kind === "deleted-target") {
-              requestedTargetRef.current = null;
-              onConsumed?.(messageId);
-            }
-          })
-          .catch(() => {
-            if (isCurrentTarget() && activeRequestRef.current === targetIdentity) {
-              requestedTargetRef.current = null;
-              setHasError(true);
-            }
-          })
-          .finally(() => {
-            if (activeRequestRef.current === targetIdentity) {
-              activeRequestRef.current = null;
-              if (mountedRef.current) setIsLoading(false);
-            }
-          });
+        .messages.bySession[
+          effectiveSessionId
+        ]?.some((message) => message.id === effectiveMessageId);
+      if (loaded) return;
+      if (
+        requestKeysRef.current.has(effectiveTargetKey) ||
+        completedAroundRef.current.has(effectiveTargetKey)
+      ) {
         return;
       }
-      attempts += 1;
-      if (attempts < 30) frame = requestAnimationFrame(attemptScroll);
+      requestKeysRef.current.add(effectiveTargetKey);
+      setIsLoading(true);
+      void loadMessageWindowAround(
+        effectiveSessionId,
+        effectiveMessageId,
+        () =>
+          isCurrentTarget() &&
+          targetIdentityRef.current === effectiveTargetKey &&
+          (!target || lifecycleRef.current.target?.token === targetToken),
+        store,
+      )
+        .then((result) => {
+          if (!isCurrentTarget()) return;
+          if (result.kind === "deleted-target") {
+            onConsumed?.(effectiveMessageId);
+          } else if (result.kind === "merged") {
+            completedAroundRef.current.add(effectiveTargetKey);
+            if (scrollSucceededRef.current) scheduleReassertion();
+          }
+        })
+        .catch(() => {
+          if (isCurrentTarget()) {
+            completedAroundRef.current.delete(effectiveTargetKey);
+            setHasError(true);
+          }
+        })
+        .finally(() => {
+          requestKeysRef.current.delete(effectiveTargetKey);
+          if (mountedRef.current) setIsLoading(requestKeysRef.current.size > 0);
+        });
+      return;
     };
     frame = requestAnimationFrame(attemptScroll);
     return () => cancelAnimationFrame(frame);
   }, [
+    cancelReassertion,
+    effectiveMessageId,
+    effectiveSessionId,
+    effectiveTargetKey,
     isInitialMessagesLoading,
+    isVisible,
     messageId,
     messageListRef,
     onConsumed,
@@ -173,6 +278,9 @@ export function usePendingMessageScroll({
     retryVersion,
     sessionId,
     store,
+    targetHostPanelId,
+    targetBelongsToHost,
+    targetToken,
   ]);
   return { isLoading, hasError, retry };
 }
@@ -323,8 +431,10 @@ type TaskChatPanelProps = {
    */
   isVisible?: boolean;
   panelId?: string | null;
-  /** Message ID requested by a non-Dockview host, such as the phone history surface. */
+  /** Legacy message-only target for non-Dockview hosts. */
   pendingScrollToMessageId?: string | null;
+  /** Identity-bearing target for mobile/non-Dockview prompt navigation. */
+  pendingScrollTarget?: PendingMessageScrollTarget | null;
   /** Called after a non-Dockview scroll target reaches a rendered row. */
   onPendingScrollConsumed?: (messageId: string) => void;
 };
@@ -333,120 +443,263 @@ type ScrollTargetConsumptionParams = {
   resolvedSessionId: string | null;
   isVisible: boolean;
   panelId: string | null;
-  messageListRef: React.RefObject<MessageListHandle | null>;
-  /** Message-list readiness: a no-op `scrollToMessage` (row not rendered yet)
-   * is retried when this flips, instead of clearing the target. */
+  messageListRef: RefObject<MessageListHandle | null>;
+  /** Whether the target row is present in the current message snapshot. */
+  targetRendered?: boolean;
   isInitialMessagesLoading: boolean;
   /** Rendered-transcript revision: retry a retained target when a row mounts
    * after the initial load or when older pages are prepended. */
   renderedMessageCount: number;
 };
+function shouldDeferTargetWindowLoad(
+  messages: readonly { id: string }[],
+  targetMessageId: string,
+  isInitialMessagesLoading: boolean,
+  targetRendered: boolean,
+) {
+  const loaded = messages.some((message) => message.id === targetMessageId);
+  return (
+    (isInitialMessagesLoading && (messages.length === 0 || loaded)) || (loaded && targetRendered)
+  );
+}
 
 /**
- * Prompt-history transcript-jump consumption (Task 03 contract).
- *
- * Two deliberately separate effects:
- * - LIFECYCLE, keyed ONLY by `resolvedSessionId`: on a session change it
- *   clears a retained target for the PREVIOUS session (the canonical `chat`
- *   host swaps sessions without ever unmounting), and its unmount cleanup
- *   clears by the last resolved session (canonical-host removal during a
- *   layout restore keeps the component mounted, so the removal-path clear in
- *   dockview-layout-setup is the always-running fallback). It must NOT depend
- *   on `isVisible`, so an inactive→active transition never triggers it.
- * - CONSUMPTION, keyed by `scrollTarget`, `resolvedSessionId`, `isVisible`,
- *   and message-list readiness, with NO cleanup: it consumes on activation
- *   and clears only on a successful scroll (compare-and-clear by token).
+ * Consumes Dockview prompt-history targets. Around-window targets stay owned
+ * through their first rendered placement and one delayed reassertion.
  */
+// eslint-disable-next-line max-lines-per-function -- Dockview target ownership and delayed reassertion share one lifecycle.
 export function useScrollTargetConsumption({
   resolvedSessionId,
   isVisible,
   panelId,
   messageListRef,
   isInitialMessagesLoading,
+  targetRendered = false,
   renderedMessageCount,
 }: ScrollTargetConsumptionParams) {
   const scrollTarget = useDockviewStore((state) => state.scrollTarget);
   const clearScrollTarget = useDockviewStore((state) => state.clearScrollTarget);
-  const clearScrollTargetForOwner = useDockviewStore((state) => state.clearScrollTargetForOwner);
   const appStore = useAppStoreApi();
+  const clearScrollTargetForOwner = useDockviewStore((state) => state.clearScrollTargetForOwner);
   const [jumpLoading, setJumpLoading] = useState(false);
-  const jumpRequestCount = useRef(0);
+  const reassertionKeyRef = useRef<string | null>(null);
+  const reassertionTargetKeyRef = useRef<string | null>(null);
+  const reassertionAttemptedRef = useRef(new Set<string>());
+  const requestKeysRef = useRef(new Set<string>());
+  const completedAroundRef = useRef(new Set<string>());
+  const scrollSucceededRef = useRef(false);
+  const reassertionTimerRef = useRef<number | null>(null);
+  const ownerCleanupTimerRef = useRef<number | null>(null);
+  const ownerTargetTokenRef = useRef<number | null>(null);
   const previousSessionId = useRef<string | null>(null);
+  const previousPanelId = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const lifecycleRef = useRef({ resolvedSessionId, isVisible, panelId });
+
+  const cancelOwnerCleanup = useCallback(() => {
+    if (ownerCleanupTimerRef.current !== null) {
+      window.clearTimeout(ownerCleanupTimerRef.current);
+      ownerCleanupTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleOwnerCleanup = useCallback(
+    (targetToken: number) => {
+      cancelOwnerCleanup();
+      ownerCleanupTimerRef.current = window.setTimeout(() => {
+        ownerCleanupTimerRef.current = null;
+        clearScrollTarget(targetToken);
+      }, 0);
+    },
+    [cancelOwnerCleanup, clearScrollTarget],
+  );
+
+  const cancelReassertion = useCallback(() => {
+    if (reassertionTimerRef.current !== null) {
+      window.clearTimeout(reassertionTimerRef.current);
+      reassertionTimerRef.current = null;
+    }
+    reassertionKeyRef.current = null;
+  }, []);
+  lifecycleRef.current = { resolvedSessionId, isVisible, panelId };
+  ownerTargetTokenRef.current =
+    scrollTarget?.sessionId === resolvedSessionId && scrollTarget.hostPanelId === panelId
+      ? scrollTarget.token
+      : null;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelReassertion();
+    };
+  }, [cancelReassertion]);
 
   useEffect(() => {
     // Only a DOCKVIEW host (defined panelId) may invalidate or clear a
-    // retained target: non-dockview callers (preview-session-tabs,
-    // task-center-panel, mobile) mount/unmount and swap resolved sessions
-    // freely, and their cleanup must not clear a target that a real dockview
-    // host (canonical `chat` / `session:<id>`) is waiting to consume.
+    // retained target. Non-Dockview hosts own their target lifecycle.
     if (!panelId) return;
-    const previous = previousSessionId.current;
+    cancelOwnerCleanup();
+    const previousSession = previousSessionId.current;
+    const previousPanel = previousPanelId.current;
     previousSessionId.current = resolvedSessionId;
-    if (previous && previous !== resolvedSessionId) {
-      if (panelId) clearScrollTargetForOwner(previous, panelId);
+    previousPanelId.current = panelId;
+    if (
+      previousSession &&
+      previousPanel &&
+      (previousSession !== resolvedSessionId || previousPanel !== panelId)
+    ) {
+      clearScrollTargetForOwner(previousSession, previousPanel);
+      cancelReassertion();
     }
     return () => {
-      if (resolvedSessionId && panelId) {
-        clearScrollTargetForOwner(resolvedSessionId, panelId);
-      }
+      cancelReassertion();
+      const targetToken = ownerTargetTokenRef.current;
+      if (targetToken !== null) scheduleOwnerCleanup(targetToken);
     };
-  }, [clearScrollTargetForOwner, panelId, resolvedSessionId]);
+  }, [
+    cancelOwnerCleanup,
+    cancelReassertion,
+    clearScrollTargetForOwner,
+    panelId,
+    resolvedSessionId,
+    scheduleOwnerCleanup,
+  ]);
 
+  useEffect(() => {
+    if (!isVisible) cancelReassertion();
+  }, [cancelReassertion, isVisible]);
+
+  // eslint-disable-next-line max-lines-per-function -- Target ownership and delayed reassertion share one lifecycle.
   useEffect(() => {
     if (
       !scrollTarget ||
       !panelId ||
-      !isVisible ||
       scrollTarget.sessionId !== resolvedSessionId ||
       scrollTarget.hostPanelId !== panelId
     ) {
+      if (!isVisible) {
+        cancelReassertion();
+        completedAroundRef.current.clear();
+      }
       return;
     }
-    // Defer the scroll two animation frames: re-showing a dockview panel
-    // (this jump's own `setActive` while the history panel was up) makes
-    // SessionPanelContent restore the saved scrollTop in a rAF that can land
-    // anywhere in the frame after the show — an immediate smooth scroll (or
-    // one deferred a single frame) is canceled by it. Two frames guarantee
-    // the restore has run before the jump scroll starts. Re-check the live
-    // target by token before scrolling so a superseded/cleared intent can
-    // never scroll a stale row.
+    const targetToken = scrollTarget.token;
+    const targetKey = `${scrollTarget.sessionId}\u0000${scrollTarget.hostPanelId}\u0000${targetToken}`;
+    if (reassertionTargetKeyRef.current !== targetKey) {
+      reassertionTargetKeyRef.current = targetKey;
+      reassertionAttemptedRef.current.delete(targetKey);
+      scrollSucceededRef.current = false;
+    }
+    if (reassertionKeyRef.current && reassertionKeyRef.current !== targetKey) {
+      cancelReassertion();
+      reassertionKeyRef.current = null;
+    }
+    const isCurrentTarget = () => {
+      const latest = useDockviewStore.getState().scrollTarget;
+      return (
+        mountedRef.current &&
+        lifecycleRef.current.isVisible &&
+        lifecycleRef.current.resolvedSessionId === scrollTarget.sessionId &&
+        lifecycleRef.current.panelId === scrollTarget.hostPanelId &&
+        latest?.token === targetToken &&
+        latest.sessionId === scrollTarget.sessionId &&
+        latest.hostPanelId === scrollTarget.hostPanelId
+      );
+    };
+    const scheduleReassertion = () => {
+      if (
+        reassertionTimerRef.current !== null ||
+        reassertionAttemptedRef.current.has(targetKey) ||
+        !isCurrentTarget()
+      )
+        return;
+      reassertionKeyRef.current = targetKey;
+      reassertionTimerRef.current = window.setTimeout(() => {
+        reassertionTimerRef.current = null;
+        reassertionKeyRef.current = null;
+        if (!isCurrentTarget()) return;
+        reassertionAttemptedRef.current.add(targetKey);
+        if (
+          messageListRef.current?.scrollToMessage(scrollTarget.messageId, {
+            align: "start",
+            behavior: "auto",
+          })
+        ) {
+          completedAroundRef.current.delete(targetKey);
+          clearScrollTarget(targetToken);
+        }
+      }, 250);
+    };
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {
-        const latest = useDockviewStore.getState().scrollTarget;
-        if (!latest || latest.token !== scrollTarget.token) return;
-        if (messageListRef.current?.scrollToMessage(scrollTarget.messageId, { align: "start" })) {
-          clearScrollTarget(scrollTarget.token);
+        if (
+          completedAroundRef.current.has(targetKey) &&
+          (reassertionTimerRef.current !== null || reassertionAttemptedRef.current.has(targetKey))
+        ) {
           return;
         }
-        const loaded = appStore
-          .getState()
-          .messages.bySession[
-            scrollTarget.sessionId
-          ]?.some((message) => message.id === scrollTarget.messageId);
-        if (loaded) return;
-        jumpRequestCount.current += 1;
+        if (!isCurrentTarget()) return;
+        const didScroll = messageListRef.current?.scrollToMessage(scrollTarget.messageId, {
+          align: "start",
+        });
+        if (didScroll) {
+          scrollSucceededRef.current = true;
+          if (completedAroundRef.current.has(targetKey)) {
+            scheduleReassertion();
+          } else if (!requestKeysRef.current.has(targetKey)) {
+            clearScrollTarget(targetToken);
+          }
+          return;
+        }
+        const sessionMessages =
+          appStore.getState().messages.bySession[scrollTarget.sessionId] ?? [];
+        if (
+          shouldDeferTargetWindowLoad(
+            sessionMessages,
+            scrollTarget.messageId,
+            isInitialMessagesLoading,
+            targetRendered,
+          )
+        ) {
+          return;
+        }
+        if (requestKeysRef.current.has(targetKey) || completedAroundRef.current.has(targetKey)) {
+          return;
+        }
+        requestKeysRef.current.add(targetKey);
         setJumpLoading(true);
         void loadMessageWindowAround(
           scrollTarget.sessionId,
           scrollTarget.messageId,
-          () => useDockviewStore.getState().scrollTarget?.token === scrollTarget.token,
+          () => isCurrentTarget(),
           appStore,
         )
           .then((result) => {
-            if (result.kind !== "merged") clearScrollTarget(scrollTarget.token);
+            if (!isCurrentTarget()) return;
+            if (result.kind === "merged") {
+              completedAroundRef.current.add(targetKey);
+              if (scrollSucceededRef.current) scheduleReassertion();
+            } else if (result.kind === "deleted-target") {
+              clearScrollTarget(targetToken);
+            }
           })
-          .catch(() => clearScrollTarget(scrollTarget.token))
+          .catch(() => {
+            if (isCurrentTarget()) clearScrollTarget(targetToken);
+          })
           .finally(() => {
-            jumpRequestCount.current -= 1;
-            setJumpLoading(jumpRequestCount.current > 0);
+            requestKeysRef.current.delete(targetKey);
+            if (mountedRef.current) setJumpLoading(requestKeysRef.current.size > 0);
           });
       });
     });
     return () => cancelAnimationFrame(frame);
   }, [
     appStore,
+    cancelReassertion,
     clearScrollTarget,
     isInitialMessagesLoading,
+    targetRendered,
     isVisible,
     messageListRef,
     panelId,
@@ -472,6 +725,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
   isVisible = true,
   panelId = null,
   pendingScrollToMessageId = null,
+  pendingScrollTarget,
   onPendingScrollConsumed,
 }: TaskChatPanelProps) {
   const isArchived = useIsTaskArchived();
@@ -481,7 +735,6 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     launchErrorContext?.taskId,
     launchErrorContext?.statusSummary,
   );
-
   const { t } = useTranslation();
   useSettingsData(true);
   const panelState = useChatPanelState({
@@ -538,6 +791,12 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     panelId,
     messageListRef,
     isInitialMessagesLoading,
+    targetRendered: Boolean(
+      useDockviewStore.getState().scrollTarget?.messageId &&
+      allMessages.some(
+        (message) => message.id === useDockviewStore.getState().scrollTarget?.messageId,
+      ),
+    ),
     renderedMessageCount: allMessages.length,
   });
   const {
@@ -548,9 +807,13 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     messageListRef,
     sessionId: resolvedSessionId,
     messageId: pendingScrollToMessageId,
+    target: pendingScrollTarget,
     onConsumed: onPendingScrollConsumed,
-    readinessKey: `${allMessages.length}:${isInitialMessagesLoading}`,
+    readinessKey: `${allMessages.length}:${isInitialMessagesLoading}:${allMessages
+      .map((message) => message.id)
+      .join("\u0000")}`,
     isInitialMessagesLoading,
+    isVisible,
   });
   const isJumpLoading = isDockviewJumpLoading || isPendingJumpLoading;
   const lastPromptMessageId = useMemo(() => getLastUserMessageId(allMessages), [allMessages]);

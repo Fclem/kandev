@@ -66,7 +66,20 @@ Zustand owns `messagePrompts.bySession` and its per-session pagination metadata.
 
 ## Prompt navigation
 
-Selecting a row creates a session-scoped jump target and activates Chat. Chat first searches the loaded transcript. If the target is absent, it requests `GET /messages?around=<message-id>`, merges the target and newer rows, and retries after the row renders. Desktop and phone clear the target only after a successful scroll or a confirmed missing target. A request cannot consume a newer target or a target for another session.
+Selecting a row creates a session-scoped jump target and activates Chat. Chat first searches the loaded transcript. If the target is absent, it waits for the initial transcript request to settle before requesting `GET /messages?around=<message-id>`, merges the target and newer rows, and retries after the row renders. Desktop and phone clear the target only after a successful scroll or a confirmed missing target. A request cannot consume a newer target or a target for another session.
+
+After an around-window merge, the first rendered target scroll is treated as an initial placement rather than the final settled position. The existing scroll handle exposes success when it finds the row and starts the scroll; that return is the navigation completion boundary. The owner retains the target and starts a fixed 250 ms delay for exactly one reassertion, which must execute within one second of that boundary. The delay is not restarted by later rendered-message revisions. The reassertion uses the existing start-aligned scroll handle and then compare-and-clears the same target token. It runs only when the session, host panel, token, active visibility, and target row still match; a superseding target, session change, panel deactivation, panel teardown, missing target, or failed request cancels the retained intent. Already-loaded prompts keep the existing single-pass behavior, and no navigation path retries indefinitely.
+
+Around-window requests are gated behind initial transcript readiness and deduplicated by `(session_id, host_panel_id, target_token)`. Request-local settlement accounting releases every request's loading contribution, including stale or superseded requests; stale completions cannot publish loading/error state or clear a newer target.
+
+The phone `SessionMobileLayout` owns a separate non-Dockview target with the
+same session ID, message ID, and monotonic token plus the stable host key
+`mobile-chat`. The target is passed only while Chat is the selected mobile
+panel. Leaving Chat, changing the selected panel, or unmounting the Chat host
+cancels and clears the target and its delayed reassertion; returning to Chat
+cannot consume an abandoned intent. The phone hook receives active visibility
+explicitly, so its request deduplication and stale-result checks use the same
+identity and lifecycle guarantees as Dockview.
 
 ## API surface
 

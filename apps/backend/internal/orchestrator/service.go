@@ -2673,6 +2673,14 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.resetCIAutomationWorkers()
 	s.resetDynamicSuccessorWorkers()
+	if err := s.reconcilePendingQueueDispatchesOnStartup(ctx); err != nil {
+		s.logger.Error("failed to reconcile pending queue dispatches on startup", zap.Error(err))
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+		return err
+	}
+
 	if err := s.reconcilePendingSendNowClaimsOnStartup(ctx); err != nil {
 		s.logger.Error("failed to reconcile pending Send Now claims on startup", zap.Error(err))
 		s.mu.Lock()

@@ -55,6 +55,13 @@ type SendNowClaim struct {
 	SessionGeneration int64 `json:"session_generation"`
 }
 
+// PendingSendNowClaim carries the durable acceptance decision used to choose
+// between restoring and acknowledging an interrupted replacement dispatch.
+type PendingSendNowClaim struct {
+	Claim    SendNowClaim
+	Accepted bool
+}
+
 func sendNowSourceGenerationChanged(claim *SendNowClaim, source QueuedMessage, current int64) bool {
 	if claim == nil || source.TaskID == "" || claim.SourceGenerations == nil {
 		return false

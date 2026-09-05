@@ -517,7 +517,12 @@ func (s *Service) promptSendNowClaim(ctx context.Context, claim *messagequeue.Se
 	}
 
 	_, err := s.promptTask(ctx, claim.Dispatch.TaskID, sessionID, promptContent, claim.Dispatch.Model,
-		claim.Dispatch.PlanMode, attachments, false, promptTaskOptions{claimEntryID: claim.Dispatch.ID})
+		claim.Dispatch.PlanMode, attachments, false, promptTaskOptions{
+			claimEntryID: claim.Dispatch.ID,
+			afterDispatch: func() error {
+				return s.markSendNowClaimAcceptedWithRetry(ctx, claim)
+			},
+		})
 	return err
 }
 
@@ -539,6 +544,17 @@ func (s *Service) acknowledgeSendNowClaimWithRetry(
 	})
 }
 
+func (s *Service) markSendNowClaimAcceptedWithRetry(
+	ctx context.Context,
+	claim *messagequeue.SendNowClaim,
+) error {
+	if claim == nil || s.messageQueue == nil || !s.messageQueue.PendingSendNowClaimPersistenceAvailable() {
+		return nil
+	}
+	return s.retrySendNowClaimMutation(ctx, func(recoveryCtx context.Context) error {
+		return s.messageQueue.MarkPendingSendNowClaimAccepted(recoveryCtx, claim.Dispatch.SessionID)
+	})
+}
 func (s *Service) retrySendNowClaimMutation(
 	ctx context.Context,
 	mutate func(context.Context) error,
@@ -573,10 +589,17 @@ func (s *Service) reconcilePendingSendNowClaimsOnStartup(ctx context.Context) er
 		return fmt.Errorf("list pending Send Now claims: %w", err)
 	}
 	for i := range claims {
-		claim := &claims[i]
-		if err := s.restoreSendNowClaimWithRetry(ctx, claim); err != nil {
-			if !errors.Is(err, messagequeue.ErrSendNowClaimChanged) {
-				return fmt.Errorf("restore pending Send Now claim for session %s: %w", claim.Dispatch.SessionID, err)
+		pending := &claims[i]
+		claim := &pending.Claim
+		var recoveryErr error
+		if pending.Accepted {
+			recoveryErr = s.acknowledgeSendNowClaimWithRetry(ctx, claim)
+		} else {
+			recoveryErr = s.restoreSendNowClaimWithRetry(ctx, claim)
+		}
+		if recoveryErr != nil {
+			if !errors.Is(recoveryErr, messagequeue.ErrSendNowClaimChanged) {
+				return fmt.Errorf("recover pending Send Now claim for session %s: %w", claim.Dispatch.SessionID, recoveryErr)
 			}
 			if deleteErr := s.messageQueue.DeletePendingSendNowClaim(
 				context.WithoutCancel(ctx), claim.Dispatch.SessionID,

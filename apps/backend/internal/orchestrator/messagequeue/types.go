@@ -11,8 +11,8 @@ const DefaultMaxPerSession = 10
 
 // Sender identities written to QueuedMessage.QueuedBy. The handlers default
 // any empty user-supplied identity to QueuedByUser so the UpdateMessage
-// ownership guard always runs against a non-empty value. Agent, workflow, and
-// server identities are reserved for backend dispatch paths.
+// ownership guard always runs against a non-empty value. Agent, workflow,
+// server, and move-task identities are reserved for backend dispatch paths.
 const (
 	QueuedByUser     = "user"
 	QueuedByAgent    = "agent"
@@ -31,7 +31,7 @@ const (
 // additive prompts from one agent into a single delivery. See ADR 0051.
 func IsReservedQueuedBy(queuedBy string) bool {
 	switch queuedBy {
-	case QueuedByAgent, QueuedByWorkflow, QueuedByServer:
+	case QueuedByAgent, QueuedByWorkflow, QueuedByServer, QueuedByMoveTask:
 		return true
 	default:
 		return false

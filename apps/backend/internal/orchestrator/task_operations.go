@@ -4228,6 +4228,7 @@ type promptTaskOptions struct {
 	claimEntryID          string
 	lifecyclePrompt       bool
 	afterClaim            func() error
+	afterDispatch         func() error
 	preservePromptContext bool
 	// reserveTurnUntilDispatch persists detached-resume ownership before agentctl
 	// dispatch, while delaying the visible turn.started event until acceptance.
@@ -4479,6 +4480,15 @@ func (s *Service) promptTask(ctx context.Context, taskID, sessionID string, prom
 	onDispatched := s.promptDispatchCallback(
 		promptCtx, taskID, sessionID, rollback.reservedTurn, foregroundDispatch, dispatchOutcome,
 	)
+	if options.afterDispatch != nil {
+		originalOnDispatched := onDispatched
+		onDispatched = func() {
+			durableOutcomeErr := options.afterDispatch()
+			originalOnDispatched()
+			_, publicationErr := dispatchOutcome.snapshot()
+			dispatchOutcome.recordAccepted(errors.Join(durableOutcomeErr, publicationErr))
+		}
+	}
 	if releaseDispatchGuard != nil {
 		originalOnDispatched := onDispatched
 		onDispatched = func() {

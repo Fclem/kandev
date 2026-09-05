@@ -372,6 +372,9 @@ func (r *sqliteRepository) Insert(ctx context.Context, msg *QueuedMessage, maxPe
 // insert. This keeps positions positive for TransferSession and future queue
 // mutations while preserving the current order.
 func (r *sqliteRepository) RequeuePreservingFIFO(ctx context.Context, msg *QueuedMessage) error {
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin requeue-fifo tx: %w", err)
@@ -384,6 +387,9 @@ func (r *sqliteRepository) RequeuePreservingFIFO(ctx context.Context, msg *Queue
 		return err
 	}
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
+		return err
+	}
+	if err := r.deletePendingQueueDispatchTx(ctx, tx, msg.SessionID, msg.ID); err != nil {
 		return err
 	}
 
@@ -522,6 +528,9 @@ func (r *sqliteRepository) applyHeadInsertTx(ctx context.Context, tx *sqlx.Tx, m
 
 // Restore reinserts a previously dequeued entry at its original FIFO position.
 func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxPerSession int) error {
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin restore tx: %w", err)
@@ -534,6 +543,9 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 		return err
 	}
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
+		return err
+	}
+	if err := r.deletePendingQueueDispatchTx(ctx, tx, msg.SessionID, msg.ID); err != nil {
 		return err
 	}
 
@@ -1157,6 +1169,9 @@ func (r *sqliteRepository) TakeHead(ctx context.Context, sessionID string) (*Que
 	// the same queue are serialized in-process, not just at the DB layer.
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return nil, err
+	}
 
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -1188,6 +1203,11 @@ func (r *sqliteRepository) TakeHead(ctx context.Context, sessionID string) (*Que
 	// already-drained message in that case would let the orchestrator dispatch
 	// it twice. Treat the lost race as "queue empty for now" so the caller
 	// retries on the next agent.ready instead.
+	if !msg.IsDurableLifecycle() {
+		if err := r.persistQueueDispatchClaimTx(ctx, tx, msg); err != nil {
+			return nil, err
+		}
+	}
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM queued_messages WHERE id = ?`), msg.ID)
 	if err != nil {
 		return nil, fmt.Errorf("delete head: %w", err)
@@ -1356,6 +1376,9 @@ func (r *sqliteRepository) ReserveHeadIfAutoRun(ctx context.Context, sessionID s
 func (r *sqliteRepository) reserveHead(ctx context.Context, sessionID string, requireAutoRun bool) (*QueuedMessage, bool, error) {
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return nil, true, err
+	}
 
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -1438,6 +1461,9 @@ func (r *sqliteRepository) reserveOrdinaryHead(
 	tx *sqlx.Tx,
 	msg *QueuedMessage,
 ) (*QueuedMessage, error) {
+	if err := r.persistQueueDispatchClaimTx(ctx, tx, msg); err != nil {
+		return nil, err
+	}
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM queued_messages WHERE id = ? AND session_id = ?
 	`), msg.ID, msg.SessionID)
@@ -1504,6 +1530,9 @@ func (r *sqliteRepository) AcknowledgeByID(ctx context.Context, sessionID, entry
 func (r *sqliteRepository) TakeByID(ctx context.Context, sessionID, entryID string) (*QueuedMessage, error) {
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return nil, err
+	}
 
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -1526,6 +1555,11 @@ func (r *sqliteRepository) TakeByID(ctx context.Context, sessionID, entryID stri
 			return nil, nil
 		}
 		return nil, fmt.Errorf("take by id: %w", err)
+	}
+	if !msg.IsDurableLifecycle() {
+		if err := r.persistQueueDispatchClaimTx(ctx, tx, msg); err != nil {
+			return nil, err
+		}
 	}
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM queued_messages WHERE id = ? AND session_id = ?`), msg.ID, sessionID)
 	if err != nil {
@@ -1683,6 +1717,12 @@ func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *S
 		return err
 	}
 	if claim.SessionGeneration != sessionGeneration {
+		if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
 		return ErrSendNowClaimChanged
 	}
 	generations := make(map[string]int64)
@@ -2554,6 +2594,9 @@ func (r *sqliteRepository) DeleteByID(ctx context.Context, sessionID, entryID st
 func (r *sqliteRepository) DeleteAllBySession(ctx context.Context, sessionID string) (int, error) {
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return 0, err
+	}
 
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -2586,6 +2629,9 @@ func (r *sqliteRepository) DeleteAllBySession(ctx context.Context, sessionID str
 	if err := r.bumpSendNowGenerationTx(ctx, tx, sessionID); err != nil {
 		return 0, err
 	}
+	if err := r.deletePendingQueueDispatchesBySessionTx(ctx, tx, sessionID); err != nil {
+		return 0, err
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -2597,6 +2643,9 @@ func (r *sqliteRepository) DeleteAllBySession(ctx context.Context, sessionID str
 func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (int, error) {
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return 0, err
+	}
 
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -2629,6 +2678,9 @@ func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (
 		return 0, err
 	}
 	if err := r.bumpSendNowGenerationTx(ctx, tx, sessionID); err != nil {
+		return 0, err
+	}
+	if err := r.deletePendingQueueDispatchesBySessionTx(ctx, tx, sessionID); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {

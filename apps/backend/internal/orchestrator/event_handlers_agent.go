@@ -940,15 +940,17 @@ func (s *Service) executeQueuedMessageWithReservation(
 	// worker already claimed the handoff before visible side effects; promptTask
 	// revalidates that ownership while it marks the session RUNNING.
 	afterClaim := s.queuedLifecycleAfterClaim(promptCtx, queuedMsg, attachments, lifecyclePrompt)
+	afterDispatch := s.queuedMessageAfterDispatch(promptCtx, queuedMsg, lifecyclePrompt)
 	_, err := s.promptTask(promptCtx, queuedMsg.TaskID, queuedMsg.SessionID,
 		promptContent, queuedMsg.Model, queuedMsg.PlanMode, attachments, false,
 		promptTaskOptions{
 			claimEntryID:    claimEntryID,
 			lifecyclePrompt: lifecyclePrompt,
 			afterClaim:      afterClaim,
-			onAccepted: func(turnID string) {
+onAccepted: func(turnID string) {
 				s.bindQueuedCIAutoFixAttempt(promptCtx, queuedMsg, turnID)
 			},
+			afterDispatch: afterDispatch,
 		})
 	if err != nil {
 		s.reconcileQueuedCIAutoFixDispatchFailure(promptCtx, queuedMsg)
@@ -1018,6 +1020,20 @@ func (s *Service) finishQueuedMessageExecution(
 		s.requeueMessage(ctx, queuedMsg, "superseded-by-newer-dispatch")
 		return
 	}
+	var acceptedDispatch *acceptedPromptDispatchError
+	if errors.As(err, &acceptedDispatch) {
+		s.logger.Error("queued prompt was accepted but post-dispatch handling failed",
+			zap.String("session_id", callerSessionID),
+			zap.String("task_id", queuedMsg.TaskID),
+			zap.String("queue_id", queuedMsg.ID),
+			zap.Error(err))
+		if lifecyclePrompt {
+			s.acknowledgeLifecycleQueueEntry(ctx, reservedSessionID, queuedMsg)
+		} else {
+			s.acknowledgeOrdinaryQueueEntry(ctx, reservedSessionID, queuedMsg)
+		}
+		return
+	}
 	if err != nil {
 		s.handleQueuedMessageExecutionError(
 			ctx, callerSessionID, queuedMsg, lifecyclePrompt, userMessageRecorded, err,
@@ -1026,6 +1042,8 @@ func (s *Service) finishQueuedMessageExecution(
 	}
 	if lifecyclePrompt {
 		s.acknowledgeLifecycleQueueEntry(ctx, reservedSessionID, queuedMsg)
+	} else {
+		s.acknowledgeOrdinaryQueueEntry(ctx, reservedSessionID, queuedMsg)
 	}
 }
 
@@ -1172,6 +1190,44 @@ func (s *Service) acknowledgeLifecycleQueueEntry(
 		return
 	}
 	s.publishQueueStatusEvent(ackCtx, sessionID)
+}
+
+func (s *Service) acknowledgeOrdinaryQueueEntry(
+	ctx context.Context,
+	sessionID string,
+	queuedMsg *messagequeue.QueuedMessage,
+) {
+	if s.messageQueue == nil || queuedMsg == nil || queuedMsg.IsDurableLifecycle() {
+		return
+	}
+	ackCtx := context.WithoutCancel(ctx)
+	if err := s.retrySendNowClaimMutation(ackCtx, func(recoveryCtx context.Context) error {
+		return s.messageQueue.AcknowledgeQueued(recoveryCtx, sessionID, queuedMsg.ID)
+	}); err != nil {
+		s.logger.Error("failed to acknowledge accepted queue message",
+			zap.String("session_id", sessionID),
+			zap.String("task_id", queuedMsg.TaskID),
+			zap.String("queue_id", queuedMsg.ID),
+			zap.Error(err))
+	}
+}
+
+func (s *Service) queuedMessageAfterDispatch(
+	ctx context.Context,
+	queuedMsg *messagequeue.QueuedMessage,
+	lifecyclePrompt bool,
+) func() error {
+	if lifecyclePrompt || queuedMsg == nil || s.messageQueue == nil ||
+		!s.messageQueue.PendingQueueDispatchPersistenceAvailable() {
+		return nil
+	}
+	return func() error {
+		return s.retrySendNowClaimMutation(ctx, func(recoveryCtx context.Context) error {
+			return s.messageQueue.MarkPendingQueueDispatchAccepted(
+				recoveryCtx, queuedMsg.SessionID, queuedMsg.ID,
+			)
+		})
+	}
 }
 
 func (s *Service) restoreQueuedMessage(ctx context.Context, queuedMsg *messagequeue.QueuedMessage) {

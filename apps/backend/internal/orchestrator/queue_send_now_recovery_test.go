@@ -64,3 +64,41 @@ func TestSendNowWorkerCancellationAfterClaimRestoresOrdinarySource(t *testing.T)
 		t.Fatalf("queue after cancelled claimed worker = %#v, want source %s", status.Entries, source.ID)
 	}
 }
+
+func TestSendNowAcceptedClaimIsAcknowledgedAfterProcessRestart(t *testing.T) {
+	ctx := context.Background()
+	dbPath := t.TempDir() + "/queue.db"
+	queue, db := newWorkflowTransferQueue(t, dbPath)
+	source, err := queue.QueueMessage(
+		ctx, "session-1", "task-1", "accepted prompt", "", messagequeue.QueuedByUser, false, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := queue.ClaimSendNow(ctx, "session-1", []messagequeue.QueuedMessage{*source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker, ok := any(queue).(interface {
+		MarkPendingSendNowClaimAccepted(context.Context, string) error
+	})
+	if !ok {
+		t.Fatal("message queue cannot durably mark accepted Send Now claims")
+	}
+	if err := marker.MarkPendingSendNowClaimAccepted(ctx, claim.Dispatch.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restartedQueue, restartedDB := newWorkflowTransferQueue(t, dbPath)
+	t.Cleanup(func() { _ = restartedDB.Close() })
+	restarted := &Service{logger: testLogger(), messageQueue: restartedQueue}
+	if err := restarted.reconcilePendingSendNowClaimsOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if status := restartedQueue.GetStatus(ctx, "session-1"); status.Count != 0 {
+		t.Fatalf("accepted Send Now source was restored after restart: %#v", status.Entries)
+	}
+}

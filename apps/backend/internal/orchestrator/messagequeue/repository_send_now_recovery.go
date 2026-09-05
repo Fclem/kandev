@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	internaldb "github.com/kandev/kandev/internal/db"
 )
 
 func (r *sqliteRepository) ensureSendNowClaimRecoverySchema(ctx context.Context) error {
@@ -14,10 +15,14 @@ func (r *sqliteRepository) ensureSendNowClaimRecoverySchema(ctx context.Context)
 		CREATE TABLE IF NOT EXISTS queue_send_now_claims (
 			session_id  TEXT PRIMARY KEY,
 			claim_json  TEXT NOT NULL,
+			accepted    INTEGER NOT NULL DEFAULT 0,
 			created_at  TIMESTAMP NOT NULL
 		)
 	`); err != nil {
 		return fmt.Errorf("ensure Send Now claim recovery schema: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_send_now_claims ADD COLUMN accepted INTEGER NOT NULL DEFAULT 0`); err != nil && !internaldb.IsDuplicateColumnError(err) {
+		return fmt.Errorf("add Send Now claim acceptance: %w", err)
 	}
 	return nil
 }
@@ -57,33 +62,39 @@ func (r *sqliteRepository) deleteSendNowClaimTx(
 	return nil
 }
 
-func (r *sqliteRepository) ListPendingSendNowClaims(ctx context.Context) ([]SendNowClaim, error) {
+func (r *sqliteRepository) ListPendingSendNowClaims(ctx context.Context) ([]PendingSendNowClaim, error) {
 	if err := r.ensureSendNowClaimRecoverySchema(ctx); err != nil {
 		return nil, err
 	}
-	rows, err := r.db.QueryxContext(ctx, `
-		SELECT claim_json FROM queue_send_now_claims ORDER BY created_at, session_id
-	`)
+	return listPendingRecoveryRecords(
+		ctx,
+		r.db,
+		`SELECT claim_json, accepted FROM queue_send_now_claims ORDER BY created_at, session_id`,
+		"Send Now claim",
+		func(claim SendNowClaim, accepted bool) PendingSendNowClaim {
+			return PendingSendNowClaim{Claim: claim, Accepted: accepted}
+		},
+	)
+}
+
+func (r *sqliteRepository) MarkPendingSendNowClaimAccepted(ctx context.Context, sessionID string) error {
+	if err := r.ensureSendNowClaimRecoverySchema(ctx); err != nil {
+		return err
+	}
+	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE queue_send_now_claims SET accepted = 1 WHERE session_id = ?
+	`), sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("list pending Send Now claims: %w", err)
+		return fmt.Errorf("mark Send Now claim accepted: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-	var claims []SendNowClaim
-	for rows.Next() {
-		var claimJSON string
-		if err := rows.Scan(&claimJSON); err != nil {
-			return nil, fmt.Errorf("scan pending Send Now claim: %w", err)
-		}
-		var claim SendNowClaim
-		if err := json.Unmarshal([]byte(claimJSON), &claim); err != nil {
-			return nil, fmt.Errorf("unmarshal pending Send Now claim: %w", err)
-		}
-		claims = append(claims, claim)
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("mark Send Now claim accepted rows affected: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate pending Send Now claims: %w", err)
+	if affected != 1 {
+		return ErrSendNowClaimChanged
 	}
-	return claims, nil
+	return nil
 }
 
 func (r *sqliteRepository) DeletePendingSendNowClaim(ctx context.Context, sessionID string) error {

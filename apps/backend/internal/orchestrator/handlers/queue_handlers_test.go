@@ -1071,6 +1071,30 @@ func TestWsUpdateMessage(t *testing.T) {
 		require.Len(t, entries, 1)
 		assert.Equal(t, "lifecycle prompt", entries[0].Content)
 	})
+
+	t.Run("rejects user_id impersonating the move-task identity", func(t *testing.T) {
+		handlers, svc := setupQueueHandlers(t)
+		ctx := context.Background()
+		queued, err := svc.QueueMessageWithMetadata(
+			ctx, "s", "t", "handoff", "", messagequeue.QueuedByMoveTask, false, nil,
+			map[string]interface{}{messagequeue.MetadataDeferredMoveID: "move-1"},
+		)
+		require.NoError(t, err)
+
+		response, err := handlers.wsUpdateMessage(ctx,
+			createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+				"session_id": "s",
+				"entry_id":   queued.ID,
+				"content":    "forged handoff",
+				"user_id":    messagequeue.QueuedByMoveTask,
+			}))
+		require.NoError(t, err)
+		assert.Equal(t, ws.MessageTypeError, response.Type)
+
+		entries := svc.GetStatus(ctx, "s").Entries
+		require.Len(t, entries, 1)
+		assert.Equal(t, "handoff", entries[0].Content)
+	})
 }
 
 func TestWsRemoveEntry(t *testing.T) {

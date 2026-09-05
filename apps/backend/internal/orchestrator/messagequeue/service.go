@@ -919,6 +919,9 @@ func (s *Service) restoreMessage(ctx context.Context, msg *QueuedMessage) (*Queu
 	if err := s.repo.Restore(ctx, &restored, 0); err != nil {
 		return nil, err
 	}
+	if err := s.deletePendingQueueDispatch(ctx, restored.SessionID, restored.ID); err != nil {
+		return nil, err
+	}
 	s.logger.Info("message restored at original queue position",
 		zap.String("session_id", restored.SessionID),
 		zap.String("task_id", restored.TaskID),
@@ -1025,6 +1028,9 @@ func (s *Service) RequeueAtHead(ctx context.Context, msg *QueuedMessage) error {
 	}
 	return s.WithSessionAdmission(ctx, msg.SessionID, func(admittedCtx context.Context) error {
 		if err := s.repo.RequeuePreservingFIFO(admittedCtx, msg); err != nil {
+			return err
+		}
+		if err := s.deletePendingQueueDispatch(admittedCtx, msg.SessionID, msg.ID); err != nil {
 			return err
 		}
 		s.invalidateEditLease(msg.SessionID, msg.ID)
@@ -1331,13 +1337,13 @@ func (s *Service) PauseAutoRunIfPending(ctx context.Context, sessionID string) (
 
 // AcknowledgeQueued removes a server-reserved entry after prompt acceptance.
 func (s *Service) AcknowledgeQueued(ctx context.Context, sessionID, entryID string) error {
-	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		return s.repo.AcknowledgeByID(admittedCtx, sessionID, entryID)
+	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		err := s.repo.AcknowledgeByID(admittedCtx, sessionID, entryID)
+		if err != nil && !errors.Is(err, ErrEntryNotFound) {
+			return err
+		}
+		return s.deletePendingQueueDispatch(admittedCtx, sessionID, entryID)
 	})
-	if errors.Is(err, ErrEntryNotFound) {
-		return nil
-	}
-	return err
 }
 
 // IsCurrentLifecycleReservation verifies that msg is still the durable row
@@ -1771,7 +1777,8 @@ func (s *Service) AcknowledgeSendNowClaim(ctx context.Context, claim *SendNowCla
 }
 
 type pendingSendNowClaimRepository interface {
-	ListPendingSendNowClaims(context.Context) ([]SendNowClaim, error)
+	ListPendingSendNowClaims(context.Context) ([]PendingSendNowClaim, error)
+	MarkPendingSendNowClaimAccepted(context.Context, string) error
 	DeletePendingSendNowClaim(context.Context, string) error
 }
 
@@ -1783,12 +1790,24 @@ func (s *Service) PendingSendNowClaimPersistenceAvailable() bool {
 }
 
 // ListPendingSendNowClaims reloads interrupted Send Now claims after restart.
-func (s *Service) ListPendingSendNowClaims(ctx context.Context) ([]SendNowClaim, error) {
+func (s *Service) ListPendingSendNowClaims(ctx context.Context) ([]PendingSendNowClaim, error) {
 	repo, ok := s.repo.(pendingSendNowClaimRepository)
 	if !ok {
 		return nil, errors.New("pending Send Now claim persistence unavailable")
 	}
 	return repo.ListPendingSendNowClaims(ctx)
+}
+
+// MarkPendingSendNowClaimAccepted records the executor acceptance boundary
+// before the potentially long-running prompt call returns.
+func (s *Service) MarkPendingSendNowClaimAccepted(ctx context.Context, sessionID string) error {
+	repo, ok := s.repo.(pendingSendNowClaimRepository)
+	if !ok {
+		return errors.New("pending Send Now claim persistence unavailable")
+	}
+	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		return repo.MarkPendingSendNowClaimAccepted(admittedCtx, sessionID)
+	})
 }
 
 // DeletePendingSendNowClaim discards a recovery record that can no longer be
@@ -1801,6 +1820,56 @@ func (s *Service) DeletePendingSendNowClaim(ctx context.Context, sessionID strin
 	return repo.DeletePendingSendNowClaim(ctx, sessionID)
 }
 
+type pendingQueueDispatchRepository interface {
+	ListPendingQueueDispatches(context.Context) ([]PendingQueueDispatch, error)
+	MarkPendingQueueDispatchAccepted(context.Context, string, string) error
+	DeletePendingQueueDispatch(context.Context, string, string) error
+}
+
+// PendingQueueDispatchPersistenceAvailable reports whether ordinary dequeues
+// survive a process exit before executor acceptance.
+func (s *Service) PendingQueueDispatchPersistenceAvailable() bool {
+	_, ok := s.repo.(pendingQueueDispatchRepository)
+	return ok
+}
+
+func (s *Service) ListPendingQueueDispatches(ctx context.Context) ([]PendingQueueDispatch, error) {
+	repo, ok := s.repo.(pendingQueueDispatchRepository)
+	if !ok {
+		return nil, errors.New("pending queue dispatch persistence unavailable")
+	}
+	return repo.ListPendingQueueDispatches(ctx)
+}
+
+func (s *Service) MarkPendingQueueDispatchAccepted(
+	ctx context.Context,
+	sessionID, entryID string,
+) error {
+	repo, ok := s.repo.(pendingQueueDispatchRepository)
+	if !ok {
+		return nil
+	}
+	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		return repo.MarkPendingQueueDispatchAccepted(admittedCtx, sessionID, entryID)
+	})
+}
+
+// DeletePendingQueueDispatch acknowledges a recovered or accepted ordinary
+// dispatch claim.
+func (s *Service) DeletePendingQueueDispatch(ctx context.Context, sessionID, entryID string) error {
+	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		return s.deletePendingQueueDispatch(admittedCtx, sessionID, entryID)
+	})
+}
+
+func (s *Service) deletePendingQueueDispatch(ctx context.Context, sessionID, entryID string) error {
+	repo, ok := s.repo.(pendingQueueDispatchRepository)
+	if !ok {
+		return nil
+	}
+	return repo.DeletePendingQueueDispatch(ctx, sessionID, entryID)
+}
+
 // UpdateMessageWithMetadata atomically edits queue content and applies
 // metadata replacements while retaining unrelated metadata keys.
 func (s *Service) UpdateMessageWithMetadata(ctx context.Context, sessionID, entryID, content string, attachments []MessageAttachment, metadataUpdates map[string]interface{}, queuedBy string) error {
@@ -1808,6 +1877,7 @@ func (s *Service) UpdateMessageWithMetadata(ctx context.Context, sessionID, entr
 		if s.editLeaseBlocksEntryLocked(sessionID, entryID) {
 			return ErrEditConflict
 		}
+
 		return s.repo.UpdateContentAndMetadata(admittedCtx, sessionID, entryID, content, attachments, metadataUpdates, queuedBy)
 	}); err != nil {
 		return err

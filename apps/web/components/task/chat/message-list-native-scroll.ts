@@ -1025,6 +1025,7 @@ export function useScrollToMessage(
         const container = scrollRef.current;
         if (!container) return;
         const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+        // A dockview panel re-show (the prompt-history jump activates the
         // chat) makes SessionPanelContent restore its saved scrollTop in a
         // rAF that can cancel the scroll, and some runtimes no-op a smooth
         // scrollIntoView entirely. Watch a bounded frame window: follow an

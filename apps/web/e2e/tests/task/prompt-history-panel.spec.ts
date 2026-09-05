@@ -1,6 +1,11 @@
 import { expect } from "@playwright/test";
 import { test } from "../../fixtures/test-base";
 import { SessionPage } from "../../pages/session-page";
+import {
+  FIRST_PROMPT_MARKER,
+  MIDDLE_PROMPT_MARKER,
+  seedLongPromptHistory,
+} from "../../helpers/prompt-history-long-seed";
 const DONE_STATES = ["COMPLETED", "WAITING_FOR_INPUT"];
 const SENTINEL = "sentinel-jump-token-9f3a";
 
@@ -191,5 +196,62 @@ test.describe("Prompt history panel", () => {
       return { elTop: rect.top, listTop: listRect?.top ?? 0 };
     });
     expect(Math.abs(elTop - listTop - targetMargin)).toBeLessThanOrEqual(2);
+  });
+
+  test("loads an unloaded middle prompt before the desktop transcript jump", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    test.setTimeout(180_000);
+    const taskId = await seedLongPromptHistory(apiClient, {
+      workspaceId: seedData.workspaceId,
+      agentProfileId: seedData.agentProfileId,
+      workflowId: seedData.workflowId,
+      startStepId: seedData.startStepId,
+      repositoryId: seedData.repositoryId,
+    });
+
+    await testPage.goto(`/t/${taskId}`);
+    const session = new SessionPage(testPage);
+    await session.waitForLoad();
+    await session.waitForDockviewReady();
+    await session.addPanelButton().click();
+    await testPage.getByTestId("add-panel-prompt-history-item").click();
+
+    const panel = testPage.getByTestId("prompt-history-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByTestId("prompt-history-number-0")).toHaveText("#121");
+    await expect(panel.getByText(FIRST_PROMPT_MARKER)).toHaveCount(0);
+
+    const scroller = panel.getByTestId("prompt-history-scroll");
+    const middleRow = panel.locator('[data-testid^="prompt-history-row-"]', {
+      hasText: MIDDLE_PROMPT_MARKER,
+    });
+    for (let attempt = 0; attempt < 20 && (await middleRow.count()) === 0; attempt++) {
+      await scroller.hover();
+      await testPage.mouse.wheel(0, 700);
+      await expect
+        .poll(async () => await middleRow.count(), { timeout: 5_000 })
+        .toBeGreaterThan(0)
+        .catch(() => undefined);
+    }
+    await expect(middleRow).toBeAttached({ timeout: 10_000 });
+    const targetMessageId = await middleRow
+      .locator("[data-message-id]")
+      .getAttribute("data-message-id");
+    if (!targetMessageId) throw new Error("Desktop middle prompt row has no message id");
+
+    let aroundRequests = 0;
+    await testPage.route("**/api/v1/task-sessions/*/messages*", async (route) => {
+      if (new URL(route.request().url()).searchParams.get("around")) aroundRequests += 1;
+      await route.continue();
+    });
+    await middleRow.locator('[role="button"]').first().click();
+
+    await expect.poll(() => aroundRequests, { timeout: 10_000 }).toBe(1);
+    await expect(session.activeChat().locator(`#msg-${targetMessageId}`)).toBeAttached({
+      timeout: 10_000,
+    });
   });
 });

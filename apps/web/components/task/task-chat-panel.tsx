@@ -2,7 +2,16 @@
 
 /* eslint-disable max-lines -- this component composes the complete transcript surface. */
 
-import { useCallback, useEffect, useMemo, useRef, useState, memo, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+  type MutableRefObject,
+  type RefObject,
+} from "react";
 import { PanelRoot, PanelBody } from "./panel-primitives";
 import { useSettingsData } from "@/hooks/domains/settings/use-settings-data";
 import {
@@ -73,10 +82,225 @@ type PendingMessageScrollOptions = {
   messageId: string | null | undefined;
   target?: PendingMessageScrollTarget | null;
   onConsumed: ((messageId: string) => void) | undefined;
-  readinessKey: string;
+  /** Stable store-derived revision. The hook only uses its identity. */
+  readinessKey: unknown;
   isInitialMessagesLoading: boolean;
   isVisible?: boolean;
 };
+
+type PendingScrollLifecycle = {
+  sessionId: string | null;
+  messageId: string | null | undefined;
+  target?: PendingMessageScrollTarget | null;
+  isVisible: boolean;
+};
+
+type PendingScrollRefs = {
+  requestKeys: MutableRefObject<Set<string>>;
+  completedAround: MutableRefObject<Set<string>>;
+  targetIdentity: MutableRefObject<string | null>;
+  failedTargetKey: MutableRefObject<string | null>;
+  scrollSucceeded: MutableRefObject<boolean>;
+  reassertionTimer: MutableRefObject<number | null>;
+  reassertionAttempted: MutableRefObject<Set<string>>;
+  mounted: MutableRefObject<boolean>;
+  lifecycle: MutableRefObject<PendingScrollLifecycle>;
+};
+
+function isPendingTargetCurrent(
+  refs: PendingScrollRefs,
+  targetKey: string,
+  sessionId: string,
+  messageId: string,
+) {
+  return (
+    refs.mounted.current &&
+    refs.lifecycle.current.isVisible &&
+    refs.targetIdentity.current === targetKey &&
+    refs.lifecycle.current.sessionId === sessionId &&
+    refs.lifecycle.current.messageId === messageId
+  );
+}
+
+function schedulePendingReassertion(options: {
+  refs: PendingScrollRefs;
+  targetKey: string;
+  messageId: string;
+  messageListRef: RefObject<MessageListHandle | null>;
+  isCurrentTarget: () => boolean;
+  onConsumed: ((messageId: string) => void) | undefined;
+  setHasError: (value: boolean) => void;
+}) {
+  const { refs, targetKey, messageId, messageListRef, isCurrentTarget, onConsumed, setHasError } =
+    options;
+  if (
+    refs.reassertionTimer.current !== null ||
+    refs.reassertionAttempted.current.has(targetKey) ||
+    !isCurrentTarget()
+  ) {
+    return;
+  }
+  refs.reassertionTimer.current = window.setTimeout(() => {
+    refs.reassertionTimer.current = null;
+    if (!isCurrentTarget()) return;
+    refs.reassertionAttempted.current.add(targetKey);
+    if (
+      messageListRef.current?.scrollToMessage(messageId, {
+        align: "start",
+        behavior: "auto",
+      })
+    ) {
+      refs.completedAround.current.delete(targetKey);
+      onConsumed?.(messageId);
+    } else {
+      refs.failedTargetKey.current = targetKey;
+      setHasError(true);
+    }
+  }, 250);
+}
+
+function requestPendingTargetWindow(options: {
+  refs: PendingScrollRefs;
+  targetKey: string;
+  sessionId: string;
+  messageId: string;
+  target?: PendingMessageScrollTarget | null;
+  targetToken: number;
+  store: ReturnType<typeof useAppStoreApi>;
+  isCurrentTarget: () => boolean;
+  setIsLoading: (value: boolean) => void;
+  setHasError: (value: boolean) => void;
+  onConsumed: ((messageId: string) => void) | undefined;
+  scheduleReassertion: () => void;
+}) {
+  const {
+    refs,
+    targetKey,
+    sessionId,
+    messageId,
+    target,
+    targetToken,
+    store,
+    isCurrentTarget,
+    setIsLoading,
+    setHasError,
+    onConsumed,
+    scheduleReassertion,
+  } = options;
+  refs.requestKeys.current.add(targetKey);
+  setIsLoading(true);
+  void loadMessageWindowAround(
+    sessionId,
+    messageId,
+    () => isCurrentTarget() && (!target || refs.lifecycle.current.target?.token === targetToken),
+    store,
+  )
+    .then((result) => {
+      if (!isCurrentTarget()) return;
+      if (result.kind === "deleted-target") {
+        onConsumed?.(messageId);
+      } else if (result.kind === "merged") {
+        refs.completedAround.current.add(targetKey);
+        if (refs.scrollSucceeded.current) scheduleReassertion();
+      }
+    })
+    .catch(() => {
+      if (isCurrentTarget()) {
+        refs.completedAround.current.delete(targetKey);
+        refs.failedTargetKey.current = targetKey;
+        setHasError(true);
+      }
+    })
+    .finally(() => {
+      refs.requestKeys.current.delete(targetKey);
+      if (refs.mounted.current) setIsLoading(refs.requestKeys.current.size > 0);
+    });
+}
+
+function attemptPendingScroll(options: {
+  refs: PendingScrollRefs;
+  targetKey: string;
+  sessionId: string;
+  messageId: string;
+  target?: PendingMessageScrollTarget | null;
+  targetToken: number;
+  messageListRef: RefObject<MessageListHandle | null>;
+  store: ReturnType<typeof useAppStoreApi>;
+  isInitialMessagesLoading: boolean;
+  isCurrentTarget: () => boolean;
+  onConsumed: ((messageId: string) => void) | undefined;
+  setIsLoading: (value: boolean) => void;
+  setHasError: (value: boolean) => void;
+}) {
+  const {
+    refs,
+    targetKey,
+    sessionId,
+    messageId,
+    target,
+    targetToken,
+    messageListRef,
+    store,
+    isInitialMessagesLoading,
+    isCurrentTarget,
+    onConsumed,
+    setIsLoading,
+    setHasError,
+  } = options;
+  if (!isCurrentTarget()) return;
+  if (
+    refs.completedAround.current.has(targetKey) &&
+    (refs.reassertionTimer.current !== null || refs.reassertionAttempted.current.has(targetKey))
+  ) {
+    return;
+  }
+  const scheduleReassertion = () =>
+    schedulePendingReassertion({
+      refs,
+      targetKey,
+      messageId,
+      messageListRef,
+      isCurrentTarget,
+      onConsumed,
+      setHasError,
+    });
+  if (
+    messageListRef.current?.scrollToMessage(messageId, {
+      align: "start",
+      behavior: "auto",
+    })
+  ) {
+    refs.scrollSucceeded.current = true;
+    if (refs.completedAround.current.has(targetKey)) {
+      scheduleReassertion();
+    } else if (!refs.requestKeys.current.has(targetKey)) {
+      onConsumed?.(messageId);
+    }
+    return;
+  }
+  if (isInitialMessagesLoading) return;
+  const loaded = store
+    .getState()
+    .messages.bySession[sessionId]?.some((message) => message.id === messageId);
+  if (loaded) return;
+  if (refs.requestKeys.current.has(targetKey) || refs.completedAround.current.has(targetKey)) {
+    return;
+  }
+  requestPendingTargetWindow({
+    refs,
+    targetKey,
+    sessionId,
+    messageId,
+    target,
+    targetToken,
+    store,
+    isCurrentTarget,
+    setIsLoading,
+    setHasError,
+    onConsumed,
+    scheduleReassertion,
+  });
+}
 
 // eslint-disable-next-line max-lines-per-function -- coordinates the target lifecycle, request guard, and retry state.
 export function usePendingMessageScroll({
@@ -96,12 +320,22 @@ export function usePendingMessageScroll({
   const requestKeysRef = useRef(new Set<string>());
   const completedAroundRef = useRef(new Set<string>());
   const targetIdentityRef = useRef<string | null>(null);
+  const failedTargetKeyRef = useRef<string | null>(null);
   const scrollSucceededRef = useRef(false);
   const reassertionTimerRef = useRef<number | null>(null);
   const reassertionAttemptedRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
-  const lifecycleRef = useRef({ sessionId, messageId, target, isVisible });
-  const retry = useCallback(() => setRetryVersion((version) => version + 1), []);
+  const lifecycleRef = useRef<PendingScrollLifecycle>({ sessionId, messageId, target, isVisible });
+  const retry = useCallback(() => {
+    const targetKey = targetIdentityRef.current;
+    failedTargetKeyRef.current = null;
+    if (targetKey) {
+      completedAroundRef.current.delete(targetKey);
+      reassertionAttemptedRef.current.delete(targetKey);
+    }
+    setHasError(false);
+    setRetryVersion((version) => version + 1);
+  }, []);
 
   const cancelReassertion = useCallback(() => {
     if (reassertionTimerRef.current !== null) {
@@ -134,10 +368,10 @@ export function usePendingMessageScroll({
     isVisible,
   };
   const targetBelongsToHost = !target || target.sessionId === sessionId;
-  // eslint-disable-next-line max-lines-per-function -- target loading and delayed reassertion share one lifecycle.
   useEffect(() => {
     if (!targetBelongsToHost) {
       targetIdentityRef.current = null;
+      failedTargetKeyRef.current = null;
       completedAroundRef.current.clear();
       cancelReassertion();
       setIsLoading(false);
@@ -147,6 +381,7 @@ export function usePendingMessageScroll({
     }
     if (!effectiveSessionId || !effectiveMessageId || !effectiveTargetKey) {
       targetIdentityRef.current = null;
+      failedTargetKeyRef.current = null;
       completedAroundRef.current.clear();
       cancelReassertion();
       setIsLoading(false);
@@ -156,6 +391,8 @@ export function usePendingMessageScroll({
     if (targetIdentityRef.current !== effectiveTargetKey) {
       scrollSucceededRef.current = false;
       targetIdentityRef.current = effectiveTargetKey;
+      failedTargetKeyRef.current = null;
+      setHasError(false);
       completedAroundRef.current.clear();
       cancelReassertion();
     }
@@ -163,106 +400,53 @@ export function usePendingMessageScroll({
       cancelReassertion();
       completedAroundRef.current.delete(effectiveTargetKey);
     }
-    setHasError(false);
-    let frame = 0;
-    const isCurrentTarget = () =>
-      mountedRef.current &&
-      lifecycleRef.current.isVisible &&
-      targetIdentityRef.current === effectiveTargetKey &&
-      lifecycleRef.current.sessionId === effectiveSessionId &&
-      lifecycleRef.current.messageId === effectiveMessageId;
+    if (failedTargetKeyRef.current === effectiveTargetKey) return;
     if (!isVisible) return;
-    const scheduleReassertion = () => {
-      if (
-        reassertionTimerRef.current !== null ||
-        reassertionAttemptedRef.current.has(effectiveTargetKey) ||
-        !isCurrentTarget()
-      )
-        return;
-      reassertionTimerRef.current = window.setTimeout(() => {
-        reassertionTimerRef.current = null;
-        if (!isCurrentTarget()) return;
-        reassertionAttemptedRef.current.add(effectiveTargetKey);
-        if (
-          messageListRef.current?.scrollToMessage(effectiveMessageId, {
-            align: "start",
-            behavior: "auto",
-          })
-        ) {
-          completedAroundRef.current.delete(effectiveTargetKey);
-          onConsumed?.(effectiveMessageId);
-        }
-      }, 250);
-    };
-    const attemptScroll = () => {
-      if (!isCurrentTarget()) return;
-      if (
-        completedAroundRef.current.has(effectiveTargetKey) &&
-        (reassertionTimerRef.current !== null ||
-          reassertionAttemptedRef.current.has(effectiveTargetKey))
-      ) {
-        return;
-      }
-      if (
-        messageListRef.current?.scrollToMessage(effectiveMessageId, {
-          align: "start",
-          behavior: "auto",
-        })
-      ) {
-        scrollSucceededRef.current = true;
-        if (completedAroundRef.current.has(effectiveTargetKey)) {
-          scheduleReassertion();
-        } else if (!requestKeysRef.current.has(effectiveTargetKey)) {
-          onConsumed?.(effectiveMessageId);
-        }
-        return;
-      }
-      if (isInitialMessagesLoading) return;
-      const loaded = store
-        .getState()
-        .messages.bySession[
-          effectiveSessionId
-        ]?.some((message) => message.id === effectiveMessageId);
-      if (loaded) return;
-      if (
-        requestKeysRef.current.has(effectiveTargetKey) ||
-        completedAroundRef.current.has(effectiveTargetKey)
-      ) {
-        return;
-      }
-      requestKeysRef.current.add(effectiveTargetKey);
-      setIsLoading(true);
-      void loadMessageWindowAround(
+    const isCurrentTarget = () =>
+      isPendingTargetCurrent(
+        {
+          requestKeys: requestKeysRef,
+          completedAround: completedAroundRef,
+          targetIdentity: targetIdentityRef,
+          failedTargetKey: failedTargetKeyRef,
+          scrollSucceeded: scrollSucceededRef,
+          reassertionTimer: reassertionTimerRef,
+          reassertionAttempted: reassertionAttemptedRef,
+          mounted: mountedRef,
+          lifecycle: lifecycleRef,
+        },
+        effectiveTargetKey,
         effectiveSessionId,
         effectiveMessageId,
-        () =>
-          isCurrentTarget() &&
-          targetIdentityRef.current === effectiveTargetKey &&
-          (!target || lifecycleRef.current.target?.token === targetToken),
-        store,
-      )
-        .then((result) => {
-          if (!isCurrentTarget()) return;
-          if (result.kind === "deleted-target") {
-            onConsumed?.(effectiveMessageId);
-          } else if (result.kind === "merged") {
-            completedAroundRef.current.add(effectiveTargetKey);
-            if (scrollSucceededRef.current) scheduleReassertion();
-          }
-        })
-        .catch(() => {
-          if (isCurrentTarget()) {
-            completedAroundRef.current.delete(effectiveTargetKey);
-            setHasError(true);
-          }
-        })
-        .finally(() => {
-          requestKeysRef.current.delete(effectiveTargetKey);
-          if (mountedRef.current) setIsLoading(requestKeysRef.current.size > 0);
-        });
-      return;
+      );
+    const refs: PendingScrollRefs = {
+      requestKeys: requestKeysRef,
+      completedAround: completedAroundRef,
+      targetIdentity: targetIdentityRef,
+      failedTargetKey: failedTargetKeyRef,
+      scrollSucceeded: scrollSucceededRef,
+      reassertionTimer: reassertionTimerRef,
+      reassertionAttempted: reassertionAttemptedRef,
+      mounted: mountedRef,
+      lifecycle: lifecycleRef,
     };
-    frame = requestAnimationFrame(attemptScroll);
+    const frame = requestAnimationFrame(() =>
+      attemptPendingScroll({
+        refs,
+        targetKey: effectiveTargetKey,
+        sessionId: effectiveSessionId,
+        messageId: effectiveMessageId,
+        target,
+        targetToken,
+        messageListRef,
+        store,
+        isInitialMessagesLoading,
+        isCurrentTarget,
+        onConsumed,
+        setIsLoading,
+        setHasError,
+      }),
+    );
     return () => cancelAnimationFrame(frame);
   }, [
     cancelReassertion,
@@ -451,6 +635,14 @@ type ScrollTargetConsumptionParams = {
    * after the initial load or when older pages are prepended. */
   renderedMessageCount: number;
 };
+
+let dockviewOwnerGeneration = 0;
+const activeDockviewOwners = new Map<string, { generation: number; token: number | null }>();
+
+function getDockviewOwnerKey(sessionId: string | null, panelId: string | null) {
+  return sessionId && panelId ? `${sessionId}\u0000${panelId}` : null;
+}
+
 function shouldDeferTargetWindowLoad(
   messages: readonly { id: string }[],
   targetMessageId: string,
@@ -458,9 +650,214 @@ function shouldDeferTargetWindowLoad(
   targetRendered: boolean,
 ) {
   const loaded = messages.some((message) => message.id === targetMessageId);
+  if (isInitialMessagesLoading) return true;
+  return loaded && targetRendered;
+}
+
+type DockviewScrollTarget = {
+  sessionId: string;
+  messageId: string;
+  token: number;
+  hostPanelId: string;
+};
+
+type DockviewScrollLifecycle = {
+  reassertionKey: MutableRefObject<string | null>;
+  reassertionTargetKey: MutableRefObject<string | null>;
+  reassertionAttempted: MutableRefObject<Set<string>>;
+  requestKeys: MutableRefObject<Set<string>>;
+  completedAround: MutableRefObject<Set<string>>;
+  failedTargetKey: MutableRefObject<string | null>;
+  scrollSucceeded: MutableRefObject<boolean>;
+  reassertionTimer: MutableRefObject<number | null>;
+  mounted: MutableRefObject<boolean>;
+  lifecycle: MutableRefObject<{
+    resolvedSessionId: string | null;
+    isVisible: boolean;
+    panelId: string | null;
+  }>;
+};
+
+function isDockviewTargetCurrent(refs: DockviewScrollLifecycle, target: DockviewScrollTarget) {
+  const latest = useDockviewStore.getState().scrollTarget;
   return (
-    (isInitialMessagesLoading && (messages.length === 0 || loaded)) || (loaded && targetRendered)
+    refs.mounted.current &&
+    refs.lifecycle.current.isVisible &&
+    refs.lifecycle.current.resolvedSessionId === target.sessionId &&
+    refs.lifecycle.current.panelId === target.hostPanelId &&
+    latest?.token === target.token &&
+    latest.sessionId === target.sessionId &&
+    latest.hostPanelId === target.hostPanelId
   );
+}
+
+function scheduleDockviewReassertion(options: {
+  refs: DockviewScrollLifecycle;
+  target: DockviewScrollTarget;
+  targetKey: string;
+  messageListRef: RefObject<MessageListHandle | null>;
+  clearScrollTarget: (token: number) => void;
+  setJumpError: (value: boolean) => void;
+}) {
+  const { refs, target, targetKey, messageListRef, clearScrollTarget, setJumpError } = options;
+  if (
+    refs.reassertionTimer.current !== null ||
+    refs.reassertionAttempted.current.has(targetKey) ||
+    !isDockviewTargetCurrent(refs, target)
+  ) {
+    return;
+  }
+  refs.reassertionKey.current = targetKey;
+  refs.reassertionTimer.current = window.setTimeout(() => {
+    refs.reassertionTimer.current = null;
+    refs.reassertionKey.current = null;
+    if (!isDockviewTargetCurrent(refs, target)) return;
+    refs.reassertionAttempted.current.add(targetKey);
+    if (
+      messageListRef.current?.scrollToMessage(target.messageId, {
+        align: "start",
+        behavior: "auto",
+      })
+    ) {
+      refs.completedAround.current.delete(targetKey);
+      clearScrollTarget(target.token);
+    } else {
+      refs.failedTargetKey.current = targetKey;
+      setJumpError(true);
+    }
+  }, 250);
+}
+
+function requestDockviewTargetWindow(options: {
+  refs: DockviewScrollLifecycle;
+  target: DockviewScrollTarget;
+  targetKey: string;
+  appStore: ReturnType<typeof useAppStoreApi>;
+  isCurrentTarget: () => boolean;
+  setJumpLoading: (value: boolean) => void;
+  setJumpError: (value: boolean) => void;
+  clearScrollTarget: (token: number) => void;
+  scheduleReassertion: () => void;
+}) {
+  const {
+    refs,
+    target,
+    targetKey,
+    appStore,
+    isCurrentTarget,
+    setJumpLoading,
+    setJumpError,
+    clearScrollTarget,
+    scheduleReassertion,
+  } = options;
+  refs.requestKeys.current.add(targetKey);
+  setJumpLoading(true);
+  void loadMessageWindowAround(
+    target.sessionId,
+    target.messageId,
+    () => isCurrentTarget(),
+    appStore,
+  )
+    .then((result) => {
+      if (!isCurrentTarget()) return;
+      if (result.kind === "merged") {
+        refs.completedAround.current.add(targetKey);
+        if (refs.scrollSucceeded.current) scheduleReassertion();
+      } else if (result.kind === "deleted-target") {
+        clearScrollTarget(target.token);
+      }
+    })
+    .catch(() => {
+      if (isCurrentTarget()) {
+        refs.failedTargetKey.current = targetKey;
+        setJumpError(true);
+      }
+    })
+    .finally(() => {
+      refs.requestKeys.current.delete(targetKey);
+      if (refs.mounted.current) setJumpLoading(refs.requestKeys.current.size > 0);
+    });
+}
+
+function attemptDockviewScroll(options: {
+  refs: DockviewScrollLifecycle;
+  target: DockviewScrollTarget;
+  targetKey: string;
+  appStore: ReturnType<typeof useAppStoreApi>;
+  messageListRef: RefObject<MessageListHandle | null>;
+  isInitialMessagesLoading: boolean;
+  targetRendered: boolean;
+  isCurrentTarget: () => boolean;
+  setJumpLoading: (value: boolean) => void;
+  setJumpError: (value: boolean) => void;
+  clearScrollTarget: (token: number) => void;
+}) {
+  const {
+    refs,
+    target,
+    targetKey,
+    appStore,
+    messageListRef,
+    isInitialMessagesLoading,
+    targetRendered,
+    isCurrentTarget,
+    setJumpLoading,
+    setJumpError,
+    clearScrollTarget,
+  } = options;
+  if (
+    refs.completedAround.current.has(targetKey) &&
+    (refs.reassertionTimer.current !== null || refs.reassertionAttempted.current.has(targetKey))
+  ) {
+    return;
+  }
+  if (!isCurrentTarget()) return;
+  const scheduleReassertion = () =>
+    scheduleDockviewReassertion({
+      refs,
+      target,
+      targetKey,
+      messageListRef,
+      clearScrollTarget,
+      setJumpError,
+    });
+  const didScroll = messageListRef.current?.scrollToMessage(target.messageId, {
+    align: "start",
+  });
+  if (didScroll) {
+    refs.scrollSucceeded.current = true;
+    if (refs.completedAround.current.has(targetKey)) {
+      scheduleReassertion();
+    } else if (!refs.requestKeys.current.has(targetKey)) {
+      clearScrollTarget(target.token);
+    }
+    return;
+  }
+  const sessionMessages = appStore.getState().messages.bySession[target.sessionId] ?? [];
+  if (
+    shouldDeferTargetWindowLoad(
+      sessionMessages,
+      target.messageId,
+      isInitialMessagesLoading,
+      targetRendered,
+    )
+  ) {
+    return;
+  }
+  if (refs.requestKeys.current.has(targetKey) || refs.completedAround.current.has(targetKey)) {
+    return;
+  }
+  requestDockviewTargetWindow({
+    refs,
+    target,
+    targetKey,
+    appStore,
+    isCurrentTarget,
+    setJumpLoading,
+    setJumpError,
+    clearScrollTarget,
+    scheduleReassertion,
+  });
 }
 
 /**
@@ -482,11 +879,14 @@ export function useScrollTargetConsumption({
   const appStore = useAppStoreApi();
   const clearScrollTargetForOwner = useDockviewStore((state) => state.clearScrollTargetForOwner);
   const [jumpLoading, setJumpLoading] = useState(false);
+  const [jumpError, setJumpError] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
   const reassertionKeyRef = useRef<string | null>(null);
   const reassertionTargetKeyRef = useRef<string | null>(null);
   const reassertionAttemptedRef = useRef(new Set<string>());
   const requestKeysRef = useRef(new Set<string>());
   const completedAroundRef = useRef(new Set<string>());
+  const failedTargetKeyRef = useRef<string | null>(null);
   const scrollSucceededRef = useRef(false);
   const reassertionTimerRef = useRef<number | null>(null);
   const ownerCleanupTimerRef = useRef<number | null>(null);
@@ -496,6 +896,17 @@ export function useScrollTargetConsumption({
   const mountedRef = useRef(true);
   const lifecycleRef = useRef({ resolvedSessionId, isVisible, panelId });
 
+  const retry = useCallback(() => {
+    failedTargetKeyRef.current = null;
+    const targetKey = reassertionTargetKeyRef.current;
+    if (targetKey) {
+      completedAroundRef.current.delete(targetKey);
+      reassertionAttemptedRef.current.delete(targetKey);
+    }
+    setJumpError(false);
+    setRetryVersion((version) => version + 1);
+  }, []);
+
   const cancelOwnerCleanup = useCallback(() => {
     if (ownerCleanupTimerRef.current !== null) {
       window.clearTimeout(ownerCleanupTimerRef.current);
@@ -504,10 +915,12 @@ export function useScrollTargetConsumption({
   }, []);
 
   const scheduleOwnerCleanup = useCallback(
-    (targetToken: number) => {
+    (targetToken: number, ownerKey: string) => {
       cancelOwnerCleanup();
       ownerCleanupTimerRef.current = window.setTimeout(() => {
         ownerCleanupTimerRef.current = null;
+        const activeOwner = activeDockviewOwners.get(ownerKey);
+        if (activeOwner?.token === targetToken) return;
         clearScrollTarget(targetToken);
       }, 0);
     },
@@ -522,6 +935,7 @@ export function useScrollTargetConsumption({
     reassertionKeyRef.current = null;
   }, []);
   lifecycleRef.current = { resolvedSessionId, isVisible, panelId };
+  const ownerKey = getDockviewOwnerKey(resolvedSessionId, panelId);
   ownerTargetTokenRef.current =
     scrollTarget?.sessionId === resolvedSessionId && scrollTarget.hostPanelId === panelId
       ? scrollTarget.token
@@ -538,7 +952,12 @@ export function useScrollTargetConsumption({
   useEffect(() => {
     // Only a DOCKVIEW host (defined panelId) may invalidate or clear a
     // retained target. Non-Dockview hosts own their target lifecycle.
-    if (!panelId) return;
+    if (!panelId || !ownerKey) return;
+    const ownerGeneration = ++dockviewOwnerGeneration;
+    activeDockviewOwners.set(ownerKey, {
+      generation: ownerGeneration,
+      token: ownerTargetTokenRef.current,
+    });
     cancelOwnerCleanup();
     const previousSession = previousSessionId.current;
     const previousPanel = previousPanelId.current;
@@ -553,24 +972,43 @@ export function useScrollTargetConsumption({
       cancelReassertion();
     }
     return () => {
+      if (activeDockviewOwners.get(ownerKey)?.generation === ownerGeneration) {
+        activeDockviewOwners.delete(ownerKey);
+      }
       cancelReassertion();
       const targetToken = ownerTargetTokenRef.current;
-      if (targetToken !== null) scheduleOwnerCleanup(targetToken);
+      if (targetToken !== null) scheduleOwnerCleanup(targetToken, ownerKey);
     };
   }, [
     cancelOwnerCleanup,
     cancelReassertion,
     clearScrollTargetForOwner,
     panelId,
+    ownerKey,
     resolvedSessionId,
     scheduleOwnerCleanup,
   ]);
 
   useEffect(() => {
-    if (!isVisible) cancelReassertion();
-  }, [cancelReassertion, isVisible]);
+    if (isVisible) return;
+    cancelReassertion();
+    if (
+      !scrollTarget ||
+      !panelId ||
+      scrollTarget.sessionId !== resolvedSessionId ||
+      scrollTarget.hostPanelId !== panelId
+    ) {
+      return;
+    }
+    const targetKey = `${scrollTarget.sessionId}\u0000${scrollTarget.hostPanelId}\u0000${scrollTarget.token}`;
+    const navigationStarted =
+      reassertionTargetKeyRef.current === targetKey &&
+      (scrollSucceededRef.current ||
+        requestKeysRef.current.has(targetKey) ||
+        completedAroundRef.current.has(targetKey));
+    if (navigationStarted) clearScrollTarget(scrollTarget.token);
+  }, [cancelReassertion, clearScrollTarget, isVisible, panelId, resolvedSessionId, scrollTarget]);
 
-  // eslint-disable-next-line max-lines-per-function -- Target ownership and delayed reassertion share one lifecycle.
   useEffect(() => {
     if (
       !scrollTarget ||
@@ -578,120 +1016,56 @@ export function useScrollTargetConsumption({
       scrollTarget.sessionId !== resolvedSessionId ||
       scrollTarget.hostPanelId !== panelId
     ) {
+      failedTargetKeyRef.current = null;
+      setJumpError(false);
       if (!isVisible) {
         cancelReassertion();
         completedAroundRef.current.clear();
       }
       return;
     }
-    const targetToken = scrollTarget.token;
-    const targetKey = `${scrollTarget.sessionId}\u0000${scrollTarget.hostPanelId}\u0000${targetToken}`;
+    const targetKey = `${scrollTarget.sessionId}\u0000${scrollTarget.hostPanelId}\u0000${scrollTarget.token}`;
     if (reassertionTargetKeyRef.current !== targetKey) {
       reassertionTargetKeyRef.current = targetKey;
       reassertionAttemptedRef.current.delete(targetKey);
+      failedTargetKeyRef.current = null;
+      setJumpError(false);
       scrollSucceededRef.current = false;
     }
     if (reassertionKeyRef.current && reassertionKeyRef.current !== targetKey) {
       cancelReassertion();
       reassertionKeyRef.current = null;
     }
-    const isCurrentTarget = () => {
-      const latest = useDockviewStore.getState().scrollTarget;
-      return (
-        mountedRef.current &&
-        lifecycleRef.current.isVisible &&
-        lifecycleRef.current.resolvedSessionId === scrollTarget.sessionId &&
-        lifecycleRef.current.panelId === scrollTarget.hostPanelId &&
-        latest?.token === targetToken &&
-        latest.sessionId === scrollTarget.sessionId &&
-        latest.hostPanelId === scrollTarget.hostPanelId
-      );
+    if (failedTargetKeyRef.current === targetKey) return;
+    const refs: DockviewScrollLifecycle = {
+      reassertionKey: reassertionKeyRef,
+      reassertionTargetKey: reassertionTargetKeyRef,
+      reassertionAttempted: reassertionAttemptedRef,
+      requestKeys: requestKeysRef,
+      completedAround: completedAroundRef,
+      failedTargetKey: failedTargetKeyRef,
+      scrollSucceeded: scrollSucceededRef,
+      reassertionTimer: reassertionTimerRef,
+      mounted: mountedRef,
+      lifecycle: lifecycleRef,
     };
-    const scheduleReassertion = () => {
-      if (
-        reassertionTimerRef.current !== null ||
-        reassertionAttemptedRef.current.has(targetKey) ||
-        !isCurrentTarget()
-      )
-        return;
-      reassertionKeyRef.current = targetKey;
-      reassertionTimerRef.current = window.setTimeout(() => {
-        reassertionTimerRef.current = null;
-        reassertionKeyRef.current = null;
-        if (!isCurrentTarget()) return;
-        reassertionAttemptedRef.current.add(targetKey);
-        if (
-          messageListRef.current?.scrollToMessage(scrollTarget.messageId, {
-            align: "start",
-            behavior: "auto",
-          })
-        ) {
-          completedAroundRef.current.delete(targetKey);
-          clearScrollTarget(targetToken);
-        }
-      }, 250);
-    };
+    const isCurrentTarget = () => isDockviewTargetCurrent(refs, scrollTarget);
     let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        if (
-          completedAroundRef.current.has(targetKey) &&
-          (reassertionTimerRef.current !== null || reassertionAttemptedRef.current.has(targetKey))
-        ) {
-          return;
-        }
-        if (!isCurrentTarget()) return;
-        const didScroll = messageListRef.current?.scrollToMessage(scrollTarget.messageId, {
-          align: "start",
-        });
-        if (didScroll) {
-          scrollSucceededRef.current = true;
-          if (completedAroundRef.current.has(targetKey)) {
-            scheduleReassertion();
-          } else if (!requestKeysRef.current.has(targetKey)) {
-            clearScrollTarget(targetToken);
-          }
-          return;
-        }
-        const sessionMessages =
-          appStore.getState().messages.bySession[scrollTarget.sessionId] ?? [];
-        if (
-          shouldDeferTargetWindowLoad(
-            sessionMessages,
-            scrollTarget.messageId,
-            isInitialMessagesLoading,
-            targetRendered,
-          )
-        ) {
-          return;
-        }
-        if (requestKeysRef.current.has(targetKey) || completedAroundRef.current.has(targetKey)) {
-          return;
-        }
-        requestKeysRef.current.add(targetKey);
-        setJumpLoading(true);
-        void loadMessageWindowAround(
-          scrollTarget.sessionId,
-          scrollTarget.messageId,
-          () => isCurrentTarget(),
+      frame = requestAnimationFrame(() =>
+        attemptDockviewScroll({
+          refs,
+          target: scrollTarget,
+          targetKey,
           appStore,
-        )
-          .then((result) => {
-            if (!isCurrentTarget()) return;
-            if (result.kind === "merged") {
-              completedAroundRef.current.add(targetKey);
-              if (scrollSucceededRef.current) scheduleReassertion();
-            } else if (result.kind === "deleted-target") {
-              clearScrollTarget(targetToken);
-            }
-          })
-          .catch(() => {
-            if (isCurrentTarget()) clearScrollTarget(targetToken);
-          })
-          .finally(() => {
-            requestKeysRef.current.delete(targetKey);
-            if (mountedRef.current) setJumpLoading(requestKeysRef.current.size > 0);
-          });
-      });
+          messageListRef,
+          isInitialMessagesLoading,
+          targetRendered,
+          isCurrentTarget,
+          setJumpLoading,
+          setJumpError,
+          clearScrollTarget,
+        }),
+      );
     });
     return () => cancelAnimationFrame(frame);
   }, [
@@ -705,9 +1079,10 @@ export function useScrollTargetConsumption({
     panelId,
     renderedMessageCount,
     resolvedSessionId,
+    retryVersion,
     scrollTarget,
   ]);
-  return jumpLoading;
+  return { isLoading: jumpLoading, hasError: jumpError, retry };
 }
 
 // eslint-disable-next-line complexity, max-lines-per-function -- composes many sub-panels; each concern already factored into its own hook
@@ -785,17 +1160,20 @@ export const TaskChatPanel = memo(function TaskChatPanel({
   // advance the read cursor, but their transcript is rendered in a visible
   // non-Dockview host. Keep read visibility separate from scroll geometry.
   const transcriptIsVisible = panelId === null || isVisible;
-  const isDockviewJumpLoading = useScrollTargetConsumption({
+  const dockviewScrollTarget = useDockviewStore((state) => state.scrollTarget);
+  const {
+    isLoading: isDockviewJumpLoading,
+    hasError: hasDockviewJumpError,
+    retry: retryDockviewJump,
+  } = useScrollTargetConsumption({
     resolvedSessionId,
     isVisible,
     panelId,
     messageListRef,
     isInitialMessagesLoading,
     targetRendered: Boolean(
-      useDockviewStore.getState().scrollTarget?.messageId &&
-      allMessages.some(
-        (message) => message.id === useDockviewStore.getState().scrollTarget?.messageId,
-      ),
+      dockviewScrollTarget?.messageId &&
+      allMessages.some((message) => message.id === dockviewScrollTarget.messageId),
     ),
     renderedMessageCount: allMessages.length,
   });
@@ -809,9 +1187,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     messageId: pendingScrollToMessageId,
     target: pendingScrollTarget,
     onConsumed: onPendingScrollConsumed,
-    readinessKey: `${allMessages.length}:${isInitialMessagesLoading}:${allMessages
-      .map((message) => message.id)
-      .join("\u0000")}`,
+    readinessKey: allMessages,
     isInitialMessagesLoading,
     isVisible,
   });
@@ -961,12 +1337,15 @@ export const TaskChatPanel = memo(function TaskChatPanel({
             {t("task:loading")}
           </div>
         )}
-        {hasPendingJumpError && (
+        {(hasPendingJumpError || hasDockviewJumpError) && (
           <button
             type="button"
             data-testid="transcript-jump-retry"
             className="absolute right-3 top-3 min-h-11 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground shadow"
-            onClick={retryPendingJump}
+            onClick={() => {
+              retryPendingJump();
+              retryDockviewJump();
+            }}
           >
             {t("task:retry")}
           </button>

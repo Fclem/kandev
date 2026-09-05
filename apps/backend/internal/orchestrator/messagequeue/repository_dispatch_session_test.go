@@ -2,6 +2,7 @@ package messagequeue
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -211,5 +212,83 @@ func TestLifecycleAcknowledgementRequiresCurrentReservation(t *testing.T) {
 				t.Fatalf("current lifecycle acknowledgement: %v", err)
 			}
 		})
+	}
+}
+
+func TestSQLiteQueueDispatchClaimMigratesLegacyAttemptID(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t).(*sqliteRepository)
+	_, err := repo.db.ExecContext(ctx, `
+		CREATE TABLE queue_dispatch_claims (
+			entry_id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			message_json TEXT NOT NULL,
+			accepted INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, legacy := range []struct {
+		msg      QueuedMessage
+		accepted int
+	}{
+		{
+			msg: QueuedMessage{
+				ID: "legacy-dispatch-pending", SessionID: "legacy-session-pending", TaskID: "legacy-task",
+				Content: "legacy pending prompt", QueuedBy: QueuedByUser,
+			},
+		},
+		{
+			msg: QueuedMessage{
+				ID: "legacy-dispatch-accepted", SessionID: "legacy-session-accepted", TaskID: "legacy-task",
+				Content: "legacy accepted prompt", QueuedBy: QueuedByUser,
+			},
+			accepted: 1,
+		},
+	} {
+		messageJSON, err := json.Marshal(legacy.msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.db.ExecContext(ctx, `
+			INSERT INTO queue_dispatch_claims
+				(entry_id, session_id, message_json, accepted, created_at)
+			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, legacy.msg.ID, legacy.msg.SessionID, string(messageJSON), legacy.accepted); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pending, err := repo.ListPendingQueueDispatches(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("migrated dispatch count = %d, want 2", len(pending))
+	}
+	attemptIDs := make(map[string]struct{}, len(pending))
+	for i := range pending {
+		attemptID := pending[i].Message.dispatchAttemptID
+		if attemptID == "" {
+			t.Fatalf("migrated dispatch = %#v, want non-empty attempt id", pending[i])
+		}
+		if _, exists := attemptIDs[attemptID]; exists {
+			t.Fatalf("duplicate migrated dispatch attempt id %q", attemptID)
+		}
+		attemptIDs[attemptID] = struct{}{}
+		if pending[i].Accepted {
+			err = repo.DeletePendingQueueDispatch(ctx, &pending[i].Message)
+		} else {
+			err = repo.Restore(ctx, &pending[i].Message, 0)
+		}
+		if err != nil {
+			t.Fatalf("settle migrated dispatch %q: %v", pending[i].Message.ID, err)
+		}
+	}
+	pending, err = repo.ListPendingQueueDispatches(ctx)
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("pending after migrated settlement = %#v, err=%v", pending, err)
 	}
 }

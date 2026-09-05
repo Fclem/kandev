@@ -937,6 +937,9 @@ func ensureTaskPurgeRecoverySchemas(ctx context.Context, tx *sqlx.Tx) error {
 	if _, err := tx.ExecContext(ctx, queueDispatchRecoverySchema); err != nil {
 		return fmt.Errorf("ensure task purge dispatch recovery schema: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, sendNowClaimRecoverySchema); err != nil {
+		return fmt.Errorf("ensure task purge Send Now recovery schema: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, attachmentCleanupSchema); err != nil {
 		return fmt.Errorf("ensure task purge attachment cleanup schema: %w", err)
 	}
@@ -994,6 +997,11 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	if err != nil {
 		return 0, err
 	}
+	sendNowSessions, err := pendingSendNowSessionsForTaskTx(ctx, tx, taskID)
+	if err != nil {
+		return 0, err
+	}
+	rowSessions = append(rowSessions, sendNowSessions...)
 	rowSessions = append(rowSessions, dispatchSessions...)
 	seen := make(map[string]struct{}, len(rowSessions)+len(taskSessions))
 	for _, sessionID := range rowSessions {
@@ -1025,6 +1033,13 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	}
 	if err := deleteTaskRecoveryRowsTx(ctx, tx, db, dispatchEntryIDs); err != nil {
 		return 0, err
+	}
+	for _, sessionID := range ordered {
+		if _, err := tx.ExecContext(ctx, db.Rebind(`
+			DELETE FROM queue_send_now_claims WHERE session_id = ?
+		`), sessionID); err != nil {
+			return 0, fmt.Errorf("purge task Send Now claim: %w", err)
+		}
 	}
 	if _, err := tx.ExecContext(ctx, db.Rebind(`
 		INSERT INTO lifecycle_queue_generations (task_id, generation) VALUES (?, 1)
@@ -2762,6 +2777,9 @@ func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return 0, err
 	}
+	if err := r.ensureSendNowClaimRecoverySchema(ctx); err != nil {
+		return 0, err
+	}
 
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -2794,6 +2812,9 @@ func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (
 		return 0, err
 	}
 	if err := r.bumpSendNowGenerationTx(ctx, tx, sessionID); err != nil {
+		return 0, err
+	}
+	if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
 		return 0, err
 	}
 	if err := r.deletePendingQueueDispatchesBySessionTx(ctx, tx, sessionID); err != nil {

@@ -52,8 +52,9 @@ type sessionAdmission struct {
 type sessionAdmissionContextKey struct{}
 
 type sessionAdmissionToken struct {
-	service   *Service
-	sessionID string
+	service              *Service
+	sessionID            string
+	afterLifecycleUnlock *[]func()
 }
 
 // NewService creates a Service backed by the supplied repository. maxPerSession
@@ -141,13 +142,30 @@ func (s *Service) WithSessionAdmission(ctx context.Context, sessionID string, fn
 		return errors.New("session admission callback is nil")
 	}
 	if token, ok := ctx.Value(sessionAdmissionContextKey{}).(sessionAdmissionToken); ok &&
-		token.service == s && token.sessionID == sessionID {
-		return fn(ctx)
+		token.service == s {
+		if token.sessionID == sessionID {
+			return fn(ctx)
+		}
+		return s.withSessionAdmissionLock(ctx, sessionID, token.afterLifecycleUnlock, fn)
 	}
 
+	var afterLifecycleUnlock []func()
 	s.lifecycleMu.RLock()
-	defer s.lifecycleMu.RUnlock()
+	defer func() {
+		s.lifecycleMu.RUnlock()
+		for _, callback := range afterLifecycleUnlock {
+			callback()
+		}
+	}()
+	return s.withSessionAdmissionLock(ctx, sessionID, &afterLifecycleUnlock, fn)
+}
 
+func (s *Service) withSessionAdmissionLock(
+	ctx context.Context,
+	sessionID string,
+	afterLifecycleUnlock *[]func(),
+	fn func(context.Context) error,
+) error {
 	s.admissionMu.Lock()
 	entry := s.admissions[sessionID]
 	if entry == nil {
@@ -169,8 +187,7 @@ func (s *Service) WithSessionAdmission(ctx context.Context, sessionID string, fn
 	}()
 
 	admittedCtx := context.WithValue(ctx, sessionAdmissionContextKey{}, sessionAdmissionToken{
-		service:   s,
-		sessionID: sessionID,
+		service: s, sessionID: sessionID, afterLifecycleUnlock: afterLifecycleUnlock,
 	})
 	return fn(admittedCtx)
 }
@@ -1206,6 +1223,21 @@ func (s *Service) ReleaseEditLeasesForConnection(connectionID string) int {
 // PurgeTask is a backend-only task lifecycle operation. Client deletion APIs
 // retain their reserved-entry protections.
 func (s *Service) PurgeTask(ctx context.Context, taskID string) (int, error) {
+	if token, ok := ctx.Value(sessionAdmissionContextKey{}).(sessionAdmissionToken); ok &&
+		token.service == s && token.afterLifecycleUnlock != nil {
+		purgeCtx := context.WithoutCancel(ctx)
+		*token.afterLifecycleUnlock = append(*token.afterLifecycleUnlock, func() {
+			if _, err := s.purgeTask(purgeCtx, taskID); err != nil {
+				s.logger.Error("failed to purge task queue after admission",
+					zap.String("task_id", taskID), zap.Error(err))
+			}
+		})
+		return 0, nil
+	}
+	return s.purgeTask(ctx, taskID)
+}
+
+func (s *Service) purgeTask(ctx context.Context, taskID string) (int, error) {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	s.editLeaseMu.Lock()

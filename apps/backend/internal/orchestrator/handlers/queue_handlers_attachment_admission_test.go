@@ -170,3 +170,85 @@ func TestPendingAdmissionClaimResumesWithoutRemovingEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, entry.ID, current.ID)
 }
+
+type failSecondCleanupUpsertQueue struct {
+	QueueService
+	service *messagequeue.Service
+	upserts atomic.Int32
+}
+
+func (q *failSecondCleanupUpsertQueue) AttachmentCleanupPersistenceAvailable() bool { return true }
+
+func (q *failSecondCleanupUpsertQueue) UpsertAttachmentCleanup(
+	ctx context.Context,
+	cleanup messagequeue.AttachmentCleanup,
+) error {
+	if q.upserts.Add(1) == 2 {
+		return errors.New("cleanup state update unavailable")
+	}
+	return q.service.UpsertAttachmentCleanup(ctx, cleanup)
+}
+
+func (q *failSecondCleanupUpsertQueue) DeleteAttachmentCleanup(
+	ctx context.Context,
+	sessionID, entryID, operationID string,
+) error {
+	return q.service.DeleteAttachmentCleanup(ctx, sessionID, entryID, operationID)
+}
+
+func (q *failSecondCleanupUpsertQueue) ListAttachmentCleanups(
+	ctx context.Context,
+) ([]messagequeue.AttachmentCleanup, error) {
+	return q.service.ListAttachmentCleanups(ctx)
+}
+
+func (q *failSecondCleanupUpsertQueue) WithSessionAdmission(
+	ctx context.Context,
+	sessionID string,
+	fn func(context.Context) error,
+) error {
+	return q.service.WithSessionAdmission(ctx, sessionID, fn)
+}
+
+func (q *failSecondCleanupUpsertQueue) RemoveEntryWithEntry(
+	ctx context.Context,
+	sessionID, entryID string,
+) (*messagequeue.QueuedMessage, error) {
+	return q.service.RemoveEntryWithEntry(ctx, sessionID, entryID)
+}
+
+func TestAdmissionClaimFailureRemovesEntryWhenCleanupStateUpdateFails(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	handlers, queue, db := newPersistentCleanupQueue(t, dbPath)
+	handlers.queueService = &failSecondCleanupUpsertQueue{QueueService: queue, service: queue}
+	claimer := &admissionCleanupAssertingClaimer{store: queue}
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner"})
+
+	response, err := handlers.wsQueueMessage(ctx, createTestMessage(t, ws.ActionMessageQueueAdd, map[string]interface{}{
+		"session_id": "session-admission-update-failure",
+		"task_id":    "task-admission-update-failure",
+		"content":    "queued",
+		"attachments": []messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "attachment-admission-update-failure",
+			Name: "attachment.txt", MimeType: "text/plain", SizeBytes: 1,
+		}},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeError, response.Type)
+	require.Empty(t, queue.GetStatus(ctx, "session-admission-update-failure").Entries)
+	require.NoError(t, db.Close())
+
+	restarted, restartedQueue, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	defer func() { _ = restartedDB.Close() }()
+	recoveryClaimer := &admissionClaimRecoveryClaimer{}
+	restarted.SetAttachmentClaimer(recoveryClaimer)
+	restarted.Start(context.Background())
+	defer restarted.Stop()
+
+	require.Eventually(t, func() bool {
+		cleanups, listErr := restartedQueue.ListAttachmentCleanups(ctx)
+		return listErr == nil && len(cleanups) == 0 && recoveryClaimer.releases.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	require.Zero(t, recoveryClaimer.claims.Load())
+}

@@ -998,11 +998,14 @@ func (s *Service) finishQueuedMessageExecution(
 	}
 	var reselected *lifecyclePromptReselectedError
 	if errors.As(err, &reselected) {
-		queuedMsg.SessionID = reselected.sessionID
+		reservation := *queuedMsg
+		reservation.SessionID = reservedSessionID
+		retry := *queuedMsg
+		retry.SessionID = reselected.sessionID
 		if s.requeueLifecycleMessage(
-			ctx, queuedMsg, queuedMsg.QueuedBy, messageCoalesceKey(queuedMsg),
+			ctx, &retry, retry.QueuedBy, messageCoalesceKey(&retry),
 		) {
-			s.acknowledgeLifecycleQueueEntry(ctx, reservedSessionID, queuedMsg)
+			s.acknowledgeLifecycleQueueEntry(ctx, reservedSessionID, &reservation)
 		}
 		return
 	}

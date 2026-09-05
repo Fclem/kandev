@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	internaldb "github.com/kandev/kandev/internal/db"
 )
 
 // PendingQueueDispatch records an ordinary queue row removed for at-least-once
@@ -35,6 +36,39 @@ const queueDispatchRecoverySchema = `
 func (r *sqliteRepository) ensureQueueDispatchRecoverySchema(ctx context.Context) error {
 	if _, err := r.db.ExecContext(ctx, queueDispatchRecoverySchema); err != nil {
 		return fmt.Errorf("ensure queue dispatch recovery schema: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		ALTER TABLE queue_dispatch_claims ADD COLUMN attempt_id TEXT NOT NULL DEFAULT ''
+	`); err != nil && !internaldb.IsDuplicateColumnError(err) {
+		return fmt.Errorf("add queue dispatch attempt id: %w", err)
+	}
+	rows, err := r.db.QueryxContext(ctx, `SELECT entry_id FROM queue_dispatch_claims WHERE attempt_id = ''`)
+	if err != nil {
+		return fmt.Errorf("list queue dispatches without attempt ids: %w", err)
+	}
+	var entryIDs []string
+	for rows.Next() {
+		var entryID string
+		if err := rows.Scan(&entryID); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan queue dispatch without attempt id: %w", err)
+		}
+		entryIDs = append(entryIDs, entryID)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate queue dispatches without attempt ids: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close queue dispatch attempt migration rows: %w", err)
+	}
+	for _, entryID := range entryIDs {
+		if _, err := r.db.ExecContext(ctx, r.db.Rebind(`
+			UPDATE queue_dispatch_claims SET attempt_id = ?
+			WHERE entry_id = ? AND attempt_id = ''
+		`), uuid.NewString(), entryID); err != nil {
+			return fmt.Errorf("backfill queue dispatch attempt id: %w", err)
+		}
 	}
 	return nil
 }

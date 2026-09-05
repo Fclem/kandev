@@ -10,15 +10,17 @@ import (
 	internaldb "github.com/kandev/kandev/internal/db"
 )
 
+const sendNowClaimRecoverySchema = `
+	CREATE TABLE IF NOT EXISTS queue_send_now_claims (
+		session_id  TEXT PRIMARY KEY,
+		claim_json  TEXT NOT NULL,
+		accepted    INTEGER NOT NULL DEFAULT 0,
+		created_at  TIMESTAMP NOT NULL
+	)
+`
+
 func (r *sqliteRepository) ensureSendNowClaimRecoverySchema(ctx context.Context) error {
-	if _, err := r.db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS queue_send_now_claims (
-			session_id  TEXT PRIMARY KEY,
-			claim_json  TEXT NOT NULL,
-			accepted    INTEGER NOT NULL DEFAULT 0,
-			created_at  TIMESTAMP NOT NULL
-		)
-	`); err != nil {
+	if _, err := r.db.ExecContext(ctx, sendNowClaimRecoverySchema); err != nil {
 		return fmt.Errorf("ensure Send Now claim recovery schema: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_send_now_claims ADD COLUMN accepted INTEGER NOT NULL DEFAULT 0`); err != nil && !internaldb.IsDuplicateColumnError(err) {
@@ -107,4 +109,38 @@ func (r *sqliteRepository) DeletePendingSendNowClaim(ctx context.Context, sessio
 		return fmt.Errorf("discard pending Send Now claim: %w", err)
 	}
 	return nil
+}
+
+func pendingSendNowSessionsForTaskTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	taskID string,
+) ([]string, error) {
+	rows, err := tx.QueryxContext(ctx, `SELECT session_id, claim_json FROM queue_send_now_claims`)
+	if err != nil {
+		return nil, fmt.Errorf("list task Send Now claims: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var sessions []string
+	for rows.Next() {
+		var sessionID, claimJSON string
+		if err := rows.Scan(&sessionID, &claimJSON); err != nil {
+			return nil, fmt.Errorf("scan task Send Now claim: %w", err)
+		}
+		var claim SendNowClaim
+		if err := json.Unmarshal([]byte(claimJSON), &claim); err != nil {
+			return nil, fmt.Errorf("unmarshal task Send Now claim: %w", err)
+		}
+		matches := claim.Dispatch.TaskID == taskID
+		for i := range claim.Sources {
+			matches = matches || claim.Sources[i].TaskID == taskID
+		}
+		if matches {
+			sessions = append(sessions, sessionID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate task Send Now claims: %w", err)
+	}
+	return sessions, nil
 }

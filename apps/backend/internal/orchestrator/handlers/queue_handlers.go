@@ -459,14 +459,27 @@ func (h *QueueHandlers) admitQueuedMessage(ctx context.Context, req *wsQueueMess
 				admittedCtx, req.TaskID, req.SessionID, queueAttachmentsToV1(req.Attachments),
 			)
 			if claimErr == nil {
-				h.settlePendingAttachmentCleanup(pending, nil)
-				return nil
+				deleteErr := h.deletePendingAttachmentCleanup(pending)
+				if deleteErr == nil {
+					return nil
+				}
+				_, rollbackErr := h.rollbackQueuedAttachmentClaim(admittedCtx, req.SessionID, source.ID)
+				cleanupErr := h.releaseSupersededQueueAttachmentsAdmitted(
+					admittedCtx, pending.req, pending.previous, pending.releaser,
+				)
+				h.settlePendingAttachmentCleanup(pending, errors.Join(rollbackErr, cleanupErr))
+				return fmt.Errorf(
+					"%w: %v",
+					errQueuedAttachmentRollback,
+					errors.Join(deleteErr, rollbackErr, cleanupErr),
+				)
 			}
 			pending.claimPending = false
 			pending.removeEntry = true
 			if err := h.persistPendingAttachmentCleanup(pending); err != nil {
+				_, rollbackErr := h.rollbackQueuedAttachmentClaim(admittedCtx, req.SessionID, source.ID)
 				h.queuePendingAttachmentCleanup(pending)
-				return fmt.Errorf("%w: %v", errQueuedAttachmentRollback, err)
+				return fmt.Errorf("%w: %v", errQueuedAttachmentRollback, errors.Join(err, rollbackErr))
 			}
 			_, rollbackErr := h.rollbackQueuedAttachmentClaim(admittedCtx, req.SessionID, source.ID)
 			cleanupErr := h.releaseSupersededQueueAttachmentsAdmitted(
@@ -1200,7 +1213,7 @@ func (h *QueueHandlers) preparePendingAttachmentCleanupWithState(
 			ID: req.EntryID, SessionID: req.SessionID, TaskID: taskID,
 			Attachments: append([]messagequeue.MessageAttachment(nil), attachments...),
 		},
-		releaser: releaser, claimPending: claimPending,
+		releaser: releaser, removeEntry: claimPending, claimPending: claimPending,
 		authCtx: cleanupCtx, wake: make(chan struct{}, 1),
 	}
 	if err := h.persistPendingAttachmentCleanup(pending); err != nil {
@@ -1349,7 +1362,11 @@ func (h *QueueHandlers) signalPendingAttachmentCleanup(sessionID, entryID string
 
 func (h *QueueHandlers) runPendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) error {
 	cleanup := func(ctx context.Context) error {
-		if pending.claimPending {
+		if pending.removeEntry {
+			if _, err := h.rollbackQueuedAttachmentClaim(ctx, pending.req.SessionID, pending.req.EntryID); err != nil {
+				return err
+			}
+		} else if pending.claimPending {
 			_, err := h.queueService.GetEntry(ctx, pending.req.SessionID, pending.req.EntryID)
 			if err == nil {
 				return h.attachmentClaimer.ClaimMessageAttachments(
@@ -1360,11 +1377,6 @@ func (h *QueueHandlers) runPendingAttachmentCleanup(pending *pendingQueueAttachm
 				)
 			}
 			if !errors.Is(err, messagequeue.ErrEntryNotFound) {
-				return err
-			}
-		}
-		if pending.removeEntry {
-			if _, err := h.rollbackQueuedAttachmentClaim(ctx, pending.req.SessionID, pending.req.EntryID); err != nil {
 				return err
 			}
 		}

@@ -114,6 +114,9 @@ type queueAttachmentCleanupStore interface {
 	DeleteAttachmentCleanup(context.Context, string, string, string) error
 	ListAttachmentCleanups(context.Context) ([]messagequeue.AttachmentCleanup, error)
 }
+type queueAttachmentCleanupLocator interface {
+	GetAttachmentCleanup(context.Context, string, string, string) (*messagequeue.AttachmentCleanup, error)
+}
 
 type queueEntryRemover interface {
 	RemoveEntryWithEntry(context.Context, string, string) (*messagequeue.QueuedMessage, error)
@@ -486,7 +489,7 @@ func (h *QueueHandlers) admitQueuedMessage(ctx context.Context, req *wsQueueMess
 			}
 			pending.claimPending = false
 			pending.removeEntry = true
-			if err := h.persistPendingAttachmentCleanup(pending); err != nil {
+			if err := h.persistPendingAttachmentCleanup(admittedCtx, pending); err != nil {
 				_, rollbackErr := h.rollbackQueuedAttachmentClaim(admittedCtx, req.SessionID, source.ID)
 				h.queuePendingAttachmentCleanup(pending)
 				return fmt.Errorf("%w: %v", errQueuedAttachmentRollback, errors.Join(err, rollbackErr))
@@ -851,7 +854,7 @@ func (h *QueueHandlers) wsEndEdit(ctx context.Context, msg *ws.Message) (*ws.Mes
 	if err := h.queueEdit.EndEdit(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx)); err != nil {
 		return queueEditLeaseError(msg, err), nil
 	}
-	h.signalPendingAttachmentCleanup(req.SessionID, req.EntryID)
+	h.signalPendingAttachmentCleanup(ctx, req.SessionID, req.EntryID)
 	return ws.NewResponse(msg.ID, msg.Action, map[string]string{fieldSessionID: req.SessionID, fieldEntryID: req.EntryID})
 }
 
@@ -1221,7 +1224,10 @@ func (h *QueueHandlers) preparePendingAttachmentCleanupWithState(
 	key := pendingQueueAttachmentCleanupKey{
 		sessionID: req.SessionID, entryID: req.EntryID, operationID: req.OperationID,
 	}
-	cleanupCtx := context.WithoutCancel(ctx)
+	cleanupCtx := context.Background()
+	if identity, ok := authn.IdentityFromContext(ctx); ok {
+		cleanupCtx = authn.WithIdentity(cleanupCtx, identity)
+	}
 	previous := &messagequeue.QueuedMessage{
 		ID: req.EntryID, SessionID: req.SessionID, TaskID: taskID,
 		Attachments: append([]messagequeue.MessageAttachment(nil), attachments...),
@@ -1234,13 +1240,37 @@ func (h *QueueHandlers) preparePendingAttachmentCleanupWithState(
 		entryFingerprint: entryFingerprint,
 		authCtx:          cleanupCtx, wake: make(chan struct{}, 1),
 	}
-	if err := h.persistPendingAttachmentCleanup(pending); err != nil {
+	persist := func(admittedCtx context.Context) error {
+		if _, ok := h.attachmentCleanupStore(); !ok {
+			return nil
+		}
+		current, err := h.queueService.GetEntry(admittedCtx, req.SessionID, req.EntryID)
+		if err != nil {
+			return fmt.Errorf("reload queue entry before cleanup persistence: %w", err)
+		}
+		h.setPendingAttachmentCleanupSessionID(pending, current.SessionID)
+		return h.persistPendingAttachmentCleanup(admittedCtx, pending)
+	}
+	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
+		admissionCtx := ctx
+		if admissionCtx.Err() != nil {
+			admissionCtx = cleanupCtx
+		}
+		if err := admission.WithSessionAdmission(admissionCtx, req.SessionID, persist); err != nil {
+			return nil, err
+		}
+		return pending, nil
+	}
+	if err := persist(cleanupCtx); err != nil {
 		return nil, err
 	}
 	return pending, nil
 }
 
-func (h *QueueHandlers) persistPendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) error {
+func (h *QueueHandlers) persistPendingAttachmentCleanup(
+	ctx context.Context,
+	pending *pendingQueueAttachmentCleanup,
+) error {
 	store, ok := h.attachmentCleanupStore()
 	if !ok {
 		return nil
@@ -1249,7 +1279,7 @@ func (h *QueueHandlers) persistPendingAttachmentCleanup(pending *pendingQueueAtt
 	if !hasIdentity || identity.UserID == "" {
 		return errors.New("queue attachment cleanup requires an owner identity")
 	}
-	if err := store.UpsertAttachmentCleanup(pending.authCtx, messagequeue.AttachmentCleanup{
+	if err := store.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
 		SessionID: pending.req.SessionID, CurrentSessionID: h.pendingAttachmentCleanupSessionID(pending),
 		EntryID: pending.req.EntryID, OperationID: pending.req.OperationID,
 		TaskID: pending.previous.TaskID, OwnerID: identity.UserID, LeaseID: pending.req.LeaseID,
@@ -1366,19 +1396,26 @@ func (h *QueueHandlers) waitForAttachmentCleanupRetry(delay time.Duration, wake 
 	}
 }
 
-func (h *QueueHandlers) signalPendingAttachmentCleanup(sessionID, entryID string) {
+func (h *QueueHandlers) signalPendingAttachmentCleanup(ctx context.Context, sessionID, entryID string) {
 	h.attachmentCleanupMu.Lock()
-	defer h.attachmentCleanupMu.Unlock()
+	pendingCleanups := make([]*pendingQueueAttachmentCleanup, 0)
 	for key, pending := range h.pendingAttachmentCleanup {
-		currentSessionID := pending.currentSessionID
-		if currentSessionID == "" {
-			currentSessionID = pending.req.SessionID
+		if key.entryID == entryID {
+			pendingCleanups = append(pendingCleanups, pending)
 		}
-		if key.entryID == entryID && (key.sessionID == sessionID || currentSessionID == sessionID) {
-			select {
-			case pending.wake <- struct{}{}:
-			default:
-			}
+	}
+	h.attachmentCleanupMu.Unlock()
+	for _, pending := range pendingCleanups {
+		if err := h.refreshPendingAttachmentCleanupSessionID(ctx, pending); err != nil {
+			h.logger.Warn("failed to refresh queue attachment cleanup before wake", zap.Error(err))
+		}
+		currentSessionID := h.pendingAttachmentCleanupSessionID(pending)
+		if pending.key.sessionID != sessionID && currentSessionID != sessionID {
+			continue
+		}
+		select {
+		case pending.wake <- struct{}{}:
+		default:
 		}
 	}
 }
@@ -1403,7 +1440,35 @@ func (h *QueueHandlers) setPendingAttachmentCleanupSessionID(
 	h.attachmentCleanupMu.Unlock()
 }
 
+func (h *QueueHandlers) refreshPendingAttachmentCleanupSessionID(
+	ctx context.Context,
+	pending *pendingQueueAttachmentCleanup,
+) error {
+	locator, ok := h.queueService.(queueAttachmentCleanupLocator)
+	if !ok {
+		return nil
+	}
+	cleanup, err := locator.GetAttachmentCleanup(
+		ctx, pending.key.sessionID, pending.key.entryID, pending.key.operationID,
+	)
+	if err != nil {
+		return err
+	}
+	if cleanup == nil {
+		return nil
+	}
+	sessionID := cleanup.CurrentSessionID
+	if sessionID == "" {
+		sessionID = cleanup.SessionID
+	}
+	h.setPendingAttachmentCleanupSessionID(pending, sessionID)
+	return nil
+}
+
 func (h *QueueHandlers) runPendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) error {
+	if err := h.refreshPendingAttachmentCleanupSessionID(pending.authCtx, pending); err != nil {
+		return err
+	}
 	if _, err := h.retargetPendingAttachmentCleanup(pending.authCtx, pending); err != nil {
 		return err
 	}

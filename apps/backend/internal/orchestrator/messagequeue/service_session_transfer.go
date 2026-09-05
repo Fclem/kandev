@@ -77,23 +77,22 @@ func (s *Service) prepareDurableSessionTransfer(
 		seenEntryIDs[entry.ID] = struct{}{}
 		hasAttachments = hasAttachments || len(entry.Attachments) > 0
 	}
-	if s.PendingQueueDispatchPersistenceAvailable() {
-		pending, listErr := s.ListPendingQueueDispatches(ctx)
-		if listErr != nil {
-			return fmt.Errorf("snapshot in-flight queue dispatches for transfer: %w", listErr)
-		}
-		for _, dispatch := range pending {
-			entry := dispatch.Message
-			if entry.SessionID != oldSessionID {
-				continue
-			}
-			if _, seen := seenEntryIDs[entry.ID]; !seen {
-				entryIDs = append(entryIDs, entry.ID)
-				seenEntryIDs[entry.ID] = struct{}{}
-			}
-			hasAttachments = hasAttachments || len(entry.Attachments) > 0
-		}
+	dispatchEntryIDs, dispatchHasAttachments, err := s.snapshotPendingDispatchTransfer(
+		ctx, oldSessionID, seenEntryIDs,
+	)
+	if err != nil {
+		return err
 	}
+	entryIDs = append(entryIDs, dispatchEntryIDs...)
+	hasAttachments = hasAttachments || dispatchHasAttachments
+	cleanupEntryIDs, cleanupHasAttachments, err := s.snapshotAttachmentCleanupTransfer(
+		ctx, taskID, oldSessionID, seenEntryIDs,
+	)
+	if err != nil {
+		return err
+	}
+	entryIDs = append(entryIDs, cleanupEntryIDs...)
+	hasAttachments = hasAttachments || cleanupHasAttachments
 	if !hasAttachments || prepare == nil {
 		return nil
 	}
@@ -111,6 +110,65 @@ func (s *Service) prepareDurableSessionTransfer(
 		return fmt.Errorf("prepare durable session transfer: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) snapshotPendingDispatchTransfer(
+	ctx context.Context,
+	sessionID string,
+	seenEntryIDs map[string]struct{},
+) ([]string, bool, error) {
+	if !s.PendingQueueDispatchPersistenceAvailable() {
+		return nil, false, nil
+	}
+	pending, err := s.ListPendingQueueDispatches(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("snapshot in-flight queue dispatches for transfer: %w", err)
+	}
+	entryIDs := make([]string, 0)
+	hasAttachments := false
+	for _, dispatch := range pending {
+		entry := dispatch.Message
+		if entry.SessionID != sessionID {
+			continue
+		}
+		if _, seen := seenEntryIDs[entry.ID]; !seen {
+			entryIDs = append(entryIDs, entry.ID)
+			seenEntryIDs[entry.ID] = struct{}{}
+		}
+		hasAttachments = hasAttachments || len(entry.Attachments) > 0
+	}
+	return entryIDs, hasAttachments, nil
+}
+
+func (s *Service) snapshotAttachmentCleanupTransfer(
+	ctx context.Context,
+	taskID, sessionID string,
+	seenEntryIDs map[string]struct{},
+) ([]string, bool, error) {
+	if !s.AttachmentCleanupPersistenceAvailable() {
+		return nil, false, nil
+	}
+	cleanups, err := s.ListAttachmentCleanups(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("snapshot attachment cleanups for transfer: %w", err)
+	}
+	entryIDs := make([]string, 0)
+	hasAttachments := false
+	for _, cleanup := range cleanups {
+		currentSessionID := cleanup.CurrentSessionID
+		if currentSessionID == "" {
+			currentSessionID = cleanup.SessionID
+		}
+		if cleanup.TaskID != taskID || currentSessionID != sessionID {
+			continue
+		}
+		if _, seen := seenEntryIDs[cleanup.EntryID]; !seen {
+			entryIDs = append(entryIDs, cleanup.EntryID)
+			seenEntryIDs[cleanup.EntryID] = struct{}{}
+		}
+		hasAttachments = hasAttachments || len(cleanup.Attachments) > 0
+	}
+	return entryIDs, hasAttachments, nil
 }
 
 func (s *Service) deleteSessionTransferCompensation(

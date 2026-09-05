@@ -2,6 +2,7 @@ package messagequeue
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -76,7 +77,6 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 			 remove_entry, claim_pending, entry_fingerprint, attachments_json, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id, entry_id, operation_id) DO UPDATE SET
-			current_session_id = excluded.current_session_id,
 			task_id = excluded.task_id,
 			owner_id = excluded.owner_id,
 			lease_id = excluded.lease_id,
@@ -152,4 +152,44 @@ func (r *sqliteRepository) ListAttachmentCleanups(ctx context.Context) ([]Attach
 		return nil, fmt.Errorf("iterate attachment cleanups: %w", err)
 	}
 	return cleanups, nil
+}
+
+func (r *sqliteRepository) GetAttachmentCleanup(
+	ctx context.Context,
+	sessionID, entryID, operationID string,
+) (*AttachmentCleanup, error) {
+	if err := r.ensureAttachmentCleanupSchema(ctx); err != nil {
+		return nil, err
+	}
+	var cleanup AttachmentCleanup
+	var attachmentsJSON string
+	err := r.db.QueryRowxContext(ctx, r.db.Rebind(`
+		SELECT session_id, current_session_id, entry_id, operation_id, task_id, owner_id, lease_id,
+		       remove_entry, claim_pending, entry_fingerprint, attachments_json, created_at
+		FROM queue_attachment_cleanups
+		WHERE session_id = ? AND entry_id = ? AND operation_id = ?
+	`), sessionID, entryID, operationID).Scan(
+		&cleanup.SessionID,
+		&cleanup.CurrentSessionID,
+		&cleanup.EntryID,
+		&cleanup.OperationID,
+		&cleanup.TaskID,
+		&cleanup.OwnerID,
+		&cleanup.LeaseID,
+		&cleanup.RemoveEntry,
+		&cleanup.ClaimPending,
+		&cleanup.EntryFingerprint,
+		&attachmentsJSON,
+		&cleanup.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get attachment cleanup: %w", err)
+	}
+	if err := json.Unmarshal([]byte(attachmentsJSON), &cleanup.Attachments); err != nil {
+		return nil, fmt.Errorf("unmarshal attachment cleanup: %w", err)
+	}
+	return &cleanup, nil
 }

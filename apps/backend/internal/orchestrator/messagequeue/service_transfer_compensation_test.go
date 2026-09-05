@@ -126,3 +126,41 @@ func TestDurableSessionTransferIncludesInFlightOrdinaryAttachment(t *testing.T) 
 	assert.Equal(t, "session-new", pending[0].Message.SessionID)
 	assert.Equal(t, queued.ID, pending[0].Message.ID)
 }
+
+func TestDurableSessionTransferIncludesCleanupOnlyAttachmentClaim(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t)
+	service := newAutoMergeTestServiceWithRepository(t, repo, DefaultMaxPerSession)
+	cleanup := AttachmentCleanup{
+		SessionID: "session-cleanup-only-old", EntryID: "entry-cleanup-only",
+		OperationID: "operation-cleanup-only", TaskID: "task-cleanup-only",
+		Attachments: []MessageAttachment{{AttachmentID: "attachment-cleanup-only"}},
+	}
+	require.NoError(t, service.UpsertAttachmentCleanup(ctx, cleanup))
+	prepareCalls := 0
+
+	err := service.TransferSessionWithDurablePreparation(
+		ctx,
+		cleanup.TaskID,
+		cleanup.SessionID,
+		"session-cleanup-only-new",
+		func(context.Context) error {
+			prepareCalls++
+			compensations, listErr := service.ListSessionTransferCompensations(ctx)
+			require.NoError(t, listErr)
+			require.Len(t, compensations, 1)
+			assert.Equal(t, []string{cleanup.EntryID}, compensations[0].EntryIDs)
+			return nil
+		},
+		nil,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, prepareCalls)
+	stored, err := service.GetAttachmentCleanup(
+		ctx, cleanup.SessionID, cleanup.EntryID, cleanup.OperationID,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.Equal(t, "session-cleanup-only-new", stored.CurrentSessionID)
+}

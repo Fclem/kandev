@@ -672,31 +672,42 @@ func TestTransferredSupersededCleanupChecksDestinationLease(t *testing.T) {
 }
 
 func TestTransferredCleanupWakesWhenDestinationEditEnds(t *testing.T) {
-	handlers, queue := setupQueueHandlers(t)
-	ctx := context.Background()
+	handlers, queue, db := newPersistentCleanupQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	defer func() { _ = db.Close() }()
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner"})
+	attachment := messagequeue.MessageAttachment{
+		Type: "resource", AttachmentID: "attachment-wake-transfer",
+		Name: "wake-transfer.txt", MimeType: "text/plain", SizeBytes: 1,
+	}
 	entry, err := queue.QueueMessage(
 		ctx, "session-wake-transfer-old", "task-wake-transfer", "queued", "",
-		messagequeue.QueuedByUser, false, nil,
+		messagequeue.QueuedByUser, false, []messagequeue.MessageAttachment{attachment},
 	)
 	require.NoError(t, err)
+	key := pendingQueueAttachmentCleanupKey{
+		sessionID: entry.SessionID, entryID: entry.ID, operationID: "wake-transfer",
+	}
+	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
+		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: key.operationID,
+		TaskID: entry.TaskID, OwnerID: "owner", Attachments: []messagequeue.MessageAttachment{attachment},
+	}))
+	pending := &pendingQueueAttachmentCleanup{
+		key: key,
+		req: wsUpdateMessageRequest{
+			SessionID: entry.SessionID, EntryID: entry.ID, OperationID: key.operationID,
+		},
+		currentSessionID: entry.SessionID,
+		authCtx:          ctx,
+		wake:             make(chan struct{}, 1),
+	}
+	handlers.attachmentCleanupMu.Lock()
+	handlers.pendingAttachmentCleanup[key] = pending
+	handlers.attachmentCleanupMu.Unlock()
 	const destinationSessionID = "session-wake-transfer-new"
 	require.NoError(t, queue.TransferSession(ctx, entry.SessionID, destinationSessionID))
 	const connectionID = "connection-wake-transfer"
 	lease, err := queue.BeginEdit(ctx, destinationSessionID, entry.ID, connectionID)
 	require.NoError(t, err)
-	key := pendingQueueAttachmentCleanupKey{
-		sessionID: entry.SessionID, entryID: entry.ID, operationID: "wake-transfer",
-	}
-	pending := &pendingQueueAttachmentCleanup{
-		key: key,
-		req: wsUpdateMessageRequest{
-			SessionID: destinationSessionID, EntryID: entry.ID, OperationID: key.operationID,
-		},
-		wake: make(chan struct{}, 1),
-	}
-	handlers.attachmentCleanupMu.Lock()
-	handlers.pendingAttachmentCleanup[key] = pending
-	handlers.attachmentCleanupMu.Unlock()
 
 	response, err := handlers.wsEndEdit(
 		ws.WithConnectionID(ctx, connectionID),

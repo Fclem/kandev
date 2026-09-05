@@ -2284,6 +2284,22 @@ func (s *Service) ListAttachmentCleanups(ctx context.Context) ([]AttachmentClean
 	return repo.ListAttachmentCleanups(ctx)
 }
 
+type attachmentCleanupLocatorRepository interface {
+	GetAttachmentCleanup(context.Context, string, string, string) (*AttachmentCleanup, error)
+}
+
+// GetAttachmentCleanup reloads one cleanup by its immutable acknowledgement key.
+func (s *Service) GetAttachmentCleanup(
+	ctx context.Context,
+	sessionID, entryID, operationID string,
+) (*AttachmentCleanup, error) {
+	repo, ok := s.repo.(attachmentCleanupLocatorRepository)
+	if !ok {
+		return nil, nil
+	}
+	return repo.GetAttachmentCleanup(ctx, sessionID, entryID, operationID)
+}
+
 type sessionTransferCompensationRepository interface {
 	UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
 	DeleteSessionTransferCompensation(context.Context, string, string, string) error

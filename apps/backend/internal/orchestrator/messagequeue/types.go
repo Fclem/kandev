@@ -245,6 +245,18 @@ type MessageAttachment struct {
 	DeliveryMode string `json:"delivery_mode,omitempty"`
 }
 
+// AttachmentCleanup records a durable obligation to release attachment claims
+// after a queued message no longer references them.
+type AttachmentCleanup struct {
+	SessionID   string
+	EntryID     string
+	OperationID string
+	TaskID      string
+	LeaseID     string
+	Attachments []MessageAttachment
+	CreatedAt   time.Time
+}
+
 // QueueStatus is the per-session view returned to clients: full ordered list of
 // pending entries plus capacity info.
 type QueueStatus struct {

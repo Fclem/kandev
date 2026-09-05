@@ -2130,6 +2130,50 @@ func (s *Service) transferSession(
 	return nil
 }
 
+type attachmentCleanupRepository interface {
+	UpsertAttachmentCleanup(context.Context, AttachmentCleanup) error
+	DeleteAttachmentCleanup(context.Context, string, string, string) error
+	ListAttachmentCleanups(context.Context) ([]AttachmentCleanup, error)
+}
+
+// AttachmentCleanupPersistenceAvailable reports whether this service's
+// repository can preserve cleanup work across handler restarts.
+func (s *Service) AttachmentCleanupPersistenceAvailable() bool {
+	_, ok := s.repo.(attachmentCleanupRepository)
+	return ok
+}
+
+// UpsertAttachmentCleanup persists a cleanup obligation before its retry
+// worker is allowed to outlive the current handler.
+func (s *Service) UpsertAttachmentCleanup(ctx context.Context, cleanup AttachmentCleanup) error {
+	repo, ok := s.repo.(attachmentCleanupRepository)
+	if !ok {
+		return errors.New("attachment cleanup persistence unavailable")
+	}
+	return repo.UpsertAttachmentCleanup(ctx, cleanup)
+}
+
+// DeleteAttachmentCleanup acknowledges one completed cleanup obligation.
+func (s *Service) DeleteAttachmentCleanup(
+	ctx context.Context,
+	sessionID, entryID, operationID string,
+) error {
+	repo, ok := s.repo.(attachmentCleanupRepository)
+	if !ok {
+		return errors.New("attachment cleanup persistence unavailable")
+	}
+	return repo.DeleteAttachmentCleanup(ctx, sessionID, entryID, operationID)
+}
+
+// ListAttachmentCleanups reloads cleanup obligations after process restart.
+func (s *Service) ListAttachmentCleanups(ctx context.Context) ([]AttachmentCleanup, error) {
+	repo, ok := s.repo.(attachmentCleanupRepository)
+	if !ok {
+		return nil, errors.New("attachment cleanup persistence unavailable")
+	}
+	return repo.ListAttachmentCleanups(ctx)
+}
+
 // RestoreSession replaces a session's queue and pending move from a snapshot,
 // preserving queued-message identity fields.
 func (s *Service) RestoreSession(ctx context.Context, sessionID string, entries []QueuedMessage, pendingMove *PendingMove) error {

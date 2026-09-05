@@ -103,6 +103,12 @@ type queueAttachmentReferenceChecker interface {
 type queueBatchCanceller interface {
 	CancelAllWithEntries(context.Context, string) ([]messagequeue.QueuedMessage, error)
 }
+type queueAttachmentCleanupStore interface {
+	AttachmentCleanupPersistenceAvailable() bool
+	UpsertAttachmentCleanup(context.Context, messagequeue.AttachmentCleanup) error
+	DeleteAttachmentCleanup(context.Context, string, string, string) error
+	ListAttachmentCleanups(context.Context) ([]messagequeue.AttachmentCleanup, error)
+}
 
 type queueEntryRemover interface {
 	RemoveEntryWithEntry(context.Context, string, string) (*messagequeue.QueuedMessage, error)
@@ -225,7 +231,8 @@ func NewQueueHandlers(
 	return handlers
 }
 
-// Start owns the context used by pending attachment cleanup retries.
+// Start owns the context used by pending attachment cleanup retries and reloads
+// durable obligations left by an earlier process.
 func (h *QueueHandlers) Start(ctx context.Context) {
 	h.attachmentCleanupMu.Lock()
 	if h.attachmentCleanupStarted || h.attachmentCleanupStopped {
@@ -234,6 +241,7 @@ func (h *QueueHandlers) Start(ctx context.Context) {
 	}
 	h.attachmentCleanupCtx, h.attachmentCleanupCancel = context.WithCancel(ctx)
 	h.attachmentCleanupStarted = true
+	h.loadPendingAttachmentCleanupsLocked(context.WithoutCancel(ctx))
 	for _, pending := range h.pendingAttachmentCleanup {
 		h.attachmentCleanupWG.Add(1)
 		go h.retryPendingAttachmentCleanup(pending)
@@ -241,7 +249,50 @@ func (h *QueueHandlers) Start(ctx context.Context) {
 	h.attachmentCleanupMu.Unlock()
 }
 
-// Stop drains pending attachment cleanup retries.
+func (h *QueueHandlers) loadPendingAttachmentCleanupsLocked(ctx context.Context) {
+	store, ok := h.attachmentCleanupStore()
+	releaser, canRelease := h.attachmentClaimer.(QueueAttachmentReleaser)
+	if !ok || !canRelease {
+		return
+	}
+	cleanups, err := store.ListAttachmentCleanups(ctx)
+	if err != nil {
+		h.logger.Error("failed to reload pending queue attachment cleanup", zap.Error(err))
+		return
+	}
+	for _, cleanup := range cleanups {
+		key := pendingQueueAttachmentCleanupKey{
+			sessionID: cleanup.SessionID, entryID: cleanup.EntryID, operationID: cleanup.OperationID,
+		}
+		if _, exists := h.pendingAttachmentCleanup[key]; exists {
+			continue
+		}
+		h.pendingAttachmentCleanup[key] = &pendingQueueAttachmentCleanup{
+			key: key,
+			req: wsUpdateMessageRequest{
+				SessionID:   cleanup.SessionID,
+				EntryID:     cleanup.EntryID,
+				LeaseID:     cleanup.LeaseID,
+				OperationID: cleanup.OperationID,
+			},
+			previous: &messagequeue.QueuedMessage{
+				ID: cleanup.EntryID, SessionID: cleanup.SessionID, TaskID: cleanup.TaskID,
+				Attachments: cleanup.Attachments,
+			},
+			releaser: releaser,
+			authCtx:  context.WithoutCancel(ctx),
+			wake:     make(chan struct{}, 1),
+		}
+	}
+}
+
+func (h *QueueHandlers) attachmentCleanupStore() (queueAttachmentCleanupStore, bool) {
+	store, ok := h.queueService.(queueAttachmentCleanupStore)
+	return store, ok && store.AttachmentCleanupPersistenceAvailable()
+}
+
+// Stop cancels active retries after their obligations are durable. A later
+// handler instance reloads unresolved work before accepting queue operations.
 func (h *QueueHandlers) Stop() {
 	h.attachmentCleanupMu.Lock()
 	if !h.attachmentCleanupStopped {
@@ -1011,9 +1062,20 @@ func (h *QueueHandlers) queuePendingAttachmentCleanup(
 	key := pendingQueueAttachmentCleanupKey{
 		sessionID: req.SessionID, entryID: req.EntryID, operationID: req.OperationID,
 	}
+	cleanupCtx := context.WithoutCancel(ctx)
+	if store, ok := h.attachmentCleanupStore(); ok {
+		if err := store.UpsertAttachmentCleanup(cleanupCtx, messagequeue.AttachmentCleanup{
+			SessionID: req.SessionID, EntryID: req.EntryID, OperationID: req.OperationID,
+			TaskID: previous.TaskID, LeaseID: req.LeaseID,
+			Attachments: append([]messagequeue.MessageAttachment(nil), previous.Attachments...),
+			CreatedAt:   time.Now().UTC(),
+		}); err != nil {
+			h.logger.Error("failed to persist queue attachment cleanup", zap.Error(err))
+		}
+	}
 	pending := &pendingQueueAttachmentCleanup{
 		key: key, req: req, previous: previous, releaser: releaser,
-		authCtx: context.WithoutCancel(ctx), wake: make(chan struct{}, 1),
+		authCtx: cleanupCtx, wake: make(chan struct{}, 1),
 	}
 	h.attachmentCleanupMu.Lock()
 	if h.attachmentCleanupStopped {
@@ -1040,10 +1102,14 @@ func (h *QueueHandlers) retryPendingAttachmentCleanup(pending *pendingQueueAttac
 	for {
 		if !h.editLeaseActive(pending) {
 			if err := h.runPendingAttachmentCleanup(pending); err == nil {
-				h.attachmentCleanupMu.Lock()
-				delete(h.pendingAttachmentCleanup, pending.key)
-				h.attachmentCleanupMu.Unlock()
-				return
+				if err := h.deletePendingAttachmentCleanup(pending); err != nil {
+					h.logger.Warn("failed to acknowledge queue attachment cleanup", zap.Error(err))
+				} else {
+					h.attachmentCleanupMu.Lock()
+					delete(h.pendingAttachmentCleanup, pending.key)
+					h.attachmentCleanupMu.Unlock()
+					return
+				}
 			}
 		}
 		if !h.waitForAttachmentCleanupRetry(delay, pending.wake) {
@@ -1053,6 +1119,16 @@ func (h *QueueHandlers) retryPendingAttachmentCleanup(pending *pendingQueueAttac
 			delay *= 2
 		}
 	}
+}
+
+func (h *QueueHandlers) deletePendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) error {
+	store, ok := h.attachmentCleanupStore()
+	if !ok {
+		return nil
+	}
+	return store.DeleteAttachmentCleanup(
+		pending.authCtx, pending.key.sessionID, pending.key.entryID, pending.key.operationID,
+	)
 }
 
 func (h *QueueHandlers) editLeaseActive(pending *pendingQueueAttachmentCleanup) bool {
@@ -1303,6 +1379,10 @@ func (h *QueueHandlers) releaseQueuedAttachments(ctx context.Context, entry *mes
 	}
 	if err := releaser.ReleaseMessageAttachments(cleanupCtx, entry.TaskID, entry.SessionID, queueAttachmentsToV1(candidates)); err != nil {
 		h.logger.Warn("failed to release attachments after queue entry removal", zap.Error(err))
+		h.queuePendingAttachmentCleanup(cleanupCtx, wsUpdateMessageRequest{
+			SessionID: entry.SessionID,
+			EntryID:   entry.ID,
+		}, entry, releaser)
 	}
 }
 

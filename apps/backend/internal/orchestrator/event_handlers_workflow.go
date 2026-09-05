@@ -2598,7 +2598,7 @@ func (s *Service) reuseSessionForStepWithEndPolicy(
 	if err != nil {
 		if endPolicy == models.WorkflowProfileSessionEndPolicyPark && !parked && currentSession.IsPrimary {
 			s.restoreWorkflowProfileSwitchSourcePrimary(ctx, currentSession)
-			s.restoreWorkflowProfileSwitchSourceQueue(ctx, existing.ID, currentSession.ID)
+			s.restoreWorkflowProfileSwitchSourceQueue(ctx, taskID, existing.ID, currentSession.ID)
 		}
 		return nil, err
 	}
@@ -2638,10 +2638,6 @@ func (s *Service) createNewSessionForStepWithEndPolicy(
 		return nil, err
 	}
 
-	// Tag the session as workflow-spawned for provenance: its agent profile
-	// was selected by the workflow step override rather than direct user choice.
-	s.tagSessionAsWorkflowSwitched(ctx, newSession.ID)
-
 	// Promote the new session to primary so it's loaded when navigating back to this task.
 	// Use SetPrimarySession (not repo.SetSessionPrimary) to broadcast a task.updated WS
 	// event — the frontend reads primarySessionId from the task to render the star icon.
@@ -2649,18 +2645,27 @@ func (s *Service) createNewSessionForStepWithEndPolicy(
 		return nil, fmt.Errorf("failed to promote new workflow session: %w", err)
 	}
 
-	// Transfer any queued message (e.g. a move_task_kandev hand-off prompt) and
-	// pending move from the old session to the new one only after promotion
-	// succeeds. If promotion fails, the source remains primary and its queue
-	// must remain attached to that source rather than being stranded on an
-	// unpromoted destination.
-	s.transferWorkflowProfileSwitchQueue(ctx, currentSession.ID, newSession.ID)
+	// Transfer queued prompts, attachments, policy, and any pending move exactly
+	// once after promotion. Session admission serializes source-side inserts
+	// that began before this hand-off; a failed transfer restores the old
+	// primary and retires the unused replacement.
+	if err := s.transferQueuedSessionState(ctx, taskID, currentSession.ID, newSession.ID); err != nil {
+		if restoreErr := s.SetPrimarySession(ctx, currentSession.ID); restoreErr != nil {
+			s.logger.Warn("failed to restore current session as primary after queue transfer failure",
+				zap.String("task_id", taskID),
+				zap.String("session_id", currentSession.ID),
+				zap.Error(restoreErr))
+		}
+		s.completeAndStopSession(ctx, taskID, newSession)
+		return nil, fmt.Errorf("transfer queue to new session: %w", err)
+	}
+	s.tagSessionAsWorkflowSwitched(ctx, newSession.ID)
 
 	parked, err := s.finishWorkflowProfileSwitchSource(ctx, taskID, currentSession, endPolicy)
 	if err != nil {
 		if endPolicy == models.WorkflowProfileSessionEndPolicyPark && !parked && currentSession.IsPrimary {
 			s.restoreWorkflowProfileSwitchSourcePrimary(ctx, currentSession)
-			s.restoreWorkflowProfileSwitchSourceQueue(ctx, newSession.ID, currentSession.ID)
+			s.restoreWorkflowProfileSwitchSourceQueue(ctx, taskID, newSession.ID, currentSession.ID)
 		}
 		return nil, err
 	}
@@ -2736,40 +2741,7 @@ func (s *Service) prepareWorkflowReplacementSession(
 		return nil, fmt.Errorf("failed to get new session: %w", err)
 	}
 
-	// Transfer any queued message (e.g. a move_task_kandev hand-off prompt) and
-	// pending move from the old session to the new session before changing
-	// primary ownership.
-	if err := s.transferQueuedSessionState(ctx, taskID, currentSession.ID, newSession.ID); err != nil {
-		// The replacement is already persisted and launched. Retire it before
-		// returning so a failed queue hand-off does not leak an agent execution
-		// or leave an unusable session for later workflow selection.
-		s.completeAndStopSession(ctx, taskID, newSession)
-		// The current session remains primary and active because promotion and
-		// completion happen only after the queue transfer succeeds.
-		return nil, fmt.Errorf("transfer queue to new session: %w", err)
-	}
-	// Tag the session as workflow-spawned for provenance only after the queue
-	// hand-off has succeeded.
-	s.tagSessionAsWorkflowSwitched(ctx, newSession.ID)
-
 	return newSession, nil
-}
-
-func (s *Service) transferWorkflowProfileSwitchQueue(ctx context.Context, fromSessionID, toSessionID string) {
-	if s.messageQueue == nil {
-		return
-	}
-	if err := s.messageQueue.TransferSession(ctx, fromSessionID, toSessionID); err != nil {
-		s.logger.Error("transfer queue to new session failed; queued prompts on the previous session will not be drained",
-			zap.String("from_session_id", fromSessionID),
-			zap.String("to_session_id", toSessionID),
-			zap.Error(err))
-		// Continue anyway: the new session is already created and committed
-		// upstream. Failing closed here would leave the workflow in a
-		// half-switched state (new session exists but caller thinks it
-		// failed). The error is surfaced via logs and the orphaned entries
-		// stay safely in the old session for manual recovery.
-	}
 }
 
 func (s *Service) finishWorkflowProfileSwitchSource(
@@ -2793,11 +2765,11 @@ func (s *Service) restoreWorkflowProfileSwitchSourcePrimary(ctx context.Context,
 	}
 }
 
-func (s *Service) restoreWorkflowProfileSwitchSourceQueue(ctx context.Context, fromSessionID, toSessionID string) {
-	if s.messageQueue == nil {
-		return
-	}
-	if err := s.messageQueue.TransferSession(ctx, fromSessionID, toSessionID); err != nil {
+func (s *Service) restoreWorkflowProfileSwitchSourceQueue(
+	ctx context.Context,
+	taskID, fromSessionID, toSessionID string,
+) {
+	if err := s.transferQueuedSessionState(ctx, taskID, fromSessionID, toSessionID); err != nil {
 		s.logger.Error("failed to return queued state to restored source session",
 			zap.String("from_session_id", fromSessionID),
 			zap.String("to_session_id", toSessionID),

@@ -2,13 +2,19 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
+
 	"github.com/kandev/kandev/internal/auth/authn"
+	"github.com/kandev/kandev/internal/common/logger"
 	eventtypes "github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
@@ -282,6 +288,101 @@ func TestWsUpdateMessageRetriesSupersededAttachmentCleanupAfterLeaseEnd(t *testi
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, int32(2), claimer.attempts.Load())
 	require.Equal(t, int32(1), claimer.released.Load())
+}
+
+func TestWsRemoveEntryRetriesFailedAttachmentRelease(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &failingThenSuccessfulQueueAttachmentClaimer{}
+	claimer.failures.Store(1)
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(ctx, "session-remove-retry", "task-remove-retry", "queued", "", "user", false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment-remove"}})
+	require.NoError(t, err)
+
+	response, err := handlers.wsRemoveEntry(ctx, createTestMessage(t, ws.ActionMessageQueueRemove, map[string]string{
+		"session_id": entry.SessionID,
+		"entry_id":   entry.ID,
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Eventually(t, func() bool {
+		return claimer.attempts.Load() == 2 && claimer.released.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestWsCancelAllRetriesFailedAttachmentRelease(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &failingThenSuccessfulQueueAttachmentClaimer{}
+	claimer.failures.Store(1)
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := context.Background()
+	_, err := queue.QueueMessage(ctx, "session-cancel-retry", "task-cancel-retry", "queued", "", "user", false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment-cancel"}})
+	require.NoError(t, err)
+
+	response, err := handlers.wsCancelAll(ctx, createTestMessage(t, ws.ActionMessageQueueCancel, map[string]string{
+		"session_id": "session-cancel-retry",
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Eventually(t, func() bool {
+		return claimer.attempts.Load() == 2 && claimer.released.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestPendingAttachmentCleanupResumesAfterHandlerRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	handlers, queue, db := newPersistentCleanupQueue(t, dbPath)
+	firstClaimer := &failingThenSuccessfulQueueAttachmentClaimer{}
+	firstClaimer.failures.Store(100)
+	handlers.SetAttachmentClaimer(firstClaimer)
+	handlers.Start(context.Background())
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(ctx, "session-cleanup-restart", "task-cleanup-restart", "before", "", "user", false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "old-attachment"}})
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-restart")
+	require.NoError(t, err)
+
+	response, err := handlers.wsUpdateMessage(ws.WithConnectionID(ctx, "connection-restart"),
+		createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id": entry.SessionID, "entry_id": entry.ID, "lease_id": lease.LeaseID,
+			"operation_id": "operation-restart", "expected_target_revision": lease.TargetRevision,
+			"content": "after", "attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new-attachment", Name: "new.txt", MimeType: "text/plain",
+			}},
+		}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Equal(t, int32(1), firstClaimer.attempts.Load())
+	handlers.Stop()
+	require.NoError(t, db.Close())
+
+	restarted, _, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	t.Cleanup(func() { _ = restartedDB.Close() })
+	secondClaimer := &failingThenSuccessfulQueueAttachmentClaimer{}
+	restarted.SetAttachmentClaimer(secondClaimer)
+	restarted.Start(context.Background())
+	t.Cleanup(restarted.Stop)
+
+	require.Eventually(t, func() bool { return secondClaimer.released.Load() == 1 }, time.Second, 10*time.Millisecond)
+}
+
+func newPersistentCleanupQueue(t *testing.T, dbPath string) (*QueueHandlers, *messagequeue.Service, *sqlx.DB) {
+	t.Helper()
+	raw, err := sql.Open("sqlite3", dbPath)
+	require.NoError(t, err)
+	raw.SetMaxOpenConns(1)
+	db := sqlx.NewDb(raw, "sqlite3")
+	repo, err := messagequeue.NewSQLiteRepository(db, db)
+	require.NoError(t, err)
+	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "console", OutputPath: "stderr"})
+	require.NoError(t, err)
+	queue := messagequeue.NewService(repo, messagequeue.DefaultMaxPerSession, log)
+	queue.SetAutoMergeEnabled(false)
+	handlers := NewQueueHandlers(queue, &mockEventBus{}, log, nil, allowQueueAccess{}, nil)
+	return handlers, queue, db
 }
 
 type controlledCleanupClaimer struct {

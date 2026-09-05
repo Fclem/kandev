@@ -1770,6 +1770,37 @@ func (s *Service) AcknowledgeSendNowClaim(ctx context.Context, claim *SendNowCla
 	return nil
 }
 
+type pendingSendNowClaimRepository interface {
+	ListPendingSendNowClaims(context.Context) ([]SendNowClaim, error)
+	DeletePendingSendNowClaim(context.Context, string) error
+}
+
+// PendingSendNowClaimPersistenceAvailable reports whether ordinary claimed
+// prompts can be recovered after the owning process exits.
+func (s *Service) PendingSendNowClaimPersistenceAvailable() bool {
+	_, ok := s.repo.(pendingSendNowClaimRepository)
+	return ok
+}
+
+// ListPendingSendNowClaims reloads interrupted Send Now claims after restart.
+func (s *Service) ListPendingSendNowClaims(ctx context.Context) ([]SendNowClaim, error) {
+	repo, ok := s.repo.(pendingSendNowClaimRepository)
+	if !ok {
+		return nil, errors.New("pending Send Now claim persistence unavailable")
+	}
+	return repo.ListPendingSendNowClaims(ctx)
+}
+
+// DeletePendingSendNowClaim discards a recovery record that can no longer be
+// applied because a destructive queue generation change superseded it.
+func (s *Service) DeletePendingSendNowClaim(ctx context.Context, sessionID string) error {
+	repo, ok := s.repo.(pendingSendNowClaimRepository)
+	if !ok {
+		return errors.New("pending Send Now claim persistence unavailable")
+	}
+	return repo.DeletePendingSendNowClaim(ctx, sessionID)
+}
+
 // UpdateMessageWithMetadata atomically edits queue content and applies
 // metadata replacements while retaining unrelated metadata keys.
 func (s *Service) UpdateMessageWithMetadata(ctx context.Context, sessionID, entryID, content string, attachments []MessageAttachment, metadataUpdates map[string]interface{}, queuedBy string) error {

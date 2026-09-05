@@ -1549,6 +1549,9 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 	if len(expected) == 0 {
 		return nil, ErrSendNowEmpty
 	}
+	if err := r.ensureSendNowClaimRecoverySchema(ctx); err != nil {
+		return nil, err
+	}
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
 
@@ -1593,6 +1596,12 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 		}
 		generations[source.TaskID] = generation
 	}
+	claim := &SendNowClaim{
+		Sources:           sources,
+		Dispatch:          *envelope,
+		SourceGenerations: generations,
+		SessionGeneration: sessionGeneration,
+	}
 
 	if err := r.applySQLiteSendNowClaim(ctx, tx, sessionID, sources, storedByID); err != nil {
 		return nil, err
@@ -1600,15 +1609,13 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 	if err := r.setAutoRunTx(ctx, tx, sessionID, true); err != nil {
 		return nil, err
 	}
+	if err := r.persistSendNowClaimTx(ctx, tx, claim); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &SendNowClaim{
-		Sources:           sources,
-		Dispatch:          *envelope,
-		SourceGenerations: generations,
-		SessionGeneration: sessionGeneration,
-	}, nil
+	return claim, nil
 }
 
 // RestoreSendNowClaim puts every claimed source back at its original position.
@@ -1653,6 +1660,9 @@ func (r *sqliteRepository) RestoreSendNowClaim(ctx context.Context, claim *SendN
 			return err
 		}
 	}
+	if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -1696,6 +1706,9 @@ func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *S
 		if err := r.acknowledgeSQLiteSendNowSource(ctx, tx, sessionID, source, stored); err != nil {
 			return err
 		}
+	}
+	if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

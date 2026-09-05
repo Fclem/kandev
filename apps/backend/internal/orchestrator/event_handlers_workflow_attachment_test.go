@@ -106,6 +106,42 @@ func TestTransferQueuedSessionStateSerializesAttachmentTransferWithQueueMutation
 	}
 }
 
+func TestTransferQueuedSessionStateIncludesReservedAttachmentRows(t *testing.T) {
+	ctx := context.Background()
+	transfer := &workflowAttachmentTransferStub{}
+	queue := messagequeue.NewServiceMemory(testLogger())
+	svc := &Service{
+		logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer,
+	}
+	queued, err := queue.QueueMessageWithMetadata(
+		ctx,
+		"session-old",
+		"task-transfer",
+		"reserved handoff",
+		"",
+		messagequeue.QueuedByAgent,
+		false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+		map[string]interface{}{messagequeue.MetadataLifecycleDurable: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.ClaimSendNow(ctx, "session-old", []messagequeue.QueuedMessage{*queued}); err != nil {
+		t.Fatal(err)
+	}
+	if queue.GetStatus(ctx, "session-old").Count != 0 {
+		t.Fatal("reserved lifecycle row remained visible")
+	}
+
+	if err := svc.transferQueuedSessionState(ctx, "task-transfer", "session-old", "session-new"); err != nil {
+		t.Fatal(err)
+	}
+	if len(transfer.calls) != 1 {
+		t.Fatalf("attachment transfer calls = %d, want 1", len(transfer.calls))
+	}
+}
+
 type statefulWorkflowAttachmentTransfer struct {
 	currentSession string
 	rollbackErr    error

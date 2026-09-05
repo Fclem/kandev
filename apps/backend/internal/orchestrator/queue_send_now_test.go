@@ -71,7 +71,9 @@ func TestSendNowWorkersCanRestartAfterStop(t *testing.T) {
 		t.Fatal("stopping Send Now workers did not mark the worker owner stopped")
 	}
 
-	svc.resetSendNowWorkers()
+	if err := svc.resetSendNowWorkers(); err != nil {
+		t.Fatal(err)
+	}
 	if svc.sendNowStopped {
 		t.Fatal("resetting Send Now workers left the worker owner stopped")
 	}
@@ -87,33 +89,55 @@ func TestSendNowWorkersCanRestartAfterStop(t *testing.T) {
 	svc.stopSendNowWorkers()
 }
 
-func TestSendNowRecoveryUsesCancellableWorkerContext(t *testing.T) {
+func TestSendNowRecoveryDetachesWorkerCancellation(t *testing.T) {
 	svc := &Service{}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	started := make(chan struct{})
-	done := make(chan error, 1)
+	cancel()
+	var mutationCtxErr error
+
+	err := svc.retrySendNowClaimMutation(ctx, func(recoveryCtx context.Context) error {
+		mutationCtxErr = recoveryCtx.Err()
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("detached recovery error = %v", err)
+	}
+	if mutationCtxErr != nil {
+		t.Fatalf("recovery inherited worker cancellation: %v", mutationCtxErr)
+	}
+}
+
+func TestStopSendNowWorkersReturnsWhenProviderIgnoresCancellation(t *testing.T) {
+	svc := &Service{logger: testLogger()}
+	if err := svc.resetSendNowWorkers(); err != nil {
+		t.Fatal(err)
+	}
+	providerStarted := make(chan struct{})
+	releaseProvider := make(chan struct{})
+	svc.sendNowWorkers.Add(1)
 	go func() {
-		done <- svc.retrySendNowClaimMutation(ctx, func(recoveryCtx context.Context) error {
-			close(started)
-			<-recoveryCtx.Done()
-			return recoveryCtx.Err()
-		})
+		defer svc.sendNowWorkers.Done()
+		close(providerStarted)
+		<-releaseProvider
+	}()
+	<-providerStarted
+	stopped := make(chan struct{})
+	go func() {
+		svc.stopSendNowWorkers()
+		close(stopped)
 	}()
 	select {
-	case <-started:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("recovery mutation did not start")
+	case <-stopped:
+	case <-time.After(time.Second):
+		close(releaseProvider)
+		<-stopped
+		t.Fatal("Send Now shutdown waited indefinitely for a stuck provider")
 	}
-	cancel()
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("recovery error = %v, want context cancellation", err)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("recovery mutation outlived worker cancellation")
+	if err := svc.resetSendNowWorkers(); err == nil {
+		t.Fatal("restart accepted while the prior Send Now worker still owned recovery")
 	}
+	close(releaseProvider)
 }
 
 func TestExplicitCancellationDoesNotJoinSendNowOperation(t *testing.T) {

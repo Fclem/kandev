@@ -2503,116 +2503,39 @@ func (s *Service) findReusableSessionForProfile(ctx context.Context, taskID, pro
 	return best, nil
 }
 
-type queuedSessionAttachmentTransfer struct {
-	compensation      *messagequeue.SessionTransferCompensation
-	transferAttempted bool
-	rollbackSucceeded bool
-}
-
 // transferQueuedSessionState keeps queue rows and their claimed attachment
 // bindings aligned when workflow session ownership changes.
 func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
 	if s.messageQueue == nil {
 		return nil
 	}
-	state := &queuedSessionAttachmentTransfer{}
-	transferErr := s.messageQueue.TransferSessionWithPreparation(
+	transferErr := s.messageQueue.TransferSessionWithDurablePreparation(
 		ctx,
+		taskID,
 		oldSessionID,
 		newSessionID,
 		func(admittedCtx context.Context) error {
-			return s.prepareQueuedSessionAttachmentTransfer(
-				admittedCtx, taskID, oldSessionID, newSessionID, state,
+			if s.sessionAttachmentTransferer == nil {
+				return nil
+			}
+			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
+				admittedCtx, taskID, oldSessionID, newSessionID,
 			)
 		},
 		func(rollbackCtx context.Context) error {
-			return s.rollbackQueuedSessionAttachmentTransfer(
-				rollbackCtx, taskID, oldSessionID, newSessionID, state,
+			if s.sessionAttachmentTransferer == nil {
+				return nil
+			}
+			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
+				rollbackCtx, taskID, newSessionID, oldSessionID,
 			)
 		},
 	)
 	if transferErr != nil {
-		if state.compensation != nil && state.rollbackSucceeded {
-			if err := s.deleteSessionTransferCompensation(context.WithoutCancel(ctx), *state.compensation); err != nil {
-				transferErr = errors.Join(transferErr, err)
-			}
-		}
 		return fmt.Errorf("transfer queued state: %w", transferErr)
-	}
-	if state.compensation != nil {
-		if err := s.deleteSessionTransferCompensation(context.WithoutCancel(ctx), *state.compensation); err != nil {
-			s.logger.Warn("session transfer committed with pending compensation record", zap.Error(err))
-		}
 	}
 	s.publishQueueStatusEvent(ctx, oldSessionID)
 	s.publishQueueStatusEvent(ctx, newSessionID)
-	return nil
-}
-
-func (s *Service) prepareQueuedSessionAttachmentTransfer(
-	ctx context.Context,
-	taskID, oldSessionID, newSessionID string,
-	state *queuedSessionAttachmentTransfer,
-) error {
-	if s.sessionAttachmentTransferer == nil {
-		return nil
-	}
-	status := s.messageQueue.GetStatus(ctx, oldSessionID)
-	entryIDs := make([]string, 0, len(status.Entries))
-	hasAttachments := false
-	for _, entry := range status.Entries {
-		entryIDs = append(entryIDs, entry.ID)
-		hasAttachments = hasAttachments || len(entry.Attachments) > 0
-	}
-	if !hasAttachments {
-		return nil
-	}
-	if s.messageQueue.SessionTransferCompensationPersistenceAvailable() {
-		state.compensation = &messagequeue.SessionTransferCompensation{
-			TaskID: taskID, FromSessionID: oldSessionID, ToSessionID: newSessionID,
-			EntryIDs: entryIDs, CreatedAt: time.Now().UTC(),
-		}
-		if err := s.messageQueue.UpsertSessionTransferCompensation(ctx, *state.compensation); err != nil {
-			return fmt.Errorf("persist session transfer compensation: %w", err)
-		}
-	}
-	state.transferAttempted = true
-	if err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
-		ctx, taskID, oldSessionID, newSessionID,
-	); err != nil {
-		return fmt.Errorf("transfer session attachments: %w", err)
-	}
-	return nil
-}
-
-func (s *Service) rollbackQueuedSessionAttachmentTransfer(
-	ctx context.Context,
-	taskID, oldSessionID, newSessionID string,
-	state *queuedSessionAttachmentTransfer,
-) error {
-	if !state.transferAttempted || s.sessionAttachmentTransferer == nil {
-		state.rollbackSucceeded = true
-		return nil
-	}
-	err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
-		ctx, taskID, newSessionID, oldSessionID,
-	)
-	state.rollbackSucceeded = err == nil
-	return err
-}
-
-func (s *Service) deleteSessionTransferCompensation(
-	ctx context.Context,
-	compensation messagequeue.SessionTransferCompensation,
-) error {
-	if err := s.messageQueue.DeleteSessionTransferCompensation(
-		ctx,
-		compensation.TaskID,
-		compensation.FromSessionID,
-		compensation.ToSessionID,
-	); err != nil {
-		return fmt.Errorf("delete session transfer compensation: %w", err)
-	}
 	return nil
 }
 
@@ -2658,8 +2581,13 @@ func (s *Service) reconcileSessionTransferCompensationsOnStartup(ctx context.Con
 		); err != nil {
 			return fmt.Errorf("reconcile session transfer attachments: %w", err)
 		}
-		if err := s.deleteSessionTransferCompensation(context.WithoutCancel(ctx), compensation); err != nil {
-			return err
+		if err := s.messageQueue.DeleteSessionTransferCompensation(
+			context.WithoutCancel(ctx),
+			compensation.TaskID,
+			compensation.FromSessionID,
+			compensation.ToSessionID,
+		); err != nil {
+			return fmt.Errorf("delete session transfer compensation: %w", err)
 		}
 	}
 	return nil

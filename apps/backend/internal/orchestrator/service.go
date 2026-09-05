@@ -1177,14 +1177,15 @@ type Service struct {
 	running   bool
 	startedAt time.Time
 
-	// sendNowWorkers owns the asynchronous replacement handoffs. The context
-	// is cancelled during Stop so a claimed durable source gets a bounded
-	// recovery attempt before shutdown returns.
+	// sendNowWorkers owns one generation of asynchronous replacement handoffs.
+	// Stop cancels the generation and waits only for a bounded interval; a late
+	// generation keeps its own wait group while the next Start creates another.
 	sendNowMu      sync.Mutex
 	sendNowCtx     context.Context
 	sendNowCancel  context.CancelFunc
 	sendNowStopped bool
-	sendNowWorkers sync.WaitGroup
+	sendNowWorkers *sync.WaitGroup
+	sendNowDrain   chan struct{}
 
 	// ciAutomationWorkers owns the asynchronous per-PR automation loops. The
 	// service-owned context lets Stop cancel in-flight evaluations and prevents
@@ -1441,6 +1442,7 @@ func NewService(
 		reservedPromptCallbacks:      newReservedPromptCallbackOwner(),
 		sendNowCtx:                   sendNowCtx,
 		sendNowCancel:                sendNowCancel,
+		sendNowWorkers:               &sync.WaitGroup{},
 		ciAutomationCtx:              ciAutomationCtx,
 		ciAutomationCancel:           ciAutomationCancel,
 		dynamicSuccessorCtx:          dynamicSuccessorCtx,
@@ -2663,9 +2665,21 @@ func (s *Service) Start(ctx context.Context) error {
 
 	s.logger.Info("starting orchestrator service")
 	s.resetReservedPromptCallbacks()
-	s.resetSendNowWorkers()
+	if err := s.resetSendNowWorkers(); err != nil {
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+		return err
+	}
 	s.resetCIAutomationWorkers()
 	s.resetDynamicSuccessorWorkers()
+	if err := s.reconcilePendingSendNowClaimsOnStartup(ctx); err != nil {
+		s.logger.Error("failed to reconcile pending Send Now claims on startup", zap.Error(err))
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+		return err
+	}
 
 	if err := s.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
 		s.logger.Error("failed to reconcile session transfer compensations on startup", zap.Error(err))

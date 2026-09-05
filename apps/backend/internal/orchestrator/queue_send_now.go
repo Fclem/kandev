@@ -18,7 +18,8 @@ const (
 	QueueSendNowScopeEntry = "entry"
 	QueueSendNowScopeAll   = "all"
 
-	sendNowClaimRecoveryTimeout = 10 * time.Second
+	sendNowClaimRecoveryTimeout  = 10 * time.Second
+	sendNowWorkerShutdownTimeout = 500 * time.Millisecond
 )
 
 var (
@@ -359,32 +360,67 @@ func (s *Service) launchSendNowClaim(
 	if s.sendNowCtx == nil {
 		s.sendNowCtx, s.sendNowCancel = context.WithCancel(context.Background())
 	}
+	if s.sendNowWorkers == nil {
+		s.sendNowWorkers = &sync.WaitGroup{}
+	}
 	workerCtx := s.sendNowCtx
-	s.sendNowWorkers.Add(1)
+	workers := s.sendNowWorkers
+	workers.Add(1)
 	s.sendNowMu.Unlock()
 	go func() {
-		defer s.sendNowWorkers.Done()
+		defer workers.Done()
 		s.executeSendNowClaimWithContext(workerCtx, claim, reservation)
 	}()
 	return true
 }
 
-func (s *Service) resetSendNowWorkers() {
+func (s *Service) resetSendNowWorkers() error {
 	s.sendNowMu.Lock()
 	defer s.sendNowMu.Unlock()
+	if s.sendNowDrain != nil {
+		select {
+		case <-s.sendNowDrain:
+		default:
+			return errors.New("previous Send Now workers are still recovering")
+		}
+	}
 	s.sendNowStopped = false
 	s.sendNowCtx, s.sendNowCancel = context.WithCancel(context.Background())
+	s.sendNowWorkers = &sync.WaitGroup{}
+	s.sendNowDrain = nil
+	return nil
 }
 
 func (s *Service) stopSendNowWorkers() {
 	s.sendNowMu.Lock()
 	s.sendNowStopped = true
 	cancel := s.sendNowCancel
+	workers := s.sendNowWorkers
+	done := s.sendNowDrain
+	startWait := workers != nil && done == nil
+	if startWait {
+		newDone := make(chan struct{})
+		done = newDone
+		s.sendNowDrain = newDone
+	}
 	s.sendNowMu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
-	s.sendNowWorkers.Wait()
+	if workers == nil {
+		return
+	}
+	if startWait {
+		go func() {
+			workers.Wait()
+			close(done)
+		}()
+	}
+	select {
+	case <-done:
+	case <-time.After(sendNowWorkerShutdownTimeout):
+		s.logger.Warn("timed out waiting for Send Now workers; recovery remains owned by detached workers")
+	}
 }
 
 func (s *Service) executeSendNowClaim(claim *messagequeue.SendNowClaim) {
@@ -507,7 +543,7 @@ func (s *Service) retrySendNowClaimMutation(
 	ctx context.Context,
 	mutate func(context.Context) error,
 ) error {
-	recoveryCtx, cancel := context.WithTimeout(ctx, sendNowClaimRecoveryTimeout)
+	recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sendNowClaimRecoveryTimeout)
 	defer cancel()
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
@@ -526,4 +562,29 @@ func (s *Service) retrySendNowClaimMutation(
 		}
 	}
 	return err
+}
+
+func (s *Service) reconcilePendingSendNowClaimsOnStartup(ctx context.Context) error {
+	if s.messageQueue == nil || !s.messageQueue.PendingSendNowClaimPersistenceAvailable() {
+		return nil
+	}
+	claims, err := s.messageQueue.ListPendingSendNowClaims(ctx)
+	if err != nil {
+		return fmt.Errorf("list pending Send Now claims: %w", err)
+	}
+	for i := range claims {
+		claim := &claims[i]
+		if err := s.restoreSendNowClaimWithRetry(ctx, claim); err != nil {
+			if !errors.Is(err, messagequeue.ErrSendNowClaimChanged) {
+				return fmt.Errorf("restore pending Send Now claim for session %s: %w", claim.Dispatch.SessionID, err)
+			}
+			if deleteErr := s.messageQueue.DeletePendingSendNowClaim(
+				context.WithoutCancel(ctx), claim.Dispatch.SessionID,
+			); deleteErr != nil {
+				return fmt.Errorf("discard superseded Send Now claim for session %s: %w", claim.Dispatch.SessionID, deleteErr)
+			}
+		}
+		s.publishQueueStatusEvent(ctx, claim.Dispatch.SessionID)
+	}
+	return nil
 }

@@ -3556,8 +3556,9 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, taskID, sel
 		return nil
 	}
 	transferCtx := context.WithoutCancel(ctx)
-	transferErr := queue.TransferSessionWithPreparation(
+	transferErr := queue.TransferSessionWithDurablePreparation(
 		transferCtx,
+		taskID,
 		selectedID,
 		primaryID,
 		func(admittedCtx context.Context) error {

@@ -65,7 +65,6 @@ func (r *memoryRepository) PurgeTask(_ context.Context, taskID string) (int, err
 		}
 		if len(kept) == 0 {
 			delete(r.entries, sessionID)
-			delete(r.nextPosition, sessionID)
 			continue
 		}
 		r.entries[sessionID] = kept
@@ -227,7 +226,9 @@ func (r *memoryRepository) RequeuePreservingFIFO(_ context.Context, msg *QueuedM
 
 func (r *memoryRepository) nextRequeuePositionLocked(sessionID string, list []*QueuedMessage) int64 {
 	if len(list) == 0 {
-		r.nextPosition[sessionID] = 1
+		if r.nextPosition[sessionID] < 1 {
+			r.nextPosition[sessionID] = 1
+		}
 		return 1
 	}
 	minPos := list[0].Position
@@ -390,6 +391,19 @@ func (r *memoryRepository) ListDurableLifecycleEntries(_ context.Context) ([]Que
 	return out, nil
 }
 
+func (r *memoryRepository) FindByID(_ context.Context, entryID string) (*QueuedMessage, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, list := range r.entries {
+		for _, message := range list {
+			if message.ID == entryID {
+				return cloneQueuedMessage(message), nil
+			}
+		}
+	}
+	return nil, ErrEntryNotFound
+}
+
 // CountBySession returns the number of entries for a session.
 func (r *memoryRepository) CountBySession(_ context.Context, sessionID string) (int, error) {
 	r.mu.Lock()
@@ -420,7 +434,6 @@ func (r *memoryRepository) TakeHead(_ context.Context, sessionID string) (*Queue
 	r.entries[sessionID] = append(list[:headIndex], list[headIndex+1:]...)
 	if len(r.entries[sessionID]) == 0 {
 		delete(r.entries, sessionID)
-		delete(r.nextPosition, sessionID)
 	}
 	out := cloneQueuedMessage(head)
 	return out, nil
@@ -453,7 +466,6 @@ func (r *memoryRepository) reserveHeadLocked(sessionID string) *QueuedMessage {
 	r.entries[sessionID] = append(list[:headIndex], list[headIndex+1:]...)
 	if len(r.entries[sessionID]) == 0 {
 		delete(r.entries, sessionID)
-		delete(r.nextPosition, sessionID)
 	}
 	return out
 }
@@ -514,7 +526,6 @@ func (r *memoryRepository) AcknowledgeByID(_ context.Context, sessionID, entryID
 		r.entries[sessionID] = append(list[:i], list[i+1:]...)
 		if len(r.entries[sessionID]) == 0 {
 			delete(r.entries, sessionID)
-			delete(r.nextPosition, sessionID)
 		}
 		return nil
 	}
@@ -538,7 +549,6 @@ func (r *memoryRepository) TakeByID(_ context.Context, sessionID, entryID string
 		r.entries[sessionID] = append(list[:i], list[i+1:]...)
 		if len(r.entries[sessionID]) == 0 {
 			delete(r.entries, sessionID)
-			delete(r.nextPosition, sessionID)
 		}
 		out := cloneQueuedMessage(m)
 		return out, nil
@@ -603,7 +613,6 @@ func (r *memoryRepository) ClaimSendNow(_ context.Context, sessionID string, exp
 	}
 	if len(remaining) == 0 {
 		delete(r.entries, sessionID)
-		delete(r.nextPosition, sessionID)
 	} else {
 		r.entries[sessionID] = remaining
 	}
@@ -729,7 +738,6 @@ func (r *memoryRepository) AcknowledgeSendNowClaim(_ context.Context, claim *Sen
 	}
 	if len(remaining) == 0 {
 		delete(r.entries, sessionID)
-		delete(r.nextPosition, sessionID)
 	} else {
 		r.entries[sessionID] = remaining
 	}
@@ -1012,7 +1020,6 @@ func (r *memoryRepository) DeleteByID(_ context.Context, sessionID, entryID stri
 		r.entries[sessionID] = append(list[:i], list[i+1:]...)
 		if len(r.entries[sessionID]) == 0 {
 			delete(r.entries, sessionID)
-			delete(r.nextPosition, sessionID)
 		}
 		return nil
 	}
@@ -1035,7 +1042,6 @@ func (r *memoryRepository) DeleteAllBySession(_ context.Context, sessionID strin
 	}
 	if len(kept) == 0 {
 		delete(r.entries, sessionID)
-		delete(r.nextPosition, sessionID)
 	} else {
 		r.entries[sessionID] = kept
 	}
@@ -1050,7 +1056,6 @@ func (r *memoryRepository) PurgeSession(_ context.Context, sessionID string) (in
 	defer r.mu.Unlock()
 	removed := len(r.entries[sessionID])
 	delete(r.entries, sessionID)
-	delete(r.nextPosition, sessionID)
 	delete(r.pendingMoves, sessionID)
 	delete(r.autoRun, sessionID)
 	r.sessionGeneration[sessionID]++
@@ -1083,18 +1088,16 @@ func (r *memoryRepository) TransferSession(_ context.Context, oldSessionID, newS
 			m.Position += destMax
 		}
 		r.entries[newSessionID] = append(r.entries[newSessionID], list...)
-		// Recompute nextPosition for the destination so future inserts keep
-		// monotonic ordering.
-		var maxPos int64
+		// Keep the destination high-water mark even when its physical queue
+		// was drained before this transfer.
 		for _, m := range r.entries[newSessionID] {
-			if m.Position > maxPos {
-				maxPos = m.Position
+			if m.Position > r.nextPosition[newSessionID] {
+				r.nextPosition[newSessionID] = m.Position
 			}
 		}
-		r.nextPosition[newSessionID] = maxPos
 		delete(r.entries, oldSessionID)
-		delete(r.nextPosition, oldSessionID)
 	}
+	delete(r.nextPosition, oldSessionID)
 	if move, ok := r.pendingMoves[oldSessionID]; ok {
 		r.pendingMoves[newSessionID] = move
 		delete(r.pendingMoves, oldSessionID)
@@ -1111,7 +1114,6 @@ func (r *memoryRepository) ReplaceSession(_ context.Context, sessionID string, e
 	r.sessionGeneration[sessionID]++
 	if len(entries) == 0 {
 		delete(r.entries, sessionID)
-		delete(r.nextPosition, sessionID)
 	} else {
 		replaced := make([]*QueuedMessage, 0, len(entries))
 		var maxPos int64
@@ -1127,7 +1129,9 @@ func (r *memoryRepository) ReplaceSession(_ context.Context, sessionID string, e
 			return replaced[i].Position < replaced[j].Position
 		})
 		r.entries[sessionID] = replaced
-		r.nextPosition[sessionID] = maxPos
+		if maxPos > r.nextPosition[sessionID] {
+			r.nextPosition[sessionID] = maxPos
+		}
 	}
 	if pendingMove == nil {
 		delete(r.pendingMoves, sessionID)

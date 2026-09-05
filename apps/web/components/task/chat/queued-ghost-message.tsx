@@ -427,15 +427,16 @@ type QueuedGhostMessageProps = {
   /** Disable while the queue mutation or backend cancellation is in flight. */
   sendNowDisabled?: boolean;
   /** Called before edit activation; returning false keeps the row read-only. */
-  onEditStart?: () => void | Promise<boolean | void>;
+  onEditStart?: () => void | Promise<boolean | string | void>;
   /** Called after edit save/cancel so the parent can restore queue policy. */
-  onEditComplete?: () => void | Promise<void>;
+  onEditComplete?: (editToken?: string) => void | Promise<void>;
 };
 
 function useFocusQueuedEdit(
   editing: boolean,
   textareaRef: React.RefObject<HTMLTextAreaElement | null>,
 ): void {
+  useQueuedGhostEditEscapeGuard(editing, textareaRef);
   useEffect(() => {
     if (!editing || !textareaRef.current) return;
     const textarea = textareaRef.current;
@@ -470,7 +471,8 @@ type QueuedGhostSaveArgs = {
   entityReferences: readonly EntityReference[];
   attachments?: QueuedMessage["attachments"];
   onSave: QueuedGhostMessageProps["onSave"];
-  onEditComplete?: () => void | Promise<void>;
+  onEditComplete?: (editToken?: string) => void | Promise<void>;
+  editTokenRef: React.RefObject<string | undefined>;
   setEditing: (editing: boolean) => void;
   setSaving: (saving: boolean) => void;
   t: (key: string) => string;
@@ -483,16 +485,18 @@ function useQueuedGhostSave({
   attachments,
   onSave,
   onEditComplete,
+  editTokenRef,
   setEditing,
   setSaving,
   t,
 }: QueuedGhostSaveArgs) {
   return useCallback(async () => {
+    const editToken = editTokenRef.current;
     const trimmed = value.trim();
     const hasAttachments = (attachments?.length ?? 0) > 0;
     if ((!trimmed && !hasAttachments) || trimmed === entryContent) {
       setEditing(false);
-      await onEditComplete?.();
+      await onEditComplete?.(editToken);
       return;
     }
     setSaving(true);
@@ -504,7 +508,7 @@ function useQueuedGhostSave({
         await onSave(trimmed, updatedReferences, attachments);
       }
       setEditing(false);
-      await onEditComplete?.();
+      await onEditComplete?.(editToken);
     } catch (err) {
       console.error("Failed to update queued entry:", err);
       if (err instanceof QueueEntryNotFoundError) {
@@ -513,7 +517,7 @@ function useQueuedGhostSave({
         toast.error(t("chat:queueEditSaveFailed"));
       }
       setEditing(false);
-      await onEditComplete?.();
+      await onEditComplete?.(editToken);
     } finally {
       setSaving(false);
     }
@@ -524,10 +528,34 @@ function useQueuedGhostSave({
     onEditComplete,
     entityReferences,
     attachments,
+    editTokenRef,
     setEditing,
     setSaving,
     t,
   ]);
+}
+
+type QueuedGhostCancelArgs = {
+  entryContent: string;
+  onEditComplete?: (editToken?: string) => void | Promise<void>;
+  editTokenRef: React.RefObject<string | undefined>;
+  setValue: (value: string) => void;
+  setEditing: (editing: boolean) => void;
+};
+
+function useQueuedGhostCancel({
+  entryContent,
+  onEditComplete,
+  editTokenRef,
+  setValue,
+  setEditing,
+}: QueuedGhostCancelArgs) {
+  return useCallback(async () => {
+    const editToken = editTokenRef.current;
+    setValue(entryContent);
+    setEditing(false);
+    await onEditComplete?.(editToken);
+  }, [editTokenRef, entryContent, onEditComplete, setEditing, setValue]);
 }
 
 function useQueuedGhostLeaseLoss(
@@ -538,10 +566,21 @@ function useQueuedGhostLeaseLoss(
   setEditing: (editing: boolean) => void,
 ): void {
   useEffect(() => {
+    if (!editing) setValue(entryContent);
+  }, [editing, entryContent, setValue]);
+  useEffect(() => {
     if (!editing || editLeaseActive) return;
     setValue(entryContent);
     setEditing(false);
   }, [editLeaseActive, editing, entryContent, setEditing, setValue]);
+}
+
+function useQueuedGhostMetadata(entry: QueuedMessage, canMerge: boolean) {
+  const entityReferences = useMemo(
+    () => entityReferencesFromMetadata(entry.metadata),
+    [entry.metadata],
+  );
+  return { entityReferences, effectiveCanMerge: canMerge && canMergeEntry(entry) };
 }
 
 export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGhostMessageProps>(
@@ -570,35 +609,30 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
     const [editing, setEditing] = useState(false);
     const [value, setValue] = useState(entry.content);
     const [saving, setSaving] = useState(false);
+    const editTokenRef = useRef<string | undefined>(undefined);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    useQueuedGhostEditEscapeGuard(editing, textareaRef);
-    const entityReferences = useMemo(
-      () => entityReferencesFromMetadata(entry.metadata),
-      [entry.metadata],
-    );
-    const effectiveCanMerge = canMerge && canMergeEntry(entry);
+    const { entityReferences, effectiveCanMerge } = useQueuedGhostMetadata(entry, canMerge);
     useFocusQueuedEdit(editing, textareaRef);
-    useEffect(() => {
-      if (!editing) setValue(entry.content);
-    }, [entry.content, editing]);
     useQueuedGhostLeaseLoss(editing, editLeaseActive, entry.content, setValue, setEditing);
     const startEdit = useQueuedGhostStartEdit({
       canEdit,
       editing,
       saving,
       onEditStart,
-      onStart: () => {
+      onStart: (editToken) => {
+        editTokenRef.current = editToken;
         setValue(entry.content);
         setEditing(true);
       },
     });
     useImperativeHandle(ref, () => ({ startEdit }), [startEdit]);
-    const handleCancel = useCallback(async () => {
-      setValue(entry.content);
-      setEditing(false);
-      await onEditComplete?.();
-    }, [entry.content, onEditComplete]);
-
+    const handleCancel = useQueuedGhostCancel({
+      entryContent: entry.content,
+      onEditComplete,
+      editTokenRef,
+      setValue,
+      setEditing,
+    });
     const handleSave = useQueuedGhostSave({
       value,
       entryContent: entry.content,
@@ -606,11 +640,11 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
       attachments: entry.attachments,
       onSave,
       onEditComplete,
+      editTokenRef,
       setEditing,
       setSaving,
       t,
     });
-
     return (
       <SortableRowShell
         id={entry.id}

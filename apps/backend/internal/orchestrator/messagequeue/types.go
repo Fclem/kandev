@@ -130,11 +130,13 @@ type QueueEditLease struct {
 	LeaseGeneration int64     `json:"lease_generation,omitempty"`
 	ExpiresAt       time.Time `json:"expires_at,omitempty"`
 	// connectionID and operation fields are server-side fencing state.
-	connectionID        string
-	taskID              string
-	lastOperationID     string
-	lastOperationHash   string
-	lastOperationResult int64
+	connectionID           string
+	taskID                 string
+	lastOperationID        string
+	lastOperationHash      string
+	lastOperationResult    int64
+	lastOperationPrevious  *QueuedMessage
+	lastOperationFinalized bool
 }
 
 // QueuedMessage represents a single FIFO entry queued for a session.

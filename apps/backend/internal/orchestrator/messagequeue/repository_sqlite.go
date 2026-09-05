@@ -225,7 +225,8 @@ func (r *sqliteRepository) initSchema() error {
 	CREATE TABLE IF NOT EXISTS queue_session_state (
 		session_id          TEXT PRIMARY KEY,
 		auto_run            INTEGER NOT NULL DEFAULT 1,
-		send_now_generation INTEGER NOT NULL DEFAULT 0
+		send_now_generation INTEGER NOT NULL DEFAULT 0,
+		next_position       INTEGER NOT NULL DEFAULT 0
 	);
 	`)
 	if err != nil {
@@ -245,6 +246,49 @@ func (r *sqliteRepository) initSchema() error {
 	}
 	if _, alterErr := r.db.Exec(`ALTER TABLE queue_session_state ADD COLUMN send_now_generation INTEGER NOT NULL DEFAULT 0`); alterErr != nil && !internaldb.IsDuplicateColumnError(alterErr) {
 		return alterErr
+	}
+	if _, alterErr := r.db.Exec(`ALTER TABLE queue_session_state ADD COLUMN next_position INTEGER NOT NULL DEFAULT 0`); alterErr != nil && !internaldb.IsDuplicateColumnError(alterErr) {
+		return alterErr
+	}
+	return nil
+}
+func (r *sqliteRepository) nextQueuePositionTx(ctx context.Context, tx *sqlx.Tx, sessionID string) (int64, error) {
+	var maxPos sql.NullInt64
+	if err := tx.GetContext(ctx, &maxPos,
+		r.db.Rebind(`SELECT MAX(position) FROM queued_messages WHERE session_id = ?`), sessionID,
+	); err != nil {
+		return 0, fmt.Errorf("max queue position: %w", err)
+	}
+	var nextPosition int64
+	err := tx.GetContext(ctx, &nextPosition, r.db.Rebind(`
+		SELECT next_position FROM queue_session_state WHERE session_id = ?
+	`), sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		nextPosition = 0
+	} else if err != nil {
+		return 0, fmt.Errorf("read next queue position: %w", err)
+	}
+	if maxPos.Valid && maxPos.Int64 > nextPosition {
+		nextPosition = maxPos.Int64
+	}
+	nextPosition++
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		INSERT INTO queue_session_state (session_id, next_position) VALUES (?, ?)
+		ON CONFLICT(session_id) DO UPDATE SET next_position = excluded.next_position
+	`), sessionID, nextPosition); err != nil {
+		return 0, fmt.Errorf("advance next queue position: %w", err)
+	}
+	return nextPosition, nil
+}
+
+func (r *sqliteRepository) bumpQueuePositionTx(ctx context.Context, tx *sqlx.Tx, sessionID string, position int64) error {
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		INSERT INTO queue_session_state (session_id, next_position) VALUES (?, ?)
+		ON CONFLICT(session_id) DO UPDATE SET next_position =
+			CASE WHEN queue_session_state.next_position < excluded.next_position
+				THEN excluded.next_position ELSE queue_session_state.next_position END
+	`), sessionID, position); err != nil {
+		return fmt.Errorf("record queue position: %w", err)
 	}
 	return nil
 }
@@ -276,11 +320,11 @@ func (r *sqliteRepository) Insert(ctx context.Context, msg *QueuedMessage, maxPe
 		}
 	}
 
-	var maxPos sql.NullInt64
-	if err := tx.GetContext(ctx, &maxPos, r.db.Rebind(`SELECT MAX(position) FROM queued_messages WHERE session_id = ?`), msg.SessionID); err != nil {
-		return fmt.Errorf("max position: %w", err)
+	position, err := r.nextQueuePositionTx(ctx, tx, msg.SessionID)
+	if err != nil {
+		return err
 	}
-	msg.Position = maxPos.Int64 + 1
+	msg.Position = position
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
 	}
@@ -437,6 +481,17 @@ func (r *sqliteRepository) applyHeadInsertTx(ctx context.Context, tx *sqlx.Tx, m
 	} else {
 		msg.Position = 1
 	}
+	var maxPosition sql.NullInt64
+	if err := tx.GetContext(ctx, &maxPosition, r.db.Rebind(`SELECT MAX(position) FROM queued_messages WHERE session_id = ?`), msg.SessionID); err != nil {
+		return fmt.Errorf("max position after requeue shift: %w", err)
+	}
+	if maxPosition.Valid {
+		if err := r.bumpQueuePositionTx(ctx, tx, msg.SessionID, maxPosition.Int64); err != nil {
+			return err
+		}
+	} else if err := r.bumpQueuePositionTx(ctx, tx, msg.SessionID, msg.Position); err != nil {
+		return err
+	}
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
 	}
@@ -490,6 +545,9 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 		if count >= maxPerSession {
 			return ErrQueueFull
 		}
+	}
+	if err := r.bumpQueuePositionTx(ctx, tx, msg.SessionID, msg.Position); err != nil {
+		return err
 	}
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
@@ -560,16 +618,16 @@ func (r *sqliteRepository) AppendOrInsertTail(ctx context.Context, sessionID, ta
 			return nil, false, ErrQueueFull
 		}
 	}
-	var maxPos sql.NullInt64
-	if err := tx.GetContext(ctx, &maxPos, r.db.Rebind(`SELECT MAX(position) FROM queued_messages WHERE session_id = ?`), sessionID); err != nil {
-		return nil, false, fmt.Errorf("max position: %w", err)
+	position, err := r.nextQueuePositionTx(ctx, tx, sessionID)
+	if err != nil {
+		return nil, false, err
 	}
 
 	msg := &QueuedMessage{
 		ID:          uuid.New().String(),
 		SessionID:   sessionID,
 		TaskID:      taskID,
-		Position:    maxPos.Int64 + 1,
+		Position:    position,
 		Content:     content,
 		Model:       model,
 		PlanMode:    planMode,
@@ -923,11 +981,11 @@ func (r *sqliteRepository) insertCoalesced(ctx context.Context, tx *sqlx.Tx, msg
 	if err := r.ensureQueueCapacity(ctx, tx, msg.SessionID, maxPerSession); err != nil {
 		return err
 	}
-	var maxPos sql.NullInt64
-	if err := tx.GetContext(ctx, &maxPos, r.db.Rebind(`SELECT MAX(position) FROM queued_messages WHERE session_id = ?`), msg.SessionID); err != nil {
-		return fmt.Errorf("max position: %w", err)
+	position, err := r.nextQueuePositionTx(ctx, tx, msg.SessionID)
+	if err != nil {
+		return err
 	}
-	msg.Position = maxPos.Int64 + 1
+	msg.Position = position
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
 	}
@@ -1024,6 +1082,23 @@ func (r *sqliteRepository) ListDurableLifecycleEntries(ctx context.Context) ([]Q
 		return nil, fmt.Errorf("list durable lifecycle queued rows: %w", err)
 	}
 	return out, nil
+}
+
+func (r *sqliteRepository) FindByID(ctx context.Context, entryID string) (*QueuedMessage, error) {
+	row := r.ro.QueryRowxContext(ctx, r.ro.Rebind(`
+		SELECT id, session_id, task_id, position, content, model, plan_mode,
+		       attachments_json, metadata_json, queued_at, queued_by
+		FROM queued_messages
+		WHERE id = ?
+	`), entryID)
+	message, err := scanQueuedRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrEntryNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find queued entry: %w", err)
+	}
+	return message, nil
 }
 
 // CountBySession returns the number of entries for a session.
@@ -1879,6 +1954,9 @@ func (r *sqliteRepository) insertSQLiteSendNowSource(ctx context.Context, tx *sq
 	if err != nil {
 		return err
 	}
+	if err := r.bumpQueuePositionTx(ctx, tx, source.SessionID, source.Position); err != nil {
+		return err
+	}
 	metadataJSON, err := marshalMetadata(clearReservedMetadata(source.Metadata))
 	if err != nil {
 		return err
@@ -2661,6 +2739,17 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 	`), newSessionID, destMax.Int64, oldSessionID); err != nil {
 		return fmt.Errorf("transfer queued: %w", err)
 	}
+	var transferredMax sql.NullInt64
+	if err := tx.GetContext(ctx, &transferredMax, r.db.Rebind(`
+		SELECT MAX(position) FROM queued_messages WHERE session_id = ?
+	`), newSessionID); err != nil {
+		return fmt.Errorf("transfer destination max after move: %w", err)
+	}
+	if transferredMax.Valid {
+		if err := r.bumpQueuePositionTx(ctx, tx, newSessionID, transferredMax.Int64); err != nil {
+			return err
+		}
+	}
 
 	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM pending_moves WHERE session_id = ?
@@ -2731,6 +2820,7 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM queued_messages WHERE session_id = ?`), sessionID); err != nil {
 		return fmt.Errorf("clear queued messages: %w", err)
 	}
+	var maxPosition int64
 	for _, entry := range entries {
 		attachmentsJSON, err := marshalAttachments(entry.Attachments)
 		if err != nil {
@@ -2744,6 +2834,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 		if queuedAt.IsZero() {
 			queuedAt = time.Now().UTC()
 		}
+		if entry.Position > maxPosition {
+			maxPosition = entry.Position
+		}
 		if _, err := tx.ExecContext(ctx, r.db.Rebind(`
 			INSERT INTO queued_messages
 				(id, session_id, task_id, position, content, model, plan_mode, attachments_json, metadata_json, queued_at, queued_by)
@@ -2756,6 +2849,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 		}
 	}
 
+	if err := r.bumpQueuePositionTx(ctx, tx, sessionID, maxPosition); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM pending_moves WHERE session_id = ?`), sessionID); err != nil {
 		return fmt.Errorf("clear pending move: %w", err)
 	}

@@ -24,11 +24,12 @@ vi.mock("@/hooks/use-queue-edit-protection", () => ({
       onEditStart,
       onStart,
     }: {
-      onEditStart?: () => void | Promise<boolean | void>;
-      onStart: () => void;
+      onEditStart?: () => void | Promise<boolean | string | void>;
+      onStart: (editToken?: string) => void;
     }) =>
     async () => {
-      if ((await onEditStart?.()) !== false) onStart();
+      const editToken = await onEditStart?.();
+      if (editToken !== false) onStart(typeof editToken === "string" ? editToken : undefined);
     },
 }));
 

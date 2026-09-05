@@ -4,6 +4,7 @@ import type { SeedData } from "../../fixtures/test-base";
 import type { ApiClient } from "../../helpers/api-client";
 import { typeWhileBusy, waitForComposerQueueMode } from "../../helpers/type-while-busy";
 import { SessionPage } from "../../pages/session-page";
+import { waitForSessionDone } from "../../helpers/session";
 import { expectFullQueueScrolls, seedFullQueueTask } from "./message-queue-scroll-helpers";
 import { registerSeparateQueueRows } from "../../helpers/message-queue-settings";
 import { assertNoDocumentHorizontalOverflow } from "../../helpers/layout-assertions";
@@ -83,7 +84,7 @@ async function seedBusyQueueTask(
   if (!loadedTask.primary_session_id) throw new Error("task did not have a primary session");
   return { session, taskId: task.id, sessionId: loadedTask.primary_session_id };
 }
-test("mobile queued-message editing keeps save and cancel touch-safe", async ({
+test("mobile edit queued message saves with touch-safe controls", async ({
   testPage,
   apiClient,
   seedData,
@@ -103,6 +104,104 @@ test("mobile queued-message editing keeps save and cancel touch-safe", async ({
   await row.getByTestId("queue-entry-edit").tap();
   await expectTouchTarget(panel.getByRole("button", { name: "Save", exact: true }));
   await expectTouchTarget(panel.getByRole("button", { name: "Cancel", exact: true }));
+
+  const editedText = "Queued item 10 edited";
+  await panel.getByTestId("queue-edit-textarea").fill(editedText);
+  await panel.getByRole("button", { name: "Save", exact: true }).tap();
+  await expect(panel.getByTestId("queue-entry-text").last()).toContainText(editedText);
+  await assertNoDocumentHorizontalOverflow(testPage);
+});
+test("mobile edit queued message retains target while earlier backlog drains", async ({
+  testPage,
+  apiClient,
+  seedData,
+}) => {
+  test.setTimeout(120_000);
+  const { session, taskId, sessionId } = await seedBusyQueueTask(testPage, apiClient, seedData);
+  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("mobile first queued"));
+  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("mobile second queued"));
+
+  const chat = session.activeChat();
+  const panel = chat.getByTestId("queued-ghost-list");
+  await chat.getByTestId("queue-chip").tap();
+  const rows = panel.getByTestId("queue-entry");
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).getByTestId("queue-entry-edit").tap();
+  await panel.getByTestId("queue-edit-textarea").fill(scriptedQueueMessage("mobile second edited"));
+  await panel.getByRole("button", { name: "Save", exact: true }).tap();
+
+  await expect(panel.getByTestId("queue-entry-text").last()).toContainText("mobile second edited");
+  await expect(
+    chat.locator("[data-agent-message-body][data-message-id]").filter({
+      hasText: "mobile first queued",
+    }),
+  ).toHaveCount(1, { timeout: 60_000 });
+  await expect(panel.getByTestId("queue-entry-text")).toContainText("mobile second edited");
+  await assertNoDocumentHorizontalOverflow(testPage);
+});
+
+test("mobile edit queued message reconciles after a session switch", async ({
+  testPage,
+  apiClient,
+  seedData,
+}) => {
+  test.setTimeout(120_000);
+
+  const replacementTask = await apiClient.createTaskWithAgent(
+    seedData.workspaceId,
+    "Mobile queue replacement B",
+    seedData.agentProfileId,
+    {
+      description: "/e2e:simple-message",
+      workflow_id: seedData.workflowId,
+      workflow_step_id: seedData.startStepId,
+      repository_ids: [seedData.repositoryId],
+    },
+  );
+  if (!replacementTask.session_id) {
+    throw new Error("replacement task did not have a primary session");
+  }
+  await waitForSessionDone(
+    apiClient,
+    replacementTask.id,
+    replacementTask.session_id,
+    "mobile replacement task should finish its seed turn",
+  );
+
+  const { session, taskId, sessionId } = await seedBusyQueueTask(testPage, apiClient, seedData);
+  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("switch first"));
+  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("switch second"));
+
+  const chat = session.activeChat();
+  const panel = chat.getByTestId("queued-ghost-list");
+  await chat.getByTestId("queue-chip").tap();
+  const rows = panel.getByTestId("queue-entry");
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).getByTestId("queue-entry-edit").tap();
+  await expect(panel.getByTestId("queue-edit-textarea")).toBeVisible();
+
+  await testPage.goto(`/t/${replacementTask.id}`);
+  await expect(testPage).toHaveURL(new RegExp(`/t/${replacementTask.id}$`), {
+    timeout: 15_000,
+  });
+  await session.waitForLoad();
+  await session.waitForChatIdle({ timeout: 30_000 });
+
+  await testPage.goto(`/t/${taskId}`);
+  await expect(testPage).toHaveURL(new RegExp(`/t/${taskId}$`), { timeout: 15_000 });
+  await session.waitForLoad();
+  const remountedChat = session.activeChat();
+  const remountedPanel = remountedChat.getByTestId("queued-ghost-list");
+  await remountedChat.getByTestId("queue-chip").tap();
+  const remountedRows = remountedPanel.getByTestId("queue-entry");
+  await expect(remountedRows).toHaveCount(2);
+  await remountedRows.nth(1).getByTestId("queue-entry-edit").tap();
+  await remountedPanel.getByTestId("queue-edit-textarea").fill("switch second edited");
+  await remountedPanel.getByRole("button", { name: "Save", exact: true }).tap();
+  await expect(remountedPanel.getByTestId("queue-entry-text").last()).toContainText(
+    "switch second edited",
+  );
+  await assertNoDocumentHorizontalOverflow(testPage);
 });
 
 test("mobile full queue stays usable while removing and clearing messages", async ({

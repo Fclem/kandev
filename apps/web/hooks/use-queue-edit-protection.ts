@@ -17,10 +17,49 @@ type QueueEditProtectionArgs = {
 type ActiveEdit = {
   sessionId: string;
   entryId: string;
+  editToken: string;
   lease: QueueEditLease;
+  renewalSequence: number;
 };
 
 const EDIT_RENEW_INTERVAL_MS = 20_000;
+
+type RenewalOwnershipArgs = {
+  activeEdit: ActiveEdit;
+  currentEdit: ActiveEdit | null;
+  leaseSnapshot: QueueEditLease;
+  renewedLease: QueueEditLease;
+  renewalSequence: number;
+};
+
+function ownsRenewal({
+  activeEdit,
+  currentEdit,
+  leaseSnapshot,
+  renewedLease,
+  renewalSequence,
+}: RenewalOwnershipArgs): currentEdit is ActiveEdit {
+  const currentLease = currentEdit?.lease;
+  if (
+    !currentEdit ||
+    currentEdit.sessionId !== activeEdit.sessionId ||
+    currentEdit.entryId !== activeEdit.entryId ||
+    currentLease?.lease_id !== leaseSnapshot.lease_id
+  ) {
+    return false;
+  }
+  if (
+    currentEdit.renewalSequence !== renewalSequence &&
+    (currentLease.lease_generation === undefined || renewedLease.lease_generation === undefined)
+  ) {
+    return false;
+  }
+  return !(
+    currentLease.lease_generation !== undefined &&
+    (renewedLease.lease_generation === undefined ||
+      renewedLease.lease_generation < currentLease.lease_generation)
+  );
+}
 
 /** Acquires a target-bound server lease before activating a queue editor. */
 // eslint-disable-next-line max-lines-per-function -- coordinates the full lease lifecycle.
@@ -29,6 +68,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editLease, setEditLease] = useState<QueueEditLease | null>(null);
   const activeEditRef = useRef<ActiveEdit | null>(null);
+  const nextEditTokenRef = useRef(0);
   const acquiringEditRef = useRef<{ sessionId: string; entryId: string } | null>(null);
   const mountedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
@@ -43,7 +83,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
     };
   }, []);
   const beginEdit = useCallback(
-    async (entryId: string): Promise<boolean> => {
+    async (entryId: string): Promise<string | false> => {
       if (!sessionId || editingEntryId || activeEditRef.current || acquiringEditRef.current) {
         return false;
       }
@@ -59,10 +99,11 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
           await endQueuedMessageEdit(lease).catch(() => undefined);
           return false;
         }
-        activeEditRef.current = { sessionId, entryId, lease };
+        const editToken = `queue-edit-${++nextEditTokenRef.current}`;
+        activeEditRef.current = { sessionId, entryId, editToken, lease, renewalSequence: 0 };
         setEditLease(lease);
         setEditingEntryId(entryId);
-        return true;
+        return editToken;
       } catch (err) {
         console.error("Failed to acquire queued message edit lease:", err);
         toast.error(t("chat:queueEditSaveFailed"));
@@ -74,40 +115,64 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
     [editingEntryId, entries, sessionId, t],
   );
 
-  const completeEdit = useCallback(async (entryId: string): Promise<void> => {
-    const activeEdit = activeEditRef.current;
-    if (!activeEdit || activeEdit.entryId !== entryId) return;
-    activeEditRef.current = null;
-    setEditingEntryId(null);
-    setEditLease(null);
-    await endQueuedMessageEdit(activeEdit.lease).catch((err) => {
-      console.error("Failed to release queued message edit lease:", err);
-    });
-  }, []);
+  const completeEdit = useCallback(
+    async (
+      entryId: string,
+      expectedSessionId = sessionIdRef.current,
+      expectedEditToken?: string,
+    ): Promise<void> => {
+      const activeEdit = activeEditRef.current;
+      if (
+        !activeEdit ||
+        activeEdit.entryId !== entryId ||
+        activeEdit.sessionId !== expectedSessionId ||
+        (expectedEditToken !== undefined && activeEdit.editToken !== expectedEditToken)
+      ) {
+        return;
+      }
+      activeEditRef.current = null;
+      setEditingEntryId(null);
+      setEditLease(null);
+      await endQueuedMessageEdit(activeEdit.lease).catch((err) => {
+        console.error("Failed to release queued message edit lease:", err);
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     const activeEdit = activeEditRef.current;
     if (!activeEdit || activeEdit.sessionId !== sessionId) return;
-    if (!entries.some((entry) => entry.id === activeEdit.entryId)) {
-      void completeEdit(activeEdit.entryId);
-    }
-  }, [completeEdit, entries, sessionId]);
-
-  useEffect(() => {
-    const activeEdit = activeEditRef.current;
-    if (!activeEdit) return;
     const renew = async () => {
       const leaseSnapshot = activeEdit.lease;
+      const renewalSequence = activeEdit.renewalSequence + 1;
+      activeEdit.renewalSequence = renewalSequence;
       try {
         const lease = await renewQueuedMessageEdit(leaseSnapshot);
-        if (activeEditRef.current?.lease !== leaseSnapshot) return;
-        activeEditRef.current.lease = lease;
+        const currentEdit = activeEditRef.current;
+        if (
+          !ownsRenewal({
+            activeEdit,
+            currentEdit,
+            leaseSnapshot,
+            renewedLease: lease,
+            renewalSequence,
+          })
+        ) {
+          return;
+        }
+        currentEdit.lease = lease;
         setEditLease(lease);
       } catch (err) {
         // A renewal can reject after this edit has been completed or a newer
         // renewal has replaced its lease snapshot. Only the renewal that
         // still owns the active snapshot may clear the edit.
-        if (activeEditRef.current?.lease !== leaseSnapshot) return;
+        if (
+          activeEditRef.current !== activeEdit ||
+          activeEdit.renewalSequence !== renewalSequence
+        ) {
+          return;
+        }
         console.error("Queued message edit lease renewal failed:", err);
         await completeEdit(activeEdit.entryId);
         toast.error(t("chat:queueEditSaveFailed"));
@@ -116,6 +181,18 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
     const timer = window.setInterval(() => void renew(), EDIT_RENEW_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [completeEdit, editingEntryId, t]);
+
+  useEffect(() => {
+    const activeEdit = activeEditRef.current;
+    if (
+      !activeEdit ||
+      activeEdit.sessionId !== sessionId ||
+      entries.some((entry) => entry.id === activeEdit.entryId)
+    ) {
+      return;
+    }
+    void completeEdit(activeEdit.entryId, activeEdit.sessionId);
+  }, [completeEdit, entries, sessionId]);
 
   useEffect(() => {
     const activeEdit = activeEditRef.current;
@@ -147,8 +224,8 @@ type QueuedGhostEditStartArgs = {
   canEdit: boolean;
   editing: boolean;
   saving: boolean;
-  onEditStart?: () => void | Promise<boolean | void>;
-  onStart: () => void;
+  onEditStart?: () => void | Promise<boolean | string | void>;
+  onStart: (editToken?: string) => void;
 };
 
 export function useQueuedGhostStartEdit({
@@ -163,8 +240,9 @@ export function useQueuedGhostStartEdit({
     if (!canEdit || editing || saving || editStartingRef.current) return;
     editStartingRef.current = true;
     try {
-      if (onEditStart && (await onEditStart()) === false) return;
-      onStart();
+      const editToken = onEditStart ? await onEditStart() : undefined;
+      if (editToken === false) return;
+      onStart(typeof editToken === "string" ? editToken : undefined);
     } finally {
       editStartingRef.current = false;
     }

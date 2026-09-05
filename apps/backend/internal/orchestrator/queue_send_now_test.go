@@ -87,6 +87,35 @@ func TestSendNowWorkersCanRestartAfterStop(t *testing.T) {
 	svc.stopSendNowWorkers()
 }
 
+func TestSendNowRecoveryUsesCancellableWorkerContext(t *testing.T) {
+	svc := &Service{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.retrySendNowClaimMutation(ctx, func(recoveryCtx context.Context) error {
+			close(started)
+			<-recoveryCtx.Done()
+			return recoveryCtx.Err()
+		})
+	}()
+	select {
+	case <-started:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("recovery mutation did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("recovery error = %v, want context cancellation", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("recovery mutation outlived worker cancellation")
+	}
+}
+
 func TestExplicitCancellationDoesNotJoinSendNowOperation(t *testing.T) {
 	operation := &cancelOperation{
 		done:   make(chan struct{}),

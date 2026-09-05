@@ -3,10 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kandev/kandev/internal/auth/authn"
+	eventtypes "github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 	ws "github.com/kandev/kandev/pkg/websocket"
@@ -189,6 +192,205 @@ func TestWsUpdateMessageRollsBackBeforeSuccessorCanAcquireEdit(t *testing.T) {
 	require.False(t, claimer.successBeforeRelease.Load())
 	require.True(t, claimer.releaseObserved.Load())
 }
+func TestWsUpdateMessageWithLeaseReleasesSupersededAttachments(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &recordingQueueAttachmentClaimer{}
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(ctx, "session-update", "task-update", "before", "", "user", false, []messagequeue.MessageAttachment{{
+		Type: "resource", AttachmentID: "old-attachment", Name: "old.txt", MimeType: "text/plain",
+	}})
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	response, err := handlers.wsUpdateMessage(ws.WithConnectionID(ctx, "connection-a"),
+		createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id":               entry.SessionID,
+			"entry_id":                 entry.ID,
+			"lease_id":                 lease.LeaseID,
+			"operation_id":             "operation-update",
+			"expected_target_revision": lease.TargetRevision,
+			"content":                  "after",
+			"attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new-attachment", Name: "new.txt", MimeType: "text/plain",
+			}},
+		}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Equal(t, []string{"new-attachment"}, claimer.claims)
+	require.Equal(t, []string{"old-attachment"}, claimer.releases)
+}
+
+type failingThenSuccessfulQueueAttachmentClaimer struct {
+	failures atomic.Int32
+	attempts atomic.Int32
+	released atomic.Int32
+}
+
+func (c *failingThenSuccessfulQueueAttachmentClaimer) ClaimMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
+	return nil
+}
+
+func (c *failingThenSuccessfulQueueAttachmentClaimer) ReleaseMessageAttachments(_ context.Context, _ string, _ string, attachments []v1.MessageAttachment) error {
+	c.attempts.Add(1)
+	if c.failures.Load() > 0 {
+		c.failures.Add(-1)
+		return errors.New("transient attachment release failure")
+	}
+	for _, attachment := range attachments {
+		if attachment.AttachmentID != "" {
+			c.released.Add(1)
+		}
+	}
+	return nil
+}
+
+func TestWsUpdateMessageRetriesSupersededAttachmentCleanupAfterLeaseEnd(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &failingThenSuccessfulQueueAttachmentClaimer{}
+	claimer.failures.Store(1)
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(ctx, "session-retry-cleanup", "task-retry-cleanup", "before", "", "user", false,
+		[]messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "old-attachment", Name: "old.txt", MimeType: "text/plain",
+		}})
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-retry")
+	require.NoError(t, err)
+	message := func() *ws.Message {
+		return createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id":               entry.SessionID,
+			"entry_id":                 entry.ID,
+			"lease_id":                 lease.LeaseID,
+			"operation_id":             "operation-retry",
+			"expected_target_revision": lease.TargetRevision,
+			"content":                  "after",
+			"attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new-attachment", Name: "new.txt", MimeType: "text/plain",
+			}},
+		})
+	}
+
+	firstResponse, err := handlers.wsUpdateMessage(ws.WithConnectionID(ctx, "connection-retry"), message())
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, firstResponse.Type)
+	require.NoError(t, queue.EndEdit(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection-retry"))
+	require.Eventually(t, func() bool {
+		return claimer.attempts.Load() >= 2 && claimer.released.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, int32(2), claimer.attempts.Load())
+	require.Equal(t, int32(1), claimer.released.Load())
+}
+
+type controlledCleanupClaimer struct {
+	failures    atomic.Int32
+	attempts    atomic.Int32
+	released    atomic.Int32
+	lastSession atomic.Value
+	lastUser    atomic.Value
+}
+
+func (c *controlledCleanupClaimer) ClaimMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
+	return nil
+}
+
+func (c *controlledCleanupClaimer) ReleaseMessageAttachments(ctx context.Context, _ string, sessionID string, attachments []v1.MessageAttachment) error {
+	c.attempts.Add(1)
+	identity, ok := authn.IdentityFromContext(ctx)
+	if !ok || identity.UserID == "" {
+		return errors.New("missing attachment authorization")
+	}
+	if c.failures.Load() > 0 {
+		c.failures.Add(-1)
+		return errors.New("transient attachment release failure")
+	}
+	c.lastSession.Store(sessionID)
+	c.lastUser.Store(identity.UserID)
+	c.released.Add(int32(len(attachments)))
+	return nil
+}
+
+func TestWsUpdateMessageCleanupRetryPreservesAuthAndPublishesStatus(t *testing.T) {
+	handlers, queue, events := setupQueueHandlersWithResolver(t, func(context.Context, string) (string, error) {
+		return "task-cleanup", nil
+	})
+	claimer := &controlledCleanupClaimer{}
+	claimer.failures.Store(1)
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "user-cleanup"})
+	entry, err := queue.QueueMessage(ctx, "session-cleanup", "task-cleanup", "before", "", "user", false,
+		[]messagequeue.MessageAttachment{{Type: "resource", AttachmentID: "old", Name: "old.txt", MimeType: "text/plain"}})
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-cleanup")
+	require.NoError(t, err)
+
+	response, err := handlers.wsUpdateMessage(ws.WithConnectionID(ctx, "connection-cleanup"),
+		createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id": entry.SessionID, "entry_id": entry.ID, "lease_id": lease.LeaseID,
+			"operation_id": "operation-cleanup", "expected_target_revision": lease.TargetRevision,
+			"content": "after", "attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new", Name: "new.txt", MimeType: "text/plain",
+			}},
+		}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Equal(t, "session-cleanup", events.lastData[fieldSessionID])
+	require.NoError(t, queue.EndEdit(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection-cleanup"))
+	require.Equal(t, eventtypes.MessageQueueStatusChanged, events.lastSubject)
+	require.Eventually(t, func() bool { return claimer.released.Load() == 1 }, time.Second, 10*time.Millisecond)
+	require.Equal(t, "user-cleanup", claimer.lastUser.Load())
+}
+
+func TestWsUpdateMessageCleanupRetryReconcilesRemovedEntry(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &controlledCleanupClaimer{}
+	claimer.failures.Store(1)
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "user-cleanup"})
+	entry, err := queue.QueueMessage(ctx, "session-removed", "task-removed", "before", "", "user", false,
+		[]messagequeue.MessageAttachment{{Type: "resource", AttachmentID: "old", Name: "old.txt", MimeType: "text/plain"}})
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-removed")
+	require.NoError(t, err)
+	_, err = handlers.wsUpdateMessage(ws.WithConnectionID(ctx, "connection-removed"),
+		createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id": entry.SessionID, "entry_id": entry.ID, "lease_id": lease.LeaseID,
+			"operation_id": "operation-removed", "expected_target_revision": lease.TargetRevision,
+			"content": "after", "attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new", Name: "new.txt", MimeType: "text/plain",
+			}},
+		}))
+	require.NoError(t, err)
+	require.NoError(t, queue.RemoveEntry(ctx, entry.SessionID, entry.ID))
+	require.Eventually(t, func() bool { return claimer.released.Load() == 1 }, time.Second, 10*time.Millisecond)
+}
+
+func TestWsUpdateMessageCleanupRetryFollowsTransferredEntry(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	claimer := &controlledCleanupClaimer{}
+	claimer.failures.Store(1)
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "user-cleanup"})
+	entry, err := queue.QueueMessage(ctx, "session-transfer-old", "task-transfer", "before", "", "user", false,
+		[]messagequeue.MessageAttachment{{Type: "resource", AttachmentID: "old", Name: "old.txt", MimeType: "text/plain"}})
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-transfer")
+	require.NoError(t, err)
+	_, err = handlers.wsUpdateMessage(ws.WithConnectionID(ctx, "connection-transfer"),
+		createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id": entry.SessionID, "entry_id": entry.ID, "lease_id": lease.LeaseID,
+			"operation_id": "operation-transfer", "expected_target_revision": lease.TargetRevision,
+			"content": "after", "attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new", Name: "new.txt", MimeType: "text/plain",
+			}},
+		}))
+	require.NoError(t, err)
+	require.NoError(t, queue.TransferSession(ctx, entry.SessionID, "session-transfer-new"))
+	require.Eventually(t, func() bool { return claimer.released.Load() == 1 }, time.Second, 10*time.Millisecond)
+	require.Equal(t, "session-transfer-new", claimer.lastSession.Load())
+}
 
 type successorEditRaceClaimer struct {
 	queue                *messagequeue.Service
@@ -229,7 +431,8 @@ func (c *successorEditRaceClaimer) ReleaseMessageAttachments(context.Context, st
 }
 
 type contextRecordingReleaser struct {
-	err error
+	err   error
+	calls int
 }
 
 func (r *contextRecordingReleaser) ClaimMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
@@ -237,6 +440,7 @@ func (r *contextRecordingReleaser) ClaimMessageAttachments(context.Context, stri
 }
 
 func (r *contextRecordingReleaser) ReleaseMessageAttachments(ctx context.Context, _ string, _ string, _ []v1.MessageAttachment) error {
+	r.calls++
 	r.err = ctx.Err()
 	return nil
 }
@@ -258,5 +462,152 @@ func TestQueueAttachmentCleanupDetachesCancelledContext(t *testing.T) {
 
 	if releaser.err != nil {
 		t.Fatalf("attachment cleanup context error = %v, want nil", releaser.err)
+	}
+}
+func TestWsRemoveEntryDetachesCancelledCleanupContext(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	entry, err := queue.QueueMessage(context.Background(), "session", "task", "queued", "", "user", false, []messagequeue.MessageAttachment{{
+		AttachmentID: "attachment",
+	}})
+	require.NoError(t, err)
+	cleanupQueue := &cleanupContextQueueService{QueueService: queue, entry: entry}
+	handlers.queueService = cleanupQueue
+	claimer := &contextRecordingReleaser{}
+	handlers.SetAttachmentClaimer(claimer)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	response, err := handlers.wsRemoveEntry(ctx, createTestMessage(t, ws.ActionMessageQueueRemove, map[string]string{
+		"session_id": entry.SessionID,
+		"entry_id":   entry.ID,
+	}))
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.NoError(t, cleanupQueue.referenceErr)
+	require.NoError(t, claimer.err)
+}
+
+type cleanupContextQueueService struct {
+	QueueService
+	entry        *messagequeue.QueuedMessage
+	getEntryErr  error
+	referenceErr error
+}
+
+func (s *cleanupContextQueueService) GetEntry(ctx context.Context, _, _ string) (*messagequeue.QueuedMessage, error) {
+	s.getEntryErr = ctx.Err()
+	return s.entry, nil
+}
+
+func (s *cleanupContextQueueService) ReferencedQueueAttachmentIDs(ctx context.Context, _, _ string, _ []string) (map[string]struct{}, error) {
+	s.referenceErr = ctx.Err()
+	return nil, nil
+}
+func (s *cleanupContextQueueService) RemoveEntryWithEntry(context.Context, string, string) (*messagequeue.QueuedMessage, error) {
+	return s.entry, nil
+}
+
+func TestQueueAttachmentCleanupDetachesReadContext(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	current := &messagequeue.QueuedMessage{
+		ID: "entry", SessionID: "session", TaskID: "task",
+		Attachments: []messagequeue.MessageAttachment{{
+			AttachmentID: "replacement",
+		}},
+	}
+	cleanupQueue := &cleanupContextQueueService{QueueService: queue, entry: current}
+	handlers.queueService = cleanupQueue
+	releaser := &contextRecordingReleaser{}
+	previous := &messagequeue.QueuedMessage{
+		ID: "entry", SessionID: "session", TaskID: "task",
+		Attachments: []messagequeue.MessageAttachment{{
+			AttachmentID: "original",
+		}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := handlers.releaseSupersededQueueAttachmentsAdmitted(ctx, wsUpdateMessageRequest{
+		SessionID: "session", EntryID: "entry",
+	}, previous, releaser)
+	require.NoError(t, err)
+
+	require.NoError(t, cleanupQueue.getEntryErr)
+	require.NoError(t, cleanupQueue.referenceErr)
+	require.NoError(t, releaser.err)
+}
+
+func TestQueueAttachmentCleanupDetachesCancelledReferenceLookup(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	cleanupQueue := &cleanupContextQueueService{QueueService: queue}
+	handlers.queueService = cleanupQueue
+	releaser := &contextRecordingReleaser{}
+	previous := []messagequeue.MessageAttachment{{AttachmentID: "attachment"}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := handlers.releaseQueueAttachmentCandidates(ctx, "task", wsUpdateMessageRequest{
+		SessionID: "session", EntryID: "entry",
+	}, previous, releaser)
+
+	require.NoError(t, err)
+	require.NoError(t, cleanupQueue.referenceErr)
+	require.NoError(t, releaser.err)
+	require.Equal(t, 1, releaser.calls)
+}
+
+func TestQueueAttachmentFailureCleanupDetachesReadContext(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	cleanupQueue := &cleanupContextQueueService{QueueService: queue}
+	handlers.queueService = cleanupQueue
+	releaser := &contextRecordingReleaser{}
+	previous := &messagequeue.QueuedMessage{ID: "entry", TaskID: "task"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handlers.releaseQueuedAttachmentUpdateFailure(ctx, previous, "session", []messagequeue.MessageAttachment{{
+		AttachmentID: "claimed",
+	}}, releaser)
+
+	require.NoError(t, cleanupQueue.referenceErr)
+	require.NoError(t, releaser.err)
+}
+
+type failingQueueAttachmentReleaser struct{}
+
+func (failingQueueAttachmentReleaser) ClaimMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
+	return nil
+}
+
+func (failingQueueAttachmentReleaser) ReleaseMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
+	return errors.New("release unavailable")
+}
+
+func TestPendingAttachmentCleanupAdoptsExplicitLifecycleContext(t *testing.T) {
+	handlers, queue := setupQueueHandlersWithoutStart(t, nil)
+	current, err := queue.QueueMessage(
+		context.Background(), "session", "task", "current", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "current"}},
+	)
+	require.NoError(t, err)
+	previous := *current
+	previous.Attachments = []messagequeue.MessageAttachment{{AttachmentID: "previous"}}
+	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
+
+	handlers.queuePendingAttachmentCleanup(
+		context.Background(),
+		wsUpdateMessageRequest{
+			SessionID: "session", EntryID: current.ID, LeaseID: "lease", OperationID: "operation",
+		},
+		&previous,
+		failingQueueAttachmentReleaser{},
+	)
+	handlers.Start(lifecycleCtx)
+	cancelLifecycle()
+
+	select {
+	case <-handlers.attachmentCleanupCtx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("pending cleanup retained its lazy background context instead of the explicit lifecycle context")
 	}
 }

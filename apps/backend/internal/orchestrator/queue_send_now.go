@@ -159,6 +159,7 @@ func (s *Service) sendNowRestoreClaimForReservation(
 ) (*messagequeue.SendNowClaim, error) {
 	restore := &messagequeue.SendNowClaim{
 		Sources:           []messagequeue.QueuedMessage{*reservation.source},
+		Dispatch:          messagequeue.QueuedMessage{SessionID: reservation.sessionID},
 		SourceGenerations: make(map[string]int64),
 	}
 	sessionGeneration, lifecycleGeneration, captured := reservation.source.ReservationGenerations()
@@ -383,16 +384,7 @@ func (s *Service) stopSendNowWorkers() {
 	if cancel != nil {
 		cancel()
 	}
-	done := make(chan struct{})
-	go func() {
-		s.sendNowWorkers.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(sendNowClaimRecoveryTimeout):
-		s.logger.Warn("timed out waiting for send-now workers during shutdown")
-	}
+	s.sendNowWorkers.Wait()
 }
 
 func (s *Service) executeSendNowClaim(claim *messagequeue.SendNowClaim) {
@@ -515,7 +507,7 @@ func (s *Service) retrySendNowClaimMutation(
 	ctx context.Context,
 	mutate func(context.Context) error,
 ) error {
-	recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sendNowClaimRecoveryTimeout)
+	recoveryCtx, cancel := context.WithTimeout(ctx, sendNowClaimRecoveryTimeout)
 	defer cancel()
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {

@@ -5,9 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"testing"
-	"time"
-
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/entityrefs"
 	"github.com/kandev/kandev/internal/events/bus"
@@ -18,6 +15,8 @@ import (
 	ws "github.com/kandev/kandev/pkg/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"testing"
+	"time"
 )
 
 // mockEventBus is a no-op event bus for handler tests.
@@ -139,6 +138,13 @@ func setupQueueHandlers(t *testing.T) (*QueueHandlers, *messagequeue.Service) {
 
 func setupQueueHandlersWithDrainer(t *testing.T, drainer QueueDrainer) (*QueueHandlers, *messagequeue.Service) {
 	t.Helper()
+	handlers, svc := setupQueueHandlersWithoutStart(t, drainer)
+	handlers.Start(context.Background())
+	return handlers, svc
+}
+
+func setupQueueHandlersWithoutStart(t *testing.T, drainer QueueDrainer) (*QueueHandlers, *messagequeue.Service) {
+	t.Helper()
 	log, err := logger.NewLogger(logger.LoggingConfig{
 		Level:      "error",
 		Format:     "console",
@@ -147,7 +153,9 @@ func setupQueueHandlersWithDrainer(t *testing.T, drainer QueueDrainer) (*QueueHa
 	require.NoError(t, err)
 	svc := messagequeue.NewServiceMemory(log)
 	svc.SetAutoMergeEnabled(false)
-	return NewQueueHandlers(svc, &mockEventBus{}, log, drainer, allowQueueAccess{}, nil), svc
+	handlers := NewQueueHandlers(svc, &mockEventBus{}, log, drainer, allowQueueAccess{}, nil)
+	t.Cleanup(handlers.Stop)
+	return handlers, svc
 }
 
 func setupQueueHandlersWithValidator(t *testing.T, validator entityrefs.SubmissionValidator) (*QueueHandlers, *messagequeue.Service) {
@@ -160,7 +168,10 @@ func setupQueueHandlersWithValidator(t *testing.T, validator entityrefs.Submissi
 	require.NoError(t, err)
 	svc := messagequeue.NewServiceMemory(log)
 	svc.SetAutoMergeEnabled(false)
-	return NewQueueHandlers(svc, &mockEventBus{}, log, nil, allowQueueAccess{}, nil, validator), svc
+	handlers := NewQueueHandlers(svc, &mockEventBus{}, log, nil, allowQueueAccess{}, nil, validator)
+	handlers.Start(context.Background())
+	t.Cleanup(handlers.Stop)
+	return handlers, svc
 }
 
 func createTestMessage(t *testing.T, action string, payload interface{}) *ws.Message {

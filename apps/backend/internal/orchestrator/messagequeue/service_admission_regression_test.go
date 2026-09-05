@@ -201,3 +201,129 @@ func TestServiceQueueOperationsWaitForAdmission(t *testing.T) {
 		})
 	}
 }
+func TestRestoreSendNowClaimUsesSourceSessionAdmission(t *testing.T) {
+	repo := newAdmissionProbeRepository()
+	svc := newAutoMergeTestServiceWithRepository(t, repo, 10)
+	svc.SetAutoMergeEnabled(false)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session", "task", "content", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	claim := &SendNowClaim{Sources: []QueuedMessage{*entry}}
+
+	holderStarted := make(chan struct{})
+	releaseHolder := make(chan struct{})
+	holderDone := make(chan error, 1)
+	go func() {
+		holderDone <- svc.WithSessionAdmission(ctx, "session", func(context.Context) error {
+			close(holderStarted)
+			<-releaseHolder
+			return nil
+		})
+	}()
+	<-holderStarted
+
+	restoreDone := make(chan error, 1)
+	go func() { restoreDone <- svc.RestoreSendNowClaim(ctx, claim) }()
+	select {
+	case <-repo.restoreCalled:
+		t.Fatal("pending Send Now restore reached repository while session admission was held")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseHolder)
+	require.NoError(t, <-holderDone)
+	require.NoError(t, <-restoreDone)
+	select {
+	case <-repo.restoreCalled:
+	case <-time.After(time.Second):
+		t.Fatal("pending Send Now restore did not reach repository after admission was released")
+	}
+}
+func TestSendNowClaimIdentityValidationRejectsBeforeRepository(t *testing.T) {
+	tests := []struct {
+		name  string
+		claim func(QueuedMessage) *SendNowClaim
+	}{
+		{
+			name: "dispatch session mismatch",
+			claim: func(entry QueuedMessage) *SendNowClaim {
+				return &SendNowClaim{
+					Dispatch: QueuedMessage{SessionID: "other-session"},
+					Sources:  []QueuedMessage{entry},
+				}
+			},
+		},
+		{
+			name: "mixed source sessions",
+			claim: func(entry QueuedMessage) *SendNowClaim {
+				other := entry
+				other.SessionID = "other-session"
+				return &SendNowClaim{Sources: []QueuedMessage{entry, other}}
+			},
+		},
+		{
+			name: "empty source session with dispatch",
+			claim: func(entry QueuedMessage) *SendNowClaim {
+				entry.SessionID = ""
+				return &SendNowClaim{
+					Dispatch: QueuedMessage{SessionID: "session"},
+					Sources:  []QueuedMessage{entry},
+				}
+			},
+		},
+		{
+			name: "empty source session without dispatch",
+			claim: func(entry QueuedMessage) *SendNowClaim {
+				entry.SessionID = ""
+				return &SendNowClaim{Sources: []QueuedMessage{entry}}
+			},
+		},
+	}
+	operations := []struct {
+		name  string
+		probe func(*admissionProbeRepository) <-chan struct{}
+		call  func(context.Context, *Service, *SendNowClaim) error
+	}{
+		{
+			name:  "restore",
+			probe: func(repo *admissionProbeRepository) <-chan struct{} { return repo.restoreCalled },
+			call: func(ctx context.Context, svc *Service, claim *SendNowClaim) error {
+				return svc.RestoreSendNowClaim(ctx, claim)
+			},
+		},
+		{
+			name:  "acknowledge",
+			probe: func(repo *admissionProbeRepository) <-chan struct{} { return repo.acknowledgeCalled },
+			call: func(ctx context.Context, svc *Service, claim *SendNowClaim) error {
+				return svc.AcknowledgeSendNowClaim(ctx, claim)
+			},
+		},
+	}
+
+	for _, operation := range operations {
+		t.Run(operation.name, func(t *testing.T) {
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					repo := newAdmissionProbeRepository()
+					svc := newAutoMergeTestServiceWithRepository(t, repo, 10)
+					svc.SetAutoMergeEnabled(false)
+					ctx := context.Background()
+					entry, err := svc.QueueMessage(ctx, "session", "task", "content", "", QueuedByUser, false, nil)
+					require.NoError(t, err)
+					before := svc.GetStatus(ctx, entry.SessionID)
+
+					err = operation.call(ctx, svc, test.claim(*entry))
+					require.ErrorIs(t, err, ErrSendNowClaimChanged)
+					select {
+					case <-operation.probe(repo):
+						t.Fatal("malformed Send Now claim reached repository")
+					default:
+					}
+
+					after := svc.GetStatus(ctx, entry.SessionID)
+					require.Equal(t, before.Entries, after.Entries)
+				})
+			}
+		})
+	}
+}

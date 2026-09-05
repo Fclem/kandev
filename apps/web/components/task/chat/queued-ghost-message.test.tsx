@@ -227,6 +227,38 @@ describe("QueuedGhostMessage lease lifecycle", () => {
 
     expect(screen.queryByTestId(QUEUE_EDIT_TEXTAREA_TESTID)).toBeNull();
   });
+  it("passes the acquired edit token to delayed save completion", async () => {
+    let resolveSave!: () => void;
+    const onSave = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    const onEditComplete = vi.fn();
+
+    renderWithProviders(
+      <QueuedGhostMessage
+        entry={entry()}
+        canEdit
+        onEditStart={async () => "edit-1"}
+        onSave={onSave}
+        onEditComplete={onEditComplete}
+        onRemove={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId(EDIT_TESTID));
+    await waitFor(() => expect(screen.getByTestId(QUEUE_EDIT_TEXTAREA_TESTID)).toBeTruthy());
+    fireEvent.change(screen.getByTestId(QUEUE_EDIT_TEXTAREA_TESTID), {
+      target: { value: "updated" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+
+    resolveSave();
+    await waitFor(() => expect(onEditComplete).toHaveBeenCalledWith("edit-1"));
+  });
 });
 
 describe("QueuedGhostMessage Escape handling", () => {

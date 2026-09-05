@@ -67,7 +67,7 @@ describe("useQueueEditProtection", () => {
     );
 
     await act(async () => {
-      expect(await result.current.beginEdit(ENTRY_ID)).toBe(true);
+      expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
     });
 
     rerender({ sessionId: SESSION_B });
@@ -96,11 +96,11 @@ it("allows only one lease acquisition while a begin request is pending", async (
     }),
   );
 
-  let firstEdit!: Promise<boolean>;
+  let firstEdit!: Promise<string | false>;
   act(() => {
     firstEdit = result.current.beginEdit(ENTRY_ID);
   });
-  let secondEdit!: Promise<boolean>;
+  let secondEdit!: Promise<string | false>;
   act(() => {
     secondEdit = result.current.beginEdit("entry-2");
   });
@@ -115,7 +115,7 @@ it("allows only one lease acquisition while a begin request is pending", async (
       lease_id: "lease-pending",
       target_revision: 0,
     });
-    await expect(firstEdit).resolves.toBe(true);
+    await expect(firstEdit).resolves.toBeTruthy();
   });
 });
 
@@ -131,7 +131,7 @@ it("releases a lease when the target disappears during acquisition", async () =>
     { initialProps: { entries: [entry()] } },
   );
 
-  let pendingEdit!: Promise<boolean>;
+  let pendingEdit!: Promise<string | false>;
   act(() => {
     pendingEdit = result.current.beginEdit(ENTRY_ID);
   });
@@ -149,6 +149,25 @@ it("releases a lease when the target disappears during acquisition", async () =>
 
   expect(endQueuedMessageEdit).toHaveBeenCalledWith(
     expect.objectContaining({ lease_id: "lease-gone" }),
+  );
+});
+
+it("releases the lease when the target disappears after acquisition", async () => {
+  const { result, rerender } = renderHook(
+    ({ entries }: { entries: QueuedMessage[] }) =>
+      useQueueEditProtection({ sessionId: SESSION_A, entries }),
+    { initialProps: { entries: [entry()] } },
+  );
+
+  await act(async () => {
+    expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
+  });
+
+  rerender({ entries: [] });
+
+  await waitFor(() => expect(result.current.editingEntryId).toBeNull());
+  expect(endQueuedMessageEdit).toHaveBeenCalledWith(
+    expect.objectContaining({ lease_id: "lease-1" }),
   );
 });
 
@@ -175,7 +194,7 @@ describe("late queued edit lease operations", () => {
       );
 
       await act(async () => {
-        expect(await result.current.beginEdit(ENTRY_ID)).toBe(true);
+        expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
       });
       await act(async () => {
         vi.advanceTimersByTime(20_000);
@@ -188,7 +207,7 @@ describe("late queued edit lease operations", () => {
       });
       vi.mocked(beginQueuedMessageEdit).mockResolvedValueOnce(replacementLease);
       await act(async () => {
-        expect(await result.current.beginEdit(ENTRY_ID)).toBe(true);
+        expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
       });
 
       await act(async () => {
@@ -216,7 +235,7 @@ describe("late queued edit lease operations", () => {
       }),
     );
 
-    let pendingEdit!: Promise<boolean>;
+    let pendingEdit!: Promise<string | false>;
     act(() => {
       pendingEdit = result.current.beginEdit(ENTRY_ID);
     });
@@ -235,6 +254,92 @@ describe("late queued edit lease operations", () => {
     expect(endQueuedMessageEdit).toHaveBeenCalledWith(
       expect.objectContaining({ lease_id: "lease-after-unmount" }),
     );
+  });
+});
+it("does not let stale session completion release a replacement lease", async () => {
+  const replacementLease: QueueEditLease = {
+    session_id: SESSION_B,
+    entry_id: ENTRY_ID,
+    lease_id: "lease-b",
+    target_revision: 0,
+  };
+  const { result, rerender } = renderHook(
+    ({ sessionId }: { sessionId: string }) =>
+      useQueueEditProtection({
+        sessionId,
+        entries: [{ ...entry(), session_id: sessionId }],
+      }),
+    { initialProps: { sessionId: SESSION_A } },
+  );
+
+  await act(async () => {
+    expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
+  });
+  rerender({ sessionId: SESSION_B });
+  await waitFor(() =>
+    expect(endQueuedMessageEdit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lease_id: "lease-1",
+      }),
+    ),
+  );
+  vi.mocked(beginQueuedMessageEdit).mockResolvedValueOnce(replacementLease);
+
+  await act(async () => {
+    expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
+  });
+  await act(async () => {
+    await result.current.completeEdit(ENTRY_ID, SESSION_A);
+  });
+
+  expect(result.current.editLease?.lease_id).toBe("lease-b");
+  expect(result.current.editingEntryId).toBe(ENTRY_ID);
+  expect(endQueuedMessageEdit).not.toHaveBeenCalledWith(
+    expect.objectContaining({
+      lease_id: "lease-b",
+    }),
+  );
+});
+it("does not let stale same-session completion release a replacement lease", async () => {
+  const { result } = renderHook(() =>
+    useQueueEditProtection({
+      sessionId: SESSION_A,
+      entries: [entry()],
+    }),
+  );
+
+  let firstToken!: string;
+  await act(async () => {
+    firstToken = (await result.current.beginEdit(ENTRY_ID)) as string;
+  });
+  await act(async () => {
+    await result.current.completeEdit(ENTRY_ID, SESSION_A, firstToken);
+  });
+
+  const replacementLease: QueueEditLease = {
+    session_id: SESSION_A,
+    entry_id: ENTRY_ID,
+    lease_id: "lease-2",
+    target_revision: 0,
+  };
+  vi.mocked(beginQueuedMessageEdit).mockResolvedValueOnce(replacementLease);
+  let secondToken!: string;
+  await act(async () => {
+    secondToken = (await result.current.beginEdit(ENTRY_ID)) as string;
+  });
+
+  await act(async () => {
+    await result.current.completeEdit(ENTRY_ID, SESSION_A, firstToken);
+  });
+
+  expect(result.current.editLease?.lease_id).toBe("lease-2");
+  expect(result.current.editingEntryId).toBe(ENTRY_ID);
+  expect(endQueuedMessageEdit).not.toHaveBeenCalledWith(
+    expect.objectContaining({ lease_id: "lease-2" }),
+  );
+
+  await act(async () => {
+    await result.current.completeEdit(ENTRY_ID, SESSION_A, secondToken);
   });
 });
 it("keeps the lease when an overlapping older renewal fails after a newer generation succeeds", async () => {
@@ -259,7 +364,7 @@ it("keeps the lease when an overlapping older renewal fails after a newer genera
     );
 
     await act(async () => {
-      expect(await result.current.beginEdit(ENTRY_ID)).toBe(true);
+      expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
     });
     await act(async () => {
       vi.advanceTimersByTime(20_000);
@@ -278,6 +383,143 @@ it("keeps the lease when an overlapping older renewal fails after a newer genera
 
     expect(result.current.editLease?.lease_generation).toBe(2);
     expect(result.current.editingEntryId).toBe(ENTRY_ID);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("ignores out-of-order and incomplete successful renewals", async () => {
+  vi.useFakeTimers();
+  try {
+    let resolveOlder!: (lease: QueueEditLease) => void;
+    let resolveNewer!: (lease: QueueEditLease) => void;
+    let resolveIncomplete!: (lease: QueueEditLease) => void;
+    const older = new Promise<QueueEditLease>((resolve) => {
+      resolveOlder = resolve;
+    });
+    const newer = new Promise<QueueEditLease>((resolve) => {
+      resolveNewer = resolve;
+    });
+    const incomplete = new Promise<QueueEditLease>((resolve) => {
+      resolveIncomplete = resolve;
+    });
+    vi.mocked(beginQueuedMessageEdit).mockResolvedValueOnce({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+      target_revision: 0,
+      lease_generation: 1,
+    });
+    vi.mocked(renewQueuedMessageEdit)
+      .mockReturnValueOnce(older)
+      .mockReturnValueOnce(newer)
+      .mockReturnValueOnce(incomplete);
+    const { result } = renderHook(() =>
+      useQueueEditProtection({
+        sessionId: SESSION_A,
+        entries: [entry()],
+      }),
+    );
+
+    await act(async () => {
+      expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+      await Promise.resolve();
+    });
+    expect(renewQueuedMessageEdit).toHaveBeenCalledTimes(3);
+
+    resolveNewer({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+      target_revision: 0,
+      lease_generation: 3,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    resolveOlder({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+      target_revision: 0,
+      lease_generation: 2,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.editLease?.lease_generation).toBe(3);
+
+    resolveIncomplete({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+      target_revision: 0,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.editLease?.lease_generation).toBe(3);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("fences overlapping renewals when lease generations are unavailable", async () => {
+  vi.useFakeTimers();
+  try {
+    let resolveOlder!: (lease: QueueEditLease) => void;
+    let resolveNewer!: (lease: QueueEditLease) => void;
+    vi.mocked(renewQueuedMessageEdit)
+      .mockReturnValueOnce(
+        new Promise<QueueEditLease>((resolve) => {
+          resolveOlder = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<QueueEditLease>((resolve) => {
+          resolveNewer = resolve;
+        }),
+      );
+    const { result } = renderHook(() =>
+      useQueueEditProtection({
+        sessionId: SESSION_A,
+        entries: [entry()],
+      }),
+    );
+
+    await act(async () => {
+      expect(await result.current.beginEdit(ENTRY_ID)).toBeTruthy();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(40_000);
+      await Promise.resolve();
+    });
+    expect(renewQueuedMessageEdit).toHaveBeenCalledTimes(2);
+
+    resolveNewer({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+      target_revision: 0,
+      expires_at: "new",
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    resolveOlder({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+      target_revision: 0,
+      expires_at: "old",
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.editLease?.expires_at).toBe("new");
   } finally {
     vi.useRealTimers();
   }

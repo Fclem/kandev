@@ -16,12 +16,14 @@ import (
 // capturingQueueEventBus records the last message.queue.status_changed payload
 // so tests can assert the task_id enrichment on the published event.
 type capturingQueueEventBus struct {
-	lastData map[string]interface{}
-	lastCtx  context.Context
+	lastData    map[string]interface{}
+	lastSubject string
+	lastCtx     context.Context
 }
 
-func (m *capturingQueueEventBus) Publish(ctx context.Context, _ string, event *bus.Event) error {
+func (m *capturingQueueEventBus) Publish(ctx context.Context, subject string, event *bus.Event) error {
 	m.lastCtx = ctx
+	m.lastSubject = subject
 	if data, ok := event.Data.(map[string]interface{}); ok {
 		m.lastData = data
 	}
@@ -53,6 +55,8 @@ func setupQueueHandlersWithResolver(
 	events := &capturingQueueEventBus{}
 	svc := messagequeue.NewServiceMemory(log)
 	handlers := NewQueueHandlers(svc, events, log, nil, allowQueueAccess{}, resolver)
+	handlers.Start(context.Background())
+	t.Cleanup(handlers.Stop)
 	return handlers, svc, events
 }
 

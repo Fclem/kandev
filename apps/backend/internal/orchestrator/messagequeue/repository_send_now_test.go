@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSessionGenerationAdvancesForDestructiveQueueChanges(t *testing.T) {
@@ -512,5 +514,103 @@ func TestSendNowRestoreKeepsCurrentDurableMetadataAndRecordedMarker(t *testing.T
 	}
 	if recorded, _ := entries[0].Metadata[metadataUserMessageRecorded].(bool); !recorded {
 		t.Fatalf("restored metadata lost recorded marker: %#v", entries[0].Metadata)
+	}
+}
+func TestRestoreKeepsPositionsUniqueAfterQueueWasEmptied(t *testing.T) {
+	for _, factory := range autoRunRepositoryFactories {
+		t.Run(factory.name, func(t *testing.T) {
+			repo := factory.new(t)
+			ctx := context.Background()
+			first := insertTestEntry(t, repo, "session-restore-order", "task", "first", QueuedByUser, nil, nil)
+			second := insertTestEntry(t, repo, "session-restore-order", "task", "second", QueuedByUser, nil, nil)
+			sources := []QueuedMessage{*first, *second}
+			claim, err := repo.ClaimSendNow(ctx, "session-restore-order", sources)
+			require.NoError(t, err)
+			later := insertTestEntry(t, repo, "session-restore-order", "task", "later", QueuedByUser, nil, nil)
+			require.NoError(t, repo.RestoreSendNowClaim(ctx, claim))
+
+			entries, err := repo.ListBySession(ctx, "session-restore-order")
+			require.NoError(t, err)
+			require.Len(t, entries, 3)
+			require.Equal(t, []string{first.ID, second.ID, later.ID}, []string{entries[0].ID, entries[1].ID, entries[2].ID})
+			require.Less(t, entries[0].Position, entries[1].Position)
+			require.Less(t, entries[1].Position, entries[2].Position)
+		})
+	}
+}
+func TestOrdinaryRestoreKeepsPositionAheadOfLaterArrival(t *testing.T) {
+	for _, factory := range autoRunRepositoryFactories {
+		t.Run(factory.name, func(t *testing.T) {
+			repo := factory.new(t)
+			ctx := context.Background()
+			first := insertTestEntry(t, repo, "session-ordinary-restore", "task", "first", QueuedByUser, nil, nil)
+			later := insertTestEntry(t, repo, "session-ordinary-restore", "task", "later", QueuedByUser, nil, nil)
+			taken, err := repo.TakeHead(ctx, "session-ordinary-restore")
+			require.NoError(t, err)
+			require.Equal(t, first.ID, taken.ID)
+			third := insertTestEntry(t, repo, "session-ordinary-restore", "task", "third", QueuedByUser, nil, nil)
+			require.NoError(t, repo.Restore(ctx, taken, 0))
+
+			entries, err := repo.ListBySession(ctx, "session-ordinary-restore")
+			require.NoError(t, err)
+			require.Len(t, entries, 3)
+			require.Equal(t, []string{first.ID, later.ID, third.ID}, []string{entries[0].ID, entries[1].ID, entries[2].ID})
+			require.Less(t, entries[0].Position, entries[1].Position)
+			require.Less(t, entries[1].Position, entries[2].Position)
+		})
+	}
+}
+func TestTransferRestoreKeepsDestinationPositionHighWater(t *testing.T) {
+	for _, factory := range autoRunRepositoryFactories {
+		t.Run(factory.name, func(t *testing.T) {
+			repo := factory.new(t)
+			ctx := context.Background()
+			var transferredSource *QueuedMessage
+			for i := range 7 {
+				entry := insertTestEntry(t, repo, "transfer-source", "task", "source", QueuedByUser, nil, nil)
+				if i == 6 {
+					transferredSource = entry
+					continue
+				}
+				taken, err := repo.TakeHead(ctx, "transfer-source")
+				require.NoError(t, err)
+				require.Equal(t, entry.ID, taken.ID)
+			}
+			require.NotNil(t, transferredSource)
+
+			require.NoError(t, repo.TransferSession(ctx, "transfer-source", "transfer-destination"))
+			transferred, err := repo.TakeHead(ctx, "transfer-destination")
+			require.NoError(t, err)
+			require.Equal(t, transferredSource.ID, transferred.ID)
+			later := insertTestEntry(t, repo, "transfer-destination", "task", "later", QueuedByUser, nil, nil)
+
+			require.NoError(t, repo.Restore(ctx, transferred, 0))
+			entries, err := repo.ListBySession(ctx, "transfer-destination")
+			require.NoError(t, err)
+			require.Equal(t, []string{transferred.ID, later.ID}, []string{entries[0].ID, entries[1].ID})
+			require.Less(t, entries[0].Position, entries[1].Position)
+		})
+	}
+}
+func TestOrdinaryRestoreKeepsPositionAfterDeleteEmptiesQueue(t *testing.T) {
+	for _, factory := range autoRunRepositoryFactories {
+		t.Run(factory.name, func(t *testing.T) {
+			repo := factory.new(t)
+			ctx := context.Background()
+			first := insertTestEntry(t, repo, "session-delete-restore", "task", "first", QueuedByUser, nil, nil)
+			second := insertTestEntry(t, repo, "session-delete-restore", "task", "second", QueuedByUser, nil, nil)
+			taken, err := repo.TakeHead(ctx, "session-delete-restore")
+			require.NoError(t, err)
+			require.Equal(t, first.ID, taken.ID)
+			require.NoError(t, repo.DeleteByID(ctx, "session-delete-restore", second.ID))
+
+			later := insertTestEntry(t, repo, "session-delete-restore", "task", "later", QueuedByUser, nil, nil)
+			require.NoError(t, repo.Restore(ctx, taken, 0))
+
+			entries, err := repo.ListBySession(ctx, "session-delete-restore")
+			require.NoError(t, err)
+			require.Equal(t, []string{first.ID, later.ID}, []string{entries[0].ID, entries[1].ID})
+			require.Less(t, entries[0].Position, entries[1].Position)
+		})
 	}
 }

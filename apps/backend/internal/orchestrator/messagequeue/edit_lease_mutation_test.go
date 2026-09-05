@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -125,6 +126,45 @@ func TestPurgeTaskInvalidatesEditLeases(t *testing.T) {
 	require.Equal(t, 1, removed)
 	require.Empty(t, svc.editLeases)
 }
+func TestEditRevisionStateFollowsEntryLifecycle(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+
+	entry, err := svc.QueueMessage(ctx, "session-edit-delete", "task-edit-delete", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err := svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+	_, err = svc.UpdateMessageWithLease(ctx, entry.SessionID, entry.ID, lease.LeaseID,
+		"operation-1", "connection-a", lease.TargetRevision, "edited", nil, nil)
+	require.NoError(t, err)
+	require.Contains(t, svc.editRevisions, svc.editLeaseKey(entry.SessionID, entry.ID))
+	require.NoError(t, svc.EndEdit(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection-a"))
+	require.NoError(t, svc.RemoveEntry(ctx, entry.SessionID, entry.ID))
+	require.NotContains(t, svc.editRevisions, svc.editLeaseKey(entry.SessionID, entry.ID))
+	require.NotContains(t, svc.editRevisionTaskIDs, svc.editLeaseKey(entry.SessionID, entry.ID))
+
+	entry, err = svc.QueueMessage(ctx, "session-edit-transfer", "task-edit-transfer", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err = svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-b")
+	require.NoError(t, err)
+	_, err = svc.UpdateMessageWithLease(ctx, entry.SessionID, entry.ID, lease.LeaseID,
+		"operation-2", "connection-b", lease.TargetRevision, "edited", nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, svc.TransferSession(ctx, entry.SessionID, "session-edit-transfer-new"))
+	require.NotContains(t, svc.editRevisions, svc.editLeaseKey(entry.SessionID, entry.ID))
+
+	entry, err = svc.QueueMessage(ctx, "session-edit-purge", "task-edit-purge", "body", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err = svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-c")
+	require.NoError(t, err)
+	_, err = svc.UpdateMessageWithLease(ctx, entry.SessionID, entry.ID, lease.LeaseID,
+		"operation-3", "connection-c", lease.TargetRevision, "edited", nil, nil)
+	require.NoError(t, err)
+	_, err = svc.PurgeTask(ctx, entry.TaskID)
+	require.NoError(t, err)
+	require.NotContains(t, svc.editRevisions, svc.editLeaseKey(entry.SessionID, entry.ID))
+	require.NotContains(t, svc.editRevisionTaskIDs, svc.editLeaseKey(entry.SessionID, entry.ID))
+}
 func TestPurgeTaskPreservesOtherEditRevisions(t *testing.T) {
 	svc := setupService(t)
 	ctx := context.Background()
@@ -149,4 +189,136 @@ func TestPurgeTaskPreservesOtherEditRevisions(t *testing.T) {
 		"operation-live-2", "connection-a", revision, "edited again", nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), revision)
+}
+func TestLeaseUpdateFinalizerRunsBeforeSessionTransfer(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session-finalize-old", "task-finalize", "before", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err := svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+
+	transferDone := make(chan error, 1)
+	_, err = svc.UpdateMessageWithLeaseAfterValidationAndFinalize(
+		ctx, entry.SessionID, entry.ID, lease.LeaseID, "operation-finalize", "connection-a",
+		lease.TargetRevision, "after", nil, nil, nil, nil,
+		func(context.Context, *QueuedMessage) error {
+			go func() {
+				transferDone <- svc.TransferSession(context.Background(), entry.SessionID, "session-finalize-new")
+			}()
+			select {
+			case err := <-transferDone:
+				t.Fatalf("session transfer completed before finalizer returned: %v", err)
+			case <-time.After(25 * time.Millisecond):
+			}
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	require.NoError(t, <-transferDone)
+	require.Empty(t, svc.GetStatus(ctx, entry.SessionID).Entries)
+	require.Equal(t, "after", svc.GetStatus(ctx, "session-finalize-new").Entries[0].Content)
+}
+
+func TestLeaseUpdateFinalizerReplayKeepsOriginalPreUpdateSnapshot(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	original := MessageAttachment{AttachmentID: "original"}
+	replacement := MessageAttachment{AttachmentID: "replacement"}
+	entry, err := svc.QueueMessage(
+		ctx, "session-finalize-replay", "task-finalize", "before", "", QueuedByUser, false,
+		[]MessageAttachment{original},
+	)
+	require.NoError(t, err)
+	lease, err := svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-a")
+	require.NoError(t, err)
+	finalizeFailure := errors.New("finalize unavailable")
+	finalizeCalls := 0
+	finalize := func(_ context.Context, previous *QueuedMessage) error {
+		finalizeCalls++
+		require.Equal(t, []MessageAttachment{original}, previous.Attachments)
+		if finalizeCalls == 1 {
+			return finalizeFailure
+		}
+		return nil
+	}
+
+	revision, err := svc.UpdateMessageWithLeaseAfterValidationAndFinalize(
+		ctx, entry.SessionID, entry.ID, lease.LeaseID, "operation-finalize-replay", "connection-a",
+		lease.TargetRevision, "after", []MessageAttachment{replacement}, nil, nil, nil, finalize,
+	)
+	require.ErrorIs(t, err, finalizeFailure)
+	require.Equal(t, int64(1), revision)
+	require.Equal(t, []MessageAttachment{replacement}, svc.GetStatus(ctx, entry.SessionID).Entries[0].Attachments)
+
+	revision, err = svc.UpdateMessageWithLeaseAfterValidationAndFinalize(
+		ctx, entry.SessionID, entry.ID, lease.LeaseID, "operation-finalize-replay", "connection-a",
+		lease.TargetRevision, "after", []MessageAttachment{replacement}, nil, nil, nil, finalize,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), revision)
+	require.Equal(t, 2, finalizeCalls)
+}
+func TestEditLeaseChecksPhysicalHeadAndTail(t *testing.T) {
+	for _, factory := range autoRunRepositoryFactories {
+		t.Run(factory.name, func(t *testing.T) {
+			repo := factory.new(t)
+			svc := newAutoMergeTestServiceWithRepository(t, repo, 10)
+			svc.SetAutoMergeEnabled(false)
+			ctx := context.Background()
+
+			t.Run("reserved head does not expose a leased visible row", func(t *testing.T) {
+				head := &QueuedMessage{
+					SessionID: "session-physical-head", TaskID: "task-head",
+					Content: "head", QueuedBy: QueuedByWorkflow,
+					Metadata: map[string]interface{}{MetadataLifecycleDurable: true},
+				}
+				require.NoError(t, repo.Insert(ctx, head, 0))
+				_, err := svc.QueueMessage(ctx, head.SessionID, "task-user", "user", "", QueuedByUser, false, nil)
+				require.NoError(t, err)
+				reserved, ok := svc.ReserveQueued(ctx, head.SessionID)
+				require.True(t, ok)
+				require.Equal(t, head.ID, reserved.ID)
+				user := svc.GetStatus(ctx, head.SessionID).Entries[0]
+				_, err = svc.BeginEdit(ctx, user.SessionID, user.ID, "connection")
+				require.NoError(t, err)
+
+				recovered, ok := svc.ReserveQueued(ctx, head.SessionID)
+				require.True(t, ok)
+				require.Equal(t, head.ID, recovered.ID)
+			})
+
+			t.Run("reserved tail does not expose a leased visible row", func(t *testing.T) {
+				user, err := svc.QueueMessage(ctx, "session-physical-tail", "task-user", "user", "", QueuedByUser, false, nil)
+				require.NoError(t, err)
+				tail := &QueuedMessage{
+					SessionID: user.SessionID, TaskID: "task-tail",
+					Content: "tail", QueuedBy: QueuedByWorkflow,
+					Metadata: map[string]interface{}{MetadataLifecycleDurable: true},
+				}
+				require.NoError(t, repo.Insert(ctx, tail, 0))
+				taken, ok := svc.TakeQueued(ctx, user.SessionID)
+				require.True(t, ok)
+				require.Equal(t, user.ID, taken.ID)
+				reserved, ok := svc.ReserveQueued(ctx, user.SessionID)
+				require.True(t, ok)
+				require.Equal(t, tail.ID, reserved.ID)
+				restored, err := svc.RestoreMessage(ctx, taken)
+				require.NoError(t, err)
+				_, err = svc.BeginEdit(ctx, restored.SessionID, restored.ID, "connection")
+				require.NoError(t, err)
+
+				inserted, appended, err := svc.AppendContent(ctx, restored.SessionID, "task-user", "new", "", QueuedByUser, false, nil)
+				require.NoError(t, err)
+				require.False(t, appended)
+				require.NotEqual(t, restored.ID, inserted.ID)
+				entries, _, err := svc.SnapshotSession(ctx, restored.SessionID)
+				require.NoError(t, err)
+				require.Len(t, entries, 3)
+				require.Equal(t, restored.ID, entries[0].ID)
+				require.Equal(t, tail.ID, entries[1].ID)
+				require.Equal(t, inserted.ID, entries[2].ID)
+			})
+		})
+	}
 }

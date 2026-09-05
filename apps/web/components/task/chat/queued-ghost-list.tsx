@@ -282,8 +282,8 @@ type QueuePanelDisclosureProps = {
   onMerge: (entryId: string) => Promise<void>;
   onReorder: (orderedIds: string[]) => void;
   onSendEntryNow: (entryId: string) => void;
-  onEditStart: (entryId: string) => Promise<boolean>;
-  onEditComplete: (entryId: string) => Promise<void>;
+  onEditStart: (entryId: string) => Promise<string | false>;
+  onEditComplete: (entryId: string, editToken?: string) => Promise<void>;
 };
 
 /** Wraps QueuePanel in the collapsible open/close animation shell. */
@@ -415,6 +415,10 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
     },
     [editLease, handlePanelSave],
   );
+  const handleEditComplete = useCallback(
+    (entryId: string, editToken?: string) => completeEdit(entryId, sessionId, editToken),
+    [completeEdit, sessionId],
+  );
   const close = useCallback(() => setIsOpen(false), []);
   useEscToClose(isOpen, close);
 
@@ -457,7 +461,7 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
         onClose={close}
         editLeaseActive={editLease !== null}
         onEditStart={beginEdit}
-        onEditComplete={completeEdit}
+        onEditComplete={handleEditComplete}
         onClear={handleClear}
         onAutoRunChange={handleAutoRunChange}
         onTogglePin={togglePin}
@@ -555,8 +559,8 @@ type QueuePanelProps = {
   onMerge: (entryId: string) => Promise<void>;
   onReorder: (orderedIds: string[]) => void;
   onSendEntryNow: (entryId: string) => void;
-  onEditStart: (entryId: string) => Promise<boolean>;
-  onEditComplete: (entryId: string) => Promise<void>;
+  onEditStart: (entryId: string) => Promise<string | false>;
+  onEditComplete: (entryId: string, editToken?: string) => Promise<void>;
 };
 /** Renders the expanded queue list: header controls plus one QueuedGhostMessage
  * row per pending entry, gating each row's merge control on `mergeEnabled`. */
@@ -621,8 +625,8 @@ type QueuePanelEntryProps = {
   onRemove: () => Promise<void>;
   onMerge: () => Promise<void>;
   onSendNow: () => void;
-  onEditStart: () => Promise<boolean>;
-  onEditComplete: () => Promise<void>;
+  onEditStart: () => Promise<string | false>;
+  onEditComplete: (editToken?: string) => Promise<void>;
 };
 
 function QueuePanelEntry({
@@ -758,7 +762,7 @@ function QueuePanel({
                 onMerge={() => onMerge(entry.id)}
                 onSendNow={() => onSendEntryNow(entry.id)}
                 onEditStart={() => onEditStart(entry.id)}
-                onEditComplete={() => onEditComplete(entry.id)}
+                onEditComplete={(editToken) => onEditComplete(entry.id, editToken)}
               />
             ))}
           </SortableContext>

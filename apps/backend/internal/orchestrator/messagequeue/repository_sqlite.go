@@ -805,6 +805,20 @@ func (r *sqliteRepository) LifecycleGeneration(ctx context.Context, taskID strin
 	return generation, nil
 }
 
+func getLifecycleGenerationTx(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string) (int64, error) {
+	var generation int64
+	err := tx.GetContext(ctx, &generation, db.Rebind(`
+		SELECT generation FROM lifecycle_queue_generations WHERE task_id = ?
+	`), taskID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get lifecycle queue generation in transaction: %w", err)
+	}
+	return generation, nil
+}
+
 // SessionGeneration returns the current destructive-mutation generation for a
 // session.
 func (r *sqliteRepository) SessionGeneration(ctx context.Context, sessionID string) (int64, error) {
@@ -884,16 +898,56 @@ func purgeQueueRowSessions(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID
 	return sessions, nil
 }
 
+func ensureTaskPurgeRecoverySchemas(ctx context.Context, tx *sqlx.Tx) error {
+	if _, err := tx.ExecContext(ctx, queueDispatchRecoverySchema); err != nil {
+		return fmt.Errorf("ensure task purge dispatch recovery schema: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, attachmentCleanupSchema); err != nil {
+		return fmt.Errorf("ensure task purge attachment cleanup schema: %w", err)
+	}
+	return nil
+}
+
+func deleteTaskRecoveryRowsTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	db *sqlx.DB,
+	taskID string,
+	sessionIDs []string,
+) error {
+	if _, err := tx.ExecContext(ctx, db.Rebind(`
+		DELETE FROM queue_attachment_cleanups WHERE task_id = ?
+	`), taskID); err != nil {
+		return fmt.Errorf("purge task attachment cleanups: %w", err)
+	}
+	for _, sessionID := range sessionIDs {
+		if _, err := tx.ExecContext(ctx, db.Rebind(`
+			DELETE FROM queue_dispatch_claims WHERE session_id = ?
+		`), sessionID); err != nil {
+			return fmt.Errorf("purge task dispatch claims: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, db.Rebind(`
+			DELETE FROM queue_attachment_cleanups WHERE session_id = ?
+		`), sessionID); err != nil {
+			return fmt.Errorf("purge session attachment cleanups: %w", err)
+		}
+	}
+	return nil
+}
+
 // PurgeTaskInTransaction lets the task repository make archive/delete and
 // durable queue invalidation one SQLite transaction. It is backend-internal:
 // user queue handlers must keep using ownership-checked deletion methods.
 //
 // taskSessions is the task's authoritative session set, discovered by the
-// caller from its own task_sessions schema — the queue repository never
-// reaches across schemas, and a failed cross-schema query would abort the
-// caller's transaction on PostgreSQL. The standalone PurgeTask passes nil and
-// locks only the sessions that currently hold queue rows.
+// caller from its own task_sessions schema. The queue repository never reaches
+// across schemas because a failed cross-schema query would abort the caller's
+// transaction on PostgreSQL. Standalone purges discover sessions from visible
+// queue rows and durable recovery records.
 func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string, taskSessions []string) (int, error) {
+	if err := ensureTaskPurgeRecoverySchemas(ctx, tx); err != nil {
+		return 0, err
+	}
 	// Serialize with per-session tail operations: a purge that races a fold
 	// or insert could otherwise delete a row an admission just accepted, or
 	// admit into a queue being purged. Lock the AUTHORITATIVE session set —
@@ -908,6 +962,11 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	if err != nil {
 		return 0, err
 	}
+	dispatchSessions, err := pendingQueueDispatchSessionsForTaskTx(ctx, tx, taskID)
+	if err != nil {
+		return 0, err
+	}
+	rowSessions = append(rowSessions, dispatchSessions...)
 	seen := make(map[string]struct{}, len(rowSessions)+len(taskSessions))
 	for _, sessionID := range rowSessions {
 		seen[sessionID] = struct{}{}
@@ -935,6 +994,9 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	}
 	if _, err := tx.ExecContext(ctx, db.Rebind(`DELETE FROM pending_moves WHERE task_id = ?`), taskID); err != nil {
 		return 0, fmt.Errorf("purge pending task moves: %w", err)
+	}
+	if err := deleteTaskRecoveryRowsTx(ctx, tx, db, taskID, ordered); err != nil {
+		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, db.Rebind(`
 		INSERT INTO lifecycle_queue_generations (task_id, generation) VALUES (?, 1)
@@ -1413,6 +1475,20 @@ func (r *sqliteRepository) reserveHead(ctx context.Context, sessionID string, re
 	if err != nil {
 		return nil, true, fmt.Errorf("reserve head: %w", err)
 	}
+	sessionGeneration, err := r.getSendNowGenerationTx(ctx, tx, sessionID)
+	if err != nil {
+		return nil, true, err
+	}
+	var lifecycleGeneration int64
+	if msg.TaskID != "" {
+		lifecycleGeneration, err = getLifecycleGenerationTx(ctx, tx, r.db, msg.TaskID)
+		if err != nil {
+			return nil, true, err
+		}
+	}
+	msg.reservationSessionGeneration = sessionGeneration
+	msg.reservationLifecycleGeneration = lifecycleGeneration
+	msg.reservationGenerationsCaptured = true
 	if msg.IsDurableLifecycle() {
 		reserved, err := r.reserveLifecycleHead(ctx, tx, msg, storedMetadataJSON)
 		return reserved, true, err
@@ -2741,6 +2817,9 @@ func isReservedMetadataJSON(metadataJSON string) (bool, error) {
 
 // TransferSession moves all entries (and any pending move) from one session to another.
 func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, newSessionID string) error {
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return err
+	}
 	// The transfer moves rows out of the source and into the destination, so
 	// it must hold BOTH sessions' locks: a concurrent source-side insert
 	// (holding the source lock) could otherwise commit a row the transfer's
@@ -2781,6 +2860,9 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 	}
 	if oldSessionID == newSessionID {
 		return tx.Commit()
+	}
+	if err := r.transferPendingQueueDispatchesTx(ctx, tx, oldSessionID, newSessionID); err != nil {
+		return err
 	}
 	sourceAutoRun, err := r.getAutoRunTx(ctx, tx, oldSessionID)
 	if err != nil {
@@ -2863,6 +2945,9 @@ func queuedSnapshotTaskIDs(entries []QueuedMessage, pendingMove *PendingMove) []
 
 // ReplaceSession replaces a session's queue with the supplied snapshot.
 func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string, entries []QueuedMessage, pendingMove *PendingMove) error {
+	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
+		return err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin replace session tx: %w", err)
@@ -2879,6 +2964,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 		return err
 	}
 	if err := r.guardSessionTx(ctx, tx, sessionID, ""); err != nil {
+		return err
+	}
+	if err := r.deletePendingQueueDispatchesBySessionTx(ctx, tx, sessionID); err != nil {
 		return err
 	}
 

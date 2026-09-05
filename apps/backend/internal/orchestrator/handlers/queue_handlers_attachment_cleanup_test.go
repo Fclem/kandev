@@ -331,6 +331,59 @@ func TestWsCancelAllRetriesFailedAttachmentRelease(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 }
 
+type failingReferenceQueueService struct {
+	QueueService
+	service  *messagequeue.Service
+	attempts atomic.Int32
+}
+
+func (s *failingReferenceQueueService) ReferencedQueueAttachmentIDs(
+	ctx context.Context,
+	sessionID, excludedEntryID string,
+	attachmentIDs []string,
+) (map[string]struct{}, error) {
+	if s.attempts.Add(1) == 1 {
+		return nil, errors.New("reference lookup unavailable")
+	}
+	return s.service.ReferencedQueueAttachmentIDs(ctx, sessionID, excludedEntryID, attachmentIDs)
+}
+
+func (s *failingReferenceQueueService) RemoveEntryWithEntry(
+	ctx context.Context,
+	sessionID, entryID string,
+) (*messagequeue.QueuedMessage, error) {
+	return s.service.RemoveEntryWithEntry(ctx, sessionID, entryID)
+}
+
+func TestWsRemoveEntryRetriesFailedAttachmentReferenceLookup(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	references := &failingReferenceQueueService{QueueService: queue, service: queue}
+	handlers.queueService = references
+	claimer := &controlledCleanupClaimer{}
+	handlers.SetAttachmentClaimer(claimer)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "user-reference-retry"})
+	handlers.Start(ctx)
+	t.Cleanup(handlers.Stop)
+	entry, err := queue.QueueMessage(
+		ctx, "session-reference-retry", "task-reference-retry", "queued", "", "user", false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment-reference-retry"}},
+	)
+	require.NoError(t, err)
+
+	response, err := handlers.wsRemoveEntry(
+		ctx,
+		createTestMessage(t, ws.ActionMessageQueueRemove, map[string]string{
+			"session_id": entry.SessionID,
+			"entry_id":   entry.ID,
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Eventually(t, func() bool {
+		return references.attempts.Load() >= 2 && claimer.released.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
 func TestPendingAttachmentCleanupResumesAfterHandlerRestart(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "queue.db")
 	handlers, queue, db := newPersistentCleanupQueue(t, dbPath)

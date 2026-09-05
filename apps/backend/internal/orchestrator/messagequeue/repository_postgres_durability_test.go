@@ -106,4 +106,100 @@ func TestPostgresRepository_DurableQueueRecoveryTables(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("task purge removes durable recovery obligations", func(t *testing.T) {
+		source := insertTestEntry(t, repo, "purge-session", "purge-task", "prompt", QueuedByUser, nil, nil)
+		if err := persistent.UpsertAttachmentCleanup(ctx, AttachmentCleanup{
+			SessionID: source.SessionID, EntryID: source.ID, OperationID: "purge-operation",
+			TaskID: source.TaskID, Attachments: []MessageAttachment{{AttachmentID: "purge-attachment"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if reserved, _, err := repo.ReserveHeadIfAutoRun(ctx, source.SessionID); err != nil || reserved == nil {
+			t.Fatalf("reserve purge source = %#v, err=%v", reserved, err)
+		}
+		if _, err := repo.PurgeTask(ctx, source.TaskID); err != nil {
+			t.Fatal(err)
+		}
+		dispatches, err := persistent.ListPendingQueueDispatches(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cleanups, err := persistent.ListAttachmentCleanups(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(dispatches) != 0 || len(cleanups) != 0 {
+			t.Fatalf("recovery rows after purge: dispatches=%#v cleanups=%#v", dispatches, cleanups)
+		}
+	})
+
+	t.Run("session mutation reconciles ordinary dispatch claims", func(t *testing.T) {
+		source := insertTestEntry(t, repo, "mutation-old", "mutation-task", "prompt", QueuedByUser, nil, nil)
+		if reserved, _, err := repo.ReserveHeadIfAutoRun(ctx, source.SessionID); err != nil || reserved == nil {
+			t.Fatalf("reserve mutation source = %#v, err=%v", reserved, err)
+		}
+		if err := repo.TransferSession(ctx, source.SessionID, "mutation-new"); err != nil {
+			t.Fatal(err)
+		}
+		dispatches, err := persistent.ListPendingQueueDispatches(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(dispatches) != 1 || dispatches[0].Message.SessionID != "mutation-new" {
+			t.Fatalf("transferred dispatch claims = %#v", dispatches)
+		}
+		if err := repo.ReplaceSession(ctx, "mutation-new", nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		dispatches, err = persistent.ListPendingQueueDispatches(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(dispatches) != 0 {
+			t.Fatalf("dispatch claims after replacement = %#v", dispatches)
+		}
+	})
+}
+
+type replaceBeforeReservationRepository struct {
+	Repository
+	replacement Repository
+}
+
+func (r *replaceBeforeReservationRepository) ReserveHeadIfAutoRun(
+	ctx context.Context,
+	sessionID string,
+) (*QueuedMessage, bool, error) {
+	entries, err := r.replacement.ListBySession(ctx, sessionID)
+	if err != nil {
+		return nil, true, err
+	}
+	if err := r.replacement.ReplaceSession(ctx, sessionID, entries, nil); err != nil {
+		return nil, true, err
+	}
+	return r.Repository.ReserveHeadIfAutoRun(ctx, sessionID)
+}
+
+func TestPostgresRepository_ReservationCapturesGenerationAfterConcurrentReplacement(t *testing.T) {
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+	source := insertTestEntry(t, repoA, "reservation-race-session", "reservation-race-task", "prompt", QueuedByUser, nil, nil)
+	service := setupService(t)
+	service.repo = &replaceBeforeReservationRepository{Repository: repoA, replacement: repoB}
+
+	reserved, exists, autoRun := service.ReserveQueuedWithAutoRun(ctx, source.SessionID)
+	if !exists || !autoRun || reserved == nil {
+		t.Fatalf("reservation = %#v, exists=%t, autoRun=%t", reserved, exists, autoRun)
+	}
+	generation, err := repoA.SessionGeneration(ctx, source.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reserved.reservationGenerationsCaptured || reserved.reservationSessionGeneration != generation {
+		t.Fatalf(
+			"reservation generation = %d (captured=%t), want current %d",
+			reserved.reservationSessionGeneration, reserved.reservationGenerationsCaptured, generation,
+		)
+	}
 }

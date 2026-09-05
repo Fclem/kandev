@@ -454,6 +454,11 @@ func (r *memoryRepository) reserveHeadLocked(sessionID string) *QueuedMessage {
 	headIndex := lowestPositionIndex(list)
 	head := list[headIndex]
 	out := cloneQueuedMessage(head)
+	out.reservationSessionGeneration = r.sessionGeneration[sessionID]
+	if out.TaskID != "" {
+		out.reservationLifecycleGeneration = r.generation[out.TaskID]
+	}
+	out.reservationGenerationsCaptured = true
 	if head.IsDurableLifecycle() {
 		// Mirror the SQLite reservation: the stored row is flagged in flight so
 		// queue status stops listing it, while the returned copy keeps the

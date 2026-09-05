@@ -9,20 +9,22 @@ import (
 	internaldb "github.com/kandev/kandev/internal/db"
 )
 
+const attachmentCleanupSchema = `
+	CREATE TABLE IF NOT EXISTS queue_attachment_cleanups (
+		session_id       TEXT NOT NULL,
+		entry_id         TEXT NOT NULL,
+		operation_id     TEXT NOT NULL DEFAULT '',
+		task_id          TEXT NOT NULL,
+		owner_id         TEXT NOT NULL DEFAULT '',
+		lease_id         TEXT NOT NULL DEFAULT '',
+		attachments_json TEXT NOT NULL DEFAULT '[]',
+		created_at       TIMESTAMP NOT NULL,
+		PRIMARY KEY (session_id, entry_id, operation_id)
+	)
+`
+
 func (r *sqliteRepository) ensureAttachmentCleanupSchema(ctx context.Context) error {
-	if _, err := r.db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS queue_attachment_cleanups (
-			session_id       TEXT NOT NULL,
-			entry_id         TEXT NOT NULL,
-			operation_id     TEXT NOT NULL DEFAULT '',
-			task_id          TEXT NOT NULL,
-			owner_id        TEXT NOT NULL DEFAULT '',
-			lease_id         TEXT NOT NULL DEFAULT '',
-			attachments_json TEXT NOT NULL DEFAULT '[]',
-			created_at       TIMESTAMP NOT NULL,
-			PRIMARY KEY (session_id, entry_id, operation_id)
-		)
-	`); err != nil {
+	if _, err := r.db.ExecContext(ctx, attachmentCleanupSchema); err != nil {
 		return fmt.Errorf("ensure attachment cleanup schema: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_attachment_cleanups ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`); err != nil && !internaldb.IsDuplicateColumnError(err) {

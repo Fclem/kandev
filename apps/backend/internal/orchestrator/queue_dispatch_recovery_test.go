@@ -174,3 +174,39 @@ func TestAcceptedOrdinaryDispatchFailureAcknowledgesRecoveryClaim(t *testing.T) 
 		t.Fatalf("pending dispatches = %#v, want empty", pending)
 	}
 }
+
+func TestTransferredOrdinaryDispatchRestoresToDestinationAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	dbPath := t.TempDir() + "/queue.db"
+	queue, db := newWorkflowTransferQueue(t, dbPath)
+	source, err := queue.QueueMessage(
+		ctx, "session-old", "task-1", "ordinary prompt", "", messagequeue.QueuedByUser, false, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserved, ok := queue.ReserveQueued(ctx, source.SessionID)
+	if !ok || reserved.ID != source.ID {
+		t.Fatalf("reserved = %#v, ok=%t", reserved, ok)
+	}
+	if err := queue.TransferSession(ctx, source.SessionID, "session-new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restartedQueue, restartedDB := newWorkflowTransferQueue(t, dbPath)
+	t.Cleanup(func() { _ = restartedDB.Close() })
+	restarted := &Service{logger: testLogger(), messageQueue: restartedQueue}
+	if err := restarted.reconcilePendingQueueDispatchesOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if status := restartedQueue.GetStatus(ctx, source.SessionID); len(status.Entries) != 0 {
+		t.Fatalf("source queue after transfer recovery = %#v, want empty", status.Entries)
+	}
+	status := restartedQueue.GetStatus(ctx, "session-new")
+	if len(status.Entries) != 1 || status.Entries[0].ID != source.ID {
+		t.Fatalf("destination queue after transfer recovery = %#v, want %s", status.Entries, source.ID)
+	}
+}

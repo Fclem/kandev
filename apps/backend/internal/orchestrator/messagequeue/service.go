@@ -1261,52 +1261,16 @@ func (s *Service) ReserveQueuedWithAutoRun(ctx context.Context, sessionID string
 	var msg *QueuedMessage
 	autoRun := true
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		var err error
-		autoRun, err = s.repo.GetAutoRun(admittedCtx, sessionID)
-		if err != nil || !autoRun {
-			return err
-		}
 		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
-		if err != nil || blocked {
-			return err
-		}
-		sessionGeneration, err := s.repo.SessionGeneration(admittedCtx, sessionID)
 		if err != nil {
 			return err
 		}
-		// Capture the lifecycle generation before reserving. A durable
-		// reservation changes queue visibility immediately; a failed read after
-		// that mutation would strand the row as in-flight with no message to
-		// acknowledge or restore.
-		headEntries, err := s.repo.ListBySession(admittedCtx, sessionID)
-		if err != nil {
+		if blocked {
+			autoRun, err = s.repo.GetAutoRun(admittedCtx, sessionID)
 			return err
 		}
-		var headTaskID string
-		if len(headEntries) > 0 {
-			// ReserveHeadIfAutoRun always selects the lowest-position row,
-			// including a durable row already marked in flight during
-			// crash recovery. Capture that row's generation rather than
-			// skipping its marker and fencing against a later entry.
-			headTaskID = headEntries[0].TaskID
-		}
-		var lifecycleGeneration int64
-		if headTaskID != "" {
-			lifecycleGeneration, err = s.repo.LifecycleGeneration(admittedCtx, headTaskID)
-			if err != nil {
-				return err
-			}
-		}
-		msg, _, err = s.repo.ReserveHeadIfAutoRun(admittedCtx, sessionID)
-		if err != nil || msg == nil {
-			return err
-		}
-		msg.reservationSessionGeneration = sessionGeneration
-		if msg.TaskID != "" {
-			msg.reservationLifecycleGeneration = lifecycleGeneration
-		}
-		msg.reservationGenerationsCaptured = true
-		return nil
+		msg, autoRun, err = s.repo.ReserveHeadIfAutoRun(admittedCtx, sessionID)
+		return err
 	})
 	if err != nil {
 		s.logger.Error("reserve head failed",

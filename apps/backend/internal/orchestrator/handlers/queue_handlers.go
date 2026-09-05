@@ -984,7 +984,10 @@ func (h *QueueHandlers) releaseQueuedAttachmentUpdateFailure(
 		return nil
 	}
 	cleanupCtx := context.WithoutCancel(ctx)
-	candidates := h.unreferencedQueueAttachments(cleanupCtx, sessionID, previous.ID, newlyAdded)
+	candidates, err := h.unreferencedQueueAttachments(cleanupCtx, sessionID, previous.ID, newlyAdded)
+	if err != nil {
+		return err
+	}
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -1003,10 +1006,10 @@ func (h *QueueHandlers) unreferencedQueueAttachments(
 	ctx context.Context,
 	sessionID, excludedEntryID string,
 	candidates []messagequeue.MessageAttachment,
-) []messagequeue.MessageAttachment {
+) ([]messagequeue.MessageAttachment, error) {
 	ctx = context.WithoutCancel(ctx)
 	if len(candidates) == 0 {
-		return nil
+		return nil, nil
 	}
 	unique := make([]messagequeue.MessageAttachment, 0, len(candidates))
 	seen := make(map[string]struct{}, len(candidates))
@@ -1021,11 +1024,11 @@ func (h *QueueHandlers) unreferencedQueueAttachments(
 		unique = append(unique, attachment)
 	}
 	if len(unique) == 0 {
-		return nil
+		return nil, nil
 	}
 	checker, ok := h.queueService.(queueAttachmentReferenceChecker)
 	if !ok {
-		return unique
+		return unique, nil
 	}
 	ids := make([]string, 0, len(unique))
 	for _, attachment := range unique {
@@ -1034,7 +1037,7 @@ func (h *QueueHandlers) unreferencedQueueAttachments(
 	referenced, err := checker.ReferencedQueueAttachmentIDs(ctx, sessionID, excludedEntryID, ids)
 	if err != nil {
 		h.logger.Warn("failed to inspect queue attachment references", zap.Error(err))
-		return nil
+		return nil, err
 	}
 	unreferenced := make([]messagequeue.MessageAttachment, 0, len(unique))
 	for _, attachment := range unique {
@@ -1042,7 +1045,7 @@ func (h *QueueHandlers) unreferencedQueueAttachments(
 			unreferenced = append(unreferenced, attachment)
 		}
 	}
-	return unreferenced
+	return unreferenced, nil
 }
 
 // releaseSupersededQueueAttachments serializes attachment cleanup with later
@@ -1114,7 +1117,10 @@ func (h *QueueHandlers) releaseQueueAttachmentCandidates(
 	releaser QueueAttachmentReleaser,
 ) error {
 	cleanupCtx := context.WithoutCancel(ctx)
-	unreferenced := h.unreferencedQueueAttachments(cleanupCtx, req.SessionID, req.EntryID, candidates)
+	unreferenced, err := h.unreferencedQueueAttachments(cleanupCtx, req.SessionID, req.EntryID, candidates)
+	if err != nil {
+		return err
+	}
 	if len(unreferenced) == 0 {
 		return nil
 	}
@@ -1525,8 +1531,9 @@ func (h *QueueHandlers) releaseQueuedAttachments(
 		return
 	}
 	cleanupCtx := context.WithoutCancel(ctx)
-	candidates := h.unreferencedQueueAttachments(cleanupCtx, entry.SessionID, entry.ID, entry.Attachments)
-	var releaseErr error
+	candidates, releaseErr := h.unreferencedQueueAttachments(
+		cleanupCtx, entry.SessionID, entry.ID, entry.Attachments,
+	)
 	if len(candidates) > 0 {
 		releaseErr = pending.releaser.ReleaseMessageAttachments(
 			cleanupCtx, entry.TaskID, entry.SessionID, queueAttachmentsToV1(candidates),

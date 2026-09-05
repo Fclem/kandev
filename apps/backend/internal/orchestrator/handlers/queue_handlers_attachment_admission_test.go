@@ -714,3 +714,56 @@ func TestTransferredCleanupWakesWhenDestinationEditEnds(t *testing.T) {
 		t.Fatal("destination edit end did not wake transferred cleanup")
 	}
 }
+
+func TestMissingEntryCleanupUsesTransferredClaimSessionAfterRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	handlers, queue, db := newPersistentCleanupQueue(t, dbPath)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner"})
+	const (
+		sourceSessionID      = "session-missing-transfer-old"
+		destinationSessionID = "session-missing-transfer-new"
+		taskID               = "task-missing-transfer"
+		entryID              = "missing-transfer-entry"
+		operationID          = "missing-transfer-cleanup"
+	)
+	attachment := messagequeue.MessageAttachment{
+		Type: "resource", AttachmentID: "attachment-missing-transfer",
+		Name: "missing-transfer.txt", MimeType: "text/plain", SizeBytes: 1,
+	}
+	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
+		SessionID: sourceSessionID, EntryID: entryID, OperationID: operationID,
+		TaskID: taskID, OwnerID: "owner", RemoveEntry: true, ClaimPending: true,
+		Attachments: []messagequeue.MessageAttachment{attachment},
+	}))
+	firstClaimer := &controlledCleanupClaimer{}
+	firstClaimer.failures.Store(1)
+	pending := &pendingQueueAttachmentCleanup{
+		key: pendingQueueAttachmentCleanupKey{
+			sessionID: sourceSessionID, entryID: entryID, operationID: operationID,
+		},
+		req: wsUpdateMessageRequest{
+			SessionID: sourceSessionID, EntryID: entryID, OperationID: operationID,
+		},
+		previous: &messagequeue.QueuedMessage{
+			ID: entryID, SessionID: sourceSessionID, TaskID: taskID,
+			Attachments: []messagequeue.MessageAttachment{attachment},
+		},
+		releaser: firstClaimer, removeEntry: true, claimPending: true, authCtx: ctx,
+	}
+	require.Error(t, handlers.runPendingAttachmentCleanup(pending))
+	require.NoError(t, queue.TransferSession(ctx, sourceSessionID, destinationSessionID))
+	require.NoError(t, db.Close())
+
+	restarted, restartedQueue, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	defer func() { _ = restartedDB.Close() }()
+	recoveryClaimer := &controlledCleanupClaimer{}
+	restarted.SetAttachmentClaimer(recoveryClaimer)
+	restarted.Start(context.Background())
+	defer restarted.Stop()
+
+	require.Eventually(t, func() bool {
+		cleanups, err := restartedQueue.ListAttachmentCleanups(ctx)
+		return err == nil && len(cleanups) == 0 && recoveryClaimer.attempts.Load() > 0
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, destinationSessionID, recoveryClaimer.lastSession.Load())
+}

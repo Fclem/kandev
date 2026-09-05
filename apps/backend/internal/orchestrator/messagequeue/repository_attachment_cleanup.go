@@ -12,6 +12,7 @@ import (
 const attachmentCleanupSchema = `
 	CREATE TABLE IF NOT EXISTS queue_attachment_cleanups (
 		session_id       TEXT NOT NULL,
+		current_session_id TEXT NOT NULL DEFAULT '',
 		entry_id         TEXT NOT NULL,
 		operation_id     TEXT NOT NULL DEFAULT '',
 		task_id          TEXT NOT NULL,
@@ -42,6 +43,16 @@ func (r *sqliteRepository) ensureAttachmentCleanupSchema(ctx context.Context) er
 	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_attachment_cleanups ADD COLUMN entry_fingerprint TEXT NOT NULL DEFAULT ''`); err != nil && !internaldb.IsDuplicateColumnError(err) {
 		return fmt.Errorf("add attachment cleanup entry fingerprint: %w", err)
 	}
+	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_attachment_cleanups ADD COLUMN current_session_id TEXT NOT NULL DEFAULT ''`); err != nil && !internaldb.IsDuplicateColumnError(err) {
+		return fmt.Errorf("add attachment cleanup current session: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE queue_attachment_cleanups
+		SET current_session_id = session_id
+		WHERE current_session_id = ''
+	`); err != nil {
+		return fmt.Errorf("backfill attachment cleanup current session: %w", err)
+	}
 	return nil
 }
 
@@ -56,12 +67,16 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 	if cleanup.CreatedAt.IsZero() {
 		cleanup.CreatedAt = time.Now().UTC()
 	}
+	if cleanup.CurrentSessionID == "" {
+		cleanup.CurrentSessionID = cleanup.SessionID
+	}
 	if _, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		INSERT INTO queue_attachment_cleanups
-			(session_id, entry_id, operation_id, task_id, owner_id, lease_id,
+			(session_id, current_session_id, entry_id, operation_id, task_id, owner_id, lease_id,
 			 remove_entry, claim_pending, entry_fingerprint, attachments_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id, entry_id, operation_id) DO UPDATE SET
+			current_session_id = excluded.current_session_id,
 			task_id = excluded.task_id,
 			owner_id = excluded.owner_id,
 			lease_id = excluded.lease_id,
@@ -69,7 +84,7 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 			claim_pending = excluded.claim_pending,
 			entry_fingerprint = excluded.entry_fingerprint,
 			attachments_json = excluded.attachments_json
-	`), cleanup.SessionID, cleanup.EntryID, cleanup.OperationID, cleanup.TaskID,
+	`), cleanup.SessionID, cleanup.CurrentSessionID, cleanup.EntryID, cleanup.OperationID, cleanup.TaskID,
 		cleanup.OwnerID, cleanup.LeaseID, boolToInt(cleanup.RemoveEntry),
 		boolToInt(cleanup.ClaimPending), cleanup.EntryFingerprint,
 		string(attachmentsJSON), cleanup.CreatedAt); err != nil {
@@ -99,7 +114,7 @@ func (r *sqliteRepository) ListAttachmentCleanups(ctx context.Context) ([]Attach
 		return nil, err
 	}
 	rows, err := r.db.QueryxContext(ctx, `
-		SELECT session_id, entry_id, operation_id, task_id, owner_id, lease_id,
+		SELECT session_id, current_session_id, entry_id, operation_id, task_id, owner_id, lease_id,
 		       remove_entry, claim_pending, entry_fingerprint, attachments_json, created_at
 		FROM queue_attachment_cleanups
 		ORDER BY created_at, session_id, entry_id, operation_id
@@ -114,6 +129,7 @@ func (r *sqliteRepository) ListAttachmentCleanups(ctx context.Context) ([]Attach
 		var attachmentsJSON string
 		if err := rows.Scan(
 			&cleanup.SessionID,
+			&cleanup.CurrentSessionID,
 			&cleanup.EntryID,
 			&cleanup.OperationID,
 			&cleanup.TaskID,

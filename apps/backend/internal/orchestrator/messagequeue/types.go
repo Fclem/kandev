@@ -264,6 +264,7 @@ type MessageAttachment struct {
 // after a queued message no longer references them.
 type AttachmentCleanup struct {
 	SessionID        string
+	CurrentSessionID string
 	EntryID          string
 	OperationID      string
 	TaskID           string

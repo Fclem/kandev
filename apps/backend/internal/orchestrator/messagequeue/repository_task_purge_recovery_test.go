@@ -170,3 +170,58 @@ func TestSQLiteRepositoryTaskPurgeDiscoversOrdinaryDispatchSession(t *testing.T)
 		t.Fatalf("dispatch claims after direct task purge = %#v, want empty", pending)
 	}
 }
+
+func TestSQLiteAttachmentCleanupMigratesAndTransfersCurrentSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t).(*sqliteRepository)
+	_, err := repo.db.ExecContext(ctx, `
+		CREATE TABLE queue_attachment_cleanups (
+			session_id TEXT NOT NULL,
+			entry_id TEXT NOT NULL,
+			operation_id TEXT NOT NULL DEFAULT '',
+			task_id TEXT NOT NULL,
+			owner_id TEXT NOT NULL DEFAULT '',
+			lease_id TEXT NOT NULL DEFAULT '',
+			remove_entry INTEGER NOT NULL DEFAULT 0,
+			claim_pending INTEGER NOT NULL DEFAULT 0,
+			entry_fingerprint TEXT NOT NULL DEFAULT '',
+			attachments_json TEXT NOT NULL DEFAULT '[]',
+			created_at TIMESTAMP NOT NULL,
+			PRIMARY KEY (session_id, entry_id, operation_id)
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		sourceSessionID      = "legacy-cleanup-source"
+		destinationSessionID = "legacy-cleanup-destination"
+	)
+	if _, err := repo.db.ExecContext(ctx, `
+		INSERT INTO queue_attachment_cleanups
+			(session_id, entry_id, operation_id, task_id, attachments_json, created_at)
+		VALUES (?, 'legacy-entry', 'legacy-operation', 'legacy-task', '[]', CURRENT_TIMESTAMP)
+	`, sourceSessionID); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanups, err := repo.ListAttachmentCleanups(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleanups) != 1 || cleanups[0].CurrentSessionID != sourceSessionID {
+		t.Fatalf("migrated cleanup = %#v", cleanups)
+	}
+	if err := repo.TransferSession(ctx, sourceSessionID, destinationSessionID); err != nil {
+		t.Fatal(err)
+	}
+	cleanups, err = repo.ListAttachmentCleanups(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleanups) != 1 ||
+		cleanups[0].SessionID != sourceSessionID ||
+		cleanups[0].CurrentSessionID != destinationSessionID {
+		t.Fatalf("transferred cleanup = %#v", cleanups)
+	}
+}

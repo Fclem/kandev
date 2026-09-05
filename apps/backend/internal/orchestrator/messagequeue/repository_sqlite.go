@@ -2907,6 +2907,9 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return err
 	}
+	if err := r.ensureAttachmentCleanupSchema(ctx); err != nil {
+		return err
+	}
 	// The transfer moves rows out of the source and into the destination, so
 	// it must hold BOTH sessions' locks: a concurrent source-side insert
 	// (holding the source lock) could otherwise commit a row the transfer's
@@ -2950,6 +2953,13 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 	}
 	if err := r.transferPendingQueueDispatchesTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		UPDATE queue_attachment_cleanups
+		SET current_session_id = ?
+		WHERE current_session_id = ?
+	`), newSessionID, oldSessionID); err != nil {
+		return fmt.Errorf("transfer attachment cleanup session: %w", err)
 	}
 	sourceAutoRun, err := r.getAutoRunTx(ctx, tx, oldSessionID)
 	if err != nil {

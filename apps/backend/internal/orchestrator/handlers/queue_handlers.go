@@ -296,6 +296,7 @@ func (h *QueueHandlers) loadPendingAttachmentCleanupsLocked(ctx context.Context)
 			removeEntry:      cleanup.RemoveEntry,
 			claimPending:     cleanup.ClaimPending,
 			entryFingerprint: cleanup.EntryFingerprint,
+			currentSessionID: cleanup.CurrentSessionID,
 			authCtx:          authCtx,
 			wake:             make(chan struct{}, 1),
 		}
@@ -1249,9 +1250,9 @@ func (h *QueueHandlers) persistPendingAttachmentCleanup(pending *pendingQueueAtt
 		return errors.New("queue attachment cleanup requires an owner identity")
 	}
 	if err := store.UpsertAttachmentCleanup(pending.authCtx, messagequeue.AttachmentCleanup{
-		SessionID: pending.req.SessionID, EntryID: pending.req.EntryID,
-		OperationID: pending.req.OperationID, TaskID: pending.previous.TaskID,
-		OwnerID: identity.UserID, LeaseID: pending.req.LeaseID,
+		SessionID: pending.req.SessionID, CurrentSessionID: h.pendingAttachmentCleanupSessionID(pending),
+		EntryID: pending.req.EntryID, OperationID: pending.req.OperationID,
+		TaskID: pending.previous.TaskID, OwnerID: identity.UserID, LeaseID: pending.req.LeaseID,
 		RemoveEntry:      pending.removeEntry,
 		ClaimPending:     pending.claimPending,
 		EntryFingerprint: pending.entryFingerprint,

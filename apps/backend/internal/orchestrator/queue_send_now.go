@@ -459,6 +459,21 @@ func (s *Service) executeSendNowClaimWithContext(
 		return
 	}
 	if err := s.promptSendNowClaim(ctx, claim); err != nil {
+		var acceptedDispatch *acceptedPromptDispatchError
+		if errors.As(err, &acceptedDispatch) {
+			s.logger.Warn("send-now replacement prompt was accepted but acceptance persistence failed; settling without restore",
+				zap.String("session_id", sessionID), zap.Error(err))
+			if markErr := s.markSendNowClaimAcceptedWithRetry(ctx, claim); markErr != nil {
+				s.logger.Error("failed to persist accepted send-now queue claim",
+					zap.String("session_id", sessionID), zap.Error(markErr))
+			}
+			if ackErr := s.acknowledgeSendNowClaimWithRetry(ctx, claim); ackErr != nil {
+				s.logger.Error("failed to acknowledge accepted send-now queue claim",
+					zap.String("session_id", sessionID), zap.Error(ackErr))
+			}
+			s.publishQueueStatusEvent(context.Background(), sessionID)
+			return
+		}
 		s.logger.Warn("send-now replacement prompt failed; restoring queue claim",
 			zap.String("session_id", sessionID), zap.Error(err))
 		restore()
@@ -552,7 +567,7 @@ func (s *Service) markSendNowClaimAcceptedWithRetry(
 		return nil
 	}
 	return s.retrySendNowClaimMutation(ctx, func(recoveryCtx context.Context) error {
-		return s.messageQueue.MarkPendingSendNowClaimAccepted(recoveryCtx, claim.Dispatch.SessionID)
+		return s.messageQueue.MarkPendingSendNowClaimAccepted(recoveryCtx, claim)
 	})
 }
 func (s *Service) retrySendNowClaimMutation(
@@ -602,8 +617,8 @@ func (s *Service) reconcilePendingSendNowClaimsOnStartup(ctx context.Context) er
 				return fmt.Errorf("recover pending Send Now claim for session %s: %w", claim.Dispatch.SessionID, recoveryErr)
 			}
 			if deleteErr := s.messageQueue.DeletePendingSendNowClaim(
-				context.WithoutCancel(ctx), claim.Dispatch.SessionID,
-			); deleteErr != nil {
+				context.WithoutCancel(ctx), claim,
+			); deleteErr != nil && !errors.Is(deleteErr, messagequeue.ErrSendNowClaimChanged) {
 				return fmt.Errorf("discard superseded Send Now claim for session %s: %w", claim.Dispatch.SessionID, deleteErr)
 			}
 		}

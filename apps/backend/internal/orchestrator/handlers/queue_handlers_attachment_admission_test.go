@@ -73,6 +73,28 @@ func TestQueueAttachmentClaimFailureHasDurableCleanupBeforeClaim(t *testing.T) {
 	require.Empty(t, cleanups)
 }
 
+func TestQueuedMessageFingerprintSurvivesSQLiteRoundTrip(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	_, queue, db := newPersistentCleanupQueue(t, dbPath)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(
+		ctx, "session-fingerprint", "task-fingerprint", "queued", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{Type: "resource", AttachmentID: "attachment-fingerprint"}},
+	)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	_, reopenedQueue, reopenedDB := newPersistentCleanupQueue(t, dbPath)
+	defer func() { _ = reopenedDB.Close() }()
+	stored, err := reopenedQueue.GetEntry(ctx, entry.SessionID, entry.ID)
+	require.NoError(t, err)
+	before, err := queuedMessageFingerprint(entry)
+	require.NoError(t, err)
+	after, err := queuedMessageFingerprint(stored)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "queued message changed during SQLite restart:\nbefore: %#v\nafter: %#v", entry, stored)
+}
+
 func TestAdmissionAttachmentCleanupRemovesEntryAfterRestart(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "queue.db")
 	_, queue, db := newPersistentCleanupQueue(t, dbPath)
@@ -86,15 +108,26 @@ func TestAdmissionAttachmentCleanupRemovesEntryAfterRestart(t *testing.T) {
 		}},
 	)
 	require.NoError(t, err)
+	fingerprint, err := queuedMessageFingerprint(entry)
+	require.NoError(t, err)
 	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
 		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: "admission-restart",
 		TaskID: entry.TaskID, OwnerID: "owner", RemoveEntry: true,
-		Attachments: entry.Attachments,
+		EntryFingerprint: fingerprint, Attachments: entry.Attachments,
 	}))
 	require.NoError(t, db.Close())
 
 	restarted, restartedQueue, restartedDB := newPersistentCleanupQueue(t, dbPath)
 	defer func() { _ = restartedDB.Close() }()
+	reloadedCleanups, err := restartedQueue.ListAttachmentCleanups(ctx)
+	require.NoError(t, err)
+	require.Len(t, reloadedCleanups, 1)
+	require.Equal(t, fingerprint, reloadedCleanups[0].EntryFingerprint)
+	reloadedEntry, err := restartedQueue.GetEntry(ctx, entry.SessionID, entry.ID)
+	require.NoError(t, err)
+	reloadedFingerprint, err := queuedMessageFingerprint(reloadedEntry)
+	require.NoError(t, err)
+	require.Equal(t, fingerprint, reloadedFingerprint)
 	claimer := &controlledCleanupClaimer{}
 	restarted.SetAttachmentClaimer(claimer)
 	restarted.Start(context.Background())
@@ -147,10 +180,12 @@ func TestPendingAdmissionClaimResumesWithoutRemovingEntry(t *testing.T) {
 		}},
 	)
 	require.NoError(t, err)
+	fingerprint, err := queuedMessageFingerprint(entry)
+	require.NoError(t, err)
 	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
 		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: "claim-restart",
 		TaskID: entry.TaskID, OwnerID: "owner", ClaimPending: true,
-		Attachments: entry.Attachments,
+		EntryFingerprint: fingerprint, Attachments: entry.Attachments,
 	}))
 	require.NoError(t, db.Close())
 
@@ -251,4 +286,70 @@ func TestAdmissionClaimFailureRemovesEntryWhenCleanupStateUpdateFails(t *testing
 		return listErr == nil && len(cleanups) == 0 && recoveryClaimer.releases.Load() == 1
 	}, time.Second, 10*time.Millisecond)
 	require.Zero(t, recoveryClaimer.claims.Load())
+}
+
+func TestAdmissionCleanupDoesNotMutateReplacementEntryAfterRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	_, queue, db := newPersistentCleanupQueue(t, dbPath)
+	ctx := context.Background()
+	original, err := queue.QueueMessage(
+		ctx, "session-cleanup-fence", "task-cleanup-fence", "original", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "attachment-original",
+			Name: "original.txt", MimeType: "text/plain", SizeBytes: 1,
+		}},
+	)
+	require.NoError(t, err)
+	fingerprint, err := queuedMessageFingerprint(original)
+	require.NoError(t, err)
+	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
+		SessionID: original.SessionID, EntryID: original.ID, OperationID: "admission-fenced",
+		TaskID: original.TaskID, OwnerID: "owner", RemoveEntry: true,
+		EntryFingerprint: fingerprint, Attachments: original.Attachments,
+	}))
+	require.NoError(t, queue.UpdateMessageWithMetadata(
+		ctx, original.SessionID, original.ID, "replacement",
+		[]messagequeue.MessageAttachment{{
+			Type: "resource", AttachmentID: "attachment-replacement",
+			Name: "replacement.txt", MimeType: "text/plain", SizeBytes: 1,
+		}}, nil, messagequeue.QueuedByUser,
+	))
+	require.NoError(t, db.Close())
+
+	restarted, restartedQueue, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	defer func() { _ = restartedDB.Close() }()
+	claimer := &admissionClaimRecoveryClaimer{}
+	restarted.SetAttachmentClaimer(claimer)
+	restarted.Start(context.Background())
+	defer restarted.Stop()
+
+	require.Eventually(t, func() bool {
+		cleanups, listErr := restartedQueue.ListAttachmentCleanups(ctx)
+		return listErr == nil && len(cleanups) == 0 && claimer.releases.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	current, err := restartedQueue.GetEntry(ctx, original.SessionID, original.ID)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", current.Content)
+	require.Zero(t, claimer.claims.Load())
+}
+
+func TestAdmissionCleanupWaitsForAnyActiveEditLease(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(
+		ctx, "session-admission-lease", "task-admission-lease", "queued", "",
+		messagequeue.QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+	pending := &pendingQueueAttachmentCleanup{
+		req:     wsUpdateMessageRequest{SessionID: entry.SessionID, EntryID: entry.ID},
+		authCtx: ctx,
+	}
+
+	require.True(t, handlers.editLeaseActive(pending))
+	require.NoError(t, queue.EndEdit(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection"))
+	require.False(t, handlers.editLeaseActive(pending))
 }

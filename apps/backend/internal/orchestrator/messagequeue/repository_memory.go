@@ -644,6 +644,7 @@ func (r *memoryRepository) ClaimSendNow(_ context.Context, sessionID string, exp
 	}
 	r.autoRun[sessionID] = true
 	return &SendNowClaim{
+		ClaimID:           uuid.NewString(),
 		Sources:           sources,
 		Dispatch:          *envelope,
 		SourceGenerations: generations,

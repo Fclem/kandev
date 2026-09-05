@@ -68,7 +68,7 @@ func TestPostgresRepository_DurableQueueRecoveryTables(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := persistent.MarkPendingSendNowClaimAccepted(ctx, source.SessionID); err != nil {
+		if err := persistent.MarkPendingSendNowClaimAccepted(ctx, claim); err != nil {
 			t.Fatal(err)
 		}
 		claims, err := persistent.ListPendingSendNowClaims(ctx)

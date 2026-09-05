@@ -2,6 +2,7 @@ package messagequeue
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -80,12 +81,13 @@ func TestSQLitePurgeRemovesDurableSendNowClaims(t *testing.T) {
 					t, repo, "session-purge-send-now", "task-purge-send-now",
 					"durable source", QueuedByUser, nil, nil,
 				)
-				if _, err := repo.ClaimSendNow(ctx, entry.SessionID, []QueuedMessage{*entry}); err != nil {
+				pendingClaim, err := repo.ClaimSendNow(ctx, entry.SessionID, []QueuedMessage{*entry})
+				if err != nil {
 					t.Fatal(err)
 				}
 				persistent := repo.(pendingSendNowClaimRepository)
 				if accepted {
-					if err := persistent.MarkPendingSendNowClaimAccepted(ctx, entry.SessionID); err != nil {
+					if err := persistent.MarkPendingSendNowClaimAccepted(ctx, pendingClaim); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -123,5 +125,134 @@ func TestSQLiteSendNowAcknowledgeGenerationChangeRetiresClaim(t *testing.T) {
 	second := insertTestEntry(t, repo, "session-1", "task-1", "second", QueuedByUser, nil, nil)
 	if _, err := repo.ClaimSendNow(ctx, "session-1", []QueuedMessage{*second}); err != nil {
 		t.Fatalf("second same-process Send Now claim: %v", err)
+	}
+}
+
+func TestSQLiteStaleSendNowWorkerCannotSettleSuccessorClaim(t *testing.T) {
+	for _, operation := range []struct {
+		name string
+		run  func(context.Context, *sqliteRepository, *SendNowClaim) error
+	}{
+		{
+			name: "restore",
+			run: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+				return repo.RestoreSendNowClaim(ctx, claim)
+			},
+		},
+		{
+			name: "acknowledge",
+			run: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+				return repo.AcknowledgeSendNowClaim(ctx, claim)
+			},
+		},
+		{
+			name: "acknowledge-unidentified",
+			run: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+				unidentified := *claim
+				unidentified.ClaimID = ""
+				return repo.AcknowledgeSendNowClaim(ctx, &unidentified)
+			},
+		},
+		{
+			name: "mark-accepted",
+			run: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+				return repo.MarkPendingSendNowClaimAccepted(ctx, claim)
+			},
+		},
+		{
+			name: "startup-discard",
+			run: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+				return repo.DeletePendingSendNowClaim(ctx, claim)
+			},
+		},
+	} {
+		t.Run(operation.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := newTestSQLiteRepo(t).(*sqliteRepository)
+			oldSource := insertTestEntry(t, repo, "session-stale-worker", "task-stale-worker", "old", QueuedByUser, nil, nil)
+			oldClaim, err := repo.ClaimSendNow(ctx, oldSource.SessionID, []QueuedMessage{*oldSource})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := repo.AcknowledgeSendNowClaim(ctx, oldClaim); err != nil {
+				t.Fatal(err)
+			}
+			successorSource := insertTestEntry(
+				t, repo, oldSource.SessionID, oldSource.TaskID, "successor", QueuedByUser, nil, nil,
+			)
+			successor, err := repo.ClaimSendNow(ctx, successorSource.SessionID, []QueuedMessage{*successorSource})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := operation.run(ctx, repo, oldClaim); !errors.Is(err, ErrSendNowClaimChanged) {
+				t.Fatalf("stale %s error = %v, want %v", operation.name, err, ErrSendNowClaimChanged)
+			}
+			pending, err := repo.ListPendingSendNowClaims(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(pending) != 1 || pending[0].Claim.Dispatch.ID != successor.Dispatch.ID || pending[0].Accepted {
+				t.Fatalf("successor after stale %s = %#v", operation.name, pending)
+			}
+			entries, err := repo.ListBySession(ctx, oldSource.SessionID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Fatalf("queue after stale %s = %#v, want successor sources still claimed", operation.name, entries)
+			}
+		})
+	}
+}
+
+func TestSQLiteSendNowClaimMigratesLegacyIdentity(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t).(*sqliteRepository)
+	_, err := repo.db.ExecContext(ctx, `
+		CREATE TABLE queue_send_now_claims (
+			session_id TEXT PRIMARY KEY,
+			claim_json TEXT NOT NULL,
+			accepted INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := SendNowClaim{
+		Sources: []QueuedMessage{{
+			ID: "legacy-source", SessionID: "legacy-session", TaskID: "legacy-task",
+			Content: "legacy", QueuedBy: QueuedByUser,
+		}},
+		Dispatch: QueuedMessage{ID: "legacy-dispatch", SessionID: "legacy-session", TaskID: "legacy-task"},
+	}
+	claimJSON, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `
+		INSERT INTO queue_send_now_claims (session_id, claim_json, accepted, created_at)
+		VALUES (?, ?, 0, CURRENT_TIMESTAMP)
+	`, legacy.Dispatch.SessionID, string(claimJSON)); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := repo.ListPendingSendNowClaims(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].Claim.ClaimID == "" {
+		t.Fatalf("migrated Send Now claim = %#v", pending)
+	}
+	if err := repo.MarkPendingSendNowClaimAccepted(ctx, &pending[0].Claim); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DeletePendingSendNowClaim(ctx, &pending[0].Claim); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = repo.ListPendingSendNowClaims(ctx)
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("pending claims after migrated settlement = %#v, err=%v", pending, err)
 	}
 }

@@ -524,6 +524,50 @@ func TestFailedEditRollbackCleanupResumesAfterRestart(t *testing.T) {
 	require.Equal(t, "user-rollback", secondClaimer.lastUser.Load())
 }
 
+func TestLeaseClaimFailureCleanupResumesAfterRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	handlers, queue, db := newPersistentCleanupQueue(t, dbPath)
+	firstClaimer := &controlledCleanupClaimer{claimErr: errors.New("claim failed")}
+	firstClaimer.failures.Store(100)
+	handlers.SetAttachmentClaimer(firstClaimer)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "user-claim-rollback"})
+	entry, err := queue.QueueMessage(
+		ctx, "session-claim-rollback", "task-claim-rollback", "before", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "old-attachment"}},
+	)
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection-claim-rollback")
+	require.NoError(t, err)
+
+	response, err := handlers.wsUpdateMessage(
+		ws.WithConnectionID(ctx, "connection-claim-rollback"),
+		createTestMessage(t, ws.ActionMessageQueueUpdate, map[string]interface{}{
+			"session_id": entry.SessionID, "entry_id": entry.ID, "lease_id": lease.LeaseID,
+			"operation_id": "operation-claim-rollback", "expected_target_revision": lease.TargetRevision,
+			"content": "after", "attachments": []messagequeue.MessageAttachment{{
+				Type: "resource", AttachmentID: "new-attachment", Name: "new.txt", MimeType: "text/plain",
+			}},
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeError, response.Type)
+	cleanups, err := queue.ListAttachmentCleanups(ctx)
+	require.NoError(t, err)
+	require.Len(t, cleanups, 1, "failed release must retain the durable rollback obligation")
+	require.NoError(t, db.Close())
+
+	restarted, _, restartedDB := newPersistentCleanupQueue(t, dbPath)
+	t.Cleanup(func() { _ = restartedDB.Close() })
+	secondClaimer := &controlledCleanupClaimer{}
+	restarted.SetAttachmentClaimer(secondClaimer)
+	restarted.Start(context.Background())
+	t.Cleanup(restarted.Stop)
+
+	require.Eventually(t, func() bool { return secondClaimer.released.Load() == 1 }, time.Second, 10*time.Millisecond)
+	require.Equal(t, "user-claim-rollback", secondClaimer.lastUser.Load())
+}
+
 func newPersistentCleanupQueue(t *testing.T, dbPath string) (*QueueHandlers, *messagequeue.Service, *sqlx.DB) {
 	t.Helper()
 	raw, err := sql.Open("sqlite3", dbPath)
@@ -546,10 +590,11 @@ type controlledCleanupClaimer struct {
 	released    atomic.Int32
 	lastSession atomic.Value
 	lastUser    atomic.Value
+	claimErr    error
 }
 
 func (c *controlledCleanupClaimer) ClaimMessageAttachments(context.Context, string, string, []v1.MessageAttachment) error {
-	return nil
+	return c.claimErr
 }
 
 func (c *controlledCleanupClaimer) ReleaseMessageAttachments(ctx context.Context, _ string, sessionID string, attachments []v1.MessageAttachment) error {

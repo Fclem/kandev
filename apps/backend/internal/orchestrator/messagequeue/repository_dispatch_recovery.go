@@ -92,36 +92,6 @@ func (r *sqliteRepository) persistQueueDispatchClaimTx(
 	return nil
 }
 
-func listPendingRecoveryRecords[T any, R any](
-	ctx context.Context,
-	db *sqlx.DB,
-	query, label string,
-	wrap func(T, bool) R,
-) ([]R, error) {
-	rows, err := db.QueryxContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("list pending %s: %w", label, err)
-	}
-	defer func() { _ = rows.Close() }()
-	var pending []R
-	for rows.Next() {
-		var payloadJSON string
-		var accepted int
-		if err := rows.Scan(&payloadJSON, &accepted); err != nil {
-			return nil, fmt.Errorf("scan pending %s: %w", label, err)
-		}
-		var payload T
-		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
-			return nil, fmt.Errorf("unmarshal pending %s: %w", label, err)
-		}
-		pending = append(pending, wrap(payload, accepted != 0))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate pending %s: %w", label, err)
-	}
-	return pending, nil
-}
-
 func (r *sqliteRepository) ListPendingQueueDispatches(ctx context.Context) ([]PendingQueueDispatch, error) {
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return nil, err

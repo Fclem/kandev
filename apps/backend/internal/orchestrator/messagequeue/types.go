@@ -263,16 +263,17 @@ type MessageAttachment struct {
 // AttachmentCleanup records a durable obligation to release attachment claims
 // after a queued message no longer references them.
 type AttachmentCleanup struct {
-	SessionID    string
-	EntryID      string
-	OperationID  string
-	TaskID       string
-	OwnerID      string
-	LeaseID      string
-	RemoveEntry  bool
-	Attachments  []MessageAttachment
-	ClaimPending bool
-	CreatedAt    time.Time
+	SessionID        string
+	EntryID          string
+	OperationID      string
+	TaskID           string
+	OwnerID          string
+	LeaseID          string
+	RemoveEntry      bool
+	Attachments      []MessageAttachment
+	EntryFingerprint string
+	ClaimPending     bool
+	CreatedAt        time.Time
 }
 
 // SessionTransferCompensation records an attachment binding that must be

@@ -46,6 +46,7 @@ var (
 // at its original position and every durable lifecycle row can be acknowledged
 // only after the replacement prompt is accepted.
 type SendNowClaim struct {
+	ClaimID           string           `json:"claim_id,omitempty"`
 	Sources           []QueuedMessage  `json:"sources"`
 	Dispatch          QueuedMessage    `json:"dispatch"`
 	SourceGenerations map[string]int64 `json:"source_generations,omitempty"`

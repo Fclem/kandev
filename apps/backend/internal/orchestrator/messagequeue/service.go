@@ -1771,8 +1771,8 @@ func (s *Service) AcknowledgeSendNowClaim(ctx context.Context, claim *SendNowCla
 
 type pendingSendNowClaimRepository interface {
 	ListPendingSendNowClaims(context.Context) ([]PendingSendNowClaim, error)
-	MarkPendingSendNowClaimAccepted(context.Context, string) error
-	DeletePendingSendNowClaim(context.Context, string) error
+	MarkPendingSendNowClaimAccepted(context.Context, *SendNowClaim) error
+	DeletePendingSendNowClaim(context.Context, *SendNowClaim) error
 }
 
 // PendingSendNowClaimPersistenceAvailable reports whether ordinary claimed
@@ -1793,24 +1793,35 @@ func (s *Service) ListPendingSendNowClaims(ctx context.Context) ([]PendingSendNo
 
 // MarkPendingSendNowClaimAccepted records the executor acceptance boundary
 // before the potentially long-running prompt call returns.
-func (s *Service) MarkPendingSendNowClaimAccepted(ctx context.Context, sessionID string) error {
+func (s *Service) MarkPendingSendNowClaimAccepted(ctx context.Context, claim *SendNowClaim) error {
 	repo, ok := s.repo.(pendingSendNowClaimRepository)
 	if !ok {
 		return errors.New("pending Send Now claim persistence unavailable")
 	}
+	sessionID, err := sendNowClaimSessionID(claim)
+	if err != nil {
+		return err
+	}
 	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		return repo.MarkPendingSendNowClaimAccepted(admittedCtx, sessionID)
+		return repo.MarkPendingSendNowClaimAccepted(admittedCtx, claim)
 	})
 }
 
-// DeletePendingSendNowClaim discards a recovery record that can no longer be
-// applied because a destructive queue generation change superseded it.
-func (s *Service) DeletePendingSendNowClaim(ctx context.Context, sessionID string) error {
+// DeletePendingSendNowClaim discards only the exact recovery record that can
+// no longer be applied because a destructive queue generation change
+// superseded it.
+func (s *Service) DeletePendingSendNowClaim(ctx context.Context, claim *SendNowClaim) error {
 	repo, ok := s.repo.(pendingSendNowClaimRepository)
 	if !ok {
 		return errors.New("pending Send Now claim persistence unavailable")
 	}
-	return repo.DeletePendingSendNowClaim(ctx, sessionID)
+	sessionID, err := sendNowClaimSessionID(claim)
+	if err != nil {
+		return err
+	}
+	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		return repo.DeletePendingSendNowClaim(admittedCtx, claim)
+	})
 }
 
 type pendingQueueDispatchRepository interface {

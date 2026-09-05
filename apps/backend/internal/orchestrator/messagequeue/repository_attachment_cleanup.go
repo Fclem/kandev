@@ -19,6 +19,7 @@ const attachmentCleanupSchema = `
 		lease_id         TEXT NOT NULL DEFAULT '',
 		remove_entry     INTEGER NOT NULL DEFAULT 0,
 		claim_pending    INTEGER NOT NULL DEFAULT 0,
+		entry_fingerprint TEXT NOT NULL DEFAULT '',
 		attachments_json TEXT NOT NULL DEFAULT '[]',
 		created_at       TIMESTAMP NOT NULL,
 		PRIMARY KEY (session_id, entry_id, operation_id)
@@ -38,6 +39,9 @@ func (r *sqliteRepository) ensureAttachmentCleanupSchema(ctx context.Context) er
 	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_attachment_cleanups ADD COLUMN claim_pending INTEGER NOT NULL DEFAULT 0`); err != nil && !internaldb.IsDuplicateColumnError(err) {
 		return fmt.Errorf("add attachment cleanup claim-pending state: %w", err)
 	}
+	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_attachment_cleanups ADD COLUMN entry_fingerprint TEXT NOT NULL DEFAULT ''`); err != nil && !internaldb.IsDuplicateColumnError(err) {
+		return fmt.Errorf("add attachment cleanup entry fingerprint: %w", err)
+	}
 	return nil
 }
 
@@ -55,18 +59,20 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 	if _, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		INSERT INTO queue_attachment_cleanups
 			(session_id, entry_id, operation_id, task_id, owner_id, lease_id,
-			 remove_entry, claim_pending, attachments_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 remove_entry, claim_pending, entry_fingerprint, attachments_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id, entry_id, operation_id) DO UPDATE SET
 			task_id = excluded.task_id,
 			owner_id = excluded.owner_id,
 			lease_id = excluded.lease_id,
 			remove_entry = excluded.remove_entry,
 			claim_pending = excluded.claim_pending,
+			entry_fingerprint = excluded.entry_fingerprint,
 			attachments_json = excluded.attachments_json
 	`), cleanup.SessionID, cleanup.EntryID, cleanup.OperationID, cleanup.TaskID,
 		cleanup.OwnerID, cleanup.LeaseID, boolToInt(cleanup.RemoveEntry),
-		boolToInt(cleanup.ClaimPending), string(attachmentsJSON), cleanup.CreatedAt); err != nil {
+		boolToInt(cleanup.ClaimPending), cleanup.EntryFingerprint,
+		string(attachmentsJSON), cleanup.CreatedAt); err != nil {
 		return fmt.Errorf("upsert attachment cleanup: %w", err)
 	}
 	return nil
@@ -94,7 +100,7 @@ func (r *sqliteRepository) ListAttachmentCleanups(ctx context.Context) ([]Attach
 	}
 	rows, err := r.db.QueryxContext(ctx, `
 		SELECT session_id, entry_id, operation_id, task_id, owner_id, lease_id,
-		       remove_entry, claim_pending, attachments_json, created_at
+		       remove_entry, claim_pending, entry_fingerprint, attachments_json, created_at
 		FROM queue_attachment_cleanups
 		ORDER BY created_at, session_id, entry_id, operation_id
 	`)
@@ -115,6 +121,7 @@ func (r *sqliteRepository) ListAttachmentCleanups(ctx context.Context) ([]Attach
 			&cleanup.LeaseID,
 			&cleanup.RemoveEntry,
 			&cleanup.ClaimPending,
+			&cleanup.EntryFingerprint,
 			&attachmentsJSON,
 			&cleanup.CreatedAt,
 		); err != nil {

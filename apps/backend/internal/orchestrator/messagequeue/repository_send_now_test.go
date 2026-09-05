@@ -239,7 +239,12 @@ func TestSendNowRestoreDiscardsSourcesFromPurgedTaskGeneration(t *testing.T) {
 			if _, err := repo.PurgeTask(ctx, "task-1"); err != nil {
 				t.Fatalf("purge task: %v", err)
 			}
-			if err := repo.RestoreSendNowClaim(ctx, claim); err != nil {
+			err = repo.RestoreSendNowClaim(ctx, claim)
+			if tt.name == "sqlite" {
+				if !errors.Is(err, ErrSendNowClaimChanged) {
+					t.Fatalf("restore after purge error = %v, want %v", err, ErrSendNowClaimChanged)
+				}
+			} else if err != nil {
 				t.Fatalf("restore after purge: %v", err)
 			}
 			entries, err := repo.ListBySession(ctx, "session-1")
@@ -469,7 +474,12 @@ func TestSendNowAcknowledgeIgnoresPurgedTaskGeneration(t *testing.T) {
 			// The replacement changes the session generation, so isolate the
 			// task-generation fence to the purged task generation itself.
 			claim.SessionGeneration++
-			if err := repo.AcknowledgeSendNowClaim(ctx, claim); err != nil {
+			err = repo.AcknowledgeSendNowClaim(ctx, claim)
+			if tt.name == "sqlite" {
+				if !errors.Is(err, ErrSendNowClaimChanged) {
+					t.Fatalf("acknowledge stale task claim error = %v, want %v", err, ErrSendNowClaimChanged)
+				}
+			} else if err != nil {
 				t.Fatalf("acknowledge stale task claim: %v", err)
 			}
 			entries, err := repo.ListBySession(ctx, "session-1")

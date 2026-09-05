@@ -1762,6 +1762,7 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 		generations[source.TaskID] = generation
 	}
 	claim := &SendNowClaim{
+		ClaimID:           uuid.NewString(),
 		Sources:           sources,
 		Dispatch:          *envelope,
 		SourceGenerations: generations,
@@ -1825,14 +1826,19 @@ func (r *sqliteRepository) RestoreSendNowClaim(ctx context.Context, claim *SendN
 			return err
 		}
 	}
-	if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
-		return err
+	if claim.ClaimID != "" {
+		if err := r.deleteExactSendNowClaimTx(ctx, tx, sessionID, claim.ClaimID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
 
 // AcknowledgeSendNowClaim removes every durable source after the replacement prompt is accepted.
 func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *SendNowClaim) error {
+	if claim != nil && claim.ClaimID == "" {
+		return ErrSendNowClaimChanged
+	}
 	tx, sessionID, unlock, err := r.beginSendNowClaimTx(ctx, claim, "acknowledge")
 	if err != nil {
 		return err
@@ -1848,8 +1854,10 @@ func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *S
 		return err
 	}
 	if claim.SessionGeneration != sessionGeneration {
-		if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
-			return err
+		if claim.ClaimID != "" {
+			if err := r.deleteExactSendNowClaimTx(ctx, tx, sessionID, claim.ClaimID); err != nil {
+				return err
+			}
 		}
 		if err := tx.Commit(); err != nil {
 			return err
@@ -1878,8 +1886,10 @@ func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *S
 			return err
 		}
 	}
-	if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
-		return err
+	if claim.ClaimID != "" {
+		if err := r.deleteExactSendNowClaimTx(ctx, tx, sessionID, claim.ClaimID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -1908,6 +1918,22 @@ func (r *sqliteRepository) beginSendNowClaimTx(
 		_ = tx.Rollback()
 		unlock()
 		return nil, "", nil, err
+	}
+	if claim.ClaimID != "" {
+		var currentClaimID string
+		err := tx.QueryRowxContext(ctx, r.db.Rebind(`
+			SELECT claim_id FROM queue_send_now_claims WHERE session_id = ?
+		`), sessionID).Scan(&currentClaimID)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && currentClaimID != claim.ClaimID) {
+			_ = tx.Rollback()
+			unlock()
+			return nil, "", nil, ErrSendNowClaimChanged
+		}
+		if err != nil {
+			_ = tx.Rollback()
+			unlock()
+			return nil, "", nil, fmt.Errorf("validate send-now %s claim: %w", action, err)
+		}
 	}
 	return tx, sessionID, unlock, nil
 }

@@ -563,3 +563,154 @@ func TestAdmissionCleanupRechecksLeaseInsideAdmission(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, releaser.released.Load())
 }
+
+type insertionDuringCleanupReleaseClaimer struct {
+	queue                 *messagequeue.Service
+	sessionID             string
+	taskID                string
+	attachment            messagequeue.MessageAttachment
+	insertedBeforeRelease atomic.Bool
+	insertDone            chan error
+}
+
+func (c *insertionDuringCleanupReleaseClaimer) ReleaseMessageAttachments(
+	context.Context,
+	string,
+	string,
+	[]v1.MessageAttachment,
+) error {
+	go func() {
+		_, err := c.queue.QueueMessage(
+			context.Background(), c.sessionID, c.taskID, "successor", "",
+			messagequeue.QueuedByUser, false, []messagequeue.MessageAttachment{c.attachment},
+		)
+		c.insertDone <- err
+	}()
+	select {
+	case err := <-c.insertDone:
+		c.insertedBeforeRelease.Store(true)
+		return err
+	case <-time.After(50 * time.Millisecond):
+		return nil
+	}
+}
+
+func TestMissingEntryCleanupHoldsAdmissionThroughRelease(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	attachment := messagequeue.MessageAttachment{
+		Type: "resource", AttachmentID: "attachment-missing-admission",
+		Name: "missing-admission.txt", MimeType: "text/plain", SizeBytes: 1,
+	}
+	releaser := &insertionDuringCleanupReleaseClaimer{
+		queue: queue, sessionID: "session-missing-admission", taskID: "task-missing-admission",
+		attachment: attachment, insertDone: make(chan error, 1),
+	}
+	pending := &pendingQueueAttachmentCleanup{
+		key: pendingQueueAttachmentCleanupKey{
+			sessionID: releaser.sessionID, entryID: "missing-entry", operationID: "missing-admission",
+		},
+		req: wsUpdateMessageRequest{
+			SessionID: releaser.sessionID, EntryID: "missing-entry", OperationID: "missing-admission",
+		},
+		previous: &messagequeue.QueuedMessage{
+			ID: "missing-entry", SessionID: releaser.sessionID, TaskID: releaser.taskID,
+			Attachments: []messagequeue.MessageAttachment{attachment},
+		},
+		releaser: releaser, removeEntry: true, claimPending: true,
+		authCtx: authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner"}),
+	}
+
+	require.NoError(t, handlers.runPendingAttachmentCleanup(pending))
+	require.False(t, releaser.insertedBeforeRelease.Load())
+	select {
+	case err := <-releaser.insertDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("successor insertion remained blocked after cleanup release")
+	}
+}
+
+func TestTransferredSupersededCleanupChecksDestinationLease(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner"})
+	oldAttachment := messagequeue.MessageAttachment{
+		Type: "resource", AttachmentID: "attachment-transfer-old",
+		Name: "old.txt", MimeType: "text/plain", SizeBytes: 1,
+	}
+	newAttachment := messagequeue.MessageAttachment{
+		Type: "resource", AttachmentID: "attachment-transfer-new",
+		Name: "new.txt", MimeType: "text/plain", SizeBytes: 1,
+	}
+	entry, err := queue.QueueMessage(
+		ctx, "session-superseded-transfer-old", "task-superseded-transfer", "updated", "",
+		messagequeue.QueuedByUser, false, []messagequeue.MessageAttachment{newAttachment},
+	)
+	require.NoError(t, err)
+	const destinationSessionID = "session-superseded-transfer-new"
+	require.NoError(t, queue.TransferSession(ctx, entry.SessionID, destinationSessionID))
+	lease, err := queue.BeginEdit(ctx, destinationSessionID, entry.ID, "successor-connection")
+	require.NoError(t, err)
+	releaser := &controlledCleanupClaimer{}
+	pending := &pendingQueueAttachmentCleanup{
+		key: pendingQueueAttachmentCleanupKey{
+			sessionID: entry.SessionID, entryID: entry.ID, operationID: "superseded-transfer",
+		},
+		req: wsUpdateMessageRequest{
+			SessionID: entry.SessionID, EntryID: entry.ID, OperationID: "superseded-transfer",
+		},
+		previous: &messagequeue.QueuedMessage{
+			ID: entry.ID, SessionID: entry.SessionID, TaskID: entry.TaskID,
+			Attachments: []messagequeue.MessageAttachment{oldAttachment},
+		},
+		releaser: releaser, authCtx: ctx,
+	}
+
+	require.Error(t, handlers.runPendingAttachmentCleanup(pending))
+	require.Equal(t, destinationSessionID, handlers.pendingAttachmentCleanupSessionID(pending))
+	require.Zero(t, releaser.released.Load())
+	require.NoError(t, queue.EndEdit(ctx, destinationSessionID, entry.ID, lease.LeaseID, "successor-connection"))
+}
+
+func TestTransferredCleanupWakesWhenDestinationEditEnds(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(
+		ctx, "session-wake-transfer-old", "task-wake-transfer", "queued", "",
+		messagequeue.QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	const destinationSessionID = "session-wake-transfer-new"
+	require.NoError(t, queue.TransferSession(ctx, entry.SessionID, destinationSessionID))
+	const connectionID = "connection-wake-transfer"
+	lease, err := queue.BeginEdit(ctx, destinationSessionID, entry.ID, connectionID)
+	require.NoError(t, err)
+	key := pendingQueueAttachmentCleanupKey{
+		sessionID: entry.SessionID, entryID: entry.ID, operationID: "wake-transfer",
+	}
+	pending := &pendingQueueAttachmentCleanup{
+		key: key,
+		req: wsUpdateMessageRequest{
+			SessionID: destinationSessionID, EntryID: entry.ID, OperationID: key.operationID,
+		},
+		wake: make(chan struct{}, 1),
+	}
+	handlers.attachmentCleanupMu.Lock()
+	handlers.pendingAttachmentCleanup[key] = pending
+	handlers.attachmentCleanupMu.Unlock()
+
+	response, err := handlers.wsEndEdit(
+		ws.WithConnectionID(ctx, connectionID),
+		createTestMessage(t, ws.ActionMessageQueueEditEnd, map[string]string{
+			"session_id": destinationSessionID,
+			"entry_id":   entry.ID,
+			"lease_id":   lease.LeaseID,
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	select {
+	case <-pending.wake:
+	case <-time.After(time.Second):
+		t.Fatal("destination edit end did not wake transferred cleanup")
+	}
+}

@@ -169,6 +169,7 @@ type pendingQueueAttachmentCleanup struct {
 	removeEntry      bool
 	claimPending     bool
 	entryFingerprint string
+	currentSessionID string
 	authCtx          context.Context
 	wake             chan struct{}
 }
@@ -1343,7 +1344,7 @@ func (h *QueueHandlers) editLeaseActive(pending *pendingQueueAttachmentCleanup) 
 		return false
 	}
 	lease, err := reader.GetEditLease(
-		pending.authCtx, pending.req.SessionID, pending.req.EntryID,
+		pending.authCtx, h.pendingAttachmentCleanupSessionID(pending), pending.req.EntryID,
 	)
 	if err != nil {
 		return !errors.Is(err, messagequeue.ErrEditLeaseNotFound)
@@ -1368,7 +1369,11 @@ func (h *QueueHandlers) signalPendingAttachmentCleanup(sessionID, entryID string
 	h.attachmentCleanupMu.Lock()
 	defer h.attachmentCleanupMu.Unlock()
 	for key, pending := range h.pendingAttachmentCleanup {
-		if key.sessionID == sessionID && key.entryID == entryID {
+		currentSessionID := pending.currentSessionID
+		if currentSessionID == "" {
+			currentSessionID = pending.req.SessionID
+		}
+		if key.entryID == entryID && (key.sessionID == sessionID || currentSessionID == sessionID) {
 			select {
 			case pending.wake <- struct{}{}:
 			default:
@@ -1377,18 +1382,31 @@ func (h *QueueHandlers) signalPendingAttachmentCleanup(sessionID, entryID string
 	}
 }
 
-func (h *QueueHandlers) runPendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) error {
-	if pending.removeEntry || pending.claimPending {
-		found, err := h.retargetPendingAttachmentCleanup(pending)
-		if err != nil {
-			return err
-		}
-		if !found {
-			return h.releaseSupersededQueueAttachmentsAdmitted(
-				pending.authCtx, pending.req, pending.previous, pending.releaser,
-			)
-		}
+func (h *QueueHandlers) pendingAttachmentCleanupSessionID(
+	pending *pendingQueueAttachmentCleanup,
+) string {
+	h.attachmentCleanupMu.Lock()
+	defer h.attachmentCleanupMu.Unlock()
+	if pending.currentSessionID != "" {
+		return pending.currentSessionID
 	}
+	return pending.req.SessionID
+}
+
+func (h *QueueHandlers) setPendingAttachmentCleanupSessionID(
+	pending *pendingQueueAttachmentCleanup,
+	sessionID string,
+) {
+	h.attachmentCleanupMu.Lock()
+	pending.currentSessionID = sessionID
+	h.attachmentCleanupMu.Unlock()
+}
+
+func (h *QueueHandlers) runPendingAttachmentCleanup(pending *pendingQueueAttachmentCleanup) error {
+	if _, err := h.retargetPendingAttachmentCleanup(pending.authCtx, pending); err != nil {
+		return err
+	}
+	sessionID := h.pendingAttachmentCleanupSessionID(pending)
 	cleanup := func(ctx context.Context) error {
 		if h.editLeaseActive(pending) {
 			return errAttachmentCleanupLeaseActive
@@ -1396,17 +1414,17 @@ func (h *QueueHandlers) runPendingAttachmentCleanup(pending *pendingQueueAttachm
 		return h.settlePendingAttachmentCleanupAdmitted(ctx, pending)
 	}
 	if admission, ok := h.queueService.(queueEditAdmissionController); ok {
-		return admission.WithSessionAdmission(pending.authCtx, pending.req.SessionID, cleanup)
+		return admission.WithSessionAdmission(pending.authCtx, sessionID, cleanup)
 	}
 	return cleanup(pending.authCtx)
 }
 
 func (h *QueueHandlers) retargetPendingAttachmentCleanup(
+	ctx context.Context,
 	pending *pendingQueueAttachmentCleanup,
 ) (bool, error) {
-	current, err := h.queueService.GetEntry(
-		pending.authCtx, pending.req.SessionID, pending.req.EntryID,
-	)
+	sessionID := h.pendingAttachmentCleanupSessionID(pending)
+	current, err := h.queueService.GetEntry(ctx, sessionID, pending.req.EntryID)
 	if err == nil {
 		return current != nil, nil
 	}
@@ -1417,7 +1435,7 @@ func (h *QueueHandlers) retargetPendingAttachmentCleanup(
 	if !ok {
 		return false, nil
 	}
-	current, err = locator.FindEntryByID(pending.authCtx, pending.req.EntryID)
+	current, err = locator.FindEntryByID(ctx, pending.req.EntryID)
 	if errors.Is(err, messagequeue.ErrEntryNotFound) {
 		return false, nil
 	}
@@ -1427,7 +1445,7 @@ func (h *QueueHandlers) retargetPendingAttachmentCleanup(
 	if current == nil {
 		return false, nil
 	}
-	pending.req.SessionID = current.SessionID
+	h.setPendingAttachmentCleanupSessionID(pending, current.SessionID)
 	return true, nil
 }
 
@@ -1435,42 +1453,62 @@ func (h *QueueHandlers) settlePendingAttachmentCleanupAdmitted(
 	ctx context.Context,
 	pending *pendingQueueAttachmentCleanup,
 ) error {
-	if !pending.removeEntry && !pending.claimPending {
-		return h.releaseSupersededQueueAttachmentsAdmitted(
-			ctx, pending.req, pending.previous, pending.releaser,
-		)
-	}
-	current, err := h.queueService.GetEntry(ctx, pending.req.SessionID, pending.req.EntryID)
+	sessionID := h.pendingAttachmentCleanupSessionID(pending)
+	req := pending.req
+	req.SessionID = sessionID
+	current, err := h.queueService.GetEntry(ctx, sessionID, req.EntryID)
 	if errors.Is(err, messagequeue.ErrEntryNotFound) {
-		return errAttachmentCleanupEntryChanged
+		found, retargetErr := h.retargetPendingAttachmentCleanup(ctx, pending)
+		if retargetErr != nil {
+			return retargetErr
+		}
+		if found {
+			return errAttachmentCleanupEntryChanged
+		}
+		return h.releaseQueueAttachmentCandidates(
+			ctx, pending.previous.TaskID, req, pending.previous.Attachments, pending.releaser,
+		)
 	}
 	if err != nil {
 		return err
+	}
+	if !pending.removeEntry && !pending.claimPending {
+		return h.releaseQueueAttachmentCandidates(
+			ctx,
+			pending.previous.TaskID,
+			req,
+			supersededQueueAttachments(pending.previous.Attachments, current.Attachments),
+			pending.releaser,
+		)
 	}
 	currentFingerprint, err := queuedMessageFingerprint(current)
 	if err != nil {
 		return err
 	}
 	if pending.entryFingerprint == "" || currentFingerprint != pending.entryFingerprint {
-		if pending.req.SessionID != pending.key.sessionID {
+		if sessionID != pending.key.sessionID {
 			return errAttachmentCleanupEntryChanged
 		}
-		return h.releaseSupersededQueueAttachmentsAdmitted(
-			ctx, pending.req, pending.previous, pending.releaser,
+		return h.releaseQueueAttachmentCandidates(
+			ctx,
+			pending.previous.TaskID,
+			req,
+			supersededQueueAttachments(pending.previous.Attachments, current.Attachments),
+			pending.releaser,
 		)
 	}
 	if pending.removeEntry {
-		if _, err := h.rollbackQueuedAttachmentClaim(ctx, pending.req.SessionID, pending.req.EntryID); err != nil {
+		if _, err := h.rollbackQueuedAttachmentClaim(ctx, sessionID, req.EntryID); err != nil {
 			return err
 		}
-		return h.releaseSupersededQueueAttachmentsAdmitted(
-			ctx, pending.req, pending.previous, pending.releaser,
+		return h.releaseQueueAttachmentCandidates(
+			ctx, pending.previous.TaskID, req, pending.previous.Attachments, pending.releaser,
 		)
 	}
 	return h.attachmentClaimer.ClaimMessageAttachments(
 		context.WithoutCancel(ctx),
 		pending.previous.TaskID,
-		pending.req.SessionID,
+		sessionID,
 		queueAttachmentsToV1(pending.previous.Attachments),
 	)
 }

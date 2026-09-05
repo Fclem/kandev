@@ -24,8 +24,21 @@ func TestSQLiteTransferSessionMovesOrdinaryDispatchClaim(t *testing.T) {
 	if len(pending) != 1 || pending[0].Message.SessionID != "session-transfer-new" {
 		t.Fatalf("dispatch claims after transfer = %#v", pending)
 	}
-	if err := repo.MarkPendingQueueDispatchAccepted(ctx, source.SessionID, source.ID); err != nil {
-		t.Fatalf("mark migrated claim through original dispatch identity: %v", err)
+	if err := repo.MarkPendingQueueDispatchAccepted(ctx, reserved); !errors.Is(err, ErrQueueDispatchClaimChanged) {
+		t.Fatalf("stale migrated claim acceptance = %v, want %v", err, ErrQueueDispatchClaimChanged)
+	}
+	if err := repo.DeletePendingQueueDispatch(ctx, reserved); !errors.Is(err, ErrQueueDispatchClaimChanged) {
+		t.Fatalf("stale migrated claim acknowledgement = %v, want %v", err, ErrQueueDispatchClaimChanged)
+	}
+	pending, err = repo.ListPendingQueueDispatches(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].Message.dispatchAttemptID == reserved.dispatchAttemptID {
+		t.Fatalf("transferred claim attempt was not rotated: reserved=%q pending=%#v", reserved.dispatchAttemptID, pending)
+	}
+	if err := repo.MarkPendingQueueDispatchAccepted(ctx, &pending[0].Message); err != nil {
+		t.Fatalf("mark current migrated claim: %v", err)
 	}
 }
 
@@ -110,6 +123,92 @@ func TestSQLiteStaleOrdinarySettlementCannotResurrectAfterSessionMutation(t *tes
 			}
 			if entries, err := repo.ListBySession(ctx, source.SessionID); err != nil || len(entries) != 0 {
 				t.Fatalf("stale source queue = %#v, err=%v", entries, err)
+			}
+		})
+	}
+}
+
+func TestDestructiveTakeSettlementIsFencedAfterTransfer(t *testing.T) {
+	factories := []struct {
+		name string
+		new  func(*testing.T) Repository
+	}{
+		{name: "memory", new: func(*testing.T) Repository { return NewMemoryRepository() }},
+		{name: "sqlite", new: newTestSQLiteRepo},
+	}
+	takes := []struct {
+		name string
+		take func(context.Context, Repository, *QueuedMessage) (*QueuedMessage, error)
+	}{
+		{
+			name: "head",
+			take: func(ctx context.Context, repo Repository, msg *QueuedMessage) (*QueuedMessage, error) {
+				return repo.TakeHead(ctx, msg.SessionID)
+			},
+		},
+		{
+			name: "by id",
+			take: func(ctx context.Context, repo Repository, msg *QueuedMessage) (*QueuedMessage, error) {
+				return repo.TakeByID(ctx, msg.SessionID, msg.ID)
+			},
+		},
+	}
+	for _, factory := range factories {
+		for _, take := range takes {
+			t.Run(factory.name+"/"+take.name, func(t *testing.T) {
+				ctx := context.Background()
+				repo := factory.new(t)
+				source := insertTestEntry(t, repo, "session-direct-old", "task-direct", "prompt", QueuedByUser, nil, nil)
+				reserved, err := take.take(ctx, repo, source)
+				if err != nil || reserved == nil {
+					t.Fatalf("take = %#v, err=%v", reserved, err)
+				}
+				if _, _, captured := reserved.ReservationGenerations(); !captured {
+					t.Fatal("destructive take did not capture settlement generation")
+				}
+				if err := repo.TransferSession(ctx, source.SessionID, "session-direct-new"); err != nil {
+					t.Fatal(err)
+				}
+				if err := repo.Restore(ctx, reserved, 0); !errors.Is(err, ErrQueueDispatchClaimChanged) {
+					t.Fatalf("stale direct-take restore = %v, want %v", err, ErrQueueDispatchClaimChanged)
+				}
+			})
+		}
+	}
+}
+
+func TestLifecycleAcknowledgementRequiresCurrentReservation(t *testing.T) {
+	factories := []struct {
+		name string
+		new  func(*testing.T) Repository
+	}{
+		{name: "memory", new: func(*testing.T) Repository { return NewMemoryRepository() }},
+		{name: "sqlite", new: newTestSQLiteRepo},
+	}
+	for _, factory := range factories {
+		t.Run(factory.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := factory.new(t)
+			source := insertTestEntry(
+				t, repo, "session-lifecycle-attempt", "task-lifecycle-attempt", "prompt",
+				QueuedByWorkflow, nil, map[string]interface{}{MetadataLifecycleDurable: true},
+			)
+			first, err := repo.ReserveHead(ctx, source.SessionID)
+			if err != nil || first == nil {
+				t.Fatalf("first reserve = %#v, err=%v", first, err)
+			}
+			second, err := repo.ReserveHead(ctx, source.SessionID)
+			if err != nil || second == nil {
+				t.Fatalf("second reserve = %#v, err=%v", second, err)
+			}
+			if first.lifecycleReservationID == "" || first.lifecycleReservationID == second.lifecycleReservationID {
+				t.Fatalf("lifecycle reservation ids = %q, %q", first.lifecycleReservationID, second.lifecycleReservationID)
+			}
+			if err := repo.AcknowledgeReserved(ctx, first); !errors.Is(err, ErrLifecycleReservationChanged) {
+				t.Fatalf("stale lifecycle acknowledgement = %v, want %v", err, ErrLifecycleReservationChanged)
+			}
+			if err := repo.AcknowledgeReserved(ctx, second); err != nil {
+				t.Fatalf("current lifecycle acknowledgement: %v", err)
 			}
 		})
 	}

@@ -615,7 +615,7 @@ func TestSQLiteRepository_DeletePreservesReservedLifecycleEntry(t *testing.T) {
 	if removed != 0 {
 		t.Fatalf("clear removed %d reserved entries, want 0", removed)
 	}
-	if err := repo.AcknowledgeByID(ctx, "s1", msg.ID); err != nil {
+	if err := repo.AcknowledgeReserved(ctx, reserved); err != nil {
 		t.Fatalf("acknowledge reserved entry after cancellation attempts: %v", err)
 	}
 }
@@ -638,7 +638,7 @@ func TestSQLiteRepository_CancellationReservationOrdering(t *testing.T) {
 	t.Run("reservation wins before clear", func(t *testing.T) {
 		repo := newTestSQLiteRepo(t)
 		ctx := context.Background()
-		msg := insertDurableLifecycleEntry(t, repo, "reserve-first")
+		_ = insertDurableLifecycleEntry(t, repo, "reserve-first")
 
 		reserved, err := repo.ReserveHead(ctx, "reserve-first")
 		if err != nil || reserved == nil {
@@ -648,7 +648,7 @@ func TestSQLiteRepository_CancellationReservationOrdering(t *testing.T) {
 		if err != nil || removed != 0 {
 			t.Fatalf("clear after reserve: removed=%d err=%v", removed, err)
 		}
-		if err := repo.AcknowledgeByID(ctx, "reserve-first", msg.ID); err != nil {
+		if err := repo.AcknowledgeReserved(ctx, reserved); err != nil {
 			t.Fatalf("acknowledge: %v", err)
 		}
 	})

@@ -38,7 +38,7 @@ func TestSQLiteTaskPurgeRemovesOrdinaryDispatchClaim(t *testing.T) {
 	}
 }
 
-func TestSQLiteTaskPurgeRemovesAttachmentCleanup(t *testing.T) {
+func TestSQLiteTaskPurgePreservesAttachmentCleanup(t *testing.T) {
 	ctx := context.Background()
 	repo := newTestSQLiteRepo(t).(*sqliteRepository)
 	cleanup := AttachmentCleanup{
@@ -65,8 +65,8 @@ func TestSQLiteTaskPurgeRemovesAttachmentCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pending) != 0 {
-		t.Fatalf("attachment cleanups after task purge = %#v, want empty", pending)
+	if len(pending) != 1 || pending[0].OperationID != cleanup.OperationID {
+		t.Fatalf("attachment cleanups after task purge = %#v, want retained obligation", pending)
 	}
 }
 
@@ -124,8 +124,8 @@ func TestSQLiteTaskPurgePreservesOtherTaskRecoveryInSharedSession(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cleanups) != 1 || cleanups[0].EntryID != entryB.ID {
-		t.Fatalf("remaining attachment cleanups = %#v, want only %s", cleanups, entryB.ID)
+	if len(cleanups) != 2 {
+		t.Fatalf("remaining attachment cleanups = %#v, want both durable obligations", cleanups)
 	}
 }
 

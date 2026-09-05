@@ -114,6 +114,10 @@ func (r *memoryRepository) Insert(_ context.Context, msg *QueuedMessage, maxPerS
 func (r *memoryRepository) Restore(_ context.Context, msg *QueuedMessage, maxPerSession int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if msg.reservationGenerationsCaptured &&
+		r.sessionGeneration[msg.SessionID] != msg.reservationSessionGeneration {
+		return ErrQueueDispatchClaimChanged
+	}
 	list := r.entries[msg.SessionID]
 	if maxPerSession > 0 && len(list) >= maxPerSession {
 		return ErrQueueFull
@@ -174,6 +178,10 @@ func (r *memoryRepository) insertLocked(msg *QueuedMessage, maxPerSession int) e
 func (r *memoryRepository) RequeuePreservingFIFO(_ context.Context, msg *QueuedMessage) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if msg.reservationGenerationsCaptured &&
+		r.sessionGeneration[msg.SessionID] != msg.reservationSessionGeneration {
+		return ErrQueueDispatchClaimChanged
+	}
 	list := r.entries[msg.SessionID]
 	coalesceKey := metadataString(msg.Metadata, MetadataCoalesceKey)
 	// Coalesce-replace: only when caller supplied a coalesce key. This
@@ -421,6 +429,14 @@ func lowestPositionIndex(list []*QueuedMessage) int {
 	return index
 }
 
+func (r *memoryRepository) captureReservationLocked(msg *QueuedMessage) {
+	msg.reservationSessionGeneration = r.sessionGeneration[msg.SessionID]
+	if msg.TaskID != "" {
+		msg.reservationLifecycleGeneration = r.generation[msg.TaskID]
+	}
+	msg.reservationGenerationsCaptured = true
+}
+
 // TakeHead atomically returns and deletes the lowest-position entry for the session.
 func (r *memoryRepository) TakeHead(_ context.Context, sessionID string) (*QueuedMessage, error) {
 	r.mu.Lock()
@@ -436,6 +452,7 @@ func (r *memoryRepository) TakeHead(_ context.Context, sessionID string) (*Queue
 		delete(r.entries, sessionID)
 	}
 	out := cloneQueuedMessage(head)
+	r.captureReservationLocked(out)
 	return out, nil
 }
 
@@ -454,18 +471,17 @@ func (r *memoryRepository) reserveHeadLocked(sessionID string) *QueuedMessage {
 	headIndex := lowestPositionIndex(list)
 	head := list[headIndex]
 	out := cloneQueuedMessage(head)
-	out.reservationSessionGeneration = r.sessionGeneration[sessionID]
-	if out.TaskID != "" {
-		out.reservationLifecycleGeneration = r.generation[out.TaskID]
-	}
-	out.reservationGenerationsCaptured = true
+	r.captureReservationLocked(out)
 	if head.IsDurableLifecycle() {
 		// Mirror the SQLite reservation: the stored row is flagged in flight so
 		// queue status stops listing it, while the returned copy keeps the
 		// unmarked metadata a requeue would write back.
 		out.Metadata = clearReservedMetadata(out.Metadata)
 		out.reservedLifecycleDelivery = true
-		head.Metadata = markReservedMetadata(copyMessageMetadata(out.Metadata, 0))
+		out.lifecycleReservationID = uuid.NewString()
+		head.Metadata = markReservedMetadata(
+			copyMessageMetadata(out.Metadata, 0), out.lifecycleReservationID,
+		)
 		return out
 	}
 	r.entries[sessionID] = append(list[:headIndex], list[headIndex+1:]...)
@@ -519,18 +535,22 @@ func (r *memoryRepository) ReserveHeadIfAutoRun(_ context.Context, sessionID str
 	return r.reserveHeadLocked(sessionID), true, nil
 }
 
-// AcknowledgeByID removes a reserved durable entry after executor acceptance.
-func (r *memoryRepository) AcknowledgeByID(_ context.Context, sessionID, entryID string) error {
+// AcknowledgeReserved removes only the exact lifecycle delivery attempt.
+func (r *memoryRepository) AcknowledgeReserved(_ context.Context, reserved *QueuedMessage) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	list := r.entries[sessionID]
+	list := r.entries[reserved.SessionID]
 	for i, msg := range list {
-		if msg.ID != entryID {
+		if msg.ID != reserved.ID {
 			continue
 		}
-		r.entries[sessionID] = append(list[:i], list[i+1:]...)
-		if len(r.entries[sessionID]) == 0 {
-			delete(r.entries, sessionID)
+		storedReservationID, _ := msg.Metadata[metadataLifecycleReservationID].(string)
+		if reserved.lifecycleReservationID == "" || storedReservationID != reserved.lifecycleReservationID {
+			return ErrLifecycleReservationChanged
+		}
+		r.entries[reserved.SessionID] = append(list[:i], list[i+1:]...)
+		if len(r.entries[reserved.SessionID]) == 0 {
+			delete(r.entries, reserved.SessionID)
 		}
 		return nil
 	}
@@ -556,6 +576,7 @@ func (r *memoryRepository) TakeByID(_ context.Context, sessionID, entryID string
 			delete(r.entries, sessionID)
 		}
 		out := cloneQueuedMessage(m)
+		r.captureReservationLocked(out)
 		return out, nil
 	}
 	return nil, nil
@@ -612,7 +633,7 @@ func (r *memoryRepository) ClaimSendNow(_ context.Context, sessionID string, exp
 			continue
 		}
 		if entry.IsDurableLifecycle() {
-			entry.Metadata = markReservedMetadata(entry.Metadata)
+			entry.Metadata = markReservedMetadata(entry.Metadata, uuid.NewString())
 			remaining = append(remaining, entry)
 		}
 	}
@@ -785,6 +806,10 @@ func sameQueuedMessageContent(left, right *QueuedMessage) bool {
 	rightCopy.Metadata = clearReservedMetadata(rightCopy.Metadata)
 	leftCopy.reservedLifecycleDelivery = false
 	rightCopy.reservedLifecycleDelivery = false
+	leftCopy.dispatchAttemptID = ""
+	rightCopy.dispatchAttemptID = ""
+	leftCopy.lifecycleReservationID = ""
+	rightCopy.lifecycleReservationID = ""
 	leftCopy.reservationSessionGeneration = 0
 	rightCopy.reservationSessionGeneration = 0
 	leftCopy.reservationLifecycleGeneration = 0

@@ -732,7 +732,7 @@ func TestRemoveEntry(t *testing.T) {
 		reserved, ok := svc.ReserveQueued(ctx, "s")
 		require.True(t, ok)
 		assert.ErrorIs(t, svc.RemoveEntry(ctx, "s", reserved.ID), ErrEntryNotFound)
-		require.NoError(t, svc.AcknowledgeQueued(ctx, "s", reserved.ID))
+		require.NoError(t, svc.AcknowledgeQueued(ctx, reserved))
 	})
 }
 
@@ -774,7 +774,7 @@ func TestCancelAllPreservesDurableEntryReservedInFlight(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, removed)
 	assert.Equal(t, 0, svc.GetStatus(ctx, "s").Count)
-	require.NoError(t, svc.AcknowledgeQueued(ctx, "s", reserved.ID))
+	require.NoError(t, svc.AcknowledgeQueued(ctx, reserved))
 }
 
 func TestGetStatus(t *testing.T) {
@@ -832,7 +832,10 @@ func TestGetStatus(t *testing.T) {
 		require.True(t, accepted)
 		assert.Equal(t, 1, svc.GetStatus(ctx, "s").Count)
 
-		require.NoError(t, svc.AcknowledgeQueued(ctx, "s", reserved.ID))
+		require.ErrorIs(t, svc.AcknowledgeQueued(ctx, reserved), ErrLifecycleReservationChanged)
+		current, ok := svc.ReserveQueued(ctx, "s")
+		require.True(t, ok)
+		require.NoError(t, svc.AcknowledgeQueued(ctx, current))
 		assert.Equal(t, 0, svc.GetStatus(ctx, "s").Count)
 	})
 

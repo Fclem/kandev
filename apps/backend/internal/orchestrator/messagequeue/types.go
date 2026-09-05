@@ -68,6 +68,8 @@ const MetadataLifecycleGeneration = "lifecycle_queue_generation"
 // carries the flag.
 const MetadataLifecycleReserved = "lifecycle_reserved_in_flight"
 
+const metadataLifecycleReservationID = "lifecycle_reservation_id"
+
 // MetadataSenderTaskID identifies the task that produced an agent message. Two
 // agent entries may only merge when their sender task ids match, so the merge
 // never mixes prompts issued by different agents.
@@ -113,6 +115,9 @@ var (
 	// ErrQueueDispatchClaimChanged means the durable ordinary-dispatch claim
 	// was cleared or transferred before its worker attempted to settle it.
 	ErrQueueDispatchClaimChanged = errors.New("queue dispatch claim changed")
+	// ErrLifecycleReservationChanged means a newer lifecycle delivery attempt
+	// replaced the reservation being acknowledged.
+	ErrLifecycleReservationChanged = errors.New("lifecycle reservation changed")
 	// ErrEditConflict means a queue entry is currently held by another editor.
 	ErrEditConflict = errors.New("queue entry edit conflict")
 	// ErrEditLeaseNotFound means a lease is missing, expired, or owned by
@@ -160,6 +165,12 @@ type QueuedMessage struct {
 	// retained this durable row for acknowledgement. It deliberately is not
 	// persisted in metadata, where a restart could leak it into a retry.
 	reservedLifecycleDelivery bool
+
+	// dispatchAttemptID and lifecycleReservationID identify the exact durable
+	// delivery attempts this process may settle. They are intentionally absent
+	// from the public JSON wire shape.
+	dispatchAttemptID      string
+	lifecycleReservationID string
 
 	// reservationSessionGeneration and reservationLifecycleGeneration fence a
 	// FIFO dispatch source to the generations observed while it was reserved.
@@ -214,14 +225,15 @@ func (m *QueuedMessage) IsReservedLifecycleDelivery() bool {
 	return m != nil && m.reservedLifecycleDelivery
 }
 
-// markReservedMetadata returns a copy of metadata carrying the in-flight
-// reservation marker.
-func markReservedMetadata(metadata map[string]interface{}) map[string]interface{} {
-	marked := make(map[string]interface{}, len(metadata)+1)
+// markReservedMetadata returns a copy carrying the exact lifecycle delivery
+// attempt that may acknowledge the durable row.
+func markReservedMetadata(metadata map[string]interface{}, reservationID string) map[string]interface{} {
+	marked := make(map[string]interface{}, len(metadata)+2)
 	for k, v := range metadata {
 		marked[k] = v
 	}
 	marked[MetadataLifecycleReserved] = true
+	marked[metadataLifecycleReservationID] = reservationID
 	return marked
 }
 
@@ -230,7 +242,7 @@ func markReservedMetadata(metadata map[string]interface{}) map[string]interface{
 func clearReservedMetadata(metadata map[string]interface{}) map[string]interface{} {
 	cleared := make(map[string]interface{}, len(metadata))
 	for k, v := range metadata {
-		if k != MetadataLifecycleReserved {
+		if k != MetadataLifecycleReserved && k != metadataLifecycleReservationID {
 			cleared[k] = v
 		}
 	}
@@ -251,14 +263,16 @@ type MessageAttachment struct {
 // AttachmentCleanup records a durable obligation to release attachment claims
 // after a queued message no longer references them.
 type AttachmentCleanup struct {
-	SessionID   string
-	EntryID     string
-	OperationID string
-	TaskID      string
-	OwnerID     string
-	LeaseID     string
-	Attachments []MessageAttachment
-	CreatedAt   time.Time
+	SessionID    string
+	EntryID      string
+	OperationID  string
+	TaskID       string
+	OwnerID      string
+	LeaseID      string
+	RemoveEntry  bool
+	Attachments  []MessageAttachment
+	ClaimPending bool
+	CreatedAt    time.Time
 }
 
 // SessionTransferCompensation records an attachment binding that must be

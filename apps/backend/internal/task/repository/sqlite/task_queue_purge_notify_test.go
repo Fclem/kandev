@@ -106,7 +106,7 @@ func TestArchiveTaskPurgesDurableQueueRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dispatches) != 0 || len(cleanups) != 0 {
+	if len(dispatches) != 0 || len(cleanups) != 1 {
 		t.Fatalf("recovery rows after archive: dispatches=%#v cleanups=%#v", dispatches, cleanups)
 	}
 }

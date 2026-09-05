@@ -92,7 +92,7 @@ func TestPostgresRepository_DurableQueueRecoveryTables(t *testing.T) {
 		if !enabled || reserved == nil || reserved.ID != source.ID {
 			t.Fatalf("ordinary reservation = %#v, enabled=%t", reserved, enabled)
 		}
-		if err := persistent.MarkPendingQueueDispatchAccepted(ctx, source.SessionID, source.ID); err != nil {
+		if err := persistent.MarkPendingQueueDispatchAccepted(ctx, reserved); err != nil {
 			t.Fatal(err)
 		}
 		dispatches, err := persistent.ListPendingQueueDispatches(ctx)
@@ -102,12 +102,12 @@ func TestPostgresRepository_DurableQueueRecoveryTables(t *testing.T) {
 		if len(dispatches) != 1 || !dispatches[0].Accepted || dispatches[0].Message.ID != source.ID {
 			t.Fatalf("pending ordinary dispatches = %#v", dispatches)
 		}
-		if err := persistent.DeletePendingQueueDispatch(ctx, source.SessionID, source.ID); err != nil {
+		if err := persistent.DeletePendingQueueDispatch(ctx, reserved); err != nil {
 			t.Fatal(err)
 		}
 	})
 
-	t.Run("task purge removes durable recovery obligations", func(t *testing.T) {
+	t.Run("task purge preserves attachment recovery obligation", func(t *testing.T) {
 		source := insertTestEntry(t, repo, "purge-session", "purge-task", "prompt", QueuedByUser, nil, nil)
 		if err := persistent.UpsertAttachmentCleanup(ctx, AttachmentCleanup{
 			SessionID: source.SessionID, EntryID: source.ID, OperationID: "purge-operation",
@@ -129,7 +129,7 @@ func TestPostgresRepository_DurableQueueRecoveryTables(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(dispatches) != 0 || len(cleanups) != 0 {
+		if len(dispatches) != 0 || len(cleanups) != 1 {
 			t.Fatalf("recovery rows after purge: dispatches=%#v cleanups=%#v", dispatches, cleanups)
 		}
 	})

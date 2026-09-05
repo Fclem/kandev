@@ -919,9 +919,6 @@ func (s *Service) restoreMessage(ctx context.Context, msg *QueuedMessage) (*Queu
 	if err := s.repo.Restore(ctx, &restored, 0); err != nil {
 		return nil, err
 	}
-	if err := s.deletePendingQueueDispatch(ctx, restored.SessionID, restored.ID); err != nil {
-		return nil, err
-	}
 	s.logger.Info("message restored at original queue position",
 		zap.String("session_id", restored.SessionID),
 		zap.String("task_id", restored.TaskID),
@@ -1028,9 +1025,6 @@ func (s *Service) RequeueAtHead(ctx context.Context, msg *QueuedMessage) error {
 	}
 	return s.WithSessionAdmission(ctx, msg.SessionID, func(admittedCtx context.Context) error {
 		if err := s.repo.RequeuePreservingFIFO(admittedCtx, msg); err != nil {
-			return err
-		}
-		if err := s.deletePendingQueueDispatch(admittedCtx, msg.SessionID, msg.ID); err != nil {
 			return err
 		}
 		s.invalidateEditLease(msg.SessionID, msg.ID)
@@ -1299,14 +1293,17 @@ func (s *Service) PauseAutoRunIfPending(ctx context.Context, sessionID string) (
 	return paused, err
 }
 
-// AcknowledgeQueued removes a server-reserved entry after prompt acceptance.
-func (s *Service) AcknowledgeQueued(ctx context.Context, sessionID, entryID string) error {
-	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		err := s.repo.AcknowledgeByID(admittedCtx, sessionID, entryID)
+// AcknowledgeQueued settles only the exact server reservation carried by msg.
+func (s *Service) AcknowledgeQueued(ctx context.Context, msg *QueuedMessage) error {
+	if msg == nil {
+		return errors.New("queued message is nil")
+	}
+	return s.WithSessionAdmission(ctx, msg.SessionID, func(admittedCtx context.Context) error {
+		err := s.repo.AcknowledgeReserved(admittedCtx, msg)
 		if err != nil && !errors.Is(err, ErrEntryNotFound) {
 			return err
 		}
-		return s.deletePendingQueueDispatch(admittedCtx, sessionID, entryID)
+		return s.deletePendingQueueDispatch(admittedCtx, msg)
 	})
 }
 
@@ -1786,8 +1783,8 @@ func (s *Service) DeletePendingSendNowClaim(ctx context.Context, sessionID strin
 
 type pendingQueueDispatchRepository interface {
 	ListPendingQueueDispatches(context.Context) ([]PendingQueueDispatch, error)
-	MarkPendingQueueDispatchAccepted(context.Context, string, string) error
-	DeletePendingQueueDispatch(context.Context, string, string) error
+	MarkPendingQueueDispatchAccepted(context.Context, *QueuedMessage) error
+	DeletePendingQueueDispatch(context.Context, *QueuedMessage) error
 }
 
 // PendingQueueDispatchPersistenceAvailable reports whether ordinary dequeues
@@ -1807,31 +1804,31 @@ func (s *Service) ListPendingQueueDispatches(ctx context.Context) ([]PendingQueu
 
 func (s *Service) MarkPendingQueueDispatchAccepted(
 	ctx context.Context,
-	sessionID, entryID string,
+	msg *QueuedMessage,
 ) error {
 	repo, ok := s.repo.(pendingQueueDispatchRepository)
 	if !ok {
 		return nil
 	}
-	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		return repo.MarkPendingQueueDispatchAccepted(admittedCtx, sessionID, entryID)
+	return s.WithSessionAdmission(ctx, msg.SessionID, func(admittedCtx context.Context) error {
+		return repo.MarkPendingQueueDispatchAccepted(admittedCtx, msg)
 	})
 }
 
-// DeletePendingQueueDispatch acknowledges a recovered or accepted ordinary
-// dispatch claim.
-func (s *Service) DeletePendingQueueDispatch(ctx context.Context, sessionID, entryID string) error {
-	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		return s.deletePendingQueueDispatch(admittedCtx, sessionID, entryID)
+// DeletePendingQueueDispatch acknowledges the exact recovered or accepted
+// ordinary dispatch attempt carried by msg.
+func (s *Service) DeletePendingQueueDispatch(ctx context.Context, msg *QueuedMessage) error {
+	return s.WithSessionAdmission(ctx, msg.SessionID, func(admittedCtx context.Context) error {
+		return s.deletePendingQueueDispatch(admittedCtx, msg)
 	})
 }
 
-func (s *Service) deletePendingQueueDispatch(ctx context.Context, sessionID, entryID string) error {
+func (s *Service) deletePendingQueueDispatch(ctx context.Context, msg *QueuedMessage) error {
 	repo, ok := s.repo.(pendingQueueDispatchRepository)
-	if !ok {
+	if !ok || msg.IsDurableLifecycle() {
 		return nil
 	}
-	return repo.DeletePendingQueueDispatch(ctx, sessionID, entryID)
+	return repo.DeletePendingQueueDispatch(ctx, msg)
 }
 
 // UpdateMessageWithMetadata atomically edits queue content and applies

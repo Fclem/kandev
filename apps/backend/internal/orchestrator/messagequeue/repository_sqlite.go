@@ -132,6 +132,27 @@ func (r *sqliteRepository) guardSessionTx(ctx context.Context, tx *sqlx.Tx, sess
 	}
 	return nil
 }
+func (r *sqliteRepository) captureReservationGenerationsTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	msg *QueuedMessage,
+) error {
+	sessionGeneration, err := r.getSendNowGenerationTx(ctx, tx, msg.SessionID)
+	if err != nil {
+		return err
+	}
+	var lifecycleGeneration int64
+	if msg.TaskID != "" {
+		lifecycleGeneration, err = getLifecycleGenerationTx(ctx, tx, r.db, msg.TaskID)
+		if err != nil {
+			return err
+		}
+	}
+	msg.reservationSessionGeneration = sessionGeneration
+	msg.reservationLifecycleGeneration = lifecycleGeneration
+	msg.reservationGenerationsCaptured = true
+	return nil
+}
 
 // LockSessionInTransaction acquires the queue's cross-process session lock
 // inside an existing transaction owned by another repository.
@@ -394,8 +415,10 @@ func (r *sqliteRepository) RequeuePreservingFIFO(ctx context.Context, msg *Queue
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
 		return err
 	}
-	if err := r.deletePendingQueueDispatchTx(ctx, tx, msg.SessionID, msg.ID); err != nil {
-		return err
+	if msg.reservationGenerationsCaptured && !msg.IsDurableLifecycle() {
+		if err := r.deletePendingQueueDispatchTx(ctx, tx, msg); err != nil {
+			return err
+		}
 	}
 
 	// Coalesce-replace: only when caller supplied a coalesce key.
@@ -555,8 +578,10 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
 		return err
 	}
-	if err := r.deletePendingQueueDispatchTx(ctx, tx, msg.SessionID, msg.ID); err != nil {
-		return err
+	if msg.reservationGenerationsCaptured && !msg.IsDurableLifecycle() {
+		if err := r.deletePendingQueueDispatchTx(ctx, tx, msg); err != nil {
+			return err
+		}
 	}
 
 	if maxPerSession > 0 {
@@ -918,18 +943,16 @@ func ensureTaskPurgeRecoverySchemas(ctx context.Context, tx *sqlx.Tx) error {
 	return nil
 }
 
+// Attachment cleanup obligations intentionally survive task purge. Archive
+// preserves task attachment storage, while already-obsolete queue claims still
+// need the retry worker to release them; deletion removes attachment bytes
+// through the task attachment service after the database mutation.
 func deleteTaskRecoveryRowsTx(
 	ctx context.Context,
 	tx *sqlx.Tx,
 	db *sqlx.DB,
-	taskID string,
 	dispatchEntryIDs []string,
 ) error {
-	if _, err := tx.ExecContext(ctx, db.Rebind(`
-		DELETE FROM queue_attachment_cleanups WHERE task_id = ?
-	`), taskID); err != nil {
-		return fmt.Errorf("purge task attachment cleanups: %w", err)
-	}
 	for _, entryID := range dispatchEntryIDs {
 		if _, err := tx.ExecContext(ctx, db.Rebind(`
 			DELETE FROM queue_dispatch_claims WHERE entry_id = ?
@@ -1000,7 +1023,7 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	if _, err := tx.ExecContext(ctx, db.Rebind(`DELETE FROM pending_moves WHERE task_id = ?`), taskID); err != nil {
 		return 0, fmt.Errorf("purge pending task moves: %w", err)
 	}
-	if err := deleteTaskRecoveryRowsTx(ctx, tx, db, taskID, dispatchEntryIDs); err != nil {
+	if err := deleteTaskRecoveryRowsTx(ctx, tx, db, dispatchEntryIDs); err != nil {
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, db.Rebind(`
@@ -1264,6 +1287,9 @@ func (r *sqliteRepository) TakeHead(ctx context.Context, sessionID string) (*Que
 		}
 		return nil, fmt.Errorf("take head: %w", err)
 	}
+	if err := r.captureReservationGenerationsTx(ctx, tx, msg); err != nil {
+		return nil, err
+	}
 	// Two concurrent TakeHead calls can both observe the same head row in
 	// their respective DEFERRED transactions; one wins the DELETE, the other
 	// finds RowsAffected()==0 after waiting on the writer lock. Returning the
@@ -1480,20 +1506,9 @@ func (r *sqliteRepository) reserveHead(ctx context.Context, sessionID string, re
 	if err != nil {
 		return nil, true, fmt.Errorf("reserve head: %w", err)
 	}
-	sessionGeneration, err := r.getSendNowGenerationTx(ctx, tx, sessionID)
-	if err != nil {
+	if err := r.captureReservationGenerationsTx(ctx, tx, msg); err != nil {
 		return nil, true, err
 	}
-	var lifecycleGeneration int64
-	if msg.TaskID != "" {
-		lifecycleGeneration, err = getLifecycleGenerationTx(ctx, tx, r.db, msg.TaskID)
-		if err != nil {
-			return nil, true, err
-		}
-	}
-	msg.reservationSessionGeneration = sessionGeneration
-	msg.reservationLifecycleGeneration = lifecycleGeneration
-	msg.reservationGenerationsCaptured = true
 	if msg.IsDurableLifecycle() {
 		reserved, err := r.reserveLifecycleHead(ctx, tx, msg, storedMetadataJSON)
 		return reserved, true, err
@@ -1512,7 +1527,8 @@ func (r *sqliteRepository) reserveLifecycleHead(
 	// Strip a marker persisted by an interrupted prior process from the
 	// returned copy so a failed retry becomes visible again.
 	msg.Metadata = clearReservedMetadata(msg.Metadata)
-	reservedJSON, err := marshalMetadata(markReservedMetadata(msg.Metadata))
+	msg.lifecycleReservationID = uuid.NewString()
+	reservedJSON, err := marshalMetadata(markReservedMetadata(msg.Metadata, msg.lifecycleReservationID))
 	if err != nil {
 		return nil, err
 	}
@@ -1564,39 +1580,55 @@ func (r *sqliteRepository) reserveOrdinaryHead(
 	return msg, nil
 }
 
-// AcknowledgeByID removes a reserved durable entry after executor acceptance.
-func (r *sqliteRepository) AcknowledgeByID(ctx context.Context, sessionID, entryID string) error {
-	unlock := r.withSessionLock(sessionID)
+// AcknowledgeReserved removes only the exact lifecycle reservation accepted by
+// the executor. A newer retry with the same queue entry ID must survive.
+func (r *sqliteRepository) AcknowledgeReserved(ctx context.Context, msg *QueuedMessage) error {
+	unlock := r.withSessionLock(msg.SessionID)
 	defer unlock()
 
-	// The ack must serialize with restore/replace on the same session across
-	// processes: an autocommit DELETE could otherwise delete a row that a
-	// concurrent backend just restored/reinserted, losing durable retry state.
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin acknowledge tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
 		return err
 	}
-	res, err := tx.ExecContext(ctx, r.db.Rebind(`
-		DELETE FROM queued_messages WHERE id = ? AND session_id = ?
-	`), entryID, sessionID)
+	var storedMetadataJSON string
+	err = tx.GetContext(ctx, &storedMetadataJSON, r.db.Rebind(`
+		SELECT metadata_json FROM queued_messages WHERE id = ? AND session_id = ?
+	`), msg.ID, msg.SessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrEntryNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("read reserved lifecycle entry: %w", err)
+	}
+	storedMetadata := make(map[string]interface{})
+	if storedMetadataJSON != "" && storedMetadataJSON != "{}" {
+		if err := json.Unmarshal([]byte(storedMetadataJSON), &storedMetadata); err != nil {
+			return fmt.Errorf("unmarshal reserved lifecycle metadata: %w", err)
+		}
+	}
+	storedReservationID, _ := storedMetadata[metadataLifecycleReservationID].(string)
+	if msg.lifecycleReservationID == "" || storedReservationID != msg.lifecycleReservationID {
+		return ErrLifecycleReservationChanged
+	}
+	result, err := tx.ExecContext(ctx, r.db.Rebind(`
+		DELETE FROM queued_messages
+		WHERE id = ? AND session_id = ? AND metadata_json = ?
+	`), msg.ID, msg.SessionID, storedMetadataJSON)
 	if err != nil {
 		return fmt.Errorf("acknowledge queued: %w", err)
 	}
-	affected, err := res.RowsAffected()
+	affected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	if affected == 0 {
-		return ErrEntryNotFound
+	if affected != 1 {
+		return ErrLifecycleReservationChanged
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return tx.Commit()
 }
 
 // TakeByID atomically returns and deletes the entry identified by entryID,
@@ -1636,6 +1668,9 @@ func (r *sqliteRepository) TakeByID(ctx context.Context, sessionID, entryID stri
 			return nil, nil
 		}
 		return nil, fmt.Errorf("take by id: %w", err)
+	}
+	if err := r.captureReservationGenerationsTx(ctx, tx, msg); err != nil {
+		return nil, err
 	}
 	if !msg.IsDurableLifecycle() {
 		if err := r.persistQueueDispatchClaimTx(ctx, tx, msg); err != nil {
@@ -1972,7 +2007,7 @@ func (r *sqliteRepository) reserveSQLiteSendNowSource(
 	source QueuedMessage,
 	stored storedQueueEntry,
 ) error {
-	metadataJSON, err := marshalMetadata(markReservedMetadata(source.Metadata))
+	metadataJSON, err := marshalMetadata(markReservedMetadata(source.Metadata, uuid.NewString()))
 	if err != nil {
 		return err
 	}

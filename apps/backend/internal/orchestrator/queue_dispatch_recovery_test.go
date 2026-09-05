@@ -58,7 +58,7 @@ func TestAcceptedOrdinaryQueueDispatchIsAcknowledgedAfterProcessRestart(t *testi
 	if !ok || reserved.ID != source.ID {
 		t.Fatalf("reserved = %#v, ok=%t", reserved, ok)
 	}
-	if err := queue.MarkPendingQueueDispatchAccepted(ctx, "session-1", source.ID); err != nil {
+	if err := queue.MarkPendingQueueDispatchAccepted(ctx, reserved); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {

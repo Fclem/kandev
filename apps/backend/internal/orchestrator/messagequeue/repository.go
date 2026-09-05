@@ -86,7 +86,8 @@ type Repository interface {
 
 	// ReserveHead returns the lowest-position entry. Ordinary entries are
 	// atomically deleted, matching TakeHead. Durable lifecycle entries remain
-	// stored until AcknowledgeByID is called after executor acceptance.
+	// stored until AcknowledgeReserved receives the exact reservation returned
+	// by this call after executor acceptance.
 	ReserveHead(ctx context.Context, sessionID string) (*QueuedMessage, error)
 
 	// GetAutoRun returns the durable per-session automatic-drain policy. Missing
@@ -106,9 +107,9 @@ type Repository interface {
 	// OFF; nil with true means the enabled queue is empty.
 	ReserveHeadIfAutoRun(ctx context.Context, sessionID string) (*QueuedMessage, bool, error)
 
-	// AcknowledgeByID is an internal dispatch operation that removes a reserved
-	// entry regardless of its server-owned queued_by identity.
-	AcknowledgeByID(ctx context.Context, sessionID, entryID string) error
+	// AcknowledgeReserved removes only the exact lifecycle reservation carried
+	// by msg. A stale delivery attempt cannot remove a newer retry.
+	AcknowledgeReserved(ctx context.Context, msg *QueuedMessage) error
 
 	// TakeByID atomically returns and deletes the entry identified by entryID
 	// for sessionID, regardless of its FIFO position. Unlike DeleteByID, it has

@@ -1181,7 +1181,7 @@ func (s *Service) acknowledgeLifecycleQueueEntry(
 		return
 	}
 	ackCtx := context.WithoutCancel(ctx)
-	if err := s.messageQueue.AcknowledgeQueued(ackCtx, sessionID, queuedMsg.ID); err != nil {
+	if err := s.messageQueue.AcknowledgeQueued(ackCtx, queuedMsg); err != nil {
 		s.logger.Error("failed to acknowledge accepted lifecycle message",
 			zap.String("session_id", sessionID),
 			zap.String("task_id", queuedMsg.TaskID),
@@ -1202,7 +1202,7 @@ func (s *Service) acknowledgeOrdinaryQueueEntry(
 	}
 	ackCtx := context.WithoutCancel(ctx)
 	if err := s.retrySendNowClaimMutation(ackCtx, func(recoveryCtx context.Context) error {
-		return s.messageQueue.AcknowledgeQueued(recoveryCtx, sessionID, queuedMsg.ID)
+		return s.messageQueue.AcknowledgeQueued(recoveryCtx, queuedMsg)
 	}); err != nil {
 		s.logger.Error("failed to acknowledge accepted queue message",
 			zap.String("session_id", sessionID),
@@ -1223,9 +1223,7 @@ func (s *Service) queuedMessageAfterDispatch(
 	}
 	return func() error {
 		return s.retrySendNowClaimMutation(ctx, func(recoveryCtx context.Context) error {
-			return s.messageQueue.MarkPendingQueueDispatchAccepted(
-				recoveryCtx, queuedMsg.SessionID, queuedMsg.ID,
-			)
+			return s.messageQueue.MarkPendingQueueDispatchAccepted(recoveryCtx, queuedMsg)
 		})
 	}
 }

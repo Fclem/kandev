@@ -428,7 +428,7 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
     expect(onConsumed).toHaveBeenCalledWith("message-b");
   });
 
-  it("does not retry a failed mobile delayed reassertion after transcript revisions", async () => {
+  it("consumes a mobile target after a failed delayed reassertion", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     vi.mocked(loadMessageWindowAround).mockImplementationOnce(async () => {
       mockAppStoreState.messages.bySession["session-1"] = [{ id: "message-a" }];
@@ -441,24 +441,25 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
       .mockReturnValueOnce(true)
       .mockReturnValue(false);
     const messageListRef = { current: { scrollToMessage } };
+    const onConsumed = vi.fn();
     const { rerender } = renderHook(
-      ({ readinessKey }) =>
+      ({ readinessKey, messageId }) =>
         usePendingMessageScroll({
           messageListRef,
           sessionId: "session-1",
-          messageId: "message-a",
-          onConsumed: undefined,
+          messageId,
+          onConsumed,
           readinessKey,
           isInitialMessagesLoading: false,
         }),
-      { initialProps: { readinessKey: "a" } },
+      { initialProps: { readinessKey: "a", messageId: "message-a" as string | null } },
     );
 
     await flushFrames();
     await act(async () => {
       await Promise.resolve();
     });
-    rerender({ readinessKey: "b" });
+    rerender({ readinessKey: "b", messageId: "message-a" });
     await flushFrames();
     expect(scrollToMessage).toHaveBeenCalledTimes(2);
 
@@ -466,8 +467,9 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
     expect(scrollToMessage).toHaveBeenCalledTimes(3);
+    expect(onConsumed).toHaveBeenCalledWith("message-a");
 
-    rerender({ readinessKey: "c" });
+    rerender({ readinessKey: "c", messageId: null });
     await flushFrames();
     expect(scrollToMessage).toHaveBeenCalledTimes(3);
   });
@@ -596,61 +598,23 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
     expect(onConsumed).toHaveBeenCalledWith("message-a");
   });
 
-  it("keeps a failed around request retryable instead of leaving a stuck target", async () => {
-    vi.mocked(loadMessageWindowAround).mockImplementation(async () => {
-      throw new Error("offline");
-    });
+  it("cancels a failed around request without leaving a stuck mobile target", async () => {
+    vi.mocked(loadMessageWindowAround).mockRejectedValueOnce(new Error("offline"));
     const messageListRef = { current: scrollHandle(false) };
-    const { result } = renderHook(() =>
+    const onConsumed = vi.fn();
+    renderHook(() =>
       usePendingMessageScroll({
         messageListRef,
         sessionId: "session-1",
         messageId: "target",
-        onConsumed: undefined,
+        onConsumed,
         readinessKey: "0",
         isInitialMessagesLoading: false,
       }),
     );
 
     await flushFrames();
-    await waitFor(() => expect(result.current.hasError).toBe(true));
-
-    vi.mocked(loadMessageWindowAround).mockImplementationOnce(async () => {
-      mockAppStoreState.messages.bySession["session-1"] = [{ id: "target" }];
-      return { kind: "merged", merged: true, current: true, targetFound: true };
-    });
-    act(() => result.current.retry());
-    await flushFrames();
-
-    expect(result.current.hasError).toBe(false);
-    expect(loadMessageWindowAround).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not retry a failed around request when transcript readiness changes", async () => {
-    vi.mocked(loadMessageWindowAround).mockImplementation(async () => {
-      throw new Error("offline");
-    });
-    const messageListRef = { current: scrollHandle(false) };
-    const { result, rerender } = renderHook(
-      ({ readinessKey }) =>
-        usePendingMessageScroll({
-          messageListRef,
-          sessionId: "session-1",
-          messageId: "target",
-          onConsumed: undefined,
-          readinessKey,
-          isInitialMessagesLoading: false,
-        }),
-      { initialProps: { readinessKey: "0" } },
-    );
-
-    await flushFrames();
-    await waitFor(() => expect(result.current.hasError).toBe(true));
-
-    rerender({ readinessKey: "1" });
-    await flushFrames();
-
-    expect(result.current.hasError).toBe(true);
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith("target"));
     expect(loadMessageWindowAround).toHaveBeenCalledTimes(1);
   });
 
@@ -658,13 +622,14 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
     const pending = Promise.withResolvers<LoadMessageWindowResult>();
     vi.mocked(loadMessageWindowAround).mockReturnValueOnce(pending.promise);
     const messageListRef = { current: scrollHandle(false) };
-    const { result, rerender } = renderHook(
+    const onConsumed = vi.fn();
+    const { rerender } = renderHook(
       ({ readinessKey }) =>
         usePendingMessageScroll({
           messageListRef,
           sessionId: "session-1",
           messageId: "target",
-          onConsumed: undefined,
+          onConsumed,
           readinessKey,
           isInitialMessagesLoading: false,
         }),
@@ -677,7 +642,7 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
     expect(loadMessageWindowAround).toHaveBeenCalledTimes(1);
 
     pending.reject(new Error("offline"));
-    await waitFor(() => expect(result.current.hasError).toBe(true));
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith("target"));
   });
 });
 
@@ -803,36 +768,12 @@ it("loads a target that is cached but not rendered in the transcript", async () 
     expect.anything(),
   );
 });
-
-it("keeps a failed Dockview around request retryable", async () => {
-  mockAppStoreState.messages.bySession["session-1"] = [];
-  vi.mocked(loadMessageWindowAround).mockImplementationOnce(async () => {
-    throw new Error("offline");
-  });
-  mockDockviewState.scrollTarget = target({ messageId: "target" });
-  const messageListRef = { current: scrollHandle(false) };
-  const { result } = renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
-
-  await flushFrames();
-  await waitFor(() => expect(result.current.hasError).toBe(true));
-  expect(mockDockviewState.scrollTarget).not.toBeNull();
-
-  messageListRef.current = scrollHandle(true);
-  act(() => result.current.retry());
-  await flushFrames();
-
-  expect(result.current.hasError).toBe(false);
-  expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
-  expect(mockDockviewState.scrollTarget).toBeNull();
-});
-
-it("loads an unloaded target after the initial transcript has populated", async () => {
+it("defers an unloaded target while initial loading is active despite a populated cache", async () => {
   const pending = new Promise<LoadMessageWindowResult>(() => {});
   vi.mocked(loadMessageWindowAround).mockReturnValue(pending);
   mockAppStoreState.messages.bySession["session-1"] = [{ id: "newest" }];
   mockDockviewState.scrollTarget = target({ messageId: "older-target" });
   const messageListRef = { current: scrollHandle(false) };
-
   const { rerender } = renderHook(
     ({ isInitialMessagesLoading }) =>
       useScrollTargetConsumption({
@@ -843,12 +784,10 @@ it("loads an unloaded target after the initial transcript has populated", async 
     { initialProps: { isInitialMessagesLoading: true } },
   );
   await flushFrames();
-
   expect(loadMessageWindowAround).not.toHaveBeenCalled();
 
   rerender({ isInitialMessagesLoading: false });
   await flushFrames();
-
   expect(loadMessageWindowAround).toHaveBeenCalledTimes(1);
 });
 
@@ -1012,20 +951,20 @@ it("settles stale request loading independently from the replacement target", as
   rerender({ renderedMessageCount: 1 });
   await flushFrames();
   expect(loadMessageWindowAround).toHaveBeenCalledTimes(2);
-  expect(result.current.isLoading).toBe(true);
+  expect(result.current).toBe(true);
 
   pendingA.resolve({ kind: "merged", merged: true, current: true, targetFound: true });
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(result.current.isLoading).toBe(true);
+  expect(result.current).toBe(true);
   expect(messageListRef.current?.scrollToMessage).toHaveBeenCalledTimes(2);
   expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
   expect(mockDockviewState.scrollTarget?.messageId).toBe("message-b");
 
   pendingB.resolve({ kind: "merged", merged: true, current: true, targetFound: true });
-  await waitFor(() => expect(result.current.isLoading).toBe(false));
+  await waitFor(() => expect(result.current).toBe(false));
 });
 it("ignores a stale Dockview around settlement without clearing the active target", async () => {
   mockAppStoreState.messages.bySession["session-1"] = [];
@@ -1279,6 +1218,26 @@ describe("useScrollTargetConsumption — canonical-host unmount ownership", () =
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
     expect(mockDockviewState.scrollTarget).toBeNull();
   });
+  it("preserves the same target when its Dockview owner immediately remounts", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(false) };
+    const first = renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
+    first.unmount();
+
+    const second = renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
+
+    second.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
+  });
   it("does not let deferred cleanup clear a replacement target", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     mockDockviewState.scrollTarget = target({ token: 7 });
@@ -1297,26 +1256,6 @@ describe("useScrollTargetConsumption — canonical-host unmount ownership", () =
 
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
     expect(mockDockviewState.scrollTarget?.token).toBe(8);
-  });
-
-  it("does not clear a target when the same Dockview owner remounts", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const ownedTarget = target({ token: 9 });
-    mockDockviewState.scrollTarget = ownedTarget;
-    const first = renderHook(() =>
-      useScrollTargetConsumption({ ...PROPS, messageListRef: { current: scrollHandle(false) } }),
-    );
-    first.unmount();
-
-    renderHook(() =>
-      useScrollTargetConsumption({ ...PROPS, messageListRef: { current: scrollHandle(false) } }),
-    );
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-
-    expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
-    expect(mockDockviewState.scrollTarget).toEqual(ownedTarget);
   });
 
   it("does not clear a target owned by another panel on unmount", async () => {
@@ -1399,8 +1338,8 @@ describe("useScrollTargetConsumption — canonical-host unmount ownership", () =
       .mockReturnValueOnce(false)
       .mockReturnValueOnce(true)
       .mockReturnValue(false);
-    const messageListRef: { current: MessageListHandle | null } = { current: { scrollToMessage } };
-    const { result, rerender } = renderHook(
+    const messageListRef = { current: { scrollToMessage } };
+    const { rerender } = renderHook(
       ({ renderedMessageCount }) =>
         useScrollTargetConsumption({
           ...PROPS,
@@ -1426,12 +1365,6 @@ describe("useScrollTargetConsumption — canonical-host unmount ownership", () =
     rerender({ renderedMessageCount: 2 });
     await flushFrames();
     expect(scrollToMessage).toHaveBeenCalledTimes(3);
-    expect(result.current.hasError).toBe(true);
-    expect(mockDockviewState.scrollTarget).not.toBeNull();
-
-    messageListRef.current = scrollHandle(true);
-    act(() => result.current.retry());
-    await flushFrames();
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
     expect(mockDockviewState.scrollTarget).toBeNull();
   });

@@ -104,12 +104,13 @@ async function revealPromptHistoryTarget(page: Page, panel: Locator, targetBubbl
   for (let attempt = 0; attempt < 10; attempt++) {
     if ((await targetBubble.count()) > 0) return;
     await touchScrollDown(page, scroller);
-    await expect
-      .poll(async () => await targetBubble.count(), { timeout: 5_000 })
-      .toBeGreaterThan(0)
+    await targetBubble
+      .first()
+      .waitFor({ state: "attached", timeout: 5_000 })
       .catch(() => undefined);
   }
-  throw new Error("prompt history target did not load");
+  if ((await targetBubble.count()) > 0) return;
+  throw new Error("prompt history target did not load after 10 touch-scroll attempts");
 }
 
 test.describe("Prompt history panel on mobile", () => {

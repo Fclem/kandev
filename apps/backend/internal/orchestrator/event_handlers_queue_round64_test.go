@@ -171,7 +171,9 @@ func TestReuseSessionRestoresPrimaryWhenQueueTransferFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = svc.reuseSessionForStep(ctx, current.TaskID, current, existing)
+	_, err = svc.reuseSessionForStepWithEndPolicy(
+		ctx, current.TaskID, current, existing, models.WorkflowProfileSessionEndPolicyComplete,
+	)
 	if !errors.Is(err, transferErr) {
 		t.Fatalf("reuseSessionForStep error = %v, want queue transfer failure", err)
 	}

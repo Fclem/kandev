@@ -2731,7 +2731,7 @@ func (s *Service) prepareWorkflowReplacementSession(
 		return nil, fmt.Errorf("failed to attach workflow replacement workspace: %w", err)
 	}
 
-	newSession, err := s.repo.GetTaskSession(ctx, sessionID)
+	newSession, err = s.repo.GetTaskSession(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get new session: %w", err)
 	}

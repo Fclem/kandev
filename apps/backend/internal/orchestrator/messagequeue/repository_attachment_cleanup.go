@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	internaldb "github.com/kandev/kandev/internal/db"
 )
 
@@ -80,9 +81,7 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 	if err := r.lockSessionTxUnfenced(ctx, tx, cleanup.CurrentSessionID); err != nil {
 		return err
 	}
-	cleanup.CurrentSessionID, err = ResolveSessionTransferInTransaction(
-		ctx, tx, r.db, cleanup.CurrentSessionID,
-	)
+	cleanup.CurrentSessionID, err = r.resolveAttachmentCleanupSessionTx(ctx, tx, cleanup)
 	if err != nil {
 		return err
 	}
@@ -111,6 +110,25 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 	return nil
 }
 
+func (r *sqliteRepository) resolveAttachmentCleanupSessionTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	cleanup AttachmentCleanup,
+) (string, error) {
+	sessionID := cleanup.CurrentSessionID
+	var entrySessionID string
+	err := tx.GetContext(ctx, &entrySessionID, tx.Rebind(`
+		SELECT session_id
+		FROM queued_messages
+		WHERE id = ? AND task_id = ?
+	`), cleanup.EntryID, cleanup.TaskID)
+	if err == nil {
+		sessionID = entrySessionID
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("resolve queued attachment cleanup entry: %w", err)
+	}
+	return ResolveSessionTransferInTransaction(ctx, tx, r.db, sessionID)
+}
 func (r *sqliteRepository) DeleteAttachmentCleanup(
 	ctx context.Context,
 	sessionID, entryID, operationID string,

@@ -255,3 +255,27 @@ func TestSQLiteStaleAttachmentCleanupUpsertPreservesTransferredSession(t *testin
 		t.Fatalf("cleanup after stale upsert = %#v", stored)
 	}
 }
+
+func TestSQLiteAttachmentCleanupUpsertReadsTransferredQueueEntry(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t).(*sqliteRepository)
+	entry := insertTestEntry(t, repo, "cleanup-entry-old", "cleanup-entry-task", "prompt", QueuedByUser, nil, nil)
+	const destinationSessionID = "cleanup-entry-new"
+	if err := repo.TransferSession(ctx, entry.SessionID, destinationSessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpsertAttachmentCleanup(ctx, AttachmentCleanup{
+		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: "cleanup-entry-operation",
+		TaskID: entry.TaskID, CurrentSessionID: entry.SessionID,
+		Attachments: []MessageAttachment{{AttachmentID: "cleanup-entry-attachment"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repo.GetAttachmentCleanup(ctx, entry.SessionID, entry.ID, "cleanup-entry-operation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored == nil || stored.CurrentSessionID != destinationSessionID {
+		t.Fatalf("cleanup after transferred queue entry = %#v", stored)
+	}
+}

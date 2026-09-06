@@ -301,14 +301,16 @@ func (r *sqliteRepository) renewSessionTransferCompensationLease(
 	); err != nil {
 		return err
 	}
+	now := time.Now().UTC()
 	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE queue_session_transfer_compensations
 		SET recovery_lease_expires_at = ?
 		WHERE operation_id = ? AND recovery_owner = ?
 		  AND task_id = ? AND from_session_id = ? AND to_session_id = ?
-	`), time.Now().UTC().Add(sessionTransferCompensationLeaseDuration),
+		  AND recovery_lease_expires_at > ?
+	`), now.Add(sessionTransferCompensationLeaseDuration),
 		compensation.OperationID, ownerID, compensation.TaskID,
-		compensation.FromSessionID, compensation.ToSessionID)
+		compensation.FromSessionID, compensation.ToSessionID, now)
 	if err != nil {
 		return fmt.Errorf("renew session transfer compensation: %w", err)
 	}

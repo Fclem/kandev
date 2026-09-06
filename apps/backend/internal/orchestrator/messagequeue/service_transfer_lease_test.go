@@ -255,6 +255,30 @@ func TestExpiredSessionTransferLeaseCannotDeleteCompensation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
 }
+func TestExpiredSessionTransferLeaseCannotRenew(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t).(*sqliteRepository)
+	compensation := SessionTransferCompensation{
+		OperationID:   "expired-renew-operation",
+		TaskID:        "task",
+		FromSessionID: "session-old",
+		ToSessionID:   "session-new",
+	}
+	require.NoError(t, repo.UpsertSessionTransferCompensation(ctx, compensation))
+	_, err := repo.db.Exec(`
+		UPDATE queue_session_transfer_compensations
+		SET recovery_lease_expires_at = ?
+		WHERE operation_id = ?
+	`, time.Now().UTC().Add(-time.Second), compensation.OperationID)
+	require.NoError(t, err)
+
+	require.ErrorIs(t, repo.renewSessionTransferCompensationLease(
+		ctx, compensation, compensation.OperationID,
+	), ErrSessionTransferOwnershipLost)
+	ownerID, err := repo.claimSessionTransferCompensationRecovery(ctx, compensation)
+	require.NoError(t, err)
+	require.NotEqual(t, compensation.OperationID, ownerID)
+}
 
 func TestSessionTransferCommitRejectsExpiredLease(t *testing.T) {
 	ctx := context.Background()

@@ -2904,6 +2904,15 @@ func (r *sqliteRepository) DeleteAllBySession(ctx context.Context, sessionID str
 	if err != nil {
 		return 0, err
 	}
+	for _, candidate := range candidates {
+		blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, candidate.id)
+		if err != nil {
+			return 0, err
+		}
+		if blocked {
+			return 0, ErrEditConflict
+		}
+	}
 	removed := 0
 	for _, candidate := range candidates {
 		res, err := tx.ExecContext(ctx, r.db.Rebind(`

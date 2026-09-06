@@ -85,7 +85,10 @@ func (s *Service) TransferSessionMessageAttachments(
 	attachmentIDs []string,
 ) error {
 	if s.attachmentSvc == nil {
-		return nil
+		if len(attachmentIDs) == 0 {
+			return nil
+		}
+		return errors.New("file-backed attachments are unavailable")
 	}
 	return s.attachmentSvc.TransferSession(ctx, taskID, oldSessionID, newSessionID, attachmentIDs)
 }

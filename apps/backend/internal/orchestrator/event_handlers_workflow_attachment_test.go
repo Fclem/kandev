@@ -10,6 +10,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
+	taskservice "github.com/kandev/kandev/internal/task/service"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -81,6 +82,68 @@ func TestTransferQueuedSessionStateFailsClosedWithoutAttachmentTransferer(t *tes
 	}
 	if _, ok := queue.TakeQueued(ctx, "session-old"); !ok {
 		t.Fatal("queue entry missing after failed transfer")
+	}
+}
+func TestTransferQueuedSessionStateFailsClosedWhenTaskAttachmentServiceUnavailable(t *testing.T) {
+	ctx := context.Background()
+	queue := messagequeue.NewServiceMemory(testLogger())
+	svc := &Service{
+		logger: testLogger(), messageQueue: queue,
+		sessionAttachmentTransferer: &taskservice.Service{},
+	}
+	if _, err := queue.QueueMessage(
+		ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.transferQueuedSessionState(ctx, "task-transfer", "session-old", "session-new"); err == nil {
+		t.Fatal("transfer unexpectedly succeeded without task attachment service")
+	}
+	if _, ok := queue.TakeQueued(ctx, "session-new"); ok {
+		t.Fatal("queue entry moved despite unavailable task attachment service")
+	}
+	if _, ok := queue.TakeQueued(ctx, "session-old"); !ok {
+		t.Fatal("queue entry missing after failed transfer")
+	}
+}
+
+func TestSessionTransferRecoveryFailsClosedWhenTaskAttachmentServiceUnavailable(t *testing.T) {
+	ctx := context.Background()
+	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	entry, err := queue.QueueMessage(
+		ctx, "session-new", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID:   "unavailable-attachment-service",
+		TaskID:        entry.TaskID,
+		FromSessionID: "session-old",
+		ToSessionID:   entry.SessionID,
+		EntryIDs:      []string{entry.ID},
+		AttachmentIDs: []string{"attachment"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expireSessionTransferCompensationLease(t, db)
+	svc := &Service{
+		logger: testLogger(), messageQueue: queue,
+		sessionAttachmentTransferer: &taskservice.Service{},
+	}
+
+	if err := svc.reconcileSessionTransferCompensationsOnStartup(ctx); err == nil {
+		t.Fatal("recovery unexpectedly succeeded without task attachment service")
+	}
+	compensations, err := queue.ListSessionTransferCompensations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compensations) != 1 {
+		t.Fatalf("remaining compensations = %#v, want one", compensations)
 	}
 }
 

@@ -119,6 +119,29 @@ func (r *sqliteRepository) withSessionTransferFence(
 	return tx.Commit()
 }
 
+func (r *sqliteRepository) validateSessionEntryForEditReplay(
+	ctx context.Context,
+	sessionID, entryID string,
+) error {
+	tx, err := r.beginSessionMutationTx(ctx, sessionID, "validate edit replay")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var present bool
+	if err := tx.GetContext(ctx, &present, r.db.Rebind(`
+		SELECT EXISTS (
+			SELECT 1 FROM queued_messages WHERE session_id = ? AND id = ?
+		)
+	`), sessionID, entryID); err != nil {
+		return fmt.Errorf("validate edit replay entry: %w", err)
+	}
+	if !present {
+		return ErrEntryNotFound
+	}
+	return tx.Commit()
+}
+
 // guardActiveTaskTx rejects queue admissions whose owning task is not live
 // (archived or deleted). It takes the task-row lock, so admission serializes
 // with task lifecycle cleanup in the global task-row -> session-lock order and

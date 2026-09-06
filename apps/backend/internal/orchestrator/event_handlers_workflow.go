@@ -2591,6 +2591,35 @@ func (s *Service) reconcileSessionTransferCompensation(
 	return nil
 }
 
+func (s *Service) pendingDispatchTransferCompensationTarget(
+	ctx context.Context,
+	compensation messagequeue.SessionTransferCompensation,
+) (string, bool, error) {
+	entryIDs := make(map[string]struct{}, len(compensation.EntryIDs))
+	for _, entryID := range compensation.EntryIDs {
+		entryIDs[entryID] = struct{}{}
+	}
+	dispatches, err := s.messageQueue.ListPendingQueueDispatches(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("list compensated queue dispatches: %w", err)
+	}
+	for _, dispatch := range dispatches {
+		if _, ok := entryIDs[dispatch.Message.ID]; !ok {
+			continue
+		}
+		sessionID := dispatch.Message.SessionID
+		if sessionID != compensation.FromSessionID && sessionID != compensation.ToSessionID {
+			return "", false, fmt.Errorf(
+				"compensated queue dispatch %s belongs to unexpected session %s",
+				dispatch.Message.ID,
+				sessionID,
+			)
+		}
+		return sessionID, true, nil
+	}
+	return "", false, nil
+}
+
 func (s *Service) sessionTransferCompensationTarget(
 	ctx context.Context,
 	compensation messagequeue.SessionTransferCompensation,
@@ -2610,6 +2639,13 @@ func (s *Service) sessionTransferCompensationTarget(
 		if !errors.Is(err, messagequeue.ErrEntryNotFound) {
 			return "", fmt.Errorf("locate compensated queue entry %s: %w", entryID, err)
 		}
+	}
+	if sessionID, found, err := s.pendingDispatchTransferCompensationTarget(
+		ctx, compensation,
+	); err != nil {
+		return "", err
+	} else if found {
+		return sessionID, nil
 	}
 	for _, locator := range compensation.CleanupLocators {
 		cleanup, err := s.messageQueue.GetAttachmentCleanup(

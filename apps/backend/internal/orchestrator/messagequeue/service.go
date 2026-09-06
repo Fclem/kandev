@@ -239,6 +239,22 @@ type sessionTransferFenceRepository interface {
 	withSessionTransferFence(context.Context, string, func(context.Context) error) error
 }
 
+type editReplayValidationRepository interface {
+	validateSessionEntryForEditReplay(context.Context, string, string) error
+}
+
+func (s *Service) validateDuplicateEditReplay(
+	ctx context.Context,
+	sessionID, entryID string,
+) error {
+	repo, ok := s.repo.(editReplayValidationRepository)
+	if !ok {
+		_, err := s.findQueuedMessageForEdit(ctx, sessionID, entryID)
+		return err
+	}
+	return repo.validateSessionEntryForEditReplay(ctx, sessionID, entryID)
+}
+
 func (s *Service) withRepositorySessionTransferFence(
 	ctx context.Context,
 	sessionID string,
@@ -444,6 +460,9 @@ func (s *Service) updateMessageWithLeaseAfterValidation(
 			return err
 		}
 		if duplicate {
+			if err := s.validateDuplicateEditReplay(admittedCtx, sessionID, entryID); err != nil {
+				return err
+			}
 			revision = initialRevision
 			return s.finalizeDuplicateEdit(
 				admittedCtx, key, operationID, operationHash, previous, finalize,

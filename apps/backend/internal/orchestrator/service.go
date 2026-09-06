@@ -2650,6 +2650,19 @@ func (s *Service) isSessionResetInProgress(sessionID string) bool {
 	return inProgress
 }
 
+func (s *Service) reconcileDurableQueueStateOnStartup(ctx context.Context) error {
+	if err := s.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
+		return fmt.Errorf("reconcile session transfer compensations: %w", err)
+	}
+	if err := s.reconcilePendingQueueDispatchesOnStartup(ctx); err != nil {
+		return fmt.Errorf("reconcile pending queue dispatches: %w", err)
+	}
+	if err := s.reconcilePendingSendNowClaimsOnStartup(ctx); err != nil {
+		return fmt.Errorf("reconcile pending Send Now claims: %w", err)
+	}
+	return nil
+}
+
 // Start starts all orchestrator components
 func (s *Service) Start(ctx context.Context) error {
 	s.mu.Lock()
@@ -2677,24 +2690,8 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.resetCIAutomationWorkers()
 	s.resetDynamicSuccessorWorkers()
-	if err := s.reconcilePendingQueueDispatchesOnStartup(ctx); err != nil {
-		s.logger.Error("failed to reconcile pending queue dispatches on startup", zap.Error(err))
-		s.mu.Lock()
-		s.running = false
-		s.mu.Unlock()
-		return err
-	}
-
-	if err := s.reconcilePendingSendNowClaimsOnStartup(ctx); err != nil {
-		s.logger.Error("failed to reconcile pending Send Now claims on startup", zap.Error(err))
-		s.mu.Lock()
-		s.running = false
-		s.mu.Unlock()
-		return err
-	}
-
-	if err := s.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
-		s.logger.Error("failed to reconcile session transfer compensations on startup", zap.Error(err))
+	if err := s.reconcileDurableQueueStateOnStartup(ctx); err != nil {
+		s.logger.Error("failed to reconcile durable queue state on startup", zap.Error(err))
 		s.mu.Lock()
 		s.running = false
 		s.mu.Unlock()

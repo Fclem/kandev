@@ -382,6 +382,57 @@ func TestCleanupOnlyTransferCompensationRecoversPreviousHopAfterRestart(t *testi
 	}
 }
 
+func TestDurableQueueStartupRecoveryReconcilesTransferBeforeDispatch(t *testing.T) {
+	ctx := context.Background()
+	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	entry, err := queue.QueueMessage(
+		ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserved, ok := queue.ReserveQueued(ctx, entry.SessionID)
+	if !ok || reserved.ID != entry.ID {
+		t.Fatalf("reserved entry = %#v, ok=%t", reserved, ok)
+	}
+	if err := queue.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID:     "startup-transfer",
+		TaskID:          entry.TaskID,
+		FromSessionID:   entry.SessionID,
+		ToSessionID:     "session-new",
+		EntryIDs:        []string{entry.ID},
+		AttachmentIDs:   []string{"attachment"},
+		CleanupLocators: nil,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	transfer := &statefulWorkflowAttachmentTransfer{currentSession: "session-new"}
+	restarted := &Service{
+		logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer,
+	}
+
+	if err := restarted.reconcileDurableQueueStateOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if transfer.currentSession != entry.SessionID {
+		t.Fatalf("attachment session after recovery = %q, want %q", transfer.currentSession, entry.SessionID)
+	}
+	status := queue.GetStatus(ctx, entry.SessionID)
+	if len(status.Entries) != 1 || status.Entries[0].ID != entry.ID {
+		t.Fatalf("recovered source queue = %#v", status.Entries)
+	}
+	compensations, err := queue.ListSessionTransferCompensations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compensations) != 0 {
+		t.Fatalf("remaining compensations = %#v", compensations)
+	}
+}
+
 func newWorkflowTransferQueue(t *testing.T, dbPath string) (*messagequeue.Service, *sqlx.DB) {
 	t.Helper()
 	raw, err := sql.Open("sqlite3", dbPath)

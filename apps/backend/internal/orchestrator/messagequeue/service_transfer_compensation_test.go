@@ -555,3 +555,44 @@ func TestRemoteSessionTransferRejectsStaleEditLeaseRenewal(t *testing.T) {
 	require.ErrorIs(t, err, ErrEditLeaseNotFound)
 	assert.Nil(t, renewed)
 }
+
+func TestRemoteSessionTransferRejectsDuplicateEditReplay(t *testing.T) {
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	transferService := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+	editService := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := editService.QueueMessage(
+		ctx, "session-old", "task", "before", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	lease, err := editService.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+	finalizeErr := errors.New("finalize failed")
+	finalizeCalls := 0
+	finalize := func(context.Context, *QueuedMessage) error {
+		finalizeCalls++
+		if finalizeCalls == 1 {
+			return finalizeErr
+		}
+		return nil
+	}
+	_, err = editService.UpdateMessageWithLeaseAfterValidationAndFinalize(
+		ctx, entry.SessionID, entry.ID, lease.LeaseID, "operation", "connection",
+		lease.TargetRevision, "after", nil, nil, nil, nil, finalize,
+	)
+	require.ErrorIs(t, err, finalizeErr)
+	require.NoError(t, transferService.TransferSessionWithDurablePreparation(
+		ctx, entry.TaskID, entry.SessionID, "session-new", nil, nil,
+	))
+
+	_, err = editService.UpdateMessageWithLeaseAfterValidationAndFinalize(
+		ctx, entry.SessionID, entry.ID, lease.LeaseID, "operation", "connection",
+		lease.TargetRevision, "after", nil, nil, nil, nil, finalize,
+	)
+
+	require.ErrorIs(t, err, ErrEntryNotFound)
+	assert.Equal(t, 1, finalizeCalls)
+}

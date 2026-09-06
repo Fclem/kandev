@@ -1287,22 +1287,40 @@ func (s *Service) invalidateEditLease(sessionID, entryID string) {
 	s.deleteEditStateLocked(s.editLeaseKey(sessionID, entryID))
 }
 
-// ReleaseEditLeasesForConnection drops all edit leases owned by a disconnected
-// WebSocket connection. Lease IDs remain unusable because they are removed
-// before a later connection can acquire the same target.
+// ReleaseEditLeasesForConnection drops every lease owned by a disconnected
+// WebSocket connection. Durable release precedes local removal so a transient
+// database failure preserves the owner's retryable state.
 func (s *Service) ReleaseEditLeasesForConnection(connectionID string) int {
 	if connectionID == "" {
 		return 0
 	}
 	s.editLeaseMu.Lock()
-	defer s.editLeaseMu.Unlock()
-	released := 0
-	for key, lease := range s.editLeases {
-		if lease.connectionID != connectionID {
-			continue
+	leases := make([]*QueueEditLease, 0)
+	for _, lease := range s.editLeases {
+		if lease.connectionID == connectionID {
+			leases = append(leases, cloneEditLease(lease))
 		}
-		delete(s.editLeases, key)
-		released++
+	}
+	s.editLeaseMu.Unlock()
+	released := 0
+	repo, persistent := s.repo.(editLeaseRepository)
+	for _, lease := range leases {
+		if persistent {
+			if err := repo.releaseEditLease(context.Background(), lease.SessionID, lease.EntryID, lease.LeaseID); err != nil {
+				s.logger.Warn("failed to release durable queue edit lease",
+					zap.String("session_id", lease.SessionID),
+					zap.String("entry_id", lease.EntryID),
+					zap.Error(err))
+				continue
+			}
+		}
+		s.editLeaseMu.Lock()
+		key := s.editLeaseKey(lease.SessionID, lease.EntryID)
+		if current := s.editLeases[key]; current != nil && current.LeaseID == lease.LeaseID {
+			delete(s.editLeases, key)
+			released++
+		}
+		s.editLeaseMu.Unlock()
 	}
 	return released
 }

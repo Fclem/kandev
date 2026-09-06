@@ -2840,6 +2840,13 @@ func (r *sqliteRepository) DeleteByID(ctx context.Context, sessionID, entryID st
 	if reserved {
 		return ErrEntryNotFound
 	}
+	blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, entryID)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return ErrEditConflict
+	}
 
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM queued_messages

@@ -16,7 +16,9 @@ type durableSessionTransferState struct {
 	attachmentIDs     []string
 	preparationCalled bool
 	rollbackSucceeded bool
-	stopLeaseRenewal  func()
+	operationCtx      context.Context
+	stopLeaseRenewal  func() error
+	cancelTransfer    context.CancelFunc
 }
 
 // TransferSessionWithDurablePreparation preserves the original callback
@@ -58,16 +60,14 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 	rollback func(context.Context, []string) error,
 ) error {
 	state := &durableSessionTransferState{}
+	transferCtx, cancelTransfer := context.WithCancel(ctx)
+	defer cancelTransfer()
+	state.cancelTransfer = cancelTransfer
 	if s.SessionTransferCompensationPersistenceAvailable() {
 		state.operationID = uuid.NewString()
 	}
-	defer func() {
-		if state.stopLeaseRenewal != nil {
-			state.stopLeaseRenewal()
-		}
-	}()
 	err := s.transferSession(
-		ctx,
+		transferCtx,
 		oldSessionID,
 		newSessionID,
 		state.operationID,
@@ -86,6 +86,13 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 			return rollbackErr
 		},
 	)
+	if state.stopLeaseRenewal != nil {
+		leaseErr := state.stopLeaseRenewal()
+		state.stopLeaseRenewal = nil
+		if leaseErr != nil {
+			err = errors.Join(err, fmt.Errorf("session transfer lease lost: %w", leaseErr))
+		}
+	}
 	if err != nil {
 		if state.compensation != nil && state.rollbackSucceeded {
 			err = errors.Join(err, s.deleteSessionTransferCompensation(context.WithoutCancel(ctx), *state.compensation))
@@ -100,24 +107,42 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 	return nil
 }
 
+func (s *Service) startSessionTransferCompensation(
+	ctx context.Context,
+	taskID, oldSessionID, newSessionID string,
+	state *durableSessionTransferState,
+) error {
+	if !s.SessionTransferCompensationPersistenceAvailable() {
+		return nil
+	}
+	state.compensation = &SessionTransferCompensation{
+		OperationID: state.operationID, TaskID: taskID,
+		FromSessionID: oldSessionID, ToSessionID: newSessionID,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.UpsertSessionTransferCompensation(ctx, *state.compensation); err != nil {
+		return fmt.Errorf("persist session transfer fence: %w", err)
+	}
+	renewInterval := sessionTransferCompensationLeaseDuration / 2
+	if s.sessionTransferCompensationLeaseRenewInterval > 0 {
+		renewInterval = s.sessionTransferCompensationLeaseRenewInterval
+	}
+	state.operationCtx, state.stopLeaseRenewal = s.maintainSessionTransferCompensationLease(
+		ctx, *state.compensation, state.operationID, state.cancelTransfer, renewInterval,
+	)
+	return nil
+}
+
 func (s *Service) prepareDurableSessionTransfer(
 	ctx context.Context,
 	taskID, oldSessionID, newSessionID string,
 	prepare func(context.Context, []string) error,
 	state *durableSessionTransferState,
 ) error {
-	if s.SessionTransferCompensationPersistenceAvailable() {
-		state.compensation = &SessionTransferCompensation{
-			OperationID: state.operationID, TaskID: taskID,
-			FromSessionID: oldSessionID, ToSessionID: newSessionID,
-			CreatedAt: time.Now().UTC(),
-		}
-		if err := s.UpsertSessionTransferCompensation(ctx, *state.compensation); err != nil {
-			return fmt.Errorf("persist session transfer fence: %w", err)
-		}
-		state.stopLeaseRenewal = s.MaintainSessionTransferCompensationLease(
-			ctx, *state.compensation, state.operationID,
-		)
+	if err := s.startSessionTransferCompensation(
+		ctx, taskID, oldSessionID, newSessionID, state,
+	); err != nil {
+		return err
 	}
 	entries, err := s.repo.ListBySession(ctx, oldSessionID)
 	if err != nil {
@@ -161,8 +186,19 @@ func (s *Service) prepareDurableSessionTransfer(
 		return nil
 	}
 	state.preparationCalled = true
-	if err := prepare(ctx, attachmentIDs); err != nil {
+	prepareCtx := ctx
+	if state.operationCtx != nil {
+		prepareCtx = state.operationCtx
+	}
+	if err := prepare(prepareCtx, attachmentIDs); err != nil {
 		return fmt.Errorf("prepare durable session transfer: %w", err)
+	}
+	if state.operationCtx != nil {
+		select {
+		case <-state.operationCtx.Done():
+			return state.operationCtx.Err()
+		default:
+		}
 	}
 	return nil
 }

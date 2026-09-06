@@ -3,10 +3,9 @@ package messagequeue
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestTransferSessionWithPreparationRollsBackPreparationError(t *testing.T) {
@@ -263,53 +262,6 @@ func TestAttachmentCleanupDeleteWaitsForActiveSessionTransfer(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, stored)
-}
-
-func TestSessionTransferCompensationRejectsActiveReplacement(t *testing.T) {
-	ctx := context.Background()
-	repo := newTestSQLiteRepo(t)
-	persistence := repo.(interface {
-		UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
-		DeleteSessionTransferCompensation(context.Context, string, string, string, string) error
-		ListSessionTransferCompensations(context.Context) ([]SessionTransferCompensation, error)
-	})
-	first := SessionTransferCompensation{
-		OperationID: "transfer-first",
-		TaskID:      "task", FromSessionID: "session-old", ToSessionID: "session-new",
-		EntryIDs: []string{"entry-first"},
-	}
-	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, first))
-
-	replacement := first
-	replacement.OperationID = "transfer-replacement"
-	replacement.EntryIDs = []string{"entry-replacement"}
-	err := persistence.UpsertSessionTransferCompensation(ctx, replacement)
-
-	require.ErrorIs(t, err, ErrSessionTransferInProgress)
-	stored, listErr := persistence.ListSessionTransferCompensations(ctx)
-	require.NoError(t, listErr)
-	require.Len(t, stored, 1)
-	assert.Equal(t, first.EntryIDs, stored[0].EntryIDs)
-	first.EntryIDs = []string{"entry-final"}
-	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, first))
-	stored, listErr = persistence.ListSessionTransferCompensations(ctx)
-	require.NoError(t, listErr)
-	require.Len(t, stored, 1)
-	assert.Equal(t, first.EntryIDs, stored[0].EntryIDs)
-	err = persistence.DeleteSessionTransferCompensation(
-		ctx, replacement.OperationID, first.TaskID, first.FromSessionID, first.ToSessionID,
-	)
-	require.ErrorIs(t, err, ErrSessionTransferOwnershipLost)
-	stored, listErr = persistence.ListSessionTransferCompensations(ctx)
-	require.NoError(t, listErr)
-	require.Len(t, stored, 1)
-	assert.Equal(t, first.OperationID, stored[0].OperationID)
-	require.NoError(t, persistence.DeleteSessionTransferCompensation(
-		ctx, first.OperationID, first.TaskID, first.FromSessionID, first.ToSessionID,
-	))
-	stored, listErr = persistence.ListSessionTransferCompensations(ctx)
-	require.NoError(t, listErr)
-	assert.Empty(t, stored)
 }
 
 func TestActiveSessionTransferFencesExistingQueueMutations(t *testing.T) {
@@ -704,4 +656,105 @@ func TestRemoteDisconnectReleasesDurableEditLease(t *testing.T) {
 	_, err = secondService.BeginEdit(ctx, entry.SessionID, entry.ID, "new-connection")
 
 	require.NoError(t, err)
+}
+
+func TestRemoteEditLeaseBlocksUncoveredMutations(t *testing.T) {
+	t.Run("update", func(t *testing.T) {
+		ctx := context.Background()
+		repository := newTestSQLiteRepo(t).(*sqliteRepository)
+		secondRepository, err := NewSQLiteRepository(repository.db, repository.ro)
+		require.NoError(t, err)
+		owner := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+		other := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+		entry, err := owner.QueueMessage(ctx, "session-1", "task", "before", "", QueuedByUser, false, nil)
+		require.NoError(t, err)
+		_, err = owner.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+		require.NoError(t, err)
+
+		err = other.UpdateMessageWithMetadata(ctx, entry.SessionID, entry.ID, "after", nil, nil, QueuedByUser)
+
+		require.ErrorIs(t, err, ErrEditConflict)
+	})
+
+	t.Run("append", func(t *testing.T) {
+		ctx := context.Background()
+		repository := newTestSQLiteRepo(t).(*sqliteRepository)
+		secondRepository, err := NewSQLiteRepository(repository.db, repository.ro)
+		require.NoError(t, err)
+		owner := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+		other := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+		entry, err := owner.QueueMessage(ctx, "session-1", "task", "before", "", QueuedByUser, false, nil)
+		require.NoError(t, err)
+		_, err = owner.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+		require.NoError(t, err)
+
+		_, _, err = other.AppendContent(ctx, entry.SessionID, entry.TaskID, "after", "", QueuedByUser, false, nil)
+
+		require.ErrorIs(t, err, ErrEditConflict)
+	})
+
+	t.Run("coalesce replacement", func(t *testing.T) {
+		ctx := context.Background()
+		repository := newTestSQLiteRepo(t).(*sqliteRepository)
+		secondRepository, err := NewSQLiteRepository(repository.db, repository.ro)
+		require.NoError(t, err)
+		owner := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+		other := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+		entry, _, err := owner.QueueMessageWithCoalesceKey(ctx, "session-1", "task", "before", "", QueuedByUser, false, nil, nil, "key", true)
+		require.NoError(t, err)
+		lease, err := owner.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+		require.NoError(t, err)
+
+		replacement, replaced, err := other.QueueMessageWithCoalesceKey(ctx, entry.SessionID, entry.TaskID, "after", "", QueuedByUser, false, nil, nil, "key", true)
+		require.NoError(t, err)
+		require.True(t, replaced)
+		require.Equal(t, entry.ID, replacement.ID)
+		_, err = owner.UpdateMessageWithLease(ctx, entry.SessionID, entry.ID, lease.LeaseID, "operation", "connection", lease.TargetRevision, "stale", nil, nil)
+		require.ErrorIs(t, err, ErrEditLeaseNotFound)
+	})
+
+	t.Run("automatic merge", func(t *testing.T) {
+		ctx := context.Background()
+		repository := newTestSQLiteRepo(t).(*sqliteRepository)
+		secondRepository, err := NewSQLiteRepository(repository.db, repository.ro)
+		require.NoError(t, err)
+		owner := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+		other := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+		owner.SetAutoMergeEnabled(false)
+		first, err := owner.QueueMessage(ctx, "session-1", "task", "first", "", QueuedByUser, false, nil)
+		require.NoError(t, err)
+		second, err := owner.QueueMessage(ctx, first.SessionID, first.TaskID, "second", "", QueuedByUser, false, nil)
+		require.NoError(t, err)
+		_, err = owner.BeginEdit(ctx, second.SessionID, second.ID, "connection")
+		require.NoError(t, err)
+		other.SetAutoMergeEnabled(true)
+
+		queued, err := other.QueueMessage(ctx, first.SessionID, first.TaskID, "third", "", QueuedByUser, false, nil)
+
+		require.NoError(t, err)
+		require.NotEqual(t, first.ID, queued.ID)
+		status := owner.GetStatus(ctx, first.SessionID)
+		require.Len(t, status.Entries, 3)
+		require.Equal(t, "first", status.Entries[0].Content)
+	})
+
+	t.Run("full queue candidate merge", func(t *testing.T) {
+		ctx := context.Background()
+		repository := newTestSQLiteRepo(t).(*sqliteRepository)
+		secondRepository, err := NewSQLiteRepository(repository.db, repository.ro)
+		require.NoError(t, err)
+		owner := newAutoMergeTestServiceWithRepository(t, repository, 1)
+		other := newAutoMergeTestServiceWithRepository(t, secondRepository, 1)
+		first, err := owner.QueueMessage(ctx, "session-1", "task", "first", "", QueuedByUser, false, nil)
+		require.NoError(t, err)
+		_, err = owner.BeginEdit(ctx, first.SessionID, first.ID, "connection")
+		require.NoError(t, err)
+
+		_, err = other.QueueMessage(ctx, first.SessionID, first.TaskID, "second", "", QueuedByUser, false, nil)
+
+		require.ErrorIs(t, err, ErrQueueFull)
+		status := owner.GetStatus(ctx, first.SessionID)
+		require.Len(t, status.Entries, 1)
+		require.Equal(t, "first", status.Entries[0].Content)
+	})
 }

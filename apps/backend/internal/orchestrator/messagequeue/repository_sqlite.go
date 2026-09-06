@@ -697,6 +697,9 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 
 // AppendOrInsertTail concatenates onto the tail entry when its owner matches, otherwise inserts a new entry.
 func (r *sqliteRepository) AppendOrInsertTail(ctx context.Context, sessionID, taskID, content, model, queuedBy string, planMode bool, attachments []MessageAttachment, metadata map[string]interface{}, maxPerSession int) (*QueuedMessage, bool, error) {
+	if err := r.ensureEditLeaseSchema(ctx); err != nil {
+		return nil, false, err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, false, fmt.Errorf("begin append tx: %w", err)
@@ -717,6 +720,13 @@ func (r *sqliteRepository) AppendOrInsertTail(ctx context.Context, sessionID, ta
 		return nil, false, err
 	}
 	if tail != nil && tail.QueuedBy == queuedBy {
+		blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, tail.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		if blocked {
+			return nil, false, ErrEditConflict
+		}
 		newContent := tail.Content + "\n\n---\n\n" + content
 		if _, err := tx.ExecContext(ctx, r.db.Rebind(`UPDATE queued_messages SET content = ? WHERE id = ?`), newContent, tail.ID); err != nil {
 			return nil, false, fmt.Errorf("append update: %w", err)
@@ -782,6 +792,9 @@ func (r *sqliteRepository) AppendOrInsertTail(ctx context.Context, sessionID, ta
 
 // InsertOrReplaceByCoalesceKey replaces an entry with the same session/queued_by/coalesce key, or inserts when allowInsert is set.
 func (r *sqliteRepository) InsertOrReplaceByCoalesceKey(ctx context.Context, msg *QueuedMessage, coalesceKey string, maxPerSession int, allowInsert bool) (*QueuedMessage, bool, error) {
+	if err := r.ensureEditLeaseSchema(ctx); err != nil {
+		return nil, false, err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, false, fmt.Errorf("begin coalesce tx: %w", err)
@@ -802,6 +815,9 @@ func (r *sqliteRepository) InsertOrReplaceByCoalesceKey(ctx context.Context, msg
 		return nil, false, err
 	}
 	if existing != nil {
+		if err := r.deleteEditLeaseForEntryTx(ctx, tx, msg.SessionID, existing.ID); err != nil {
+			return nil, false, err
+		}
 		updated, err := r.replaceCoalesced(ctx, tx, existing, msg)
 		if err != nil {
 			return nil, false, err
@@ -2355,26 +2371,46 @@ func (r *sqliteRepository) UpdateContent(ctx context.Context, sessionID, entryID
 
 // UpdateContentAndMetadata replaces content and applies metadata updates to an entry owned by queuedBy.
 func (r *sqliteRepository) UpdateContentAndMetadata(ctx context.Context, sessionID, entryID, content string, attachments []MessageAttachment, metadataUpdates map[string]interface{}, queuedBy string) error {
-	if queuedBy == "" || IsReservedQueuedBy(queuedBy) {
-		return ErrEntryNotFound
-	}
-	attachmentsJSON, err := marshalAttachments(attachments)
-	if err != nil {
-		return err
-	}
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin update queued tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	// Content edits serialize with merges/folds on the same session: without
-	// the cross-process session lock a merge's scan-to-write window could
-	// silently overwrite a concurrent edit (the merge's affected-row check
-	// only detects deletion, not stale content).
-	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
-		return err
-	}
+	return r.updateContentAndMetadataWithLease(ctx, sessionID, entryID, "", content, attachments, metadataUpdates, queuedBy)
+}
 
+func (r *sqliteRepository) authorizeQueueEditLeaseTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	sessionID, entryID, leaseID string,
+) error {
+	if leaseID == "" {
+		blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, entryID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrEditConflict
+		}
+		return nil
+	}
+	var authorized bool
+	if err := tx.GetContext(ctx, &authorized, tx.Rebind(`
+		SELECT EXISTS (
+			SELECT 1 FROM queue_edit_leases
+			WHERE session_id = ? AND entry_id = ? AND lease_id = ? AND expires_at > ?
+		)
+	`), sessionID, entryID, leaseID, time.Now().UTC()); err != nil {
+		return fmt.Errorf("authorize queue edit lease: %w", err)
+	}
+	if !authorized {
+		return ErrEditLeaseNotFound
+	}
+	return nil
+}
+
+func (r *sqliteRepository) updateContentAndMetadataTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	sessionID, entryID, content, queuedBy string,
+	attachmentsJSON string,
+	metadataUpdates map[string]interface{},
+) error {
 	var metadataJSON string
 	query := `SELECT metadata_json FROM queued_messages WHERE id = ? AND session_id = ? AND queued_by = ? AND queued_by NOT IN (?, ?, ?)`
 	if err := tx.GetContext(ctx, &metadataJSON, r.db.Rebind(query), entryID, sessionID, queuedBy, QueuedByAgent, QueuedByWorkflow, QueuedByServer); err != nil {
@@ -2389,7 +2425,7 @@ func (r *sqliteRepository) UpdateContentAndMetadata(ctx context.Context, session
 			return fmt.Errorf("unmarshal queued metadata: %w", err)
 		}
 	}
-	metadataJSON, err = marshalMetadata(applyMetadataUpdates(metadata, metadataUpdates))
+	metadataJSON, err := marshalMetadata(applyMetadataUpdates(metadata, metadataUpdates))
 	if err != nil {
 		return err
 	}
@@ -2407,6 +2443,33 @@ func (r *sqliteRepository) UpdateContentAndMetadata(ctx context.Context, session
 		return ErrEntryNotFound
 	}
 	return tx.Commit()
+}
+
+func (r *sqliteRepository) updateContentAndMetadataWithLease(ctx context.Context, sessionID, entryID, leaseID, content string, attachments []MessageAttachment, metadataUpdates map[string]interface{}, queuedBy string) error {
+	if queuedBy == "" || IsReservedQueuedBy(queuedBy) {
+		return ErrEntryNotFound
+	}
+	if err := r.ensureEditLeaseSchema(ctx); err != nil {
+		return err
+	}
+	attachmentsJSON, err := marshalAttachments(attachments)
+	if err != nil {
+		return err
+	}
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin update queued tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
+	if err := r.authorizeQueueEditLeaseTx(ctx, tx, sessionID, entryID, leaseID); err != nil {
+		return err
+	}
+	return r.updateContentAndMetadataTx(
+		ctx, tx, sessionID, entryID, content, queuedBy, attachmentsJSON, metadataUpdates,
+	)
 }
 
 // MergeIntoAbove folds the source entry into the entry directly above it within
@@ -2475,6 +2538,9 @@ func (r *sqliteRepository) MergeIntoAbove(ctx context.Context, sessionID, source
 // predecessor in one transaction. Missing or incompatible candidates are
 // successful skips and leave storage unchanged.
 func (r *sqliteRepository) AutoMergeIntoAbove(ctx context.Context, sessionID, sourceID string) (*QueuedMessage, bool, error) {
+	if err := r.ensureEditLeaseSchema(ctx); err != nil {
+		return nil, false, err
+	}
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
 
@@ -2505,6 +2571,15 @@ func (r *sqliteRepository) AutoMergeIntoAbove(ctx context.Context, sessionID, so
 	if !compatible {
 		return source, false, nil
 	}
+	for _, entryID := range []string{source.ID, target.ID} {
+		blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, entryID)
+		if err != nil {
+			return nil, false, err
+		}
+		if blocked {
+			return nil, false, ErrEditConflict
+		}
+	}
 	if err := applyMergeWrites(ctx, r, tx, target, source, values.content, values.attachments, values.metadata, sessionID); err != nil {
 		if errors.Is(err, ErrEntryNotFound) {
 			return nil, false, nil
@@ -2527,6 +2602,9 @@ func (r *sqliteRepository) AutoMergeIntoAbove(ctx context.Context, sessionID, so
 // the fold is the admission. Missing or incompatible tails are successful
 // skips and leave storage unchanged.
 func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, candidate *QueuedMessage) (*QueuedMessage, bool, error) {
+	if err := r.ensureEditLeaseSchema(ctx); err != nil {
+		return nil, false, err
+	}
 	unlock := r.withSessionLock(candidate.SessionID)
 	defer unlock()
 
@@ -2566,6 +2644,13 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 	values, compatible := buildAutoMergedEntry(target, candidate)
 	if !compatible {
 		return nil, false, nil
+	}
+	blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, candidate.SessionID, target.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	if blocked {
+		return nil, false, ErrEditConflict
 	}
 	attachmentsJSON, err := marshalAttachments(values.attachments)
 	if err != nil {

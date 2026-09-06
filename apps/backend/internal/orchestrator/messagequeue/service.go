@@ -35,13 +35,14 @@ type Service struct {
 	// lifecycleMu fences task-wide purges against every session-scoped queue
 	// admission. A task purge cannot enumerate every possibly empty session,
 	// so the barrier must cover admissions before they reach the repository.
-	lifecycleMu         sync.RWMutex
-	admissionMu         sync.Mutex
-	admissions          map[string]*sessionAdmission
-	editLeaseMu         sync.Mutex
-	editLeases          map[editLeaseKey]*QueueEditLease
-	editRevisions       map[editLeaseKey]int64
-	editRevisionTaskIDs map[editLeaseKey]string
+	lifecycleMu                                   sync.RWMutex
+	admissionMu                                   sync.Mutex
+	admissions                                    map[string]*sessionAdmission
+	editLeaseMu                                   sync.Mutex
+	editLeases                                    map[editLeaseKey]*QueueEditLease
+	editRevisions                                 map[editLeaseKey]int64
+	editRevisionTaskIDs                           map[editLeaseKey]string
+	sessionTransferCompensationLeaseRenewInterval time.Duration
 }
 
 type sessionAdmission struct {
@@ -521,7 +522,13 @@ func (s *Service) updateMessageWithLeaseAfterValidation(
 			s.rollbackPreparedEdit(admittedCtx, rollback)
 			return err
 		}
-		if err := s.repo.UpdateContentAndMetadata(admittedCtx, sessionID, entryID, content, attachments, metadataUpdates, QueuedByUser); err != nil {
+		if leaseRepository, ok := s.repo.(durableEditLeaseMutationRepository); ok {
+			if err := leaseRepository.updateContentAndMetadataWithLease(admittedCtx, sessionID, entryID, leaseID, content, attachments, metadataUpdates, QueuedByUser); err != nil {
+				s.editLeaseMu.Unlock()
+				s.rollbackPreparedEdit(admittedCtx, rollback)
+				return err
+			}
+		} else if err := s.repo.UpdateContentAndMetadata(admittedCtx, sessionID, entryID, content, attachments, metadataUpdates, QueuedByUser); err != nil {
 			s.editLeaseMu.Unlock()
 			s.rollbackPreparedEdit(admittedCtx, rollback)
 			return err
@@ -2502,36 +2509,84 @@ func (s *Service) ClaimSessionTransferCompensationRecovery(
 // state only while the caller owns the compensation recovery lease.
 
 // MaintainSessionTransferCompensationLease renews an owner-scoped lease until
-// the caller completes its external attachment operation.
+// the caller completes its external attachment operation. Renewal failure
+// cancels the returned context and is returned by the stop function.
 func (s *Service) MaintainSessionTransferCompensationLease(
 	ctx context.Context,
 	compensation SessionTransferCompensation,
 	ownerID string,
-) func() {
+) (context.Context, func() error) {
+	return s.maintainSessionTransferCompensationLease(
+		ctx, compensation, ownerID, nil, sessionTransferCompensationLeaseDuration/2,
+	)
+}
+
+// MaintainSessionTransferCompensationLeaseWithCancel is the recovery variant
+// that also cancels the owning operation when lease renewal fails.
+func (s *Service) MaintainSessionTransferCompensationLeaseWithCancel(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+	ownerID string,
+	cancelOwner context.CancelFunc,
+) (context.Context, func() error) {
+	return s.maintainSessionTransferCompensationLease(
+		ctx, compensation, ownerID, cancelOwner, sessionTransferCompensationLeaseDuration/2,
+	)
+}
+
+func (s *Service) maintainSessionTransferCompensationLease(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+	ownerID string,
+	cancelOwner context.CancelFunc,
+	renewInterval time.Duration,
+) (context.Context, func() error) {
+	operationCtx, cancel := context.WithCancel(ctx)
 	stop := make(chan struct{})
-	done := make(chan struct{})
+	done := make(chan error, 1)
+	var stopOnce sync.Once
+	var stopErr error
 	go func() {
-		defer close(done)
-		ticker := time.NewTicker(sessionTransferCompensationLeaseDuration / 2)
+		ticker := time.NewTicker(renewInterval)
 		defer ticker.Stop()
+		var err error
 		for {
 			select {
 			case <-stop:
+				done <- nil
+				return
+			case <-operationCtx.Done():
+				done <- nil
 				return
 			case <-ticker.C:
-				if err := s.RenewSessionTransferCompensationLease(
-					context.WithoutCancel(ctx), compensation, ownerID,
-				); err != nil {
+				renewCtx, renewCancel := context.WithTimeout(
+					operationCtx, sessionTransferCompensationLeaseDuration/3,
+				)
+				err = s.RenewSessionTransferCompensationLease(
+					renewCtx, compensation, ownerID,
+				)
+				renewCancel()
+				if err != nil {
+					cancel()
+					if cancelOwner != nil {
+						cancelOwner()
+					}
+					done <- err
 					return
 				}
 			}
 		}
 	}()
-	return func() {
-		close(stop)
-		<-done
+	return operationCtx, func() error {
+		stopOnce.Do(func() {
+			close(stop)
+			stopErr = <-done
+			cancel()
+		})
+		return stopErr
 	}
 }
+
 func (s *Service) DeleteClaimedSessionTransferCompensation(
 	ctx context.Context,
 	compensation SessionTransferCompensation,

@@ -2566,11 +2566,13 @@ func (s *Service) reconcileSessionTransferCompensation(
 	if err != nil {
 		return fmt.Errorf("claim session transfer compensation recovery: %w", err)
 	}
-	stopLeaseRenewal := s.messageQueue.MaintainSessionTransferCompensationLease(
-		ctx, compensation, ownerID,
+	transferCtx, cancelTransfer := context.WithCancel(ctx)
+	defer cancelTransfer()
+	operationCtx, stopLeaseRenewal := s.messageQueue.MaintainSessionTransferCompensationLeaseWithCancel(
+		transferCtx, compensation, ownerID, cancelTransfer,
 	)
-	defer stopLeaseRenewal()
-	targetSessionID, err := s.sessionTransferCompensationTarget(ctx, compensation)
+	defer func() { _ = stopLeaseRenewal() }()
+	targetSessionID, err := s.sessionTransferCompensationTarget(operationCtx, compensation)
 	if err != nil {
 		return err
 	}
@@ -2578,17 +2580,26 @@ func (s *Service) reconcileSessionTransferCompensation(
 	if targetSessionID == compensation.FromSessionID {
 		fromSessionID, toSessionID = compensation.ToSessionID, compensation.FromSessionID
 	}
-	if err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
-		ctx,
+	transferErr := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
+		operationCtx,
 		compensation.TaskID,
 		fromSessionID,
 		toSessionID,
 		compensation.AttachmentIDs,
-	); err != nil {
-		return fmt.Errorf("reconcile session transfer attachments: %w", err)
+	)
+	leaseErr := stopLeaseRenewal()
+	if transferErr != nil {
+		transferErr = fmt.Errorf("reconcile session transfer attachments: %w", transferErr)
+		if leaseErr != nil {
+			return errors.Join(transferErr, fmt.Errorf("session transfer lease lost: %w", leaseErr))
+		}
+		return transferErr
+	}
+	if leaseErr != nil {
+		return fmt.Errorf("session transfer lease lost: %w", leaseErr)
 	}
 	if err := s.messageQueue.DeleteClaimedSessionTransferCompensation(
-		ctx,
+		context.WithoutCancel(ctx),
 		compensation,
 		ownerID,
 	); err != nil {

@@ -18,6 +18,16 @@ const editLeaseSchema = `
 	)
 `
 
+type durableEditLeaseMutationRepository interface {
+	updateContentAndMetadataWithLease(
+		ctx context.Context,
+		sessionID, entryID, leaseID, content string,
+		attachments []MessageAttachment,
+		metadataUpdates map[string]interface{},
+		queuedBy string,
+	) error
+}
+
 func (r *sqliteRepository) ensureEditLeaseSchema(ctx context.Context) error {
 	if _, err := r.db.ExecContext(ctx, editLeaseSchema); err != nil {
 		return fmt.Errorf("ensure queue edit lease schema: %w", err)
@@ -107,6 +117,15 @@ func (r *sqliteRepository) editLeaseBlocksEntryTx(ctx context.Context, tx *sqlx.
 		return false, fmt.Errorf("check queue edit lease: %w", err)
 	}
 	return blocked, nil
+}
+
+func (r *sqliteRepository) deleteEditLeaseForEntryTx(ctx context.Context, tx *sqlx.Tx, sessionID, entryID string) error {
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		DELETE FROM queue_edit_leases WHERE session_id = ? AND entry_id = ?
+	`), sessionID, entryID); err != nil {
+		return fmt.Errorf("invalidate replaced queue edit lease: %w", err)
+	}
+	return nil
 }
 
 func (r *sqliteRepository) deleteEditLeasesForSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID string) error {

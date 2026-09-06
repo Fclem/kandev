@@ -97,7 +97,8 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 	if err != nil {
 		if state.compensation != nil &&
 			state.rollbackSucceeded &&
-			state.leaseRenewalErr == nil {
+			state.leaseRenewalErr == nil &&
+			!errors.Is(err, ErrSessionTransferOwnershipLost) {
 			err = errors.Join(err, s.deleteSessionTransferCompensation(context.WithoutCancel(ctx), *state.compensation))
 		}
 		return err

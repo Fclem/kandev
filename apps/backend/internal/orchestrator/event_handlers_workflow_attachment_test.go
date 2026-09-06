@@ -146,6 +146,39 @@ func TestSessionTransferRecoveryFailsClosedWhenTaskAttachmentServiceUnavailable(
 		t.Fatalf("remaining compensations = %#v, want one", compensations)
 	}
 }
+func TestSessionTransferCompensationRecoveryAllowsTextOnlyWithoutAttachmentTransferer(t *testing.T) {
+	ctx := context.Background()
+	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	entry, err := queue.QueueMessage(
+		ctx, "session-new", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID:   "text-only-transfer",
+		TaskID:        entry.TaskID,
+		FromSessionID: "session-old",
+		ToSessionID:   entry.SessionID,
+		EntryIDs:      []string{entry.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expireSessionTransferCompensationLease(t, db)
+	svc := &Service{logger: testLogger(), messageQueue: queue}
+
+	if err := svc.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	compensations, err := queue.ListSessionTransferCompensations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compensations) != 0 {
+		t.Fatalf("remaining compensations = %#v, want none", compensations)
+	}
+}
 
 func TestTransferQueuedSessionStateSerializesAttachmentTransferWithQueueMutation(t *testing.T) {
 	ctx := context.Background()

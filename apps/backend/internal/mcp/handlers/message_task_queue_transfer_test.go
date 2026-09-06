@@ -39,6 +39,26 @@ func TestRestoreTaskMessageQueueOwnerTransfersClaimedAttachments(t *testing.T) {
 	require.Equal(t, attachment.ID, status.Entries[0].Attachments[0].AttachmentID)
 }
 
+func TestRestoreTaskMessageQueueOwnerFailsClosedWithoutAttachmentService(t *testing.T) {
+	ctx := context.Background()
+	taskSvc, repo := newTestTaskService(t)
+	_, target, oldSession := seedTaskWithSession(t, taskSvc, repo, models.TaskSessionStateWaitingForInput)
+	newSession := taskSessionForQueueTransferTest(target.ID)
+	require.NoError(t, repo.CreateTaskSession(ctx, newSession))
+
+	h, orch := newMessageTaskHandler(t, taskSvc, repo)
+	_, err := orch.queue.QueueMessage(
+		ctx, oldSession.ID, target.ID, "queued prompt", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "unavailable-attachment"}},
+	)
+	require.NoError(t, err)
+
+	require.Error(t, h.restoreTaskMessageQueueOwner(ctx, target.ID, oldSession.ID, newSession.ID))
+	status := orch.queue.GetStatus(ctx, oldSession.ID)
+	require.Len(t, status.Entries, 1)
+	require.Empty(t, orch.queue.GetStatus(ctx, newSession.ID).Entries)
+}
+
 func taskSessionForQueueTransferTest(taskID string) *models.TaskSession {
 	return &models.TaskSession{
 		ID:     "replacement-session",

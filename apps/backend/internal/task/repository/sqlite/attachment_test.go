@@ -307,6 +307,36 @@ func TestTransferMessageAttachmentsAcceptsAlreadyTransferredRows(t *testing.T) {
 	}
 }
 
+func TestTransferMessageAttachmentsIgnoresTaskScopedRows(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	now := time.Now().UTC()
+	attachment := &models.TaskMessageAttachment{
+		ID: "transfer-task-scoped", OwnerID: "owner-1", WorkspaceID: "workspace-attachments",
+		Name: "task-scoped", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path",
+		SizeBytes: 1, StorageKey: "transfer-task-scoped", TaskID: "task-transfer",
+		State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now,
+	}
+	if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.TransferMessageAttachments(
+		ctx, "task-transfer", "session-old", "session-new",
+		[]string{attachment.ID},
+	); err != nil {
+		t.Fatalf("task-scoped attachment transfer: %v", err)
+	}
+	got, err := repo.GetMessageAttachment(ctx, attachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SessionID != "" {
+		t.Fatalf("task-scoped attachment session = %q, want empty", got.SessionID)
+	}
+}
+
 func TestTransferMessageAttachmentsRejectsPartialOwnership(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()

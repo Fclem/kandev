@@ -3563,7 +3563,7 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, taskID, sel
 		primaryID,
 		func(admittedCtx context.Context, attachmentIDs []string) error {
 			if h.taskSvc == nil {
-				return nil
+				return errors.New("session attachment transfer service is unavailable")
 			}
 			if err := h.taskSvc.TransferSessionMessageAttachments(
 				admittedCtx,
@@ -3578,7 +3578,7 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, taskID, sel
 		},
 		func(rollbackCtx context.Context, attachmentIDs []string) error {
 			if h.taskSvc == nil {
-				return nil
+				return errors.New("session attachment transfer service is unavailable")
 			}
 			return h.taskSvc.TransferSessionMessageAttachments(
 				rollbackCtx,

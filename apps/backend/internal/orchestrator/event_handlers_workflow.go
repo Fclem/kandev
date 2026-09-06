@@ -2548,7 +2548,8 @@ func (s *Service) reconcileSessionTransferCompensationsOnStartup(ctx context.Con
 	if err != nil {
 		return fmt.Errorf("list session transfer compensations: %w", err)
 	}
-	if len(compensations) > 0 && s.sessionAttachmentTransferer == nil {
+	if sessionTransferCompensationsNeedAttachmentTransfer(compensations) &&
+		s.sessionAttachmentTransferer == nil {
 		return errors.New("reconcile session transfer compensations: attachment transfer service is unavailable")
 	}
 	for _, compensation := range compensations {
@@ -2556,7 +2557,19 @@ func (s *Service) reconcileSessionTransferCompensationsOnStartup(ctx context.Con
 			return err
 		}
 	}
+
 	return nil
+}
+
+func sessionTransferCompensationsNeedAttachmentTransfer(
+	compensations []messagequeue.SessionTransferCompensation,
+) bool {
+	for _, compensation := range compensations {
+		if len(compensation.AttachmentIDs) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) reconcileSessionTransferCompensation(
@@ -2589,13 +2602,16 @@ func (s *Service) reconcileSessionTransferCompensation(
 	if targetSessionID == compensation.FromSessionID {
 		fromSessionID, toSessionID = compensation.ToSessionID, compensation.FromSessionID
 	}
-	transferErr := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
-		operationCtx,
-		compensation.TaskID,
-		fromSessionID,
-		toSessionID,
-		compensation.AttachmentIDs,
-	)
+	var transferErr error
+	if len(compensation.AttachmentIDs) > 0 {
+		transferErr = s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
+			operationCtx,
+			compensation.TaskID,
+			fromSessionID,
+			toSessionID,
+			compensation.AttachmentIDs,
+		)
+	}
 	leaseErr := stopLeaseRenewal()
 	stopped = true
 	if transferErr != nil {

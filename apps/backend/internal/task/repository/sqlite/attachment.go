@@ -459,7 +459,7 @@ func validateTransferAttachmentLocations(
 	sourceAttachmentIDs := make([]string, 0, len(attachmentIDs))
 	for _, attachmentID := range attachmentIDs {
 		sessionID, ok := locations[attachmentID]
-		if !ok || (sessionID != oldSessionID && sessionID != newSessionID) {
+		if !ok || (sessionID != "" && sessionID != oldSessionID && sessionID != newSessionID) {
 			return nil, fmt.Errorf(
 				"transfer session attachments: attachment %q is not a claimed attachment for task %q in either transfer session",
 				attachmentID, taskID,

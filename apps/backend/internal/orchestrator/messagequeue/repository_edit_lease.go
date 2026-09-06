@@ -109,6 +109,15 @@ func (r *sqliteRepository) editLeaseBlocksEntryTx(ctx context.Context, tx *sqlx.
 	return blocked, nil
 }
 
+func (r *sqliteRepository) deleteEditLeasesForSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID string) error {
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		DELETE FROM queue_edit_leases WHERE session_id = ?
+	`), sessionID); err != nil {
+		return fmt.Errorf("invalidate purged queue edit leases: %w", err)
+	}
+	return nil
+}
+
 func (r *sqliteRepository) deleteEditLeasesForTransferTx(
 	ctx context.Context,
 	tx *sqlx.Tx,

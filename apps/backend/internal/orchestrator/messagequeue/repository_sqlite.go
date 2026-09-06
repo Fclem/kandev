@@ -2960,6 +2960,9 @@ func (r *sqliteRepository) PurgeSession(ctx context.Context, sessionID string) (
 	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
 		return 0, err
 	}
+	if err := r.deleteEditLeasesForSessionTx(ctx, tx, sessionID); err != nil {
+		return 0, err
+	}
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM queued_messages WHERE session_id = ?
 	`), sessionID)

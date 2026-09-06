@@ -15,6 +15,11 @@ import (
 	"github.com/kandev/kandev/pkg/agent"
 )
 
+const (
+	remoteAuthMethodTypeFiles = "files"
+	remoteAuthCopyFilesLabel  = "Copy auth files"
+)
+
 // ErrNotSupported is returned when an agent does not support an operation.
 var ErrNotSupported = errors.New("not supported by this agent")
 

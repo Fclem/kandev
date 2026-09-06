@@ -499,6 +499,43 @@ describe("queue actions", () => {
     expect(store.getState().queue.bySessionId[SESSION_ID]).toBeUndefined();
   });
 
+  it("requires an authoritative snapshot to replace the accepted status epoch", () => {
+    const store = makeStore();
+    store.getState().setTaskSession(makeSession({ queue_incarnation_id: "incarnation-1" }));
+    const currentEntries = [makeEntry({ id: "current" })];
+    store.getState().setQueueEntries(SESSION_ID, currentEntries, {
+      count: 1,
+      max: 10,
+      mergeEnabled: true,
+      autoRun: true,
+      taskId: TASK_ID,
+      sessionIncarnationId: "incarnation-1",
+      statusEpoch: "epoch-1",
+      statusGeneration: 5,
+    });
+    const replacementEntries = [makeEntry({ id: "replacement" })];
+    const replacementMeta = {
+      count: 1,
+      max: 10,
+      mergeEnabled: false,
+      autoRun: false,
+      taskId: TASK_ID,
+      sessionIncarnationId: "incarnation-1",
+      statusEpoch: "epoch-2",
+      statusGeneration: 99,
+    };
+
+    store.getState().setQueueEntries(SESSION_ID, replacementEntries, replacementMeta);
+    expect(store.getState().queue.bySessionId[SESSION_ID]).toEqual(currentEntries);
+    expect(store.getState().queue.metaBySessionId[SESSION_ID]?.statusEpoch).toBe("epoch-1");
+
+    store.getState().setQueueEntries(SESSION_ID, replacementEntries, replacementMeta, {
+      establishStatusEpoch: true,
+    });
+    expect(store.getState().queue.bySessionId[SESSION_ID]).toEqual(replacementEntries);
+    expect(store.getState().queue.metaBySessionId[SESSION_ID]?.statusEpoch).toBe("epoch-2");
+  });
+
   it("clearQueueStatus removes both entries and meta", () => {
     const store = makeStore();
     store.getState().setQueueEntries(SESSION_ID, [makeEntry()], {
@@ -512,5 +549,63 @@ describe("queue actions", () => {
 
     expect(store.getState().queue.bySessionId[SESSION_ID]).toBeUndefined();
     expect(store.getState().queue.metaBySessionId[SESSION_ID]).toBeUndefined();
+  });
+});
+
+describe("queue state reincarnation", () => {
+  function seedOldIncarnation() {
+    const store = makeStore();
+    store.getState().setTaskSession(makeSession({ queue_incarnation_id: "old-incarnation" }));
+    store.getState().setQueueEntries(SESSION_ID, [makeEntry()], {
+      count: 1,
+      max: 10,
+      mergeEnabled: true,
+      autoRun: true,
+      taskId: TASK_ID,
+      sessionIncarnationId: "old-incarnation",
+    });
+    expect(store.getState().beginQueueOperation(SESSION_ID, "old-incarnation")).not.toBeNull();
+    return store;
+  }
+
+  function expectQueueStateCleared(store: ReturnType<typeof makeStore>) {
+    expect(store.getState().queue.bySessionId[SESSION_ID]).toBeUndefined();
+    expect(store.getState().queue.metaBySessionId[SESSION_ID]).toBeUndefined();
+    expect(store.getState().queue.activeOperationBySessionId[SESSION_ID]).toBeUndefined();
+  }
+
+  it("clears stale queue state on an event upsert", () => {
+    const store = seedOldIncarnation();
+
+    store
+      .getState()
+      .upsertTaskSessionFromEvent(
+        TASK_ID,
+        makeSession({ queue_incarnation_id: "new-incarnation" }),
+      );
+
+    expectQueueStateCleared(store);
+  });
+
+  it("clears stale queue state on a session snapshot", () => {
+    const store = seedOldIncarnation();
+
+    store
+      .getState()
+      .setTaskSessionsForTask(
+        TASK_ID,
+        [makeSession({ queue_incarnation_id: "new-incarnation" })],
+        {},
+      );
+
+    expectQueueStateCleared(store);
+  });
+
+  it("clears stale queue state on a direct session set", () => {
+    const store = seedOldIncarnation();
+
+    store.getState().setTaskSession(makeSession({ queue_incarnation_id: "new-incarnation" }));
+
+    expectQueueStateCleared(store);
   });
 });

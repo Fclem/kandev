@@ -161,7 +161,7 @@ type httpCreateWorkflowRequest struct {
 func (h *WorkflowHandlers) httpCreateWorkflow(c *gin.Context) {
 	var body httpCreateWorkflowRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": invalidRequestBody})
 		return
 	}
 	if body.Name == "" || body.WorkspaceID == "" {
@@ -274,7 +274,7 @@ type httpUpdateWorkflowRequest struct {
 func (h *WorkflowHandlers) httpUpdateWorkflow(c *gin.Context) {
 	var body httpUpdateWorkflowRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": invalidRequestBody})
 		return
 	}
 	id := c.Param("id")

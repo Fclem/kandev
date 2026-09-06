@@ -250,3 +250,4 @@ Read individual ADRs for full context. Create new ones via `/record decision` or
 | 2026-09-06-opt-in-external-e2e-runners | [Opt in selected Linux CI jobs to external runners](2026-09-06-opt-in-external-e2e-runners.md) | accepted | infra, workflow, security | 2026-09-06 |
 | 2026-09-06-explicit-pr-auto-fix-outcomes | [Require Explicit Outcomes for PR Auto-Fix Attempts](2026-09-06-explicit-pr-auto-fix-outcomes.md) | proposed | backend, frontend, protocol, workflow, GitHub | 2026-09-06 |
 | 2026-09-05-bounded-progressive-storage-analysis | [Use bounded progressive storage analysis](2026-09-05-bounded-progressive-storage-analysis.md) | accepted | backend, frontend, protocol | 2026-09-05 |
+| 2026-09-04-inherit-queue-auto-merge-until-overridden | [Inherit Queue Auto-merge Until Overridden](2026-09-04-inherit-queue-auto-merge-until-overridden.md) | accepted | backend, frontend, protocol | 2026-09-04 |

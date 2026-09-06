@@ -73,6 +73,23 @@ export function registerWorkspacesHandlers(store: StoreApi<AppState>): WsHandler
       }));
     },
     "workspace.deleted": (message) => {
+      const currentState = store.getState();
+      const workspaceTaskIds = new Set(
+        [
+          ...currentState.kanban.tasks,
+          ...Object.values(currentState.kanbanMulti.snapshots).flatMap(
+            (snapshot) => snapshot.tasks,
+          ),
+        ]
+          .filter((task) => task.workspaceId === message.payload.id)
+          .map((task) => task.id),
+      );
+      const sessionIds = Object.values(currentState.taskSessions.items)
+        .filter((session) => workspaceTaskIds.has(session.task_id))
+        .map((session) => session.id);
+      for (const sessionId of sessionIds) {
+        currentState.clearQueueStatus(sessionId);
+      }
       store.setState((state) => {
         const items = state.workspaces.items.filter((item) => item.id !== message.payload.id);
         const activeId =

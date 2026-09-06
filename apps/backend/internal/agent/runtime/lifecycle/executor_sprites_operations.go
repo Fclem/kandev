@@ -24,6 +24,9 @@ import (
 )
 
 // validSlugRe matches slugs that are safe for use in shell commands and file paths.
+
+const defaultSpriteProjectSkillDir = ".agents/skills"
+
 var validSlugRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 func spriteProjectSkillDir(metadata map[string]interface{}) string {
@@ -38,7 +41,7 @@ func spriteProjectSkillDir(metadata map[string]interface{}) string {
 		return ""
 	}
 	if strings.TrimSpace(manifest.ProjectSkillDir) == "" {
-		return ".agents/skills"
+		return defaultSpriteProjectSkillDir
 	}
 	return manifest.ProjectSkillDir
 }
@@ -130,7 +133,7 @@ func (r *SpritesExecutor) uploadSkillFiles(
 
 	projectSkillDir := manifest.ProjectSkillDir
 	if projectSkillDir == "" {
-		projectSkillDir = ".agents/skills"
+		projectSkillDir = defaultSpriteProjectSkillDir
 	}
 
 	// Wipe any kandev-* skills from a previous session and append the

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
 	"github.com/kandev/kandev/internal/github"
@@ -15,6 +16,26 @@ import (
 	"github.com/kandev/kandev/internal/task/models"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 )
+
+type sessionIdentityTransitionHookRepository struct {
+	repoStore
+	afterTransition func()
+}
+
+func (r *sessionIdentityTransitionHookRepository) UpdateTaskSessionStateIfCurrentIdentity(
+	ctx context.Context,
+	taskID, sessionID, incarnationID string,
+	expected, state models.TaskSessionState,
+	errorMessage string,
+) (bool, time.Time, error) {
+	changed, updatedAt, err := r.repoStore.UpdateTaskSessionStateIfCurrentIdentity(
+		ctx, taskID, sessionID, incarnationID, expected, state, errorMessage,
+	)
+	if err == nil && changed && r.afterTransition != nil {
+		r.afterTransition()
+	}
+	return changed, updatedAt, err
+}
 
 func TestExecuteQueuedMessage_RequeuesWhenResetInProgress(t *testing.T) {
 	ctx := context.Background()
@@ -52,6 +73,59 @@ func TestExecuteQueuedMessage_RequeuesWhenResetInProgress(t *testing.T) {
 	}
 	if status.Entries[0].Content != "hello" {
 		t.Fatalf("expected queued content to be preserved, got %q", status.Entries[0].Content)
+	}
+}
+
+func TestExecuteQueuedMessage_DoesNotPublishVisibleEffectsForReplacedIdentity(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t-replaced", "s-replaced", "step-replaced")
+	seedExecutorRunning(t, repo, "s-replaced", "t-replaced", "exec-replaced")
+	session, err := repo.GetTaskSession(ctx, "s-replaced")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	session.State = models.TaskSessionStateWaitingForInput
+	if err := repo.UpdateTaskSession(ctx, session); err != nil {
+		t.Fatalf("set waiting session: %v", err)
+	}
+	agentMgr := &mockAgentManager{isAgentRunning: true, repoForExecutionLookup: repo}
+	svc := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), agentMgr)
+	svc.executor = executor.NewExecutor(agentMgr, repo, testLogger(), executor.ExecutorConfig{})
+	messages := &mockMessageCreator{}
+	svc.messageCreator = messages
+	svc.repo = &sessionIdentityTransitionHookRepository{
+		repoStore: repo,
+		afterTransition: func() {
+			if _, updateErr := repo.DB().Exec(
+				`UPDATE task_sessions
+				    SET queue_incarnation_id = ?, state = ?
+				  WHERE id = ?`,
+				"replacement-incarnation",
+				models.TaskSessionStateWaitingForInput,
+				"s-replaced",
+			); updateErr != nil {
+				t.Fatalf("replace session identity: %v", updateErr)
+			}
+		},
+	}
+	identity, err := svc.messageQueue.ResolveSessionIdentity(ctx, "t-replaced", "s-replaced")
+	if err != nil {
+		t.Fatalf("resolve queue identity: %v", err)
+	}
+	queued := &messagequeue.QueuedMessage{
+		ID: "replaced-dispatch", SessionID: "s-replaced", TaskID: "t-replaced", Content: "stale prompt",
+	}
+	lock, release := svc.acquireCancelInFlightGuard(identity.SessionID)
+	lock.Lock()
+	reservation := svc.markQueuedDispatchInFlightWithIdentityLocked(identity, queued.ID, nil)
+	lock.Unlock()
+	release()
+
+	svc.executeQueuedMessageWithReservation(identity.SessionID, queued, reservation)
+
+	if len(messages.userMessages) != 0 {
+		t.Fatalf("replacement received %d stale visible messages, want 0", len(messages.userMessages))
 	}
 }
 
@@ -223,6 +297,7 @@ func TestExecuteQueuedMessage_StoresAttachmentsInUserMessageMetadata(t *testing.
 	ctx := context.Background()
 	repo := setupTestRepo(t)
 	seedSession(t, repo, "t1", "s1", "step1")
+	seedExecutorRunning(t, repo, "s1", "t1", "exec-1")
 
 	session, err := repo.GetTaskSession(ctx, "s1")
 	if err != nil {
@@ -284,6 +359,14 @@ func TestExecuteQueuedMessageTransientRetryDoesNotDuplicateRecordedUserMessage(t
 	repo := setupTestRepo(t)
 	seedSession(t, repo, "t1", "s1", "step1")
 	seedExecutorRunning(t, repo, "s1", "t1", "exec-1")
+	session, err := repo.GetTaskSession(ctx, "s1")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	session.State = models.TaskSessionStateWaitingForInput
+	if err := repo.UpdateTaskSession(ctx, session); err != nil {
+		t.Fatalf("set waiting session: %v", err)
+	}
 	agentMgr := &mockAgentManager{
 		isAgentRunning:         true,
 		promptErr:              fmt.Errorf("agent stream disconnected while prompting"),

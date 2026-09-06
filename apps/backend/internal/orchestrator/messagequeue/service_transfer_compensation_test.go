@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -619,4 +620,73 @@ func TestRemoteEditLeaseBlocksHeadReservation(t *testing.T) {
 	status := editService.GetStatus(ctx, entry.SessionID)
 	require.Len(t, status.Entries, 1)
 	assert.Equal(t, entry.ID, status.Entries[0].ID)
+}
+
+func TestRemoteEditLeaseBlocksTargetedDrain(t *testing.T) {
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	editService := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+	drainService := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := editService.QueueMessage(
+		ctx, "session-1", "task", "queued", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	_, err = editService.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+
+	taken, ok, err := drainService.TakeQueuedEntry(ctx, entry.SessionID, entry.ID)
+
+	require.ErrorIs(t, err, ErrEditConflict)
+	assert.False(t, ok)
+	assert.Nil(t, taken)
+}
+
+func TestRemoteEditLeaseBlocksSendNowClaim(t *testing.T) {
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	editService := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+	sendNowService := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := editService.QueueMessage(
+		ctx, "session-1", "task", "queued", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	_, err = editService.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+
+	claim, err := sendNowService.ClaimSendNow(ctx, entry.SessionID, []QueuedMessage{*entry})
+
+	require.ErrorIs(t, err, ErrEditConflict)
+	assert.Nil(t, claim)
+}
+
+func TestRecoveredTransferLeaseRejectsOriginalOwner(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t).(*sqliteRepository)
+	compensation := SessionTransferCompensation{
+		OperationID: "transfer-operation",
+		TaskID:      "task", FromSessionID: "session-old", ToSessionID: "session-new",
+	}
+	require.NoError(t, repo.UpsertSessionTransferCompensation(ctx, compensation))
+	_, err := repo.db.ExecContext(ctx, `
+		UPDATE queue_session_transfer_compensations
+		SET recovery_lease_expires_at = ?
+	`, time.Now().UTC().Add(-time.Second))
+	require.NoError(t, err)
+	_, err = repo.claimSessionTransferCompensationRecovery(ctx, compensation)
+	require.NoError(t, err)
+	tx, err := repo.db.BeginTxx(ctx, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback() })
+
+	err = authorizeSessionTransferTx(
+		ctx, tx, repo.db, compensation.FromSessionID, compensation.ToSessionID, compensation.OperationID,
+	)
+
+	require.ErrorIs(t, err, ErrSessionTransferOwnershipLost)
 }

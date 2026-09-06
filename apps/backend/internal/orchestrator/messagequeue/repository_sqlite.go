@@ -1779,6 +1779,13 @@ func (r *sqliteRepository) TakeByID(ctx context.Context, sessionID, entryID stri
 		}
 		return nil, fmt.Errorf("take by id: %w", err)
 	}
+	blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, entryID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, ErrEditConflict
+	}
 	if err := r.captureReservationGenerationsTx(ctx, tx, msg); err != nil {
 		return nil, err
 	}
@@ -1836,6 +1843,15 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 	sources, err := selectSQLiteSendNowSources(ordered, storedByID, requested, expected)
 	if err != nil {
 		return nil, err
+	}
+	for _, source := range sources {
+		blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, source.ID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return nil, ErrEditConflict
+		}
 	}
 	envelope, err := BuildSendNowEnvelope(sources)
 	if err != nil {

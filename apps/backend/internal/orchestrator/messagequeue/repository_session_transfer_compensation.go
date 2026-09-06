@@ -339,13 +339,16 @@ func authorizeSessionTransferTx(
 	db *sqlx.DB,
 	fromSessionID, toSessionID, operationID string,
 ) error {
-	var activeOperationID, activeFromSessionID, activeToSessionID string
+	var activeOperationID, activeOwnerID, activeFromSessionID, activeToSessionID string
+	var leaseExpiresAt sql.NullTime
 	err := tx.QueryRowxContext(ctx, db.Rebind(`
-		SELECT operation_id, from_session_id, to_session_id
+		SELECT operation_id, recovery_owner, recovery_lease_expires_at,
+		       from_session_id, to_session_id
 		FROM queue_session_transfer_compensations
 		WHERE from_session_id IN (?, ?) OR to_session_id IN (?, ?)
 	`), fromSessionID, toSessionID, fromSessionID, toSessionID).Scan(
-		&activeOperationID, &activeFromSessionID, &activeToSessionID,
+		&activeOperationID, &activeOwnerID, &leaseExpiresAt,
+		&activeFromSessionID, &activeToSessionID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		if operationID != "" {
@@ -361,6 +364,9 @@ func authorizeSessionTransferTx(
 		fromSessionID != activeFromSessionID ||
 		toSessionID != activeToSessionID {
 		return ErrSessionTransferInProgress
+	}
+	if activeOwnerID != operationID || !leaseExpiresAt.Valid || !leaseExpiresAt.Time.After(time.Now().UTC()) {
+		return ErrSessionTransferOwnershipLost
 	}
 	return nil
 }

@@ -2651,8 +2651,21 @@ func (s *Service) isSessionResetInProgress(sessionID string) bool {
 }
 
 func (s *Service) reconcileDurableQueueStateOnStartup(ctx context.Context) error {
-	if err := s.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
-		return fmt.Errorf("reconcile session transfer compensations: %w", err)
+	for {
+		err := s.reconcileSessionTransferCompensationsOnStartup(ctx)
+		if !errors.Is(err, messagequeue.ErrSessionTransferInProgress) {
+			if err != nil {
+				return fmt.Errorf("reconcile session transfer compensations: %w", err)
+			}
+			break
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 	if err := s.reconcilePendingQueueDispatchesOnStartup(ctx); err != nil {
 		return fmt.Errorf("reconcile pending queue dispatches: %w", err)

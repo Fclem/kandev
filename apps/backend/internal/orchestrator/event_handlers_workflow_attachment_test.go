@@ -376,6 +376,36 @@ func TestSessionTransferCompensationRecoveryRejectsActiveOwner(t *testing.T) {
 	}
 }
 
+func TestDurableQueueStartupRecoveryDefersActiveTransferUntilContextStops(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	entry, err := queue.QueueMessage(
+		ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID:   "active-transfer",
+		TaskID:        entry.TaskID,
+		FromSessionID: entry.SessionID,
+		ToSessionID:   "session-new",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	service := &Service{
+		logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: &workflowAttachmentTransferStub{},
+	}
+
+	err = service.reconcileDurableQueueStateOnStartup(ctx)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("startup recovery error = %v, want context cancellation", err)
+	}
+}
+
 func TestCleanupOnlyTransferCompensationRecoversPreviousHopAfterRestart(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "queue.db")

@@ -114,10 +114,6 @@ func (r *Repository) ClaimMessageAttachments(ctx context.Context, ids []string, 
 		if err := messagequeue.LockSessionInTransaction(ctx, tx, r.db, sessionID); err != nil {
 			return fmt.Errorf("lock attachment claim session: %w", err)
 		}
-		sessionID, err = messagequeue.ResolveSessionTransferInTransaction(ctx, tx, r.db, sessionID)
-		if err != nil {
-			return err
-		}
 	}
 
 	now := time.Now().UTC()

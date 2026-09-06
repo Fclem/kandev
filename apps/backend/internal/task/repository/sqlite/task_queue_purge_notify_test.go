@@ -183,6 +183,39 @@ func TestDeleteTaskSessionPurgesQueuedMessages(t *testing.T) {
 	}
 }
 
+func TestDeleteTaskSessionRejectsActiveQueueTransfer(t *testing.T) {
+	repo := newRepoForArchiveTests(t, "task-session-transfer")
+	ctx := context.Background()
+	seedLiveSessionForQueue(t, repo, "session-old", "task-session-transfer")
+	seedLiveSessionForQueue(t, repo, "session-new", "task-session-transfer")
+	queueRepo, err := messagequeue.NewSQLiteRepository(repo.db, repo.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compensations := queueRepo.(interface {
+		UpsertSessionTransferCompensation(context.Context, messagequeue.SessionTransferCompensation) error
+	})
+	if err := compensations.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID: "session-delete-transfer",
+		TaskID:      "task-session-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err = repo.DeleteTaskSession(ctx, "session-old")
+
+	if !errors.Is(err, messagequeue.ErrSessionTransferInProgress) {
+		t.Fatalf("DeleteTaskSession error = %v, want %v", err, messagequeue.ErrSessionTransferInProgress)
+	}
+	var count int
+	if err := repo.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM task_sessions WHERE id = 'session-old'`); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("session-old row count = %d, want 1", count)
+	}
+}
+
 func TestDeleteTaskSessionNotifiesQueueSessionPurge(t *testing.T) {
 	repo := newRepoForArchiveTests(t, "task-session-queue-purge-notify")
 	ctx := context.Background()

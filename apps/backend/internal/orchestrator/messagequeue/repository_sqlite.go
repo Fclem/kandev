@@ -167,9 +167,13 @@ func (r *sqliteRepository) captureReservationGenerationsTx(
 }
 
 // LockSessionInTransaction acquires the queue's cross-process session lock
-// inside an existing transaction owned by another repository.
+// inside an existing transaction and rejects mutations during an active
+// durable transfer.
 func LockSessionInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) error {
-	return lockSessionTxIn(ctx, tx, db, sessionID)
+	if err := lockSessionTxIn(ctx, tx, db, sessionID); err != nil {
+		return err
+	}
+	return guardSessionTransferTx(ctx, tx, db, sessionID)
 }
 
 // lockSessionTxIn takes the per-session cross-process lock inside an existing

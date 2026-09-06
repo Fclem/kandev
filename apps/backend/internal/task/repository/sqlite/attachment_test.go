@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -276,7 +277,7 @@ func TestTransferMessageAttachments_RebindsClaimedRows(t *testing.T) {
 	}
 }
 
-func TestClaimMessageAttachmentsFollowsActiveSessionTransfer(t *testing.T) {
+func TestClaimMessageAttachmentsRejectsActiveSessionTransfer(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
 	seedWorkspace(t, repo, "workspace-attachments")
@@ -304,26 +305,27 @@ func TestClaimMessageAttachmentsFollowsActiveSessionTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := repo.ClaimMessageAttachments(
+	err = repo.ClaimMessageAttachments(
 		ctx,
 		[]string{attachment.ID},
 		attachment.OwnerID,
 		attachment.WorkspaceID,
 		"task-transfer",
 		"session-old",
-	); err != nil {
-		t.Fatal(err)
+	)
+	if !errors.Is(err, messagequeue.ErrSessionTransferInProgress) {
+		t.Fatalf("claim error = %v, want %v", err, messagequeue.ErrSessionTransferInProgress)
 	}
 	stored, err := repo.GetMessageAttachment(ctx, attachment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.SessionID != "session-new" {
-		t.Fatalf("attachment session = %q, want session-new", stored.SessionID)
+	if stored.SessionID != "" || stored.State != models.AttachmentStateStaged {
+		t.Fatalf("attachment after rejected claim = %#v", stored)
 	}
 }
 
-func TestPostgresAttachmentClaimFollowsBlockedSessionTransfer(t *testing.T) {
+func TestPostgresAttachmentClaimRejectsActiveSessionTransfer(t *testing.T) {
 	repoA, repoB, _ := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	seedWorkspace(t, repoA, "workspace-transfer-claim")
@@ -351,21 +353,22 @@ func TestPostgresAttachmentClaimFollowsBlockedSessionTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := repoB.ClaimMessageAttachments(
+	err = repoB.ClaimMessageAttachments(
 		ctx,
 		[]string{attachment.ID},
 		attachment.OwnerID,
 		attachment.WorkspaceID,
 		"task-transfer",
 		"session-old",
-	); err != nil {
-		t.Fatal(err)
+	)
+	if !errors.Is(err, messagequeue.ErrSessionTransferInProgress) {
+		t.Fatalf("claim error = %v, want %v", err, messagequeue.ErrSessionTransferInProgress)
 	}
 	stored, err := repoA.GetMessageAttachment(ctx, attachment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.SessionID != "session-new" {
-		t.Fatalf("attachment session = %q, want session-new", stored.SessionID)
+	if stored.SessionID != "" || stored.State != models.AttachmentStateStaged {
+		t.Fatalf("attachment after rejected claim = %#v", stored)
 	}
 }

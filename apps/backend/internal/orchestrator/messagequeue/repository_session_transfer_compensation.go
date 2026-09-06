@@ -284,6 +284,42 @@ func (r *sqliteRepository) claimSessionTransferCompensationRecovery(
 	return ownerID, nil
 }
 
+func (r *sqliteRepository) renewSessionTransferCompensationLease(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+	ownerID string,
+) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin renew session transfer compensation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, _, err := r.lockSessionTransferPairTx(
+		ctx, tx, compensation.FromSessionID, compensation.ToSessionID,
+	); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE queue_session_transfer_compensations
+		SET recovery_lease_expires_at = ?
+		WHERE operation_id = ? AND recovery_owner = ?
+		  AND task_id = ? AND from_session_id = ? AND to_session_id = ?
+	`), time.Now().UTC().Add(sessionTransferCompensationLeaseDuration),
+		compensation.OperationID, ownerID, compensation.TaskID,
+		compensation.FromSessionID, compensation.ToSessionID)
+	if err != nil {
+		return fmt.Errorf("renew session transfer compensation: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("renew session transfer compensation rows affected: %w", err)
+	}
+	if affected != 1 {
+		return ErrSessionTransferOwnershipLost
+	}
+	return tx.Commit()
+}
+
 func (r *sqliteRepository) ListSessionTransferCompensations(
 	ctx context.Context,
 ) ([]SessionTransferCompensation, error) {

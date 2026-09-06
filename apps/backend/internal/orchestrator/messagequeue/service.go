@@ -2402,7 +2402,7 @@ func (s *Service) GetAttachmentCleanup(
 ) (*AttachmentCleanup, error) {
 	repo, ok := s.repo.(attachmentCleanupLocatorRepository)
 	if !ok {
-		return nil, nil
+		return nil, errors.New("attachment cleanup persistence unavailable")
 	}
 	return repo.GetAttachmentCleanup(ctx, sessionID, entryID, operationID)
 }
@@ -2415,6 +2415,7 @@ type sessionTransferCompensationRepository interface {
 
 type sessionTransferCompensationRecoveryRepository interface {
 	claimSessionTransferCompensationRecovery(context.Context, SessionTransferCompensation) (string, error)
+	renewSessionTransferCompensationLease(context.Context, SessionTransferCompensation, string) error
 	deleteSessionTransferCompensationWithOwner(context.Context, string, string, string, string, string) error
 }
 
@@ -2452,6 +2453,20 @@ func (s *Service) DeleteSessionTransferCompensation(
 	)
 }
 
+// RenewSessionTransferCompensationLease keeps external transfer work owned
+// until its queue mutation or recovery acknowledgement completes.
+func (s *Service) RenewSessionTransferCompensationLease(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+	ownerID string,
+) error {
+	repo, ok := s.repo.(sessionTransferCompensationRecoveryRepository)
+	if !ok {
+		return errors.New("session transfer compensation recovery unavailable")
+	}
+	return repo.renewSessionTransferCompensationLease(ctx, compensation, ownerID)
+}
+
 // ClaimSessionTransferCompensationRecovery claims an expired transfer
 // compensation before its external attachment recovery starts.
 func (s *Service) ClaimSessionTransferCompensationRecovery(
@@ -2467,6 +2482,38 @@ func (s *Service) ClaimSessionTransferCompensationRecovery(
 
 // DeleteClaimedSessionTransferCompensation acknowledges recovered attachment
 // state only while the caller owns the compensation recovery lease.
+
+// MaintainSessionTransferCompensationLease renews an owner-scoped lease until
+// the caller completes its external attachment operation.
+func (s *Service) MaintainSessionTransferCompensationLease(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+	ownerID string,
+) func() {
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(sessionTransferCompensationLeaseDuration / 2)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if err := s.RenewSessionTransferCompensationLease(
+					context.WithoutCancel(ctx), compensation, ownerID,
+				); err != nil {
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		close(stop)
+		<-done
+	}
+}
 func (s *Service) DeleteClaimedSessionTransferCompensation(
 	ctx context.Context,
 	compensation SessionTransferCompensation,

@@ -16,6 +16,7 @@ type durableSessionTransferState struct {
 	attachmentIDs     []string
 	preparationCalled bool
 	rollbackSucceeded bool
+	stopLeaseRenewal  func()
 }
 
 // TransferSessionWithDurablePreparation preserves the original callback
@@ -60,6 +61,11 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 	if s.SessionTransferCompensationPersistenceAvailable() {
 		state.operationID = uuid.NewString()
 	}
+	defer func() {
+		if state.stopLeaseRenewal != nil {
+			state.stopLeaseRenewal()
+		}
+	}()
 	err := s.transferSession(
 		ctx,
 		oldSessionID,
@@ -109,6 +115,9 @@ func (s *Service) prepareDurableSessionTransfer(
 		if err := s.UpsertSessionTransferCompensation(ctx, *state.compensation); err != nil {
 			return fmt.Errorf("persist session transfer fence: %w", err)
 		}
+		state.stopLeaseRenewal = s.MaintainSessionTransferCompensationLease(
+			ctx, *state.compensation, state.operationID,
+		)
 	}
 	entries, err := s.repo.ListBySession(ctx, oldSessionID)
 	if err != nil {

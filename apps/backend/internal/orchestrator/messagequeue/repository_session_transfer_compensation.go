@@ -220,11 +220,13 @@ func (r *sqliteRepository) deleteSessionTransferCompensationWithOwner(
 	); err != nil {
 		return err
 	}
+	now := time.Now().UTC()
 	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		DELETE FROM queue_session_transfer_compensations
 		WHERE operation_id = ? AND recovery_owner = ?
 		  AND task_id = ? AND from_session_id = ? AND to_session_id = ?
-	`), operationID, ownerID, taskID, fromSessionID, toSessionID)
+		  AND recovery_lease_expires_at > ?
+	`), operationID, ownerID, taskID, fromSessionID, toSessionID, now)
 	if err != nil {
 		return fmt.Errorf("delete session transfer compensation: %w", err)
 	}
@@ -405,6 +407,20 @@ func authorizeSessionTransferTx(
 		return ErrSessionTransferOwnershipLost
 	}
 	return nil
+}
+
+func commitAuthorizedSessionTransferTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	db *sqlx.DB,
+	fromSessionID, toSessionID, operationID string,
+) error {
+	if err := authorizeSessionTransferTx(
+		ctx, tx, db, fromSessionID, toSessionID, operationID,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func guardSessionTransferTx(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) error {

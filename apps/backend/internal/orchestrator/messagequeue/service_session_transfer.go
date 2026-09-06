@@ -18,6 +18,7 @@ type durableSessionTransferState struct {
 	rollbackSucceeded bool
 	operationCtx      context.Context
 	stopLeaseRenewal  func() error
+	leaseRenewalErr   error
 	cancelTransfer    context.CancelFunc
 }
 
@@ -87,14 +88,16 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 		},
 	)
 	if state.stopLeaseRenewal != nil {
-		leaseErr := state.stopLeaseRenewal()
+		state.leaseRenewalErr = state.stopLeaseRenewal()
 		state.stopLeaseRenewal = nil
-		if leaseErr != nil {
-			err = errors.Join(err, fmt.Errorf("session transfer lease lost: %w", leaseErr))
+		if state.leaseRenewalErr != nil {
+			err = errors.Join(err, fmt.Errorf("session transfer lease lost: %w", state.leaseRenewalErr))
 		}
 	}
 	if err != nil {
-		if state.compensation != nil && state.rollbackSucceeded {
+		if state.compensation != nil &&
+			state.rollbackSucceeded &&
+			state.leaseRenewalErr == nil {
 			err = errors.Join(err, s.deleteSessionTransferCompensation(context.WithoutCancel(ctx), *state.compensation))
 		}
 		return err

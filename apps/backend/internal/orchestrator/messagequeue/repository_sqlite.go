@@ -632,6 +632,9 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return err
 	}
+	if err := r.ensureEditLeaseSchema(ctx); err != nil {
+		return err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin restore tx: %w", err)
@@ -649,6 +652,9 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 		}
 	}
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
+		return err
+	}
+	if err := r.deleteEditLeasesForSessionTx(ctx, tx, msg.SessionID); err != nil {
 		return err
 	}
 	if msg.reservationGenerationsCaptured && !msg.IsDurableLifecycle() {
@@ -1035,6 +1041,9 @@ func ensureTaskPurgeRecoverySchemas(ctx context.Context, tx *sqlx.Tx) error {
 	if _, err := tx.ExecContext(ctx, sessionTransferCompensationSchema); err != nil {
 		return fmt.Errorf("ensure task purge transfer compensation schema: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, editLeaseSchema); err != nil {
+		return fmt.Errorf("ensure task purge edit lease schema: %w", err)
+	}
 	return nil
 }
 
@@ -1116,6 +1125,9 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 		if err := guardSessionTransferTx(ctx, tx, db, sessionID); err != nil {
 			return 0, err
 		}
+	}
+	if err := deleteEditLeasesForSessionIDsTx(ctx, tx, db, ordered); err != nil {
+		return 0, err
 	}
 	result, err := tx.ExecContext(ctx, db.Rebind(`DELETE FROM queued_messages WHERE task_id = ?`), taskID)
 	if err != nil {
@@ -3301,7 +3313,9 @@ func (r *sqliteRepository) transferSession(
 	}
 	defer func() { _ = tx.Rollback() }()
 	if oldSessionID == newSessionID {
-		return tx.Commit()
+		return commitAuthorizedSessionTransferTx(
+			ctx, tx, r.db, oldSessionID, newSessionID, operationID,
+		)
 	}
 	if err := r.transferSessionRecoveryRowsTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
@@ -3318,7 +3332,9 @@ func (r *sqliteRepository) transferSession(
 	if err := r.transferPendingSendNowClaimTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return commitAuthorizedSessionTransferTx(
+		ctx, tx, r.db, oldSessionID, newSessionID, operationID,
+	)
 }
 
 func queuedSnapshotTaskIDs(entries []QueuedMessage, pendingMove *PendingMove) []string {
@@ -3344,6 +3360,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return err
 	}
+	if err := r.ensureEditLeaseSchema(ctx); err != nil {
+		return err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin replace session tx: %w", err)
@@ -3360,6 +3379,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 		return err
 	}
 	if err := r.guardSessionTx(ctx, tx, sessionID, ""); err != nil {
+		return err
+	}
+	if err := r.deleteEditLeasesForSessionTx(ctx, tx, sessionID); err != nil {
 		return err
 	}
 	if err := r.deletePendingQueueDispatchesBySessionTx(ctx, tx, sessionID); err != nil {

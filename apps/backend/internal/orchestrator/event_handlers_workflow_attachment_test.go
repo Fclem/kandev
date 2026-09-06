@@ -376,8 +376,9 @@ func TestSessionTransferCompensationRecoveryRejectsActiveOwner(t *testing.T) {
 	}
 }
 
-func TestDurableQueueStartupRecoveryDefersActiveTransferUntilContextStops(t *testing.T) {
+func TestDurableQueueStartupRecoveryStopsRetryWhenContextCancels(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
 	t.Cleanup(func() { _ = db.Close() })
 	entry, err := queue.QueueMessage(
@@ -387,22 +388,29 @@ func TestDurableQueueStartupRecoveryDefersActiveTransferUntilContextStops(t *tes
 		t.Fatal(err)
 	}
 	if err := queue.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
-		OperationID:   "active-transfer",
-		TaskID:        entry.TaskID,
-		FromSessionID: entry.SessionID,
-		ToSessionID:   "session-new",
+		OperationID: "active-transfer", TaskID: entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	cancel()
 	service := &Service{
 		logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: &workflowAttachmentTransferStub{},
 	}
+	result := make(chan error, 1)
+	go func() { result <- service.reconcileDurableQueueStateOnStartup(ctx) }()
 
-	err = service.reconcileDurableQueueStateOnStartup(ctx)
-
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("startup recovery error = %v, want context cancellation", err)
+	select {
+	case err := <-result:
+		t.Fatalf("startup recovery returned before cancellation: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("startup recovery error = %v, want context cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("startup recovery did not stop after cancellation")
 	}
 }
 

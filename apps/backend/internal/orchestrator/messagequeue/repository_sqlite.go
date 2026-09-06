@@ -43,6 +43,9 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 	if err := r.ensureSessionTransferCompensationSchema(context.Background()); err != nil {
 		return nil, fmt.Errorf("messagequeue: init session transfer schema: %w", err)
 	}
+	if err := r.ensureEditLeaseSchema(context.Background()); err != nil {
+		return nil, fmt.Errorf("messagequeue: init edit lease schema: %w", err)
+	}
 	var present bool
 	var err error
 	if writer.DriverName() == "pgx" {
@@ -1380,6 +1383,13 @@ func (r *sqliteRepository) TakeHead(ctx context.Context, sessionID string) (*Que
 		}
 		return nil, fmt.Errorf("take head: %w", err)
 	}
+	blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, msg.ID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, nil
+	}
 	if err := r.captureReservationGenerationsTx(ctx, tx, msg); err != nil {
 		return nil, err
 	}
@@ -1598,6 +1608,13 @@ func (r *sqliteRepository) reserveHead(ctx context.Context, sessionID string, re
 	}
 	if err != nil {
 		return nil, true, fmt.Errorf("reserve head: %w", err)
+	}
+	blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, msg.ID)
+	if err != nil {
+		return nil, true, err
+	}
+	if blocked {
+		return nil, true, nil
 	}
 	if err := r.captureReservationGenerationsTx(ctx, tx, msg); err != nil {
 		return nil, true, err
@@ -3115,6 +3132,9 @@ func (r *sqliteRepository) transferSession(
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return err
 	}
+	if err := r.ensureSendNowClaimRecoverySchema(ctx); err != nil {
+		return err
+	}
 	if err := r.ensureAttachmentCleanupSchema(ctx); err != nil {
 		return err
 	}
@@ -3148,10 +3168,16 @@ func (r *sqliteRepository) transferSession(
 	if err := r.transferSessionRecoveryRowsTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
 	}
+	if err := r.deleteEditLeasesForTransferTx(ctx, tx, oldSessionID, newSessionID); err != nil {
+		return err
+	}
 	if err := r.transferSessionQueueRowsTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
 	}
 	if err := r.transferSessionStateTx(ctx, tx, oldSessionID, newSessionID); err != nil {
+		return err
+	}
+	if err := r.transferPendingSendNowClaimTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
 	}
 	return tx.Commit()

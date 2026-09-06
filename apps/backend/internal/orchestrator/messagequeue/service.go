@@ -243,6 +243,12 @@ type editReplayValidationRepository interface {
 	validateSessionEntryForEditReplay(context.Context, string, string) error
 }
 
+type editLeaseRepository interface {
+	acquireEditLease(context.Context, *QueueEditLease) error
+	renewEditLease(context.Context, *QueueEditLease) error
+	releaseEditLease(context.Context, string, string, string) error
+}
+
 func (s *Service) validateDuplicateEditReplay(
 	ctx context.Context,
 	sessionID, entryID string,
@@ -296,26 +302,35 @@ func (s *Service) BeginEdit(ctx context.Context, sessionID, entryID, connectionI
 		if err != nil {
 			return err
 		}
-		return s.withRepositorySessionTransferFence(admittedCtx, sessionID, func(context.Context) error {
-			key := s.editLeaseKey(sessionID, entryID)
-			now := time.Now().UTC()
-			s.editLeaseMu.Lock()
-			defer s.editLeaseMu.Unlock()
-			s.expireEditLeaseLocked(key, now)
-			if existing := s.editLeases[key]; existing != nil {
-				return ErrEditConflict
+		key := s.editLeaseKey(sessionID, entryID)
+		now := time.Now().UTC()
+		s.editLeaseMu.Lock()
+		s.expireEditLeaseLocked(key, now)
+		if s.editLeases[key] != nil {
+			s.editLeaseMu.Unlock()
+			return ErrEditConflict
+		}
+		lease = &QueueEditLease{
+			SessionID: sessionID, EntryID: entryID, LeaseID: uuid.NewString(),
+			TargetRevision: s.editRevisions[key], LeaseGeneration: 1,
+			ExpiresAt: now.Add(QueueEditLeaseTTL), connectionID: connectionID,
+			taskID: entry.TaskID,
+		}
+		s.editLeaseMu.Unlock()
+		if repo, ok := s.repo.(editLeaseRepository); ok {
+			if err := repo.acquireEditLease(admittedCtx, lease); err != nil {
+				return err
 			}
-			lease = &QueueEditLease{
-				SessionID: sessionID, EntryID: entryID, LeaseID: uuid.NewString(),
-				TargetRevision: s.editRevisions[key], LeaseGeneration: 1,
-				ExpiresAt: now.Add(QueueEditLeaseTTL), connectionID: connectionID,
-				taskID: entry.TaskID,
-			}
-			s.editLeases[key] = lease
-			return nil
-		})
+		}
+		s.editLeaseMu.Lock()
+		s.editLeases[key] = lease
+		s.editLeaseMu.Unlock()
+		return nil
 	})
-	return cloneEditLease(lease), err
+	if err != nil {
+		return nil, err
+	}
+	return cloneEditLease(lease), nil
 }
 
 // GetEditLease returns the current lease for an entry without acquiring
@@ -356,11 +371,24 @@ func (s *Service) RenewEdit(ctx context.Context, sessionID, entryID, leaseID, co
 			return nil
 		})
 	})
-	return renewed, err
+	if err != nil || renewed == nil {
+		return renewed, err
+	}
+	if repo, ok := s.repo.(editLeaseRepository); ok {
+		if err := repo.renewEditLease(ctx, renewed); err != nil {
+			s.editLeaseMu.Lock()
+			if lease := s.editLeases[s.editLeaseKey(sessionID, entryID)]; lease != nil && lease.LeaseID == leaseID {
+				delete(s.editLeases, s.editLeaseKey(sessionID, entryID))
+			}
+			s.editLeaseMu.Unlock()
+			return nil, err
+		}
+	}
+	return renewed, nil
 }
 
 func (s *Service) EndEdit(ctx context.Context, sessionID, entryID, leaseID, connectionID string) error {
-	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
 		return s.withRepositorySessionTransferFence(admittedCtx, sessionID, func(context.Context) error {
 			key := s.editLeaseKey(sessionID, entryID)
 			s.editLeaseMu.Lock()
@@ -374,6 +402,13 @@ func (s *Service) EndEdit(ctx context.Context, sessionID, entryID, leaseID, conn
 			return nil
 		})
 	})
+	if err != nil {
+		return err
+	}
+	if repo, ok := s.repo.(editLeaseRepository); ok {
+		return repo.releaseEditLease(ctx, sessionID, entryID, leaseID)
+	}
+	return nil
 }
 
 func (s *Service) UpdateMessageWithLease(
@@ -2378,6 +2413,11 @@ type sessionTransferCompensationRepository interface {
 	ListSessionTransferCompensations(context.Context) ([]SessionTransferCompensation, error)
 }
 
+type sessionTransferCompensationRecoveryRepository interface {
+	claimSessionTransferCompensationRecovery(context.Context, SessionTransferCompensation) (string, error)
+	deleteSessionTransferCompensationWithOwner(context.Context, string, string, string, string, string) error
+}
+
 // SessionTransferCompensationPersistenceAvailable reports whether interrupted
 // queue and attachment transfers can be reconciled after process restart.
 func (s *Service) SessionTransferCompensationPersistenceAvailable() bool {
@@ -2409,6 +2449,40 @@ func (s *Service) DeleteSessionTransferCompensation(
 	}
 	return repo.DeleteSessionTransferCompensation(
 		ctx, operationID, taskID, fromSessionID, toSessionID,
+	)
+}
+
+// ClaimSessionTransferCompensationRecovery claims an expired transfer
+// compensation before its external attachment recovery starts.
+func (s *Service) ClaimSessionTransferCompensationRecovery(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+) (string, error) {
+	repo, ok := s.repo.(sessionTransferCompensationRecoveryRepository)
+	if !ok {
+		return "", errors.New("session transfer compensation recovery unavailable")
+	}
+	return repo.claimSessionTransferCompensationRecovery(ctx, compensation)
+}
+
+// DeleteClaimedSessionTransferCompensation acknowledges recovered attachment
+// state only while the caller owns the compensation recovery lease.
+func (s *Service) DeleteClaimedSessionTransferCompensation(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+	ownerID string,
+) error {
+	repo, ok := s.repo.(sessionTransferCompensationRecoveryRepository)
+	if !ok {
+		return errors.New("session transfer compensation recovery unavailable")
+	}
+	return repo.deleteSessionTransferCompensationWithOwner(
+		ctx,
+		compensation.OperationID,
+		ownerID,
+		compensation.TaskID,
+		compensation.FromSessionID,
+		compensation.ToSessionID,
 	)
 }
 

@@ -53,6 +53,66 @@ func TestSQLiteSendNowClaimPersistsOrdinarySourceRecovery(t *testing.T) {
 		t.Fatalf("restored queue = %#v, want source %s", entries, source.ID)
 	}
 }
+func TestSQLiteTransferSessionMovesPendingSendNowClaim(t *testing.T) {
+	for _, accepted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("accepted=%t", accepted), func(t *testing.T) {
+			ctx := context.Background()
+			repo := newTestSQLiteRepo(t).(*sqliteRepository)
+			source := insertTestEntry(
+				t, repo, "session-old", "task-1", "durable source", QueuedByWorkflow, nil,
+				map[string]interface{}{MetadataLifecycleDurable: true},
+			)
+			claim, err := repo.ClaimSendNow(ctx, source.SessionID, []QueuedMessage{*source})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if accepted {
+				if err := repo.MarkPendingSendNowClaimAccepted(ctx, claim); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if err := repo.TransferSession(ctx, "session-old", "session-new"); err != nil {
+				t.Fatal(err)
+			}
+
+			pending, err := repo.ListPendingSendNowClaims(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(pending) != 1 {
+				t.Fatalf("pending claims = %#v, want one transferred claim", pending)
+			}
+			transferred := pending[0]
+			if transferred.Claim.Sources[0].SessionID != "session-new" ||
+				transferred.Claim.Dispatch.SessionID != "session-new" {
+				t.Fatalf("transferred claim = %#v, want session-new", transferred.Claim)
+			}
+			if transferred.Accepted != accepted {
+				t.Fatalf("transferred accepted = %t, want %t", transferred.Accepted, accepted)
+			}
+			if accepted {
+				err = repo.AcknowledgeSendNowClaim(ctx, &transferred.Claim)
+			} else {
+				err = repo.RestoreSendNowClaim(ctx, &transferred.Claim)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			entries, err := repo.ListBySession(ctx, "session-new")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if accepted && len(entries) != 0 {
+				t.Fatalf("acknowledged destination queue = %#v, want empty", entries)
+			}
+			if !accepted && (len(entries) != 1 || entries[0].ID != source.ID || entries[0].IsReservedInFlight()) {
+				t.Fatalf("restored destination queue = %#v", entries)
+			}
+		})
+	}
+}
+
 func TestSQLitePurgeRemovesDurableSendNowClaims(t *testing.T) {
 	for _, purge := range []struct {
 		name string

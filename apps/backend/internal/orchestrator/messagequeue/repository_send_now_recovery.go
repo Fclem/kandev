@@ -2,7 +2,9 @@ package messagequeue
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -117,6 +119,66 @@ func (r *sqliteRepository) deleteExactSendNowClaimTx(
 	}
 	if affected != 1 {
 		return ErrSendNowClaimChanged
+	}
+	return nil
+}
+
+func (r *sqliteRepository) transferPendingSendNowClaimTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	oldSessionID, newSessionID string,
+) error {
+	var claimID, claimJSON string
+	err := tx.QueryRowxContext(ctx, r.db.Rebind(`
+		SELECT claim_id, claim_json
+		FROM queue_send_now_claims
+		WHERE session_id = ?
+	`), oldSessionID).Scan(&claimID, &claimJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read source Send Now claim: %w", err)
+	}
+	var destinationClaimID string
+	err = tx.QueryRowxContext(ctx, r.db.Rebind(`
+		SELECT claim_id
+		FROM queue_send_now_claims
+		WHERE session_id = ?
+	`), newSessionID).Scan(&destinationClaimID)
+	if err == nil {
+		return ErrSendNowClaimChanged
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read destination Send Now claim: %w", err)
+	}
+	var claim SendNowClaim
+	if err := json.Unmarshal([]byte(claimJSON), &claim); err != nil {
+		return fmt.Errorf("unmarshal source Send Now claim: %w", err)
+	}
+	claim.ClaimID = claimID
+	sessionID, err := sendNowClaimSessionID(&claim)
+	if err != nil || sessionID != oldSessionID || claim.Dispatch.SessionID != oldSessionID {
+		return ErrSendNowClaimChanged
+	}
+	for sourceIndex := range claim.Sources {
+		claim.Sources[sourceIndex].SessionID = newSessionID
+	}
+	claim.Dispatch.SessionID = newSessionID
+	claim.SessionGeneration, err = r.getSendNowGenerationTx(ctx, tx, newSessionID)
+	if err != nil {
+		return err
+	}
+	claimJSONBytes, err := json.Marshal(&claim)
+	if err != nil {
+		return fmt.Errorf("marshal transferred Send Now claim: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		UPDATE queue_send_now_claims
+		SET session_id = ?, claim_json = ?
+		WHERE session_id = ? AND claim_id = ?
+	`), newSessionID, string(claimJSONBytes), oldSessionID, claimID); err != nil {
+		return fmt.Errorf("transfer Send Now claim: %w", err)
 	}
 	return nil
 }

@@ -378,13 +378,26 @@ func (r *Repository) TransferMessageAttachments(
 		oldSessionID == newSessionID || len(attachmentIDs) == 0 {
 		return nil
 	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(attachmentIDs)), ",")
-	args := make([]interface{}, 0, 5+len(attachmentIDs))
-	args = append(args, newSessionID, time.Now().UTC(), taskID, oldSessionID, models.AttachmentStateClaimed)
+	uniqueAttachmentIDs := make([]string, 0, len(attachmentIDs))
+	seenAttachmentIDs := make(map[string]struct{}, len(attachmentIDs))
 	for _, attachmentID := range attachmentIDs {
+		if _, seen := seenAttachmentIDs[attachmentID]; !seen {
+			seenAttachmentIDs[attachmentID] = struct{}{}
+			uniqueAttachmentIDs = append(uniqueAttachmentIDs, attachmentID)
+		}
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(uniqueAttachmentIDs)), ",")
+	args := make([]interface{}, 0, 5+len(uniqueAttachmentIDs))
+	args = append(args, newSessionID, time.Now().UTC(), taskID, oldSessionID, models.AttachmentStateClaimed)
+	for _, attachmentID := range uniqueAttachmentIDs {
 		args = append(args, attachmentID)
 	}
-	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transfer session attachments: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE task_message_attachments
 		SET session_id = ?, updated_at = ?
 		WHERE task_id = ? AND session_id = ? AND state = ?
@@ -393,8 +406,17 @@ func (r *Repository) TransferMessageAttachments(
 	if err != nil {
 		return fmt.Errorf("transfer session attachments: %w", err)
 	}
-	_, err = result.RowsAffected()
-	return err
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count transferred session attachments: %w", err)
+	}
+	if affected != int64(len(uniqueAttachmentIDs)) {
+		return fmt.Errorf("transfer session attachments: expected %d claimed source attachments, moved %d", len(uniqueAttachmentIDs), affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transfer session attachments: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) MarkExpiredMessageAttachments(ctx context.Context, now time.Time) ([]*models.TaskMessageAttachment, error) {

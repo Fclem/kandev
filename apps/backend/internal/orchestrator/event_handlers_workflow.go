@@ -2562,6 +2562,10 @@ func (s *Service) reconcileSessionTransferCompensation(
 	ctx context.Context,
 	compensation messagequeue.SessionTransferCompensation,
 ) error {
+	ownerID, err := s.messageQueue.ClaimSessionTransferCompensationRecovery(ctx, compensation)
+	if err != nil {
+		return fmt.Errorf("claim session transfer compensation recovery: %w", err)
+	}
 	targetSessionID, err := s.sessionTransferCompensationTarget(ctx, compensation)
 	if err != nil {
 		return err
@@ -2579,12 +2583,10 @@ func (s *Service) reconcileSessionTransferCompensation(
 	); err != nil {
 		return fmt.Errorf("reconcile session transfer attachments: %w", err)
 	}
-	if err := s.messageQueue.DeleteSessionTransferCompensation(
+	if err := s.messageQueue.DeleteClaimedSessionTransferCompensation(
 		context.WithoutCancel(ctx),
-		compensation.OperationID,
-		compensation.TaskID,
-		compensation.FromSessionID,
-		compensation.ToSessionID,
+		compensation,
+		ownerID,
 	); err != nil {
 		return fmt.Errorf("delete session transfer compensation: %w", err)
 	}

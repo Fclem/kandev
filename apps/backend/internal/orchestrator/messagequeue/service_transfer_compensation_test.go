@@ -596,3 +596,27 @@ func TestRemoteSessionTransferRejectsDuplicateEditReplay(t *testing.T) {
 	require.ErrorIs(t, err, ErrEntryNotFound)
 	assert.Equal(t, 1, finalizeCalls)
 }
+
+func TestRemoteEditLeaseBlocksHeadReservation(t *testing.T) {
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	editService := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+	drainService := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := editService.QueueMessage(
+		ctx, "session-1", "task", "queued", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	_, err = editService.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+
+	reserved, ok := drainService.ReserveQueued(ctx, entry.SessionID)
+
+	assert.False(t, ok)
+	assert.Nil(t, reserved)
+	status := editService.GetStatus(ctx, entry.SessionID)
+	require.Len(t, status.Entries, 1)
+	assert.Equal(t, entry.ID, status.Entries[0].ID)
+}

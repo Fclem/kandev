@@ -199,6 +199,7 @@ func TestTransferQueuedSessionStateRecoversFailedAttachmentCompensationAfterRest
 	if transfer.currentSession != "session-new" {
 		t.Fatalf("attachment session after failed compensation = %q, want session-new before recovery", transfer.currentSession)
 	}
+	expireSessionTransferCompensationLease(t, db)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -313,6 +314,7 @@ func TestCleanupOnlyTransferCompensationRecoversSourceAfterRestart(t *testing.T)
 	if transfer.currentSession != "session-new" {
 		t.Fatalf("attachment session before restart = %q, want session-new", transfer.currentSession)
 	}
+	expireSessionTransferCompensationLease(t, db)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -328,6 +330,49 @@ func TestCleanupOnlyTransferCompensationRecoversSourceAfterRestart(t *testing.T)
 	}
 	if transfer.currentSession != "session-old" {
 		t.Fatalf("attachment session after recovery = %q, want session-old", transfer.currentSession)
+	}
+}
+
+func TestSessionTransferCompensationRecoveryRejectsActiveOwner(t *testing.T) {
+	ctx := context.Background()
+	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	entry, err := queue.QueueMessage(
+		ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID:   "active-transfer",
+		TaskID:        entry.TaskID,
+		FromSessionID: entry.SessionID,
+		ToSessionID:   "session-new",
+		EntryIDs:      []string{entry.ID},
+		AttachmentIDs: []string{"attachment"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	transfer := &workflowAttachmentTransferStub{}
+	restarted := &Service{
+		logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer,
+	}
+
+	err = restarted.reconcileSessionTransferCompensationsOnStartup(ctx)
+
+	if !errors.Is(err, messagequeue.ErrSessionTransferInProgress) {
+		t.Fatalf("recovery error = %v, want active transfer rejection", err)
+	}
+	if len(transfer.calls) != 0 {
+		t.Fatalf("attachment recovery calls = %#v, want none", transfer.calls)
+	}
+	compensations, listErr := queue.ListSessionTransferCompensations(ctx)
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(compensations) != 1 {
+		t.Fatalf("remaining compensations = %#v, want active owner preserved", compensations)
 	}
 }
 
@@ -364,6 +409,7 @@ func TestCleanupOnlyTransferCompensationRecoversPreviousHopAfterRestart(t *testi
 	if transfer.currentSession != "session-c" {
 		t.Fatalf("attachment session before restart = %q, want session-c", transfer.currentSession)
 	}
+	expireSessionTransferCompensationLease(t, db)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -408,6 +454,7 @@ func TestDurableQueueStartupRecoveryReconcilesTransferBeforeDispatch(t *testing.
 	}); err != nil {
 		t.Fatal(err)
 	}
+	expireSessionTransferCompensationLease(t, db)
 	transfer := &statefulWorkflowAttachmentTransfer{currentSession: "session-new"}
 	restarted := &Service{
 		logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer,
@@ -433,12 +480,23 @@ func TestDurableQueueStartupRecoveryReconcilesTransferBeforeDispatch(t *testing.
 	}
 }
 
+func expireSessionTransferCompensationLease(t *testing.T, db *sqlx.DB) {
+	t.Helper()
+	if _, err := db.Exec(`
+		UPDATE queue_session_transfer_compensations
+		SET recovery_lease_expires_at = ?
+	`, time.Now().UTC().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newWorkflowTransferQueue(t *testing.T, dbPath string) (*messagequeue.Service, *sqlx.DB) {
 	t.Helper()
 	raw, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw.SetMaxOpenConns(1)
 	db := sqlx.NewDb(raw, "sqlite3")
 	repo, err := messagequeue.NewSQLiteRepository(db, db)

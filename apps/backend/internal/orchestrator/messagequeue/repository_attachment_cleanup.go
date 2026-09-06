@@ -77,7 +77,7 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 		return fmt.Errorf("begin attachment cleanup upsert: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := r.lockSessionTx(ctx, tx, cleanup.CurrentSessionID); err != nil {
+	if err := r.lockSessionTxUnfenced(ctx, tx, cleanup.CurrentSessionID); err != nil {
 		return err
 	}
 	cleanup.CurrentSessionID, err = ResolveSessionTransferInTransaction(
@@ -135,9 +135,6 @@ func (r *sqliteRepository) DeleteAttachmentCleanup(
 		return fmt.Errorf("locate attachment cleanup for delete: %w", err)
 	}
 	if err := r.lockSessionTx(ctx, tx, currentSessionID); err != nil {
-		return err
-	}
-	if err := guardSessionTransferTx(ctx, tx, r.db, currentSessionID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`

@@ -121,6 +121,9 @@ var (
 	// ErrSessionTransferInProgress prevents a queue mutation from entering a
 	// session while its rows and external attachment claims are being rebound.
 	ErrSessionTransferInProgress = errors.New("session transfer in progress")
+	// ErrSessionTransferOwnershipLost prevents an older transfer attempt from
+	// deleting or replacing a newer durable transfer fence.
+	ErrSessionTransferOwnershipLost = errors.New("session transfer ownership lost")
 	// ErrEditConflict means a queue entry is currently held by another editor.
 	ErrEditConflict = errors.New("queue entry edit conflict")
 	// ErrEditLeaseNotFound means a lease is missing, expired, or owned by
@@ -289,6 +292,7 @@ type AttachmentCleanupLocator struct {
 // SessionTransferCompensation records an attachment binding that must be
 // reconciled with the durable queue location after an interrupted transfer.
 type SessionTransferCompensation struct {
+	OperationID     string
 	TaskID          string
 	FromSessionID   string
 	ToSessionID     string

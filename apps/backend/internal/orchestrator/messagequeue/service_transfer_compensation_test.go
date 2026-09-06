@@ -217,7 +217,8 @@ func TestAttachmentCleanupFollowsActiveSessionTransfer(t *testing.T) {
 		GetAttachmentCleanup(context.Context, string, string, string) (*AttachmentCleanup, error)
 	})
 	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
-		TaskID: "task", FromSessionID: "session-old", ToSessionID: "session-new",
+		OperationID: "transfer-operation",
+		TaskID:      "task", FromSessionID: "session-old", ToSessionID: "session-new",
 	}))
 	cleanup := AttachmentCleanup{
 		SessionID: "session-old", CurrentSessionID: "session-old",
@@ -249,7 +250,8 @@ func TestAttachmentCleanupDeleteWaitsForActiveSessionTransfer(t *testing.T) {
 	}
 	require.NoError(t, persistence.UpsertAttachmentCleanup(ctx, cleanup))
 	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
-		TaskID: "task", FromSessionID: "session-old", ToSessionID: "session-new",
+		OperationID: "transfer-operation",
+		TaskID:      "task", FromSessionID: "session-old", ToSessionID: "session-new",
 	}))
 
 	err := persistence.DeleteAttachmentCleanup(
@@ -261,4 +263,122 @@ func TestAttachmentCleanupDeleteWaitsForActiveSessionTransfer(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, stored)
+}
+
+func TestSessionTransferCompensationRejectsActiveReplacement(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t)
+	persistence := repo.(interface {
+		UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
+		DeleteSessionTransferCompensation(context.Context, string, string, string, string) error
+		ListSessionTransferCompensations(context.Context) ([]SessionTransferCompensation, error)
+	})
+	first := SessionTransferCompensation{
+		OperationID: "transfer-first",
+		TaskID:      "task", FromSessionID: "session-old", ToSessionID: "session-new",
+		EntryIDs: []string{"entry-first"},
+	}
+	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, first))
+
+	replacement := first
+	replacement.OperationID = "transfer-replacement"
+	replacement.EntryIDs = []string{"entry-replacement"}
+	err := persistence.UpsertSessionTransferCompensation(ctx, replacement)
+
+	require.ErrorIs(t, err, ErrSessionTransferInProgress)
+	stored, listErr := persistence.ListSessionTransferCompensations(ctx)
+	require.NoError(t, listErr)
+	require.Len(t, stored, 1)
+	assert.Equal(t, first.EntryIDs, stored[0].EntryIDs)
+	first.EntryIDs = []string{"entry-final"}
+	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, first))
+	stored, listErr = persistence.ListSessionTransferCompensations(ctx)
+	require.NoError(t, listErr)
+	require.Len(t, stored, 1)
+	assert.Equal(t, first.EntryIDs, stored[0].EntryIDs)
+	err = persistence.DeleteSessionTransferCompensation(
+		ctx, replacement.OperationID, first.TaskID, first.FromSessionID, first.ToSessionID,
+	)
+	require.ErrorIs(t, err, ErrSessionTransferOwnershipLost)
+	stored, listErr = persistence.ListSessionTransferCompensations(ctx)
+	require.NoError(t, listErr)
+	require.Len(t, stored, 1)
+	assert.Equal(t, first.OperationID, stored[0].OperationID)
+	require.NoError(t, persistence.DeleteSessionTransferCompensation(
+		ctx, first.OperationID, first.TaskID, first.FromSessionID, first.ToSessionID,
+	))
+	stored, listErr = persistence.ListSessionTransferCompensations(ctx)
+	require.NoError(t, listErr)
+	assert.Empty(t, stored)
+}
+
+func TestActiveSessionTransferFencesExistingQueueMutations(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(context.Context, Repository, *QueuedMessage, *QueuedMessage) error
+	}{
+		{
+			name: "edit",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				return repo.UpdateContent(ctx, first.SessionID, first.ID, "edited", nil, QueuedByUser)
+			},
+		},
+		{
+			name: "purge",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				_, err := repo.PurgeSession(ctx, first.SessionID)
+				return err
+			},
+		},
+		{
+			name: "purge task",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				_, err := repo.PurgeTask(ctx, first.TaskID)
+				return err
+			},
+		},
+		{
+			name: "merge",
+			mutate: func(ctx context.Context, repo Repository, _, second *QueuedMessage) error {
+				_, err := repo.MergeIntoAbove(ctx, second.SessionID, second.ID, QueuedByUser)
+				return err
+			},
+		},
+		{
+			name: "reorder",
+			mutate: func(ctx context.Context, repo Repository, first, second *QueuedMessage) error {
+				return repo.ReorderEntries(ctx, first.SessionID, []string{second.ID, first.ID})
+			},
+		},
+		{
+			name: "take pending move",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				_, err := repo.TakePendingMove(ctx, first.SessionID)
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := newTestSQLiteRepo(t)
+			first := insertTestEntry(t, repo, "session-old", "task", "first", QueuedByUser, nil, nil)
+			second := insertTestEntry(t, repo, "session-old", "task", "second", QueuedByUser, nil, nil)
+			require.NoError(t, repo.SetPendingMove(ctx, first.SessionID, &PendingMove{
+				MoveID: "move", TaskID: "task", WorkflowID: "workflow", WorkflowStepID: "step",
+			}))
+			persistence := repo.(interface {
+				UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
+			})
+			require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+				OperationID: "transfer-operation",
+				TaskID:      "task", FromSessionID: first.SessionID, ToSessionID: "session-new",
+			}))
+
+			err := test.mutate(ctx, repo, first, second)
+
+			require.ErrorIs(t, err, ErrSessionTransferInProgress)
+		})
+	}
 }

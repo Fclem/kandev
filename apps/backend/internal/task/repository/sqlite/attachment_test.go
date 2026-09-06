@@ -288,7 +288,8 @@ func TestClaimMessageAttachmentsFollowsActiveSessionTransfer(t *testing.T) {
 		UpsertSessionTransferCompensation(context.Context, messagequeue.SessionTransferCompensation) error
 	})
 	if err := compensations.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
-		TaskID: "task-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
+		OperationID: "claim-transfer",
+		TaskID:      "task-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +335,8 @@ func TestPostgresAttachmentClaimFollowsBlockedSessionTransfer(t *testing.T) {
 		UpsertSessionTransferCompensation(context.Context, messagequeue.SessionTransferCompensation) error
 	})
 	if err := compensations.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
-		TaskID: "task-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
+		OperationID: "postgres-claim-transfer",
+		TaskID:      "task-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
 	}); err != nil {
 		t.Fatal(err)
 	}

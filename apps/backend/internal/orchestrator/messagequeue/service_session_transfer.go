@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -96,7 +97,8 @@ func (s *Service) prepareDurableSessionTransfer(
 ) error {
 	if s.SessionTransferCompensationPersistenceAvailable() {
 		state.compensation = &SessionTransferCompensation{
-			TaskID: taskID, FromSessionID: oldSessionID, ToSessionID: newSessionID,
+			OperationID: uuid.NewString(), TaskID: taskID,
+			FromSessionID: oldSessionID, ToSessionID: newSessionID,
 			CreatedAt: time.Now().UTC(),
 		}
 		if err := s.UpsertSessionTransferCompensation(ctx, *state.compensation); err != nil {
@@ -238,6 +240,7 @@ func (s *Service) deleteSessionTransferCompensation(
 ) error {
 	if err := s.DeleteSessionTransferCompensation(
 		ctx,
+		compensation.OperationID,
 		compensation.TaskID,
 		compensation.FromSessionID,
 		compensation.ToSessionID,

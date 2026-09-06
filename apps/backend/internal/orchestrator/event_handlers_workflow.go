@@ -2581,6 +2581,7 @@ func (s *Service) reconcileSessionTransferCompensation(
 	}
 	if err := s.messageQueue.DeleteSessionTransferCompensation(
 		context.WithoutCancel(ctx),
+		compensation.OperationID,
 		compensation.TaskID,
 		compensation.FromSessionID,
 		compensation.ToSessionID,

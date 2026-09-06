@@ -12,20 +12,26 @@ import (
 	internaldb "github.com/kandev/kandev/internal/db"
 )
 
+const sessionTransferCompensationSchema = `
+	CREATE TABLE IF NOT EXISTS queue_session_transfer_compensations (
+		task_id               TEXT NOT NULL,
+		from_session_id       TEXT NOT NULL,
+		to_session_id         TEXT NOT NULL,
+		operation_id          TEXT NOT NULL DEFAULT '',
+		entry_ids_json        TEXT NOT NULL DEFAULT '[]',
+		attachment_ids_json   TEXT NOT NULL DEFAULT '[]',
+		cleanup_locators_json TEXT NOT NULL DEFAULT '[]',
+		created_at             TIMESTAMP NOT NULL,
+		PRIMARY KEY (task_id, from_session_id, to_session_id)
+	)
+`
+
 func (r *sqliteRepository) ensureSessionTransferCompensationSchema(ctx context.Context) error {
-	if _, err := r.db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS queue_session_transfer_compensations (
-			task_id          TEXT NOT NULL,
-			from_session_id  TEXT NOT NULL,
-			to_session_id    TEXT NOT NULL,
-			entry_ids_json        TEXT NOT NULL DEFAULT '[]',
-			attachment_ids_json   TEXT NOT NULL DEFAULT '[]',
-			cleanup_locators_json TEXT NOT NULL DEFAULT '[]',
-			created_at            TIMESTAMP NOT NULL,
-			PRIMARY KEY (task_id, from_session_id, to_session_id)
-		)
-	`); err != nil {
+	if _, err := r.db.ExecContext(ctx, sessionTransferCompensationSchema); err != nil {
 		return fmt.Errorf("ensure session transfer compensation schema: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_session_transfer_compensations ADD COLUMN operation_id TEXT NOT NULL DEFAULT ''`); err != nil && !internaldb.IsDuplicateColumnError(err) {
+		return fmt.Errorf("add session transfer operation id: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx, `ALTER TABLE queue_session_transfer_compensations ADD COLUMN attachment_ids_json TEXT NOT NULL DEFAULT '[]'`); err != nil && !internaldb.IsDuplicateColumnError(err) {
 		return fmt.Errorf("add session transfer attachment ids: %w", err)
@@ -36,45 +42,50 @@ func (r *sqliteRepository) ensureSessionTransferCompensationSchema(ctx context.C
 	return nil
 }
 
-func (r *sqliteRepository) UpsertSessionTransferCompensation(
-	ctx context.Context,
+func marshalSessionTransferCompensation(
 	compensation SessionTransferCompensation,
-) error {
-	if err := r.ensureSessionTransferCompensationSchema(ctx); err != nil {
-		return err
-	}
+) (string, string, string, error) {
 	entryIDsJSON, err := json.Marshal(compensation.EntryIDs)
 	if err != nil {
-		return fmt.Errorf("marshal session transfer compensation: %w", err)
+		return "", "", "", fmt.Errorf("marshal session transfer compensation: %w", err)
 	}
 	attachmentIDsJSON, err := json.Marshal(compensation.AttachmentIDs)
 	if err != nil {
-		return fmt.Errorf("marshal session transfer attachment ids: %w", err)
+		return "", "", "", fmt.Errorf("marshal session transfer attachment ids: %w", err)
 	}
 	cleanupLocatorsJSON, err := json.Marshal(compensation.CleanupLocators)
 	if err != nil {
-		return fmt.Errorf("marshal session transfer cleanup locators: %w", err)
+		return "", "", "", fmt.Errorf("marshal session transfer cleanup locators: %w", err)
 	}
-	if compensation.CreatedAt.IsZero() {
-		compensation.CreatedAt = time.Now().UTC()
-	}
-	first, second := compensation.FromSessionID, compensation.ToSessionID
+	return string(entryIDsJSON), string(attachmentIDsJSON), string(cleanupLocatorsJSON), nil
+}
+
+func (r *sqliteRepository) lockSessionTransferPairTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	fromSessionID, toSessionID string,
+) (string, string, error) {
+	first, second := fromSessionID, toSessionID
 	if first > second {
 		first, second = second, first
 	}
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin session transfer compensation: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := r.lockSessionTx(ctx, tx, first); err != nil {
-		return err
+	if err := r.lockSessionTxUnfenced(ctx, tx, first); err != nil {
+		return "", "", err
 	}
 	if first != second {
-		if err := r.lockSessionTx(ctx, tx, second); err != nil {
-			return err
+		if err := r.lockSessionTxUnfenced(ctx, tx, second); err != nil {
+			return "", "", err
 		}
 	}
+	return first, second, nil
+}
+
+func guardSessionTransferCompensationOwnerTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	compensation SessionTransferCompensation,
+	first, second string,
+) error {
 	var conflicts int
 	if err := tx.GetContext(ctx, &conflicts, tx.Rebind(`
 		SELECT COUNT(*) FROM queue_session_transfer_compensations
@@ -87,19 +98,75 @@ func (r *sqliteRepository) UpsertSessionTransferCompensation(
 	if conflicts > 0 {
 		return ErrSessionTransferInProgress
 	}
-	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+	var activeOperationID string
+	err := tx.GetContext(ctx, &activeOperationID, tx.Rebind(`
+		SELECT operation_id FROM queue_session_transfer_compensations
+		WHERE task_id = ? AND from_session_id = ? AND to_session_id = ?
+	`), compensation.TaskID, compensation.FromSessionID, compensation.ToSessionID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read active session transfer owner: %w", err)
+	}
+	if err == nil && activeOperationID != compensation.OperationID {
+		return ErrSessionTransferInProgress
+	}
+	return nil
+}
+
+func (r *sqliteRepository) UpsertSessionTransferCompensation(
+	ctx context.Context,
+	compensation SessionTransferCompensation,
+) error {
+	if compensation.OperationID == "" {
+		return errors.New("session transfer operation id is required")
+	}
+	if err := r.ensureSessionTransferCompensationSchema(ctx); err != nil {
+		return err
+	}
+	entryIDsJSON, attachmentIDsJSON, cleanupLocatorsJSON, err := marshalSessionTransferCompensation(compensation)
+	if err != nil {
+		return err
+	}
+	if compensation.CreatedAt.IsZero() {
+		compensation.CreatedAt = time.Now().UTC()
+	}
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin session transfer compensation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	first, second, err := r.lockSessionTransferPairTx(
+		ctx, tx, compensation.FromSessionID, compensation.ToSessionID,
+	)
+	if err != nil {
+		return err
+	}
+	if err := guardSessionTransferCompensationOwnerTx(
+		ctx, tx, compensation, first, second,
+	); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO queue_session_transfer_compensations
-			(task_id, from_session_id, to_session_id, entry_ids_json, attachment_ids_json,
-			 cleanup_locators_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+			(operation_id, task_id, from_session_id, to_session_id, entry_ids_json,
+			 attachment_ids_json, cleanup_locators_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(task_id, from_session_id, to_session_id) DO UPDATE SET
 			entry_ids_json = excluded.entry_ids_json,
 			attachment_ids_json = excluded.attachment_ids_json,
 			cleanup_locators_json = excluded.cleanup_locators_json
-	`), compensation.TaskID, compensation.FromSessionID, compensation.ToSessionID,
-		string(entryIDsJSON), string(attachmentIDsJSON), string(cleanupLocatorsJSON),
-		compensation.CreatedAt); err != nil {
+		WHERE queue_session_transfer_compensations.operation_id = excluded.operation_id
+	`), compensation.OperationID, compensation.TaskID, compensation.FromSessionID,
+		compensation.ToSessionID, entryIDsJSON, attachmentIDsJSON,
+		cleanupLocatorsJSON, compensation.CreatedAt)
+	if err != nil {
 		return fmt.Errorf("upsert session transfer compensation: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("session transfer compensation rows affected: %w", err)
+	}
+	if affected != 1 {
+		return ErrSessionTransferOwnershipLost
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit session transfer compensation: %w", err)
@@ -109,16 +176,37 @@ func (r *sqliteRepository) UpsertSessionTransferCompensation(
 
 func (r *sqliteRepository) DeleteSessionTransferCompensation(
 	ctx context.Context,
-	taskID, fromSessionID, toSessionID string,
+	operationID, taskID, fromSessionID, toSessionID string,
 ) error {
 	if err := r.ensureSessionTransferCompensationSchema(ctx); err != nil {
 		return err
 	}
-	if _, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete session transfer compensation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, _, err := r.lockSessionTransferPairTx(
+		ctx, tx, fromSessionID, toSessionID,
+	); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		DELETE FROM queue_session_transfer_compensations
-		WHERE task_id = ? AND from_session_id = ? AND to_session_id = ?
-	`), taskID, fromSessionID, toSessionID); err != nil {
+		WHERE operation_id = ? AND task_id = ? AND from_session_id = ? AND to_session_id = ?
+	`), operationID, taskID, fromSessionID, toSessionID)
+	if err != nil {
 		return fmt.Errorf("delete session transfer compensation: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete session transfer compensation rows affected: %w", err)
+	}
+	if affected != 1 {
+		return ErrSessionTransferOwnershipLost
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete session transfer compensation: %w", err)
 	}
 	return nil
 }
@@ -130,7 +218,7 @@ func (r *sqliteRepository) ListSessionTransferCompensations(
 		return nil, err
 	}
 	rows, err := r.db.QueryxContext(ctx, `
-		SELECT task_id, from_session_id, to_session_id, entry_ids_json,
+		SELECT operation_id, task_id, from_session_id, to_session_id, entry_ids_json,
 		       attachment_ids_json, cleanup_locators_json, created_at
 		FROM queue_session_transfer_compensations
 		ORDER BY created_at, task_id, from_session_id, to_session_id
@@ -144,6 +232,7 @@ func (r *sqliteRepository) ListSessionTransferCompensations(
 		var compensation SessionTransferCompensation
 		var entryIDsJSON, attachmentIDsJSON, cleanupLocatorsJSON string
 		if err := rows.Scan(
+			&compensation.OperationID,
 			&compensation.TaskID,
 			&compensation.FromSessionID,
 			&compensation.ToSessionID,

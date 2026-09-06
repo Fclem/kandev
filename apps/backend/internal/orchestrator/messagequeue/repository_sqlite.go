@@ -74,10 +74,17 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 // merge-wins/drain-wins ordering deterministic.
 //
 // lockSessionTx is the cross-process counterpart: every mutating method takes
-// the per-session queue_session_locks row inside its transaction, so tail
-// scans and tail changes cannot interleave between backend instances. It is a
-// no-op on SQLite (single writer; FOR UPDATE is ignored).
+// the per-session queue_session_locks row inside its transaction and rejects
+// mutations while a durable transfer owns that session. SQLite serializes
+// writers globally; PostgreSQL locks the session row with FOR UPDATE.
 func (r *sqliteRepository) lockSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID string) error {
+	if err := r.lockSessionTxUnfenced(ctx, tx, sessionID); err != nil {
+		return err
+	}
+	return guardSessionTransferTx(ctx, tx, r.db, sessionID)
+}
+
+func (r *sqliteRepository) lockSessionTxUnfenced(ctx context.Context, tx *sqlx.Tx, sessionID string) error {
 	return lockSessionTxIn(ctx, tx, r.db, sessionID)
 }
 
@@ -111,12 +118,9 @@ func (r *sqliteRepository) guardActiveTaskTx(ctx context.Context, tx *sqlx.Tx, t
 	return nil
 }
 
-// guardSessionTx rejects writes while a durable session transfer is active,
-// then verifies that the owning task session still exists.
+// guardSessionTx verifies that the owning task session still exists. The
+// session lock acquired before this call already rejects active transfers.
 func (r *sqliteRepository) guardSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID, taskID string) error {
-	if err := guardSessionTransferTx(ctx, tx, r.db, sessionID); err != nil {
-		return err
-	}
 	return r.guardSessionOwnerTx(ctx, tx, sessionID, taskID)
 }
 
@@ -951,6 +955,9 @@ func ensureTaskPurgeRecoverySchemas(ctx context.Context, tx *sqlx.Tx) error {
 	if _, err := tx.ExecContext(ctx, attachmentCleanupSchema); err != nil {
 		return fmt.Errorf("ensure task purge attachment cleanup schema: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, sessionTransferCompensationSchema); err != nil {
+		return fmt.Errorf("ensure task purge transfer compensation schema: %w", err)
+	}
 	return nil
 }
 
@@ -1025,6 +1032,11 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	sort.Strings(ordered)
 	for _, sessionID := range ordered {
 		if err := lockSessionTxIn(ctx, tx, db, sessionID); err != nil {
+			return 0, err
+		}
+	}
+	for _, sessionID := range ordered {
+		if err := guardSessionTransferTx(ctx, tx, db, sessionID); err != nil {
 			return 0, err
 		}
 	}
@@ -2940,11 +2952,11 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 		return fmt.Errorf("begin transfer tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := r.lockSessionTx(ctx, tx, first); err != nil {
+	if err := r.lockSessionTxUnfenced(ctx, tx, first); err != nil {
 		return err
 	}
 	if first != second {
-		if err := r.lockSessionTx(ctx, tx, second); err != nil {
+		if err := r.lockSessionTxUnfenced(ctx, tx, second); err != nil {
 			return err
 		}
 	}

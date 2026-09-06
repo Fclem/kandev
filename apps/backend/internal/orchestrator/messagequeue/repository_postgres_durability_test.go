@@ -2,6 +2,7 @@ package messagequeue
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -40,7 +41,8 @@ func TestPostgresRepository_DurableQueueRecoveryTables(t *testing.T) {
 
 	t.Run("session transfer compensation replays schema and upsert", func(t *testing.T) {
 		compensation := SessionTransferCompensation{
-			TaskID: "transfer-task", FromSessionID: "transfer-old", ToSessionID: "transfer-new",
+			OperationID: "transfer-operation",
+			TaskID:      "transfer-task", FromSessionID: "transfer-old", ToSessionID: "transfer-new",
 			EntryIDs: []string{"entry-1"},
 		}
 		if err := persistent.UpsertSessionTransferCompensation(ctx, compensation); err != nil {
@@ -57,7 +59,7 @@ func TestPostgresRepository_DurableQueueRecoveryTables(t *testing.T) {
 		if len(compensations) != 1 || len(compensations[0].EntryIDs) != 2 || compensations[0].EntryIDs[1] != "entry-2" {
 			t.Fatalf("session transfer compensations = %#v", compensations)
 		}
-		if err := persistent.DeleteSessionTransferCompensation(ctx, compensation.TaskID, compensation.FromSessionID, compensation.ToSessionID); err != nil {
+		if err := persistent.DeleteSessionTransferCompensation(ctx, compensation.OperationID, compensation.TaskID, compensation.FromSessionID, compensation.ToSessionID); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -263,5 +265,111 @@ func TestPostgresRepository_ReservationCapturesGenerationAfterConcurrentReplacem
 			"reservation generation = %d (captured=%t), want current %d",
 			reserved.reservationSessionGeneration, reserved.reservationGenerationsCaptured, generation,
 		)
+	}
+}
+
+func TestPostgresRepository_TransferFenceOwnershipIsOperationScoped(t *testing.T) {
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+	persistenceA := repoA.(sessionTransferCompensationRepository)
+	persistenceB := repoB.(sessionTransferCompensationRepository)
+	first := SessionTransferCompensation{
+		OperationID: "transfer-first",
+		TaskID:      "transfer-task", FromSessionID: "transfer-old", ToSessionID: "transfer-new",
+		EntryIDs: []string{"entry-first"},
+	}
+	if err := persistenceA.UpsertSessionTransferCompensation(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	replacement := first
+	replacement.OperationID = "transfer-replacement"
+	replacement.EntryIDs = []string{"entry-replacement"}
+	if err := persistenceB.UpsertSessionTransferCompensation(ctx, replacement); !errors.Is(err, ErrSessionTransferInProgress) {
+		t.Fatalf("replacement error = %v, want %v", err, ErrSessionTransferInProgress)
+	}
+	if err := persistenceB.DeleteSessionTransferCompensation(
+		ctx, replacement.OperationID, first.TaskID, first.FromSessionID, first.ToSessionID,
+	); !errors.Is(err, ErrSessionTransferOwnershipLost) {
+		t.Fatalf("stale delete error = %v, want %v", err, ErrSessionTransferOwnershipLost)
+	}
+	stored, err := persistenceA.ListSessionTransferCompensations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 1 || stored[0].OperationID != first.OperationID {
+		t.Fatalf("session transfer compensations = %#v", stored)
+	}
+}
+
+func TestPostgresRepository_ActiveSessionTransferFencesMutationsAcrossInstances(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(context.Context, Repository, *QueuedMessage, *QueuedMessage) error
+	}{
+		{
+			name: "edit",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				return repo.UpdateContent(ctx, first.SessionID, first.ID, "edited", nil, QueuedByUser)
+			},
+		},
+		{
+			name: "purge",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				_, err := repo.PurgeSession(ctx, first.SessionID)
+				return err
+			},
+		},
+		{
+			name: "purge task",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				_, err := repo.PurgeTask(ctx, first.TaskID)
+				return err
+			},
+		},
+		{
+			name: "merge",
+			mutate: func(ctx context.Context, repo Repository, _, second *QueuedMessage) error {
+				_, err := repo.MergeIntoAbove(ctx, second.SessionID, second.ID, QueuedByUser)
+				return err
+			},
+		},
+		{
+			name: "reorder",
+			mutate: func(ctx context.Context, repo Repository, first, second *QueuedMessage) error {
+				return repo.ReorderEntries(ctx, first.SessionID, []string{second.ID, first.ID})
+			},
+		},
+		{
+			name: "take pending move",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				_, err := repo.TakePendingMove(ctx, first.SessionID)
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repoA, repoB, _ := newTestPostgresRepoPair(t)
+			ctx := context.Background()
+			first := insertTestEntry(t, repoA, "session-old", "task", "first", QueuedByUser, nil, nil)
+			second := insertTestEntry(t, repoA, "session-old", "task", "second", QueuedByUser, nil, nil)
+			if err := repoA.SetPendingMove(ctx, first.SessionID, &PendingMove{
+				MoveID: "move", TaskID: "task", WorkflowID: "workflow", WorkflowStepID: "step",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			persistence := repoA.(sessionTransferCompensationRepository)
+			if err := persistence.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+				OperationID: "transfer-operation",
+				TaskID:      "task", FromSessionID: first.SessionID, ToSessionID: "session-new",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := test.mutate(ctx, repoB, first, second); !errors.Is(err, ErrSessionTransferInProgress) {
+				t.Fatalf("mutation error = %v, want %v", err, ErrSessionTransferInProgress)
+			}
+		})
 	}
 }

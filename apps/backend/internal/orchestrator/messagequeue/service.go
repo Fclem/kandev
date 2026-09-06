@@ -2302,7 +2302,7 @@ func (s *Service) GetAttachmentCleanup(
 
 type sessionTransferCompensationRepository interface {
 	UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
-	DeleteSessionTransferCompensation(context.Context, string, string, string) error
+	DeleteSessionTransferCompensation(context.Context, string, string, string, string) error
 	ListSessionTransferCompensations(context.Context) ([]SessionTransferCompensation, error)
 }
 
@@ -2329,13 +2329,15 @@ func (s *Service) UpsertSessionTransferCompensation(
 // DeleteSessionTransferCompensation acknowledges a reconciled transfer.
 func (s *Service) DeleteSessionTransferCompensation(
 	ctx context.Context,
-	taskID, fromSessionID, toSessionID string,
+	operationID, taskID, fromSessionID, toSessionID string,
 ) error {
 	repo, ok := s.repo.(sessionTransferCompensationRepository)
 	if !ok {
 		return errors.New("session transfer compensation persistence unavailable")
 	}
-	return repo.DeleteSessionTransferCompensation(ctx, taskID, fromSessionID, toSessionID)
+	return repo.DeleteSessionTransferCompensation(
+		ctx, operationID, taskID, fromSessionID, toSessionID,
+	)
 }
 
 // ListSessionTransferCompensations reloads interrupted transfers after restart.

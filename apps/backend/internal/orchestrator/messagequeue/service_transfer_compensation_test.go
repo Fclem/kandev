@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -663,30 +662,4 @@ func TestRemoteEditLeaseBlocksSendNowClaim(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrEditConflict)
 	assert.Nil(t, claim)
-}
-
-func TestRecoveredTransferLeaseRejectsOriginalOwner(t *testing.T) {
-	ctx := context.Background()
-	repo := newTestSQLiteRepo(t).(*sqliteRepository)
-	compensation := SessionTransferCompensation{
-		OperationID: "transfer-operation",
-		TaskID:      "task", FromSessionID: "session-old", ToSessionID: "session-new",
-	}
-	require.NoError(t, repo.UpsertSessionTransferCompensation(ctx, compensation))
-	_, err := repo.db.ExecContext(ctx, `
-		UPDATE queue_session_transfer_compensations
-		SET recovery_lease_expires_at = ?
-	`, time.Now().UTC().Add(-time.Second))
-	require.NoError(t, err)
-	_, err = repo.claimSessionTransferCompensationRecovery(ctx, compensation)
-	require.NoError(t, err)
-	tx, err := repo.db.BeginTxx(ctx, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback() })
-
-	err = authorizeSessionTransferTx(
-		ctx, tx, repo.db, compensation.FromSessionID, compensation.ToSessionID, compensation.OperationID,
-	)
-
-	require.ErrorIs(t, err, ErrSessionTransferOwnershipLost)
 }

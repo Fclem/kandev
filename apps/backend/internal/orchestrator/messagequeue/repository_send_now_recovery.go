@@ -163,7 +163,12 @@ func (r *sqliteRepository) MarkPendingSendNowClaimAccepted(ctx context.Context, 
 	if claim.ClaimID == "" {
 		return ErrSendNowClaimChanged
 	}
-	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.beginSessionMutationTx(ctx, sessionID, "mark Send Now claim accepted")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, r.db.Rebind(`
 		UPDATE queue_send_now_claims SET accepted = 1
 		WHERE session_id = ? AND claim_id = ?
 	`), sessionID, claim.ClaimID)
@@ -177,7 +182,7 @@ func (r *sqliteRepository) MarkPendingSendNowClaimAccepted(ctx context.Context, 
 	if affected != 1 {
 		return ErrSendNowClaimChanged
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (r *sqliteRepository) DeletePendingSendNowClaim(ctx context.Context, claim *SendNowClaim) error {
@@ -191,7 +196,12 @@ func (r *sqliteRepository) DeletePendingSendNowClaim(ctx context.Context, claim 
 	if claim.ClaimID == "" {
 		return ErrSendNowClaimChanged
 	}
-	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.beginSessionMutationTx(ctx, sessionID, "discard pending Send Now claim")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM queue_send_now_claims WHERE session_id = ? AND claim_id = ?
 	`), sessionID, claim.ClaimID)
 	if err != nil {
@@ -204,7 +214,7 @@ func (r *sqliteRepository) DeletePendingSendNowClaim(ctx context.Context, claim 
 	if affected != 1 {
 		return ErrSendNowClaimChanged
 	}
-	return nil
+	return tx.Commit()
 }
 
 func pendingSendNowSessionsForTaskTx(

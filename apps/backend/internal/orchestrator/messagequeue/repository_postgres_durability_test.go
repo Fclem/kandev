@@ -346,6 +346,12 @@ func TestPostgresRepository_ActiveSessionTransferFencesMutationsAcrossInstances(
 				return err
 			},
 		},
+		{
+			name: "transfer",
+			mutate: func(ctx context.Context, repo Repository, first, _ *QueuedMessage) error {
+				return repo.TransferSession(ctx, first.SessionID, "session-third")
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -371,5 +377,102 @@ func TestPostgresRepository_ActiveSessionTransferFencesMutationsAcrossInstances(
 				t.Fatalf("mutation error = %v, want %v", err, ErrSessionTransferInProgress)
 			}
 		})
+	}
+}
+
+func TestPostgresRepository_ActiveSessionTransferFencesDispatchSettlementAcrossInstances(t *testing.T) {
+	tests := []struct {
+		name   string
+		settle func(context.Context, *sqliteRepository, *QueuedMessage) error
+	}{
+		{name: "mark accepted", settle: func(ctx context.Context, repo *sqliteRepository, msg *QueuedMessage) error {
+			return repo.MarkPendingQueueDispatchAccepted(ctx, msg)
+		}},
+		{name: "delete", settle: func(ctx context.Context, repo *sqliteRepository, msg *QueuedMessage) error {
+			return repo.DeletePendingQueueDispatch(ctx, msg)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repoA, repoB, _ := newTestPostgresRepoPair(t)
+			ctx := context.Background()
+			entry := insertTestEntry(t, repoA, "session-old", "task", "first", QueuedByUser, nil, nil)
+			reserved, err := repoA.ReserveHead(ctx, entry.SessionID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			persistentA := repoA.(sessionTransferCompensationRepository)
+			if err := persistentA.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+				OperationID: "transfer-operation",
+				TaskID:      entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			err = test.settle(ctx, repoB.(*sqliteRepository), reserved)
+			if !errors.Is(err, ErrSessionTransferInProgress) {
+				t.Fatalf("settlement error = %v, want %v", err, ErrSessionTransferInProgress)
+			}
+		})
+	}
+}
+
+func TestPostgresRepository_ActiveSessionTransferFencesSendNowSettlementAcrossInstances(t *testing.T) {
+	tests := []struct {
+		name   string
+		settle func(context.Context, *sqliteRepository, *SendNowClaim) error
+	}{
+		{name: "mark accepted", settle: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+			return repo.MarkPendingSendNowClaimAccepted(ctx, claim)
+		}},
+		{name: "delete", settle: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+			return repo.DeletePendingSendNowClaim(ctx, claim)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repoA, repoB, _ := newTestPostgresRepoPair(t)
+			ctx := context.Background()
+			entry := insertTestEntry(t, repoA, "session-old", "task", "first", QueuedByUser, nil, nil)
+			claim, err := repoA.ClaimSendNow(ctx, entry.SessionID, []QueuedMessage{*entry})
+			if err != nil {
+				t.Fatal(err)
+			}
+			persistentA := repoA.(sessionTransferCompensationRepository)
+			if err := persistentA.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+				OperationID: "transfer-operation",
+				TaskID:      entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			err = test.settle(ctx, repoB.(*sqliteRepository), claim)
+			if !errors.Is(err, ErrSessionTransferInProgress) {
+				t.Fatalf("settlement error = %v, want %v", err, ErrSessionTransferInProgress)
+			}
+		})
+	}
+}
+
+func TestPostgresRepository_ActiveSessionTransferFencesEditLeaseAcrossInstances(t *testing.T) {
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+	entry := insertTestEntry(t, repoA, "session-old", "task", "first", QueuedByUser, nil, nil)
+	persistentA := repoA.(sessionTransferCompensationRepository)
+	if err := persistentA.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+		OperationID: "transfer-operation",
+		TaskID:      entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	serviceB := newAutoMergeTestServiceWithRepository(t, repoB, DefaultMaxPerSession)
+
+	lease, err := serviceB.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+
+	if !errors.Is(err, ErrSessionTransferInProgress) {
+		t.Fatalf("BeginEdit error = %v, want %v", err, ErrSessionTransferInProgress)
+	}
+	if lease != nil {
+		t.Fatalf("lease = %#v, want nil", lease)
 	}
 }

@@ -277,7 +277,12 @@ func (r *sqliteRepository) MarkPendingQueueDispatchAccepted(
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return err
 	}
-	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.beginSessionMutationTx(ctx, msg.SessionID, "mark queue dispatch accepted")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, r.db.Rebind(`
 		UPDATE queue_dispatch_claims SET accepted = 1
 		WHERE entry_id = ? AND session_id = ? AND attempt_id = ?
 	`), msg.ID, msg.SessionID, msg.dispatchAttemptID)
@@ -291,7 +296,7 @@ func (r *sqliteRepository) MarkPendingQueueDispatchAccepted(
 	if affected != 1 {
 		return ErrQueueDispatchClaimChanged
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (r *sqliteRepository) DeletePendingQueueDispatch(
@@ -301,19 +306,13 @@ func (r *sqliteRepository) DeletePendingQueueDispatch(
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return err
 	}
-	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
-		DELETE FROM queue_dispatch_claims
-		WHERE entry_id = ? AND session_id = ? AND attempt_id = ?
-	`), msg.ID, msg.SessionID, msg.dispatchAttemptID)
+	tx, err := r.beginSessionMutationTx(ctx, msg.SessionID, "delete pending queue dispatch")
 	if err != nil {
-		return fmt.Errorf("delete pending queue dispatch: %w", err)
+		return err
 	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("delete pending queue dispatch rows affected: %w", err)
+	defer func() { _ = tx.Rollback() }()
+	if err := r.deletePendingQueueDispatchTx(ctx, tx, msg); err != nil {
+		return err
 	}
-	if affected != 1 {
-		return ErrQueueDispatchClaimChanged
-	}
-	return nil
+	return tx.Commit()
 }

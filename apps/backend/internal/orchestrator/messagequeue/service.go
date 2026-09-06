@@ -235,6 +235,40 @@ func (s *Service) expireEditLeaseLocked(key editLeaseKey, now time.Time) {
 	}
 }
 
+type sessionTransferFenceRepository interface {
+	withSessionTransferFence(context.Context, string, func(context.Context) error) error
+}
+
+func (s *Service) withRepositorySessionTransferFence(
+	ctx context.Context,
+	sessionID string,
+	fn func(context.Context) error,
+) error {
+	repo, ok := s.repo.(sessionTransferFenceRepository)
+	if !ok {
+		return fn(ctx)
+	}
+	return repo.withSessionTransferFence(ctx, sessionID, fn)
+}
+
+func (s *Service) editableEntry(
+	ctx context.Context,
+	sessionID, entryID string,
+) (*QueuedMessage, error) {
+	entries, err := s.repo.ListBySession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range entries {
+		if entries[i].ID == entryID &&
+			entries[i].QueuedBy == QueuedByUser &&
+			!entries[i].IsReservedInFlight() {
+			return &entries[i], nil
+		}
+	}
+	return nil, ErrEditLeaseNotFound
+}
+
 // BeginEdit acquires a target-bound lease for a visible user-owned entry.
 func (s *Service) BeginEdit(ctx context.Context, sessionID, entryID, connectionID string) (*QueueEditLease, error) {
 	if sessionID == "" || entryID == "" || connectionID == "" {
@@ -242,36 +276,28 @@ func (s *Service) BeginEdit(ctx context.Context, sessionID, entryID, connectionI
 	}
 	var lease *QueueEditLease
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		key := s.editLeaseKey(sessionID, entryID)
-		now := time.Now().UTC()
-		s.editLeaseMu.Lock()
-		defer s.editLeaseMu.Unlock()
-		entries, err := s.repo.ListBySession(admittedCtx, sessionID)
+		entry, err := s.editableEntry(admittedCtx, sessionID, entryID)
 		if err != nil {
 			return err
 		}
-		var entry *QueuedMessage
-		for i := range entries {
-			if entries[i].ID == entryID {
-				entry = &entries[i]
-				break
+		return s.withRepositorySessionTransferFence(admittedCtx, sessionID, func(context.Context) error {
+			key := s.editLeaseKey(sessionID, entryID)
+			now := time.Now().UTC()
+			s.editLeaseMu.Lock()
+			defer s.editLeaseMu.Unlock()
+			s.expireEditLeaseLocked(key, now)
+			if existing := s.editLeases[key]; existing != nil {
+				return ErrEditConflict
 			}
-		}
-		if entry == nil || entry.QueuedBy != QueuedByUser || entry.IsReservedInFlight() {
-			return ErrEditLeaseNotFound
-		}
-		s.expireEditLeaseLocked(key, now)
-		if existing := s.editLeases[key]; existing != nil {
-			return ErrEditConflict
-		}
-		lease = &QueueEditLease{
-			SessionID: sessionID, EntryID: entryID, LeaseID: uuid.NewString(),
-			TargetRevision: s.editRevisions[key], LeaseGeneration: 1,
-			ExpiresAt: now.Add(QueueEditLeaseTTL), connectionID: connectionID,
-			taskID: entry.TaskID,
-		}
-		s.editLeases[key] = lease
-		return nil
+			lease = &QueueEditLease{
+				SessionID: sessionID, EntryID: entryID, LeaseID: uuid.NewString(),
+				TargetRevision: s.editRevisions[key], LeaseGeneration: 1,
+				ExpiresAt: now.Add(QueueEditLeaseTTL), connectionID: connectionID,
+				taskID: entry.TaskID,
+			}
+			s.editLeases[key] = lease
+			return nil
+		})
 	})
 	return cloneEditLease(lease), err
 }
@@ -294,36 +320,43 @@ func (s *Service) GetEditLease(_ context.Context, sessionID, entryID string) (*Q
 // RenewEdit extends a live lease owned by connectionID.
 func (s *Service) RenewEdit(ctx context.Context, sessionID, entryID, leaseID, connectionID string) (*QueueEditLease, error) {
 	var renewed *QueueEditLease
-	err := s.WithSessionAdmission(ctx, sessionID, func(context.Context) error {
-		key := s.editLeaseKey(sessionID, entryID)
-		now := time.Now().UTC()
-		s.editLeaseMu.Lock()
-		defer s.editLeaseMu.Unlock()
-		s.expireEditLeaseLocked(key, now)
-		lease := s.editLeases[key]
-		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
-			return ErrEditLeaseNotFound
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		if _, err := s.editableEntry(admittedCtx, sessionID, entryID); err != nil {
+			return err
 		}
-		lease.LeaseGeneration++
-		lease.ExpiresAt = now.Add(QueueEditLeaseTTL)
-		renewed = cloneEditLease(lease)
-		return nil
+		return s.withRepositorySessionTransferFence(admittedCtx, sessionID, func(context.Context) error {
+			key := s.editLeaseKey(sessionID, entryID)
+			now := time.Now().UTC()
+			s.editLeaseMu.Lock()
+			defer s.editLeaseMu.Unlock()
+			s.expireEditLeaseLocked(key, now)
+			lease := s.editLeases[key]
+			if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+				return ErrEditLeaseNotFound
+			}
+			lease.LeaseGeneration++
+			lease.ExpiresAt = now.Add(QueueEditLeaseTTL)
+			renewed = cloneEditLease(lease)
+			return nil
+		})
 	})
 	return renewed, err
 }
 
 func (s *Service) EndEdit(ctx context.Context, sessionID, entryID, leaseID, connectionID string) error {
-	return s.WithSessionAdmission(ctx, sessionID, func(context.Context) error {
-		key := s.editLeaseKey(sessionID, entryID)
-		s.editLeaseMu.Lock()
-		defer s.editLeaseMu.Unlock()
-		s.expireEditLeaseLocked(key, time.Now().UTC())
-		lease := s.editLeases[key]
-		if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
-			return ErrEditLeaseNotFound
-		}
-		delete(s.editLeases, key)
-		return nil
+	return s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		return s.withRepositorySessionTransferFence(admittedCtx, sessionID, func(context.Context) error {
+			key := s.editLeaseKey(sessionID, entryID)
+			s.editLeaseMu.Lock()
+			defer s.editLeaseMu.Unlock()
+			s.expireEditLeaseLocked(key, time.Now().UTC())
+			lease := s.editLeases[key]
+			if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+				return ErrEditLeaseNotFound
+			}
+			delete(s.editLeases, key)
+			return nil
+		})
 	})
 }
 
@@ -2173,13 +2206,31 @@ func (s *Service) SnapshotSession(ctx context.Context, sessionID string) ([]Queu
 	return entries, move, err
 }
 
+type ownedSessionTransferRepository interface {
+	transferSessionOwned(context.Context, string, string, string) error
+}
+
+func (s *Service) transferRepositorySession(
+	ctx context.Context,
+	oldSessionID, newSessionID, operationID string,
+) error {
+	if operationID == "" {
+		return s.repo.TransferSession(ctx, oldSessionID, newSessionID)
+	}
+	repo, ok := s.repo.(ownedSessionTransferRepository)
+	if !ok {
+		return errors.New("owned session transfer unavailable")
+	}
+	return repo.transferSessionOwned(ctx, oldSessionID, newSessionID, operationID)
+}
+
 // TransferSession moves any queued messages and pending move from one session
 // to another. Used by workflow session switches. Returns an error so the
 // caller can fail closed instead of silently leaving entries orphaned on the
 // old session — a transfer that no-ops without a signal would let the workflow
 // step move forward while the queue sticks behind.
 func (s *Service) TransferSession(ctx context.Context, oldSessionID, newSessionID string) error {
-	return s.transferSession(ctx, oldSessionID, newSessionID, nil, nil)
+	return s.transferSession(ctx, oldSessionID, newSessionID, "", nil, nil)
 }
 
 // TransferSessionWithPreparation runs preparation while both session
@@ -2193,12 +2244,12 @@ func (s *Service) TransferSessionWithPreparation(
 	prepare func(context.Context) error,
 	rollback func(context.Context) error,
 ) error {
-	return s.transferSession(ctx, oldSessionID, newSessionID, prepare, rollback)
+	return s.transferSession(ctx, oldSessionID, newSessionID, "", prepare, rollback)
 }
 
 func (s *Service) transferSession(
 	ctx context.Context,
-	oldSessionID, newSessionID string,
+	oldSessionID, newSessionID, operationID string,
 	prepare func(context.Context) error,
 	rollback func(context.Context) error,
 ) error {
@@ -2221,7 +2272,9 @@ func (s *Service) transferSession(
 				return rollbackPreparation(err)
 			}
 		}
-		if err := s.repo.TransferSession(admittedCtx, oldSessionID, newSessionID); err != nil {
+		if err := s.transferRepositorySession(
+			admittedCtx, oldSessionID, newSessionID, operationID,
+		); err != nil {
 			return rollbackPreparation(err)
 		}
 		s.invalidateEditLeasesLocked(oldSessionID, newSessionID)

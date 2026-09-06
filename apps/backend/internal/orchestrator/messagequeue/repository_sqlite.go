@@ -88,6 +88,37 @@ func (r *sqliteRepository) lockSessionTxUnfenced(ctx context.Context, tx *sqlx.T
 	return lockSessionTxIn(ctx, tx, r.db, sessionID)
 }
 
+func (r *sqliteRepository) beginSessionMutationTx(
+	ctx context.Context,
+	sessionID, operation string,
+) (*sqlx.Tx, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin %s: %w", operation, err)
+	}
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
+}
+
+func (r *sqliteRepository) withSessionTransferFence(
+	ctx context.Context,
+	sessionID string,
+	fn func(context.Context) error,
+) error {
+	tx, err := r.beginSessionMutationTx(ctx, sessionID, "session transfer fence")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(ctx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // guardActiveTaskTx rejects queue admissions whose owning task is not live
 // (archived or deleted). It takes the task-row lock, so admission serializes
 // with task lifecycle cleanup in the global task-row -> session-lock order and
@@ -2928,6 +2959,136 @@ func isReservedMetadataJSON(metadataJSON string) (bool, error) {
 
 // TransferSession moves all entries (and any pending move) from one session to another.
 func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, newSessionID string) error {
+	return r.transferSession(ctx, oldSessionID, newSessionID, "")
+}
+
+func (r *sqliteRepository) transferSessionOwned(
+	ctx context.Context,
+	oldSessionID, newSessionID, operationID string,
+) error {
+	return r.transferSession(ctx, oldSessionID, newSessionID, operationID)
+}
+
+func (r *sqliteRepository) beginAuthorizedSessionTransferTx(
+	ctx context.Context,
+	oldSessionID, newSessionID, operationID string,
+) (*sqlx.Tx, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin transfer tx: %w", err)
+	}
+	if _, _, err := r.lockSessionTransferPairTx(ctx, tx, oldSessionID, newSessionID); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := authorizeSessionTransferTx(
+		ctx, tx, r.db, oldSessionID, newSessionID, operationID,
+	); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := r.guardSessionOwnerTx(ctx, tx, oldSessionID, ""); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if oldSessionID != newSessionID {
+		if err := r.guardSessionOwnerTx(ctx, tx, newSessionID, ""); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+	}
+	return tx, nil
+}
+
+func (r *sqliteRepository) transferSessionRecoveryRowsTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	oldSessionID, newSessionID string,
+) error {
+	if err := r.transferPendingQueueDispatchesTx(ctx, tx, oldSessionID, newSessionID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		UPDATE queue_attachment_cleanups
+		SET current_session_id = ?
+		WHERE current_session_id = ?
+	`), newSessionID, oldSessionID); err != nil {
+		return fmt.Errorf("transfer attachment cleanup session: %w", err)
+	}
+	return nil
+}
+
+func (r *sqliteRepository) transferSessionQueueRowsTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	oldSessionID, newSessionID string,
+) error {
+	var destinationMax sql.NullInt64
+	if err := tx.GetContext(ctx, &destinationMax, r.db.Rebind(`
+		SELECT MAX(position) FROM queued_messages WHERE session_id = ?
+	`), newSessionID); err != nil {
+		return fmt.Errorf("transfer max: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		UPDATE queued_messages
+		SET session_id = ?, position = position + ?
+		WHERE session_id = ?
+	`), newSessionID, destinationMax.Int64, oldSessionID); err != nil {
+		return fmt.Errorf("transfer queued: %w", err)
+	}
+	var transferredMax sql.NullInt64
+	if err := tx.GetContext(ctx, &transferredMax, r.db.Rebind(`
+		SELECT MAX(position) FROM queued_messages WHERE session_id = ?
+	`), newSessionID); err != nil {
+		return fmt.Errorf("transfer destination max after move: %w", err)
+	}
+	if transferredMax.Valid {
+		return r.bumpQueuePositionTx(ctx, tx, newSessionID, transferredMax.Int64)
+	}
+	return nil
+}
+
+func (r *sqliteRepository) transferSessionStateTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	oldSessionID, newSessionID string,
+) error {
+	sourceAutoRun, err := r.getAutoRunTx(ctx, tx, oldSessionID)
+	if err != nil {
+		return err
+	}
+	destinationAutoRun, err := r.getAutoRunTx(ctx, tx, newSessionID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		DELETE FROM pending_moves WHERE session_id = ?
+	`), newSessionID); err != nil {
+		return fmt.Errorf("clear dest pending move: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		UPDATE pending_moves SET session_id = ? WHERE session_id = ?
+	`), newSessionID, oldSessionID); err != nil {
+		return fmt.Errorf("transfer pending move: %w", err)
+	}
+	if err := r.setAutoRunTx(ctx, tx, newSessionID, sourceAutoRun && destinationAutoRun); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		DELETE FROM queue_session_state WHERE session_id = ?
+	`), oldSessionID); err != nil {
+		return fmt.Errorf("clear source queue auto-run: %w", err)
+	}
+	if err := r.bumpSendNowGenerationTx(ctx, tx, oldSessionID); err != nil {
+		return err
+	}
+	return r.bumpSendNowGenerationTx(ctx, tx, newSessionID)
+}
+
+func (r *sqliteRepository) transferSession(
+	ctx context.Context,
+	oldSessionID, newSessionID, operationID string,
+) error {
 	if err := r.ensureQueueDispatchRecoverySchema(ctx); err != nil {
 		return err
 	}
@@ -2951,96 +3112,23 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 		defer unlockSecond()
 	}
 
-	tx, err := r.db.BeginTxx(ctx, nil)
+	tx, err := r.beginAuthorizedSessionTransferTx(
+		ctx, oldSessionID, newSessionID, operationID,
+	)
 	if err != nil {
-		return fmt.Errorf("begin transfer tx: %w", err)
+		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := r.lockSessionTxUnfenced(ctx, tx, first); err != nil {
-		return err
-	}
-	if first != second {
-		if err := r.lockSessionTxUnfenced(ctx, tx, second); err != nil {
-			return err
-		}
-	}
-	if err := r.guardSessionOwnerTx(ctx, tx, oldSessionID, ""); err != nil {
-		return err
-	}
-	if oldSessionID != newSessionID {
-		if err := r.guardSessionOwnerTx(ctx, tx, newSessionID, ""); err != nil {
-			return err
-		}
-	}
 	if oldSessionID == newSessionID {
 		return tx.Commit()
 	}
-	if err := r.transferPendingQueueDispatchesTx(ctx, tx, oldSessionID, newSessionID); err != nil {
+	if err := r.transferSessionRecoveryRowsTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
-		UPDATE queue_attachment_cleanups
-		SET current_session_id = ?
-		WHERE current_session_id = ?
-	`), newSessionID, oldSessionID); err != nil {
-		return fmt.Errorf("transfer attachment cleanup session: %w", err)
-	}
-	sourceAutoRun, err := r.getAutoRunTx(ctx, tx, oldSessionID)
-	if err != nil {
+	if err := r.transferSessionQueueRowsTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
 	}
-	destinationAutoRun, err := r.getAutoRunTx(ctx, tx, newSessionID)
-	if err != nil {
-		return err
-	}
-
-	// Shift positions on the destination so transferred entries land at the tail
-	// without colliding on the (session_id, position) implicit ordering.
-	var destMax sql.NullInt64
-	if err := tx.GetContext(ctx, &destMax, r.db.Rebind(`SELECT MAX(position) FROM queued_messages WHERE session_id = ?`), newSessionID); err != nil {
-		return fmt.Errorf("transfer max: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
-		UPDATE queued_messages
-		SET session_id = ?, position = position + ?
-		WHERE session_id = ?
-	`), newSessionID, destMax.Int64, oldSessionID); err != nil {
-		return fmt.Errorf("transfer queued: %w", err)
-	}
-	var transferredMax sql.NullInt64
-	if err := tx.GetContext(ctx, &transferredMax, r.db.Rebind(`
-		SELECT MAX(position) FROM queued_messages WHERE session_id = ?
-	`), newSessionID); err != nil {
-		return fmt.Errorf("transfer destination max after move: %w", err)
-	}
-	if transferredMax.Valid {
-		if err := r.bumpQueuePositionTx(ctx, tx, newSessionID, transferredMax.Int64); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
-		DELETE FROM pending_moves WHERE session_id = ?
-	`), newSessionID); err != nil {
-		return fmt.Errorf("clear dest pending move: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
-		UPDATE pending_moves SET session_id = ? WHERE session_id = ?
-	`), newSessionID, oldSessionID); err != nil {
-		return fmt.Errorf("transfer pending move: %w", err)
-	}
-	if err := r.setAutoRunTx(ctx, tx, newSessionID, sourceAutoRun && destinationAutoRun); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
-		DELETE FROM queue_session_state WHERE session_id = ?
-	`), oldSessionID); err != nil {
-		return fmt.Errorf("clear source queue auto-run: %w", err)
-	}
-	if err := r.bumpSendNowGenerationTx(ctx, tx, oldSessionID); err != nil {
-		return err
-	}
-	if err := r.bumpSendNowGenerationTx(ctx, tx, newSessionID); err != nil {
+	if err := r.transferSessionStateTx(ctx, tx, oldSessionID, newSessionID); err != nil {
 		return err
 	}
 	return tx.Commit()

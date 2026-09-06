@@ -382,3 +382,176 @@ func TestActiveSessionTransferFencesExistingQueueMutations(t *testing.T) {
 		})
 	}
 }
+
+func TestActiveSessionTransferRejectsNonOwnerQueueTransfer(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t)
+	entry := insertTestEntry(t, repo, "session-old", "task", "first", QueuedByUser, nil, nil)
+	persistent := repo.(*sqliteRepository)
+	require.NoError(t, persistent.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+		OperationID: "transfer-owner",
+		TaskID:      entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
+	}))
+
+	err := repo.TransferSession(ctx, entry.SessionID, "session-third")
+
+	require.ErrorIs(t, err, ErrSessionTransferInProgress)
+	stored, listErr := repo.ListBySession(ctx, entry.SessionID)
+	require.NoError(t, listErr)
+	require.Len(t, stored, 1)
+	assert.Equal(t, entry.ID, stored[0].ID)
+}
+
+func TestActiveSessionTransferFencesDispatchSettlement(t *testing.T) {
+	tests := []struct {
+		name   string
+		settle func(context.Context, *sqliteRepository, *QueuedMessage) error
+	}{
+		{name: "mark accepted", settle: func(ctx context.Context, repo *sqliteRepository, msg *QueuedMessage) error {
+			return repo.MarkPendingQueueDispatchAccepted(ctx, msg)
+		}},
+		{name: "delete", settle: func(ctx context.Context, repo *sqliteRepository, msg *QueuedMessage) error {
+			return repo.DeletePendingQueueDispatch(ctx, msg)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			repository := newTestSQLiteRepo(t)
+			persistent := repository.(*sqliteRepository)
+			entry := insertTestEntry(t, repository, "session-old", "task", "first", QueuedByUser, nil, nil)
+			reserved, err := repository.ReserveHead(ctx, entry.SessionID)
+			require.NoError(t, err)
+			require.NotNil(t, reserved)
+			require.NoError(t, persistent.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+				OperationID: "transfer-owner",
+				TaskID:      entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
+			}))
+
+			err = test.settle(ctx, persistent, reserved)
+
+			require.ErrorIs(t, err, ErrSessionTransferInProgress)
+			pending, listErr := persistent.ListPendingQueueDispatches(ctx)
+			require.NoError(t, listErr)
+			require.Len(t, pending, 1)
+			assert.False(t, pending[0].Accepted)
+		})
+	}
+}
+
+func TestActiveSessionTransferFencesSendNowSettlement(t *testing.T) {
+	tests := []struct {
+		name   string
+		settle func(context.Context, *sqliteRepository, *SendNowClaim) error
+	}{
+		{name: "mark accepted", settle: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+			return repo.MarkPendingSendNowClaimAccepted(ctx, claim)
+		}},
+		{name: "delete", settle: func(ctx context.Context, repo *sqliteRepository, claim *SendNowClaim) error {
+			return repo.DeletePendingSendNowClaim(ctx, claim)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			repository := newTestSQLiteRepo(t)
+			persistent := repository.(*sqliteRepository)
+			entry := insertTestEntry(t, repository, "session-old", "task", "first", QueuedByUser, nil, nil)
+			claim, err := repository.ClaimSendNow(ctx, entry.SessionID, []QueuedMessage{*entry})
+			require.NoError(t, err)
+			require.NoError(t, persistent.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+				OperationID: "transfer-owner",
+				TaskID:      entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
+			}))
+
+			err = test.settle(ctx, persistent, claim)
+
+			require.ErrorIs(t, err, ErrSessionTransferInProgress)
+			pending, listErr := persistent.ListPendingSendNowClaims(ctx)
+			require.NoError(t, listErr)
+			require.Len(t, pending, 1)
+			assert.False(t, pending[0].Accepted)
+		})
+	}
+}
+
+func setupCrossRepositoryEditTransferFence(
+	t *testing.T,
+	withLease bool,
+) (*Service, *QueuedMessage, *QueueEditLease) {
+	t.Helper()
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	service := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := service.QueueMessage(
+		ctx, "session-old", "task", "first", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	var lease *QueueEditLease
+	if withLease {
+		lease, err = service.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+		require.NoError(t, err)
+	}
+	require.NoError(t, persistent.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+		OperationID: "transfer-owner",
+		TaskID:      entry.TaskID, FromSessionID: entry.SessionID, ToSessionID: "session-new",
+	}))
+	return service, entry, lease
+}
+
+func TestActiveSessionTransferFencesEditLeaseLifecycle(t *testing.T) {
+	ctx := context.Background()
+	t.Run("begin", func(t *testing.T) {
+		service, entry, _ := setupCrossRepositoryEditTransferFence(t, false)
+		lease, err := service.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+		require.ErrorIs(t, err, ErrSessionTransferInProgress)
+		assert.Nil(t, lease)
+	})
+	t.Run("renew", func(t *testing.T) {
+		service, entry, lease := setupCrossRepositoryEditTransferFence(t, true)
+		renewed, err := service.RenewEdit(
+			ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection",
+		)
+		require.ErrorIs(t, err, ErrSessionTransferInProgress)
+		assert.Nil(t, renewed)
+		stored, getErr := service.GetEditLease(ctx, entry.SessionID, entry.ID)
+		require.NoError(t, getErr)
+		assert.Equal(t, lease.LeaseGeneration, stored.LeaseGeneration)
+	})
+	t.Run("end", func(t *testing.T) {
+		service, entry, lease := setupCrossRepositoryEditTransferFence(t, true)
+		err := service.EndEdit(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection")
+		require.ErrorIs(t, err, ErrSessionTransferInProgress)
+		_, getErr := service.GetEditLease(ctx, entry.SessionID, entry.ID)
+		require.NoError(t, getErr)
+	})
+}
+
+func TestRemoteSessionTransferRejectsStaleEditLeaseRenewal(t *testing.T) {
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	transferService := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+	editService := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := editService.QueueMessage(
+		ctx, "session-old", "task", "first", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	lease, err := editService.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+	require.NoError(t, transferService.TransferSessionWithDurablePreparation(
+		ctx, entry.TaskID, entry.SessionID, "session-new", nil, nil,
+	))
+
+	renewed, err := editService.RenewEdit(
+		ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection",
+	)
+
+	require.ErrorIs(t, err, ErrEditLeaseNotFound)
+	assert.Nil(t, renewed)
+}

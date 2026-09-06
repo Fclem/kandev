@@ -260,6 +260,38 @@ func (r *sqliteRepository) ListSessionTransferCompensations(
 	return compensations, nil
 }
 
+func authorizeSessionTransferTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	db *sqlx.DB,
+	fromSessionID, toSessionID, operationID string,
+) error {
+	var activeOperationID, activeFromSessionID, activeToSessionID string
+	err := tx.QueryRowxContext(ctx, db.Rebind(`
+		SELECT operation_id, from_session_id, to_session_id
+		FROM queue_session_transfer_compensations
+		WHERE from_session_id IN (?, ?) OR to_session_id IN (?, ?)
+	`), fromSessionID, toSessionID, fromSessionID, toSessionID).Scan(
+		&activeOperationID, &activeFromSessionID, &activeToSessionID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		if operationID != "" {
+			return ErrSessionTransferOwnershipLost
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("authorize session transfer: %w", err)
+	}
+	if operationID == "" ||
+		operationID != activeOperationID ||
+		fromSessionID != activeFromSessionID ||
+		toSessionID != activeToSessionID {
+		return ErrSessionTransferInProgress
+	}
+	return nil
+}
+
 func guardSessionTransferTx(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) error {
 	var active bool
 	if err := tx.GetContext(ctx, &active, db.Rebind(`

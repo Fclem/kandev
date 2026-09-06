@@ -11,6 +11,7 @@ import (
 )
 
 type durableSessionTransferState struct {
+	operationID       string
 	compensation      *SessionTransferCompensation
 	attachmentIDs     []string
 	preparationCalled bool
@@ -56,10 +57,14 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 	rollback func(context.Context, []string) error,
 ) error {
 	state := &durableSessionTransferState{}
+	if s.SessionTransferCompensationPersistenceAvailable() {
+		state.operationID = uuid.NewString()
+	}
 	err := s.transferSession(
 		ctx,
 		oldSessionID,
 		newSessionID,
+		state.operationID,
 		func(admittedCtx context.Context) error {
 			return s.prepareDurableSessionTransfer(
 				admittedCtx, taskID, oldSessionID, newSessionID, prepare, state,
@@ -97,7 +102,7 @@ func (s *Service) prepareDurableSessionTransfer(
 ) error {
 	if s.SessionTransferCompensationPersistenceAvailable() {
 		state.compensation = &SessionTransferCompensation{
-			OperationID: uuid.NewString(), TaskID: taskID,
+			OperationID: state.operationID, TaskID: taskID,
 			FromSessionID: oldSessionID, ToSessionID: newSessionID,
 			CreatedAt: time.Now().UTC(),
 		}

@@ -663,3 +663,45 @@ func TestRemoteEditLeaseBlocksSendNowClaim(t *testing.T) {
 	require.ErrorIs(t, err, ErrEditConflict)
 	assert.Nil(t, claim)
 }
+
+func TestRemoteEditLeaseBlocksEntryRemoval(t *testing.T) {
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	editService := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+	removeService := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := editService.QueueMessage(
+		ctx, "session-1", "task", "queued", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	_, err = editService.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+
+	removed, err := removeService.RemoveEntryWithEntry(ctx, entry.SessionID, entry.ID)
+
+	require.ErrorIs(t, err, ErrEditConflict)
+	assert.Nil(t, removed)
+}
+
+func TestRemoteDisconnectReleasesDurableEditLease(t *testing.T) {
+	ctx := context.Background()
+	repository := newTestSQLiteRepo(t)
+	persistent := repository.(*sqliteRepository)
+	secondRepository, err := NewSQLiteRepository(persistent.db, persistent.ro)
+	require.NoError(t, err)
+	firstService := newAutoMergeTestServiceWithRepository(t, repository, DefaultMaxPerSession)
+	secondService := newAutoMergeTestServiceWithRepository(t, secondRepository, DefaultMaxPerSession)
+	entry, err := firstService.QueueMessage(
+		ctx, "session-1", "task", "queued", "", QueuedByUser, false, nil,
+	)
+	require.NoError(t, err)
+	_, err = firstService.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+
+	require.Equal(t, 1, firstService.ReleaseEditLeasesForConnection("connection"))
+	_, err = secondService.BeginEdit(ctx, entry.SessionID, entry.ID, "new-connection")
+
+	require.NoError(t, err)
+}

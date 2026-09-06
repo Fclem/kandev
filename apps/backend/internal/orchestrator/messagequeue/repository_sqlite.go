@@ -2442,6 +2442,15 @@ func (r *sqliteRepository) MergeIntoAbove(ctx context.Context, sessionID, source
 	if !mergeAllowed(source, target, queuedBy) {
 		return nil, ErrNoMergeTarget
 	}
+	for _, entryID := range []string{source.ID, target.ID} {
+		blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, entryID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return nil, ErrEditConflict
+		}
+	}
 
 	content, attachments, metadata, err := buildMergedEntry(target, source)
 	if err != nil {
@@ -2663,6 +2672,15 @@ func (r *sqliteRepository) ReorderEntries(ctx context.Context, sessionID string,
 	ordered, err := validateReorderSet(visible, orderedIDs)
 	if err != nil {
 		return err
+	}
+	for _, msg := range visible {
+		blocked, err := r.editLeaseBlocksEntryTx(ctx, tx, sessionID, msg.ID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrEditConflict
+		}
 	}
 
 	// Interleave reserved rows at their current places; visible rows emit in

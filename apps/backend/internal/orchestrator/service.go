@@ -142,10 +142,14 @@ type SessionAttachmentCleaner interface {
 	DeleteSessionMessageAttachments(ctx context.Context, taskID, sessionID string) error
 }
 
-// SessionAttachmentTransferer keeps claimed prompt attachments bound to the
-// session that owns their queued message.
+// SessionAttachmentTransferer keeps the exact claimed prompt attachments
+// represented by a queue transfer bound to the queue's owning session.
 type SessionAttachmentTransferer interface {
-	TransferSessionMessageAttachments(ctx context.Context, taskID, oldSessionID, newSessionID string) error
+	TransferSessionMessageAttachments(
+		ctx context.Context,
+		taskID, oldSessionID, newSessionID string,
+		attachmentIDs []string,
+	) error
 }
 
 // SubagentContextRecorder persists a durable relational record of a subagent

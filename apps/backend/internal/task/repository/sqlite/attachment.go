@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	"github.com/kandev/kandev/internal/task/models"
 )
 
@@ -100,11 +101,24 @@ func (r *Repository) ClaimMessageAttachments(ctx context.Context, ids []string, 
 	if len(ids) > models.MaxMessageAttachmentCount {
 		return models.ErrTooManyAttachments
 	}
+	queueLockPresent, err := r.queueSessionLockTablePresent(ctx)
+	if err != nil {
+		return fmt.Errorf("check queue session lock schema: %w", err)
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin attachment claim: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if queueLockPresent {
+		if err := messagequeue.LockSessionInTransaction(ctx, tx, r.db, sessionID); err != nil {
+			return fmt.Errorf("lock attachment claim session: %w", err)
+		}
+		sessionID, err = messagequeue.ResolveSessionTransferInTransaction(ctx, tx, r.db, sessionID)
+		if err != nil {
+			return err
+		}
+	}
 
 	now := time.Now().UTC()
 	selection, err := r.selectAttachmentsForClaim(ctx, tx, ids, ownerID, workspaceID, taskID, sessionID, now)
@@ -359,15 +373,27 @@ func (r *Repository) DeleteMessageAttachmentsBySession(ctx context.Context, task
 	return attachments, nil
 }
 
-func (r *Repository) TransferMessageAttachments(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
-	if taskID == "" || oldSessionID == "" || newSessionID == "" || oldSessionID == newSessionID {
+func (r *Repository) TransferMessageAttachments(
+	ctx context.Context,
+	taskID, oldSessionID, newSessionID string,
+	attachmentIDs []string,
+) error {
+	if taskID == "" || oldSessionID == "" || newSessionID == "" ||
+		oldSessionID == newSessionID || len(attachmentIDs) == 0 {
 		return nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(attachmentIDs)), ",")
+	args := make([]interface{}, 0, 5+len(attachmentIDs))
+	args = append(args, newSessionID, time.Now().UTC(), taskID, oldSessionID, models.AttachmentStateClaimed)
+	for _, attachmentID := range attachmentIDs {
+		args = append(args, attachmentID)
 	}
 	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		UPDATE task_message_attachments
 		SET session_id = ?, updated_at = ?
 		WHERE task_id = ? AND session_id = ? AND state = ?
-	`), newSessionID, time.Now().UTC(), taskID, oldSessionID, models.AttachmentStateClaimed)
+		  AND id IN (`+placeholders+`)
+	`), args...)
 	if err != nil {
 		return fmt.Errorf("transfer session attachments: %w", err)
 	}

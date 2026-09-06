@@ -40,6 +40,9 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 	if err := r.initSchema(); err != nil {
 		return nil, fmt.Errorf("messagequeue: init schema: %w", err)
 	}
+	if err := r.ensureSessionTransferCompensationSchema(context.Background()); err != nil {
+		return nil, fmt.Errorf("messagequeue: init session transfer schema: %w", err)
+	}
 	var present bool
 	var err error
 	if writer.DriverName() == "pgx" {
@@ -108,11 +111,16 @@ func (r *sqliteRepository) guardActiveTaskTx(ctx context.Context, tx *sqlx.Tx, t
 	return nil
 }
 
-// guardSessionTx rejects queue writes for sessions that were deleted while a
-// task remained live. It runs after lockSessionTx so a session deletion and a
-// queue admission cannot pass the existence check on opposite sides of the
-// same session lock.
+// guardSessionTx rejects writes while a durable session transfer is active,
+// then verifies that the owning task session still exists.
 func (r *sqliteRepository) guardSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID, taskID string) error {
+	if err := guardSessionTransferTx(ctx, tx, r.db, sessionID); err != nil {
+		return err
+	}
+	return r.guardSessionOwnerTx(ctx, tx, sessionID, taskID)
+}
+
+func (r *sqliteRepository) guardSessionOwnerTx(ctx context.Context, tx *sqlx.Tx, sessionID, taskID string) error {
 	if !r.tasksTablePresent || !r.taskSessionsTablePresent {
 		return nil
 	}
@@ -2940,11 +2948,11 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 			return err
 		}
 	}
-	if err := r.guardSessionTx(ctx, tx, oldSessionID, ""); err != nil {
+	if err := r.guardSessionOwnerTx(ctx, tx, oldSessionID, ""); err != nil {
 		return err
 	}
 	if oldSessionID != newSessionID {
-		if err := r.guardSessionTx(ctx, tx, newSessionID, ""); err != nil {
+		if err := r.guardSessionOwnerTx(ctx, tx, newSessionID, ""); err != nil {
 			return err
 		}
 	}

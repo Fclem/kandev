@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -71,7 +72,21 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 	if cleanup.CurrentSessionID == "" {
 		cleanup.CurrentSessionID = cleanup.SessionID
 	}
-	if _, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin attachment cleanup upsert: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, cleanup.CurrentSessionID); err != nil {
+		return err
+	}
+	cleanup.CurrentSessionID, err = ResolveSessionTransferInTransaction(
+		ctx, tx, r.db, cleanup.CurrentSessionID,
+	)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO queue_attachment_cleanups
 			(session_id, current_session_id, entry_id, operation_id, task_id, owner_id, lease_id,
 			 remove_entry, claim_pending, entry_fingerprint, attachments_json, created_at)
@@ -90,6 +105,9 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 		string(attachmentsJSON), cleanup.CreatedAt); err != nil {
 		return fmt.Errorf("upsert attachment cleanup: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit attachment cleanup upsert: %w", err)
+	}
 	return nil
 }
 
@@ -100,11 +118,36 @@ func (r *sqliteRepository) DeleteAttachmentCleanup(
 	if err := r.ensureAttachmentCleanupSchema(ctx); err != nil {
 		return err
 	}
-	if _, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin attachment cleanup delete: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var currentSessionID string
+	err = tx.GetContext(ctx, &currentSessionID, tx.Rebind(`
+		SELECT current_session_id FROM queue_attachment_cleanups
+		WHERE session_id = ? AND entry_id = ? AND operation_id = ?
+	`), sessionID, entryID, operationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("locate attachment cleanup for delete: %w", err)
+	}
+	if err := r.lockSessionTx(ctx, tx, currentSessionID); err != nil {
+		return err
+	}
+	if err := guardSessionTransferTx(ctx, tx, r.db, currentSessionID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		DELETE FROM queue_attachment_cleanups
 		WHERE session_id = ? AND entry_id = ? AND operation_id = ?
 	`), sessionID, entryID, operationID); err != nil {
 		return fmt.Errorf("delete attachment cleanup: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit attachment cleanup delete: %w", err)
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
 	"github.com/kandev/kandev/internal/task/models"
 )
 
@@ -235,6 +236,7 @@ func TestTransferMessageAttachments_RebindsClaimedRows(t *testing.T) {
 	attachments := []*models.TaskMessageAttachment{
 		{ID: "transfer-one", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-transfer", SessionID: "session-old", Name: "one", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-one", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
 		{ID: "transfer-other-task", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "other-task", SessionID: "session-old", Name: "two", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-other-task", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+		{ID: "transfer-unselected", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-transfer", SessionID: "session-old", Name: "unselected", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-unselected", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
 	}
 	for _, attachment := range attachments {
 		if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
@@ -242,7 +244,13 @@ func TestTransferMessageAttachments_RebindsClaimedRows(t *testing.T) {
 		}
 	}
 
-	if err := repo.TransferMessageAttachments(ctx, "task-transfer", "session-old", "session-new"); err != nil {
+	if err := repo.TransferMessageAttachments(
+		ctx,
+		"task-transfer",
+		"session-old",
+		"session-new",
+		[]string{"transfer-one"},
+	); err != nil {
 		t.Fatal(err)
 	}
 	got, err := repo.GetMessageAttachment(ctx, "transfer-one")
@@ -258,5 +266,104 @@ func TestTransferMessageAttachments_RebindsClaimedRows(t *testing.T) {
 	}
 	if other.SessionID != "session-old" {
 		t.Fatalf("unrelated attachment session = %q", other.SessionID)
+	}
+	unselected, err := repo.GetMessageAttachment(ctx, "transfer-unselected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unselected.SessionID != "session-old" {
+		t.Fatalf("unselected attachment session = %q", unselected.SessionID)
+	}
+}
+
+func TestClaimMessageAttachmentsFollowsActiveSessionTransfer(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	queueRepo, err := messagequeue.NewSQLiteRepository(repo.db, repo.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compensations := queueRepo.(interface {
+		UpsertSessionTransferCompensation(context.Context, messagequeue.SessionTransferCompensation) error
+	})
+	if err := compensations.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		TaskID: "task-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	attachment := &models.TaskMessageAttachment{
+		ID: "claim-during-transfer", OwnerID: "owner-1", WorkspaceID: "workspace-attachments",
+		Name: "during.txt", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path",
+		SizeBytes: 1, StorageKey: "claim-during-transfer", State: models.AttachmentStateStaged,
+		ExpiresAt: now.Add(time.Hour), CreatedAt: now,
+	}
+	if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.ClaimMessageAttachments(
+		ctx,
+		[]string{attachment.ID},
+		attachment.OwnerID,
+		attachment.WorkspaceID,
+		"task-transfer",
+		"session-old",
+	); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repo.GetMessageAttachment(ctx, attachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.SessionID != "session-new" {
+		t.Fatalf("attachment session = %q, want session-new", stored.SessionID)
+	}
+}
+
+func TestPostgresAttachmentClaimFollowsBlockedSessionTransfer(t *testing.T) {
+	repoA, repoB, _ := newTaskPostgresRepoPair(t)
+	ctx := context.Background()
+	seedWorkspace(t, repoA, "workspace-transfer-claim")
+	queueRepo, err := messagequeue.NewSQLiteRepository(repoA.db, repoA.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compensations := queueRepo.(interface {
+		UpsertSessionTransferCompensation(context.Context, messagequeue.SessionTransferCompensation) error
+	})
+	if err := compensations.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		TaskID: "task-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	attachment := &models.TaskMessageAttachment{
+		ID: "postgres-claim-during-transfer", OwnerID: "owner-1", WorkspaceID: "workspace-transfer-claim",
+		Name: "during.txt", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path",
+		SizeBytes: 1, StorageKey: "postgres-claim-during-transfer", State: models.AttachmentStateStaged,
+		ExpiresAt: now.Add(time.Hour), CreatedAt: now,
+	}
+	if err := repoA.CreateMessageAttachment(ctx, attachment); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repoB.ClaimMessageAttachments(
+		ctx,
+		[]string{attachment.ID},
+		attachment.OwnerID,
+		attachment.WorkspaceID,
+		"task-transfer",
+		"session-old",
+	); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repoA.GetMessageAttachment(ctx, attachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.SessionID != "session-new" {
+		t.Fatalf("attachment session = %q, want session-new", stored.SessionID)
 	}
 }

@@ -3556,12 +3556,12 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, taskID, sel
 		return nil
 	}
 	transferCtx := context.WithoutCancel(ctx)
-	transferErr := queue.TransferSessionWithDurablePreparation(
+	transferErr := queue.TransferSessionWithDurableAttachmentPreparation(
 		transferCtx,
 		taskID,
 		selectedID,
 		primaryID,
-		func(admittedCtx context.Context) error {
+		func(admittedCtx context.Context, attachmentIDs []string) error {
 			if h.taskSvc == nil {
 				return nil
 			}
@@ -3570,12 +3570,13 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, taskID, sel
 				taskID,
 				selectedID,
 				primaryID,
+				attachmentIDs,
 			); err != nil {
 				return fmt.Errorf("transfer session attachments: %w", err)
 			}
 			return nil
 		},
-		func(rollbackCtx context.Context) error {
+		func(rollbackCtx context.Context, attachmentIDs []string) error {
 			if h.taskSvc == nil {
 				return nil
 			}
@@ -3584,6 +3585,7 @@ func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, taskID, sel
 				taskID,
 				primaryID,
 				selectedID,
+				attachmentIDs,
 			)
 		},
 	)

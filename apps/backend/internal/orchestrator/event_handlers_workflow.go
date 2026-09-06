@@ -2509,25 +2509,25 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 	if s.messageQueue == nil {
 		return nil
 	}
-	transferErr := s.messageQueue.TransferSessionWithDurablePreparation(
+	transferErr := s.messageQueue.TransferSessionWithDurableAttachmentPreparation(
 		ctx,
 		taskID,
 		oldSessionID,
 		newSessionID,
-		func(admittedCtx context.Context) error {
+		func(admittedCtx context.Context, attachmentIDs []string) error {
 			if s.sessionAttachmentTransferer == nil {
 				return nil
 			}
 			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
-				admittedCtx, taskID, oldSessionID, newSessionID,
+				admittedCtx, taskID, oldSessionID, newSessionID, attachmentIDs,
 			)
 		},
-		func(rollbackCtx context.Context) error {
+		func(rollbackCtx context.Context, attachmentIDs []string) error {
 			if s.sessionAttachmentTransferer == nil {
 				return nil
 			}
 			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
-				rollbackCtx, taskID, newSessionID, oldSessionID,
+				rollbackCtx, taskID, newSessionID, oldSessionID, attachmentIDs,
 			)
 		},
 	)
@@ -2551,46 +2551,89 @@ func (s *Service) reconcileSessionTransferCompensationsOnStartup(ctx context.Con
 		return errors.New("reconcile session transfer compensations: attachment transfer service is unavailable")
 	}
 	for _, compensation := range compensations {
-		targetSessionID := compensation.ToSessionID
-		for _, entryID := range compensation.EntryIDs {
-			entry, findErr := s.messageQueue.FindEntryByID(ctx, entryID)
-			if findErr == nil {
-				if entry.SessionID != compensation.FromSessionID && entry.SessionID != compensation.ToSessionID {
-					return fmt.Errorf(
-						"compensated queue entry %s belongs to unexpected session %s",
-						entryID,
-						entry.SessionID,
-					)
-				}
-				targetSessionID = entry.SessionID
-				break
-			}
-			if !errors.Is(findErr, messagequeue.ErrEntryNotFound) {
-				return fmt.Errorf("locate compensated queue entry %s: %w", entryID, findErr)
-			}
-		}
-		fromSessionID, toSessionID := compensation.FromSessionID, compensation.ToSessionID
-		if targetSessionID == compensation.FromSessionID {
-			fromSessionID, toSessionID = compensation.ToSessionID, compensation.FromSessionID
-		}
-		if err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
-			context.WithoutCancel(ctx),
-			compensation.TaskID,
-			fromSessionID,
-			toSessionID,
-		); err != nil {
-			return fmt.Errorf("reconcile session transfer attachments: %w", err)
-		}
-		if err := s.messageQueue.DeleteSessionTransferCompensation(
-			context.WithoutCancel(ctx),
-			compensation.TaskID,
-			compensation.FromSessionID,
-			compensation.ToSessionID,
-		); err != nil {
-			return fmt.Errorf("delete session transfer compensation: %w", err)
+		if err := s.reconcileSessionTransferCompensation(ctx, compensation); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (s *Service) reconcileSessionTransferCompensation(
+	ctx context.Context,
+	compensation messagequeue.SessionTransferCompensation,
+) error {
+	targetSessionID, err := s.sessionTransferCompensationTarget(ctx, compensation)
+	if err != nil {
+		return err
+	}
+	fromSessionID, toSessionID := compensation.FromSessionID, compensation.ToSessionID
+	if targetSessionID == compensation.FromSessionID {
+		fromSessionID, toSessionID = compensation.ToSessionID, compensation.FromSessionID
+	}
+	if err := s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
+		context.WithoutCancel(ctx),
+		compensation.TaskID,
+		fromSessionID,
+		toSessionID,
+		compensation.AttachmentIDs,
+	); err != nil {
+		return fmt.Errorf("reconcile session transfer attachments: %w", err)
+	}
+	if err := s.messageQueue.DeleteSessionTransferCompensation(
+		context.WithoutCancel(ctx),
+		compensation.TaskID,
+		compensation.FromSessionID,
+		compensation.ToSessionID,
+	); err != nil {
+		return fmt.Errorf("delete session transfer compensation: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) sessionTransferCompensationTarget(
+	ctx context.Context,
+	compensation messagequeue.SessionTransferCompensation,
+) (string, error) {
+	for _, entryID := range compensation.EntryIDs {
+		entry, err := s.messageQueue.FindEntryByID(ctx, entryID)
+		if err == nil {
+			if entry.SessionID != compensation.FromSessionID && entry.SessionID != compensation.ToSessionID {
+				return "", fmt.Errorf(
+					"compensated queue entry %s belongs to unexpected session %s",
+					entryID,
+					entry.SessionID,
+				)
+			}
+			return entry.SessionID, nil
+		}
+		if !errors.Is(err, messagequeue.ErrEntryNotFound) {
+			return "", fmt.Errorf("locate compensated queue entry %s: %w", entryID, err)
+		}
+	}
+	for _, locator := range compensation.CleanupLocators {
+		cleanup, err := s.messageQueue.GetAttachmentCleanup(
+			ctx, locator.SessionID, locator.EntryID, locator.OperationID,
+		)
+		if err != nil {
+			return "", fmt.Errorf("locate compensated attachment cleanup %s: %w", locator.EntryID, err)
+		}
+		if cleanup == nil {
+			continue
+		}
+		currentSessionID := cleanup.CurrentSessionID
+		if currentSessionID == "" {
+			currentSessionID = cleanup.SessionID
+		}
+		if currentSessionID != compensation.FromSessionID && currentSessionID != compensation.ToSessionID {
+			return "", fmt.Errorf(
+				"compensated attachment cleanup %s belongs to unexpected session %s",
+				locator.EntryID,
+				currentSessionID,
+			)
+		}
+		return currentSessionID, nil
+	}
+	return compensation.ToSessionID, nil
 }
 
 func (s *Service) reuseSessionForStepWithEndPolicy(

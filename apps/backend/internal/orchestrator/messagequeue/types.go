@@ -118,6 +118,9 @@ var (
 	// ErrLifecycleReservationChanged means a newer lifecycle delivery attempt
 	// replaced the reservation being acknowledged.
 	ErrLifecycleReservationChanged = errors.New("lifecycle reservation changed")
+	// ErrSessionTransferInProgress prevents a queue mutation from entering a
+	// session while its rows and external attachment claims are being rebound.
+	ErrSessionTransferInProgress = errors.New("session transfer in progress")
 	// ErrEditConflict means a queue entry is currently held by another editor.
 	ErrEditConflict = errors.New("queue entry edit conflict")
 	// ErrEditLeaseNotFound means a lease is missing, expired, or owned by
@@ -277,14 +280,22 @@ type AttachmentCleanup struct {
 	CreatedAt        time.Time
 }
 
+type AttachmentCleanupLocator struct {
+	SessionID   string `json:"session_id"`
+	EntryID     string `json:"entry_id"`
+	OperationID string `json:"operation_id"`
+}
+
 // SessionTransferCompensation records an attachment binding that must be
 // reconciled with the durable queue location after an interrupted transfer.
 type SessionTransferCompensation struct {
-	TaskID        string
-	FromSessionID string
-	ToSessionID   string
-	EntryIDs      []string
-	CreatedAt     time.Time
+	TaskID          string
+	FromSessionID   string
+	ToSessionID     string
+	EntryIDs        []string
+	AttachmentIDs   []string
+	CleanupLocators []AttachmentCleanupLocator
+	CreatedAt       time.Time
 }
 
 // QueueStatus is the per-session view returned to clients: full ordered list of

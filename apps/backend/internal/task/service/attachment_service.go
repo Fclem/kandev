@@ -320,10 +320,15 @@ func (s *AttachmentService) DeleteBySession(ctx context.Context, taskID, session
 	return nil
 }
 
-// TransferSession rebinds claimed prompt attachments when queued work moves
-// between task sessions.
-func (s *AttachmentService) TransferSession(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
-	return s.repo.TransferMessageAttachments(ctx, taskID, oldSessionID, newSessionID)
+// TransferSession rebinds only the claimed prompt attachments represented by
+// the queue transfer operation. The source-session predicate is the CAS guard
+// used by both forward transfer and rollback.
+func (s *AttachmentService) TransferSession(
+	ctx context.Context,
+	taskID, oldSessionID, newSessionID string,
+	attachmentIDs []string,
+) error {
+	return s.repo.TransferMessageAttachments(ctx, taskID, oldSessionID, newSessionID, attachmentIDs)
 }
 
 func (s *AttachmentService) Descriptor(attachment *models.TaskMessageAttachment) AttachmentDescriptor {

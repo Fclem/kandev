@@ -21,7 +21,11 @@ type workflowAttachmentTransferStub struct {
 	release chan struct{}
 }
 
-func (s *workflowAttachmentTransferStub) TransferSessionMessageAttachments(_ context.Context, taskID, oldSessionID, newSessionID string) error {
+func (s *workflowAttachmentTransferStub) TransferSessionMessageAttachments(
+	_ context.Context,
+	taskID, oldSessionID, newSessionID string,
+	_ []string,
+) error {
 	s.calls = append(s.calls, struct {
 		taskID, oldSessionID, newSessionID string
 	}{taskID, oldSessionID, newSessionID})
@@ -152,6 +156,7 @@ func (s *statefulWorkflowAttachmentTransfer) TransferSessionMessageAttachments(
 	_ context.Context,
 	_ string,
 	oldSessionID, newSessionID string,
+	_ []string,
 ) error {
 	s.calls++
 	if s.currentSession != oldSessionID {
@@ -215,6 +220,165 @@ func TestTransferQueuedSessionStateRecoversFailedAttachmentCompensationAfterRest
 	}
 	if transfer.currentSession != "session-old" {
 		t.Fatalf("attachment session after recovery = %q, want session-old", transfer.currentSession)
+	}
+}
+
+type attachmentSessionSetTransfer struct {
+	sessions map[string]string
+}
+
+func (s *attachmentSessionSetTransfer) TransferSessionMessageAttachments(
+	_ context.Context,
+	_ string,
+	oldSessionID, newSessionID string,
+	attachmentIDs []string,
+) error {
+	for _, attachmentID := range attachmentIDs {
+		if s.sessions[attachmentID] == oldSessionID {
+			s.sessions[attachmentID] = newSessionID
+		}
+	}
+	return nil
+}
+
+func TestTransferQueuedSessionRollbackPreservesDestinationAttachmentClaims(t *testing.T) {
+	ctx := context.Background()
+	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	_, err := queue.QueueMessage(
+		ctx, "session-old", "task-transfer", "source", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "source-attachment"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = queue.QueueMessage(
+		ctx, "session-new", "task-transfer", "destination", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "destination-attachment"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_scoped_workflow_queue_transfer
+		BEFORE UPDATE OF session_id ON queued_messages
+		BEGIN
+			SELECT RAISE(ABORT, 'forced queue transfer failure');
+		END
+	`); err != nil {
+		t.Fatal(err)
+	}
+	transfer := &attachmentSessionSetTransfer{sessions: map[string]string{
+		"source-attachment":      "session-old",
+		"destination-attachment": "session-new",
+	}}
+	svc := &Service{logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer}
+
+	if err := svc.transferQueuedSessionState(ctx, "task-transfer", "session-old", "session-new"); err == nil {
+		t.Fatal("transfer unexpectedly succeeded")
+	}
+	if got := transfer.sessions["destination-attachment"]; got != "session-new" {
+		t.Fatalf("pre-existing destination attachment session = %q, want session-new", got)
+	}
+}
+
+func TestCleanupOnlyTransferCompensationRecoversSourceAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	queue, db := newWorkflowTransferQueue(t, dbPath)
+	cleanup := messagequeue.AttachmentCleanup{
+		SessionID: "session-old", EntryID: "cleanup-entry", OperationID: "cleanup-operation",
+		TaskID: "task-transfer", Attachments: []messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+	}
+	if err := queue.UpsertAttachmentCleanup(ctx, cleanup); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_cleanup_only_queue_transfer
+		BEFORE UPDATE OF current_session_id ON queue_attachment_cleanups
+		BEGIN
+			SELECT RAISE(ABORT, 'forced cleanup transfer failure');
+		END
+	`); err != nil {
+		t.Fatal(err)
+	}
+	transfer := &statefulWorkflowAttachmentTransfer{
+		currentSession: "session-old",
+		rollbackErr:    errors.New("forced attachment rollback failure"),
+	}
+	svc := &Service{logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer}
+	if err := svc.transferQueuedSessionState(ctx, cleanup.TaskID, cleanup.SessionID, "session-new"); err == nil {
+		t.Fatal("transfer unexpectedly succeeded")
+	}
+	if transfer.currentSession != "session-new" {
+		t.Fatalf("attachment session before restart = %q, want session-new", transfer.currentSession)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restartedQueue, restartedDB := newWorkflowTransferQueue(t, dbPath)
+	t.Cleanup(func() { _ = restartedDB.Close() })
+	transfer.rollbackErr = nil
+	restarted := &Service{
+		logger: testLogger(), messageQueue: restartedQueue, sessionAttachmentTransferer: transfer,
+	}
+	if err := restarted.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if transfer.currentSession != "session-old" {
+		t.Fatalf("attachment session after recovery = %q, want session-old", transfer.currentSession)
+	}
+}
+
+func TestCleanupOnlyTransferCompensationRecoversPreviousHopAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "queue.db")
+	queue, db := newWorkflowTransferQueue(t, dbPath)
+	cleanup := messagequeue.AttachmentCleanup{
+		SessionID: "session-a", EntryID: "cleanup-entry", OperationID: "cleanup-operation",
+		TaskID: "task-transfer", Attachments: []messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+	}
+	if err := queue.UpsertAttachmentCleanup(ctx, cleanup); err != nil {
+		t.Fatal(err)
+	}
+	transfer := &statefulWorkflowAttachmentTransfer{currentSession: "session-a"}
+	svc := &Service{logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer}
+	if err := svc.transferQueuedSessionState(ctx, cleanup.TaskID, "session-a", "session-b"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_multi_hop_cleanup_transfer
+		BEFORE UPDATE OF current_session_id ON queue_attachment_cleanups
+		BEGIN
+			SELECT RAISE(ABORT, 'forced cleanup transfer failure');
+		END
+	`); err != nil {
+		t.Fatal(err)
+	}
+	transfer.calls = 0
+	transfer.rollbackErr = errors.New("forced attachment rollback failure")
+	if err := svc.transferQueuedSessionState(ctx, cleanup.TaskID, "session-b", "session-c"); err == nil {
+		t.Fatal("second transfer unexpectedly succeeded")
+	}
+	if transfer.currentSession != "session-c" {
+		t.Fatalf("attachment session before restart = %q, want session-c", transfer.currentSession)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restartedQueue, restartedDB := newWorkflowTransferQueue(t, dbPath)
+	t.Cleanup(func() { _ = restartedDB.Close() })
+	transfer.rollbackErr = nil
+	restarted := &Service{
+		logger: testLogger(), messageQueue: restartedQueue, sessionAttachmentTransferer: transfer,
+	}
+	if err := restarted.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if transfer.currentSession != "session-b" {
+		t.Fatalf("attachment session after recovery = %q, want session-b", transfer.currentSession)
 	}
 }
 

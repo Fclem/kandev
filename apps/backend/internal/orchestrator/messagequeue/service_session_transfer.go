@@ -11,19 +11,48 @@ import (
 
 type durableSessionTransferState struct {
 	compensation      *SessionTransferCompensation
+	attachmentIDs     []string
 	preparationCalled bool
 	rollbackSucceeded bool
 }
 
-// TransferSessionWithDurablePreparation keeps attachment ownership aligned
-// with every queue row, including lifecycle rows hidden from the UI status.
-// Durable repositories record the external mutation before it starts so a
-// failed rollback or process exit can be reconciled on startup.
+// TransferSessionWithDurablePreparation preserves the original callback
+// contract for callers whose external state is not attachment-scoped.
 func (s *Service) TransferSessionWithDurablePreparation(
 	ctx context.Context,
 	taskID, oldSessionID, newSessionID string,
 	prepare func(context.Context) error,
 	rollback func(context.Context) error,
+) error {
+	return s.TransferSessionWithDurableAttachmentPreparation(
+		ctx,
+		taskID,
+		oldSessionID,
+		newSessionID,
+		func(callbackCtx context.Context, _ []string) error {
+			if prepare == nil {
+				return nil
+			}
+			return prepare(callbackCtx)
+		},
+		func(callbackCtx context.Context, _ []string) error {
+			if rollback == nil {
+				return nil
+			}
+			return rollback(callbackCtx)
+		},
+	)
+}
+
+// TransferSessionWithDurableAttachmentPreparation keeps attachment ownership
+// aligned with every queue row, including lifecycle rows hidden from UI status.
+// Durable repositories record the exact attachment set before external state
+// changes so rollback and startup recovery cannot move unrelated claims.
+func (s *Service) TransferSessionWithDurableAttachmentPreparation(
+	ctx context.Context,
+	taskID, oldSessionID, newSessionID string,
+	prepare func(context.Context, []string) error,
+	rollback func(context.Context, []string) error,
 ) error {
 	state := &durableSessionTransferState{}
 	err := s.transferSession(
@@ -40,7 +69,7 @@ func (s *Service) TransferSessionWithDurablePreparation(
 				state.rollbackSucceeded = true
 				return nil
 			}
-			rollbackErr := rollback(rollbackCtx)
+			rollbackErr := rollback(rollbackCtx, state.attachmentIDs)
 			state.rollbackSucceeded = rollbackErr == nil
 			return rollbackErr
 		},
@@ -62,51 +91,61 @@ func (s *Service) TransferSessionWithDurablePreparation(
 func (s *Service) prepareDurableSessionTransfer(
 	ctx context.Context,
 	taskID, oldSessionID, newSessionID string,
-	prepare func(context.Context) error,
+	prepare func(context.Context, []string) error,
 	state *durableSessionTransferState,
 ) error {
+	if s.SessionTransferCompensationPersistenceAvailable() {
+		state.compensation = &SessionTransferCompensation{
+			TaskID: taskID, FromSessionID: oldSessionID, ToSessionID: newSessionID,
+			CreatedAt: time.Now().UTC(),
+		}
+		if err := s.UpsertSessionTransferCompensation(ctx, *state.compensation); err != nil {
+			return fmt.Errorf("persist session transfer fence: %w", err)
+		}
+	}
 	entries, err := s.repo.ListBySession(ctx, oldSessionID)
 	if err != nil {
 		return fmt.Errorf("snapshot session queue for transfer: %w", err)
 	}
 	entryIDs := make([]string, 0, len(entries))
 	seenEntryIDs := make(map[string]struct{}, len(entries))
-	hasAttachments := false
+	attachmentIDs := make([]string, 0)
+	seenAttachmentIDs := make(map[string]struct{})
 	for _, entry := range entries {
 		entryIDs = append(entryIDs, entry.ID)
 		seenEntryIDs[entry.ID] = struct{}{}
-		hasAttachments = hasAttachments || len(entry.Attachments) > 0
+		attachmentIDs = appendTransferAttachmentIDs(attachmentIDs, seenAttachmentIDs, entry.Attachments)
 	}
-	dispatchEntryIDs, dispatchHasAttachments, err := s.snapshotPendingDispatchTransfer(
-		ctx, oldSessionID, seenEntryIDs,
+	dispatchEntryIDs, dispatchAttachments, err := s.snapshotPendingDispatchTransfer(
+		ctx, oldSessionID, seenEntryIDs, seenAttachmentIDs,
 	)
 	if err != nil {
 		return err
 	}
 	entryIDs = append(entryIDs, dispatchEntryIDs...)
-	hasAttachments = hasAttachments || dispatchHasAttachments
-	cleanupEntryIDs, cleanupHasAttachments, err := s.snapshotAttachmentCleanupTransfer(
-		ctx, taskID, oldSessionID, seenEntryIDs,
+	attachmentIDs = append(attachmentIDs, dispatchAttachments...)
+	cleanupEntryIDs, cleanupAttachments, cleanupLocators, err := s.snapshotAttachmentCleanupTransfer(
+		ctx, taskID, oldSessionID, seenEntryIDs, seenAttachmentIDs,
 	)
 	if err != nil {
 		return err
 	}
 	entryIDs = append(entryIDs, cleanupEntryIDs...)
-	hasAttachments = hasAttachments || cleanupHasAttachments
-	if !hasAttachments || prepare == nil {
-		return nil
-	}
-	if s.SessionTransferCompensationPersistenceAvailable() {
-		state.compensation = &SessionTransferCompensation{
-			TaskID: taskID, FromSessionID: oldSessionID, ToSessionID: newSessionID,
-			EntryIDs: entryIDs, CreatedAt: time.Now().UTC(),
-		}
+	attachmentIDs = append(attachmentIDs, cleanupAttachments...)
+	state.attachmentIDs = attachmentIDs
+	if state.compensation != nil {
+		state.compensation.EntryIDs = entryIDs
+		state.compensation.AttachmentIDs = attachmentIDs
+		state.compensation.CleanupLocators = cleanupLocators
 		if err := s.UpsertSessionTransferCompensation(ctx, *state.compensation); err != nil {
 			return fmt.Errorf("persist session transfer compensation: %w", err)
 		}
 	}
+	if len(attachmentIDs) == 0 || prepare == nil {
+		return nil
+	}
 	state.preparationCalled = true
-	if err := prepare(ctx); err != nil {
+	if err := prepare(ctx, attachmentIDs); err != nil {
 		return fmt.Errorf("prepare durable session transfer: %w", err)
 	}
 	return nil
@@ -115,17 +154,17 @@ func (s *Service) prepareDurableSessionTransfer(
 func (s *Service) snapshotPendingDispatchTransfer(
 	ctx context.Context,
 	sessionID string,
-	seenEntryIDs map[string]struct{},
-) ([]string, bool, error) {
+	seenEntryIDs, seenAttachmentIDs map[string]struct{},
+) ([]string, []string, error) {
 	if !s.PendingQueueDispatchPersistenceAvailable() {
-		return nil, false, nil
+		return nil, nil, nil
 	}
 	pending, err := s.ListPendingQueueDispatches(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("snapshot in-flight queue dispatches for transfer: %w", err)
+		return nil, nil, fmt.Errorf("snapshot in-flight queue dispatches for transfer: %w", err)
 	}
 	entryIDs := make([]string, 0)
-	hasAttachments := false
+	attachmentIDs := make([]string, 0)
 	for _, dispatch := range pending {
 		entry := dispatch.Message
 		if entry.SessionID != sessionID {
@@ -135,25 +174,26 @@ func (s *Service) snapshotPendingDispatchTransfer(
 			entryIDs = append(entryIDs, entry.ID)
 			seenEntryIDs[entry.ID] = struct{}{}
 		}
-		hasAttachments = hasAttachments || len(entry.Attachments) > 0
+		attachmentIDs = appendTransferAttachmentIDs(attachmentIDs, seenAttachmentIDs, entry.Attachments)
 	}
-	return entryIDs, hasAttachments, nil
+	return entryIDs, attachmentIDs, nil
 }
 
 func (s *Service) snapshotAttachmentCleanupTransfer(
 	ctx context.Context,
 	taskID, sessionID string,
-	seenEntryIDs map[string]struct{},
-) ([]string, bool, error) {
+	seenEntryIDs, seenAttachmentIDs map[string]struct{},
+) ([]string, []string, []AttachmentCleanupLocator, error) {
 	if !s.AttachmentCleanupPersistenceAvailable() {
-		return nil, false, nil
+		return nil, nil, nil, nil
 	}
 	cleanups, err := s.ListAttachmentCleanups(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("snapshot attachment cleanups for transfer: %w", err)
+		return nil, nil, nil, fmt.Errorf("snapshot attachment cleanups for transfer: %w", err)
 	}
 	entryIDs := make([]string, 0)
-	hasAttachments := false
+	attachmentIDs := make([]string, 0)
+	locators := make([]AttachmentCleanupLocator, 0)
 	for _, cleanup := range cleanups {
 		currentSessionID := cleanup.CurrentSessionID
 		if currentSessionID == "" {
@@ -166,9 +206,30 @@ func (s *Service) snapshotAttachmentCleanupTransfer(
 			entryIDs = append(entryIDs, cleanup.EntryID)
 			seenEntryIDs[cleanup.EntryID] = struct{}{}
 		}
-		hasAttachments = hasAttachments || len(cleanup.Attachments) > 0
+		attachmentIDs = appendTransferAttachmentIDs(attachmentIDs, seenAttachmentIDs, cleanup.Attachments)
+		locators = append(locators, AttachmentCleanupLocator{
+			SessionID: cleanup.SessionID, EntryID: cleanup.EntryID, OperationID: cleanup.OperationID,
+		})
 	}
-	return entryIDs, hasAttachments, nil
+	return entryIDs, attachmentIDs, locators, nil
+}
+
+func appendTransferAttachmentIDs(
+	ids []string,
+	seen map[string]struct{},
+	attachments []MessageAttachment,
+) []string {
+	for _, attachment := range attachments {
+		if attachment.AttachmentID == "" {
+			continue
+		}
+		if _, ok := seen[attachment.AttachmentID]; ok {
+			continue
+		}
+		seen[attachment.AttachmentID] = struct{}{}
+		ids = append(ids, attachment.AttachmentID)
+	}
+	return ids
 }
 
 func (s *Service) deleteSessionTransferCompensation(

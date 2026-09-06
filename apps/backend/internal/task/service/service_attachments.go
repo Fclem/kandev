@@ -78,10 +78,14 @@ func (s *Service) DeleteSessionMessageAttachments(ctx context.Context, taskID, s
 }
 
 // TransferSessionMessageAttachments keeps claimed prompt attachments aligned
-// with a queued session transfer.
-func (s *Service) TransferSessionMessageAttachments(ctx context.Context, taskID, oldSessionID, newSessionID string) error {
+// with a queued session transfer without touching unrelated destination claims.
+func (s *Service) TransferSessionMessageAttachments(
+	ctx context.Context,
+	taskID, oldSessionID, newSessionID string,
+	attachmentIDs []string,
+) error {
 	if s.attachmentSvc == nil {
 		return nil
 	}
-	return s.attachmentSvc.TransferSession(ctx, taskID, oldSessionID, newSessionID)
+	return s.attachmentSvc.TransferSession(ctx, taskID, oldSessionID, newSessionID, attachmentIDs)
 }

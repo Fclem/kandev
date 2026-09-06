@@ -164,3 +164,101 @@ func TestDurableSessionTransferIncludesCleanupOnlyAttachmentClaim(t *testing.T) 
 	require.NotNil(t, stored)
 	assert.Equal(t, "session-cleanup-only-new", stored.CurrentSessionID)
 }
+
+func TestDurableSessionTransferFencesConcurrentSourceInsert(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t)
+	service := newAutoMergeTestServiceWithRepository(t, repo, DefaultMaxPerSession)
+	_, err := service.QueueMessage(
+		ctx,
+		"session-old",
+		"task",
+		"handoff",
+		"",
+		QueuedByUser,
+		false,
+		[]MessageAttachment{{AttachmentID: "attachment"}},
+	)
+	require.NoError(t, err)
+	prepared := make(chan struct{})
+	release := make(chan struct{})
+	transferDone := make(chan error, 1)
+	go func() {
+		transferDone <- service.TransferSessionWithDurableAttachmentPreparation(
+			ctx,
+			"task",
+			"session-old",
+			"session-new",
+			func(context.Context, []string) error {
+				close(prepared)
+				<-release
+				return nil
+			},
+			nil,
+		)
+	}()
+	<-prepared
+
+	err = repo.Insert(ctx, &QueuedMessage{
+		ID: "concurrent", SessionID: "session-old", TaskID: "task",
+		Content: "concurrent", QueuedBy: QueuedByUser,
+	}, DefaultMaxPerSession)
+	require.ErrorContains(t, err, "session transfer in progress")
+	close(release)
+	require.NoError(t, <-transferDone)
+}
+
+func TestAttachmentCleanupFollowsActiveSessionTransfer(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t)
+	persistence := repo.(interface {
+		UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
+		UpsertAttachmentCleanup(context.Context, AttachmentCleanup) error
+		GetAttachmentCleanup(context.Context, string, string, string) (*AttachmentCleanup, error)
+	})
+	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+		TaskID: "task", FromSessionID: "session-old", ToSessionID: "session-new",
+	}))
+	cleanup := AttachmentCleanup{
+		SessionID: "session-old", CurrentSessionID: "session-old",
+		EntryID: "entry", OperationID: "operation", TaskID: "task",
+		Attachments: []MessageAttachment{{AttachmentID: "attachment"}},
+	}
+
+	require.NoError(t, persistence.UpsertAttachmentCleanup(ctx, cleanup))
+	stored, err := persistence.GetAttachmentCleanup(
+		ctx, cleanup.SessionID, cleanup.EntryID, cleanup.OperationID,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.Equal(t, "session-new", stored.CurrentSessionID)
+}
+
+func TestAttachmentCleanupDeleteWaitsForActiveSessionTransfer(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestSQLiteRepo(t)
+	persistence := repo.(interface {
+		UpsertSessionTransferCompensation(context.Context, SessionTransferCompensation) error
+		UpsertAttachmentCleanup(context.Context, AttachmentCleanup) error
+		DeleteAttachmentCleanup(context.Context, string, string, string) error
+		GetAttachmentCleanup(context.Context, string, string, string) (*AttachmentCleanup, error)
+	})
+	cleanup := AttachmentCleanup{
+		SessionID: "session-old", EntryID: "entry", OperationID: "operation", TaskID: "task",
+		Attachments: []MessageAttachment{{AttachmentID: "attachment"}},
+	}
+	require.NoError(t, persistence.UpsertAttachmentCleanup(ctx, cleanup))
+	require.NoError(t, persistence.UpsertSessionTransferCompensation(ctx, SessionTransferCompensation{
+		TaskID: "task", FromSessionID: "session-old", ToSessionID: "session-new",
+	}))
+
+	err := persistence.DeleteAttachmentCleanup(
+		ctx, cleanup.SessionID, cleanup.EntryID, cleanup.OperationID,
+	)
+	require.ErrorIs(t, err, ErrSessionTransferInProgress)
+	stored, err := persistence.GetAttachmentCleanup(
+		ctx, cleanup.SessionID, cleanup.EntryID, cleanup.OperationID,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+}

@@ -38,6 +38,7 @@ var (
 	errReusableSessionNoLongerActive        = errors.New("reusable session is no longer active")
 	errWorkflowAutoStartSessionTerminalized = errors.New("workflow auto-start session terminalized")
 	errContextResetCancellationConflict     = errors.New("context reset cancellation is already in progress")
+	errSessionAttachmentTransferUnavailable = errors.New("session attachment transfer service is unavailable")
 )
 
 type workflowAutoStartSessionTerminalizedError struct {
@@ -2516,7 +2517,7 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 		newSessionID,
 		func(admittedCtx context.Context, attachmentIDs []string) error {
 			if s.sessionAttachmentTransferer == nil {
-				return nil
+				return errSessionAttachmentTransferUnavailable
 			}
 			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
 				admittedCtx, taskID, oldSessionID, newSessionID, attachmentIDs,
@@ -2524,7 +2525,7 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 		},
 		func(rollbackCtx context.Context, attachmentIDs []string) error {
 			if s.sessionAttachmentTransferer == nil {
-				return nil
+				return errSessionAttachmentTransferUnavailable
 			}
 			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
 				rollbackCtx, taskID, newSessionID, oldSessionID, attachmentIDs,

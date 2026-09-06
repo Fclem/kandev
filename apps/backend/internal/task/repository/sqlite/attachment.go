@@ -378,25 +378,112 @@ func (r *Repository) TransferMessageAttachments(
 		oldSessionID == newSessionID || len(attachmentIDs) == 0 {
 		return nil
 	}
-	uniqueAttachmentIDs := make([]string, 0, len(attachmentIDs))
-	seenAttachmentIDs := make(map[string]struct{}, len(attachmentIDs))
-	for _, attachmentID := range attachmentIDs {
-		if _, seen := seenAttachmentIDs[attachmentID]; !seen {
-			seenAttachmentIDs[attachmentID] = struct{}{}
-			uniqueAttachmentIDs = append(uniqueAttachmentIDs, attachmentID)
-		}
-	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(uniqueAttachmentIDs)), ",")
-	args := make([]interface{}, 0, 5+len(uniqueAttachmentIDs))
-	args = append(args, newSessionID, time.Now().UTC(), taskID, oldSessionID, models.AttachmentStateClaimed)
-	for _, attachmentID := range uniqueAttachmentIDs {
-		args = append(args, attachmentID)
-	}
+	uniqueAttachmentIDs := uniqueAttachmentIDs(attachmentIDs)
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transfer session attachments: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	locations, err := transferAttachmentLocations(ctx, tx, taskID, uniqueAttachmentIDs)
+	if err != nil {
+		return err
+	}
+	sourceAttachmentIDs, err := validateTransferAttachmentLocations(
+		taskID, oldSessionID, newSessionID, uniqueAttachmentIDs, locations,
+	)
+	if err != nil {
+		return err
+	}
+	if err := updateTransferSessionAttachments(
+		ctx, tx, taskID, oldSessionID, newSessionID, sourceAttachmentIDs,
+	); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transfer session attachments: %w", err)
+	}
+	return nil
+}
+
+func uniqueAttachmentIDs(attachmentIDs []string) []string {
+	unique := make([]string, 0, len(attachmentIDs))
+	seen := make(map[string]struct{}, len(attachmentIDs))
+	for _, attachmentID := range attachmentIDs {
+		if _, ok := seen[attachmentID]; ok {
+			continue
+		}
+		seen[attachmentID] = struct{}{}
+		unique = append(unique, attachmentID)
+	}
+	return unique
+}
+
+func transferAttachmentLocations(
+	ctx context.Context, tx *sqlx.Tx, taskID string, attachmentIDs []string,
+) (map[string]string, error) {
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(attachmentIDs)), ",")
+	args := make([]interface{}, 0, 2+len(attachmentIDs))
+	args = append(args, taskID, models.AttachmentStateClaimed)
+	for _, attachmentID := range attachmentIDs {
+		args = append(args, attachmentID)
+	}
+	rows, err := tx.QueryxContext(ctx, tx.Rebind(`
+		SELECT id, session_id
+		FROM task_message_attachments
+		WHERE task_id = ? AND state = ? AND id IN (`+placeholders+`)
+	`), args...)
+	if err != nil {
+		return nil, fmt.Errorf("inspect transfer session attachments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	locations := make(map[string]string, len(attachmentIDs))
+	for rows.Next() {
+		var attachmentID, sessionID string
+		if err := rows.Scan(&attachmentID, &sessionID); err != nil {
+			return nil, fmt.Errorf("scan transfer session attachment: %w", err)
+		}
+		locations[attachmentID] = sessionID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate transfer session attachments: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close transfer session attachments: %w", err)
+	}
+	return locations, nil
+}
+
+func validateTransferAttachmentLocations(
+	taskID, oldSessionID, newSessionID string, attachmentIDs []string, locations map[string]string,
+) ([]string, error) {
+	sourceAttachmentIDs := make([]string, 0, len(attachmentIDs))
+	for _, attachmentID := range attachmentIDs {
+		sessionID, ok := locations[attachmentID]
+		if !ok || (sessionID != oldSessionID && sessionID != newSessionID) {
+			return nil, fmt.Errorf(
+				"transfer session attachments: attachment %q is not a claimed attachment for task %q in either transfer session",
+				attachmentID, taskID,
+			)
+		}
+		if sessionID == oldSessionID {
+			sourceAttachmentIDs = append(sourceAttachmentIDs, attachmentID)
+		}
+	}
+	return sourceAttachmentIDs, nil
+}
+
+func updateTransferSessionAttachments(
+	ctx context.Context, tx *sqlx.Tx, taskID, oldSessionID, newSessionID string, attachmentIDs []string,
+) error {
+	if len(attachmentIDs) == 0 {
+		return nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(attachmentIDs)), ",")
+	args := make([]interface{}, 0, 5+len(attachmentIDs))
+	args = append(args, newSessionID, time.Now().UTC(), taskID, oldSessionID, models.AttachmentStateClaimed)
+	for _, attachmentID := range attachmentIDs {
+		args = append(args, attachmentID)
+	}
 	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE task_message_attachments
 		SET session_id = ?, updated_at = ?
@@ -410,11 +497,8 @@ func (r *Repository) TransferMessageAttachments(
 	if err != nil {
 		return fmt.Errorf("count transferred session attachments: %w", err)
 	}
-	if affected != int64(len(uniqueAttachmentIDs)) {
-		return fmt.Errorf("transfer session attachments: expected %d claimed source attachments, moved %d", len(uniqueAttachmentIDs), affected)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transfer session attachments: %w", err)
+	if affected != int64(len(attachmentIDs)) {
+		return fmt.Errorf("transfer session attachments: expected %d claimed source attachments, moved %d", len(attachmentIDs), affected)
 	}
 	return nil
 }

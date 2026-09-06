@@ -61,6 +61,28 @@ func TestTransferQueuedSessionStateRebindsAttachments(t *testing.T) {
 		t.Fatalf("moved queue entry = %#v, ok=%t", moved, ok)
 	}
 }
+func TestTransferQueuedSessionStateFailsClosedWithoutAttachmentTransferer(t *testing.T) {
+	ctx := context.Background()
+	queue := messagequeue.NewServiceMemory(testLogger())
+	svc := &Service{logger: testLogger(), messageQueue: queue}
+	if _, err := queue.QueueMessage(
+		ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	err := svc.transferQueuedSessionState(ctx, "task-transfer", "session-old", "session-new")
+	if !errors.Is(err, errSessionAttachmentTransferUnavailable) {
+		t.Fatalf("transfer error = %v, want attachment transfer service unavailable", err)
+	}
+	if _, ok := queue.TakeQueued(ctx, "session-new"); ok {
+		t.Fatal("queue entry moved despite unavailable attachment transfer service")
+	}
+	if _, ok := queue.TakeQueued(ctx, "session-old"); !ok {
+		t.Fatal("queue entry missing after failed transfer")
+	}
+}
 
 func TestTransferQueuedSessionStateSerializesAttachmentTransferWithQueueMutation(t *testing.T) {
 	ctx := context.Background()
@@ -280,6 +302,47 @@ func TestTransferQueuedSessionRollbackPreservesDestinationAttachmentClaims(t *te
 	}
 	if got := transfer.sessions["destination-attachment"]; got != "session-new" {
 		t.Fatalf("pre-existing destination attachment session = %q, want session-new", got)
+	}
+}
+func TestSessionTransferCompensationRecoveryAcceptsDestinationAttachment(t *testing.T) {
+	ctx := context.Background()
+	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	entry, err := queue.QueueMessage(
+		ctx, "session-new", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID:   "destination-transfer",
+		TaskID:        entry.TaskID,
+		FromSessionID: "session-old",
+		ToSessionID:   entry.SessionID,
+		EntryIDs:      []string{entry.ID},
+		AttachmentIDs: []string{"destination-attachment"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expireSessionTransferCompensationLease(t, db)
+	transfer := &attachmentSessionSetTransfer{sessions: map[string]string{
+		"destination-attachment": "session-new",
+	}}
+	restarted := &Service{
+		logger: testLogger(), messageQueue: queue, sessionAttachmentTransferer: transfer,
+	}
+	if err := restarted.reconcileSessionTransferCompensationsOnStartup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := transfer.sessions["destination-attachment"]; got != "session-new" {
+		t.Fatalf("destination attachment session = %q, want session-new", got)
+	}
+	compensations, err := queue.ListSessionTransferCompensations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compensations) != 0 {
+		t.Fatalf("remaining compensations = %#v, want none", compensations)
 	}
 }
 

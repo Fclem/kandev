@@ -276,6 +276,36 @@ func TestTransferMessageAttachments_RebindsClaimedRows(t *testing.T) {
 		t.Fatalf("unselected attachment session = %q", unselected.SessionID)
 	}
 }
+func TestTransferMessageAttachmentsAcceptsAlreadyTransferredRows(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	now := time.Now().UTC()
+	for _, attachment := range []*models.TaskMessageAttachment{
+		{ID: "transfer-source", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-transfer", SessionID: "session-old", Name: "source", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-source", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+		{ID: "transfer-destination", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-transfer", SessionID: "session-new", Name: "destination", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-destination", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+	} {
+		if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := repo.TransferMessageAttachments(
+		ctx, "task-transfer", "session-old", "session-new",
+		[]string{"transfer-source", "transfer-destination"},
+	); err != nil {
+		t.Fatalf("idempotent attachment transfer: %v", err)
+	}
+	for _, attachmentID := range []string{"transfer-source", "transfer-destination"} {
+		attachment, err := repo.GetMessageAttachment(ctx, attachmentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if attachment.SessionID != "session-new" {
+			t.Fatalf("attachment %s session = %q, want session-new", attachmentID, attachment.SessionID)
+		}
+	}
+}
 
 func TestTransferMessageAttachmentsRejectsPartialOwnership(t *testing.T) {
 	repo := newRepoForSessionTests(t)

@@ -41,7 +41,6 @@ import { QueuedGhostRowActions } from "@/components/task/chat/queued-ghost-row-a
 import { useQueuedMessageOverflow } from "@/components/task/chat/use-queued-message-overflow";
 import { AttachmentRow, type QueuedAttachment } from "@/components/task/chat/queued-attachment-row";
 import { QueuedGhostEditView } from "@/components/task/chat/queued-ghost-edit-view";
-import { QueuedGhostRowActions } from "@/components/task/chat/queued-ghost-row-actions";
 import { t } from "@/lib/i18n";
 import { useClarificationEscapeGuard } from "@/hooks/use-clarification-escape-guard";
 import { useQueuedGhostStartEdit } from "@/hooks/use-queue-edit-protection";

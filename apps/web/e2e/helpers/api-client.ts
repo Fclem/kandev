@@ -2741,11 +2741,13 @@ export class ApiClient {
   }
 
   async setQueueAutoRun(
-    sessionId: string,
+    identity: QueueSessionIdentityInput,
     enabled: boolean,
   ): Promise<{ session_id: string; auto_run: boolean; dispatched: boolean }> {
     return this.wsRequest("message.queue.auto_run.set", {
-      session_id: sessionId,
+      task_id: identity.taskId,
+      session_id: identity.sessionId,
+      session_incarnation_id: identity.sessionIncarnationId,
       enabled,
     });
   }

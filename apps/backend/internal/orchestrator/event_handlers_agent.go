@@ -555,6 +555,27 @@ func (s *Service) handleAgentBootReady(ctx context.Context, data watcher.AgentEv
 	s.drainQueuedMessageForPromptableSession(ctx, data.SessionID)
 }
 
+func (s *Service) drainQueuedBeforeWorkflowTransition(
+	ctx context.Context,
+	taskID string,
+	sessionID string,
+	session *models.TaskSession,
+) bool {
+	if s.messageQueue == nil {
+		return false
+	}
+	if s.agentManager != nil && s.agentManager.IsPassthroughSession(ctx, sessionID) {
+		return false
+	}
+	status := s.messageQueue.GetStatus(ctx, sessionID)
+	if !status.AutoRun || len(status.Entries) == 0 {
+		return false
+	}
+	s.setSessionWaitingForInput(ctx, taskID, sessionID, session)
+	s.drainQueuedMessageForPromptableSessionLockedWithTaskAdmission(ctx, taskID, sessionID)
+	return true
+}
+
 // handleAgentReady handles turn-end ready events: the agent finished processing
 // a prompt and is waiting for the next input. This is the *only* event that
 // should evaluate workflow on_turn_complete actions — boot signals route
@@ -850,6 +871,10 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 			zap.String("task_id", data.TaskID),
 			zap.String("session_id", data.SessionID))
 		s.setSessionWaitingForInput(ctx, data.TaskID, data.SessionID, session)
+		return
+	}
+
+	if s.drainQueuedBeforeWorkflowTransition(ctx, data.TaskID, data.SessionID, session) {
 		return
 	}
 
@@ -1631,6 +1656,15 @@ func (s *Service) handleAgentCompletedLocked(ctx context.Context, data watcher.A
 		return
 	}
 
+	s.finishAgentCompleted(ctx, data, session, guard)
+}
+
+func (s *Service) finishAgentCompleted(
+	ctx context.Context,
+	data watcher.AgentEventData,
+	session *models.TaskSession,
+	guard *lockedCancelInFlightGuard,
+) {
 	// A successful, still-live completion clears retry state and scheduler
 	// ownership only after the guarded terminal/rotation checks above.
 	s.resetTransientRetry(data.SessionID)
@@ -1656,7 +1690,8 @@ func (s *Service) handleAgentCompletedLocked(ctx context.Context, data watcher.A
 		return
 	}
 
-	transitioned := s.processOnTurnCompleteViaEngine(ctx, data.TaskID, session)
+	transitioned := !s.drainQueuedBeforeWorkflowTransition(ctx, data.TaskID, data.SessionID, session) &&
+		s.processOnTurnCompleteViaEngine(ctx, data.TaskID, session)
 	s.finishAgentCompletedTurn(ctx, data, session, transitioned, guard)
 }
 
@@ -1725,6 +1760,10 @@ func (s *Service) finishAgentCompletedTurn(
 			zap.String("session_id", data.SessionID),
 			zap.Error(err))
 	}
+	// Some runtimes report completion without a matching agent.ready event.
+	// Once completion has settled the session, give an enabled queue its normal
+	// promptable drain instead of leaving its head parked indefinitely.
+	s.drainQueuedMessageForPromptableSession(context.WithoutCancel(ctx), data.SessionID)
 }
 
 // handleAgentFailed handles agent failure events

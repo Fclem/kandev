@@ -799,12 +799,13 @@ test.describe("Queued row controls", () => {
       .first();
     await expect(chatMaximize).toBeVisible();
     await chatMaximize.click();
-    const autoRunResponse = await apiClient.setQueueAutoRun(sessionId, false);
+    const identity = await apiClient.getQueueSessionIdentity(taskId, sessionId);
+    const autoRunResponse = await apiClient.setQueueAutoRun(identity, false);
     expect(autoRunResponse).toMatchObject({ session_id: sessionId, auto_run: false });
     await waitForComposerQueueMode(testPage);
-    await apiClient.queueMessage(taskId, sessionId, fixture);
+    await apiClient.queueMessage(identity, fixture);
     await expect
-      .poll(() => apiClient.getQueueStatus(sessionId))
+      .poll(() => apiClient.getQueueStatus(identity))
       .toMatchObject({ count: 1, auto_run: false });
 
     const chat = session.activeChat();

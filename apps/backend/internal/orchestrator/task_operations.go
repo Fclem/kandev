@@ -4765,7 +4765,7 @@ func (s *Service) claimPromptDispatch(
 	claimed, previousState, turnID, createdTurn, reservedTurn, err := s.claimSessionRunningForPrompt(
 		ctx, taskID, sessionID, claimEntryID, reserveTurnUntilDispatch,
 		promptDispatchRecovery, foregroundClaim, expectedCurrentTurnID, requireNonterminalSession,
-		afterClaim, expectedIdentity,
+		expectedIdentity, afterClaim,
 	)
 	if err != nil {
 		return nil, promptClaimRollback{}, err

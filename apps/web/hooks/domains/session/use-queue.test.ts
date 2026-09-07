@@ -518,6 +518,18 @@ describe("useQueue clearAll", () => {
     });
 
     expect(queueApiMock.clearQueue).toHaveBeenCalledWith(IDENTITY);
+    expect(mockState.setQueueEntries.mock.calls).toContainEqual([
+      SESSION_ID,
+      [],
+      {
+        count: 0,
+        max: 0,
+        mergeEnabled: true,
+        autoRun: true,
+        taskId: TASK_ID,
+        sessionIncarnationId: IDENTITY.session_incarnation_id,
+      },
+    ]);
     expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 

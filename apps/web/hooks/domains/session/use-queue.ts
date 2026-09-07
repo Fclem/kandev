@@ -285,6 +285,8 @@ function useClearAllAction({
           max: metaMax ?? 0,
           mergeEnabled: metaMergeEnabled ?? true,
           autoRun: metaAutoRun ?? true,
+          taskId: identity.task_id,
+          sessionIncarnationId: incarnationId,
         });
       } catch (err) {
         mutationFailed = true;

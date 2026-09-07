@@ -247,15 +247,16 @@ test.describe("Mobile queued row controls", () => {
     await session.sendMessageViaButton("/sleep 60");
     await expect(session.agentStatus()).toBeVisible({ timeout: 15_000 });
     await waitForActiveSessionForegroundActivity(testPage, "generating");
-    const autoRunResponse = await apiClient.setQueueAutoRun(task.session_id, false);
+    const identity = await apiClient.getQueueSessionIdentity(task.id, task.session_id);
+    const autoRunResponse = await apiClient.setQueueAutoRun(identity, false);
     expect(autoRunResponse).toMatchObject({
       session_id: task.session_id,
       auto_run: false,
     });
     await waitForComposerQueueMode(testPage);
-    await apiClient.queueMessage(task.id, task.session_id, fixture);
+    await apiClient.queueMessage(identity, fixture);
     await expect
-      .poll(() => apiClient.getQueueStatus(task.session_id!))
+      .poll(() => apiClient.getQueueStatus(identity))
       .toMatchObject({ count: 1, auto_run: false });
 
     const chat = session.activeChat();

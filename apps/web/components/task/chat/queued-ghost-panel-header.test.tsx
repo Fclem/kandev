@@ -61,4 +61,19 @@ describe("QueuePanelHeader", () => {
     expect((screen.getByTestId("queue-auto-run") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId("queue-auto-merge") as HTMLButtonElement).disabled).toBe(true);
   });
+  it("keeps the unavailable Auto-merge tooltip keyboard reachable", () => {
+    const { container } = render(
+      <TooltipProvider>
+        <QueuePanelHeader {...props} autoMergeAvailable={false} />
+      </TooltipProvider>,
+    );
+
+    const autoMergeSwitch = screen.getByTestId("queue-auto-merge") as HTMLButtonElement;
+    expect(autoMergeSwitch.disabled).toBe(true);
+    const label = container.querySelector(`label[for="${autoMergeSwitch.id}"]`);
+    expect(label?.className).toContain("opacity-50");
+    expect(label?.className).toContain("pointer-events-none");
+    expect(label?.parentElement?.tagName).toBe("SPAN");
+    expect(label?.parentElement?.getAttribute("tabindex")).toBe("0");
+  });
 });

@@ -207,7 +207,8 @@ func (h *QueueHandlers) wsSetAutoMerge(ctx context.Context, msg *ws.Message) (*w
 	identity := messagequeue.QueueSessionIdentity{
 		TaskID: req.TaskID, SessionID: req.SessionID, SessionIncarnationID: req.SessionIncarnationID,
 	}
-	if _, err := controller.SetSessionAutoMerge(ctx, identity, *req.Enabled); err != nil {
+	policy, err := controller.SetSessionAutoMerge(ctx, identity, *req.Enabled)
+	if err != nil {
 		if errors.Is(err, messagequeue.ErrSessionIdentityMismatch) ||
 			errors.Is(err, messagequeue.ErrTaskInactive) {
 			return queueAccessDeniedResponse(msg), nil
@@ -215,16 +216,15 @@ func (h *QueueHandlers) wsSetAutoMerge(ctx context.Context, msg *ws.Message) (*w
 		h.logger.Error("failed to set queue Auto-merge", zap.String(fieldSessionID, req.SessionID), zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to set queue Auto-merge", nil)
 	}
-	snapshots, ok := h.queueService.(QueueSnapshotService)
-	if !ok {
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Queue status is unavailable", nil)
-	}
-	status, err := snapshots.Snapshot(ctx, identity)
-	if err != nil {
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to read queue status", nil)
-	}
-	h.publishIdentityStatus(ctx, status)
-	return ws.NewResponse(msg.ID, msg.Action, status)
+	h.publishStatusForIdentity(ctx, identity)
+	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{
+		fieldTaskID:             identity.TaskID,
+		fieldSessionID:          identity.SessionID,
+		fieldSessionIncarnation: identity.SessionIncarnationID,
+		fieldAutoMergeEnabled:   policy.Enabled,
+		"auto_merge_source":     policy.Source,
+		"auto_merge_revision":   policy.Revision,
+	})
 }
 
 type wsSendNowRequest struct {

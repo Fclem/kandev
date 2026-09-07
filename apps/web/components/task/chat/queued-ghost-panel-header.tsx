@@ -78,21 +78,26 @@ function QueueAutomationPills({
       </span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <label
-            htmlFor={autoMergeId}
-            className={cn(pillClassName, autoMergeAvailable ? "cursor-pointer" : "opacity-50")}
-          >
-            <span>{t("chat:queueAutoMerge")}</span>
-            <Switch
-              id={autoMergeId}
-              data-testid="queue-auto-merge"
-              checked={autoMerge}
-              disabled={controlsDisabled || !autoMergeAvailable}
-              onCheckedChange={onAutoMergeChange}
-              aria-label={t("chat:queueAutoMerge")}
-              className="[@media(pointer:coarse)]:after:-inset-y-3.5"
-            />
-          </label>
+          <span tabIndex={autoMergeAvailable ? -1 : 0} className="inline-flex">
+            <label
+              htmlFor={autoMergeId}
+              className={cn(
+                pillClassName,
+                autoMergeAvailable ? "cursor-pointer" : "opacity-50 pointer-events-none",
+              )}
+            >
+              <span>{t("chat:queueAutoMerge")}</span>
+              <Switch
+                id={autoMergeId}
+                data-testid="queue-auto-merge"
+                checked={autoMerge}
+                disabled={controlsDisabled || !autoMergeAvailable}
+                onCheckedChange={onAutoMergeChange}
+                aria-label={t("chat:queueAutoMerge")}
+                className="[@media(pointer:coarse)]:after:-inset-y-3.5"
+              />
+            </label>
+          </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-[280px]">
           {t("system:messageQueueAutoMergeNotice")}

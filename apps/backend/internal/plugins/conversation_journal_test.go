@@ -142,6 +142,74 @@ func TestPruneConversationJournalKeepsLatestRowsAndRecentEvents(t *testing.T) {
 	require.NoError(t, database.Get(&count, "SELECT COUNT(*) FROM conversation_session_events"))
 	require.Equal(t, 1, count)
 }
+func TestPruneConversationJournalPurgestDeadSessionPartitions(t *testing.T) {
+	database, err := sqlx.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+	database.SetMaxOpenConns(1)
+	t.Cleanup(func() { require.NoError(t, database.Close()) })
+	_, err = database.Exec(`
+		CREATE TABLE conversation_session_streams (
+			session_id TEXT PRIMARY KEY, watermark INTEGER NOT NULL DEFAULT 0,
+			terminal BOOLEAN NOT NULL DEFAULT FALSE, updated_at TIMESTAMP NOT NULL
+		);
+		CREATE TABLE conversation_message_versions (
+			session_id TEXT NOT NULL, message_id TEXT NOT NULL, row_sequence INTEGER NOT NULL,
+			task_id TEXT, author_type TEXT, created_at TIMESTAMP NOT NULL,
+			tombstone BOOLEAN NOT NULL, payload TEXT NOT NULL
+		);
+		CREATE TABLE conversation_turn_versions (
+			session_id TEXT NOT NULL, turn_id TEXT NOT NULL, row_sequence INTEGER NOT NULL,
+			task_id TEXT, started_at TIMESTAMP NOT NULL, tombstone BOOLEAN NOT NULL, payload TEXT NOT NULL
+		);
+		CREATE TABLE conversation_session_events (
+			session_id TEXT NOT NULL, sequence INTEGER NOT NULL, event_id TEXT NOT NULL,
+			protocol_version INTEGER NOT NULL, event_type TEXT NOT NULL, task_id TEXT,
+			payload TEXT NOT NULL, created_at TIMESTAMP NOT NULL
+		);
+		CREATE TABLE task_sessions (
+			id TEXT PRIMARY KEY, task_id TEXT NOT NULL, started_at TIMESTAMP NOT NULL
+		);`)
+	require.NoError(t, err)
+	old := time.Now().UTC().Add(-2 * SessionEventRetention)
+	recent := time.Now().UTC()
+	for _, seed := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO conversation_session_streams VALUES ('session-dead', 5, TRUE, ?)`, []any{old}},
+		{`INSERT INTO conversation_session_streams VALUES ('session-live', 5, TRUE, ?)`, []any{recent}},
+		{`INSERT INTO conversation_session_streams VALUES ('session-retained', 5, TRUE, ?)`, []any{recent}},
+		{`INSERT INTO conversation_message_versions VALUES ('session-dead', 'm-1', 1, 'task-1', 'agent', ?, FALSE, '{}')`, []any{old}},
+		{`INSERT INTO conversation_message_versions VALUES ('session-dead', 'm-1', 2, 'task-1', 'agent', ?, FALSE, '{}')`, []any{recent}},
+		{`INSERT INTO conversation_turn_versions VALUES ('session-dead', 'turn-1', 3, 'task-1', ?, FALSE, '{}')`, []any{old}},
+		{`INSERT INTO conversation_session_events VALUES ('session-dead', 1, 'session-dead:1', 1, 'message.added', 'task-1', '{}', ?)`, []any{old}},
+		{`INSERT INTO conversation_session_events VALUES ('session-dead', 5, 'session-dead:5', 1, 'session.removed', 'task-1', '{}', ?)`, []any{recent}},
+		{`INSERT INTO task_sessions VALUES ('session-live', 'task-1', ?)`, []any{recent}},
+	} {
+		if _, err := database.Exec(seed.sql, seed.args...); err != nil {
+			t.Fatalf("seed: %v\n%s", err, seed.sql)
+		}
+	}
+
+	service := NewService(nil, NewRegistry(), nil, testLogger(t))
+	service.SetConversationJournalDB(database)
+	retained := map[string]struct{}{"session-retained": {}}
+	require.NoError(t, service.pruneConversationJournal(context.Background(), time.Now().UTC(), retained))
+
+	var streams int
+	require.NoError(t, database.Get(&streams, "SELECT COUNT(*) FROM conversation_session_streams"))
+	require.Equal(t, 2, streams) // live + retained survive; dead purged
+	var versions int
+	require.NoError(t, database.Get(&versions, "SELECT COUNT(*) FROM conversation_message_versions"))
+	require.Equal(t, 0, versions)
+	require.NoError(t, database.Get(&versions, "SELECT COUNT(*) FROM conversation_turn_versions"))
+	require.Equal(t, 0, versions)
+	require.NoError(t, database.Get(&versions, "SELECT COUNT(*) FROM conversation_session_events"))
+	require.Equal(t, 0, versions)
+	require.NoError(t, database.Get(&streams, "SELECT COUNT(*) FROM conversation_session_streams WHERE session_id = 'session-dead'"))
+	require.Equal(t, 0, streams)
+}
+
 func insertJournalMessageVersion(t *testing.T, database *sqlx.DB, sequence int, tombstone bool, payload map[string]any) {
 
 	t.Helper()

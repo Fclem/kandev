@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -67,6 +68,72 @@ func TestSessionEventRetentionKeepsTerminalTombstoneThroughBothBounds(t *testing
 	events, terminal := log.EventsAfter("session-1", 0)
 	require.False(t, terminal)
 	require.Empty(t, events)
+}
+
+func TestSessionEventResyncAfterTerminalCollectionHealsForwardGap(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session-events.db")
+	log, err := NewSessionEventLog(path)
+	require.NoError(t, err)
+	start := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	log.now = func() time.Time { return start }
+	removed, err := log.AppendCommitted(SessionEvent{
+		SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: 3,
+		ID: "session-1:3", EventType: "session.removed",
+		Payload: validSessionRemovedPayload(), CreatedAt: start,
+	})
+	require.NoError(t, err)
+	require.True(t, removed)
+
+	// After retention both bounds lapse the local partition is dropped: the
+	// terminal tombstone is gone from the durable log.
+	require.NoError(t, log.CollectExpired(start.Add(SessionEventRetention+time.Hour)))
+	_, terminal := log.EventsAfter("session-1", 0)
+	require.False(t, terminal)
+
+	// The primary journal keeps only its session.removed row (all other rows
+	// are pruned), which is not at sequence 1. Re-mirroring it must heal the
+	// gap instead of failing forever.
+	removed, err = log.AppendCommitted(SessionEvent{
+		SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: 3,
+		ID: "session-1:3", EventType: "session.removed",
+		Payload: validSessionRemovedPayload(), CreatedAt: start.Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.True(t, removed)
+	events, terminal := log.EventsAfter("session-1", 0)
+	require.True(t, terminal)
+	require.Len(t, events, 1)
+	require.Equal(t, uint64(3), events[0].Sequence)
+}
+
+func TestSessionEventResyncAfterTruncationHealsForwardGap(t *testing.T) {
+	log, err := NewSessionEventLog("")
+	require.NoError(t, err)
+	start := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	log.now = func() time.Time { return start }
+	// seq 1 and 2 mirror fine; then the idle partition's rows age out and are
+	// truncated while the primary keeps a newer row at seq 4 (seq 3 pruned).
+	for _, sequence := range []uint64{1, 2} {
+		_, err := log.AppendCommitted(SessionEvent{
+			SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: sequence,
+			ID: "session-1:" + strconv.FormatUint(sequence, 10), EventType: "message.added",
+			Payload: validMessageAddedPayload("m" + strconv.FormatUint(sequence, 10)), CreatedAt: start,
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, log.CollectExpired(start.Add(SessionEventRetention+time.Hour)))
+	_, terminal := log.EventsAfter("session-1", 0)
+	require.False(t, terminal)
+	require.Equal(t, uint64(2), log.Watermark("session-1"))
+
+	appended, err := log.AppendCommitted(SessionEvent{
+		SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: 4,
+		ID: "session-1:4", EventType: "message.added",
+		Payload: validMessageAddedPayload("m4"), CreatedAt: start.Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.True(t, appended)
+	require.Equal(t, uint64(4), log.Watermark("session-1"))
 }
 
 func TestSessionEventRetentionExpiresExhaustedPoisonState(t *testing.T) {
@@ -137,19 +204,26 @@ func TestSessionEventCursorLifecycleFieldsSurviveRestart(t *testing.T) {
 	require.Equal(t, retryAt, restored.RetryAt)
 }
 
-func TestSessionEventMaintenanceAdvancesDuePoisonOnly(t *testing.T) {
+func TestSessionEventMaintenanceDoesNotCountUndeliveredPoisonAttempts(t *testing.T) {
 	service := NewService(nil, NewRegistry(), nil, testLogger(t))
 	start := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	poison, err := service.SessionEvents().Append("session-1", stringPtr("task-1"), "unknown.event", json.RawMessage(`{"type":"unknown.event","session_id":"session-1","task_id":"task-1"}`))
 	require.NoError(t, err)
-	require.NoError(t, service.maintainSessionEvents(start))
-	first, ok := service.SessionEvents().Poison("session-1", poison.ID)
+	// Maintenance runs many times; without any actual delivery attempt the
+	// poison must stay pending at zero attempts instead of being exhausted.
+	for _, at := range []time.Time{start, start.Add(SessionPoisonLease), start.Add(2 * SessionPoisonLease)} {
+		require.NoError(t, service.maintainSessionEvents(at))
+		record, ok := service.SessionEvents().Poison("session-1", poison.ID)
+		require.True(t, ok)
+		require.Equal(t, 0, record.Attempts)
+		require.Equal(t, SessionPoisonPending, record.State)
+	}
+	// A real delivery observation advances the attempt bookkeeping.
+	require.NoError(t, service.SessionDelivery().RecordFailure("session-1", poison.ID, start.Add(3*SessionPoisonLease)))
+	record, ok := service.SessionEvents().Poison("session-1", poison.ID)
 	require.True(t, ok)
-	require.Equal(t, 1, first.Attempts)
-	require.Equal(t, SessionPoisonLeased, first.State)
-	require.NoError(t, service.maintainSessionEvents(start.Add(SessionPoisonLease+2*time.Second)))
-	second, _ := service.SessionEvents().Poison("session-1", poison.ID)
-	require.Equal(t, 2, second.Attempts)
+	require.Equal(t, 1, record.Attempts)
+	require.Equal(t, SessionPoisonLeased, record.State)
 }
 
 func TestSessionEventCursorReplacementRestoresMemoryOnPersistFailure(t *testing.T) {

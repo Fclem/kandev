@@ -173,6 +173,10 @@ func (c *Controller) conversationMessages(ctx *gin.Context) {
 		Limit:         query.limit,
 		Sort:          query.sort,
 		AuthorType:    query.authorType,
+		// Parity with the journal branch: multi-author filters and an
+		// explicit task_id must narrow the fallback page the same way.
+		AuthorTypes: query.authors,
+		TaskID:      optionalStringValue(query.taskID),
 	}
 	if !c.applyConversationMessageCursor(ctx, record, identity.UserID, sessionID, query, snapshot, &request) {
 		return

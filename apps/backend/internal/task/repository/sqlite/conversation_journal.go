@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -248,6 +249,38 @@ func (r *Repository) insertConversationBackfillEvent(
 	return nil
 }
 
+// sqliteStripSystemContentExpr returns a scalar subquery that removes every
+// <kandev-system>...</kandev-system> block from expr - including multi-line
+// blocks, multiple blocks, and nested evasion - and trims the result,
+// mirroring sysprompt.StripSystemContent. SQLite has no scalar regex replace,
+// so a bounded recursive CTE reapplies first-block removal until no opening
+// tag remains (depth 64 caps adversarial nesting, like the Go helper's
+// replace-until-stable loop).
+func sqliteStripSystemContentExpr(expr string) string {
+	// Go's helper also consumes the whitespace run after each closing tag
+	// (`\s*` in the pattern); ltrim the tail so junction spacing matches.
+	whitespace := "char(32) || char(9) || char(10) || char(13)"
+	return `(SELECT trim(x) FROM (
+		WITH RECURSIVE strip(x, depth) AS (
+			SELECT ` + expr + `, 0
+			UNION ALL
+			SELECT substr(x, 1, instr(x, '<kandev-system>') - 1)
+				|| ltrim(substr(x, instr(x, '</kandev-system>') + length('</kandev-system>')), ` + whitespace + `), depth + 1
+			FROM strip
+			WHERE depth < 64
+				AND instr(x, '<kandev-system>') > 0
+				AND instr(x, '</kandev-system>') > instr(x, '<kandev-system>')
+		)
+		SELECT x FROM strip
+		WHERE x NOT LIKE '%<kandev-system>%'
+		LIMIT 1
+	))`
+}
+
+// sqliteStripSystemToken marks where a trigger or migration must insert the
+// strip expression; the raw SQL literal keeps strftime %-formats untouched.
+const sqliteStripSystemToken = "__SQLITE_STRIP_SYSTEM__"
+
 func journalTaskID(taskID string) any {
 	if taskID == "" {
 		return nil
@@ -264,7 +297,7 @@ func journalTime(value *time.Time) any {
 
 //nolint:funlen // Trigger definitions are kept together so schema initialization is atomic.
 func (r *Repository) initSQLiteConversationJournalTriggers() error {
-	_, err := r.db.Exec(`
+	triggerSQL := strings.ReplaceAll(`
 DROP TRIGGER IF EXISTS conversation_message_insert;
 CREATE TRIGGER IF NOT EXISTS conversation_message_insert
 AFTER INSERT ON task_session_messages
@@ -276,7 +309,7 @@ BEGIN
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
 		json_object('type','message.added','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
-			'content',trim(CASE WHEN instr(NEW.content,'<kandev-system>') > 0 AND instr(NEW.content,'</kandev-system>') > instr(NEW.content,'<kandev-system>') THEN substr(NEW.content,1,instr(NEW.content,'<kandev-system>')-1) || substr(NEW.content,instr(NEW.content,'</kandev-system>')+length('</kandev-system>')) ELSE NEW.content END),'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
+			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
 			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
@@ -300,7 +333,7 @@ BEGIN
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
 		json_object('type','message.updated','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
-			'content',trim(CASE WHEN instr(NEW.content,'<kandev-system>') > 0 AND instr(NEW.content,'</kandev-system>') > instr(NEW.content,'<kandev-system>') THEN substr(NEW.content,1,instr(NEW.content,'<kandev-system>')-1) || substr(NEW.content,instr(NEW.content,'</kandev-system>')+length('</kandev-system>')) ELSE NEW.content END),'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
+			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
 			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
@@ -382,6 +415,19 @@ BEGIN
 	WHERE conversation_session_streams.session_id = NEW.task_session_id;
 END;
 
+DROP TRIGGER IF EXISTS conversation_turn_delete;
+CREATE TRIGGER IF NOT EXISTS conversation_turn_delete
+AFTER DELETE ON task_session_turns
+BEGIN
+	-- Turn deletions (only possible for turns without messages) remove the
+	-- turn's journal history so snapshots stop reporting the phantom turn.
+	-- No stream sequence or event row is consumed, so ordered mirroring and
+	-- replay are unaffected; a completed-but-deleted turn simply disappears
+	-- from journal reads, matching the first-party session.
+	DELETE FROM conversation_turn_versions
+	WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
+END;
+
 DROP TRIGGER IF EXISTS conversation_session_delete;
 CREATE TRIGGER IF NOT EXISTS conversation_session_delete
 AFTER DELETE ON task_sessions
@@ -394,32 +440,25 @@ BEGIN
 		json_object('type','session.removed','session_id',OLD.id,'task_id',NULLIF(OLD.task_id,'')), CURRENT_TIMESTAMP
 	FROM conversation_session_streams WHERE session_id = OLD.id;
 END;
-`)
-	if err != nil {
+`, sqliteStripSystemToken, sqliteStripSystemContentExpr("NEW.content"))
+	if _, err := r.db.Exec(triggerSQL); err != nil {
 		return fmt.Errorf("create SQLite conversation journal triggers: %w", err)
 	}
-	if _, err := r.db.Exec(`
+	messageMigrate := `
 		UPDATE conversation_message_versions
-		SET payload = json_set(payload, '$.content',
-			trim(CASE WHEN instr(json_extract(payload, '$.content'), '<kandev-system>') > 0
-				AND instr(json_extract(payload, '$.content'), '</kandev-system>') > instr(json_extract(payload, '$.content'), '<kandev-system>')
-				THEN substr(json_extract(payload, '$.content'), 1, instr(json_extract(payload, '$.content'), '<kandev-system>') - 1)
-					|| substr(json_extract(payload, '$.content'), instr(json_extract(payload, '$.content'), '</kandev-system>') + length('</kandev-system>'))
-				ELSE json_extract(payload, '$.content') END))
+		SET payload = json_set(payload, '$.content', __SQLITE_STRIP_SYSTEM__)
 		WHERE json_extract(payload, '$.content') LIKE '%<kandev-system>%'
-	`); err != nil {
+	`
+	contentExpr := sqliteStripSystemContentExpr("json_extract(payload, '$.content')")
+	if _, err := r.db.Exec(strings.ReplaceAll(messageMigrate, sqliteStripSystemToken, contentExpr)); err != nil {
 		return fmt.Errorf("sanitize SQLite conversation message journal: %w", err)
 	}
-	if _, err := r.db.Exec(`
+	eventMigrate := `
 		UPDATE conversation_session_events
-		SET payload = json_set(payload, '$.content',
-			trim(CASE WHEN instr(json_extract(payload, '$.content'), '<kandev-system>') > 0
-				AND instr(json_extract(payload, '$.content'), '</kandev-system>') > instr(json_extract(payload, '$.content'), '<kandev-system>')
-				THEN substr(json_extract(payload, '$.content'), 1, instr(json_extract(payload, '$.content'), '<kandev-system>') - 1)
-					|| substr(json_extract(payload, '$.content'), instr(json_extract(payload, '$.content'), '</kandev-system>') + length('</kandev-system>'))
-				ELSE json_extract(payload, '$.content') END))
+		SET payload = json_set(payload, '$.content', __SQLITE_STRIP_SYSTEM__)
 		WHERE json_extract(payload, '$.content') LIKE '%<kandev-system>%'
-	`); err != nil {
+	`
+	if _, err := r.db.Exec(strings.ReplaceAll(eventMigrate, sqliteStripSystemToken, contentExpr)); err != nil {
 		return fmt.Errorf("sanitize SQLite conversation event journal: %w", err)
 	}
 	return nil
@@ -453,7 +492,9 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION conversation_visible_content(value TEXT) RETURNS TEXT AS $$
 BEGIN
-	RETURN btrim(regexp_replace(value, '<kandev-system>.*?</kandev-system>[[:space:]]*', '', 'g', 'n'));
+	-- No 'n' flag: '.' must match newlines so multi-line system blocks (the
+	-- normal shape of sysprompt.Wrap) are stripped like the Go helper does.
+	RETURN btrim(regexp_replace(value, '<kandev-system>.*?</kandev-system>[[:space:]]*', '', 'g'));
 END;
 $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION conversation_message_journal() RETURNS TRIGGER AS $$
@@ -479,6 +520,14 @@ FOR EACH ROW EXECUTE FUNCTION conversation_message_journal();
 CREATE OR REPLACE FUNCTION conversation_turn_journal() RETURNS TRIGGER AS $$
 DECLARE seq BIGINT; event_name TEXT;
 BEGIN
+	IF TG_OP = 'DELETE' THEN
+		-- Turn deletions (only possible for turns without messages) remove the
+		-- turn's journal history so snapshots stop reporting the phantom turn,
+		-- without consuming a stream sequence or emitting an event row.
+		DELETE FROM conversation_turn_versions
+		WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
+		RETURN OLD;
+	END IF;
 	IF TG_OP = 'UPDATE' AND NOT (OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL) THEN RETURN NEW; END IF;
 	event_name := CASE WHEN TG_OP = 'INSERT' THEN 'session.turn.started' ELSE 'session.turn.completed' END;
 	seq := conversation_next_sequence(NEW.task_session_id);
@@ -495,7 +544,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS conversation_turn_journal_trigger ON task_session_turns;
-CREATE TRIGGER conversation_turn_journal_trigger AFTER INSERT OR UPDATE ON task_session_turns
+CREATE TRIGGER conversation_turn_journal_trigger AFTER INSERT OR UPDATE OR DELETE ON task_session_turns
 FOR EACH ROW EXECUTE FUNCTION conversation_turn_journal();
 
 CREATE OR REPLACE FUNCTION conversation_session_delete_journal() RETURNS TRIGGER AS $$

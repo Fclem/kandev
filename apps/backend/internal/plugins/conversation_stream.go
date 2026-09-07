@@ -282,7 +282,16 @@ func (l *SessionEventLog) AppendCommitted(event SessionEvent) (bool, error) {
 		return false, ErrSessionRemoved
 	}
 	if event.Sequence != partition.Watermark+1 {
-		return false, ErrForwardGap
+		if !mirrorGapHealable(newPartition, partition) {
+			return false, ErrForwardGap
+		}
+		// Collection can drop a partition (terminal, after retention) or
+		// truncate its rows (idle, non-terminal) once no cursor or poison
+		// protects the session. The primary journal then prunes the same
+		// aged rows, so the first surviving row may start past the local
+		// watermark. The primary is authoritative for mirrored rows: jump
+		// the replay boundary and accept the row.
+		partition.Watermark = event.Sequence - 1
 	}
 	previousTerminal := partition.Terminal
 	partition.Events = append(partition.Events, event)
@@ -310,6 +319,19 @@ func (l *SessionEventLog) AppendCommitted(event SessionEvent) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// mirrorGapHealable reports whether a mirror row that starts past the local
+// watermark can be accepted by jumping the replay boundary. Cursor/poison-
+// protected sessions always keep their rows, so a gap into a non-empty (or
+// still-terminal) partition means real history is missing and must stay an
+// error; an empty partition can only mean both sides already discarded the
+// intermediate rows.
+func mirrorGapHealable(newPartition bool, partition *sessionEventPartition) bool {
+	if newPartition {
+		return true
+	}
+	return len(partition.Events) == 0 && !partition.Terminal
 }
 
 func (l *SessionEventLog) EventsAfter(sessionID string, sequence uint64) ([]SessionEvent, bool) {

@@ -731,11 +731,10 @@ func (s *Service) maintainSessionEvents(now time.Time) error {
 	if err := s.sessionDelivery.ReclaimExpiredLeases(now); err != nil {
 		return fmt.Errorf("reclaim plugin session event leases: %w", err)
 	}
-	for _, poison := range s.sessionEvents.PendingPoison(now) {
-		if err := s.sessionDelivery.RecordFailure(poison.SessionID, poison.EventID, now); err != nil {
-			return fmt.Errorf("advance plugin session poison %s: %w", poison.EventID, err)
-		}
-	}
+	// Poison attempts are counted only when delivery is actually observed
+	// (a hub fanout or replay attempt), never by the maintenance ticker.
+	// A poison no subscriber ever attempted to consume stays pending until
+	// retention reaps it instead of being exhaustively cycled blind.
 	if err := s.sessionEvents.CollectExpired(now); err != nil {
 		return fmt.Errorf("collect expired plugin session events: %w", err)
 	}

@@ -37,9 +37,21 @@ func (s *Service) HasConversationJournal() bool {
 }
 
 func (s *Service) conversationJournalTablesExist(ctx context.Context) (bool, error) {
-	query := `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'conversation_message_versions'`
+	return s.conversationTableExists(ctx, "conversation_message_versions")
+}
+
+func toAnySlice(values []string) []any {
+	out := make([]any, len(values))
+	for index, value := range values {
+		out[index] = value
+	}
+	return out
+}
+
+func (s *Service) conversationTableExists(ctx context.Context, table string) (bool, error) {
+	query := `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '` + table + `'`
 	if strings.Contains(strings.ToLower(s.conversationJournal.DriverName()), "postgres") {
-		query = `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'conversation_message_versions'`
+		query = `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '` + table + `'`
 	}
 	var present int
 	err := s.conversationJournal.GetContext(ctx, &present, query)
@@ -47,7 +59,7 @@ func (s *Service) conversationJournalTablesExist(ctx context.Context) (bool, err
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("check conversation journal schema: %w", err)
+		return false, fmt.Errorf("check conversation journal schema (%s): %w", table, err)
 	}
 	return true, nil
 }
@@ -183,6 +195,8 @@ func (s *Service) SetSessionEventSink(sink func(SessionEvent)) {
 
 	s.sessionEventSink = sink
 }
+
+//nolint:cyclop // Retention orchestration: schema gates plus four prune passes over three tables.
 func (s *Service) pruneConversationJournal(
 	ctx context.Context,
 	cutoff time.Time,
@@ -198,21 +212,17 @@ func (s *Service) pruneConversationJournal(
 	if !exists {
 		return nil
 	}
+	purgeable, err := s.deadSessionPurgeEnabled(ctx)
+	if err != nil {
+		return err
+	}
 	ids := make([]string, 0, len(retained))
 	for sessionID := range retained {
 		ids = append(ids, sessionID)
 	}
 	sort.Strings(ids)
-	exclusion := "1 = 1"
-	args := []any{cutoff.UTC()}
-	if len(ids) > 0 {
-		placeholders := make([]string, len(ids))
-		for index, sessionID := range ids {
-			placeholders[index] = "?"
-			args = append(args, sessionID)
-		}
-		exclusion = "session_id NOT IN (" + strings.Join(placeholders, ",") + ")"
-	}
+	exclusion, extraArgs := retainedSessionExclusion(ids)
+	args := append([]any{cutoff.UTC()}, extraArgs...)
 	tx, err := s.conversationJournal.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin conversation journal retention: %w", err)
@@ -254,8 +264,86 @@ func (s *Service) pruneConversationJournal(
 	if _, err := tx.ExecContext(ctx, turnQuery, args...); err != nil {
 		return rollback(fmt.Errorf("prune conversation turn versions: %w", err))
 	}
+	if purgeable {
+		if err := s.purgeDeadSessionPartitions(ctx, tx, exclusion, args); err != nil {
+			return rollback(err)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit conversation journal retention: %w", err)
+	}
+	return nil
+}
+
+// deadSessionPurgeEnabled reports whether the retention pass can purge whole
+// dead-session partitions: both the journal stream table and the source
+// session table must be present. Checked before the retention tx opens so a
+// single-connection pool (in-memory test DBs) cannot deadlock on the catalog
+// lookups.
+func (s *Service) deadSessionPurgeEnabled(ctx context.Context) (bool, error) {
+	streams, err := s.conversationTableExists(ctx, "conversation_session_streams")
+	if err != nil {
+		return false, err
+	}
+	if !streams {
+		return false, nil
+	}
+	return s.conversationTableExists(ctx, "task_sessions")
+}
+
+// retainedSessionExclusion builds the SQL exclusion clause and its bound
+// arguments for the retained session ids; with none retained it returns the
+// no-op "1 = 1" clause so every row is eligible for age-based pruning.
+func retainedSessionExclusion(ids []string) (string, []any) {
+	if len(ids) == 0 {
+		return "1 = 1", nil
+	}
+	placeholders := make([]string, len(ids))
+	extra := make([]any, len(ids))
+	for index, sessionID := range ids {
+		placeholders[index] = "?"
+		extra[index] = sessionID
+	}
+	return "session_id NOT IN (" + strings.Join(placeholders, ",") + ")", extra
+}
+
+// purgeDeadSessionPartitions deletes every journal row (message and turn
+// versions, events, and the stream row) for sessions whose source task_sessions
+// row no longer exists and whose partition is older than the retention cutoff
+// (args[0]) and not protected by a live cursor/poison (remaining args). The
+// dead ids are materialized first because a CTE whose DELETE targets the same
+// table the CTE reads can stall SQLite.
+func (s *Service) purgeDeadSessionPartitions(ctx context.Context, tx *sqlx.Tx, exclusion string, args []any) error {
+	deadQuery := s.conversationJournal.Rebind(`
+		SELECT st.session_id
+		FROM conversation_session_streams st
+		WHERE st.updated_at < ? AND ` + exclusion + `
+		  AND NOT EXISTS (
+			SELECT 1 FROM task_sessions ts WHERE ts.id = st.session_id
+		  )`)
+	var deadIDs []string
+	if err := tx.SelectContext(ctx, &deadIDs, deadQuery, args...); err != nil {
+		return fmt.Errorf("select dead session journal partitions: %w", err)
+	}
+	if len(deadIDs) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(deadIDs))
+	for index := range deadIDs {
+		placeholders[index] = "?"
+	}
+	inClause := strings.Join(placeholders, ",")
+	for _, child := range []string{"conversation_message_versions", "conversation_turn_versions", "conversation_session_events"} {
+		query := s.conversationJournal.Rebind(
+			`DELETE FROM ` + child + ` WHERE session_id IN (` + inClause + `)`)
+		if _, err := tx.ExecContext(ctx, query, toAnySlice(deadIDs)...); err != nil {
+			return fmt.Errorf("purge dead session journal rows (%s): %w", child, err)
+		}
+	}
+	streamQuery := s.conversationJournal.Rebind(
+		`DELETE FROM conversation_session_streams WHERE session_id IN (` + inClause + `)`)
+	if _, err := tx.ExecContext(ctx, streamQuery, toAnySlice(deadIDs)...); err != nil {
+		return fmt.Errorf("purge dead session stream rows: %w", err)
 	}
 	return nil
 }

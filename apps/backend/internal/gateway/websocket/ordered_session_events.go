@@ -79,6 +79,12 @@ func (h *Hub) appendAndBroadcastOrderedSessionEvent(sessionID string, message *w
 	}
 }
 
+// broadcastCommittedOrderedSessionEvent fans a mirrored primary-journal event
+// out to ordered subscribers. Poison frames are never delivered as live
+// frames: the mirroring attempt is counted as a delivery observation, then the
+// frame is dropped so subscribers only ever see projectable rows (matching the
+// local Append path above). A subscriber that fell behind the poison must
+// recover through the ACK-block / replace_cursor rebind path instead.
 func (h *Hub) broadcastCommittedOrderedSessionEvent(service *plugins.Service, event plugins.SessionEvent) {
 	if poison, poisoned := service.SessionEvents().Poison(event.SessionID, event.ID); poisoned {
 		if failureErr := service.SessionDelivery().RecordFailure(event.SessionID, event.ID, event.CreatedAt); failureErr != nil && h.logger != nil {
@@ -89,6 +95,7 @@ func (h *Hub) broadcastCommittedOrderedSessionEvent(service *plugins.Service, ev
 				zap.Error(failureErr),
 			)
 		}
+		return
 	}
 	for _, client := range h.orderedSessionRecipients(event.SessionID) {
 		client.sendOrderedSessionEvent(event)

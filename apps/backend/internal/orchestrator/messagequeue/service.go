@@ -412,6 +412,37 @@ func (s *Service) EndEdit(ctx context.Context, sessionID, entryID, leaseID, conn
 	return nil
 }
 
+// EndEditAfterSave releases a lease and reports whether its latest update
+// completed all attachment finalization. Only that state may authorize a
+// post-save automatic drain.
+func (s *Service) EndEditAfterSave(ctx context.Context, sessionID, entryID, leaseID, connectionID string) (bool, error) {
+	saved := false
+	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
+		return s.withRepositorySessionTransferFence(admittedCtx, sessionID, func(context.Context) error {
+			key := s.editLeaseKey(sessionID, entryID)
+			s.editLeaseMu.Lock()
+			defer s.editLeaseMu.Unlock()
+			s.expireEditLeaseLocked(key, time.Now().UTC())
+			lease := s.editLeases[key]
+			if lease == nil || lease.LeaseID != leaseID || leaseConnection(lease) != connectionID {
+				return ErrEditLeaseNotFound
+			}
+			saved = lease.lastOperationID != "" && lease.lastOperationFinalized
+			delete(s.editLeases, key)
+			return nil
+		})
+	})
+	if err != nil {
+		return false, err
+	}
+	if repo, ok := s.repo.(editLeaseRepository); ok {
+		if err := repo.releaseEditLease(ctx, sessionID, entryID, leaseID); err != nil {
+			return saved, err
+		}
+	}
+	return saved, nil
+}
+
 func (s *Service) UpdateMessageWithLease(
 	ctx context.Context,
 	sessionID, entryID, leaseID, operationID, connectionID string,

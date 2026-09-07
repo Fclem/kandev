@@ -257,7 +257,7 @@ describe("QueuedGhostMessage lease lifecycle", () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled());
 
     resolveSave();
-    await waitFor(() => expect(onEditComplete).toHaveBeenCalledWith("edit-1"));
+    await waitFor(() => expect(onEditComplete).toHaveBeenCalledWith("edit-1", true));
   });
 });
 

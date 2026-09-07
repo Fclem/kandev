@@ -90,6 +90,15 @@ type QueueEditLeaseController interface {
 	EndEdit(context.Context, string, string, string, string) error
 	UpdateMessageWithLease(context.Context, string, string, string, string, string, int64, string, []messagequeue.MessageAttachment, map[string]interface{}) (int64, error)
 }
+type queueEditSavedLeaseController interface {
+	EndEditAfterSave(context.Context, string, string, string, string) (bool, error)
+}
+
+// QueueAutoRunPreservingDrainer attempts one normal FIFO dispatch without
+// changing the persisted Auto-run policy.
+type QueueAutoRunPreservingDrainer interface {
+	DrainQueuedMessageIfAutoRun(context.Context, string) (bool, error)
+}
 
 type queueEditAdmissionController interface {
 	WithSessionAdmission(context.Context, string, func(context.Context) error) error
@@ -153,6 +162,28 @@ type QueueAttachmentClaimer interface {
 
 type QueueAttachmentReleaser interface {
 	ReleaseMessageAttachments(ctx context.Context, taskID, sessionID string, attachments []v1.MessageAttachment) error
+}
+
+type queueAttachmentCleanupOwnerResolver interface {
+	ResolveMessageAttachmentOwner(
+		context.Context, string, string, []v1.MessageAttachment,
+	) (string, error)
+}
+
+type queueAttachmentCleanupReleaser interface {
+	ReleaseMessageAttachmentsForCleanup(
+		context.Context, string, string, []v1.MessageAttachment,
+	) error
+}
+
+type internalQueueAttachmentReleaser struct {
+	releaser queueAttachmentCleanupReleaser
+}
+
+func (r internalQueueAttachmentReleaser) ReleaseMessageAttachments(
+	ctx context.Context, taskID, sessionID string, attachments []v1.MessageAttachment,
+) error {
+	return r.releaser.ReleaseMessageAttachmentsForCleanup(ctx, taskID, sessionID, attachments)
 }
 
 type queueEntryTaker interface {
@@ -279,9 +310,15 @@ func (h *QueueHandlers) loadPendingAttachmentCleanupsLocked(ctx context.Context)
 		if _, exists := h.pendingAttachmentCleanup[key]; exists {
 			continue
 		}
-		authCtx := context.WithoutCancel(ctx)
-		if cleanup.OwnerID != "" {
-			authCtx = authn.WithIdentity(authCtx, authn.Identity{UserID: cleanup.OwnerID})
+		currentSessionID := cleanup.CurrentSessionID
+		if currentSessionID == "" {
+			currentSessionID = cleanup.SessionID
+		}
+		authCtx, cleanupReleaser := h.recoverAttachmentCleanupContext(
+			ctx, cleanup, currentSessionID, releaser,
+		)
+		if cleanupReleaser == nil {
+			continue
 		}
 		h.pendingAttachmentCleanup[key] = &pendingQueueAttachmentCleanup{
 			key: key,
@@ -295,7 +332,7 @@ func (h *QueueHandlers) loadPendingAttachmentCleanupsLocked(ctx context.Context)
 				ID: cleanup.EntryID, SessionID: cleanup.SessionID, TaskID: cleanup.TaskID,
 				Attachments: cleanup.Attachments,
 			},
-			releaser:         releaser,
+			releaser:         cleanupReleaser,
 			removeEntry:      cleanup.RemoveEntry,
 			claimPending:     cleanup.ClaimPending,
 			entryFingerprint: cleanup.EntryFingerprint,
@@ -304,6 +341,41 @@ func (h *QueueHandlers) loadPendingAttachmentCleanupsLocked(ctx context.Context)
 			wake:             make(chan struct{}, 1),
 		}
 	}
+}
+
+func (h *QueueHandlers) recoverAttachmentCleanupContext(
+	ctx context.Context,
+	cleanup messagequeue.AttachmentCleanup,
+	currentSessionID string,
+	releaser QueueAttachmentReleaser,
+) (context.Context, QueueAttachmentReleaser) {
+	authCtx := context.WithoutCancel(ctx)
+	var ownerID string
+	var resolveErr error
+	if cleanup.OwnerID != "" {
+		ownerID = cleanup.OwnerID
+	} else if resolver, resolverOK := h.attachmentClaimer.(queueAttachmentCleanupOwnerResolver); resolverOK {
+		ownerID, resolveErr = resolver.ResolveMessageAttachmentOwner(
+			authCtx, cleanup.TaskID, currentSessionID, queueAttachmentsToV1(cleanup.Attachments),
+		)
+	}
+	var cleanupReleaser QueueAttachmentReleaser
+	if ownerID != "" {
+		authCtx = authn.WithIdentity(authCtx, authn.Identity{UserID: ownerID})
+		cleanupReleaser = releaser
+	} else if cleanup.OwnerID == "" && !cleanup.ClaimPending {
+		if internalReleaser, canRelease := h.attachmentClaimer.(queueAttachmentCleanupReleaser); canRelease {
+			cleanupReleaser = internalQueueAttachmentReleaser{releaser: internalReleaser}
+		}
+	}
+	if cleanupReleaser == nil && cleanup.OwnerID == "" {
+		if resolveErr != nil {
+			h.logger.Warn("failed to recover owner for queue attachment cleanup", zap.Error(resolveErr))
+		} else {
+			h.logger.Warn("queue attachment cleanup owner is unavailable")
+		}
+	}
+	return authCtx, cleanupReleaser
 }
 
 func (h *QueueHandlers) attachmentCleanupStore() (queueAttachmentCleanupStore, bool) {
@@ -765,15 +837,15 @@ func (h *QueueHandlers) wsGetQueueStatus(ctx context.Context, msg *ws.Message) (
 	if denied := h.authorizeSession(ctx, msg, req.SessionID); denied != nil {
 		return denied, nil
 	}
-
 	status := h.queueService.GetStatus(ctx, req.SessionID)
 	return ws.NewResponse(msg.ID, msg.Action, status)
 }
 
 type wsQueueEditRequest struct {
-	SessionID string `json:"session_id"`
-	EntryID   string `json:"entry_id"`
-	LeaseID   string `json:"lease_id"`
+	SessionID         string `json:"session_id"`
+	EntryID           string `json:"entry_id"`
+	LeaseID           string `json:"lease_id"`
+	DispatchIfAutoRun bool   `json:"dispatch_if_auto_run,omitempty"`
 }
 
 func queueEditError(msg *ws.Message, err error) *ws.Message {
@@ -851,10 +923,32 @@ func (h *QueueHandlers) wsEndEdit(ctx context.Context, msg *ws.Message) (*ws.Mes
 	if h.queueEdit == nil || ws.ConnectionID(ctx) == "" {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeForbidden, "Queue editing requires a WebSocket connection", nil)
 	}
-	if err := h.queueEdit.EndEdit(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx)); err != nil {
+	var saved bool
+	var err error
+	if req.DispatchIfAutoRun {
+		controller, ok := h.queueEdit.(queueEditSavedLeaseController)
+		if !ok {
+			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Queue edit save completion is unavailable", nil)
+		}
+		saved, err = controller.EndEditAfterSave(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx))
+	} else {
+		err = h.queueEdit.EndEdit(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx))
+	}
+	if err != nil {
 		return queueEditLeaseError(msg, err), nil
 	}
 	h.signalPendingAttachmentCleanup(ctx, req.SessionID, req.EntryID)
+	if saved {
+		if drainer, ok := h.queueDrainer.(QueueAutoRunPreservingDrainer); ok {
+			if _, drainErr := drainer.DrainQueuedMessageIfAutoRun(ctx, req.SessionID); drainErr != nil {
+				h.logger.Warn("post-save queued message drain failed",
+					zap.String(fieldSessionID, req.SessionID), zap.String(fieldEntryID, req.EntryID), zap.Error(drainErr))
+			}
+		} else {
+			h.logger.Warn("post-save queued message drain unavailable",
+				zap.String(fieldSessionID, req.SessionID), zap.String(fieldEntryID, req.EntryID))
+		}
+	}
 	return ws.NewResponse(msg.ID, msg.Action, map[string]string{fieldSessionID: req.SessionID, fieldEntryID: req.EntryID})
 }
 
@@ -1444,6 +1538,9 @@ func (h *QueueHandlers) refreshPendingAttachmentCleanupSessionID(
 	ctx context.Context,
 	pending *pendingQueueAttachmentCleanup,
 ) error {
+	if _, ok := h.attachmentCleanupStore(); !ok {
+		return nil
+	}
 	locator, ok := h.queueService.(queueAttachmentCleanupLocator)
 	if !ok {
 		return nil

@@ -13,6 +13,7 @@ import (
 )
 
 const sessionTransferCompensationLeaseDuration = time.Minute
+const postgresDriverName = "pgx"
 
 const sessionTransferCompensationSchema = `
 	CREATE TABLE IF NOT EXISTS queue_session_transfer_compensations (
@@ -128,6 +129,50 @@ func guardSessionTransferCompensationOwnerTx(
 	return nil
 }
 
+func (r *sqliteRepository) lockTaskForSessionTransferTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	taskID string,
+	fromSessionID string,
+	toSessionID string,
+) error {
+	if !r.tasksTablePresent {
+		return nil
+	}
+	query := `SELECT id FROM tasks WHERE id = ?`
+	if r.db.DriverName() == postgresDriverName {
+		query += ` FOR UPDATE`
+	}
+	var lockedTaskID string
+	if err := tx.GetContext(ctx, &lockedTaskID, r.db.Rebind(query), taskID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("session transfer task %q no longer exists", taskID)
+		}
+		return fmt.Errorf("lock session transfer task %q: %w", taskID, err)
+	}
+	if !r.taskSessionsTablePresent {
+		return nil
+	}
+	for _, sessionID := range []string{fromSessionID, toSessionID} {
+		if sessionID == "" {
+			continue
+		}
+		var sessionTaskID string
+		if err := tx.GetContext(ctx, &sessionTaskID, r.db.Rebind(`
+			SELECT task_id FROM task_sessions WHERE id = ?
+		`), sessionID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("session transfer session %q no longer exists", sessionID)
+			}
+			return fmt.Errorf("load session transfer session %q: %w", sessionID, err)
+		}
+		if sessionTaskID != taskID {
+			return fmt.Errorf("session transfer session %q belongs to task %q, not %q", sessionID, sessionTaskID, taskID)
+		}
+	}
+	return nil
+}
+
 func (r *sqliteRepository) UpsertSessionTransferCompensation(
 	ctx context.Context,
 	compensation SessionTransferCompensation,
@@ -150,6 +195,11 @@ func (r *sqliteRepository) UpsertSessionTransferCompensation(
 		return fmt.Errorf("begin session transfer compensation: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockTaskForSessionTransferTx(
+		ctx, tx, compensation.TaskID, compensation.FromSessionID, compensation.ToSessionID,
+	); err != nil {
+		return err
+	}
 	first, second, err := r.lockSessionTransferPairTx(
 		ctx, tx, compensation.FromSessionID, compensation.ToSessionID,
 	)
@@ -423,6 +473,19 @@ func commitAuthorizedSessionTransferTx(
 		return err
 	}
 	return tx.Commit()
+}
+
+// GuardSessionTransferInTransaction rejects mutations that race an active
+// durable session transfer. Callers must first hold the queue_session_locks
+// row for sessionID. A missing compensation table means no active transfer.
+func GuardSessionTransferInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) error {
+	if err := guardSessionTransferTx(ctx, tx, db, sessionID); err != nil {
+		if internaldb.IsMissingTableError(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func guardSessionTransferTx(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) error {

@@ -429,7 +429,7 @@ type QueuedGhostMessageProps = {
   /** Called before edit activation; returning false keeps the row read-only. */
   onEditStart?: () => void | Promise<boolean | string | void>;
   /** Called after edit save/cancel so the parent can restore queue policy. */
-  onEditComplete?: (editToken?: string) => void | Promise<void>;
+  onEditComplete?: (editToken?: string, saved?: boolean) => void | Promise<void>;
 };
 
 function useFocusQueuedEdit(
@@ -471,7 +471,7 @@ type QueuedGhostSaveArgs = {
   entityReferences: readonly EntityReference[];
   attachments?: QueuedMessage["attachments"];
   onSave: QueuedGhostMessageProps["onSave"];
-  onEditComplete?: (editToken?: string) => void | Promise<void>;
+  onEditComplete?: (editToken?: string, saved?: boolean) => void | Promise<void>;
   editTokenRef: React.RefObject<string | undefined>;
   setEditing: (editing: boolean) => void;
   setSaving: (saving: boolean) => void;
@@ -496,7 +496,7 @@ function useQueuedGhostSave({
     const hasAttachments = (attachments?.length ?? 0) > 0;
     if ((!trimmed && !hasAttachments) || trimmed === entryContent) {
       setEditing(false);
-      await onEditComplete?.(editToken);
+      await onEditComplete?.(editToken, false);
       return;
     }
     setSaving(true);
@@ -508,7 +508,7 @@ function useQueuedGhostSave({
         await onSave(trimmed, updatedReferences, attachments);
       }
       setEditing(false);
-      await onEditComplete?.(editToken);
+      await onEditComplete?.(editToken, true);
     } catch (err) {
       console.error("Failed to update queued entry:", err);
       if (err instanceof QueueEntryNotFoundError) {
@@ -517,7 +517,7 @@ function useQueuedGhostSave({
         toast.error(t("chat:queueEditSaveFailed"));
       }
       setEditing(false);
-      await onEditComplete?.(editToken);
+      await onEditComplete?.(editToken, false);
     } finally {
       setSaving(false);
     }
@@ -537,7 +537,7 @@ function useQueuedGhostSave({
 
 type QueuedGhostCancelArgs = {
   entryContent: string;
-  onEditComplete?: (editToken?: string) => void | Promise<void>;
+  onEditComplete?: (editToken?: string, saved?: boolean) => void | Promise<void>;
   editTokenRef: React.RefObject<string | undefined>;
   setValue: (value: string) => void;
   setEditing: (editing: boolean) => void;

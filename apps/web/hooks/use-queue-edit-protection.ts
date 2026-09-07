@@ -38,7 +38,7 @@ function ownsRenewal({
   leaseSnapshot,
   renewedLease,
   renewalSequence,
-}: RenewalOwnershipArgs): currentEdit is ActiveEdit {
+}: RenewalOwnershipArgs): boolean {
   const currentLease = currentEdit?.lease;
   if (
     !currentEdit ||
@@ -120,6 +120,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
       entryId: string,
       expectedSessionId = sessionIdRef.current,
       expectedEditToken?: string,
+      dispatchIfAutoRun = false,
     ): Promise<void> => {
       const activeEdit = activeEditRef.current;
       if (
@@ -132,8 +133,10 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
       }
       activeEditRef.current = null;
       setEditingEntryId(null);
-      setEditLease(null);
-      await endQueuedMessageEdit(activeEdit.lease).catch((err) => {
+      const release = dispatchIfAutoRun
+        ? endQueuedMessageEdit(activeEdit.lease, true)
+        : endQueuedMessageEdit(activeEdit.lease);
+      await release.catch((err) => {
         console.error("Failed to release queued message edit lease:", err);
       });
     },
@@ -161,6 +164,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
         ) {
           return;
         }
+        if (!currentEdit) return;
         currentEdit.lease = lease;
         setEditLease(lease);
       } catch (err) {

@@ -109,6 +109,30 @@ func TestTransferQueuedSessionStateFailsClosedWhenTaskAttachmentServiceUnavailab
 	}
 }
 
+func TestTransferQueuedSessionStateTreatsTypedNilAttachmentTransfererAsUnavailable(t *testing.T) {
+	ctx := context.Background()
+	queue := messagequeue.NewServiceMemory(testLogger())
+	var transfer *taskservice.Service
+	svc := &Service{
+		logger: testLogger(), messageQueue: queue,
+		sessionAttachmentTransferer: transfer,
+	}
+	if _, err := queue.QueueMessage(
+		ctx, "session-old", "task-transfer", "handoff", "", messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "attachment"}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	err := svc.transferQueuedSessionState(ctx, "task-transfer", "session-old", "session-new")
+	if !errors.Is(err, errSessionAttachmentTransferUnavailable) {
+		t.Fatalf("transfer error = %v, want attachment transfer service unavailable", err)
+	}
+	if _, ok := queue.TakeQueued(ctx, "session-new"); ok {
+		t.Fatal("queue entry moved despite typed nil attachment transfer service")
+	}
+}
+
 func TestSessionTransferRecoveryFailsClosedWhenTaskAttachmentServiceUnavailable(t *testing.T) {
 	ctx := context.Background()
 	queue, db := newWorkflowTransferQueue(t, filepath.Join(t.TempDir(), "queue.db"))

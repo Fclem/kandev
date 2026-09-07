@@ -230,7 +230,28 @@ func LockSessionInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, ses
 	if err := lockSessionTxIn(ctx, tx, db, sessionID); err != nil {
 		return err
 	}
-	return guardSessionTransferTx(ctx, tx, db, sessionID)
+	return GuardSessionTransferInTransaction(ctx, tx, db, sessionID)
+}
+
+// LockSessionPairInTransaction acquires both transfer-session locks without
+// applying the mutation fence. It is reserved for the owned transfer itself,
+// which must mutate attachment claims while its compensation row is active.
+func LockSessionPairInTransaction(
+	ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, firstSessionID, secondSessionID string,
+) error {
+	first, second := firstSessionID, secondSessionID
+	if first > second {
+		first, second = second, first
+	}
+	if err := lockSessionTxIn(ctx, tx, db, first); err != nil {
+		return err
+	}
+	if first != second {
+		if err := lockSessionTxIn(ctx, tx, db, second); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // lockSessionTxIn takes the per-session cross-process lock inside an existing

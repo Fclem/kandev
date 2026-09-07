@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,19 @@ var (
 	errContextResetCancellationConflict     = errors.New("context reset cancellation is already in progress")
 	errSessionAttachmentTransferUnavailable = errors.New("session attachment transfer service is unavailable")
 )
+
+func sessionAttachmentTransfererAvailable(transfer SessionAttachmentTransferer) bool {
+	if transfer == nil {
+		return false
+	}
+	value := reflect.ValueOf(transfer)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return !value.IsNil()
+	default:
+		return true
+	}
+}
 
 type workflowAutoStartSessionTerminalizedError struct {
 	state models.TaskSessionState
@@ -2516,7 +2530,7 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 		oldSessionID,
 		newSessionID,
 		func(admittedCtx context.Context, attachmentIDs []string) error {
-			if s.sessionAttachmentTransferer == nil {
+			if !sessionAttachmentTransfererAvailable(s.sessionAttachmentTransferer) {
 				return errSessionAttachmentTransferUnavailable
 			}
 			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
@@ -2524,7 +2538,7 @@ func (s *Service) transferQueuedSessionState(ctx context.Context, taskID, oldSes
 			)
 		},
 		func(rollbackCtx context.Context, attachmentIDs []string) error {
-			if s.sessionAttachmentTransferer == nil {
+			if !sessionAttachmentTransfererAvailable(s.sessionAttachmentTransferer) {
 				return errSessionAttachmentTransferUnavailable
 			}
 			return s.sessionAttachmentTransferer.TransferSessionMessageAttachments(
@@ -2549,7 +2563,7 @@ func (s *Service) reconcileSessionTransferCompensationsOnStartup(ctx context.Con
 		return fmt.Errorf("list session transfer compensations: %w", err)
 	}
 	if sessionTransferCompensationsNeedAttachmentTransfer(compensations) &&
-		s.sessionAttachmentTransferer == nil {
+		!sessionAttachmentTransfererAvailable(s.sessionAttachmentTransferer) {
 		return errors.New("reconcile session transfer compensations: attachment transfer service is unavailable")
 	}
 	for _, compensation := range compensations {

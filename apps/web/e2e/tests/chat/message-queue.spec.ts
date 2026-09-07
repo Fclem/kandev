@@ -596,6 +596,48 @@ test.describe("Task session queue", () => {
     await expect(testPage.getByTestId("queue-entry-text")).toContainText("second edited");
   });
 
+  test("saving the held head after its turn completes resumes Auto-run", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    test.setTimeout(120_000);
+
+    const session = await seedTaskAndWaitForIdle(
+      testPage,
+      apiClient,
+      seedData,
+      "Queue edit save dispatch test",
+    );
+    await session.sendMessage("/slow 10s");
+    await expect(session.agentStatus()).toBeVisible({ timeout: 15_000 });
+    await waitForComposerQueueMode(testPage);
+    await queueMessages(apiClient, session.taskId, session.sessionId, [
+      scriptedQueueMessage("edited head dispatched"),
+    ]);
+
+    await openQueuePanel(testPage);
+    const row = testPage.getByTestId("queue-entry").first();
+    await row.getByTestId("queue-entry-edit").click();
+    await testPage
+      .getByTestId("queue-edit-textarea")
+      .fill(scriptedQueueMessage("edited head dispatched after save"));
+
+    await expect(testPage.getByText("Slow response complete", { exact: false })).toBeVisible({
+      timeout: 45_000,
+    });
+    await expect(testPage.getByTestId("queue-entry")).toHaveCount(1);
+
+    await testPage.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      session
+        .activeChat()
+        .locator("[data-agent-message-body][data-message-id]")
+        .filter({ hasText: "edited head dispatched after save" }),
+    ).toHaveCount(1, { timeout: 45_000 });
+    await expect(testPage.getByTestId("queue-entry")).toHaveCount(0, { timeout: 15_000 });
+  });
+
   test("queue editor reconciles after switching sessions", async ({
     testPage,
     apiClient,

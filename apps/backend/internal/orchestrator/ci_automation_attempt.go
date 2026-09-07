@@ -104,7 +104,7 @@ func (s *Service) reconcileOrphanedCIAutoFixQueueEntries(
 			}
 		}
 		if ackErr := s.messageQueue.AcknowledgeQueued(
-			context.WithoutCancel(ctx), entry.SessionID, entry.ID,
+			context.WithoutCancel(ctx), &entry,
 		); ackErr != nil {
 			return fmt.Errorf("remove orphaned CI auto-fix queue entry %q: %w", entry.ID, ackErr)
 		}

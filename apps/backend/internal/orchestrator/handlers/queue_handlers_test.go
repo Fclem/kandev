@@ -124,6 +124,11 @@ func (m *mockQueueDrainer) DrainQueuedMessage(_ context.Context, sessionID strin
 	m.sessionID = sessionID
 	return m.drained, m.err
 }
+func (m *mockQueueDrainer) DrainQueuedMessageIfAutoRun(_ context.Context, sessionID string) (bool, error) {
+	m.autoRunCalls++
+	m.sessionID = sessionID
+	return m.autoRunResult, m.autoRunErr
+}
 
 func (m *mockQueueDrainer) SetQueueAutoRun(_ context.Context, sessionID string, enabled bool) (bool, bool, error) {
 	m.autoRunCalls++

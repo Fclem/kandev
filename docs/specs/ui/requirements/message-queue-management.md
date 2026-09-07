@@ -65,9 +65,9 @@ editor is open.
   disconnection, or session switch, every connected view shall reconcile to
   the authoritative queue state without a stale response restoring an older
   editor or row value.
-- **AC-UI-MESSAGE-QUEUE-MANAGEMENT-002.7:** Desktop and mobile queue editors
-  shall provide the same lease-protected save and cancellation behavior while
-  preserving their platform-appropriate controls.
+- **AC-UI-MESSAGE-QUEUE-MANAGEMENT-002.7:** Desktop and mobile queue editors shall provide the same lease-protected save and cancellation behavior while preserving their platform-appropriate controls.
+- **AC-UI-MESSAGE-QUEUE-MANAGEMENT-002.8:** **GIVEN** a user-owned queued message is being edited, Auto-run is enabled, and the active turn becomes promptable while the edit lease is held, **WHEN** the user successfully saves the message, **THEN** the lease is released and the saved entry is eligible for automatic FIFO delivery without another user action.
+- **AC-UI-MESSAGE-QUEUE-MANAGEMENT-002.9:** **GIVEN** Auto-run is disabled, the user cancels the edit, or the save fails or loses its lease, **WHEN** the edit operation completes, **THEN** the queued entry remains pending and no automatic delivery is initiated by the edit lifecycle.
 
 Editing non-user provenance rows and persisting edit leases across backend
 process restarts are excluded.

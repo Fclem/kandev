@@ -292,6 +292,31 @@ func (s *AttachmentService) Release(ctx context.Context, ownerID, taskID, sessio
 	return nil
 }
 
+type claimedAttachmentCleanupRepository interface {
+	DeleteClaimedMessageAttachmentsByTaskSession(
+		context.Context, []string, string, string,
+	) ([]*models.TaskMessageAttachment, error)
+}
+
+// ReleaseForCleanup removes claimed descriptors using task/session ownership
+// rather than a user identity. It is restricted to durable queue cleanup.
+func (s *AttachmentService) ReleaseForCleanup(
+	ctx context.Context, taskID, sessionID string, ids []string,
+) error {
+	repo, ok := s.repo.(claimedAttachmentCleanupRepository)
+	if !ok {
+		return errors.New("attachment cleanup release is unavailable")
+	}
+	attachments, err := repo.DeleteClaimedMessageAttachmentsByTaskSession(ctx, ids, taskID, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, attachment := range attachments {
+		s.removeBytes(attachment)
+	}
+	return nil
+}
+
 // DeleteByTask removes all attachment registry rows and private bytes owned by
 // a task. Task deletion must clean claimed rows as well as staged rows because
 // only staged rows participate in expiry maintenance.

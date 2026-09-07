@@ -283,7 +283,7 @@ type QueuePanelDisclosureProps = {
   onReorder: (orderedIds: string[]) => void;
   onSendEntryNow: (entryId: string) => void;
   onEditStart: (entryId: string) => Promise<string | false>;
-  onEditComplete: (entryId: string, editToken?: string) => Promise<void>;
+  onEditComplete: (entryId: string, editToken?: string, saved?: boolean) => Promise<void>;
 };
 
 /** Wraps QueuePanel in the collapsible open/close animation shell. */
@@ -416,7 +416,8 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
     [editLease, handlePanelSave],
   );
   const handleEditComplete = useCallback(
-    (entryId: string, editToken?: string) => completeEdit(entryId, sessionId, editToken),
+    (entryId: string, editToken?: string, saved = false) =>
+      completeEdit(entryId, sessionId, editToken, saved),
     [completeEdit, sessionId],
   );
   const close = useCallback(() => setIsOpen(false), []);
@@ -560,7 +561,7 @@ type QueuePanelProps = {
   onReorder: (orderedIds: string[]) => void;
   onSendEntryNow: (entryId: string) => void;
   onEditStart: (entryId: string) => Promise<string | false>;
-  onEditComplete: (entryId: string, editToken?: string) => Promise<void>;
+  onEditComplete: (entryId: string, editToken?: string, saved?: boolean) => Promise<void>;
 };
 /** Renders the expanded queue list: header controls plus one QueuedGhostMessage
  * row per pending entry, gating each row's merge control on `mergeEnabled`. */
@@ -626,7 +627,7 @@ type QueuePanelEntryProps = {
   onMerge: () => Promise<void>;
   onSendNow: () => void;
   onEditStart: () => Promise<string | false>;
-  onEditComplete: (editToken?: string) => Promise<void>;
+  onEditComplete: (editToken?: string, saved?: boolean) => Promise<void>;
 };
 
 function QueuePanelEntry({
@@ -762,7 +763,7 @@ function QueuePanel({
                 onMerge={() => onMerge(entry.id)}
                 onSendNow={() => onSendEntryNow(entry.id)}
                 onEditStart={() => onEditStart(entry.id)}
-                onEditComplete={(editToken) => onEditComplete(entry.id, editToken)}
+                onEditComplete={(editToken, saved) => onEditComplete(entry.id, editToken, saved)}
               />
             ))}
           </SortableContext>

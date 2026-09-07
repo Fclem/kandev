@@ -309,11 +309,15 @@ export async function renewQueuedMessageEdit(
 
 export async function endQueuedMessageEdit(
   lease: Pick<QueueEditLease, "session_id" | "entry_id" | "lease_id">,
+  dispatchIfAutoRun = false,
 ): Promise<void> {
   const client = getWebSocketClient();
   if (!client) throw new Error(WS_CLIENT_UNAVAILABLE);
   try {
-    await client.request("message.queue.edit.end", lease);
+    await client.request("message.queue.edit.end", {
+      ...lease,
+      ...(dispatchIfAutoRun ? { dispatch_if_auto_run: true } : {}),
+    });
   } catch (err) {
     rethrowQueueError(err);
   }

@@ -423,6 +423,30 @@ func TestPendingAttachmentCleanupResumesAfterHandlerRestart(t *testing.T) {
 	require.Eventually(t, func() bool { return secondClaimer.released.Load() == 1 }, time.Second, 10*time.Millisecond)
 	require.Equal(t, "user-restart", secondClaimer.lastUser.Load())
 }
+func TestLegacyAttachmentCleanupWithoutOwnerIsSkippedWithoutInternalReleaser(t *testing.T) {
+	handlers, queue, db := newPersistentCleanupQueue(t, filepath.Join(t.TempDir(), "queue.db"))
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(
+		ctx, "session-legacy-cleanup", "task-legacy-cleanup", "queued", "",
+		messagequeue.QueuedByUser, false,
+		[]messagequeue.MessageAttachment{{AttachmentID: "legacy-attachment"}},
+	)
+	require.NoError(t, err)
+	require.NoError(t, queue.UpsertAttachmentCleanup(ctx, messagequeue.AttachmentCleanup{
+		SessionID: entry.SessionID, EntryID: entry.ID, OperationID: "legacy-cleanup",
+		TaskID: entry.TaskID, Attachments: entry.Attachments,
+	}))
+
+	handlers.SetAttachmentClaimer(&controlledCleanupClaimer{})
+	handlers.Start(ctx)
+	t.Cleanup(handlers.Stop)
+
+	handlers.attachmentCleanupMu.Lock()
+	pending := len(handlers.pendingAttachmentCleanup)
+	handlers.attachmentCleanupMu.Unlock()
+	require.Zero(t, pending)
+}
 
 type cleanupPersistenceFailureQueue struct {
 	QueueService

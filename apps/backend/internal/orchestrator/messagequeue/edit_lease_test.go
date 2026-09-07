@@ -261,3 +261,25 @@ func TestQueueCoalesceReplacementInvalidatesEditLease(t *testing.T) {
 		"operation-1", "connection-a", lease.TargetRevision, "stale", nil, nil)
 	require.ErrorIs(t, err, ErrEditLeaseNotFound)
 }
+func TestEndEditAfterSaveReportsOnlyFinalizedUpdates(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	entry, err := svc.QueueMessage(ctx, "session-lease-save", "task", "before", "", QueuedByUser, false, nil)
+	require.NoError(t, err)
+
+	lease, err := svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+	saved, err := svc.EndEditAfterSave(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection")
+	require.NoError(t, err)
+	require.False(t, saved)
+
+	lease, err = svc.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+	_, err = svc.UpdateMessageWithLease(ctx, entry.SessionID, entry.ID, lease.LeaseID,
+		"operation-1", "connection", lease.TargetRevision, "after", nil, nil)
+	require.NoError(t, err)
+
+	saved, err = svc.EndEditAfterSave(ctx, entry.SessionID, entry.ID, lease.LeaseID, "connection")
+	require.NoError(t, err)
+	require.True(t, saved)
+}

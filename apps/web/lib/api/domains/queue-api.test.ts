@@ -245,6 +245,17 @@ describe("queued message edit leases", () => {
     expect(request).toHaveBeenNthCalledWith(2, "message.queue.edit.renew", lease);
     expect(request).toHaveBeenNthCalledWith(3, "message.queue.edit.end", lease);
   });
+  it("requests a policy-preserving drain after a successful save", async () => {
+    const request = vi.fn().mockResolvedValue(undefined);
+    getWebSocketClientMock.mockReturnValue({ request });
+
+    await endQueuedMessageEdit(lease, true);
+
+    expect(request).toHaveBeenCalledWith("message.queue.edit.end", {
+      ...lease,
+      dispatch_if_auto_run: true,
+    });
+  });
 
   it("forwards operation and target revision fences when replacing content", async () => {
     const request = vi

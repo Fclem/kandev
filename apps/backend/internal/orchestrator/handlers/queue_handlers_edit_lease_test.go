@@ -39,3 +39,46 @@ func TestWsUpdateMessageDoesNotReleaseUnclaimedAttachmentsOnLeaseConflict(t *tes
 	require.Empty(t, claimer.releases)
 	require.NoError(t, queue.EndEdit(ctx, entry.SessionID, entry.ID, secondLease.LeaseID, "connection-b"))
 }
+func TestWsEndEditDispatchesOnlyAfterSuccessfulSave(t *testing.T) {
+	drainer := &mockQueueDrainer{}
+	handlers, queue := setupQueueHandlersWithDrainer(t, drainer)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(ctx, "session", "task", "original", "", messagequeue.QueuedByUser, false, nil)
+	require.NoError(t, err)
+	lease, err := queue.BeginEdit(ctx, entry.SessionID, entry.ID, "connection")
+	require.NoError(t, err)
+	_, err = queue.UpdateMessageWithLease(ctx, entry.SessionID, entry.ID, lease.LeaseID,
+		"operation-1", "connection", lease.TargetRevision, "edited", nil, nil)
+	require.NoError(t, err)
+
+	response, err := handlers.wsEndEdit(
+		ws.WithConnectionID(ctx, "connection"),
+		createTestMessage(t, ws.ActionMessageQueueEditEnd, map[string]interface{}{
+			"session_id":           entry.SessionID,
+			"entry_id":             entry.ID,
+			"lease_id":             lease.LeaseID,
+			"dispatch_if_auto_run": true,
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Equal(t, 1, drainer.autoRunCalls)
+	require.Equal(t, entry.SessionID, drainer.sessionID)
+
+	second, err := queue.QueueMessage(ctx, entry.SessionID, entry.TaskID, "not saved", "", messagequeue.QueuedByUser, false, nil)
+	require.NoError(t, err)
+	secondLease, err := queue.BeginEdit(ctx, second.SessionID, second.ID, "connection")
+	require.NoError(t, err)
+	response, err = handlers.wsEndEdit(
+		ws.WithConnectionID(ctx, "connection"),
+		createTestMessage(t, ws.ActionMessageQueueEditEnd, map[string]interface{}{
+			"session_id":           second.SessionID,
+			"entry_id":             second.ID,
+			"lease_id":             secondLease.LeaseID,
+			"dispatch_if_auto_run": true,
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, response.Type)
+	require.Equal(t, 1, drainer.autoRunCalls)
+}

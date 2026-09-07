@@ -28,14 +28,19 @@ must not become a session-wide Auto-run pause.
   edit hold and automatic head reservation.
 - `internal/orchestrator/handlers.QueueHandlers` authorizes the session before
   reading or mutating queue state, binds edit requests to the server-assigned
-  WebSocket connection ID, and translates typed queue conflicts to stable
-  errors.
+  WebSocket connection ID, translates typed queue conflicts to stable errors,
+  and requests a post-save auto-run drain only after the edit lease is ended.
+- `internal/orchestrator.Service` owns promptability checks and exposes the
+  policy-preserving queue drain used after a successful edit save. This drain
+  may reserve the FIFO head only when Auto-run is already enabled; it never
+  enables Auto-run as a side effect.
 - `internal/gateway/websocket.Client` places its connection ID in the dispatch
   context. The client never accepts a connection identity from a payload.
 - `apps/web/lib/api/domains/queue-api.ts` carries begin, renew, end, and fenced
   update requests. `apps/web/hooks/use-queue-edit-protection.ts` owns the
   editor lease lifecycle. `queued-ghost-list.tsx` and
-  `queued-ghost-message.tsx` keep the editor attached to the selected row.
+  `queued-ghost-message.tsx` keep the editor attached to the selected row and
+  identify successful saves separately from cancellations.
 - `apps/web/hooks/domains/session/use-queue.ts` reconciles mutation responses
   and queue status for the session captured by the action. Stale HTTP/WS
   responses must not overwrite a newer session snapshot.
@@ -46,6 +51,13 @@ A lease is keyed by `(session_id, entry_id)` and contains a server-generated
 lease ID, the entry's target revision at acquisition, an expiry timestamp, a
 monotonic lease generation, and the server-side connection binding. Lease
 connection identity is not exposed to the browser.
+
+The queue edit end request may carry `dispatch_if_auto_run: true` only for a
+successful save. The backend releases the validated lease first, then invokes
+the policy-preserving drain for the same session. Cancel, failed save, stale
+lease cleanup, and disconnect cleanup omit the field or set it false. The
+response remains the existing session/entry acknowledgement; any dispatched
+successor is observed through the existing queue and session events.
 
 The queue update contract includes `lease_id`, `operation_id`, and
 `expected_target_revision` when sent by a connected editor. The server returns
@@ -75,12 +87,18 @@ non-WebSocket callers. Browser updates must use the fenced contract and the
    then commits atomically. Superseded attachment claims are released only
    after a successful replacement; rejected saves release only claims made by
    that request.
-5. Cancel or successful save ends the lease. A drain, remove, merge, session
-   transfer, or replacement that wins first invalidates the target and causes
-   the editor to refetch instead of applying stale state.
-6. Disconnect cleanup and lease expiry make the old lease unusable. Delayed
-   cleanup from the old connection is fenced by lease ID, connection ID, and
-   session/entry key, so it cannot release a newer lease.
+5. After a successful save, the UI ends the lease with
+   `dispatch_if_auto_run: true`. The backend validates and releases that lease
+   before attempting the policy-preserving drain. The drain serializes against
+   cancellation and other queue dispatches, rechecks promptability, and
+   reserves the FIFO head only when Auto-run is already enabled.
+6. Cancel, failed save, lease loss, disconnect cleanup, and expiry end the lease
+   without requesting a drain. A drain, remove, merge, session transfer, or
+   replacement that wins first invalidates the target and causes the editor to
+   refetch instead of applying stale state.
+7. Delayed cleanup from the old connection is fenced by lease ID, connection ID,
+   and session/entry key, so it cannot release a newer lease or trigger a
+   successor turn after a later edit.
 
 Session transfer and queue snapshot replacement must participate in the same
 admission boundary as editing and invalidate leases for affected source and
@@ -101,6 +119,12 @@ save and prevents a lease from surviving under an obsolete session identity.
 - Validation, lease, reference, or attachment-claim failures before the queue
   mutation release only attachments newly claimed by that request. Existing
   retained attachments remain owned by the queue.
+- A requested post-save drain is never an implicit resume: Auto-run OFF,
+  promptability guards, clarification, cancellation, or an in-flight dispatch
+  leave the saved row pending for the next eligible trigger.
+- If lease release succeeds but the post-save drain cannot dispatch, the saved
+  row remains durable and the existing queue status event is authoritative; a
+  later agent-ready or explicit Auto-run trigger may deliver it.
 - Status events remain authoritative for every successful update. Reconciliation
   is scoped to the session and uses the existing request-generation guard so an
   older response cannot restore stale content after a newer event or session
@@ -110,10 +134,11 @@ save and prevents a lease from surviving under an obsolete session identity.
 
 Session authorization runs before queue reads for all edit actions. The server
 uses its connection-bound identity rather than payload data for lease fencing.
-A browser may submit only session ID, entry ID, lease ID, operation ID, target
-revision, content, and replacement metadata. It cannot choose `queued_by`, task
-ownership, or another connection's lease.
-
+The post-save dispatch flag is honored only when the live lease records a
+successful update for that target; a browser cannot turn a cancel or failed
+save into a delivery request. A browser may submit only session ID, entry ID,
+lease ID, operation ID, target revision, content, and replacement metadata. It
+cannot choose `queued_by`, task ownership, or another connection's lease.
 ## Responsive behavior
 
 The existing inline queue panel remains the mobile composition and its queue
@@ -122,16 +147,18 @@ remain discoverable without hover on coarse pointers, use at least 44 by 44 CSS
 pixel hit areas where the shared row/action pattern requires them, and do not
 introduce document-level horizontal overflow. Desktop keeps the compact row
 layout. Both surfaces use the same lease and reconciliation state.
-
 ## Observability and tests
 
-Queue edit conflicts, expired leases, rejected revisions, and attachment
-rollback failures should retain the existing structured queue-handler/service
-logging without logging message content or attachment data. Focused backend
-coverage belongs beside the message-queue service and handler tests. Frontend
-unit coverage covers lease lifecycle and operation fencing. Playwright coverage
-must exercise desktop and `mobile-chrome` edit/save behavior, including an
-Auto-run backlog and a session/view replacement scenario.
+Queue edit conflicts, expired leases, rejected revisions, post-save drain
+deferrals, and attachment rollback failures should retain the existing
+structured queue-handler/service logging without logging message content or
+attachment data. Focused backend coverage belongs beside the message-queue
+service and handler tests and must cover save-after-turn-completion, Auto-run
+OFF, cancel, and failed-save paths. Frontend unit coverage covers lease
+lifecycle, operation fencing, and successful-save versus cancellation
+completion. Playwright coverage must exercise desktop and `mobile-chrome`
+edit/save behavior, including an Auto-run backlog and a session/view
+replacement scenario.
 
 ## Requirement mapping
 

@@ -6,10 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/jmoiron/sqlx"
 	internaldb "github.com/kandev/kandev/internal/db"
+	"time"
 )
 
 const attachmentCleanupSchema = `
@@ -78,9 +77,6 @@ func (r *sqliteRepository) UpsertAttachmentCleanup(ctx context.Context, cleanup 
 		return fmt.Errorf("begin attachment cleanup upsert: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := r.lockSessionTxUnfenced(ctx, tx, cleanup.CurrentSessionID); err != nil {
-		return err
-	}
 	cleanup.CurrentSessionID, err = r.resolveAttachmentCleanupSessionTx(ctx, tx, cleanup)
 	if err != nil {
 		return err
@@ -115,19 +111,48 @@ func (r *sqliteRepository) resolveAttachmentCleanupSessionTx(
 	tx *sqlx.Tx,
 	cleanup AttachmentCleanup,
 ) (string, error) {
-	sessionID := cleanup.CurrentSessionID
-	var entrySessionID string
-	err := tx.GetContext(ctx, &entrySessionID, tx.Rebind(`
+	if cleanup.CurrentSessionID != "" {
+		if err := r.lockSessionTxUnfenced(ctx, tx, cleanup.CurrentSessionID); err != nil {
+			return "", err
+		}
+	}
+	entrySessionID := cleanup.CurrentSessionID
+	if queuedSessionID, err := r.queuedAttachmentCleanupSessionTx(ctx, tx, cleanup); err != nil {
+		return "", err
+	} else if queuedSessionID != "" {
+		entrySessionID = queuedSessionID
+	}
+	if entrySessionID != "" && entrySessionID != cleanup.CurrentSessionID {
+		if err := r.lockSessionTxUnfenced(ctx, tx, entrySessionID); err != nil {
+			return "", err
+		}
+		if queuedSessionID, err := r.queuedAttachmentCleanupSessionTx(ctx, tx, cleanup); err != nil {
+			return "", err
+		} else if queuedSessionID != "" {
+			entrySessionID = queuedSessionID
+		}
+	}
+	return ResolveSessionTransferInTransaction(ctx, tx, r.db, entrySessionID)
+}
+
+func (r *sqliteRepository) queuedAttachmentCleanupSessionTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	cleanup AttachmentCleanup,
+) (string, error) {
+	var queuedSessionID string
+	err := tx.GetContext(ctx, &queuedSessionID, tx.Rebind(`
 		SELECT session_id
 		FROM queued_messages
 		WHERE id = ? AND task_id = ?
 	`), cleanup.EntryID, cleanup.TaskID)
-	if err == nil {
-		sessionID = entrySessionID
-	} else if !errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
 		return "", fmt.Errorf("resolve queued attachment cleanup entry: %w", err)
 	}
-	return ResolveSessionTransferInTransaction(ctx, tx, r.db, sessionID)
+	return queuedSessionID, nil
 }
 func (r *sqliteRepository) DeleteAttachmentCleanup(
 	ctx context.Context,

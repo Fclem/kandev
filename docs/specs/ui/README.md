@@ -172,6 +172,7 @@ UI owns responsive behavior; other systems own behavior/state.
 - [Sidebar task row](system-design/sidebar-task-row-presentation.md)
 - [PR walkthrough](system-design/pr-walkthrough.md)
 - [PR Task Status Summary](system-design/pr-task-status-summary.md)
+- [Queued message editing](system-design/message-queue-edit.md)
 - [Prompt History Panel](system-design/prompt-history-panel.md)
 - [Quick Chat and terminal elevation](system-design/quick-chat-elevation.md)
 - [Quick Chat viewport layout](system-design/quick-chat-viewport-layout.md)

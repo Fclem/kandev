@@ -524,3 +524,25 @@ it("fences overlapping renewals when lease generations are unavailable", async (
     vi.useRealTimers();
   }
 });
+it("requests dispatch only when completing a successful save", async () => {
+  const { result } = renderHook(() =>
+    useQueueEditProtection({
+      sessionId: SESSION_A,
+      entries: [entry()],
+    }),
+  );
+
+  await act(async () => {
+    await result.current.beginEdit(ENTRY_ID);
+    await result.current.completeEdit(ENTRY_ID, SESSION_A, "queue-edit-1", true);
+  });
+
+  expect(endQueuedMessageEdit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      session_id: SESSION_A,
+      entry_id: ENTRY_ID,
+      lease_id: "lease-1",
+    }),
+    true,
+  );
+});

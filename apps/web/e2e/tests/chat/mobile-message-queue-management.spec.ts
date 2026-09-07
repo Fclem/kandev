@@ -140,6 +140,39 @@ test("mobile edit queued message retains target while earlier backlog drains", a
   await assertNoDocumentHorizontalOverflow(testPage);
 });
 
+test("mobile saving the held head after its turn completes resumes Auto-run", async ({
+  testPage,
+  apiClient,
+  seedData,
+}) => {
+  test.setTimeout(120_000);
+  const { session, taskId, sessionId } = await seedBusyQueueTask(testPage, apiClient, seedData);
+  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("mobile edited head"));
+
+  const chat = session.activeChat();
+  const panel = chat.getByTestId("queued-ghost-list");
+  await chat.getByTestId("queue-chip").tap();
+  const row = panel.getByTestId("queue-entry").first();
+  await row.getByTestId("queue-entry-edit").tap();
+  await panel
+    .getByTestId("queue-edit-textarea")
+    .fill(scriptedQueueMessage("mobile edited head after save"));
+
+  await expect(chat.getByText("Slow response complete", { exact: false })).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(panel.getByTestId("queue-entry")).toHaveCount(1);
+
+  await panel.getByRole("button", { name: "Save", exact: true }).tap();
+  await expect(
+    chat.locator("[data-agent-message-body][data-message-id]").filter({
+      hasText: "mobile edited head after save",
+    }),
+  ).toHaveCount(1, { timeout: 45_000 });
+  await expect(panel.getByTestId("queue-entry")).toHaveCount(0, { timeout: 15_000 });
+  await assertNoDocumentHorizontalOverflow(testPage);
+});
+
 test("mobile edit queued message reconciles after a session switch", async ({
   testPage,
   apiClient,

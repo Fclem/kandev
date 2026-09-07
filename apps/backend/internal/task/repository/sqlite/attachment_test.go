@@ -174,6 +174,70 @@ func TestDeleteClaimedMessageAttachments_RemovesOnlyMatchingClaims(t *testing.T)
 	}
 }
 
+func TestDeleteClaimedMessageAttachmentsByTaskSession_ReleasesWithoutOwner(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	now := time.Now().UTC()
+	attachments := []*models.TaskMessageAttachment{
+		{ID: "cleanup-release", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-1", SessionID: "session-1", Name: "one", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "cleanup-release", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+		{ID: "cleanup-release-other", OwnerID: "owner-1", WorkspaceID: "workspace-attachments", TaskID: "task-2", SessionID: "session-1", Name: "two", MimeType: "text/plain", Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "cleanup-release-other", State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now},
+	}
+	for _, attachment := range attachments {
+		if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The durable queue cleanup path carries no user identity, so the
+	// task/session-scoped release must succeed without an owner check.
+	released, err := repo.DeleteClaimedMessageAttachmentsByTaskSession(ctx, []string{"cleanup-release", "cleanup-release-other"}, "task-1", "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(released) != 1 || released[0].ID != "cleanup-release" {
+		t.Fatalf("released = %+v", released)
+	}
+	if _, err := repo.GetMessageAttachment(ctx, "cleanup-release"); err == nil {
+		t.Fatal("released attachment still exists")
+	}
+	if _, err := repo.GetMessageAttachment(ctx, "cleanup-release-other"); err != nil {
+		t.Fatalf("unmatched claim was removed: %v", err)
+	}
+	// Replaying the same cleanup is a no-op, not an error.
+	released, err = repo.DeleteClaimedMessageAttachmentsByTaskSession(ctx, []string{"cleanup-release"}, "task-1", "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(released) != 0 {
+		t.Fatalf("replayed release = %+v, want empty", released)
+	}
+}
+func TestDeleteClaimedMessageAttachmentsByTaskSessionReleasesTaskScopedRows(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	now := time.Now().UTC()
+	attachment := &models.TaskMessageAttachment{
+		ID: "cleanup-task-scoped", OwnerID: "owner-1", WorkspaceID: "workspace-attachments",
+		TaskID: "task-1", Name: "task-scoped", MimeType: "text/plain", Kind: "resource",
+		DeliveryMode: "path", SizeBytes: 1, StorageKey: "cleanup-task-scoped",
+		State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now,
+	}
+	if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+		t.Fatal(err)
+	}
+
+	released, err := repo.DeleteClaimedMessageAttachmentsByTaskSession(
+		ctx, []string{attachment.ID}, "task-1", "session-1",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(released) != 1 || released[0].ID != attachment.ID {
+		t.Fatalf("released = %+v", released)
+	}
+}
+
 func TestDeleteMessageAttachmentsByTask_RemovesRegistryRows(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
@@ -367,11 +431,147 @@ func TestTransferMessageAttachmentsRejectsPartialOwnership(t *testing.T) {
 		t.Fatalf("partially moved attachment session = %q, want session-old", owned.SessionID)
 	}
 }
+func TestTransferMessageAttachmentsAllowsOwnedActiveSessionTransfer(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "workspace-attachments")
+	if err := repo.CreateTask(ctx, &models.Task{ID: "task-transfer", Title: "Attachment transfer"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, sessionID := range []string{"session-old", "session-new"} {
+		if err := repo.CreateTaskSession(ctx, &models.TaskSession{
+			ID: sessionID, TaskID: "task-transfer", State: models.TaskSessionStateWaitingForInput,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	queueRepo, err := messagequeue.NewSQLiteRepository(repo.db, repo.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compensations := queueRepo.(interface {
+		UpsertSessionTransferCompensation(context.Context, messagequeue.SessionTransferCompensation) error
+	})
+	if err := compensations.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+		OperationID: "attachment-transfer",
+		TaskID:      "task-transfer", FromSessionID: "session-old", ToSessionID: "session-new",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	attachment := &models.TaskMessageAttachment{
+		ID: "transfer-owned-active", OwnerID: "owner-1", WorkspaceID: "workspace-attachments",
+		TaskID: "task-transfer", SessionID: "session-old", Name: "owned", MimeType: "text/plain",
+		Kind: "resource", DeliveryMode: "path", SizeBytes: 1, StorageKey: "transfer-owned-active",
+		State: models.AttachmentStateClaimed, ExpiresAt: now.Add(time.Hour), CreatedAt: now,
+	}
+	if err := repo.CreateMessageAttachment(ctx, attachment); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.TransferMessageAttachments(
+		ctx, "task-transfer", "session-old", "session-new", []string{attachment.ID},
+	); err != nil {
+		t.Fatalf("owned attachment transfer: %v", err)
+	}
+	got, err := repo.GetMessageAttachment(ctx, attachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SessionID != "session-new" {
+		t.Fatalf("transferred attachment session = %q, want session-new", got.SessionID)
+	}
+}
+func TestUpsertSessionTransferCompensationValidatesTaskSessions(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*Repository, context.Context) (string, string, string)
+	}{
+		{
+			name: "missing task",
+			setup: func(_ *Repository, _ context.Context) (string, string, string) {
+				return "missing-task", "missing-old", "missing-new"
+			},
+		},
+		{
+			name: "missing session",
+			setup: func(repo *Repository, ctx context.Context) (string, string, string) {
+				if err := repo.CreateTask(ctx, &models.Task{ID: "task-missing-session", Title: "Transfer"}); err != nil {
+					t.Fatal(err)
+				}
+				if err := repo.CreateTaskSession(ctx, &models.TaskSession{
+					ID: "session-existing", TaskID: "task-missing-session",
+					State: models.TaskSessionStateWaitingForInput,
+				}); err != nil {
+					t.Fatal(err)
+				}
+				return "task-missing-session", "session-existing", "session-missing"
+			},
+		},
+		{
+			name: "session belongs to another task",
+			setup: func(repo *Repository, ctx context.Context) (string, string, string) {
+				for _, task := range []*models.Task{
+					{ID: "task-owner", Title: "Owner"},
+					{ID: "task-other", Title: "Other"},
+				} {
+					if err := repo.CreateTask(ctx, task); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := repo.CreateTaskSession(ctx, &models.TaskSession{
+					ID: "session-owner", TaskID: "task-owner",
+					State: models.TaskSessionStateWaitingForInput,
+				}); err != nil {
+					t.Fatal(err)
+				}
+				if err := repo.CreateTaskSession(ctx, &models.TaskSession{
+					ID: "session-other", TaskID: "task-other",
+					State: models.TaskSessionStateWaitingForInput,
+				}); err != nil {
+					t.Fatal(err)
+				}
+				return "task-owner", "session-owner", "session-other"
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newRepoForSessionTests(t)
+			ctx := context.Background()
+			taskID, fromSessionID, toSessionID := test.setup(repo, ctx)
+			queueRepo, err := messagequeue.NewSQLiteRepository(repo.db, repo.db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			persistence := queueRepo.(interface {
+				UpsertSessionTransferCompensation(context.Context, messagequeue.SessionTransferCompensation) error
+			})
+			err = persistence.UpsertSessionTransferCompensation(ctx, messagequeue.SessionTransferCompensation{
+				OperationID: "invalid-transfer-" + test.name,
+				TaskID:      taskID, FromSessionID: fromSessionID, ToSessionID: toSessionID,
+			})
+			if err == nil {
+				t.Fatal("invalid session transfer compensation unexpectedly succeeded")
+			}
+		})
+	}
+}
 
 func TestClaimMessageAttachmentsRejectsActiveSessionTransfer(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
 	seedWorkspace(t, repo, "workspace-attachments")
+	if err := repo.CreateTask(ctx, &models.Task{ID: "task-transfer", Title: "Attachment transfer"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, sessionID := range []string{"session-old", "session-new"} {
+		if err := repo.CreateTaskSession(ctx, &models.TaskSession{
+			ID: sessionID, TaskID: "task-transfer", State: models.TaskSessionStateWaitingForInput,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	queueRepo, err := messagequeue.NewSQLiteRepository(repo.db, repo.db)
 	if err != nil {
 		t.Fatal(err)
@@ -420,6 +620,16 @@ func TestPostgresAttachmentClaimRejectsActiveSessionTransfer(t *testing.T) {
 	repoA, repoB, _ := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	seedWorkspace(t, repoA, "workspace-transfer-claim")
+	if err := repoA.CreateTask(ctx, &models.Task{ID: "task-transfer", Title: "Attachment transfer"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, sessionID := range []string{"session-old", "session-new"} {
+		if err := repoA.CreateTaskSession(ctx, &models.TaskSession{
+			ID: sessionID, TaskID: "task-transfer", State: models.TaskSessionStateWaitingForInput,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	queueRepo, err := messagequeue.NewSQLiteRepository(repoA.db, repoA.db)
 	if err != nil {
 		t.Fatal(err)

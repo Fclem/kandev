@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@kandev/ui/tooltip";
 import { QueuePanelHeader, type QueuePanelHeaderProps } from "./queued-ghost-panel-header";
-
 vi.mock("@/hooks/use-responsive-breakpoint", () => ({
   useResponsiveBreakpoint: () => ({ isMobile: false }),
 }));
@@ -27,10 +27,10 @@ const props: QueuePanelHeaderProps = {
 describe("QueuePanelHeader", () => {
   it("renders compact Auto-run and Auto-merge pills with unique accessible labels", () => {
     const { container } = render(
-      <>
+      <TooltipProvider>
         <QueuePanelHeader {...props} />
         <QueuePanelHeader {...props} />
-      </>,
+      </TooltipProvider>,
     );
 
     const autoRunSwitches = screen.getAllByTestId("queue-auto-run");
@@ -53,7 +53,11 @@ describe("QueuePanelHeader", () => {
   });
 
   it("disables both policies through the same conflicting-operation state", () => {
-    render(<QueuePanelHeader {...props} isLoading />);
+    render(
+      <TooltipProvider>
+        <QueuePanelHeader {...props} isLoading />
+      </TooltipProvider>,
+    );
     expect((screen.getByTestId("queue-auto-run") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId("queue-auto-merge") as HTMLButtonElement).disabled).toBe(true);
   });

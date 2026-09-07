@@ -3,6 +3,7 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui";
 import { Switch } from "@kandev/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 
@@ -52,37 +53,51 @@ function QueueAutomationPills({
     "flex min-h-7 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2 text-xs font-medium text-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-3";
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <label htmlFor={autoRunId} className={cn(pillClassName, "cursor-pointer")}>
-        <span>{t("chat:queueAutoRun")}</span>
-        <Switch
-          id={autoRunId}
-          data-testid="queue-auto-run"
-          checked={autoRun}
-          disabled={controlsDisabled}
-          onCheckedChange={onAutoRunChange}
-          aria-label={t("chat:queueAutoRun")}
-          aria-describedby={autoRunDescriptionId}
-          className="[@media(pointer:coarse)]:after:-inset-y-3.5"
-        />
-      </label>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <label htmlFor={autoRunId} className={cn(pillClassName, "cursor-pointer")}>
+            <span>{t("chat:queueAutoRun")}</span>
+            <Switch
+              id={autoRunId}
+              data-testid="queue-auto-run"
+              checked={autoRun}
+              disabled={controlsDisabled}
+              onCheckedChange={onAutoRunChange}
+              aria-label={t("chat:queueAutoRun")}
+              aria-describedby={autoRunDescriptionId}
+              className="[@media(pointer:coarse)]:after:-inset-y-3.5"
+            />
+          </label>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[280px]">
+          {t(autoRun ? "chat:queueAutoRunOnHelp" : "chat:queueAutoRunOffHelp")}
+        </TooltipContent>
+      </Tooltip>
       <span id={autoRunDescriptionId} className="sr-only">
         {t(autoRun ? "chat:queueAutoRunOnHelp" : "chat:queueAutoRunOffHelp")}
       </span>
-      <label
-        htmlFor={autoMergeId}
-        className={cn(pillClassName, autoMergeAvailable ? "cursor-pointer" : "opacity-50")}
-      >
-        <span>{t("chat:queueAutoMerge")}</span>
-        <Switch
-          id={autoMergeId}
-          data-testid="queue-auto-merge"
-          checked={autoMerge}
-          disabled={controlsDisabled || !autoMergeAvailable}
-          onCheckedChange={onAutoMergeChange}
-          aria-label={t("chat:queueAutoMerge")}
-          className="[@media(pointer:coarse)]:after:-inset-y-3.5"
-        />
-      </label>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <label
+            htmlFor={autoMergeId}
+            className={cn(pillClassName, autoMergeAvailable ? "cursor-pointer" : "opacity-50")}
+          >
+            <span>{t("chat:queueAutoMerge")}</span>
+            <Switch
+              id={autoMergeId}
+              data-testid="queue-auto-merge"
+              checked={autoMerge}
+              disabled={controlsDisabled || !autoMergeAvailable}
+              onCheckedChange={onAutoMergeChange}
+              aria-label={t("chat:queueAutoMerge")}
+              className="[@media(pointer:coarse)]:after:-inset-y-3.5"
+            />
+          </label>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[280px]">
+          {t("system:messageQueueAutoMergeNotice")}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }

@@ -542,7 +542,7 @@ export function registerTasksHandlers(store: StoreApi<AppState>): WsHandlers {
           ...(currentState.taskSessionsByTask.itemsByTaskId[deletedId] ?? []).map(
             (session) => session.id,
           ),
-          ...Object.values(currentState.taskSessions.items)
+          ...Object.values(currentState.taskSessions?.items ?? {})
             .filter((session) => session.task_id === deletedId)
             .map((session) => session.id),
         ]),
@@ -566,7 +566,7 @@ export function registerTasksHandlers(store: StoreApi<AppState>): WsHandlers {
       currentState.removeTaskFromSidebarPrefs(deletedId);
       for (const sid of sessionIds) {
         useContextFilesStore.getState().clearSession(sid);
-        currentState.clearQueueStatus(sid);
+        currentState.clearQueueStatus?.(sid);
       }
 
       const wasActive = currentState.tasks.activeTaskId === deletedId;

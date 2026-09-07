@@ -63,41 +63,52 @@ func (h *Hub) appendAndBroadcastOrderedSessionEvent(sessionID string, message *w
 		}
 		return
 	}
+	recipients := h.orderedSessionRecipients(sessionID)
 	if poison, poisoned := service.SessionEvents().Poison(sessionID, event.ID); poisoned {
-		if failureErr := service.SessionDelivery().RecordFailure(sessionID, event.ID, event.CreatedAt); failureErr != nil && h.logger != nil {
-			h.logger.Error(
-				"record ordered session poison",
-				zap.String("event_id", event.ID),
-				zap.String("validation_error", poison.LastError),
-				zap.Error(failureErr),
-			)
+		// A delivery attempt is counted only when at least one subscriber
+		// exists to receive the frame; mirroring with nobody subscribed does
+		// not burn an attempt.
+		if len(recipients) > 0 {
+			if failureErr := service.SessionDelivery().RecordFailure(sessionID, event.ID, event.CreatedAt); failureErr != nil && h.logger != nil {
+				h.logger.Error(
+					"record ordered session poison",
+					zap.String("event_id", event.ID),
+					zap.String("validation_error", poison.LastError),
+					zap.Error(failureErr),
+				)
+			}
 		}
-		return
 	}
-	for _, client := range h.orderedSessionRecipients(sessionID) {
+	// Poison frames are delivered to live subscribers on every path (append
+	// and mirror, live and replay alike) so clients can run their recovery:
+	// the web core stream treats the frame as poison and re-subscribes with
+	// replace_cursor, and plugin scopes rebind past the poison. Consumers
+	// never acknowledge the poisoned sequence itself, so the ACK block stays
+	// the durable rebind trigger for lagging cursors.
+	for _, client := range recipients {
 		client.sendOrderedSessionEvent(event)
 	}
 }
 
 // broadcastCommittedOrderedSessionEvent fans a mirrored primary-journal event
-// out to ordered subscribers. Poison frames are never delivered as live
-// frames: the mirroring attempt is counted as a delivery observation, then the
-// frame is dropped so subscribers only ever see projectable rows (matching the
-// local Append path above). A subscriber that fell behind the poison must
-// recover through the ACK-block / replace_cursor rebind path instead.
+// out to ordered subscribers with the same poison contract as the append
+// path: the frame is delivered (recovery depends on seeing it), and the
+// delivery attempt is counted only when recipients exist.
 func (h *Hub) broadcastCommittedOrderedSessionEvent(service *plugins.Service, event plugins.SessionEvent) {
+	recipients := h.orderedSessionRecipients(event.SessionID)
 	if poison, poisoned := service.SessionEvents().Poison(event.SessionID, event.ID); poisoned {
-		if failureErr := service.SessionDelivery().RecordFailure(event.SessionID, event.ID, event.CreatedAt); failureErr != nil && h.logger != nil {
-			h.logger.Error(
-				"record ordered session poison",
-				zap.String("event_id", event.ID),
-				zap.String("validation_error", poison.LastError),
-				zap.Error(failureErr),
-			)
+		if len(recipients) > 0 {
+			if failureErr := service.SessionDelivery().RecordFailure(event.SessionID, event.ID, event.CreatedAt); failureErr != nil && h.logger != nil {
+				h.logger.Error(
+					"record ordered session poison",
+					zap.String("event_id", event.ID),
+					zap.String("validation_error", poison.LastError),
+					zap.Error(failureErr),
+				)
+			}
 		}
-		return
 	}
-	for _, client := range h.orderedSessionRecipients(event.SessionID) {
+	for _, client := range recipients {
 		client.sendOrderedSessionEvent(event)
 	}
 }

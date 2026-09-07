@@ -175,6 +175,50 @@ func TestConversationJournalStripsMultiLineAndMultiBlockSystemContent(t *testing
 	}
 }
 
+func TestConversationJournalStripKeepsRawTextWhenNoWellFormedBlock(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-journal-strip-raw", "session-journal-strip-raw", "turn-journal-strip-raw")
+	// Shapes where the Go helper has no full match: an unterminated opening
+	// tag and a stray closing tag before the first opening tag. The SQLite
+	// strip must keep the raw text (never NULL), byte-identical to Go.
+	cases := map[string]string{
+		"unterminated-open": "visible <kandev-system>never closed",
+		"stray-close":       "</kandev-system>before <kandev-system>closed</kandev-system> after",
+		"deep-nesting":      "<kandev-system>" + strings.Repeat("<kandev-system>", 70) + "x" + strings.Repeat("</kandev-system>", 70) + "</kandev-system>tail",
+	}
+	for name, content := range cases {
+		t.Run(name, func(t *testing.T) {
+			id := "message-strip-raw-" + name
+			message := &models.Message{
+				ID: id, TaskSessionID: "session-journal-strip-raw", TaskID: "task-journal-strip-raw",
+				TurnID: "turn-journal-strip-raw", AuthorType: models.MessageAuthorUser,
+				Type: models.MessageTypeMessage, Content: content,
+			}
+			if err := repo.CreateMessage(ctx, message); err != nil {
+				t.Fatalf("create message: %v", err)
+			}
+			var versionContent *string
+			if err := repo.db.Get(&versionContent, `SELECT json_extract(payload, '$.content') FROM conversation_message_versions WHERE message_id = ?`, id); err != nil {
+				t.Fatalf("read message version content: %v", err)
+			}
+			if versionContent == nil {
+				t.Fatalf("strip returned NULL for %q", content)
+			}
+			want := sysprompt.StripSystemContent(content)
+			if name != "deep-nesting" && *versionContent != want {
+				t.Fatalf("version content = %q, want %q", *versionContent, want)
+			}
+			if strings.Contains(*versionContent, "<kandev-system>") && name == "unterminated-open" {
+				// Unterminated opener text is preserved verbatim.
+				if *versionContent != content {
+					t.Fatalf("unterminated content = %q, want raw %q", *versionContent, content)
+				}
+			}
+		})
+	}
+}
+
 func TestConversationJournalSanitizeMigrationRewritesLegacyRows(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,7 +14,13 @@ import (
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/sysprompt"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
+	"go.uber.org/zap"
 )
+
+// errConversationCursorGone reports a page cursor whose message was
+// deleted/tombstoned before the walk reached it; the page would otherwise
+// silently truncate.
+var errConversationCursorGone = errors.New("conversation page cursor message no longer exists")
 
 const (
 	conversationContentKey    = "content"
@@ -83,6 +90,7 @@ func (s *Service) SyncCommittedSessionEvents(ctx context.Context, sessionID stri
 	defer func() { _ = rows.Close() }()
 
 	mirrored := make([]SessionEvent, 0)
+	expected := watermark
 	for rows.Next() {
 		var event SessionEvent
 		var taskID sql.NullString
@@ -98,9 +106,18 @@ func (s *Service) SyncCommittedSessionEvents(ctx context.Context, sessionID stri
 		if err != nil {
 			return nil, fmt.Errorf("mirror committed conversation event: %w", err)
 		}
-		if appended {
-			mirrored = append(mirrored, event)
+		if !appended {
+			continue
 		}
+		mirrored = append(mirrored, event)
+		if event.Sequence > expected+1 && s.log != nil {
+			s.log.Warn("journal mirror healed a retention gap",
+				zap.String("session_id", sessionID),
+				zap.Uint64("expected_sequence", expected+1),
+				zap.Uint64("sequence", event.Sequence),
+			)
+		}
+		expected = event.Sequence
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate committed conversation events: %w", err)
@@ -179,12 +196,21 @@ func (s *Service) syncAllCommittedSessionEvents(ctx context.Context) ([]SessionE
 		return nil, fmt.Errorf("iterate conversation stream partitions: %w", err)
 	}
 	var mirrored []SessionEvent
+	var failures []string
 	for _, sessionID := range sessionIDs {
 		events, err := s.SyncCommittedSessionEvents(ctx, sessionID)
 		if err != nil {
-			return nil, err
+			// Isolate one unhealthy partition: it must not freeze retention
+			// for every other session. The combined error is still returned
+			// so the failure stays loud (it is only reachable through state
+			// tampering, since the maintenance tick prunes both sides).
+			failures = append(failures, sessionID+": "+err.Error())
+			continue
 		}
 		mirrored = append(mirrored, events...)
+	}
+	if len(failures) > 0 {
+		return mirrored, fmt.Errorf("mirror %d session partition(s): %s", len(failures), strings.Join(failures, "; "))
 	}
 	return mirrored, nil
 }
@@ -313,6 +339,14 @@ func retainedSessionExclusion(ids []string) (string, []any) {
 // (args[0]) and not protected by a live cursor/poison (remaining args). The
 // dead ids are materialized first because a CTE whose DELETE targets the same
 // table the CTE reads can stall SQLite.
+//
+// The session.removed terminal marker intentionally lives exactly as long as
+// the rest of the partition: this pass fires only after updated_at has aged
+// past SessionEventRetention, so a subscriber arriving within that window
+// still receives session_removed (the durable-log mirror keeps the terminal
+// tombstone through the same window and only then drops it). After both
+// stores forget the partition, the session is gone for good and later
+// snapshot reads correctly 404.
 func (s *Service) purgeDeadSessionPartitions(ctx context.Context, tx *sqlx.Tx, exclusion string, args []any) error {
 	deadQuery := s.conversationJournal.Rebind(`
 		SELECT st.session_id
@@ -396,6 +430,17 @@ func (s *Service) conversationMessagesAt(
 		comparison = "<"
 	}
 	if cursorID != "" {
+		// A cursor whose message was deleted/tombstoned mid-walk is gone from
+		// the live projection; the cursor predicate would otherwise match
+		// nothing and the client would read a silent empty terminal page.
+		// Surface an error (parity with the source-table fallback) instead.
+		live, err := s.liveConversationMessageAtCutoff(ctx, sessionID, cutoff, cursorID)
+		if err != nil {
+			return nil, false, err
+		}
+		if !live {
+			return nil, false, fmt.Errorf("%w: %s", errConversationCursorGone, cursorID)
+		}
 		where = append(where, fmt.Sprintf("(created_at %s (SELECT created_at FROM live WHERE message_id = ?) OR (created_at = (SELECT created_at FROM live WHERE message_id = ?) AND message_id %s ?))", comparison, comparison))
 		args = append(args, cursorID, cursorID, cursorID)
 	}
@@ -419,6 +464,19 @@ func (s *Service) conversationMessagesAt(
 		return nil, false, fmt.Errorf("query conversation message snapshot: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return decodeConversationSnapshotRows(rows, sessionID, limit)
+}
+
+type conversationRowScanner interface {
+	Next() bool
+	Scan(dest ...any) error
+	Err() error
+}
+
+// decodeConversationSnapshotRows scans message-version payload rows into
+// messages, applying the limit+1 page bound, and reports whether another page
+// remains.
+func decodeConversationSnapshotRows(rows conversationRowScanner, sessionID string, limit int) ([]*taskmodels.Message, bool, error) {
 	messages := make([]*taskmodels.Message, 0, limit+1)
 	for rows.Next() {
 		var raw []byte
@@ -439,6 +497,24 @@ func (s *Service) conversationMessagesAt(
 		messages = messages[:limit]
 	}
 	return messages, hasMore, nil
+}
+
+// liveConversationMessageAtCutoff reports whether the message cursor still has
+// a live (non-tombstoned) version at or before the snapshot cutoff.
+func (s *Service) liveConversationMessageAtCutoff(ctx context.Context, sessionID string, cutoff uint64, cursorID string) (bool, error) {
+	query := s.conversationJournal.Rebind(`
+		WITH ranked AS (
+			SELECT message_id, tombstone,
+				ROW_NUMBER() OVER (PARTITION BY message_id ORDER BY row_sequence DESC) AS version_rank
+			FROM conversation_message_versions
+			WHERE session_id = ? AND row_sequence <= ?
+		)
+		SELECT COUNT(*) FROM ranked WHERE message_id = ? AND version_rank = 1 AND tombstone = FALSE`)
+	var live int
+	if err := s.conversationJournal.GetContext(ctx, &live, query, sessionID, cutoff, cursorID); err != nil {
+		return false, fmt.Errorf("resolve conversation page cursor: %w", err)
+	}
+	return live > 0, nil
 }
 
 func decodeJournalMessage(raw []byte, sessionID string) (*taskmodels.Message, error) {

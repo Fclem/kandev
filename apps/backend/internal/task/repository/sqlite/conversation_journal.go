@@ -58,22 +58,89 @@ CREATE TABLE IF NOT EXISTS conversation_turn_versions (
 );
 CREATE INDEX IF NOT EXISTS idx_conversation_turn_snapshot
 	ON conversation_turn_versions(session_id, row_sequence, started_at, turn_id);
+CREATE TABLE IF NOT EXISTS conversation_journal_meta (
+	key TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
 `
+
+// journalSchemaVersion is the current conversation journal schema version.
+// Boot runs the trigger (re)creation plus its one-time sanitize migration only
+// while the stored version is below this constant, then records it, so the
+// per-boot full-corpus payload rewrite never repeats.
+const journalSchemaVersion = 2
+
+// journalBackfillKey records that the one-time backfill of pre-trigger source
+// rows completed, so boot does not re-scan the whole message/turn corpus.
+const journalBackfillKey = "backfill.complete"
 
 func (r *Repository) initConversationJournalSchema() error {
 	if _, err := r.db.Exec(conversationJournalTables); err != nil {
 		return fmt.Errorf("create conversation journal tables: %w", err)
 	}
-	var err error
-	if dialect.IsPostgres(r.db.DriverName()) {
-		err = r.initPostgresConversationJournalTriggers()
-	} else {
-		err = r.initSQLiteConversationJournalTriggers()
-	}
+	version, err := r.readConversationJournalMetaInt("schema.version")
 	if err != nil {
 		return err
 	}
-	return r.backfillConversationJournal()
+	if version < journalSchemaVersion {
+		var triggerErr error
+		if dialect.IsPostgres(r.db.DriverName()) {
+			triggerErr = r.initPostgresConversationJournalTriggers()
+		} else {
+			triggerErr = r.initSQLiteConversationJournalTriggers()
+		}
+		if triggerErr != nil {
+			return triggerErr
+		}
+		if err := r.writeConversationJournalMeta("schema.version", journalSchemaVersion); err != nil {
+			return err
+		}
+	}
+	backfilled, err := r.readConversationJournalMetaFlag(journalBackfillKey)
+	if err != nil {
+		return err
+	}
+	if backfilled {
+		return nil
+	}
+	if err := r.backfillConversationJournal(); err != nil {
+		return err
+	}
+	return r.writeConversationJournalMeta(journalBackfillKey, 1)
+}
+
+func (r *Repository) readConversationJournalMetaInt(key string) (int, error) {
+	var value string
+	err := r.db.Get(&value, r.db.Rebind(`SELECT value FROM conversation_journal_meta WHERE key = ?`), key)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read conversation journal meta %s: %w", key, err)
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("parse conversation journal meta %s: %w", key, err)
+	}
+	return parsed, nil
+}
+
+func (r *Repository) readConversationJournalMetaFlag(key string) (bool, error) {
+	value, err := r.readConversationJournalMetaInt(key)
+	if err != nil {
+		return false, err
+	}
+	return value > 0, nil
+}
+
+func (r *Repository) writeConversationJournalMeta(key string, value int) error {
+	_, err := r.db.Exec(r.db.Rebind(`
+		INSERT INTO conversation_journal_meta(key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`), key, strconv.Itoa(value))
+	if err != nil {
+		return fmt.Errorf("write conversation journal meta %s: %w", key, err)
+	}
+	return nil
 }
 
 type conversationJournalMessageSeed struct {
@@ -250,12 +317,15 @@ func (r *Repository) insertConversationBackfillEvent(
 }
 
 // sqliteStripSystemContentExpr returns a scalar subquery that removes every
-// <kandev-system>...</kandev-system> block from expr - including multi-line
-// blocks, multiple blocks, and nested evasion - and trims the result,
-// mirroring sysprompt.StripSystemContent. SQLite has no scalar regex replace,
-// so a bounded recursive CTE reapplies first-block removal until no opening
-// tag remains (depth 64 caps adversarial nesting, like the Go helper's
-// replace-until-stable loop).
+// well-formed <kandev-system>...</kandev-system> block from expr - including
+// multi-line blocks, multiple blocks, and nested evasion - and trims the
+// result, mirroring sysprompt.StripSystemContent. SQLite has no scalar regex
+// replace, so a bounded recursive CTE reapplies first-block removal until no
+// well-formed block remains (an opening tag with no later closing tag, or a
+// stray closing tag, leaves the raw text intact exactly like the Go helper,
+// which only removes full matches). Depth 64 caps adversarial nesting; past
+// that bound the remainder is kept rather than dropped. The final row is the
+// deepest one, so the scalar never evaluates to NULL for text input.
 func sqliteStripSystemContentExpr(expr string) string {
 	// Go's helper also consumes the whitespace run after each closing tag
 	// (`\s*` in the pattern); ltrim the tail so junction spacing matches.
@@ -265,15 +335,16 @@ func sqliteStripSystemContentExpr(expr string) string {
 			SELECT ` + expr + `, 0
 			UNION ALL
 			SELECT substr(x, 1, instr(x, '<kandev-system>') - 1)
-				|| ltrim(substr(x, instr(x, '</kandev-system>') + length('</kandev-system>')), ` + whitespace + `), depth + 1
+				|| ltrim(substr(x,
+					instr(x, '<kandev-system>') + length('<kandev-system>')
+						+ instr(substr(x, instr(x, '<kandev-system>') + length('<kandev-system>')), '</kandev-system>') - 1
+						+ length('</kandev-system>')),
+					` + whitespace + `), depth + 1
 			FROM strip
 			WHERE depth < 64
-				AND instr(x, '<kandev-system>') > 0
-				AND instr(x, '</kandev-system>') > instr(x, '<kandev-system>')
+				AND instr(substr(x, instr(x, '<kandev-system>') + length('<kandev-system>')), '</kandev-system>') > 0
 		)
-		SELECT x FROM strip
-		WHERE x NOT LIKE '%<kandev-system>%'
-		LIMIT 1
+		SELECT x FROM strip ORDER BY depth DESC LIMIT 1
 	))`
 }
 
@@ -424,6 +495,11 @@ BEGIN
 	-- No stream sequence or event row is consumed, so ordered mirroring and
 	-- replay are unaffected; a completed-but-deleted turn simply disappears
 	-- from journal reads, matching the first-party session.
+	-- Accepted divergence: an ordered replay that spans the deletion (within
+	-- retention) may still project that empty turn's started/completed events
+	-- because no turn.removed marker exists, while the snapshot taken after
+	-- the deletion omits it. The window is bounded by retention and only
+	-- affects message-less turns.
 	DELETE FROM conversation_turn_versions
 	WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
 END;
@@ -524,6 +600,9 @@ BEGIN
 		-- Turn deletions (only possible for turns without messages) remove the
 		-- turn's journal history so snapshots stop reporting the phantom turn,
 		-- without consuming a stream sequence or emitting an event row.
+		-- Accepted divergence (mirrors SQLite): a mid-retention replay may
+		-- still project the deleted empty turn's events, while snapshots after
+		-- the deletion omit it; bounded by retention and message-less turns.
 		DELETE FROM conversation_turn_versions
 		WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
 		RETURN OLD;
@@ -569,6 +648,7 @@ FOR EACH ROW EXECUTE FUNCTION conversation_session_delete_journal();
 		SET payload = jsonb_set(payload::jsonb, '{content}',
 			to_jsonb(conversation_visible_content(payload::jsonb ->> 'content')))::text
 		WHERE payload::jsonb ? 'content'
+		  AND payload::jsonb ->> 'content' LIKE '%<kandev-system>%'
 	`); err != nil {
 		return fmt.Errorf("sanitize PostgreSQL conversation message journal: %w", err)
 	}
@@ -577,6 +657,7 @@ FOR EACH ROW EXECUTE FUNCTION conversation_session_delete_journal();
 		SET payload = jsonb_set(payload::jsonb, '{content}',
 			to_jsonb(conversation_visible_content(payload::jsonb ->> 'content')))::text
 		WHERE payload::jsonb ? 'content'
+		  AND payload::jsonb ->> 'content' LIKE '%<kandev-system>%'
 	`); err != nil {
 		return fmt.Errorf("sanitize PostgreSQL conversation event journal: %w", err)
 	}

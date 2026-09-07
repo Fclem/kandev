@@ -288,3 +288,32 @@ func TestSyncCommittedSessionEventsPoisonsMalformedPayloadWithoutRetainingRawByt
 	_, projectionErr := ProjectSessionEvent(events[0])
 	require.Error(t, projectionErr)
 }
+
+func TestConversationMessagesAtErrorsWhenPageCursorWasTombstoned(t *testing.T) {
+	database, err := sqlx.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, database.Close()) })
+	_, err = database.Exec(`
+		CREATE TABLE conversation_message_versions (
+			session_id TEXT NOT NULL, message_id TEXT NOT NULL, row_sequence INTEGER NOT NULL,
+			task_id TEXT, author_type TEXT, created_at TIMESTAMP NOT NULL,
+			tombstone BOOLEAN NOT NULL, payload TEXT NOT NULL
+		);`)
+	require.NoError(t, err)
+	createdAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	insertJournalMessageVersion(t, database, 1, false, map[string]any{
+		"message_id": "message-1", "turn_id": "turn-1", "task_id": "task-1",
+		"author_type": "agent", "content": "first", "message_type": "message",
+		"created_at": createdAt.Format(time.RFC3339Nano),
+		"updated_at": createdAt.Format(time.RFC3339Nano),
+	})
+	insertJournalMessageVersion(t, database, 2, true, map[string]any{"message_id": "message-1"})
+
+	service := NewService(nil, NewRegistry(), nil, testLogger(t))
+	service.SetConversationJournalDB(database)
+
+	_, _, err = service.conversationMessagesAt(
+		context.Background(), "session-1", 2, nil, nil, "asc", "message-1", 20,
+	)
+	require.ErrorIs(t, err, errConversationCursorGone)
+}

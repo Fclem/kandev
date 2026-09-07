@@ -223,3 +223,74 @@ func TestSendToIdentityTargetsConnectedClientsWithoutSubscription(t *testing.T) 
 		t.Fatal("a different identity must not receive the notification")
 	}
 }
+
+// TestBroadcastCommittedPoisonFrameDeliversAndCountsAttempt pins the unified
+// poison contract: the mirrored frame IS delivered to live subscribers (their
+// recovery depends on seeing it) and the delivery attempt is counted only when
+// a recipient exists.
+func TestBroadcastCommittedPoisonFrameDeliversAndCountsAttempt(t *testing.T) {
+	h := newTestHub(t)
+	svc := plugins.NewService(nil, plugins.NewRegistry(), nil, testLogger())
+	h.SetPluginConversationService(svc)
+
+	// message.added missing author/content -> projection poison.
+	event, err := svc.SessionEvents().Append(
+		"sess-poison", newStringPointer("task-poison"), "message.added",
+		[]byte(`{"type":"message.added","session_id":"sess-poison","task_id":"task-poison"}`),
+	)
+	if err != nil {
+		t.Fatalf("append poison event: %v", err)
+	}
+	if _, ok := svc.SessionEvents().Poison("sess-poison", event.ID); !ok {
+		t.Fatal("append did not poison the malformed event")
+	}
+
+	c := newTestClient("c-poison")
+	registerTestClient(h, c)
+	c.orderedSessionSubscriptions = map[string]map[string]plugins.SessionDeliveryCursorKey{
+		"sess-poison": {
+			"core-1": {SessionID: "sess-poison", ConsumerKind: "core", WireID: "core-1"},
+		},
+	}
+
+	h.broadcastCommittedOrderedSessionEvent(svc, event)
+
+	if !clientReceived(c) {
+		t.Fatal("live subscriber did not receive the poison frame")
+	}
+	record, ok := svc.SessionEvents().Poison("sess-poison", event.ID)
+	if !ok {
+		t.Fatal("poison record missing after broadcast")
+	}
+	if record.Attempts != 1 {
+		t.Fatalf("poison attempts = %d, want 1 (one delivery with a recipient)", record.Attempts)
+	}
+}
+
+// TestBroadcastCommittedPoisonFrameWithoutRecipientsSkipsAttempt pins that a
+// mirrored poison with nobody subscribed does not burn a delivery attempt.
+func TestBroadcastCommittedPoisonFrameWithoutRecipientsSkipsAttempt(t *testing.T) {
+	h := newTestHub(t)
+	svc := plugins.NewService(nil, plugins.NewRegistry(), nil, testLogger())
+	h.SetPluginConversationService(svc)
+
+	event, err := svc.SessionEvents().Append(
+		"sess-poison-idle", newStringPointer("task-poison"), "message.added",
+		[]byte(`{"type":"message.added","session_id":"sess-poison-idle","task_id":"task-poison"}`),
+	)
+	if err != nil {
+		t.Fatalf("append poison event: %v", err)
+	}
+
+	h.broadcastCommittedOrderedSessionEvent(svc, event)
+
+	record, ok := svc.SessionEvents().Poison("sess-poison-idle", event.ID)
+	if !ok {
+		t.Fatal("poison record missing after broadcast")
+	}
+	if record.Attempts != 0 {
+		t.Fatalf("poison attempts = %d, want 0 with no recipients", record.Attempts)
+	}
+}
+
+func newStringPointer(value string) *string { return &value }

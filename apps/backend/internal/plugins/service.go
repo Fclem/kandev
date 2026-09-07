@@ -716,10 +716,11 @@ func (s *Service) SetPluginsDir(dir string) error {
 }
 
 func (s *Service) maintainSessionEvents(now time.Time) error {
-	events, err := s.syncAllCommittedSessionEvents(context.Background())
-	if err != nil {
-		return fmt.Errorf("synchronize committed conversation journal: %w", err)
-	}
+	// A failing partition must not freeze the rest of maintenance: mirror
+	// errors are isolated per session (syncAll collects them), and the
+	// remaining passes still run so healthy sessions are collected and the
+	// primary journal is pruned every tick.
+	events, syncErr := s.syncAllCommittedSessionEvents(context.Background())
 	s.mu.Lock()
 	sink := s.sessionEventSink
 	s.mu.Unlock()
@@ -743,6 +744,9 @@ func (s *Service) maintainSessionEvents(now time.Time) error {
 		context.Background(), now.UTC().Add(-SessionEventRetention), retained,
 	); err != nil {
 		return fmt.Errorf("prune primary conversation journal: %w", err)
+	}
+	if syncErr != nil {
+		return fmt.Errorf("synchronize committed conversation journal: %w", syncErr)
 	}
 	return nil
 }

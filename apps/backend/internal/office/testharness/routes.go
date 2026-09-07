@@ -96,7 +96,11 @@ func RegisterRoutes(
 	})
 	g.POST("/tasks", seedTaskHandler(repo, log))
 	g.POST("/task-sessions", seedTaskSessionHandler(repo, eventBus, log))
+	g.DELETE("/task-sessions/:id", deleteTaskSessionHandler(repo, eventBus, log))
 	g.POST("/messages", seedMessageHandler(repo, eventBus, log))
+	g.PATCH("/messages/:id", updateMessageHandler(repo, eventBus, log))
+	g.DELETE("/messages/:id", deleteMessageHandler(repo, eventBus, log))
+	g.POST("/turns/:id/complete", completeTurnHandler(repo, eventBus, log))
 	g.POST("/workflows", seedWorkflowHandler(repo, log))
 	g.PUT("/repositories/:id/git-remote", configureGitRemoteHandler(repo, log))
 	g.DELETE("/repositories/:id/git-remote", configureGitRemoteHandler(repo, log))
@@ -395,6 +399,34 @@ func statusForSeedSessionUpdateError(err error) int {
 	return http.StatusInternalServerError
 }
 
+func deleteTaskSessionHandler(
+	repo *sqliterepo.Repository,
+	eventBus bus.EventBus,
+	log *logger.Logger,
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sessionID := c.Param("id")
+		session, err := repo.GetTaskSession(c.Request.Context(), sessionID)
+		if err != nil || session == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task session not found"})
+			return
+		}
+		if err := repo.DeleteTaskSession(c.Request.Context(), sessionID); err != nil {
+			log.Error("delete seeded task session", zap.Error(err), zap.String("session_id", sessionID))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete task session"})
+			return
+		}
+		if eventBus != nil {
+			_ = eventBus.Publish(c.Request.Context(), events.SessionRemoved, bus.NewEvent(
+				events.SessionRemoved,
+				"office-testharness",
+				map[string]interface{}{testSessionIDKey: session.ID, testTaskIDKey: session.TaskID},
+			))
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	}
+}
+
 func getExistingSeedSession(ctx context.Context, repo *sqliterepo.Repository, req *seedTaskSessionRequest) *models.TaskSession {
 	if req.SessionID != "" {
 		existing, _ := repo.GetTaskSession(ctx, req.SessionID)
@@ -602,8 +634,15 @@ func publishSessionStateChanged(ctx context.Context, eventBus bus.EventBus, sess
 	}
 }
 
-// messageCreatedAtKey is the JSON key for seeded message timestamps.
-const messageCreatedAtKey = "created_at"
+// Event key constants keep the test mutation routes aligned with seed payloads.
+const (
+	messageCreatedAtKey = "created_at"
+	testSessionIDKey    = "session_id"
+	testMessageIDKey    = "message_id"
+	testCompletedAtKey  = "completed_at"
+	testTaskIDKey       = "task_id"
+	testTurnIDKey       = "turn_id"
+)
 
 type seedMessageRequest struct {
 	SessionID string                 `json:"session_id"`
@@ -733,7 +772,7 @@ func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log 
 		}
 
 		publishMessageAdded(ctx, eventBus, msg, log)
-		c.JSON(http.StatusOK, gin.H{"message_id": msg.ID})
+		c.JSON(http.StatusOK, gin.H{testMessageIDKey: msg.ID, testTurnIDKey: msg.TurnID})
 	}
 }
 
@@ -743,10 +782,10 @@ func publishMessageAdded(ctx context.Context, eventBus bus.EventBus, msg *models
 		return
 	}
 	data := map[string]interface{}{
-		"message_id":     msg.ID,
-		"session_id":     msg.TaskSessionID,
-		"task_id":        msg.TaskID,
-		"turn_id":        msg.TurnID,
+		testMessageIDKey: msg.ID,
+		testSessionIDKey: msg.TaskSessionID,
+		testTaskIDKey:    msg.TaskID,
+		testTurnIDKey:    msg.TurnID,
 		"author_type":    string(msg.AuthorType),
 		"content":        msg.Content,
 		"type":           string(msg.Type),
@@ -754,6 +793,7 @@ func publishMessageAdded(ctx context.Context, eventBus bus.EventBus, msg *models
 		// RFC3339Nano preserves fractional precision so seeded user prompts
 		// order deterministically on the client.
 		messageCreatedAtKey: msg.CreatedAt.Format(time.RFC3339Nano),
+		"updated_at":        msg.UpdatedAt.Format(time.RFC3339Nano),
 	}
 	// User rows carry their stable prompt ordinal in the live WS event.
 	if msg.PromptIndex > 0 {
@@ -762,8 +802,124 @@ func publishMessageAdded(ctx context.Context, eventBus bus.EventBus, msg *models
 	if msg.Metadata != nil {
 		data["metadata"] = msg.Metadata
 	}
-	if err := eventBus.Publish(ctx, events.MessageAdded, bus.NewEvent(events.MessageAdded, "e2e-mock", data)); err != nil {
-		log.Warn("test harness: publish message added failed", zap.Error(err))
+	publishMessageEvent(ctx, eventBus, events.MessageAdded, data, log)
+}
+
+func publishMessageEvent(
+	ctx context.Context,
+	eventBus bus.EventBus,
+	eventType string,
+	data map[string]interface{},
+	log *logger.Logger,
+) {
+	if eventBus == nil {
+		return
+	}
+	if err := eventBus.Publish(ctx, eventType, bus.NewEvent(eventType, "e2e-mock", data)); err != nil {
+		log.Warn("test harness: publish message event failed", zap.Error(err))
+	}
+}
+
+func updateMessageHandler(
+	repo *sqliterepo.Repository,
+	eventBus bus.EventBus,
+	log *logger.Logger,
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var request struct {
+			Content string `json:"content" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		message, err := repo.GetMessage(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+			return
+		}
+		message.Content = request.Content
+		message.UpdatedAt = time.Now().UTC()
+		if err := repo.UpdateMessage(c.Request.Context(), message); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		data := messageEventData(message)
+		publishMessageEvent(c.Request.Context(), eventBus, events.MessageUpdated, data, log)
+		c.JSON(http.StatusOK, gin.H{"message_id": message.ID, "updated_at": data["updated_at"]})
+	}
+}
+
+func deleteMessageHandler(
+	repo *sqliterepo.Repository,
+	eventBus bus.EventBus,
+	log *logger.Logger,
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		message, err := repo.GetMessage(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+			return
+		}
+		if err := repo.DeleteMessage(c.Request.Context(), message.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		data := messageEventData(message)
+		publishMessageEvent(c.Request.Context(), eventBus, events.MessageDeleted, data, log)
+		c.JSON(http.StatusOK, gin.H{testMessageIDKey: message.ID})
+	}
+}
+
+func messageEventData(message *models.Message) map[string]interface{} {
+	data := map[string]interface{}{
+		testMessageIDKey: message.ID, testSessionIDKey: message.TaskSessionID,
+		testTaskIDKey: message.TaskID, testTurnIDKey: message.TurnID,
+		"author_type": string(message.AuthorType), "content": message.Content,
+		"type":              string(message.Type),
+		messageCreatedAtKey: message.CreatedAt.Format(time.RFC3339Nano),
+		"updated_at":        message.UpdatedAt.Format(time.RFC3339Nano),
+	}
+	if message.PromptIndex > 0 {
+		data["prompt_index"] = message.PromptIndex
+	}
+	if message.Metadata != nil {
+		data["metadata"] = message.Metadata
+	}
+	return data
+}
+
+func completeTurnHandler(
+	repo *sqliterepo.Repository,
+	eventBus bus.EventBus,
+	log *logger.Logger,
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		turnID := c.Param("id")
+		if err := repo.CompleteTurn(c.Request.Context(), turnID); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "turn not found"})
+			return
+		}
+		turn, err := repo.GetTurn(c.Request.Context(), turnID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		data := map[string]interface{}{
+			"id": turn.ID, testSessionIDKey: turn.TaskSessionID, testTaskIDKey: turn.TaskID,
+			"started_at": turn.StartedAt, testCompletedAtKey: turn.CompletedAt,
+			"updated_at": turn.UpdatedAt,
+		}
+		if eventBus != nil {
+			if err := eventBus.Publish(
+				c.Request.Context(),
+				events.TurnCompleted,
+				bus.NewEvent(events.TurnCompleted, "e2e-mock", data),
+			); err != nil {
+				log.Warn("test harness: publish turn completion failed", zap.Error(err))
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{testTurnIDKey: turn.ID, testCompletedAtKey: turn.CompletedAt})
 	}
 }
 

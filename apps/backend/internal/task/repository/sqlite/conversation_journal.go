@@ -1,0 +1,535 @@
+package sqlite
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/kandev/kandev/internal/db/dialect"
+	"github.com/kandev/kandev/internal/sysprompt"
+)
+
+const conversationJournalTables = `
+CREATE TABLE IF NOT EXISTS conversation_session_streams (
+	session_id TEXT PRIMARY KEY,
+	watermark BIGINT NOT NULL DEFAULT 0,
+	terminal BOOLEAN NOT NULL DEFAULT FALSE,
+	updated_at TIMESTAMP NOT NULL
+);
+CREATE TABLE IF NOT EXISTS conversation_session_events (
+	session_id TEXT NOT NULL,
+	sequence BIGINT NOT NULL,
+	event_id TEXT NOT NULL UNIQUE,
+	protocol_version INTEGER NOT NULL DEFAULT 1,
+	event_type TEXT NOT NULL,
+	task_id TEXT,
+	payload TEXT NOT NULL,
+	created_at TIMESTAMP NOT NULL,
+	PRIMARY KEY (session_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_events_created
+	ON conversation_session_events(created_at);
+CREATE TABLE IF NOT EXISTS conversation_message_versions (
+	session_id TEXT NOT NULL,
+	message_id TEXT NOT NULL,
+	row_sequence BIGINT NOT NULL,
+	task_id TEXT,
+	author_type TEXT,
+	created_at TIMESTAMP NOT NULL,
+	tombstone BOOLEAN NOT NULL DEFAULT FALSE,
+	payload TEXT NOT NULL,
+	PRIMARY KEY (session_id, message_id, row_sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_message_snapshot
+	ON conversation_message_versions(session_id, row_sequence, created_at, message_id);
+CREATE TABLE IF NOT EXISTS conversation_turn_versions (
+	session_id TEXT NOT NULL,
+	turn_id TEXT NOT NULL,
+	row_sequence BIGINT NOT NULL,
+	task_id TEXT,
+	started_at TIMESTAMP NOT NULL,
+	tombstone BOOLEAN NOT NULL DEFAULT FALSE,
+	payload TEXT NOT NULL,
+	PRIMARY KEY (session_id, turn_id, row_sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_turn_snapshot
+	ON conversation_turn_versions(session_id, row_sequence, started_at, turn_id);
+`
+
+func (r *Repository) initConversationJournalSchema() error {
+	if _, err := r.db.Exec(conversationJournalTables); err != nil {
+		return fmt.Errorf("create conversation journal tables: %w", err)
+	}
+	var err error
+	if dialect.IsPostgres(r.db.DriverName()) {
+		err = r.initPostgresConversationJournalTriggers()
+	} else {
+		err = r.initSQLiteConversationJournalTriggers()
+	}
+	if err != nil {
+		return err
+	}
+	return r.backfillConversationJournal()
+}
+
+type conversationJournalMessageSeed struct {
+	ID            string    `db:"id"`
+	TaskSessionID string    `db:"task_session_id"`
+	TaskID        string    `db:"task_id"`
+	TurnID        string    `db:"turn_id"`
+	AuthorType    string    `db:"author_type"`
+	AuthorID      string    `db:"author_id"`
+	Content       string    `db:"content"`
+	RequestsInput bool      `db:"requests_input"`
+	MessageType   string    `db:"message_type"`
+	Metadata      string    `db:"metadata"`
+	CreatedAt     time.Time `db:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"`
+	PromptIndex   int       `db:"prompt_index"`
+}
+
+type conversationJournalTurnSeed struct {
+	ID                 string     `db:"id"`
+	TaskSessionID      string     `db:"task_session_id"`
+	TaskID             string     `db:"task_id"`
+	ExecutionProfileID string     `db:"execution_profile_id"`
+	RouteGeneration    int64      `db:"route_generation"`
+	Metadata           string     `db:"metadata"`
+	StartedAt          time.Time  `db:"started_at"`
+	CompletedAt        *time.Time `db:"completed_at"`
+	CreatedAt          time.Time  `db:"created_at"`
+	UpdatedAt          time.Time  `db:"updated_at"`
+}
+
+func (r *Repository) backfillConversationJournal() error {
+	var turns []conversationJournalTurnSeed
+	if err := r.db.Select(&turns, `
+		SELECT t.id, t.task_session_id, t.task_id, t.execution_profile_id, t.route_generation,
+			t.metadata, t.started_at, t.completed_at, t.created_at, t.updated_at
+		FROM task_session_turns t
+		WHERE NOT EXISTS (
+			SELECT 1 FROM conversation_turn_versions v
+			WHERE v.session_id = t.task_session_id AND v.turn_id = t.id
+		)
+		ORDER BY t.task_session_id, t.started_at, t.id`); err != nil {
+		return fmt.Errorf("list conversation turn backfill: %w", err)
+	}
+	var messages []conversationJournalMessageSeed
+	if err := r.db.Select(&messages, `
+		SELECT m.id, m.task_session_id, m.task_id, m.turn_id, m.author_type, m.author_id,
+			m.content, m.requests_input, m.type AS message_type, m.metadata,
+			m.created_at, m.updated_at, m.prompt_seq AS prompt_index
+		FROM task_session_messages m
+		WHERE NOT EXISTS (
+			SELECT 1 FROM conversation_message_versions v
+			WHERE v.session_id = m.task_session_id AND v.message_id = m.id
+		)
+		ORDER BY m.task_session_id, m.created_at, m.id`); err != nil {
+		return fmt.Errorf("list conversation message backfill: %w", err)
+	}
+	if len(turns) == 0 && len(messages) == 0 {
+		return nil
+	}
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("begin conversation journal backfill: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, turn := range turns {
+		if err := r.backfillConversationTurn(tx, turn); err != nil {
+			return err
+		}
+	}
+	for _, message := range messages {
+		if err := r.backfillConversationMessage(tx, message); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit conversation journal backfill: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) nextConversationJournalSequence(tx *sqlx.Tx, sessionID string) (uint64, error) {
+	var sequence uint64
+	query := r.db.Rebind(`UPDATE conversation_session_streams
+		SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP
+		WHERE session_id = ? RETURNING watermark`)
+	err := tx.Get(&sequence, query, sessionID)
+	if err == nil {
+		return sequence, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, fmt.Errorf("advance conversation journal sequence: %w", err)
+	}
+	query = r.db.Rebind(`INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+		VALUES (?, 1, FALSE, CURRENT_TIMESTAMP)`)
+	if _, err := tx.Exec(query, sessionID); err != nil {
+		return 0, fmt.Errorf("initialize conversation journal sequence: %w", err)
+	}
+	return 1, nil
+}
+
+//nolint:goconst // Backfill payload values mirror the public event contract.
+func (r *Repository) backfillConversationTurn(tx *sqlx.Tx, turn conversationJournalTurnSeed) error {
+	sequence, err := r.nextConversationJournalSequence(tx, turn.TaskSessionID)
+	if err != nil {
+		return err
+	}
+	eventType := "session.turn.started"
+	if turn.CompletedAt != nil {
+		eventType = "session.turn.completed"
+	}
+	payload, err := json.Marshal(map[string]any{
+		"type": eventType, "session_id": turn.TaskSessionID, "task_id": journalTaskID(turn.TaskID),
+		"id": turn.ID, "execution_profile_id": turn.ExecutionProfileID, "route_generation": turn.RouteGeneration,
+		"started_at": turn.StartedAt.UTC().Format(time.RFC3339Nano), "completed_at": journalTime(turn.CompletedAt),
+		"metadata_json": turn.Metadata, "created_at": turn.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at": turn.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return fmt.Errorf("encode conversation turn backfill: %w", err)
+	}
+	query := r.db.Rebind(`INSERT INTO conversation_turn_versions(
+		session_id, turn_id, row_sequence, task_id, started_at, tombstone, payload
+	) VALUES (?, ?, ?, ?, ?, FALSE, ?)`)
+	if _, err := tx.Exec(query, turn.TaskSessionID, turn.ID, sequence, journalTaskID(turn.TaskID), turn.StartedAt, payload); err != nil {
+		return fmt.Errorf("insert conversation turn backfill version: %w", err)
+	}
+	return r.insertConversationBackfillEvent(tx, turn.TaskSessionID, turn.TaskID, sequence, eventType, payload)
+}
+
+//nolint:goconst // Backfill payload values mirror the public event contract.
+func (r *Repository) backfillConversationMessage(tx *sqlx.Tx, message conversationJournalMessageSeed) error {
+	sequence, err := r.nextConversationJournalSequence(tx, message.TaskSessionID)
+	if err != nil {
+		return err
+	}
+	var metadata map[string]any
+	_ = json.Unmarshal([]byte(message.Metadata), &metadata)
+	payload, err := json.Marshal(map[string]any{
+		"type": "message.added", "session_id": message.TaskSessionID, "task_id": journalTaskID(message.TaskID),
+		"message_id": message.ID, "turn_id": message.TurnID, "author_type": message.AuthorType,
+		"content":      sysprompt.StripSystemContent(message.Content),
+		"message_type": message.MessageType, "created_at": message.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at": message.UpdatedAt.UTC().Format(time.RFC3339Nano), "prompt_index": message.PromptIndex,
+		"sender_task_id": metadata["sender_task_id"],
+	})
+	if err != nil {
+		return fmt.Errorf("encode conversation message backfill: %w", err)
+	}
+	query := r.db.Rebind(`INSERT INTO conversation_message_versions(
+		session_id, message_id, row_sequence, task_id, author_type, created_at, tombstone, payload
+	) VALUES (?, ?, ?, ?, ?, ?, FALSE, ?)`)
+	if _, err := tx.Exec(query, message.TaskSessionID, message.ID, sequence, journalTaskID(message.TaskID), message.AuthorType, message.CreatedAt, payload); err != nil {
+		return fmt.Errorf("insert conversation message backfill version: %w", err)
+	}
+	return r.insertConversationBackfillEvent(tx, message.TaskSessionID, message.TaskID, sequence, "message.added", payload)
+}
+
+func (r *Repository) insertConversationBackfillEvent(
+	tx *sqlx.Tx,
+	sessionID string,
+	taskID string,
+	sequence uint64,
+	eventType string,
+	payload []byte,
+) error {
+	query := r.db.Rebind(`INSERT INTO conversation_session_events(
+		session_id, sequence, event_id, protocol_version, event_type, task_id, payload, created_at
+	) VALUES (?, ?, ?, 1, ?, ?, ?, CURRENT_TIMESTAMP)`)
+	if _, err := tx.Exec(query, sessionID, sequence, sessionID+":"+strconv.FormatUint(sequence, 10), eventType, journalTaskID(taskID), payload); err != nil {
+		return fmt.Errorf("insert conversation journal backfill event: %w", err)
+	}
+	return nil
+}
+
+func journalTaskID(taskID string) any {
+	if taskID == "" {
+		return nil
+	}
+	return taskID
+}
+
+func journalTime(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+//nolint:funlen // Trigger definitions are kept together so schema initialization is atomic.
+func (r *Repository) initSQLiteConversationJournalTriggers() error {
+	_, err := r.db.Exec(`
+DROP TRIGGER IF EXISTS conversation_message_insert;
+CREATE TRIGGER IF NOT EXISTS conversation_message_insert
+AFTER INSERT ON task_session_messages
+BEGIN
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (NEW.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_message_versions(session_id, message_id, row_sequence, task_id, author_type, created_at, tombstone, payload)
+	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
+		json_object('type','message.added','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
+			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
+			'content',trim(CASE WHEN instr(NEW.content,'<kandev-system>') > 0 AND instr(NEW.content,'</kandev-system>') > instr(NEW.content,'<kandev-system>') THEN substr(NEW.content,1,instr(NEW.content,'<kandev-system>')-1) || substr(NEW.content,instr(NEW.content,'</kandev-system>')+length('</kandev-system>')) ELSE NEW.content END),'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
+			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
+			'sender_task_id',CASE WHEN json_valid(NEW.metadata) THEN json_extract(NEW.metadata,'$.sender_task_id') END)
+	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
+	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
+	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'message.added', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
+	FROM conversation_session_streams JOIN conversation_message_versions
+		ON conversation_message_versions.session_id = conversation_session_streams.session_id
+		AND conversation_message_versions.message_id = NEW.id
+		AND conversation_message_versions.row_sequence = conversation_session_streams.watermark
+	WHERE conversation_session_streams.session_id = NEW.task_session_id;
+END;
+
+DROP TRIGGER IF EXISTS conversation_message_update;
+CREATE TRIGGER IF NOT EXISTS conversation_message_update
+AFTER UPDATE ON task_session_messages
+BEGIN
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (NEW.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_message_versions(session_id, message_id, row_sequence, task_id, author_type, created_at, tombstone, payload)
+	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
+		json_object('type','message.updated','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
+			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
+			'content',trim(CASE WHEN instr(NEW.content,'<kandev-system>') > 0 AND instr(NEW.content,'</kandev-system>') > instr(NEW.content,'<kandev-system>') THEN substr(NEW.content,1,instr(NEW.content,'<kandev-system>')-1) || substr(NEW.content,instr(NEW.content,'</kandev-system>')+length('</kandev-system>')) ELSE NEW.content END),'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
+			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
+			'sender_task_id',CASE WHEN json_valid(NEW.metadata) THEN json_extract(NEW.metadata,'$.sender_task_id') END)
+	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
+	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
+	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'message.updated', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
+	FROM conversation_session_streams JOIN conversation_message_versions
+		ON conversation_message_versions.session_id = conversation_session_streams.session_id
+		AND conversation_message_versions.message_id = NEW.id
+		AND conversation_message_versions.row_sequence = conversation_session_streams.watermark
+	WHERE conversation_session_streams.session_id = NEW.task_session_id;
+END;
+DROP TRIGGER IF EXISTS conversation_message_delete;
+
+CREATE TRIGGER IF NOT EXISTS conversation_message_delete
+BEFORE DELETE ON task_session_messages
+BEGIN
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (OLD.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_message_versions(session_id, message_id, row_sequence, task_id, author_type, created_at, tombstone, payload)
+	SELECT OLD.task_session_id, OLD.id, watermark, NULLIF(OLD.task_id, ''), OLD.author_type, OLD.created_at, TRUE,
+		json_object('type','message.deleted','session_id',OLD.task_session_id,'task_id',NULLIF(OLD.task_id,''),'message_id',OLD.id)
+	FROM conversation_session_streams WHERE session_id = OLD.task_session_id;
+	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
+	SELECT OLD.task_session_id, watermark, OLD.task_session_id || ':' || watermark, 'message.deleted', NULLIF(OLD.task_id,''), payload, CURRENT_TIMESTAMP
+	FROM conversation_session_streams JOIN conversation_message_versions
+		ON conversation_message_versions.session_id = conversation_session_streams.session_id
+		AND conversation_message_versions.message_id = OLD.id
+		AND conversation_message_versions.row_sequence = conversation_session_streams.watermark
+	WHERE conversation_session_streams.session_id = OLD.task_session_id;
+END;
+DROP TRIGGER IF EXISTS conversation_turn_insert;
+
+CREATE TRIGGER IF NOT EXISTS conversation_turn_insert
+AFTER INSERT ON task_session_turns
+BEGIN
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (NEW.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_turn_versions(session_id, turn_id, row_sequence, task_id, started_at, tombstone, payload)
+	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.started_at, FALSE,
+		json_object('type','session.turn.started','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
+			'id',NEW.id,'started_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.started_at),
+			'completed_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.completed_at),
+			'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
+			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.started_at)))
+	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
+	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
+	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'session.turn.started', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
+	FROM conversation_session_streams JOIN conversation_turn_versions
+		ON conversation_turn_versions.session_id = conversation_session_streams.session_id
+		AND conversation_turn_versions.turn_id = NEW.id
+		AND conversation_turn_versions.row_sequence = conversation_session_streams.watermark
+	WHERE conversation_session_streams.session_id = NEW.task_session_id;
+END;
+DROP TRIGGER IF EXISTS conversation_turn_complete;
+
+CREATE TRIGGER IF NOT EXISTS conversation_turn_complete
+AFTER UPDATE OF completed_at ON task_session_turns
+WHEN OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL
+BEGIN
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (NEW.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_turn_versions(session_id, turn_id, row_sequence, task_id, started_at, tombstone, payload)
+	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.started_at, FALSE,
+		json_object('type','session.turn.completed','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
+			'id',NEW.id,'started_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.started_at),
+			'completed_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.completed_at),
+			'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
+			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at)))
+	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
+	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
+	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'session.turn.completed', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
+	FROM conversation_session_streams JOIN conversation_turn_versions
+		ON conversation_turn_versions.session_id = conversation_session_streams.session_id
+		AND conversation_turn_versions.turn_id = NEW.id
+		AND conversation_turn_versions.row_sequence = conversation_session_streams.watermark
+	WHERE conversation_session_streams.session_id = NEW.task_session_id;
+END;
+
+DROP TRIGGER IF EXISTS conversation_session_delete;
+CREATE TRIGGER IF NOT EXISTS conversation_session_delete
+AFTER DELETE ON task_sessions
+BEGIN
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (OLD.id, 1, TRUE, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, terminal = TRUE, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
+	SELECT OLD.id, watermark, OLD.id || ':' || watermark, 'session.removed', NULLIF(OLD.task_id,''),
+		json_object('type','session.removed','session_id',OLD.id,'task_id',NULLIF(OLD.task_id,'')), CURRENT_TIMESTAMP
+	FROM conversation_session_streams WHERE session_id = OLD.id;
+END;
+`)
+	if err != nil {
+		return fmt.Errorf("create SQLite conversation journal triggers: %w", err)
+	}
+	if _, err := r.db.Exec(`
+		UPDATE conversation_message_versions
+		SET payload = json_set(payload, '$.content',
+			trim(CASE WHEN instr(json_extract(payload, '$.content'), '<kandev-system>') > 0
+				AND instr(json_extract(payload, '$.content'), '</kandev-system>') > instr(json_extract(payload, '$.content'), '<kandev-system>')
+				THEN substr(json_extract(payload, '$.content'), 1, instr(json_extract(payload, '$.content'), '<kandev-system>') - 1)
+					|| substr(json_extract(payload, '$.content'), instr(json_extract(payload, '$.content'), '</kandev-system>') + length('</kandev-system>'))
+				ELSE json_extract(payload, '$.content') END))
+		WHERE json_extract(payload, '$.content') LIKE '%<kandev-system>%'
+	`); err != nil {
+		return fmt.Errorf("sanitize SQLite conversation message journal: %w", err)
+	}
+	if _, err := r.db.Exec(`
+		UPDATE conversation_session_events
+		SET payload = json_set(payload, '$.content',
+			trim(CASE WHEN instr(json_extract(payload, '$.content'), '<kandev-system>') > 0
+				AND instr(json_extract(payload, '$.content'), '</kandev-system>') > instr(json_extract(payload, '$.content'), '<kandev-system>')
+				THEN substr(json_extract(payload, '$.content'), 1, instr(json_extract(payload, '$.content'), '<kandev-system>') - 1)
+					|| substr(json_extract(payload, '$.content'), instr(json_extract(payload, '$.content'), '</kandev-system>') + length('</kandev-system>'))
+				ELSE json_extract(payload, '$.content') END))
+		WHERE json_extract(payload, '$.content') LIKE '%<kandev-system>%'
+	`); err != nil {
+		return fmt.Errorf("sanitize SQLite conversation event journal: %w", err)
+	}
+	return nil
+}
+
+//nolint:funlen // Trigger definitions are kept together so schema initialization is atomic.
+func (r *Repository) initPostgresConversationJournalTriggers() error {
+	_, err := r.db.Exec(`
+CREATE OR REPLACE FUNCTION conversation_next_sequence(p_session_id TEXT, p_terminal BOOLEAN DEFAULT FALSE)
+RETURNS BIGINT AS $$
+DECLARE next_value BIGINT;
+BEGIN
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (p_session_id, 1, p_terminal, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET
+		watermark = conversation_session_streams.watermark + 1,
+		terminal = conversation_session_streams.terminal OR EXCLUDED.terminal,
+		updated_at = CURRENT_TIMESTAMP
+	RETURNING watermark INTO next_value;
+	RETURN next_value;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION conversation_safe_jsonb(value TEXT) RETURNS JSONB AS $$
+BEGIN
+	RETURN COALESCE(NULLIF(value, ''), '{}')::jsonb;
+EXCEPTION WHEN others THEN
+	RETURN '{}'::jsonb;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION conversation_visible_content(value TEXT) RETURNS TEXT AS $$
+BEGIN
+	RETURN btrim(regexp_replace(value, '<kandev-system>.*?</kandev-system>[[:space:]]*', '', 'g', 'n'));
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION conversation_message_journal() RETURNS TRIGGER AS $$
+DECLARE seq BIGINT; event_name TEXT; source_row task_session_messages%ROWTYPE; deleted BOOLEAN;
+BEGIN
+	deleted := TG_OP = 'DELETE';
+	IF deleted THEN source_row := OLD; event_name := 'message.deleted';
+	ELSIF TG_OP = 'INSERT' THEN source_row := NEW; event_name := 'message.added';
+	ELSE source_row := NEW; event_name := 'message.updated'; END IF;
+	seq := conversation_next_sequence(source_row.task_session_id);
+	INSERT INTO conversation_message_versions(session_id,message_id,row_sequence,task_id,author_type,created_at,tombstone,payload)
+	VALUES (source_row.task_session_id,source_row.id,seq,NULLIF(source_row.task_id,''),source_row.author_type,source_row.created_at,deleted,
+		CASE WHEN deleted THEN json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),'message_id',source_row.id)::text
+		ELSE json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),
+			'message_id',source_row.id,'turn_id',NULLIF(source_row.turn_id,''),'author_type',source_row.author_type,
+			'content',conversation_visible_content(source_row.content),'message_type',source_row.type,'created_at',source_row.created_at,
+			'updated_at',COALESCE(source_row.updated_at,source_row.created_at),'prompt_index',source_row.prompt_seq,
+			'sender_task_id',conversation_safe_jsonb(source_row.metadata) ->> 'sender_task_id')::text END);
+DROP TRIGGER IF EXISTS conversation_message_journal_trigger ON task_session_messages;
+CREATE TRIGGER conversation_message_journal_trigger AFTER INSERT OR UPDATE OR DELETE ON task_session_messages
+FOR EACH ROW EXECUTE FUNCTION conversation_message_journal();
+
+CREATE OR REPLACE FUNCTION conversation_turn_journal() RETURNS TRIGGER AS $$
+DECLARE seq BIGINT; event_name TEXT;
+BEGIN
+	IF TG_OP = 'UPDATE' AND NOT (OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL) THEN RETURN NEW; END IF;
+	event_name := CASE WHEN TG_OP = 'INSERT' THEN 'session.turn.started' ELSE 'session.turn.completed' END;
+	seq := conversation_next_sequence(NEW.task_session_id);
+	INSERT INTO conversation_turn_versions(session_id,turn_id,row_sequence,task_id,started_at,tombstone,payload)
+	VALUES (NEW.task_session_id,NEW.id,seq,NULLIF(NEW.task_id,''),NEW.started_at,FALSE,
+		json_build_object('type',event_name,'session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
+			'id',NEW.id,'started_at',NEW.started_at,'completed_at',NEW.completed_at,
+			'created_at',NEW.created_at,
+			'updated_at',COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at))::text);
+	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
+	SELECT NEW.task_session_id,seq,NEW.task_session_id || ':' || seq,event_name,NULLIF(NEW.task_id,''),payload,CURRENT_TIMESTAMP
+	FROM conversation_turn_versions WHERE session_id=NEW.task_session_id AND turn_id=NEW.id AND row_sequence=seq;
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS conversation_turn_journal_trigger ON task_session_turns;
+CREATE TRIGGER conversation_turn_journal_trigger AFTER INSERT OR UPDATE ON task_session_turns
+FOR EACH ROW EXECUTE FUNCTION conversation_turn_journal();
+
+CREATE OR REPLACE FUNCTION conversation_session_delete_journal() RETURNS TRIGGER AS $$
+DECLARE seq BIGINT;
+BEGIN
+	seq := conversation_next_sequence(OLD.id, TRUE);
+	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
+	VALUES (OLD.id,seq,OLD.id || ':' || seq,'session.removed',NULLIF(OLD.task_id,''),
+		json_build_object('type','session.removed','session_id',OLD.id,'task_id',NULLIF(OLD.task_id,''))::text,CURRENT_TIMESTAMP);
+	RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS conversation_session_delete_trigger ON task_sessions;
+CREATE TRIGGER conversation_session_delete_trigger AFTER DELETE ON task_sessions
+FOR EACH ROW EXECUTE FUNCTION conversation_session_delete_journal();
+	`)
+	if err != nil {
+		return fmt.Errorf("create PostgreSQL conversation journal triggers: %w", err)
+	}
+	if _, err := r.db.Exec(`
+		UPDATE conversation_message_versions
+		SET payload = jsonb_set(payload::jsonb, '{content}',
+			to_jsonb(conversation_visible_content(payload::jsonb ->> 'content')))::text
+		WHERE payload::jsonb ? 'content'
+	`); err != nil {
+		return fmt.Errorf("sanitize PostgreSQL conversation message journal: %w", err)
+	}
+	if _, err := r.db.Exec(`
+		UPDATE conversation_session_events
+		SET payload = jsonb_set(payload::jsonb, '{content}',
+			to_jsonb(conversation_visible_content(payload::jsonb ->> 'content')))::text
+		WHERE payload::jsonb ? 'content'
+	`); err != nil {
+		return fmt.Errorf("sanitize PostgreSQL conversation event journal: %w", err)
+	}
+	return nil
+}

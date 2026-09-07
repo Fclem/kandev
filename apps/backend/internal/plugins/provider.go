@@ -124,7 +124,13 @@ func Provide(cfg *config.Config, dbPool *db.Pool, secrets SecretVault, eventBus 
 		svc.SetWebRuntime(webapp.NewRuntime(webapp.NewTokenManager(nil), artifactStore, svc.validateWebAppBinding, frameAncestors))
 	}
 	svc.SetSecrets(secrets)
-	svc.SetPluginsDir(dir)
+	svc.SetConversationJournalDB(dbPool.Writer())
+	if err := svc.SetPluginsDir(dir); err != nil {
+		return nil, nil, fmt.Errorf("plugins: initialize durable conversation state: %w", err)
+	}
+	if _, err := svc.syncAllCommittedSessionEvents(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("plugins: synchronize committed conversation journal: %w", err)
+	}
 
 	if err := attachMarketplace(svc, dbPool, log); err != nil {
 		// Non-fatal: the rest of the plugin system still works without the
@@ -147,9 +153,11 @@ func Provide(cfg *config.Config, dbPool *db.Pool, secrets SecretVault, eventBus 
 	if cfg.Features.Canvases {
 		stopArtifactCleanup = svc.StartWebAppArtifactCleanupWorker(context.Background())
 	}
+	stopSessionEventMaintenance := svc.StartSessionEventMaintenanceWorker(context.Background())
 
 	cleanup := func() error {
 		stopArtifactCleanup()
+		stopSessionEventMaintenance()
 		svc.closeWebAppEvents()
 		rt.StopAll()
 		return nil

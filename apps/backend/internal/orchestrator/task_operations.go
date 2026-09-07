@@ -1507,7 +1507,7 @@ func (s *Service) prepareSessionForStart(
 		// session row. Compensate before returning so callers never observe a
 		// partial sibling session when the required parent/group workspace is
 		// unavailable.
-		if deleteErr := s.repo.DeleteTaskSession(ctx, sessionID); deleteErr != nil {
+		if deleteErr := s.deleteSessionAndPublishRemoval(ctx, task.ID, sessionID); deleteErr != nil {
 			s.logger.Warn("failed to compensate inherited workspace session",
 				zap.String("session_id", sessionID), zap.Error(deleteErr))
 		}
@@ -3419,6 +3419,22 @@ func (s *Service) StopSessionSynchronously(ctx context.Context, sessionID string
 	return s.executor.StopSessionSynchronously(ctx, sessionID, reason, force)
 }
 
+// deleteSessionAndPublishRemoval commits a session deletion before publishing
+// the terminal event consumed by ordered conversation subscribers.
+func (s *Service) deleteSessionAndPublishRemoval(ctx context.Context, taskID, sessionID string) error {
+	if err := s.repo.DeleteTaskSession(ctx, sessionID); err != nil {
+		return err
+	}
+	if s.eventBus != nil {
+		return s.eventBus.Publish(ctx, events.SessionRemoved, bus.NewEvent(
+			events.SessionRemoved,
+			"orchestrator",
+			map[string]interface{}{metaKeySessionID: sessionID, metaKeyTaskID: taskID},
+		))
+	}
+	return nil
+}
+
 // DeleteSession deletes a session that is not currently running.
 func (s *Service) DeleteSession(ctx context.Context, sessionID string) error {
 	if err := s.authorizeSession(ctx, sessionID); err != nil {
@@ -3494,7 +3510,7 @@ func (s *Service) deleteSessionAndPublishError(ctx context.Context, taskID, sess
 	lock.Lock()
 	defer lock.Unlock()
 
-	if err := s.repo.DeleteTaskSession(ctx, sessionID); err != nil {
+	if err := s.deleteSessionAndPublishRemoval(ctx, taskID, sessionID); err != nil {
 		return err
 	}
 	s.publishDeletedSessionError(ctx, taskID, sessionID)
@@ -3531,7 +3547,6 @@ func (s *Service) publishDeletedSessionError(ctx context.Context, taskID, sessio
 			zap.Error(err))
 	}
 }
-
 func (s *Service) newestRetainedSessionError(
 	ctx context.Context,
 	taskID string,

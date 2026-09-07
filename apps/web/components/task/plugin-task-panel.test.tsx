@@ -8,6 +8,11 @@ vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       tasks: { activeTaskId: mockActiveTaskId, activeSessionId: mockActiveSessionId },
+      taskSessions: {
+        items: {
+          session_1: { id: "session_1", is_passthrough: false, name: "Session" },
+        },
+      },
     }),
 }));
 
@@ -51,6 +56,117 @@ describe("PluginTaskPanel", () => {
     expect(screen.getByTestId("notes-body").textContent).toBe(
       "plugin:plugin-a:notes|task_1|session_1|desktop",
     );
+  });
+
+  it("passes session kind and a presentation-scoped navigation facade", () => {
+    const onOpenMessage = vi.fn(() => ({ status: "accepted" as const }));
+    function Notes(props: {
+      sessionKind: string | null;
+      conversation: { openMessage: (messageId: string) => { status: string } };
+    }) {
+      return (
+        <button type="button" onClick={() => props.conversation.openMessage("message-1")}>
+          {props.sessionKind}
+        </button>
+      );
+    }
+    pluginRegistry
+      .forPlugin("plugin-a")
+      .registerTaskPanel({ id: "notes", title: "Notes", Component: Notes, mobileEnabled: true });
+
+    render(
+      <PluginTaskPanel
+        pluginId="plugin-a"
+        panelKey="notes"
+        panelId="plugin:plugin-a:notes"
+        presentation="mobile"
+        onOpenMessage={onOpenMessage}
+      />,
+    );
+
+    screen.getByRole("button", { name: "managed" }).click();
+    expect(onOpenMessage).toHaveBeenCalledWith("message-1");
+  });
+
+  it("reports unavailable for invalid or rejected mobile navigation", () => {
+    let emptyResult = "";
+    let rejectedResult = "";
+    const onOpenMessage = vi.fn(() => ({ status: "unavailable" as const }));
+    function Notes(props: {
+      conversation: { openMessage: (messageId: string) => { status: string } };
+    }) {
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => (emptyResult = props.conversation.openMessage(" ").status)}
+          >
+            empty
+          </button>
+          <button
+            type="button"
+            onClick={() => (rejectedResult = props.conversation.openMessage("message-1").status)}
+          >
+            rejected
+          </button>
+        </>
+      );
+    }
+    pluginRegistry
+      .forPlugin("plugin-a")
+      .registerTaskPanel({ id: "notes", title: "Notes", Component: Notes, mobileEnabled: true });
+
+    render(
+      <PluginTaskPanel
+        pluginId="plugin-a"
+        panelKey="notes"
+        panelId="plugin:plugin-a:notes"
+        presentation="mobile"
+        onOpenMessage={onOpenMessage}
+      />,
+    );
+
+    screen.getByRole("button", { name: "empty" }).click();
+    expect(emptyResult).toBe("unavailable");
+    expect(onOpenMessage).not.toHaveBeenCalled();
+
+    screen.getByRole("button", { name: "rejected" }).click();
+    expect(rejectedResult).toBe("unavailable");
+    expect(onOpenMessage).toHaveBeenCalledWith("message-1");
+  });
+});
+
+describe("PluginTaskPanel failure containment", () => {
+  it("fails closed when a managed visibility predicate throws", () => {
+    function Notes() {
+      return <div>secret panel</div>;
+    }
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    pluginRegistry.forPlugin("plugin-a").registerTaskPanel({
+      id: "notes",
+      title: "Notes",
+      Component: Notes,
+      visible: () => {
+        throw new Error("predicate failed");
+      },
+    });
+
+    render(
+      <PluginTaskPanel
+        pluginId="plugin-a"
+        panelKey="notes"
+        panelId="plugin:plugin-a:notes"
+        presentation="desktop"
+      />,
+    );
+
+    expect(screen.queryByText("secret panel")).toBeNull();
+    expect(screen.getByText("This panel is no longer available.")).not.toBeNull();
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("plugin-a:notes"),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 
   it("renders a not-available fallback when the plugin is no longer registered (AC5)", () => {

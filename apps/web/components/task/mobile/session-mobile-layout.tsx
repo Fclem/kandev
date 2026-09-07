@@ -27,7 +27,11 @@ import type { MobileSessionPanel } from "@/lib/state/slices/ui/types";
 import type { OpenFileTab } from "@/lib/types/backend";
 import { useAppStore } from "@/components/state-provider";
 import { useNormalizedTaskReviewsState } from "../review-panel-provider";
-import type { ReviewItemSummary } from "@/lib/plugins/types";
+import type {
+  PluginOpenMessageResult,
+  PluginSessionKind,
+  ReviewItemSummary,
+} from "@/lib/plugins/types";
 import type { Canvas } from "@/lib/api/domains/canvas-api";
 import { reviewItemId, useReviewItemSelection } from "../review-selection";
 import { PluginTaskPanel } from "../plugin-task-panel";
@@ -159,7 +163,7 @@ type MobilePanelAreaProps = {
   handleClearSelectedDiff: () => void;
   handleOpenFile: (file: OpenFileTab) => void;
   handlePanelChangeAndClearSheet: (panel: MobileSessionPanel) => void;
-  onNavigateToPrompt: (messageId: string) => void;
+  onNavigateToPrompt: (messageId: string) => PluginOpenMessageResult;
   onScrollTargetConsumed?: (messageId: string) => void;
   mobileScrollTarget: PendingMessageScrollTarget | null;
   topNavHeight: string;
@@ -181,6 +185,26 @@ export function terminalPaddingBottom(
   return keyboardOpen
     ? `calc(${bottomOffset + KEYBAR_HEIGHT_PX}px - ${bottomNavHeight} - env(safe-area-inset-bottom, 0px))`
     : `${KEYBAR_HEIGHT_PX}px`;
+}
+
+function MobileTerminalPanel({
+  sessionId,
+  paddingBottom,
+}: {
+  sessionId: string | null;
+  paddingBottom: string;
+}) {
+  return (
+    <div
+      data-testid="terminal-panel"
+      className="flex-1 min-h-0 flex flex-col px-2"
+      style={{ paddingBottom }}
+    >
+      <SessionPanelContent className="p-0 flex-1 min-h-0 flex flex-col">
+        <MobileTerminalPane key={sessionId} sessionId={sessionId} />
+      </SessionPanelContent>
+    </div>
+  );
 }
 
 export function MobilePanelArea({
@@ -205,7 +229,6 @@ export function MobilePanelArea({
   onSelectReview,
 }: MobilePanelAreaProps) {
   const { keyboardOpen, bottomOffset } = useVisualViewportOffset();
-  const terminalPadding = terminalPaddingBottom(keyboardOpen, bottomOffset, bottomNavHeight);
   return (
     <div
       className="flex flex-col"
@@ -261,15 +284,10 @@ export function MobilePanelArea({
         </div>
       )}
       {currentMobilePanel === "terminal" && (
-        <div
-          data-testid="terminal-panel"
-          className="flex-1 min-h-0 flex flex-col px-2"
-          style={{ paddingBottom: terminalPadding }}
-        >
-          <SessionPanelContent className="p-0 flex-1 min-h-0 flex flex-col">
-            <MobileTerminalPane key={effectiveSessionId} sessionId={effectiveSessionId} />
-          </SessionPanelContent>
-        </div>
+        <MobileTerminalPanel
+          sessionId={effectiveSessionId}
+          paddingBottom={terminalPaddingBottom(keyboardOpen, bottomOffset, bottomNavHeight)}
+        />
       )}
       <MobileReviewPanel
         currentMobilePanel={currentMobilePanel}
@@ -277,7 +295,10 @@ export function MobilePanelArea({
         selectedReview={selectedReview}
         onSelectReview={onSelectReview}
       />
-      <MobilePluginPanel currentMobilePanel={currentMobilePanel} />
+      <MobilePluginPanel
+        currentMobilePanel={currentMobilePanel}
+        onOpenMessage={onNavigateToPrompt}
+      />
     </div>
   );
 }
@@ -302,7 +323,13 @@ function MobilePlanPanel({
  * plugin-contributed nav entries. A non-plugin id (the common case) is a
  * no-op, so this stays a single trailing branch instead of one per plugin.
  */
-function MobilePluginPanel({ currentMobilePanel }: { currentMobilePanel: MobileSessionPanel }) {
+function MobilePluginPanel({
+  currentMobilePanel,
+  onOpenMessage,
+}: {
+  currentMobilePanel: MobileSessionPanel;
+  onOpenMessage: (messageId: string) => PluginOpenMessageResult;
+}) {
   const parsed = parsePluginPanelId(currentMobilePanel);
   if (!parsed) return null;
   return (
@@ -312,6 +339,7 @@ function MobilePluginPanel({ currentMobilePanel }: { currentMobilePanel: MobileS
         panelKey={parsed.panelKey}
         panelId={currentMobilePanel}
         presentation="mobile"
+        onOpenMessage={onOpenMessage}
       />
     </div>
   );
@@ -521,6 +549,8 @@ export function useMobilePanelHandlers({
 
 type SessionMobileFooterProps = {
   sessionId: string | null;
+  taskId: string | null;
+  sessionKind: "managed" | "passthrough" | null;
   activePanel: MobileSessionPanel;
   onPanelChange: (panel: MobileSessionPanel) => void;
   showPromptHistory: boolean;
@@ -536,6 +566,8 @@ type SessionMobileFooterProps = {
 
 function SessionMobileFooter({
   sessionId,
+  taskId,
+  sessionKind,
   activePanel,
   onPanelChange,
   showPromptHistory,
@@ -567,6 +599,9 @@ function SessionMobileFooter({
         connectionIssueSeverity={connectionIssueSeverity}
         taskCanvases={taskCanvases}
         onOpenCanvas={onOpenCanvas}
+        taskId={taskId}
+        sessionId={sessionId}
+        sessionKind={sessionKind}
       />
     </>
   );
@@ -629,16 +664,20 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
     [handlePanelChangeAndClearSheet],
   );
   const handleNavigateToPrompt = useCallback(
-    (messageId: string) => {
-      if (!effectiveSessionId) return;
+    (messageId: string): PluginOpenMessageResult => {
+      const normalizedMessageId = messageId.trim();
+      if (!effectiveSessionId || normalizedMessageId === "") {
+        return { status: "unavailable" };
+      }
       const token = ++mobileScrollTokenRef.current;
       setMobileScrollTarget({
         sessionId: effectiveSessionId,
-        messageId,
+        messageId: normalizedMessageId,
         token,
         hostPanelId: "mobile-chat",
       });
       handlePanelChangeAndClearSheet("chat");
+      return { status: "accepted" };
     },
     [effectiveSessionId, handlePanelChangeAndClearSheet],
   );
@@ -658,6 +697,10 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
       setMobileScrollTarget(null);
     }
   }, [currentMobilePanel, effectiveMobilePanel]);
+  let sessionKind: PluginSessionKind = null;
+  if (effectiveSessionId) {
+    sessionKind = isPassthroughMode ? "passthrough" : "managed";
+  }
   return (
     <div className="h-dvh relative bg-background" data-testid="mobile-task-layout">
       <MobileTopBarSticky
@@ -691,6 +734,8 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
       />
       <StatusAwareSessionMobileFooter
         sessionId={effectiveSessionId ?? null}
+        taskId={activeTaskId ?? null}
+        sessionKind={sessionKind}
         activePanel={effectiveMobilePanel}
         onPanelChange={handleMobilePanelChange}
         planBadge={hasUnseenPlanUpdate}

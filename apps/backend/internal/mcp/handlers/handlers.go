@@ -3506,7 +3506,27 @@ func (h *Handlers) restoreSelectedTaskMessageSession(ctx context.Context, repo t
 			return err
 		}
 	}
-	return repo.DeleteTaskSession(ctx, rollback.selectedID)
+	return h.deleteSessionAndPublishRemoval(ctx, repo, selected)
+}
+func (h *Handlers) deleteSessionAndPublishRemoval(
+	ctx context.Context,
+	repo taskMessageSessionRollbackRepository,
+	session *models.TaskSession,
+) error {
+	if h.taskSvc != nil {
+		return h.taskSvc.DeleteSessionAndPublishRemoval(ctx, session.ID)
+	}
+	if err := repo.DeleteTaskSession(ctx, session.ID); err != nil {
+		return err
+	}
+	if h.eventBus == nil {
+		return nil
+	}
+	return h.eventBus.Publish(ctx, events.SessionRemoved, bus.NewEvent(
+		events.SessionRemoved,
+		"mcp-handlers",
+		map[string]interface{}{"session_id": session.ID, "task_id": session.TaskID},
+	))
 }
 
 func (r taskMessageReviewRollback) primarySessionID() string {

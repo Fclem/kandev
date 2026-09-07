@@ -70,6 +70,7 @@ const (
 	MessageAdded   = "message.added"
 	MessageUpdated = "message.updated"
 	MessageDeleted = "message.deleted"
+	SessionRemoved = "session.removed"
 )
 
 // Event types for message queue

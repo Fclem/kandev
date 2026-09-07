@@ -182,6 +182,20 @@ describe("assertBackendBinaryFresh", () => {
     expect(() => assertBackendBinaryFresh(backendDir, [binPath], {})).not.toThrow();
   });
 
+  it("ignores generated plugin fixture UI rebuilt after the backend binary", () => {
+    touch(
+      path.join(backendDir, "internal", "task", "service.go"),
+      new Date("2025-01-01T00:00:00Z"),
+    );
+    touch(binPath, new Date("2026-01-01T00:00:00Z"));
+    const generated = path.join(backendDir, "cmd", "plugin-fixture", "fixture-package", "ui");
+    fs.mkdirSync(generated, { recursive: true });
+    fs.writeFileSync(path.join(generated, "bundle.js"), "generated");
+    touch(path.join(generated, "bundle.js"), new Date("2026-06-01T00:00:00Z"));
+
+    expect(() => assertBackendBinaryFresh(backendDir, [binPath], {})).not.toThrow();
+  });
+
   it("ignores Go coverage and compiled-test artifacts left in the source tree", () => {
     // `make -C apps/backend test-coverage` writes these next to go.mod. They are
     // gitignored build outputs, so a test run must not demand a backend rebuild.

@@ -79,6 +79,14 @@ function acknowledge(socket: FakeWebSocket, request: SentRequest) {
   });
 }
 
+function acknowledgeWithResumeToken(socket: FakeWebSocket, request: SentRequest, token: string) {
+  socket.receive({
+    id: request.id,
+    type: "response",
+    payload: { success: true, resume_token: token },
+  });
+}
+
 beforeEach(() => {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   FakeWebSocket.reset();
@@ -103,7 +111,9 @@ describe("session subscription readiness", () => {
     expect(ready).toBe(false);
 
     acknowledge(socket, request);
-
+    await Promise.resolve();
+    expect(ready).toBe(false);
+    acknowledge(socket, sessionSubscribeRequest(socket, 1));
     await expect(subscription.ready).resolves.toBeUndefined();
     expect(ready).toBe(true);
     subscription.unsubscribe();
@@ -118,6 +128,8 @@ describe("session subscription readiness", () => {
     expect(socket.sent.filter((message) => message.action === "session.subscribe")).toHaveLength(1);
 
     acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledge(socket, sessionSubscribeRequest(socket, 1));
     await expect(second.ready).resolves.toBeUndefined();
 
     first.unsubscribe();
@@ -141,6 +153,8 @@ describe("session subscription readiness", () => {
     expect(retry).not.toBe(subscription.ready);
 
     acknowledge(socket, retryRequest);
+    await Promise.resolve();
+    acknowledge(socket, sessionSubscribeRequest(socket, 2));
     await expect(retry).resolves.toBeUndefined();
     subscription.unsubscribe();
   });
@@ -150,6 +164,8 @@ describe("session subscription readiness", () => {
     const { client, socket } = connectClient({ enabled: true, initialDelay: 0, maxAttempts: 1 });
     const initial = client.subscribeSessionWithReady("sess-1");
     acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledge(socket, sessionSubscribeRequest(socket, 1));
     await expect(initial.ready).resolves.toBeUndefined();
 
     socket.close();
@@ -163,9 +179,121 @@ describe("session subscription readiness", () => {
     expect(reconnected.ready).not.toBe(initial.ready);
 
     acknowledge(reconnectedSocket, reconnectRequest);
+    await Promise.resolve();
+    acknowledge(reconnectedSocket, sessionSubscribeRequest(reconnectedSocket, 1));
     await expect(reconnected.ready).resolves.toBeUndefined();
     initial.unsubscribe();
     reconnected.unsubscribe();
+  });
+});
+
+describe("ordered core session compatibility", () => {
+  it("registers a distinct core wire and dispatches each sequence before acknowledging it", async () => {
+    const { client, socket } = connectClient();
+    const handler = vi.fn();
+    client.on("session.message.added", handler);
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    const ordered = sessionSubscribeRequest(socket, 1);
+    expect(ordered.payload).toMatchObject({
+      session_id: "sess-1",
+      consumer_kind: "core",
+    });
+    expect(ordered.payload).not.toHaveProperty("last_seen_sequence");
+    expect((ordered.payload as { wire_id: string }).wire_id).toMatch(/^core:web:/);
+    acknowledgeWithResumeToken(socket, ordered, "resume-core");
+    await subscription.ready;
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "event-1",
+      payload: {
+        type: "message.added",
+        session_id: "sess-1",
+        message_id: "message-1",
+        message_type: "message",
+      },
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0]?.[0].payload).toMatchObject({
+      message_id: "message-1",
+      type: "message",
+    });
+    const ack = socket.sent.at(-1);
+    expect(ack).toMatchObject({
+      action: "session.ack",
+      payload: {
+        session_id: "sess-1",
+        consumer_kind: "core",
+        sequence: 1,
+        resume_token: "resume-core",
+      },
+    });
+    if (!ack) throw new Error("No session.ack request was sent");
+    acknowledge(socket, ack);
+    subscription.unsubscribe();
+  });
+});
+
+describe("ordered core session validation", () => {
+  it("does not project or acknowledge a mismatched payload type", async () => {
+    const { client, socket } = connectClient();
+    const handler = vi.fn();
+    client.on("session.message.added", handler);
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledge(socket, sessionSubscribeRequest(socket, 1));
+    await subscription.ready;
+    const sentBefore = socket.sent.length;
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "event-poison",
+      payload: { type: "message.updated", message_id: "message-1" },
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(socket.sent).toHaveLength(sentBefore + 1);
+    subscription.unsubscribe();
+  });
+
+  it("acknowledges a registry-approved ignorable event without projection", async () => {
+    const { client, socket } = connectClient();
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledge(socket, sessionSubscribeRequest(socket, 1));
+    await subscription.ready;
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "session.workspace_sources.updated",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "event-ignored",
+      payload: { type: "session.workspace_sources.updated" },
+    });
+
+    expect(socket.sent.at(-1)).toMatchObject({
+      action: "session.ack",
+      payload: { session_id: "sess-1", consumer_kind: "core", sequence: 1 },
+    });
+    subscription.unsubscribe();
   });
 });
 
@@ -209,6 +337,8 @@ describe("session subscription reconnect recovery", () => {
     const { client, socket } = connectClient({ enabled: true, initialDelay: 0, maxAttempts: 1 });
     const initial = client.subscribeSessionWithReady("sess-1");
     acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledge(socket, sessionSubscribeRequest(socket, 1));
     await expect(initial.ready).resolves.toBeUndefined();
 
     socket.close();
@@ -241,6 +371,8 @@ describe("session subscription reconnect recovery", () => {
     if (!hydrationRequest) throw new Error("No queued message.list request was sent");
 
     acknowledge(reconnectedSocket, reconnectRequest);
+    await Promise.resolve();
+    acknowledge(reconnectedSocket, sessionSubscribeRequest(reconnectedSocket, 1));
     await expect(reconnectReadiness).resolves.toBeUndefined();
     expect(hydrationRequest.id).toBe("hydration-1");
     initial.unsubscribe();

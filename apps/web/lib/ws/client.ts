@@ -1,9 +1,20 @@
+/* eslint-disable max-lines -- WebSocketClient intentionally owns one connection's complete request, subscription, and reconnect lifecycle. */
+
 import type { BackendMessageMap, BackendMessageType } from "@/lib/types/backend";
 import type { ConnectionStatus } from "@/lib/types/connection";
 import { generateUUID } from "@/lib/utils";
 import { createDebugLogger, isDebug } from "@/lib/debug/log";
 import { dispatchToPluginWsHandlers } from "@/lib/ws/plugin-bridge";
 import { toWebSocketRequestError } from "./request-error";
+import {
+  isRawSessionEvent,
+  orderedCoreDisposition,
+  orderedCoreAction,
+  projectCoreSessionPayload,
+  type CoreSessionStream,
+  type RawSessionEvent,
+} from "./ordered-session-events";
+export type { RawSessionEvent } from "./ordered-session-events";
 export { WebSocketRequestError, type WebSocketRequestErrorDetails } from "./request-error";
 
 const debugDispatch = createDebugLogger("ws:dispatch");
@@ -44,6 +55,11 @@ type SessionSubscriptionReadiness = {
   requestStarted: boolean;
   settled: boolean;
 };
+type RawWebSocketMessage = {
+  type?: unknown;
+  id?: unknown;
+  payload?: unknown;
+};
 
 const DEFAULT_RECONNECT_OPTIONS: Required<ReconnectOptions> = {
   enabled: true,
@@ -69,6 +85,8 @@ export class WebSocketClient {
       timeout: ReturnType<typeof setTimeout>;
     }
   >();
+  private rawSessionEventHandlers = new Set<(event: RawSessionEvent) => void>();
+  private statusHandlers = new Set<(status: WebSocketStatus) => void>();
   private pendingQueue: string[] = [];
   private reconnectOptions: Required<ReconnectOptions>;
   private reconnectAttempts = 0;
@@ -77,6 +95,7 @@ export class WebSocketClient {
   private subscriptions = new Map<string, number>();
   private sessionSubscriptions = new Map<string, number>();
   private sessionSubscriptionReadiness = new Map<string, SessionSubscriptionReadiness>();
+  private coreSessionStreams = new Map<string, CoreSessionStream>();
   // Ref-counted focus signals: a session can be focused by both the task panel
   // and the task details page if both are mounted. Backend wakes its workspace
   // tracker into fast-poll mode while any client has focus, falling back to
@@ -336,6 +355,20 @@ export class WebSocketClient {
     if (nextCount <= 0) {
       this.sessionSubscriptions.delete(sessionId);
       this.cancelSessionSubscriptionReadiness(sessionId);
+      const stream = this.coreSessionStreams.get(sessionId);
+      if (this.status === "connected" && stream) {
+        this.send({
+          id: generateUUID(),
+          type: "request",
+          action: "session.unsubscribe",
+          payload: {
+            session_id: sessionId,
+            consumer_kind: "core",
+            wire_id: stream.wireId,
+          },
+        });
+      }
+      this.coreSessionStreams.delete(sessionId);
       if (this.status === "connected") {
         this.send({
           id: generateUUID(),
@@ -443,6 +476,18 @@ export class WebSocketClient {
     }
   }
 
+  onConnectionStatus(handler: (status: WebSocketStatus) => void) {
+    this.statusHandlers.add(handler);
+    return () => this.statusHandlers.delete(handler);
+  }
+
+  onRawSessionEvent(handler: (event: RawSessionEvent) => void) {
+    this.rawSessionEventHandlers.add(handler);
+    return () => {
+      this.rawSessionEventHandlers.delete(handler);
+    };
+  }
+
   private debugNotification(action: BackendMessageType, payload: unknown, handlerCount: number) {
     if (!isDebug() || DISPATCH_LOG_DENYLIST.has(action)) return;
     const payloadSessionId = (payload as { session_id?: string } | undefined)?.session_id;
@@ -453,31 +498,39 @@ export class WebSocketClient {
     });
   }
 
-  private handleParsedMessage(message: BackendMessageMap[BackendMessageType]) {
-    const msgWithId = message as { id?: string; type: string };
-
-    if (msgWithId.type === "response" && msgWithId.id) {
-      if (isDebug()) debugDispatch("response", { id: msgWithId.id });
-      this.resolvePendingRequest(msgWithId.id, message.payload);
+  private handleParsedMessage(value: unknown) {
+    if (isRawSessionEvent(value)) {
+      const disposition = orderedCoreDisposition(value);
+      this.handleCoreSessionEvent(value, disposition);
+      if (disposition === "poison") return;
+      this.rawSessionEventHandlers.forEach((handler) => handler(value));
       return;
     }
-    if (msgWithId.type === "error" && msgWithId.id) {
-      if (isDebug()) debugDispatch("error-response", { id: msgWithId.id });
-      this.rejectPendingRequest(msgWithId.id, message.payload);
-      return;
-    }
+    if (!value || typeof value !== "object" || !("type" in value)) return;
+    const rawMessage = value as RawWebSocketMessage;
+    if (this.handleRequestResult(rawMessage)) return;
+    const message = value as BackendMessageMap[BackendMessageType];
     if (message.type !== "notification") return;
-
-    const action = (message as { action?: string })?.action as BackendMessageType | undefined;
+    const action = message.action;
     if (!action) return;
     const handlers = this.handlers.get(action);
     this.debugNotification(action, message.payload, handlers?.size ?? 0);
     if (handlers) {
       handlers.forEach((handler) => handler(message));
     }
-    // Plugin bridge: forward the same notification to any handlers a loaded
-    // plugin registered for this action (registry.registerWsHandler).
     dispatchToPluginWsHandlers(action, message.payload);
+  }
+  private handleRequestResult(message: RawWebSocketMessage): boolean {
+    if (message.type !== "response" && message.type !== "error") return false;
+    if (typeof message.id !== "string") return false;
+    if (message.type === "response") {
+      if (isDebug()) debugDispatch("response", { id: message.id });
+      this.resolvePendingRequest(message.id, message.payload);
+    } else {
+      if (isDebug()) debugDispatch("error-response", { id: message.id });
+      this.rejectPendingRequest(message.id, message.payload);
+    }
+    return true;
   }
 
   private resolvePendingRequest(msgId: string, payload: unknown) {
@@ -596,22 +649,131 @@ export class WebSocketClient {
   private startSessionSubscription(sessionId: string, readiness: SessionSubscriptionReadiness) {
     if (readiness.requestStarted) return;
     readiness.requestStarted = true;
-    void this.request("session.subscribe", { session_id: sessionId }).then(
-      () => {
+    void this.request("session.subscribe", { session_id: sessionId })
+      .then(() => {
+        if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
+        const stream = this.getOrCreateCoreSessionStream(sessionId);
+        return this.request<{
+          success: boolean;
+          event_watermark?: number;
+          resume_token?: string;
+        }>("session.subscribe", {
+          session_id: sessionId,
+          consumer_kind: "core",
+          wire_id: stream.wireId,
+          ...(stream.resumeToken || stream.lastSeenSequence > 0
+            ? { last_seen_sequence: stream.lastSeenSequence }
+            : {}),
+          ...(stream.resumeToken ? { resume_token: stream.resumeToken } : {}),
+        }).then((response) => {
+          if (!response.success) {
+            throw new Error("Ordered session subscription was rejected");
+          }
+          stream.lastSeenSequence = Math.max(
+            stream.lastSeenSequence,
+            response.event_watermark ?? stream.lastSeenSequence,
+          );
+          stream.resumeToken = response.resume_token;
+        });
+      })
+      .then(() => {
         if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
         readiness.settled = true;
         readiness.resolve();
-      },
-      (error: unknown) => {
+      })
+      .catch((error: unknown) => {
         if (this.sessionSubscriptionReadiness.get(sessionId) === readiness) {
           this.sessionSubscriptionReadiness.delete(sessionId);
         }
         readiness.settled = true;
         readiness.reject(error);
-      },
-    );
+      });
   }
 
+  private getOrCreateCoreSessionStream(sessionId: string): CoreSessionStream {
+    const current = this.coreSessionStreams.get(sessionId);
+    if (current) return current;
+    const stream = {
+      wireId: `core:web:${generateUUID()}`,
+      lastSeenSequence: 0,
+    };
+    this.coreSessionStreams.set(sessionId, stream);
+    return stream;
+  }
+
+  private handleCoreSessionEvent(
+    event: RawSessionEvent,
+    disposition = orderedCoreDisposition(event),
+  ) {
+    const stream = this.coreSessionStreams.get(event.session_id);
+    if (!stream) return;
+    if (event.sequence <= stream.lastSeenSequence) {
+      void this.acknowledgeCoreSessionEvent(event.session_id, stream, stream.lastSeenSequence);
+      return;
+    }
+    if (event.sequence !== stream.lastSeenSequence + 1) return;
+    if (disposition === "poison") {
+      this.recoverCoreSessionPoison(event.session_id, stream);
+      return;
+    }
+    if (disposition === "project") {
+      const action = orderedCoreAction(event.event_type);
+      if (!action) return;
+      const payload = projectCoreSessionPayload(event);
+      const message = {
+        type: "notification",
+        action,
+        payload,
+      } as BackendMessageMap[BackendMessageType];
+      const handlers = this.handlers.get(action);
+      this.debugNotification(action, payload, handlers?.size ?? 0);
+      handlers?.forEach((handler) => handler(message));
+      dispatchToPluginWsHandlers(action, payload);
+    }
+    stream.lastSeenSequence = event.sequence;
+    void this.acknowledgeCoreSessionEvent(event.session_id, stream, event.sequence);
+  }
+
+  private recoverCoreSessionPoison(sessionId: string, stream: CoreSessionStream) {
+    if (stream.poisonRecovery) return;
+    stream.poisonRecovery = this.request("session.subscribe", {
+      session_id: sessionId,
+      consumer_kind: "core",
+      wire_id: stream.wireId,
+      last_seen_sequence: stream.lastSeenSequence,
+      ...(stream.resumeToken ? { resume_token: stream.resumeToken } : {}),
+      replace_cursor: true,
+    })
+      .then((response) => {
+        const payload = response as {
+          success?: boolean;
+          event_watermark?: number;
+          resume_token?: string;
+        };
+        if (!payload.success) throw new Error("Core session poison recovery was rejected");
+        stream.lastSeenSequence = Math.max(stream.lastSeenSequence, payload.event_watermark ?? 0);
+        if (payload.resume_token) stream.resumeToken = payload.resume_token;
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        stream.poisonRecovery = undefined;
+      });
+  }
+
+  private async acknowledgeCoreSessionEvent(
+    sessionId: string,
+    stream: CoreSessionStream,
+    sequence: number,
+  ) {
+    const response = await this.request<{ resume_token?: string }>("session.ack", {
+      session_id: sessionId,
+      consumer_kind: "core",
+      wire_id: stream.wireId,
+      sequence,
+      resume_token: stream.resumeToken,
+    });
+    if (response.resume_token) stream.resumeToken = response.resume_token;
+  }
   private cancelSessionSubscriptionReadiness(sessionId: string) {
     const readiness = this.sessionSubscriptionReadiness.get(sessionId);
     if (!readiness) return;
@@ -694,5 +856,6 @@ export class WebSocketClient {
   private setStatus(status: WebSocketStatus) {
     this.status = status;
     this.onStatusChange?.(status);
+    this.statusHandlers.forEach((handler) => handler(status));
   }
 }

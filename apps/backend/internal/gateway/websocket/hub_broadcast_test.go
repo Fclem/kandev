@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kandev/kandev/internal/auth/authn"
+	"github.com/kandev/kandev/internal/plugins"
 	ws "github.com/kandev/kandev/pkg/websocket"
 )
 
@@ -116,6 +117,31 @@ func TestBroadcastToSession_DeliversOnceToSubscribedAndFocusedClient(t *testing.
 	}
 	if clientReceived(c) {
 		t.Fatal("subscribed+focused client received a duplicate broadcast")
+	}
+}
+
+func TestBroadcastToSession_SuppressesLegacyCopyForOrderedCoreConsumer(t *testing.T) {
+	h := newTestHub(t)
+	c := newTestClient("c1")
+	registerTestClient(h, c)
+	h.SubscribeToSession(c, "sess-1")
+	c.orderedSessionSubscriptions = map[string]map[string]plugins.SessionDeliveryCursorKey{
+		"sess-1": {
+			"core-1": {SessionID: "sess-1", ConsumerKind: "core", WireID: "core-1"},
+		},
+	}
+
+	msg, err := ws.NewNotification(
+		ws.ActionSessionMessageAdded,
+		map[string]any{"session_id": "sess-1"},
+	)
+	if err != nil {
+		t.Fatalf("notification: %v", err)
+	}
+	h.BroadcastToSession("sess-1", msg)
+
+	if clientReceived(c) {
+		t.Fatal("ordered core consumer received a duplicate legacy notification")
 	}
 }
 

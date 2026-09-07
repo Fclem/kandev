@@ -572,8 +572,8 @@ func (s *Service) drainQueuedBeforeWorkflowTransition(
 		return false
 	}
 	s.setSessionWaitingForInput(ctx, taskID, sessionID, session)
-	s.drainQueuedMessageForPromptableSessionLockedWithTaskAdmission(ctx, taskID, sessionID)
-	return true
+	outcome := s.drainQueuedMessageForPromptableSessionLockedWithTaskAdmission(ctx, taskID, sessionID)
+	return outcome == queueDrainDispatched
 }
 
 // handleAgentReady handles turn-end ready events: the agent finished processing
@@ -1135,6 +1135,14 @@ func (s *Service) executeQueuedMessageWithReservation(
 		promptCtx, callerSessionID, reservedSessionID, queuedMsg, reservation,
 		lifecyclePrompt, userMessageRecorded, err,
 	)
+	s.clearQueuedDispatchInFlightIfCurrent(reservedSessionID, reservation)
+	if err == nil {
+		// A ready event can arrive while this worker still owns the reservation.
+		// Retry through the public guarded drain after releasing that marker so a
+		// later FIFO entry is not stranded when the ready handler backed off.
+		s.drainQueuedMessageForPromptableSession(promptCtx, reservedSessionID)
+	}
+
 }
 
 func (s *Service) queuedMessageAfterClaim(

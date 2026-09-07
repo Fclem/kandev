@@ -4649,6 +4649,18 @@ func (s *Service) promptDispatchCallback(
 	)
 }
 
+func (s *Service) promptDispatchIdentityIsCurrent(
+	ctx context.Context,
+	identity messagequeue.QueueSessionIdentity,
+	expectedExecutionID, executionID string,
+) bool {
+	if identity.SessionIncarnationID == "" {
+		return true
+	}
+	current, err := s.messageQueue.ResolveSessionIdentity(ctx, identity.TaskID, identity.SessionID)
+	return err == nil && current == identity && executionID == expectedExecutionID
+}
+
 func (s *Service) promptDispatchCallbackForIdentity(
 	ctx context.Context,
 	taskID, sessionID string,
@@ -4660,12 +4672,9 @@ func (s *Service) promptDispatchCallbackForIdentity(
 ) func() {
 	return func() {
 		executionID, _ := s.agentManager.GetExecutionIDForSession(ctx, sessionID)
-		if identity.SessionIncarnationID != "" {
-			current, err := s.messageQueue.ResolveSessionIdentity(ctx, identity.TaskID, identity.SessionID)
-			if err != nil || current != identity || executionID != expectedExecutionID {
-				outcome.recordAccepted(nil)
-				return
-			}
+		if !s.promptDispatchIdentityIsCurrent(ctx, identity, expectedExecutionID, executionID) {
+			outcome.recordAccepted(nil)
+			return
 		}
 		s.bindPromptAttemptToExecution(ctx, sessionID, executionID)
 		var publicationErr error

@@ -322,6 +322,56 @@ func TestExecuteQueuedMessage_LifecycleRequeueAfterArchiveIsDiscardedBeforeUnarc
 	}
 }
 
+func TestDrainQueuedBeforeWorkflowTransition_DoesNotSuppressTransitionWhenAdmissionSkips(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t-queue-admission", "s-queue-admission", "step1")
+
+	session, err := repo.GetTaskSession(ctx, "s-queue-admission")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	session.State = models.TaskSessionStateWaitingForInput
+	if err := repo.UpdateTaskSession(ctx, session); err != nil {
+		t.Fatalf("set session waiting: %v", err)
+	}
+	task, err := repo.GetTask(ctx, "t-queue-admission")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	task.QueuedForStepID = "step1"
+	task.WIPAdmitted = false
+	if err := repo.UpdateTask(ctx, task); err != nil {
+		t.Fatalf("set task WIP wait: %v", err)
+	}
+
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	if _, err := svc.messageQueue.QueueMessage(
+		ctx,
+		"s-queue-admission",
+		"t-queue-admission",
+		"queued while waiting for WIP admission",
+		"",
+		"user",
+		false,
+		nil,
+	); err != nil {
+		t.Fatalf("queue message: %v", err)
+	}
+
+	if drained := svc.drainQueuedBeforeWorkflowTransition(
+		ctx,
+		"t-queue-admission",
+		"s-queue-admission",
+		session,
+	); drained {
+		t.Fatal("workflow transition was suppressed without dispatching a queued message")
+	}
+	if got := svc.messageQueue.GetStatus(ctx, "s-queue-admission").Count; got != 1 {
+		t.Fatalf("queue count after skipped drain = %d, want 1", got)
+	}
+}
+
 func TestExecuteQueuedMessage_DiscardsReservedLifecycleMessageForRecreatedSession(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)

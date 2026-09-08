@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
@@ -354,6 +355,32 @@ func (s *AttachmentService) TransferSession(
 	attachmentIDs []string,
 ) error {
 	return s.repo.TransferMessageAttachments(ctx, taskID, oldSessionID, newSessionID, attachmentIDs)
+}
+
+type transactionalWorkspaceAttachmentRepository interface {
+	DeleteMessageAttachmentsByWorkspaceTx(
+		context.Context,
+		*sqlx.Tx,
+		string,
+	) ([]*models.TaskMessageAttachment, error)
+}
+
+func (s *AttachmentService) DeleteWorkspaceAttachmentsTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	workspaceID string,
+) ([]*models.TaskMessageAttachment, error) {
+	repo, ok := s.repo.(transactionalWorkspaceAttachmentRepository)
+	if !ok {
+		return nil, nil
+	}
+	return repo.DeleteMessageAttachmentsByWorkspaceTx(ctx, tx, workspaceID)
+}
+
+func (s *AttachmentService) RemoveBytes(attachments []*models.TaskMessageAttachment) {
+	for _, attachment := range attachments {
+		s.removeBytes(attachment)
+	}
 }
 
 func (s *AttachmentService) Descriptor(attachment *models.TaskMessageAttachment) AttachmentDescriptor {

@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- queue panel keeps its responsive controls and row composition together. */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { IconLayoutList } from "@tabler/icons-react";
 import {
@@ -38,6 +38,7 @@ import { useQueueEditProtection } from "@/hooks/use-queue-edit-protection";
 import { useQueuePinned } from "@/hooks/use-queue-pinned";
 import { canMergeWithAbove, QueuedGhostMessage } from "./queued-ghost-message";
 import { useQueuePanelOpenState } from "./use-queue-panel-open-state";
+import { useQueuePanelEscape } from "./use-queue-panel-escape";
 import { QueuePanelHeader } from "./queued-ghost-panel-header";
 import type { EntityReference } from "@/lib/types/entity-reference";
 import type { QueueEditLease } from "@/lib/api/domains/queue-api";
@@ -56,34 +57,6 @@ function headPreviewText(entries: QueuedMessage[]): string {
   const clean = stripSystemTags(first.content);
   if (clean.length <= HEAD_PREVIEW_MAX) return clean;
   return clean.slice(0, HEAD_PREVIEW_MAX).trimEnd() + "…";
-}
-
-function isEditableTarget(el: EventTarget | null): boolean {
-  if (!(el instanceof HTMLElement)) return false;
-  const tag = el.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  // contentEditable covers the TipTap chat editor and any rich-text surface.
-  // `el.isContentEditable` walks up the contenteditable inheritance chain.
-  return el.isContentEditable;
-}
-
-function useEscToClose(open: boolean, onClose: () => void): void {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // Don't hijack Esc while the user is editing inside any input control on
-      // the page (queue textarea, TipTap chat editor, native input/select, or
-      // the clarification overlay).
-      if (isEditableTarget(e.target)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-    };
-    // Capture Escape before an enclosing Radix dialog handles it as a dismissal.
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, onClose]);
 }
 
 type QueueAffordanceProps = {
@@ -112,6 +85,7 @@ type QueuePanelHandlerArgs = {
   reorderEntries: (orderedIds: string[]) => Promise<void>;
   sendEntryNow: (entryId: string) => Promise<void>;
   setAutoRun: (enabled: boolean) => Promise<void>;
+  setAutoMerge: (enabled: boolean) => Promise<void>;
 };
 
 function useSendNowPanelHandlers(sendEntryNow: (entryId: string) => Promise<void>) {
@@ -148,6 +122,7 @@ function useSendNowPanelHandlers(sendEntryNow: (entryId: string) => Promise<void
   return { handleSendEntryNow };
 }
 
+// eslint-disable-next-line max-lines-per-function -- panel actions share queue error and admission handling.
 function useQueuePanelHandlers({
   clearAll,
   editEntry,
@@ -156,6 +131,7 @@ function useQueuePanelHandlers({
   reorderEntries,
   sendEntryNow,
   setAutoRun,
+  setAutoMerge,
 }: QueuePanelHandlerArgs) {
   // Tracks merge requests still in flight so a rapid second click on the same
   // row cannot fire a second request for an entry that is already gone — the
@@ -229,6 +205,15 @@ function useQueuePanelHandlers({
     },
     [setAutoRun, t],
   );
+  const handleAutoMergeChange = useCallback(
+    (enabled: boolean) => {
+      setAutoMerge(enabled).catch((err) => {
+        console.error("Failed to update queue Auto-merge:", err);
+        toast.error(t("chat:failedToSetQueueAutoMerge"));
+      });
+    },
+    [setAutoMerge, t],
+  );
   const handleReorder = useCallback(
     async (orderedIds: string[]) => {
       try {
@@ -250,6 +235,7 @@ function useQueuePanelHandlers({
     handleMerge,
     handleClear,
     handleAutoRunChange,
+    handleAutoMergeChange,
     handleReorder,
     handleSendEntryNow,
   };
@@ -263,6 +249,8 @@ type QueuePanelDisclosureProps = {
   max: number;
   isFull: boolean;
   autoRun: boolean;
+  autoMerge: boolean;
+  autoMergeAvailable: boolean;
   isLoading: boolean;
   cancellationPending: boolean;
   mergeEnabled: boolean;
@@ -272,6 +260,7 @@ type QueuePanelDisclosureProps = {
   onClose: () => void;
   onClear: () => void;
   onAutoRunChange: (enabled: boolean) => void;
+  onAutoMergeChange: (enabled: boolean) => void;
   onTogglePin: () => void;
   onSave: (
     entryId: string,
@@ -297,6 +286,8 @@ function QueuePanelDisclosure({
   max,
   isFull,
   autoRun,
+  autoMerge,
+  autoMergeAvailable,
   isLoading,
   cancellationPending,
   mergeEnabled,
@@ -306,6 +297,7 @@ function QueuePanelDisclosure({
   onClose,
   onClear,
   onAutoRunChange,
+  onAutoMergeChange,
   onTogglePin,
   onSave,
   onRemove,
@@ -329,6 +321,8 @@ function QueuePanelDisclosure({
           max={max}
           isFull={isFull}
           autoRun={autoRun}
+          autoMerge={autoMerge}
+          autoMergeAvailable={autoMergeAvailable}
           isLoading={isLoading}
           cancellationPending={cancellationPending}
           editingEntryId={editingEntryId}
@@ -338,6 +332,7 @@ function QueuePanelDisclosure({
           onClose={onClose}
           onClear={onClear}
           onAutoRunChange={onAutoRunChange}
+          onAutoMergeChange={onAutoMergeChange}
           onTogglePin={onTogglePin}
           onSave={onSave}
           onRemove={onRemove}
@@ -369,9 +364,12 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
     isFull,
     mergeEnabled,
     autoRun,
+    autoMerge,
+    autoMergeAvailable,
     isLoading,
     clearAll,
     setAutoRun,
+    setAutoMerge,
     editEntry,
     removeEntry,
     mergeEntry,
@@ -391,6 +389,7 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
     handleMerge,
     handleClear,
     handleAutoRunChange,
+    handleAutoMergeChange,
     handleReorder,
     handleSendEntryNow,
   } = useQueuePanelHandlers({
@@ -401,6 +400,7 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
     reorderEntries,
     sendEntryNow,
     setAutoRun,
+    setAutoMerge,
   });
 
   const handleSave = useCallback(
@@ -418,7 +418,7 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
     [completeEdit, sessionId],
   );
   const close = useCallback(() => setIsOpen(false), []);
-  useEscToClose(isOpen, close);
+  useQueuePanelEscape(isOpen, close);
 
   const chipNode =
     !!sessionId && entries.length > 0 && !isOpen ? (
@@ -452,6 +452,8 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
         max={max}
         isFull={isFull}
         autoRun={autoRun}
+        autoMerge={autoMerge}
+        autoMergeAvailable={autoMergeAvailable}
         isLoading={isLoading}
         cancellationPending={cancellationPending}
         mergeEnabled={mergeEnabled}
@@ -462,6 +464,7 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
         onEditComplete={handleEditComplete}
         onClear={handleClear}
         onAutoRunChange={handleAutoRunChange}
+        onAutoMergeChange={handleAutoMergeChange}
         onTogglePin={togglePin}
         onSave={handleSave}
         onRemove={handleRemove}
@@ -536,6 +539,8 @@ type QueuePanelProps = {
   max: number;
   isFull: boolean;
   autoRun: boolean;
+  autoMerge: boolean;
+  autoMergeAvailable: boolean;
   isLoading: boolean;
   cancellationPending: boolean;
   mergeEnabled: boolean;
@@ -545,6 +550,7 @@ type QueuePanelProps = {
   onClose: () => void;
   onClear: () => void;
   onAutoRunChange: (enabled: boolean) => void;
+  onAutoMergeChange: (enabled: boolean) => void;
   onTogglePin: () => void;
   onSave: (
     entryId: string,
@@ -668,12 +674,15 @@ function QueuePanelEntry({
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- the panel keeps responsive drag, edit, and status composition together.
 function QueuePanel({
   entries,
   count,
   max,
   isFull,
   autoRun,
+  autoMerge,
+  autoMergeAvailable,
   isLoading,
   cancellationPending,
   mergeEnabled,
@@ -683,6 +692,7 @@ function QueuePanel({
   onClose,
   onClear,
   onAutoRunChange,
+  onAutoMergeChange,
   onTogglePin,
   onSave,
   onRemove,
@@ -718,11 +728,14 @@ function QueuePanel({
         max={max}
         isFull={isFull}
         autoRun={autoRun}
+        autoMerge={autoMerge}
+        autoMergeAvailable={autoMergeAvailable}
         isLoading={isLoading || editingEntryId !== null}
         cancellationPending={cancellationPending}
         pinned={pinned}
         onClear={onClear}
         onAutoRunChange={onAutoRunChange}
+        onAutoMergeChange={onAutoMergeChange}
         onTogglePin={onTogglePin}
         onClose={onClose}
       />

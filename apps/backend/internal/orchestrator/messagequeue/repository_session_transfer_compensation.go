@@ -14,6 +14,7 @@ import (
 
 const sessionTransferCompensationLeaseDuration = time.Minute
 const postgresDriverName = "pgx"
+const postgresForUpdateSuffix = " FOR UPDATE"
 
 const sessionTransferCompensationSchema = `
 	CREATE TABLE IF NOT EXISTS queue_session_transfer_compensations (
@@ -141,7 +142,7 @@ func (r *sqliteRepository) lockTaskForSessionTransferTx(
 	}
 	query := `SELECT id FROM tasks WHERE id = ?`
 	if r.db.DriverName() == postgresDriverName {
-		query += ` FOR UPDATE`
+		query += postgresForUpdateSuffix
 	}
 	var lockedTaskID string
 	if err := tx.GetContext(ctx, &lockedTaskID, r.db.Rebind(query), taskID); err != nil {

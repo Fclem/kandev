@@ -127,4 +127,5 @@ func TestHandleAgentReady_PassthroughQueuedMessagePublishesAfterWriteFailure(t *
 	status := svc.messageQueue.GetStatus(ctx, "s1")
 	require.Len(t, status.Entries, 1, "failed PTY delivery must restore the queued prompt")
 	require.Equal(t, "queued prompt", status.Entries[0].Content)
+	require.Equal(t, 1, status.Count)
 }

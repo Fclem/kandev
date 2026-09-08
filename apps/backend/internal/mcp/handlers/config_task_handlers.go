@@ -157,24 +157,34 @@ func (h *Handlers) deferMoveTask(
 	}
 
 	moveID := uuid.NewString()
+	var handoff *queuedMoveTaskPrompt
 	if req.Prompt != "" {
 		wrapped := "You were moved to this step with the following message: " + req.Prompt
-		if err := h.queueMoveTaskPromptWithMoveID(ctx, req.TaskID, session.ID, wrapped, moveID); err != nil {
+		var err error
+		handoff, err = h.queueMoveTaskPromptWithMoveID(ctx, queueIdentityForSession(session), wrapped, moveID)
+		if err != nil {
 			h.logger.Error("move_task: failed to queue hand-off prompt",
 				zap.String("task_id", req.TaskID), zap.String("session_id", session.ID), zap.Error(err))
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError,
 				"failed to queue move_task hand-off prompt", nil)
 		}
 	}
-	h.messageQueue.SetPendingMove(ctx, session.ID, &messagequeue.PendingMove{
-		MoveID:          moveID,
-		TaskID:          req.TaskID,
-		WorkflowID:      req.WorkflowID,
-		WorkflowStepID:  req.WorkflowStepID,
-		Position:        req.Position,
-		Actor:           string(wfmodels.StepTransitionActorAgent),
-		SenderSessionID: req.SenderSessionID,
-	})
+	if err := h.messageQueue.SetPendingMove(ctx, session.ID, &messagequeue.PendingMove{
+		MoveID:               moveID,
+		SessionIncarnationID: session.QueueIncarnationID,
+		TaskID:               req.TaskID,
+		WorkflowID:           req.WorkflowID,
+		WorkflowStepID:       req.WorkflowStepID,
+		Position:             req.Position,
+		Actor:                string(wfmodels.StepTransitionActorAgent),
+		SenderSessionID:      req.SenderSessionID,
+	}); err != nil {
+		h.rollbackMoveTaskPrompt(ctx, handoff)
+		h.logger.Error("move_task: failed to persist deferred move",
+			zap.String("task_id", req.TaskID), zap.String("session_id", session.ID), zap.Error(err))
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError,
+			"failed to persist deferred move", nil)
+	}
 	return ws.NewResponse(msg.ID, msg.Action,
 		h.synthesizeMovedTaskDTO(ctx, req.TaskID, req.WorkflowID, req.WorkflowStepID, req.Position))
 }
@@ -196,20 +206,16 @@ func (h *Handlers) applyMoveTaskImmediate(
 	},
 	session *models.TaskSession,
 ) (*ws.Message, error) {
-	queuedSessionID := ""
-	queuedEntryID := ""
+	var handoff *queuedMoveTaskPrompt
 	if req.Prompt != "" && session != nil {
 		wrapped := "You were moved to this step with the following message: " + req.Prompt
-		queued, err := h.queueMoveTaskPromptEntry(ctx, req.TaskID, session.ID, wrapped)
+		var err error
+		handoff, err = h.queueMoveTaskPrompt(ctx, queueIdentityForSession(session), wrapped)
 		if err != nil {
 			h.logger.Error("move_task: failed to queue hand-off prompt for idle session",
 				zap.String("task_id", req.TaskID), zap.String("session_id", session.ID), zap.Error(err))
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError,
 				"failed to queue move_task hand-off prompt", nil)
-		}
-		queuedSessionID = session.ID
-		if queued != nil {
-			queuedEntryID = queued.ID
 		}
 	}
 
@@ -230,34 +236,8 @@ func (h *Handlers) applyMoveTaskImmediate(
 	result, err := h.taskSvc.MoveTaskWithOptions(moveCtx, req.TaskID, req.WorkflowID, req.WorkflowStepID, req.Position,
 		service.MoveTaskOptions{StepHistoryActor: wfmodels.StepTransitionActorAgent})
 	if err != nil {
-		// Roll back the queued prompt — without this, the next turn would
-		// deliver a "You were moved to this step…" message for a transition
-		// that didn't actually happen. The move request may already be
-		// cancelled, but cleanup must still remove the durable queue row.
-		if queuedSessionID != "" && h.messageQueue != nil {
-			rollbackCtx := context.WithoutCancel(ctx)
-			removed := false
-			exactRemovalAvailable := false
-			if remover, ok := h.messageQueue.(interface {
-				RemoveEntry(context.Context, string, string) error
-			}); ok {
-				exactRemovalAvailable = true
-				if queuedEntryID != "" {
-					removed = remover.RemoveEntry(rollbackCtx, queuedSessionID, queuedEntryID) == nil
-				}
-			}
-			if !removed && !exactRemovalAvailable {
-				// Alternate queue implementations predate exact entry removal.
-				// Keep their legacy cleanup behavior when no exact remover is
-				// available; production uses the target-scoped path above.
-				_, removed = h.messageQueue.TakeQueued(rollbackCtx, queuedSessionID)
-			}
-			if removed {
-				h.logger.Warn("move_task: dropped queued hand-off prompt after MoveTask failure",
-					zap.String("task_id", req.TaskID), zap.String("session_id", queuedSessionID))
-				h.publishQueuedMessageStatus(rollbackCtx, queuedSessionID)
-			}
-		}
+		// Without the transition, its handoff must not reach a later turn.
+		h.rollbackMoveTaskPrompt(ctx, handoff)
 		h.logger.Error("failed to move task", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, classifyMoveTaskError(err), moveTaskErrorMessage(err), nil)
 	}
@@ -343,64 +323,90 @@ func (h *Handlers) lookupSession(ctx context.Context, taskID string) (*models.Ta
 	return session, nil
 }
 
-// queueMoveTaskPrompt enqueues a user-supplied prompt on the task's primary session.
-// Returns an error when the queue itself is missing or QueueMessage fails — the
-// caller decides whether to fail the whole move (running-session deferred path)
-// or proceed (idle path), since a queue failure makes the deferred contract
-// impossible to honor.
-func (h *Handlers) queueMoveTaskPrompt(ctx context.Context, taskID, sessionID, prompt string) error {
-	_, err := h.queueMoveTaskPromptEntry(ctx, taskID, sessionID, prompt)
-	return err
+type queuedMoveTaskPrompt struct {
+	identity messagequeue.QueueSessionIdentity
+	entryID  string
 }
 
-func (h *Handlers) queueMoveTaskPromptWithMoveID(ctx context.Context, taskID, sessionID, prompt, moveID string) error {
-	_, err := h.queueMoveTaskPromptEntryWithMoveID(ctx, taskID, sessionID, prompt, moveID)
-	return err
+func queueIdentityForSession(session *models.TaskSession) messagequeue.QueueSessionIdentity {
+	return messagequeue.QueueSessionIdentity{
+		TaskID:               session.TaskID,
+		SessionID:            session.ID,
+		SessionIncarnationID: session.QueueIncarnationID,
+	}
 }
 
-func (h *Handlers) queueMoveTaskPromptEntry(
+// queueMoveTaskPrompt enqueues a handoff for one exact session incarnation and
+// returns the entry identity needed to undo only that handoff.
+func (h *Handlers) queueMoveTaskPrompt(
 	ctx context.Context,
-	taskID, sessionID, prompt string,
-) (*messagequeue.QueuedMessage, error) {
-	return h.queueMoveTaskPromptEntryWithMoveID(ctx, taskID, sessionID, prompt, "")
+	identity messagequeue.QueueSessionIdentity,
+	prompt string,
+) (*queuedMoveTaskPrompt, error) {
+	return h.queueMoveTaskPromptWithMoveID(ctx, identity, prompt, "")
 }
 
-func (h *Handlers) queueMoveTaskPromptEntryWithMoveID(
+func (h *Handlers) queueMoveTaskPromptWithMoveID(
 	ctx context.Context,
-	taskID, sessionID, prompt, moveID string,
-) (*messagequeue.QueuedMessage, error) {
+	identity messagequeue.QueueSessionIdentity,
+	prompt string,
+	moveID string,
+) (*queuedMoveTaskPrompt, error) {
 	if h.messageQueue == nil {
 		return nil, fmt.Errorf("message queue is unavailable")
 	}
-	if sessionID == "" {
+	if identity.SessionID == "" {
 		return nil, fmt.Errorf("task has no primary session")
 	}
 	metadata := map[string]interface{}(nil)
 	if moveID != "" {
 		metadata = map[string]interface{}{messagequeue.MetadataDeferredMoveID: moveID}
 	}
-	if queueWithMetadata, ok := h.messageQueue.(messageMetadataQueuer); ok {
-		queued, err := queueWithMetadata.QueueMessageWithMetadata(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil, metadata)
-		if err != nil {
-			return nil, fmt.Errorf("queue message: %w", err)
+	var (
+		entry *messagequeue.QueuedMessage
+		err   error
+	)
+	if queue, ok := h.messageQueue.(*messagequeue.Service); ok {
+		entry, err = queue.QueueMessageWithMetadataForSession(
+			ctx, identity, prompt, "", messagequeue.QueuedByMoveTask, false, nil, metadata,
+		)
+		if err == nil {
+			h.publishQueueStatusEvent(ctx, identity, queue)
 		}
-		h.publishQueuedMessageStatus(ctx, sessionID)
-		return queued, nil
+	} else if queueWithMetadata, ok := h.messageQueue.(messageMetadataQueuer); ok {
+		entry, err = queueWithMetadata.QueueMessageWithMetadata(
+			ctx, identity.SessionID, identity.TaskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil, metadata,
+		)
+	} else {
+		entry, err = h.messageQueue.QueueMessage(
+			ctx, identity.SessionID, identity.TaskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil,
+		)
 	}
-	queued, err := h.messageQueue.QueueMessage(ctx, sessionID, taskID, prompt, "", messagequeue.QueuedByMoveTask, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("queue message: %w", err)
 	}
-	h.publishQueuedMessageStatus(ctx, sessionID)
-	return queued, nil
+	if entry == nil || entry.ID == "" {
+		return nil, fmt.Errorf("queue message returned no entry identity")
+	}
+	return &queuedMoveTaskPrompt{identity: identity, entryID: entry.ID}, nil
 }
 
-func (h *Handlers) publishQueuedMessageStatus(ctx context.Context, sessionID string) {
-	queue, ok := h.messageQueue.(*messagequeue.Service)
-	if !ok {
+func (h *Handlers) rollbackMoveTaskPrompt(ctx context.Context, handoff *queuedMoveTaskPrompt) {
+	if handoff == nil || h.messageQueue == nil {
 		return
 	}
-	h.publishQueueStatusEvent(ctx, sessionID, queue)
+	rollbackCtx := context.WithoutCancel(ctx)
+	if _, err := h.messageQueue.RemoveEntryForSession(rollbackCtx, handoff.identity, handoff.entryID); err != nil {
+		h.logger.Error("move_task: failed to roll back queued hand-off prompt",
+			zap.String("task_id", handoff.identity.TaskID),
+			zap.String("session_id", handoff.identity.SessionID),
+			zap.String("entry_id", handoff.entryID),
+			zap.Error(err))
+		return
+	}
+	if queue, ok := h.messageQueue.(*messagequeue.Service); ok {
+		h.publishQueueStatusEvent(rollbackCtx, handoff.identity, queue)
+	}
 }
 
 func (h *Handlers) handleDeleteTask(ctx context.Context, msg *ws.Message) (*ws.Message, error) {

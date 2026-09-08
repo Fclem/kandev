@@ -2206,6 +2206,19 @@ func TestDrainQueuedMessageIfAutoRunDoesNotResumePausedQueue(t *testing.T) {
 	require.Len(t, status.Entries, 1)
 }
 
+func queueAndInterruptForPeerMessage(
+	svc *Service,
+	ctx context.Context,
+	taskID, sessionID, prompt string,
+	metadata map[string]interface{},
+) (*messagequeue.QueuedMessage, bool, error) {
+	identity, err := svc.messageQueue.ResolveSessionIdentity(ctx, taskID, sessionID)
+	if err != nil {
+		return nil, false, err
+	}
+	return svc.QueueAndInterruptForPeerMessage(ctx, identity, prompt, metadata)
+}
+
 // --- QueueAndInterruptForPeerMessage ---
 
 // TestQueueAndInterruptForPeerMessage_DeliversQueuedMessageWithoutUserCancelSideEffects
@@ -2227,7 +2240,7 @@ func TestQueueAndInterruptForPeerMessage_DeliversQueuedMessageWithoutUserCancelS
 	seedTaskAndSession(t, repo, "task1", "session1", models.TaskSessionStateRunning)
 	seedExecutorRunning(t, repo, "session1", "task1", "exec-1")
 
-	queued, dispatched, err := svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+	queued, dispatched, err := queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 	if err != nil {
 		t.Fatalf("queue and interrupt for peer message: %v", err)
 	}
@@ -2312,9 +2325,7 @@ func TestQueueAndInterruptForPeerMessage_LeavesMessageQueuedDuringUserCancel(t *
 	var dispatched bool
 	var interruptErr error
 	go func() {
-		queued, dispatched, interruptErr = svc.QueueAndInterruptForPeerMessage(
-			ctx, "task1", "session1", "peer message during cancel", nil,
-		)
+		queued, dispatched, interruptErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "peer message during cancel", nil)
 		close(interruptDone)
 	}()
 
@@ -2368,7 +2379,7 @@ func TestQueueAndInterruptForPeerMessage_CancelFailurePropagatesAndKeepsMessageQ
 	seedTaskAndSession(t, repo, "task1", "session1", models.TaskSessionStateRunning)
 	seedExecutorRunning(t, repo, "session1", "task1", "exec-1")
 
-	queued, dispatched, err := svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+	queued, dispatched, err := queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 	if err == nil {
 		t.Fatal("expected QueueAndInterruptForPeerMessage to propagate the cancel failure")
 	}
@@ -2411,7 +2422,7 @@ func TestQueueAndInterruptForPeerMessage_DeliversTargetedEntryAheadOfOlderQueued
 		t.Fatalf("queue older message: %v", err)
 	}
 
-	queued, dispatched, err := svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+	queued, dispatched, err := queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 	if err != nil {
 		t.Fatalf("queue and interrupt for peer message: %v", err)
 	}
@@ -2469,7 +2480,7 @@ func TestQueueAndInterruptForPeerMessage_WaitsForConcurrentHolderThenDelivers(t 
 	// the guard around the lifecycle call, and blocks inside CancelAgent.
 	firstDone := make(chan struct{})
 	go func() {
-		_, _, _ = svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "first parent message", nil)
+		_, _, _ = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "first parent message", nil)
 		close(firstDone)
 	}()
 
@@ -2485,7 +2496,7 @@ func TestQueueAndInterruptForPeerMessage_WaitsForConcurrentHolderThenDelivers(t 
 	var dispatched bool
 	var secondErr error
 	go func() {
-		queued, dispatched, secondErr = svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "second parent message", nil)
+		queued, dispatched, secondErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "second parent message", nil)
 		close(secondDone)
 	}()
 
@@ -2578,6 +2589,14 @@ func (r *erroringTakeByIDRepository) TakeByID(context.Context, string, string) (
 	return nil, r.takeByIDErr
 }
 
+func (r *erroringTakeByIDRepository) TakeByIDForSession(
+	context.Context,
+	messagequeue.QueueSessionIdentity,
+	string,
+) (*messagequeue.QueuedMessage, error) {
+	return nil, r.takeByIDErr
+}
+
 // TestQueueAndInterruptForPeerMessage_TargetedTakeErrorPropagatesWithoutFIFOFallback
 // pins the error-vs-not-found distinction on the targeted take: a genuine
 // repository error (e.g. a transient DB failure) must propagate rather than
@@ -2611,7 +2630,7 @@ func TestQueueAndInterruptForPeerMessage_TargetedTakeErrorPropagatesWithoutFIFOF
 		t.Fatalf("queue older message: %v", err)
 	}
 
-	queued, dispatched, err := svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+	queued, dispatched, err := queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 	if err == nil {
 		t.Fatal("expected QueueAndInterruptForPeerMessage to propagate the targeted-take error")
 	}
@@ -2638,6 +2657,58 @@ func TestQueueAndInterruptForPeerMessage_TargetedTakeErrorPropagatesWithoutFIFOF
 	if status.Count != 2 {
 		t.Fatalf("expected both entries to remain queued, count=%d entries=%+v", status.Count, status.Entries)
 	}
+}
+
+func TestQueueAndInterruptForPeerMessageRejectsReplacementIncarnationWhileWaiting(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	agentMgr := &mockAgentManager{isAgentRunning: false, repoForExecutionLookup: repo}
+	svc := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), agentMgr)
+	seedTaskAndSession(t, repo, "task1", "session1", models.TaskSessionStateRunning)
+	original, err := repo.GetTaskSession(ctx, "session1")
+	require.NoError(t, err)
+	originalIdentity := messagequeue.QueueSessionIdentity{
+		TaskID: original.TaskID, SessionID: original.ID, SessionIncarnationID: original.QueueIncarnationID,
+	}
+
+	guard, releaseGuard := svc.acquireCancelInFlightGuard(original.ID)
+	guard.Lock()
+	result := make(chan struct {
+		queued     *messagequeue.QueuedMessage
+		dispatched bool
+		err        error
+	}, 1)
+	go func() {
+		queued, dispatched, callErr := svc.QueueAndInterruptForPeerMessage(
+			ctx, originalIdentity, "stale parent message", nil,
+		)
+		result <- struct {
+			queued     *messagequeue.QueuedMessage
+			dispatched bool
+			err        error
+		}{queued: queued, dispatched: dispatched, err: callErr}
+	}()
+	coordinatorStopWaitForGuardRefs(t, svc, original.ID, 2)
+
+	require.NoError(t, repo.DeleteTaskSession(ctx, original))
+	replacement := &models.TaskSession{
+		ID: original.ID, TaskID: original.TaskID, State: models.TaskSessionStateRunning,
+		StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, repo.CreateTaskSession(ctx, replacement))
+	replacementIdentity, err := svc.messageQueue.ResolveSessionIdentity(ctx, replacement.TaskID, replacement.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, originalIdentity.SessionIncarnationID, replacementIdentity.SessionIncarnationID)
+	guard.Unlock()
+	releaseGuard()
+
+	outcome := <-result
+	require.ErrorIs(t, outcome.err, messagequeue.ErrSessionIdentityMismatch)
+	require.Nil(t, outcome.queued)
+	require.False(t, outcome.dispatched)
+	status, err := svc.messageQueue.Snapshot(ctx, replacementIdentity)
+	require.NoError(t, err)
+	require.Empty(t, status.Entries)
 }
 
 // blockingGetTaskSessionRepo wraps a sessionExecutorStore and blocks the
@@ -2747,7 +2818,7 @@ func TestQueueAndInterruptForPeerMessage_ClosesStaleEarlyCheckRace(t *testing.T)
 	var dispatched bool
 	var interruptErr error
 	go func() {
-		queued, dispatched, interruptErr = svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+		queued, dispatched, interruptErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 		close(interruptDone)
 	}()
 
@@ -2913,7 +2984,7 @@ func TestQueueAndInterruptForPeerMessage_CancelFailureDoesNotStrandMessageWhenRe
 	var dispatched bool
 	var interruptErr error
 	go func() {
-		queued, dispatched, interruptErr = svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+		queued, dispatched, interruptErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 		close(interruptDone)
 	}()
 
@@ -3017,7 +3088,7 @@ func TestQueueAndInterruptForPeerMessage_CancelFailureLeavesMessageQueuedWhenSti
 	seedTaskAndSession(t, repo, "task1", "session1", models.TaskSessionStateRunning)
 	seedExecutorRunning(t, repo, "session1", "task1", "exec-1")
 
-	queued, dispatched, err := svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+	queued, dispatched, err := queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 	if err == nil {
 		t.Fatal("expected the genuine cancel failure to propagate while the session is still RUNNING")
 	}
@@ -3080,7 +3151,7 @@ func TestQueueAndInterruptForPeerMessage_DoesNotCancelUnrelatedSuccessorTurn(t *
 	var dispatched bool
 	var interruptErr error
 	go func() {
-		queued, dispatched, interruptErr = svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+		queued, dispatched, interruptErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 		close(interruptDone)
 	}()
 
@@ -3159,7 +3230,7 @@ func TestQueueAndInterruptForPeerMessage_RacesManualDrainForSameSession(t *testi
 	var dispatched bool
 	var interruptErr error
 	go func() {
-		queued, dispatched, interruptErr = svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+		queued, dispatched, interruptErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 		close(interruptDone)
 	}()
 	select {
@@ -3277,7 +3348,7 @@ func TestQueueAndInterruptForPeerMessage_RacesClarificationTimeoutRecovery(t *te
 	var dispatched bool
 	var interruptErr error
 	go func() {
-		queued, dispatched, interruptErr = svc.QueueAndInterruptForPeerMessage(ctx, "task1", "session1", "parent steer message", nil)
+		queued, dispatched, interruptErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer message", nil)
 		close(interruptDone)
 	}()
 	select {
@@ -3387,9 +3458,7 @@ func TestClarificationRecovery_ReleasesGuardAfterRetryDispatch(t *testing.T) {
 	var dispatched bool
 	var interruptErr error
 	go func() {
-		queued, dispatched, interruptErr = svc.QueueAndInterruptForPeerMessage(
-			ctx, "task1", "session1", "parent steer", nil,
-		)
+		queued, dispatched, interruptErr = queueAndInterruptForPeerMessage(svc, ctx, "task1", "session1", "parent steer", nil)
 		close(interruptDone)
 	}()
 	<-turnSync.snapshotTaken
@@ -3615,14 +3684,16 @@ func TestCancelIntentDoesNotFollowSharedGuard(t *testing.T) {
 
 func requirePersistedSessionLaunchError(t *testing.T, repo *sqliterepo.Repository, sessionID string) models.LastAgentError {
 	t.Helper()
-	session, err := repo.GetTaskSession(context.Background(), sessionID)
-	if err != nil {
-		t.Fatalf("GetTaskSession: %v", err)
-	}
-	lastError, ok := models.LoadLastAgentError(session.Metadata)
-	if !ok {
-		t.Fatalf("session %q has no typed launch error: %#v", sessionID, session.Metadata)
-	}
+	var lastError models.LastAgentError
+	require.Eventually(t, func() bool {
+		session, err := repo.GetTaskSession(context.Background(), sessionID)
+		if err != nil {
+			return false
+		}
+		var ok bool
+		lastError, ok = models.LoadLastAgentError(session.Metadata)
+		return ok
+	}, time.Second, 10*time.Millisecond, "session %q has no typed launch error", sessionID)
 	if lastError.Code == "" || lastError.Stamp() == "" {
 		t.Fatalf("session %q has incomplete typed launch error: %#v", sessionID, lastError)
 	}

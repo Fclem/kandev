@@ -65,9 +65,11 @@ func TestCreateNewSessionForStepTransfersQueueStateExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.messageQueue.SetPendingMove(ctx, current.ID, &messagequeue.PendingMove{
+	if err := svc.messageQueue.SetPendingMove(ctx, current.ID, &messagequeue.PendingMove{
 		MoveID: "move-one", TaskID: current.TaskID, WorkflowID: "workflow-one", WorkflowStepID: "step-two",
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	created, err := svc.createNewSessionForStep(ctx, current.TaskID, current, "profile-new")
 	if err != nil {

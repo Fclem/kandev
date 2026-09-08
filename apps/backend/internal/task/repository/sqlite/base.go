@@ -23,6 +23,7 @@ type Repository struct {
 	migrate                 *db.MigrateLogger
 	queuePurgeMu            sync.RWMutex
 	queuePurger             func(context.Context, string)
+	queuePurgePrepare       func(context.Context, string)
 	queuePurgeNotify        func(context.Context, string)
 	queueSessionPurgeNotify func(context.Context, string, string)
 	// clockNow is a test-only clock seam. Set it before any concurrent
@@ -116,6 +117,14 @@ func (r *Repository) SetTaskQueuePurger(purger func(context.Context, string)) {
 	r.queuePurger = purger
 }
 
+// SetTaskQueuePurgePreparer registers a bounded in-process cancellation hook
+// invoked before a task lifecycle transaction purges queue rows.
+func (r *Repository) SetTaskQueuePurgePreparer(prepare func(context.Context, string)) {
+	r.queuePurgeMu.Lock()
+	defer r.queuePurgeMu.Unlock()
+	r.queuePurgePrepare = prepare
+}
+
 // SetTaskQueuePurgeNotifier registers a post-commit observer for every path
 // that purges a task's queued_messages (archive/delete/workspace cascade).
 // Callers must not purge the production SQLite queue again — that already
@@ -126,6 +135,15 @@ func (r *Repository) SetTaskQueuePurgeNotifier(notifier func(context.Context, st
 	r.queuePurgeMu.Lock()
 	defer r.queuePurgeMu.Unlock()
 	r.queuePurgeNotify = notifier
+}
+
+func (r *Repository) notifyTaskQueuePurging(ctx context.Context, taskID string) {
+	r.queuePurgeMu.RLock()
+	prepare := r.queuePurgePrepare
+	r.queuePurgeMu.RUnlock()
+	if prepare != nil {
+		prepare(ctx, taskID)
+	}
 }
 
 func (r *Repository) notifyTaskQueuePurged(ctx context.Context, taskID string) {

@@ -109,6 +109,7 @@ func TestLifecycleManualRecoveryReplacesReservedRow(t *testing.T) {
 		ctx,
 		"session-round64-recovery",
 		reserved,
+		nil,
 		true,
 		false,
 		errors.New("UsageLimitExceeded"),

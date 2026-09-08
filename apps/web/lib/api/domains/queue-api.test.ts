@@ -2,6 +2,8 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { EntityReference } from "@/lib/types/entity-reference";
 
 const getWebSocketClientMock = vi.hoisted(() => vi.fn());
+const SESSION_ID = `session-1`;
+const INCARNATION_ID = `incarnation-1`;
 
 vi.mock("@/lib/ws/connection", () => ({
   getWebSocketClient: getWebSocketClientMock,
@@ -146,14 +148,16 @@ describe("queue reference payloads", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await queueMessage({
-      session_id: "session-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       task_id: "task-1",
       content: "queued reference",
       entity_references: [reference],
     });
 
     expect(request).toHaveBeenCalledWith("message.queue.add", {
-      session_id: "session-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       task_id: "task-1",
       content: "queued reference",
       entity_references: [reference],
@@ -165,14 +169,16 @@ describe("queue reference payloads", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await queueMessage({
-      session_id: "session-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       task_id: "task-1",
       content: "queued context",
       context_files: [{ path: "src/components", name: "components", is_directory: true }],
     });
 
     expect(request).toHaveBeenCalledWith("message.queue.add", {
-      session_id: "session-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       task_id: "task-1",
       content: "queued context",
       context_files: [{ path: "src/components", name: "components", is_directory: true }],
@@ -184,13 +190,17 @@ describe("queue reference payloads", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await updateQueuedMessage({
-      session_id: "session-1",
+      session_id: SESSION_ID,
+      task_id: "task-1",
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-1",
       content: "reference removed",
-    } as never);
+    });
 
     expect(request).toHaveBeenCalledWith("message.queue.update", {
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-1",
       content: "reference removed",
       entity_references: [],
@@ -202,14 +212,18 @@ describe("queue reference payloads", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await updateQueuedMessage({
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-1",
       content: "reference kept",
       entity_references: [reference],
     });
 
     expect(request).toHaveBeenCalledWith("message.queue.update", {
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-1",
       content: "reference kept",
       entity_references: [reference],
@@ -264,7 +278,9 @@ describe("queued message edit leases", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await updateQueuedMessage({
+      task_id: "task-1",
       session_id: "session-1",
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-1",
       lease_id: "lease-1",
       operation_id: "op-1",
@@ -274,7 +290,9 @@ describe("queued message edit leases", () => {
     });
 
     expect(request).toHaveBeenCalledWith("message.queue.update", {
+      task_id: "task-1",
       session_id: "session-1",
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-1",
       lease_id: "lease-1",
       operation_id: "op-1",
@@ -291,13 +309,17 @@ describe("mergeQueuedEntry", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await mergeQueuedEntry({
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-b",
       user_id: "user-1",
     });
 
     expect(request).toHaveBeenCalledWith("message.queue.merge", {
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-b",
       user_id: "user-1",
     });
@@ -307,10 +329,17 @@ describe("mergeQueuedEntry", () => {
     const request = vi.fn().mockResolvedValue({ entry_id: "q-a" });
     getWebSocketClientMock.mockReturnValue({ request });
 
-    await mergeQueuedEntry({ session_id: "session-1", entry_id: "q-b" });
+    await mergeQueuedEntry({
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
+      entry_id: "q-b",
+    });
 
     expect(request).toHaveBeenCalledWith("message.queue.merge", {
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       entry_id: "q-b",
     });
   });
@@ -322,7 +351,12 @@ describe("mergeQueuedEntry", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await expect(
-      mergeQueuedEntry({ session_id: "session-1", entry_id: "q-b" }),
+      mergeQueuedEntry({
+        task_id: "task-1",
+        session_id: SESSION_ID,
+        session_incarnation_id: INCARNATION_ID,
+        entry_id: "q-b",
+      }),
     ).rejects.toBeInstanceOf(QueueEntryNotFoundError);
   });
 
@@ -334,7 +368,12 @@ describe("mergeQueuedEntry", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await expect(
-      mergeQueuedEntry({ session_id: "session-1", entry_id: "q-b" }),
+      mergeQueuedEntry({
+        task_id: "task-1",
+        session_id: SESSION_ID,
+        session_incarnation_id: INCARNATION_ID,
+        entry_id: "q-b",
+      }),
     ).rejects.toBeInstanceOf(MergeReferenceOverflowError);
   });
 });
@@ -342,20 +381,24 @@ describe("mergeQueuedEntry", () => {
 describe("sendQueuedNow", () => {
   it("sends an exact entry scope", async () => {
     const request = vi.fn().mockResolvedValue({
-      session_id: "session-1",
+      session_id: SESSION_ID,
       dispatched: true,
       sent_count: 1,
     });
     getWebSocketClientMock.mockReturnValue({ request });
 
     await sendQueuedNow({
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       scope: "entry",
       entry_id: "q-2",
     });
 
     expect(request).toHaveBeenCalledWith("message.queue.send_now", {
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       scope: "entry",
       entry_id: "q-2",
     });
@@ -363,16 +406,23 @@ describe("sendQueuedNow", () => {
 
   it("omits entry_id for an all scope snapshot", async () => {
     const request = vi.fn().mockResolvedValue({
-      session_id: "session-1",
+      session_id: SESSION_ID,
       dispatched: true,
       sent_count: 3,
     });
     getWebSocketClientMock.mockReturnValue({ request });
 
-    await sendQueuedNow({ session_id: "session-1", scope: "all" });
+    await sendQueuedNow({
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
+      scope: "all",
+    });
 
     expect(request).toHaveBeenCalledWith("message.queue.send_now", {
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       scope: "all",
     });
   });
@@ -384,19 +434,31 @@ describe("sendQueuedNow", () => {
     });
     getWebSocketClientMock.mockReturnValue({ request });
 
-    await expect(sendQueuedNow({ session_id: "session-1", scope: "all" })).rejects.toMatchObject({
+    await expect(
+      sendQueuedNow({
+        task_id: "task-1",
+        session_id: SESSION_ID,
+        session_incarnation_id: INCARNATION_ID,
+        scope: "all",
+      }),
+    ).rejects.toMatchObject({
       code: "send_now_conflict",
     });
-    await expect(sendQueuedNow({ session_id: "session-1", scope: "all" })).rejects.toBeInstanceOf(
-      QueueSendNowError,
-    );
+    await expect(
+      sendQueuedNow({
+        task_id: "task-1",
+        session_id: SESSION_ID,
+        session_incarnation_id: INCARNATION_ID,
+        scope: "all",
+      }),
+    ).rejects.toBeInstanceOf(QueueSendNowError);
   });
 });
 
 describe("setQueueAutoRun", () => {
   it("sets the per-session queue policy through its exact WebSocket action", async () => {
     const request = vi.fn().mockResolvedValue({
-      session_id: "session-1",
+      session_id: SESSION_ID,
       auto_run: false,
       dispatched: false,
     });
@@ -404,17 +466,68 @@ describe("setQueueAutoRun", () => {
     const setQueueAutoRun = (
       queueApi as typeof queueApi & {
         setQueueAutoRun?: (
-          sessionId: string,
+          identity: {
+            task_id: string;
+            session_id: string;
+            session_incarnation_id: string;
+          },
           enabled: boolean,
         ) => Promise<{ session_id: string; auto_run: boolean; dispatched: boolean }>;
       }
     ).setQueueAutoRun;
 
     expect(setQueueAutoRun).toBeTypeOf("function");
-    await setQueueAutoRun!("session-1", false);
+    await setQueueAutoRun!(
+      { task_id: "task-1", session_id: SESSION_ID, session_incarnation_id: INCARNATION_ID },
+      false,
+    );
 
     expect(request).toHaveBeenCalledWith("message.queue.auto_run.set", {
-      session_id: "session-1",
+      session_id: SESSION_ID,
+      task_id: "task-1",
+      session_incarnation_id: INCARNATION_ID,
+      enabled: false,
+    });
+  });
+});
+describe("setQueueAutoMerge", () => {
+  it("sets the session override with the complete immutable identity", async () => {
+    const request = vi.fn().mockResolvedValue({
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
+      auto_merge_enabled: false,
+      auto_merge_source: "session",
+      auto_merge_revision: 1,
+    });
+    getWebSocketClientMock.mockReturnValue({ request });
+    const setQueueAutoMerge = (
+      queueApi as typeof queueApi & {
+        setQueueAutoMerge?: (
+          identity: {
+            task_id: string;
+            session_id: string;
+            session_incarnation_id: string;
+          },
+          enabled: boolean,
+        ) => Promise<unknown>;
+      }
+    ).setQueueAutoMerge;
+
+    expect(setQueueAutoMerge).toBeTypeOf("function");
+    await setQueueAutoMerge!(
+      {
+        task_id: "task-1",
+        session_id: SESSION_ID,
+        session_incarnation_id: INCARNATION_ID,
+      },
+      false,
+    );
+
+    expect(request).toHaveBeenCalledWith("message.queue.auto_merge.set", {
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       enabled: false,
     });
   });
@@ -422,16 +535,20 @@ describe("setQueueAutoRun", () => {
 
 describe("reorderQueuedEntries", () => {
   it("sends the full ordered id list through message.queue.reorder", async () => {
-    const request = vi.fn().mockResolvedValue({ session_id: "session-1", reordered: 3 });
+    const request = vi.fn().mockResolvedValue({ session_id: SESSION_ID, reordered: 3 });
     getWebSocketClientMock.mockReturnValue({ request });
 
     await reorderQueuedEntries({
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       ordered_ids: ["q-c", "q-a", "q-b"],
     });
 
     expect(request).toHaveBeenCalledWith("message.queue.reorder", {
-      session_id: "session-1",
+      task_id: "task-1",
+      session_id: SESSION_ID,
+      session_incarnation_id: INCARNATION_ID,
       ordered_ids: ["q-c", "q-a", "q-b"],
     });
   });
@@ -444,7 +561,12 @@ describe("reorderQueuedEntries", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await expect(
-      reorderQueuedEntries({ session_id: "session-1", ordered_ids: ["q-a"] }),
+      reorderQueuedEntries({
+        task_id: "task-1",
+        session_id: SESSION_ID,
+        session_incarnation_id: INCARNATION_ID,
+        ordered_ids: ["q-a"],
+      }),
     ).rejects.toBeInstanceOf(QueueReorderError);
   });
 
@@ -453,7 +575,12 @@ describe("reorderQueuedEntries", () => {
     getWebSocketClientMock.mockReturnValue({ request });
 
     await expect(
-      reorderQueuedEntries({ session_id: "session-1", ordered_ids: ["q-a"] }),
+      reorderQueuedEntries({
+        task_id: "task-1",
+        session_id: SESSION_ID,
+        session_incarnation_id: INCARNATION_ID,
+        ordered_ids: ["q-a"],
+      }),
     ).rejects.toBeInstanceOf(QueueEntryNotFoundError);
   });
 });

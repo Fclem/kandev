@@ -31,11 +31,20 @@ func (r *blockingPurgeRepository) ListBySession(ctx context.Context, sessionID s
 }
 
 func (r *blockingPurgeRepository) Insert(ctx context.Context, msg *QueuedMessage, maxPerSession int) error {
+	r.blockInsert()
+	return r.Repository.Insert(ctx, msg, maxPerSession)
+}
+
+func (r *blockingPurgeRepository) InsertForSession(ctx context.Context, identity QueueSessionIdentity, msg *QueuedMessage, maxPerSession int) error {
+	r.blockInsert()
+	return r.Repository.InsertForSession(ctx, identity, msg, maxPerSession)
+}
+
+func (r *blockingPurgeRepository) blockInsert() {
 	if r.insertStarted != nil {
 		close(r.insertStarted)
 		<-r.insertRelease
 	}
-	return r.Repository.Insert(ctx, msg, maxPerSession)
 }
 
 func TestPurgeTaskWaitsForInFlightQueueAdmission(t *testing.T) {

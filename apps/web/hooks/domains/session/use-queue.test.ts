@@ -1,6 +1,7 @@
+/* eslint-disable max-lines -- queue hook tests keep the complete mutation race matrix together. */
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { QueuedMessage } from "@/lib/state/slices/session/types";
+import type { QueuedMessage, QueueOperationToken } from "@/lib/state/slices/session/types";
 import type { EntityReference } from "@/lib/types/entity-reference";
 
 const queueApiMock = vi.hoisted(() => {
@@ -20,6 +21,7 @@ const queueApiMock = vi.hoisted(() => {
     reorderQueuedEntries: vi.fn(),
     sendQueuedNow: vi.fn(),
     setQueueAutoRun: vi.fn(),
+    setQueueAutoMerge: vi.fn(),
   };
 });
 
@@ -30,13 +32,23 @@ type MockQueueState = {
       string,
       { count: number; max: number; mergeEnabled?: boolean; autoRun?: boolean }
     >;
-    isLoading: Record<string, boolean>;
+    activeOperationBySessionId: Record<string, QueueOperationToken>;
   };
   connection: { status: string };
-  taskSessions: { items: Record<string, { cancellation_pending?: boolean }> };
+  taskSessions: {
+    items: Record<
+      string,
+      {
+        task_id?: string;
+        queue_incarnation_id?: string;
+        cancellation_pending?: boolean;
+      }
+    >;
+  };
   setQueueEntries: ReturnType<typeof vi.fn>;
   removeQueueEntry: ReturnType<typeof vi.fn>;
-  setQueueLoading: ReturnType<typeof vi.fn>;
+  beginQueueOperation: ReturnType<typeof vi.fn>;
+  finishQueueOperation: ReturnType<typeof vi.fn>;
 };
 
 let mockState: MockQueueState;
@@ -52,6 +64,11 @@ import { useQueue } from "./use-queue";
 const SESSION_ID = "sess-1";
 const STALE_ENTRY_ID = "stale-entry";
 const TASK_ID = "task-1";
+const IDENTITY = {
+  task_id: TASK_ID,
+  session_id: SESSION_ID,
+  session_incarnation_id: "incarnation-1",
+};
 const reference: EntityReference = {
   version: 1,
   ref: "mention:v1:github:issue:acme%2Frepo:42",
@@ -89,28 +106,38 @@ function resetMockState() {
     queue: {
       bySessionId: {},
       metaBySessionId: {},
-      isLoading: {},
+      activeOperationBySessionId: {},
     },
     connection: { status: "connected" },
-    taskSessions: { items: {} },
+    taskSessions: {
+      items: {
+        [SESSION_ID]: {
+          task_id: TASK_ID,
+          queue_incarnation_id: IDENTITY.session_incarnation_id,
+        },
+      },
+    },
     setQueueEntries: vi.fn(),
     removeQueueEntry: vi.fn(),
-    setQueueLoading: vi.fn(),
+    beginQueueOperation: vi
+      .fn()
+      .mockReturnValue({ sessionIncarnationId: IDENTITY.session_incarnation_id, generation: 1 }),
+    finishQueueOperation: vi.fn(),
   };
 }
 
+beforeEach(() => {
+  resetMockState();
+  setDocumentVisibility("visible");
+  queueApiMock.getQueueStatus.mockResolvedValue({ ...IDENTITY, entries: [], count: 0, max: 10 });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
 describe("useQueue", () => {
-  beforeEach(() => {
-    resetMockState();
-    setDocumentVisibility("visible");
-    queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
-
   it("refetches the queue snapshot when the WebSocket reconnects", async () => {
     mockState.connection.status = "disconnected";
     const { rerender } = renderHook(() => useQueue(SESSION_ID));
@@ -121,19 +148,40 @@ describe("useQueue", () => {
     mockState.connection.status = "connected";
     rerender();
 
-    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID));
-    expect(mockState.setQueueEntries).toHaveBeenCalledWith(SESSION_ID, [], {
-      count: 0,
-      max: 10,
-      mergeEnabled: true,
-      autoRun: true,
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY));
+    expect(mockState.setQueueEntries).toHaveBeenCalledWith(
+      SESSION_ID,
+      [],
+      {
+        count: 0,
+        max: 10,
+        mergeEnabled: true,
+        autoRun: true,
+        taskId: TASK_ID,
+        sessionIncarnationId: IDENTITY.session_incarnation_id,
+      },
+      { establishStatusEpoch: true },
+    );
+  });
+
+  it("rejects an identity-less queue snapshot after session identity is known", async () => {
+    const { result } = renderHook(() => useQueue(SESSION_ID));
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalled());
+    mockState.setQueueEntries.mockClear();
+    queueApiMock.getQueueStatus.mockResolvedValueOnce({ entries: [entry()], count: 1, max: 10 });
+
+    await act(async () => {
+      await result.current.refetch();
     });
+
+    expect(mockState.setQueueEntries).not.toHaveBeenCalled();
   });
 
   it("refetches a stale queue snapshot when a suspended tab becomes visible again", async () => {
     mockState.queue.bySessionId[SESSION_ID] = [entry()];
     mockState.queue.metaBySessionId[SESSION_ID] = { count: 1, max: 10 };
     queueApiMock.getQueueStatus.mockResolvedValueOnce({
+      ...IDENTITY,
       entries: [entry()],
       count: 1,
       max: 10,
@@ -144,17 +192,29 @@ describe("useQueue", () => {
 
     queueApiMock.getQueueStatus.mockClear();
     mockState.setQueueEntries.mockClear();
-    queueApiMock.getQueueStatus.mockResolvedValueOnce({ entries: [], count: 0, max: 10 });
+    queueApiMock.getQueueStatus.mockResolvedValueOnce({
+      ...IDENTITY,
+      entries: [],
+      count: 0,
+      max: 10,
+    });
 
     document.dispatchEvent(new Event("visibilitychange"));
 
-    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID));
-    expect(mockState.setQueueEntries).toHaveBeenCalledWith(SESSION_ID, [], {
-      count: 0,
-      max: 10,
-      mergeEnabled: true,
-      autoRun: true,
-    });
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY));
+    expect(mockState.setQueueEntries).toHaveBeenCalledWith(
+      SESSION_ID,
+      [],
+      {
+        count: 0,
+        max: 10,
+        mergeEnabled: true,
+        autoRun: true,
+        taskId: TASK_ID,
+        sessionIncarnationId: IDENTITY.session_incarnation_id,
+      },
+      { establishStatusEpoch: true },
+    );
   });
 
   it("refetches a stale queue snapshot when the Kandev window regains focus", async () => {
@@ -164,7 +224,7 @@ describe("useQueue", () => {
 
     window.dispatchEvent(new Event("focus"));
 
-    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID));
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY));
   });
 
   it("does not refetch on foreground visibility while disconnected", async () => {
@@ -176,7 +236,9 @@ describe("useQueue", () => {
 
     expect(queueApiMock.getQueueStatus).not.toHaveBeenCalled();
   });
+});
 
+describe("useQueue message metadata", () => {
   it("queues structured references with busy-agent messages", async () => {
     queueApiMock.queueMessage.mockResolvedValue(entry());
     const { result } = renderHook(() => useQueue(SESSION_ID));
@@ -193,6 +255,7 @@ describe("useQueue", () => {
 
     expect(queueApiMock.queueMessage).toHaveBeenCalledWith({
       session_id: SESSION_ID,
+      session_incarnation_id: IDENTITY.session_incarnation_id,
       task_id: TASK_ID,
       content: "queued reference",
       model: undefined,
@@ -200,6 +263,22 @@ describe("useQueue", () => {
       attachments: undefined,
       entity_references: [reference],
     });
+  });
+
+  it("refetches authoritative status after a queue admission error", async () => {
+    const mutationError = new Error("queue failed");
+    queueApiMock.queueMessage.mockRejectedValueOnce(mutationError);
+    const { result } = renderHook(() => useQueue(SESSION_ID));
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalled());
+    queueApiMock.getQueueStatus.mockClear();
+
+    await act(async () => {
+      await expect(result.current.queue({ taskId: TASK_ID, content: "rejected" })).rejects.toBe(
+        mutationError,
+      );
+    });
+
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 
   it("replaces queued reference metadata with an explicit empty array", async () => {
@@ -213,6 +292,8 @@ describe("useQueue", () => {
 
     expect(queueApiMock.updateQueuedMessage).toHaveBeenCalledWith({
       session_id: SESSION_ID,
+      task_id: TASK_ID,
+      session_incarnation_id: IDENTITY.session_incarnation_id,
       entry_id: "q-1",
       content: "reference removed",
       attachments: undefined,
@@ -305,17 +386,6 @@ describe("queue refetch races", () => {
   });
 });
 describe("useQueue context file metadata and Send Now", () => {
-  beforeEach(() => {
-    resetMockState();
-    setDocumentVisibility("visible");
-    queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
-
   it("forwards context file metadata with queued messages", async () => {
     queueApiMock.queueMessage.mockResolvedValue(entry());
     const { result } = renderHook(() => useQueue(SESSION_ID));
@@ -332,6 +402,7 @@ describe("useQueue context file metadata and Send Now", () => {
 
     expect(queueApiMock.queueMessage).toHaveBeenCalledWith({
       session_id: SESSION_ID,
+      session_incarnation_id: IDENTITY.session_incarnation_id,
       task_id: TASK_ID,
       content: "queued context",
       model: undefined,
@@ -358,12 +429,16 @@ describe("useQueue context file metadata and Send Now", () => {
 
     expect(queueApiMock.sendQueuedNow).toHaveBeenCalledWith({
       session_id: SESSION_ID,
+      task_id: TASK_ID,
+      session_incarnation_id: IDENTITY.session_incarnation_id,
       scope: "entry",
       entry_id: "q-2",
     });
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
+});
 
+describe("useQueue automation controls", () => {
   it("refetches after an Auto-run mutation failure and preserves its error", async () => {
     const mutationError = new Error("policy update failed");
     queueApiMock.setQueueAutoRun.mockRejectedValueOnce(mutationError);
@@ -375,12 +450,16 @@ describe("useQueue context file metadata and Send Now", () => {
       await expect(result.current.setAutoRun(false)).rejects.toBe(mutationError);
     });
 
-    expect(queueApiMock.setQueueAutoRun).toHaveBeenCalledWith(SESSION_ID, false);
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.setQueueAutoRun).toHaveBeenCalledWith(IDENTITY, false);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 
   it("exposes authoritative cancellation progress for disabling controls", async () => {
-    mockState.taskSessions.items[SESSION_ID] = { cancellation_pending: true };
+    mockState.taskSessions.items[SESSION_ID] = {
+      task_id: TASK_ID,
+      queue_incarnation_id: IDENTITY.session_incarnation_id,
+      cancellation_pending: true,
+    };
     const { result } = renderHook(() => useQueue(SESSION_ID));
     await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalled());
 
@@ -407,18 +486,53 @@ describe("useQueue context file metadata and Send Now", () => {
       await setAutoRun!(false);
     });
 
-    expect(queueApiMock.setQueueAutoRun).toHaveBeenCalledWith(SESSION_ID, false);
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.setQueueAutoRun).toHaveBeenCalledWith(IDENTITY, false);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
+  });
+  it("sets Auto-merge for the immutable session and refetches policy", async () => {
+    queueApiMock.getQueueStatus.mockResolvedValue({
+      ...IDENTITY,
+      entries: [],
+      count: 0,
+      max: 10,
+      ...IDENTITY,
+      merge_enabled: true,
+      auto_run: true,
+      auto_merge_available: true,
+      auto_merge_enabled: true,
+      auto_merge_source: "global",
+      auto_merge_revision: 4,
+    });
+    queueApiMock.setQueueAutoMerge.mockResolvedValue({
+      ...IDENTITY,
+      auto_merge_enabled: false,
+      auto_merge_source: "session",
+      auto_merge_revision: 1,
+    });
+    const { result } = renderHook(() => useQueue(SESSION_ID));
+    await waitFor(() => expect(mockState.setQueueEntries).toHaveBeenCalled());
+    expect(mockState.setQueueEntries).toHaveBeenLastCalledWith(
+      SESSION_ID,
+      [],
+      expect.objectContaining({
+        autoMergeAvailable: true,
+        autoMergeEnabled: true,
+        autoMergeSource: "global",
+        autoMergeRevision: 4,
+      }),
+      { establishStatusEpoch: true },
+    );
+
+    await act(async () => {
+      await result.current.setAutoMerge(false);
+    });
+
+    expect(queueApiMock.setQueueAutoMerge).toHaveBeenCalledWith(IDENTITY, false);
+    expect(queueApiMock.getQueueStatus).toHaveBeenLastCalledWith(IDENTITY);
   });
 });
 
 describe("useQueue mergeEntry", () => {
-  beforeEach(() => {
-    resetMockState();
-    setDocumentVisibility("visible");
-    queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
-  });
-
   it("merges an entry and refetches the queue", async () => {
     queueApiMock.mergeQueuedEntry.mockResolvedValue({ entry_id: "q-1" });
     const { result } = renderHook(() => useQueue(SESSION_ID));
@@ -431,9 +545,12 @@ describe("useQueue mergeEntry", () => {
 
     expect(queueApiMock.mergeQueuedEntry).toHaveBeenCalledWith({
       session_id: SESSION_ID,
+      task_id: TASK_ID,
+      session_incarnation_id: IDENTITY.session_incarnation_id,
       entry_id: "q-2",
+      user_id: undefined,
     });
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 
   it("forwards an explicit user_id on merge", async () => {
@@ -447,6 +564,8 @@ describe("useQueue mergeEntry", () => {
 
     expect(queueApiMock.mergeQueuedEntry).toHaveBeenCalledWith({
       session_id: SESSION_ID,
+      task_id: TASK_ID,
+      session_incarnation_id: IDENTITY.session_incarnation_id,
       entry_id: "q-2",
       user_id: "alice",
     });
@@ -464,16 +583,13 @@ describe("useQueue mergeEntry", () => {
       );
     });
 
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 });
 
 describe("useQueue clearAll", () => {
   beforeEach(() => {
-    resetMockState();
-    setDocumentVisibility("visible");
     queueApiMock.clearQueue.mockReset();
-    queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
     queueApiMock.clearQueue.mockResolvedValue(undefined);
   });
 
@@ -486,8 +602,20 @@ describe("useQueue clearAll", () => {
       await result.current.clearAll();
     });
 
-    expect(queueApiMock.clearQueue).toHaveBeenCalledWith(SESSION_ID);
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.clearQueue).toHaveBeenCalledWith(IDENTITY);
+    expect(mockState.setQueueEntries.mock.calls).toContainEqual([
+      SESSION_ID,
+      [],
+      {
+        count: 0,
+        max: 0,
+        mergeEnabled: true,
+        autoRun: true,
+        taskId: TASK_ID,
+        sessionIncarnationId: IDENTITY.session_incarnation_id,
+      },
+    ]);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 
   it("refetches authoritative status and rethrows when clear fails", async () => {
@@ -497,6 +625,7 @@ describe("useQueue clearAll", () => {
     await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalled());
     queueApiMock.getQueueStatus.mockClear();
     queueApiMock.getQueueStatus.mockResolvedValueOnce({
+      ...IDENTITY,
       entries: [authoritative],
       count: 1,
       max: 10,
@@ -506,13 +635,20 @@ describe("useQueue clearAll", () => {
       await expect(result.current.clearAll()).rejects.toThrow("clear failed");
     });
 
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
-    expect(mockState.setQueueEntries).toHaveBeenCalledWith(SESSION_ID, [authoritative], {
-      count: 1,
-      max: 10,
-      mergeEnabled: true,
-      autoRun: true,
-    });
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
+    expect(mockState.setQueueEntries).toHaveBeenCalledWith(
+      SESSION_ID,
+      [authoritative],
+      {
+        count: 1,
+        max: 10,
+        mergeEnabled: true,
+        autoRun: true,
+        taskId: TASK_ID,
+        sessionIncarnationId: IDENTITY.session_incarnation_id,
+      },
+      { establishStatusEpoch: true },
+    );
   });
 
   it("discards an in-flight refetch that resolves after the clear", async () => {
@@ -555,10 +691,7 @@ describe("useQueue clearAll", () => {
 
 describe("useQueue removeEntry", () => {
   beforeEach(() => {
-    resetMockState();
-    setDocumentVisibility("visible");
     queueApiMock.removeQueuedEntry.mockReset();
-    queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
   });
 
   it("optimistically removes then refetches authoritative status after success", async () => {
@@ -572,7 +705,7 @@ describe("useQueue removeEntry", () => {
     });
 
     expect(mockState.removeQueueEntry).toHaveBeenCalledWith(SESSION_ID, "q-1");
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 
   it("refetches after a drain race without surfacing a benign error", async () => {
@@ -587,7 +720,7 @@ describe("useQueue removeEntry", () => {
       await expect(result.current.removeEntry("q-1")).resolves.toBeUndefined();
     });
 
-    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
+    expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(IDENTITY);
   });
 
   it("refetches and rethrows a failed removal", async () => {
@@ -597,6 +730,7 @@ describe("useQueue removeEntry", () => {
     await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalled());
     queueApiMock.getQueueStatus.mockClear();
     queueApiMock.getQueueStatus.mockResolvedValueOnce({
+      ...IDENTITY,
       entries: [authoritative],
       count: 1,
       max: 10,

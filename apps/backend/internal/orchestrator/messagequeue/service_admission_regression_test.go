@@ -123,8 +123,7 @@ func TestServiceQueueOperationsWaitForAdmission(t *testing.T) {
 			probe: func(repo *admissionProbeRepository) <-chan struct{} { return repo.setPendingCalled },
 			prepare: func(_ context.Context, svc *Service, _ *admissionProbeRepository) func(context.Context) error {
 				return func(operationCtx context.Context) error {
-					svc.SetPendingMove(operationCtx, "session", &PendingMove{TaskID: "task"})
-					return nil
+					return svc.SetPendingMove(operationCtx, "session", &PendingMove{TaskID: "task"})
 				}
 			},
 		},
@@ -132,7 +131,7 @@ func TestServiceQueueOperationsWaitForAdmission(t *testing.T) {
 			name:  "get pending move",
 			probe: func(repo *admissionProbeRepository) <-chan struct{} { return repo.getPendingCalled },
 			prepare: func(ctx context.Context, svc *Service, _ *admissionProbeRepository) func(context.Context) error {
-				svc.SetPendingMove(ctx, "session", &PendingMove{TaskID: "task"})
+				require.NoError(t, svc.SetPendingMove(ctx, "session", &PendingMove{TaskID: "task"}))
 				return func(operationCtx context.Context) error {
 					_, _ = svc.GetPendingMove(operationCtx, "session")
 					return nil
@@ -143,7 +142,7 @@ func TestServiceQueueOperationsWaitForAdmission(t *testing.T) {
 			name:  "take pending move",
 			probe: func(repo *admissionProbeRepository) <-chan struct{} { return repo.takePendingCalled },
 			prepare: func(ctx context.Context, svc *Service, _ *admissionProbeRepository) func(context.Context) error {
-				svc.SetPendingMove(ctx, "session", &PendingMove{TaskID: "task"})
+				require.NoError(t, svc.SetPendingMove(ctx, "session", &PendingMove{TaskID: "task"}))
 				return func(operationCtx context.Context) error {
 					_, _ = svc.TakePendingMove(operationCtx, "session")
 					return nil

@@ -1753,14 +1753,8 @@ func DeleteSessionInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, i
 	if incarnationID != identity.SessionIncarnationID {
 		return ErrSessionIdentityMismatch
 	}
-	for _, statement := range []string{
-		`DELETE FROM queued_messages WHERE session_id = ?`,
-		`DELETE FROM pending_moves WHERE session_id = ?`,
-		`DELETE FROM queue_session_state WHERE session_id = ?`,
-	} {
-		if _, err := tx.ExecContext(ctx, db.Rebind(statement), identity.SessionID); err != nil {
-			return fmt.Errorf("delete queue session state: %w", err)
-		}
+	if _, err := PurgeSessionInTransaction(ctx, tx, db, identity.SessionID); err != nil {
+		return fmt.Errorf("delete queue session state: %w", err)
 	}
 	return nil
 }
@@ -5695,6 +5689,9 @@ func (r *sqliteRepository) replaceSession(ctx context.Context, identity *QueueSe
 	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
 		return err
 	}
+	if err := r.guardSessionTx(ctx, tx, sessionID, ""); err != nil {
+		return err
+	}
 	if err := r.validateOptionalSessionIdentityTx(ctx, tx, identity); err != nil {
 		return err
 	}
@@ -5738,16 +5735,8 @@ func (r *sqliteRepository) SetPendingMove(ctx context.Context, sessionID string,
 	if move == nil || move.TaskID == "" || sessionID == "" {
 		return ErrSessionIdentityMismatch
 	}
-	if move.SessionIncarnationID == "" {
-		if r.tasksTablePresent {
-			identity, err := r.ResolveSessionIdentity(ctx, move.TaskID, sessionID)
-			if err != nil {
-				return err
-			}
-			move.SessionIncarnationID = identity.SessionIncarnationID
-		} else {
-			move.SessionIncarnationID = "legacy:" + sessionID
-		}
+	if move.SessionIncarnationID == "" && !r.tasksTablePresent {
+		move.SessionIncarnationID = "legacy:" + sessionID
 	}
 	if move.QueuedAt.IsZero() {
 		move.QueuedAt = time.Now().UTC()
@@ -5771,6 +5760,18 @@ func (r *sqliteRepository) SetPendingMove(ctx context.Context, sessionID string,
 		return err
 	}
 	if r.tasksTablePresent {
+		if move.SessionIncarnationID == "" {
+			var incarnationID string
+			if err := tx.GetContext(ctx, &incarnationID, r.db.Rebind(`
+				SELECT queue_incarnation_id FROM task_sessions WHERE id = ? AND task_id = ?
+			`), sessionID, move.TaskID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrTaskInactive
+				}
+				return fmt.Errorf("resolve pending move session identity: %w", err)
+			}
+			move.SessionIncarnationID = incarnationID
+		}
 		if err := r.validateSessionIdentityTx(ctx, tx, QueueSessionIdentity{
 			TaskID:               move.TaskID,
 			SessionID:            sessionID,

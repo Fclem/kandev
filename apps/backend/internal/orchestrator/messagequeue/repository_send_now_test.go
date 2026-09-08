@@ -240,11 +240,7 @@ func TestSendNowRestoreDiscardsSourcesFromPurgedTaskGeneration(t *testing.T) {
 				t.Fatalf("purge task: %v", err)
 			}
 			err = repo.RestoreSendNowClaim(ctx, claim)
-			if tt.name == "sqlite" {
-				if !errors.Is(err, ErrSendNowClaimChanged) {
-					t.Fatalf("restore after purge error = %v, want %v", err, ErrSendNowClaimChanged)
-				}
-			} else if err != nil {
+			if err != nil {
 				t.Fatalf("restore after purge: %v", err)
 			}
 			entries, err := repo.ListBySession(ctx, "session-1")

@@ -5,13 +5,14 @@ import type { ApiClient } from "../../helpers/api-client";
 import { typeWhileBusy, waitForComposerQueueMode } from "../../helpers/type-while-busy";
 import { SessionPage } from "../../pages/session-page";
 import { seedRunningGeneratingSession } from "../../helpers/generating-session";
-import { waitForSessionDone } from "../../helpers/session";
+import { waitForAgentMessage, waitForSessionDone } from "../../helpers/session";
 import { expectFullQueueScrolls, seedFullQueueTask } from "./message-queue-scroll-helpers";
 import { waitForQuickChatComposerReady } from "./quick-chat-helpers";
 import {
   registerSeparateQueueRows,
   requestMessageQueueSettings,
 } from "../../helpers/message-queue-settings";
+import { watchWs } from "../../helpers/causal-waits";
 
 registerSeparateQueueRows(test);
 
@@ -560,6 +561,7 @@ test.describe("Task session queue", () => {
     seedData,
   }) => {
     test.setTimeout(90_000);
+    const gateway = watchWs(testPage);
 
     const session = await seedTaskAndWaitForIdle(
       testPage,
@@ -584,15 +586,16 @@ test.describe("Task session queue", () => {
     const textarea = testPage.getByTestId("queue-edit-textarea");
     await expect(textarea).toBeVisible({ timeout: 5_000 });
     await textarea.fill(scriptedQueueMessage("second edited"));
+    const saveResponse = gateway.waitForResponse("message.queue.update");
     await testPage.getByRole("button", { name: "Save", exact: true }).click();
+    await saveResponse;
 
-    // The first entry is still eligible to drain while the later target is held.
-    await expect(
-      testPage
-        .locator("[data-agent-message-body][data-message-id]")
-        .filter({ hasText: "first queued" }),
-    ).toHaveCount(1, { timeout: 45_000 });
-    await expect(rows).toHaveCount(1, { timeout: 15_000 });
+    // The first entry remains eligible while the later target is held.
+    await waitForAgentMessage(apiClient, session.sessionId, "first queued");
+    await expect
+      .poll(async () => (await apiClient.getQueueStatus(session.sessionId)).count)
+      .toBe(1);
+    await expect(rows).toHaveCount(1);
     await expect(testPage.getByTestId("queue-entry-text")).toContainText("second edited");
   });
 
@@ -601,6 +604,7 @@ test.describe("Task session queue", () => {
     apiClient,
     seedData,
   }) => {
+    const gateway = watchWs(testPage);
     test.setTimeout(120_000);
 
     const session = await seedTaskAndWaitForIdle(
@@ -623,19 +627,19 @@ test.describe("Task session queue", () => {
       .getByTestId("queue-edit-textarea")
       .fill(scriptedQueueMessage("edited head dispatched after save"));
 
-    await expect(testPage.getByText("Slow response complete", { exact: false })).toBeVisible({
-      timeout: 45_000,
-    });
-    await expect(testPage.getByTestId("queue-entry")).toHaveCount(1);
+    await waitForAgentMessage(apiClient, session.sessionId, "Slow response complete");
+    await expect
+      .poll(async () => (await apiClient.getQueueStatus(session.sessionId)).count)
+      .toBe(1);
 
+    const saveResponse = gateway.waitForResponse("message.queue.update");
     await testPage.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(
-      session
-        .activeChat()
-        .locator("[data-agent-message-body][data-message-id]")
-        .filter({ hasText: "edited head dispatched after save" }),
-    ).toHaveCount(1, { timeout: 45_000 });
-    await expect(testPage.getByTestId("queue-entry")).toHaveCount(0, { timeout: 15_000 });
+    await saveResponse;
+    await waitForAgentMessage(apiClient, session.sessionId, "edited head dispatched after save");
+    await expect
+      .poll(async () => (await apiClient.getQueueStatus(session.sessionId)).count)
+      .toBe(0);
+    await expect(testPage.getByTestId("queue-entry")).toHaveCount(0);
   });
 
   test("queue editor reconciles after switching sessions", async ({

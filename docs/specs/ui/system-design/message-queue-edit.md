@@ -67,8 +67,10 @@ identical operation returns the original revision without applying the update
 again. Reusing an operation ID with different content is rejected.
 
 The ordinary compatibility update path remains available only for trusted
-non-WebSocket callers. Browser updates must use the fenced contract and the
-`user` provenance guard.
+non-WebSocket callers. Browser queue edits must acquire and retain a live
+target lease, pass its fencing fields on save, and refuse the save action when
+the lease is absent or has ended. The browser must never send an unfenced queue
+edit request.
 
 ## Control flow and state transitions
 

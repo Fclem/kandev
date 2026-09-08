@@ -2887,7 +2887,7 @@ func (r *Repository) DeleteTaskSession(ctx context.Context, id string) error {
 	var taskID string
 	if err := tx.GetContext(ctx, &taskID, r.db.Rebind(`SELECT task_id FROM task_sessions WHERE id = ?`), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("agent session not found: %s", id)
+			return fmt.Errorf("%w: %w: %s", models.ErrTaskSessionNotFound, sql.ErrNoRows, id)
 		}
 		return fmt.Errorf("load task for session %s: %w", id, err)
 	}

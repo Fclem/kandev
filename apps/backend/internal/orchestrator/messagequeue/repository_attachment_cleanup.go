@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/jmoiron/sqlx"
 	internaldb "github.com/kandev/kandev/internal/db"
+	"sort"
 	"time"
 )
 
@@ -111,26 +112,38 @@ func (r *sqliteRepository) resolveAttachmentCleanupSessionTx(
 	tx *sqlx.Tx,
 	cleanup AttachmentCleanup,
 ) (string, error) {
-	if cleanup.CurrentSessionID != "" {
-		if err := r.lockSessionTxUnfenced(ctx, tx, cleanup.CurrentSessionID); err != nil {
-			return "", err
-		}
-	}
 	entrySessionID := cleanup.CurrentSessionID
-	if queuedSessionID, err := r.queuedAttachmentCleanupSessionTx(ctx, tx, cleanup); err != nil {
+	queuedSessionID, err := r.queuedAttachmentCleanupSessionTx(ctx, tx, cleanup)
+	if err != nil {
 		return "", err
-	} else if queuedSessionID != "" {
+	}
+	if queuedSessionID != "" {
 		entrySessionID = queuedSessionID
 	}
-	if entrySessionID != "" && entrySessionID != cleanup.CurrentSessionID {
-		if err := r.lockSessionTxUnfenced(ctx, tx, entrySessionID); err != nil {
+	sessionIDs := make([]string, 0, 2)
+	seenSessionIDs := make(map[string]struct{}, 2)
+	for _, sessionID := range []string{cleanup.CurrentSessionID, entrySessionID} {
+		if sessionID == "" {
+			continue
+		}
+		if _, seen := seenSessionIDs[sessionID]; seen {
+			continue
+		}
+		seenSessionIDs[sessionID] = struct{}{}
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	sort.Strings(sessionIDs)
+	for _, sessionID := range sessionIDs {
+		if err := r.lockSessionTxUnfenced(ctx, tx, sessionID); err != nil {
 			return "", err
 		}
-		if queuedSessionID, err := r.queuedAttachmentCleanupSessionTx(ctx, tx, cleanup); err != nil {
-			return "", err
-		} else if queuedSessionID != "" {
-			entrySessionID = queuedSessionID
-		}
+	}
+	queuedSessionID, err = r.queuedAttachmentCleanupSessionTx(ctx, tx, cleanup)
+	if err != nil {
+		return "", err
+	}
+	if queuedSessionID != "" {
+		entrySessionID = queuedSessionID
 	}
 	return ResolveSessionTransferInTransaction(ctx, tx, r.db, entrySessionID)
 }

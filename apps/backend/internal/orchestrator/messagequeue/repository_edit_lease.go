@@ -36,9 +36,6 @@ func (r *sqliteRepository) ensureEditLeaseSchema(ctx context.Context) error {
 }
 
 func (r *sqliteRepository) acquireEditLease(ctx context.Context, lease *QueueEditLease) error {
-	if err := r.ensureEditLeaseSchema(ctx); err != nil {
-		return err
-	}
 	tx, err := r.beginSessionMutationTx(ctx, lease.SessionID, "acquire edit lease")
 	if err != nil {
 		return err

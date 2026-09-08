@@ -431,23 +431,36 @@ func authorizeSessionTransferTx(
 ) error {
 	var activeOperationID, activeOwnerID, activeFromSessionID, activeToSessionID string
 	var leaseExpiresAt sql.NullTime
-	err := tx.QueryRowxContext(ctx, db.Rebind(`
+	rows, err := tx.QueryxContext(ctx, db.Rebind(`
 		SELECT operation_id, recovery_owner, recovery_lease_expires_at,
 		       from_session_id, to_session_id
 		FROM queue_session_transfer_compensations
 		WHERE from_session_id IN (?, ?) OR to_session_id IN (?, ?)
-	`), fromSessionID, toSessionID, fromSessionID, toSessionID).Scan(
-		&activeOperationID, &activeOwnerID, &leaseExpiresAt,
-		&activeFromSessionID, &activeToSessionID,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
+	`), fromSessionID, toSessionID, fromSessionID, toSessionID)
+	if err != nil {
+		return fmt.Errorf("authorize session transfer: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate session transfer authorization: %w", err)
+		}
 		if operationID != "" {
 			return ErrSessionTransferOwnershipLost
 		}
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("authorize session transfer: %w", err)
+	if err := rows.Scan(
+		&activeOperationID, &activeOwnerID, &leaseExpiresAt,
+		&activeFromSessionID, &activeToSessionID,
+	); err != nil {
+		return fmt.Errorf("scan session transfer authorization: %w", err)
+	}
+	if rows.Next() {
+		return ErrSessionTransferInProgress
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate session transfer authorization: %w", err)
 	}
 	if operationID == "" ||
 		operationID != activeOperationID ||
@@ -513,17 +526,30 @@ func ResolveSessionTransferInTransaction(
 	db *sqlx.DB,
 	sessionID string,
 ) (string, error) {
-	var fromSessionID, toSessionID string
-	err := tx.QueryRowxContext(ctx, db.Rebind(`
+	rows, err := tx.QueryxContext(ctx, db.Rebind(`
 		SELECT from_session_id, to_session_id
 		FROM queue_session_transfer_compensations
 		WHERE from_session_id = ? OR to_session_id = ?
-	`), sessionID, sessionID).Scan(&fromSessionID, &toSessionID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return sessionID, nil
-	}
+	`), sessionID, sessionID)
 	if err != nil {
 		return "", fmt.Errorf("resolve active session transfer: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return "", fmt.Errorf("iterate active session transfer: %w", err)
+		}
+		return sessionID, nil
+	}
+	var fromSessionID, toSessionID string
+	if err := rows.Scan(&fromSessionID, &toSessionID); err != nil {
+		return "", fmt.Errorf("scan active session transfer: %w", err)
+	}
+	if rows.Next() {
+		return "", ErrSessionTransferInProgress
+	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("iterate active session transfer: %w", err)
 	}
 	if sessionID == fromSessionID {
 		return toSessionID, nil

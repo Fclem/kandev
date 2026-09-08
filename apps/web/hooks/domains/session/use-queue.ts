@@ -16,7 +16,7 @@ import {
   type QueueEditLease,
 } from "@/lib/api/domains/queue-api";
 import type { QueueMessageParams } from "@/lib/api/domains/queue-api";
-import type { QueueMeta, QueuedMessage } from "@/lib/state/slices/session/types";
+import type { QueuedMessage } from "@/lib/state/slices/session/types";
 import type { EntityReference } from "@/lib/types/entity-reference";
 
 import { generateUUID } from "@/lib/utils";
@@ -77,7 +77,6 @@ type QueueActionsArgs = {
   setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"];
   removeQueueEntry: ReturnType<typeof useQueueState>["removeQueueEntry"];
   setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"];
-  queueMeta: QueueMeta | undefined;
   metaMax: number | undefined;
   metaMergeEnabled: boolean | undefined;
   metaAutoRun: boolean | undefined;
@@ -162,16 +161,13 @@ function useSetAutoRunAction(
 function useQueueRefetch(
   setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"],
   setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"],
-  queueMeta: QueueMeta | undefined,
   activeSessionId: string | null,
 ) {
-  const queueMetaRef = useRef(queueMeta);
-  queueMetaRef.current = queueMeta;
   const activeSessionIdRef = useRef(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
   const mountedRef = useRef(false);
   const refetchVersion = useRef<Record<string, number>>({});
-  const refetchEpoch = useRef<Record<string, number>>({});
+  const mutationEpoch = useRef<Record<string, number>>({});
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -180,13 +176,13 @@ function useQueueRefetch(
   }, []);
   const invalidate = useCallback((sid: string) => {
     refetchVersion.current[sid] = (refetchVersion.current[sid] ?? 0) + 1;
-    refetchEpoch.current[sid] = (refetchEpoch.current[sid] ?? 0) + 1;
+    mutationEpoch.current[sid] = (mutationEpoch.current[sid] ?? 0) + 1;
   }, []);
   useEffect(() => {
     if (!activeSessionId) return;
     return () => {
       refetchVersion.current[activeSessionId] = (refetchVersion.current[activeSessionId] ?? 0) + 1;
-      refetchEpoch.current[activeSessionId] = (refetchEpoch.current[activeSessionId] ?? 0) + 1;
+      mutationEpoch.current[activeSessionId] = (mutationEpoch.current[activeSessionId] ?? 0) + 1;
     };
   }, [activeSessionId]);
   const refetch = useCallback(
@@ -194,17 +190,15 @@ function useQueueRefetch(
       if (!mountedRef.current) return;
       const version = (refetchVersion.current[sid] ?? 0) + 1;
       refetchVersion.current[sid] = version;
-      const epoch = (refetchEpoch.current[sid] ?? 0) + 1;
-      refetchEpoch.current[sid] = epoch;
-      const requestMeta = queueMetaRef.current;
+      const epoch = (mutationEpoch.current[sid] ?? 0) + 1;
+      mutationEpoch.current[sid] = epoch;
       try {
         setQueueLoading(sid, true);
         const status = await getQueueStatus(sid);
         if (
           refetchVersion.current[sid] !== version ||
-          refetchEpoch.current[sid] !== epoch ||
-          activeSessionIdRef.current !== sid ||
-          queueMetaRef.current !== requestMeta
+          mutationEpoch.current[sid] !== epoch ||
+          activeSessionIdRef.current !== sid
         ) {
           return;
         }
@@ -215,7 +209,7 @@ function useQueueRefetch(
           autoRun: status.auto_run ?? true,
         });
       } finally {
-        if (refetchVersion.current[sid] === version && refetchEpoch.current[sid] === epoch) {
+        if (refetchVersion.current[sid] === version && mutationEpoch.current[sid] === epoch) {
           setQueueLoading(sid, false);
         }
       }
@@ -232,7 +226,6 @@ function useQueueActions({
   setQueueEntries,
   setQueueLoading,
   removeQueueEntry,
-  queueMeta,
   metaMax,
   metaMergeEnabled,
   metaAutoRun,
@@ -240,7 +233,6 @@ function useQueueActions({
   const { refetch, invalidate: invalidateRefetch } = useQueueRefetch(
     setQueueEntries,
     setQueueLoading,
-    queueMeta,
     sessionId,
   );
 
@@ -607,12 +599,10 @@ export function useQueue(sessionId: string | null) {
     setQueueEntries: state.setQueueEntries,
     removeQueueEntry: state.removeQueueEntry,
     setQueueLoading: state.setQueueLoading,
-    queueMeta: meta,
     metaMax: meta?.max,
     metaMergeEnabled: meta?.mergeEnabled,
     metaAutoRun: meta?.autoRun,
   });
-
   useEffect(() => {
     if (!sessionId) return;
     if (connectionStatus !== "connected") return;

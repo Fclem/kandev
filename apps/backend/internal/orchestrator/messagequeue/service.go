@@ -707,13 +707,13 @@ func leaseConnection(lease *QueueEditLease) string {
 	return lease.connectionID
 }
 
-func (s *Service) editLeaseBlocksHeadLocked(ctx context.Context, sessionID string) (bool, error) {
-	s.editLeaseMu.Lock()
-	defer s.editLeaseMu.Unlock()
+func (s *Service) editLeaseBlocksHead(ctx context.Context, sessionID string) (bool, error) {
 	entries, err := s.repo.ListBySession(ctx, sessionID)
 	if err != nil {
 		return false, err
 	}
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	now := time.Now().UTC()
 	for _, entry := range entries {
 		key := s.editLeaseKey(sessionID, entry.ID)
@@ -746,9 +746,7 @@ func (s *Service) editLeaseBlocksReorderLocked(sessionID string) bool {
 	return false
 }
 
-func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excludedEntryID, queuedBy string) (bool, error) {
-	s.editLeaseMu.Lock()
-	defer s.editLeaseMu.Unlock()
+func (s *Service) editLeaseBlocksTail(ctx context.Context, sessionID, excludedEntryID, queuedBy string) (bool, error) {
 	entries, err := s.repo.ListBySession(ctx, sessionID)
 	if err != nil {
 		return false, err
@@ -766,14 +764,14 @@ func (s *Service) editLeaseBlocksTailLocked(ctx context.Context, sessionID, excl
 	if tail == nil {
 		return false, nil
 	}
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	key := s.editLeaseKey(sessionID, tail.ID)
 	s.expireEditLeaseLocked(key, time.Now().UTC())
 	return s.editLeases[key] != nil && tail.QueuedBy == queuedBy, nil
 }
 
-func (s *Service) editLeaseBlocksMergeLocked(ctx context.Context, sessionID, sourceID string) (bool, error) {
-	s.editLeaseMu.Lock()
-	defer s.editLeaseMu.Unlock()
+func (s *Service) editLeaseBlocksMerge(ctx context.Context, sessionID, sourceID string) (bool, error) {
 	entries, err := s.repo.ListBySession(ctx, sessionID)
 	if err != nil {
 		return false, err
@@ -797,6 +795,8 @@ func (s *Service) editLeaseBlocksMergeLocked(ctx context.Context, sessionID, sou
 			target = entry
 		}
 	}
+	s.editLeaseMu.Lock()
+	defer s.editLeaseMu.Unlock()
 	now := time.Now().UTC()
 	sourceKey := s.editLeaseKey(sessionID, source.ID)
 	s.expireEditLeaseLocked(sourceKey, now)
@@ -901,7 +901,7 @@ func (s *Service) queueMessageWithMetadataAdmission(ctx context.Context, session
 					QueuedAt:    time.Now().UTC(),
 					QueuedBy:    userID,
 				}
-				blocked, leaseErr := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "", candidate.QueuedBy)
+				blocked, leaseErr := s.editLeaseBlocksTail(admittedCtx, sessionID, "", candidate.QueuedBy)
 				if leaseErr != nil {
 					return leaseErr
 				}
@@ -978,7 +978,7 @@ func (s *Service) finalizeAutoMerge(ctx context.Context, source *QueuedMessage, 
 	if !enabled {
 		return source
 	}
-	blocked, err := s.editLeaseBlocksTailLocked(ctx, source.SessionID, source.ID, source.QueuedBy)
+	blocked, err := s.editLeaseBlocksTail(ctx, source.SessionID, source.ID, source.QueuedBy)
 	if err != nil {
 		s.logger.Error("automatic queue merge lease check failed; preserving separate admission",
 			zap.String("session_id", source.SessionID),
@@ -1061,6 +1061,7 @@ func (s *Service) restoreMessage(ctx context.Context, msg *QueuedMessage) (*Queu
 	if err := s.repo.Restore(ctx, &restored, 0); err != nil {
 		return nil, err
 	}
+	s.invalidateEditLease(restored.SessionID, restored.ID)
 	s.logger.Info("message restored at original queue position",
 		zap.String("session_id", restored.SessionID),
 		zap.String("task_id", restored.TaskID),
@@ -1326,8 +1327,8 @@ func (s *Service) invalidateEditLease(sessionID, entryID string) {
 }
 
 // ReleaseEditLeasesForConnection drops every lease owned by a disconnected
-// WebSocket connection. Durable release precedes local removal so a transient
-// database failure preserves the owner's retryable state.
+// WebSocket connection. Durable release is attempted before local removal,
+// but a failed durable release cannot preserve a disconnected owner's lease.
 func (s *Service) ReleaseEditLeasesForConnection(connectionID string) int {
 	if connectionID == "" {
 		return 0
@@ -1349,7 +1350,6 @@ func (s *Service) ReleaseEditLeasesForConnection(connectionID string) int {
 					zap.String("session_id", lease.SessionID),
 					zap.String("entry_id", lease.EntryID),
 					zap.Error(err))
-				continue
 			}
 		}
 		s.editLeaseMu.Lock()
@@ -1430,7 +1430,7 @@ func (s *Service) ReserveQueuedWithAutoRun(ctx context.Context, sessionID string
 	var msg *QueuedMessage
 	autoRun := true
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
+		blocked, err := s.editLeaseBlocksHead(admittedCtx, sessionID)
 		if err != nil {
 			return err
 		}
@@ -1588,7 +1588,7 @@ func (s *Service) AppendContent(ctx context.Context, sessionID, taskID, content,
 	var msg *QueuedMessage
 	var appended bool
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		blocked, err := s.editLeaseBlocksTailLocked(admittedCtx, sessionID, "", userID)
+		blocked, err := s.editLeaseBlocksTail(admittedCtx, sessionID, "", userID)
 		if err != nil {
 			return err
 		}
@@ -1622,7 +1622,7 @@ func (s *Service) TakeQueued(ctx context.Context, sessionID string) (*QueuedMess
 		if len(entries) > 0 && entries[0].IsReservedInFlight() {
 			return nil
 		}
-		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
+		blocked, err := s.editLeaseBlocksHead(admittedCtx, sessionID)
 		if err != nil || blocked {
 			return err
 		}
@@ -1666,7 +1666,7 @@ func (s *Service) TakeQueuedIfAutoRun(ctx context.Context, sessionID string) (*Q
 		if len(entries) == 0 || entries[0].IsDurableLifecycle() || entries[0].IsReservedInFlight() {
 			return nil
 		}
-		blocked, err := s.editLeaseBlocksHeadLocked(admittedCtx, sessionID)
+		blocked, err := s.editLeaseBlocksHead(admittedCtx, sessionID)
 		if err != nil || blocked {
 			return err
 		}
@@ -2091,7 +2091,7 @@ func (s *Service) MergeIntoAbove(ctx context.Context, sessionID, entryID, queued
 	}
 	var merged *QueuedMessage
 	err := s.WithSessionAdmission(ctx, sessionID, func(admittedCtx context.Context) error {
-		blocked, err := s.editLeaseBlocksMergeLocked(admittedCtx, sessionID, entryID)
+		blocked, err := s.editLeaseBlocksMerge(admittedCtx, sessionID, entryID)
 		if err != nil {
 			return err
 		}

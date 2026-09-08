@@ -71,6 +71,18 @@ func sendNowSourceGenerationChanged(claim *SendNowClaim, source QueuedMessage, c
 	return ok && expected != current
 }
 
+func sendNowClaimSourcesAllInvalidated(claim *SendNowClaim, generations map[string]int64) bool {
+	if claim == nil || len(claim.Sources) == 0 {
+		return false
+	}
+	for _, source := range claim.Sources {
+		if source.TaskID == "" || !sendNowSourceGenerationChanged(claim, source, generations[source.TaskID]) {
+			return false
+		}
+	}
+	return true
+}
+
 // ValidateSendNowEntries checks aggregate admission limits without building a
 // dispatch envelope. Callers use it before interrupting an active turn; the
 // repository still validates the exact snapshot again inside its claim

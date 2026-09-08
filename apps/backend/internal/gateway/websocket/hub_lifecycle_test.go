@@ -45,16 +45,25 @@ func TestHubClientDisconnectNotifiesListenerOnce(t *testing.T) {
 	h := newTestHub(t)
 	client := newTestClient("connection-a")
 	h.clients[client] = true
-
-	var disconnected []string
+	disconnected := make(chan string, 1)
 	h.SetClientDisconnectListener(func(connectionID string) {
-		disconnected = append(disconnected, connectionID)
+		disconnected <- connectionID
 	})
 
 	h.removeClient(client)
 	h.removeClient(client)
 
-	if len(disconnected) != 1 || disconnected[0] != client.ID {
-		t.Fatalf("disconnect notifications = %#v, want one notification for %q", disconnected, client.ID)
+	select {
+	case connectionID := <-disconnected:
+		if connectionID != client.ID {
+			t.Fatalf("disconnect notification = %q, want %q", connectionID, client.ID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("disconnect listener was not called")
+	}
+	select {
+	case duplicate := <-disconnected:
+		t.Fatalf("duplicate disconnect notification = %q", duplicate)
+	case <-time.After(50 * time.Millisecond):
 	}
 }

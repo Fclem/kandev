@@ -221,6 +221,8 @@ describe("useQueue", () => {
   });
 });
 
+type QueueSnapshot = { entries: QueuedMessage[]; count: number; max: number };
+
 describe("queue refetch races", () => {
   beforeEach(() => {
     resetMockState();
@@ -234,23 +236,28 @@ describe("queue refetch races", () => {
   });
 
   it("does not let a stale refetch overwrite a newer queue event", async () => {
-    const pendingSnapshot = Promise.withResolvers<{
-      entries: QueuedMessage[];
-      count: number;
-      max: number;
-    }>();
-    queueApiMock.getQueueStatus.mockReturnValueOnce(pendingSnapshot.promise);
-    const { rerender } = renderHook(() => useQueue(SESSION_ID));
+    const pendingSnapshot = Promise.withResolvers<QueueSnapshot>();
+    const newerSnapshot = Promise.withResolvers<QueueSnapshot>();
+    queueApiMock.getQueueStatus
+      .mockReturnValueOnce(pendingSnapshot.promise)
+      .mockReturnValueOnce(newerSnapshot.promise);
+    const { result } = renderHook(() => useQueue(SESSION_ID));
     await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledTimes(1));
 
     const eventEntry = entry({ id: "event-entry", content: "newer event" });
-    mockState.queue.bySessionId[SESSION_ID] = [eventEntry];
-    mockState.queue.metaBySessionId[SESSION_ID] = { count: 1, max: 10 };
-    rerender();
+    await act(async () => {
+      void result.current.refetch();
+    });
+    await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalledTimes(2));
 
     await act(async () => {
       pendingSnapshot.resolve({
         entries: [entry({ id: STALE_ENTRY_ID })],
+        count: 1,
+        max: 10,
+      });
+      newerSnapshot.resolve({
+        entries: [eventEntry],
         count: 1,
         max: 10,
       });
@@ -262,14 +269,15 @@ describe("queue refetch races", () => {
       [expect.objectContaining({ id: STALE_ENTRY_ID })],
       expect.anything(),
     );
+    expect(mockState.setQueueEntries).toHaveBeenCalledWith(
+      SESSION_ID,
+      [eventEntry],
+      expect.anything(),
+    );
   });
   it("drops a delayed response from a previous session when both snapshots lack metadata", async () => {
     const previousSessionId = SESSION_ID;
-    const pendingSnapshot = Promise.withResolvers<{
-      entries: QueuedMessage[];
-      count: number;
-      max: number;
-    }>();
+    const pendingSnapshot = Promise.withResolvers<QueueSnapshot>();
     queueApiMock.getQueueStatus.mockReturnValueOnce(pendingSnapshot.promise);
     const { rerender } = renderHook(({ sessionId }: { sessionId: string }) => useQueue(sessionId), {
       initialProps: { sessionId: previousSessionId },
@@ -688,7 +696,6 @@ describe("useQueue reorderEntries", () => {
 
     const { result } = renderHook(() => useQueue(SESSION_ID));
     await waitFor(() => expect(queueApiMock.getQueueStatus).toHaveBeenCalled());
-    queueApiMock.getQueueStatus.mockClear();
 
     await act(async () => {
       await expect(result.current.reorderEntries([first.id])).rejects.toThrow(

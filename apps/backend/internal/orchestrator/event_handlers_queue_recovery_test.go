@@ -16,7 +16,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func TestDispatchTakenQueuedMessageRestoresEmptyOrdinaryEntry(t *testing.T) {
+func TestDispatchTakenQueuedMessageDiscardsEmptyOrdinaryEntry(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
@@ -33,8 +33,8 @@ func TestDispatchTakenQueuedMessageRestoresEmptyOrdinaryEntry(t *testing.T) {
 	if svc.dispatchTakenQueuedMessage(ctx, "session-empty", queued, true) {
 		t.Fatal("empty ordinary entry was dispatched")
 	}
-	if got := svc.messageQueue.GetStatus(ctx, "session-empty").Count; got != 1 {
-		t.Fatalf("empty ordinary entry count = %d, want restored entry", got)
+	if got := svc.messageQueue.GetStatus(ctx, "session-empty").Count; got != 0 {
+		t.Fatalf("empty ordinary entry count = %d, want discarded entry", got)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestDispatchTakenQueuedMessageAcknowledgesEmptyLifecycleAfterCancellation(t
 	}
 }
 
-func TestTakeAndMergeHandoffMessageRestoresEmptyEntry(t *testing.T) {
+func TestTakeAndMergeHandoffMessageDiscardsEmptyEntry(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
@@ -135,8 +135,8 @@ func TestTakeAndMergeHandoffMessageRestoresEmptyEntry(t *testing.T) {
 	if msg != nil || prompt != "base" || attachments != nil || references != nil {
 		t.Fatalf("empty handoff result = msg:%v prompt:%q attachments:%v references:%v", msg, prompt, attachments, references)
 	}
-	if got := svc.messageQueue.GetStatus(ctx, "session-empty-handoff").Count; got != 1 {
-		t.Fatalf("empty handoff count = %d, want restored entry", got)
+	if got := svc.messageQueue.GetStatus(ctx, "session-empty-handoff").Count; got != 0 {
+		t.Fatalf("empty handoff count = %d, want discarded entry", got)
 	}
 }
 

@@ -237,16 +237,16 @@ func (h *Handlers) applyMoveTaskImmediate(
 		if queuedSessionID != "" && h.messageQueue != nil {
 			rollbackCtx := context.WithoutCancel(ctx)
 			removed := false
-			exactRemovalAttempted := false
-			if queuedEntryID != "" {
-				if remover, ok := h.messageQueue.(interface {
-					RemoveEntry(context.Context, string, string) error
-				}); ok {
-					exactRemovalAttempted = true
+			exactRemovalAvailable := false
+			if remover, ok := h.messageQueue.(interface {
+				RemoveEntry(context.Context, string, string) error
+			}); ok {
+				exactRemovalAvailable = true
+				if queuedEntryID != "" {
 					removed = remover.RemoveEntry(rollbackCtx, queuedSessionID, queuedEntryID) == nil
 				}
 			}
-			if !removed && !exactRemovalAttempted {
+			if !removed && !exactRemovalAvailable {
 				// Alternate queue implementations predate exact entry removal.
 				// Keep their legacy cleanup behavior when no exact remover is
 				// available; production uses the target-scoped path above.

@@ -53,6 +53,8 @@ var (
 	ErrRouteActionActiveTurn = errors.New("route actions require a settled turn")
 )
 
+const maxStartupTransferReconcileAttempts = 30
+
 // ServiceConfig holds orchestrator service configuration
 type ServiceConfig struct {
 	Scheduler                     scheduler.SchedulerConfig
@@ -2710,13 +2712,20 @@ func (s *Service) isSessionResetInProgress(sessionID string) bool {
 }
 
 func (s *Service) reconcileDurableQueueStateOnStartup(ctx context.Context) error {
-	for {
+	for attempt := 1; ; attempt++ {
 		err := s.reconcileSessionTransferCompensationsOnStartup(ctx)
 		if !errors.Is(err, messagequeue.ErrSessionTransferInProgress) {
 			if err != nil {
 				return fmt.Errorf("reconcile session transfer compensations: %w", err)
 			}
 			break
+		}
+		if attempt == maxStartupTransferReconcileAttempts {
+			return fmt.Errorf(
+				"reconcile session transfer compensations still blocked after %d attempts: %w",
+				attempt,
+				err,
+			)
 		}
 		timer := time.NewTimer(time.Second)
 		select {

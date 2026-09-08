@@ -132,6 +132,7 @@ export function useQueueEditProtection({ sessionId, entries }: QueueEditProtecti
         return;
       }
       activeEditRef.current = null;
+      setEditLease(null);
       setEditingEntryId(null);
       const release = dispatchIfAutoRun
         ? endQueuedMessageEdit(activeEdit.lease, true)

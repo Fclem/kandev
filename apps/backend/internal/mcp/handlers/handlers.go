@@ -2969,6 +2969,7 @@ type taskMessageDispatchResult struct {
 }
 
 type taskMessageReviewRollback struct {
+	taskID         string
 	changed        bool
 	restoreTask    bool
 	taskState      v1.TaskState
@@ -3388,6 +3389,7 @@ func (h *Handlers) ensureTaskInProgressForTaskMessage(ctx context.Context, taskI
 		return taskMessageReviewRollback{}, err
 	}
 	rollback := taskMessageReviewRollback{
+		taskID:         taskID,
 		changed:        true,
 		restoreTask:    true,
 		taskState:      task.State,
@@ -3497,22 +3499,36 @@ func (h *Handlers) restoreSelectedTaskMessageSession(ctx context.Context, repo t
 		return nil
 	}
 	selected, err := repo.GetTaskSession(ctx, rollback.selectedID)
-	if err != nil {
+	if err != nil && !errors.Is(err, models.ErrTaskSessionNotFound) {
 		return err
 	}
 	if selected != nil && selected.State == models.TaskSessionStateCancelled {
 		return errTaskMessageRollbackSuperseded
 	}
-	taskID := ""
-	if selected != nil {
+	taskID := rollback.taskID
+	if selected != nil && selected.TaskID != "" {
 		taskID = selected.TaskID
+	}
+	if taskID == "" {
+		if snapshot, ok := rollback.queues[rollback.selectedID]; ok {
+			for _, entry := range snapshot.entries {
+				if entry.TaskID != "" {
+					taskID = entry.TaskID
+					break
+				}
+			}
+		}
 	}
 	if primaryID != "" && rollback.selectedID != primaryID {
 		if err := h.restoreTaskMessageQueueOwner(ctx, taskID, rollback.selectedID, primaryID); err != nil {
 			return err
 		}
 	}
-	return repo.DeleteTaskSession(ctx, rollback.selectedID)
+	if err := repo.DeleteTaskSession(ctx, rollback.selectedID); err != nil &&
+		!errors.Is(err, models.ErrTaskSessionNotFound) {
+		return err
+	}
+	return nil
 }
 
 func (r taskMessageReviewRollback) primarySessionID() string {

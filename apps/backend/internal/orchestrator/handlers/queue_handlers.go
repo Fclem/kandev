@@ -804,6 +804,8 @@ func (h *QueueHandlers) sendNowErrorResponse(msg *ws.Message, sessionID string, 
 		return ws.NewError(msg.ID, msg.Action, queueErrorCodeSendNowQueueEmpty, "Queue is empty", nil)
 	case errors.Is(err, orchestrator.ErrSendNowQueueChanged):
 		return ws.NewError(msg.ID, msg.Action, queueErrorCodeSendNowQueueChanged, "Queue changed before Send Now could start", nil)
+	case errors.Is(err, orchestrator.ErrSendNowEditConflict):
+		return ws.NewError(msg.ID, msg.Action, "edit_conflict", "Queue entry is being edited by another view", nil)
 	case errors.Is(err, orchestrator.ErrSendNowConflict):
 		return ws.NewError(msg.ID, msg.Action, queueErrorCodeSendNowConflict, "Another cancellation or Send Now operation is in progress", nil)
 	case errors.Is(err, orchestrator.ErrSendNowTurnChanged):
@@ -848,23 +850,33 @@ type wsQueueEditRequest struct {
 	DispatchIfAutoRun bool   `json:"dispatch_if_auto_run,omitempty"`
 }
 
-func queueEditError(msg *ws.Message, err error) *ws.Message {
-	code := queueErrorCodeEntryNotFound
-	message := "Queue entry was already drained or is no longer editable"
-	if errors.Is(err, messagequeue.ErrEditConflict) {
-		code, message = "edit_conflict", "Queue entry is being edited by another view"
-	} else if errors.Is(err, messagequeue.ErrEditRevisionConflict) {
-		code, message = "queue_conflict", "Queue entry changed while it was being edited"
+func (h *QueueHandlers) queueEditError(msg *ws.Message, err error) *ws.Message {
+	switch {
+	case errors.Is(err, messagequeue.ErrEntryNotFound):
+		response, _ := ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound,
+			"Queue entry was already drained or is no longer editable", nil)
+		return response
+	case errors.Is(err, messagequeue.ErrEditConflict):
+		response, _ := ws.NewError(msg.ID, msg.Action, "edit_conflict",
+			"Queue entry is being edited by another view", nil)
+		return response
+	case errors.Is(err, messagequeue.ErrEditRevisionConflict):
+		response, _ := ws.NewError(msg.ID, msg.Action, "queue_conflict",
+			"Queue entry changed while it was being edited", nil)
+		return response
+	default:
+		h.logger.Error("failed to process queue edit", zap.Error(err))
+		response, _ := ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError,
+			"Failed to process queue edit", nil)
+		return response
 	}
-	response, _ := ws.NewError(msg.ID, msg.Action, code, message, nil)
-	return response
 }
-func queueEditLeaseError(msg *ws.Message, err error) *ws.Message {
+func (h *QueueHandlers) queueEditLeaseError(msg *ws.Message, err error) *ws.Message {
 	if errors.Is(err, messagequeue.ErrEditLeaseNotFound) {
 		response, _ := ws.NewError(msg.ID, msg.Action, "edit_conflict", "Queue entry edit lease is no longer valid", nil)
 		return response
 	}
-	return queueEditError(msg, err)
+	return h.queueEditError(msg, err)
 }
 
 func (h *QueueHandlers) wsBeginEdit(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
@@ -883,7 +895,7 @@ func (h *QueueHandlers) wsBeginEdit(ctx context.Context, msg *ws.Message) (*ws.M
 	}
 	lease, err := h.queueEdit.BeginEdit(ctx, req.SessionID, req.EntryID, ws.ConnectionID(ctx))
 	if err != nil {
-		return queueEditError(msg, err), nil
+		return h.queueEditError(msg, err), nil
 	}
 	return ws.NewResponse(msg.ID, msg.Action, lease)
 }
@@ -904,7 +916,7 @@ func (h *QueueHandlers) wsRenewEdit(ctx context.Context, msg *ws.Message) (*ws.M
 	}
 	lease, err := h.queueEdit.RenewEdit(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx))
 	if err != nil {
-		return queueEditLeaseError(msg, err), nil
+		return h.queueEditLeaseError(msg, err), nil
 	}
 	return ws.NewResponse(msg.ID, msg.Action, lease)
 }
@@ -935,7 +947,7 @@ func (h *QueueHandlers) wsEndEdit(ctx context.Context, msg *ws.Message) (*ws.Mes
 		err = h.queueEdit.EndEdit(ctx, req.SessionID, req.EntryID, req.LeaseID, ws.ConnectionID(ctx))
 	}
 	if err != nil {
-		return queueEditLeaseError(msg, err), nil
+		return h.queueEditLeaseError(msg, err), nil
 	}
 	h.signalPendingAttachmentCleanup(ctx, req.SessionID, req.EntryID)
 	if saved {
@@ -1087,6 +1099,7 @@ func (h *QueueHandlers) wsUpdateMessage(ctx context.Context, msg *ws.Message) (*
 				req.LeaseID, req.OperationID, connectionID, *req.ExpectedRevision, req.Content,
 				req.Attachments, metadataUpdates)
 		} else {
+			// Non-WebSocket/MCP updates still use the service's durable lease fencing.
 			updateErr = h.queueService.UpdateMessageWithMetadata(updateCtx, req.SessionID, req.EntryID,
 				req.Content, req.Attachments, metadataUpdates, queuedBy)
 		}
@@ -1853,7 +1866,7 @@ func (h *QueueHandlers) queueUpdateFailure(
 	if errors.Is(updateErr, messagequeue.ErrEditConflict) ||
 		errors.Is(updateErr, messagequeue.ErrEditLeaseNotFound) ||
 		errors.Is(updateErr, messagequeue.ErrEditRevisionConflict) {
-		return queueEditLeaseError(msg, updateErr), nil
+		return h.queueEditLeaseError(msg, updateErr), nil
 	}
 	if errors.Is(updateErr, messagequeue.ErrEntryNotFound) {
 		return ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound, "Queue entry was already drained or not owned by caller", nil)
@@ -2188,7 +2201,7 @@ func (h *QueueHandlers) wsReorder(ctx context.Context, msg *ws.Message) (*ws.Mes
 			return ws.NewError(msg.ID, msg.Action, queueErrorCodeQueueChanged, "Queue changed before the reorder could be applied", nil)
 		}
 		if errors.Is(err, messagequeue.ErrEditConflict) {
-			return queueEditLeaseError(msg, err), nil
+			return h.queueEditLeaseError(msg, err), nil
 		}
 		h.logger.Error("failed to reorder queued messages", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to reorder queued messages", nil)

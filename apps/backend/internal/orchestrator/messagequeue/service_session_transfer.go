@@ -186,7 +186,7 @@ func (s *Service) prepareDurableSessionTransfer(
 			return fmt.Errorf("persist session transfer compensation: %w", err)
 		}
 	}
-	if len(attachmentIDs) == 0 || prepare == nil {
+	if prepare == nil {
 		return nil
 	}
 	state.preparationCalled = true

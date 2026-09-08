@@ -54,11 +54,13 @@ func (r *memoryRepository) PurgeTask(_ context.Context, taskID string) (int, err
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	removed := 0
+	affectedSessions := make(map[string]struct{})
 	for sessionID, list := range r.entries {
 		kept := list[:0]
 		for _, msg := range list {
 			if msg.TaskID == taskID {
 				removed++
+				affectedSessions[sessionID] = struct{}{}
 				continue
 			}
 			kept = append(kept, msg)
@@ -72,7 +74,11 @@ func (r *memoryRepository) PurgeTask(_ context.Context, taskID string) (int, err
 	for sessionID, move := range r.pendingMoves {
 		if move.TaskID == taskID {
 			delete(r.pendingMoves, sessionID)
+			affectedSessions[sessionID] = struct{}{}
 		}
+	}
+	for sessionID := range affectedSessions {
+		r.sessionGeneration[sessionID]++
 	}
 	r.generation[taskID]++
 	return removed, nil
@@ -661,7 +667,14 @@ func (r *memoryRepository) RestoreSendNowClaim(_ context.Context, claim *SendNow
 	defer r.mu.Unlock()
 
 	sessionID := claim.Sources[0].SessionID
-	if claim.SessionGeneration != r.sessionGeneration[sessionID] {
+	generations := make(map[string]int64)
+	for _, source := range claim.Sources {
+		if source.TaskID != "" {
+			generations[source.TaskID] = r.generation[source.TaskID]
+		}
+	}
+	sessionChanged := claim.SessionGeneration != r.sessionGeneration[sessionID]
+	if sessionChanged && !sendNowClaimSourcesAllInvalidated(claim, generations) {
 		return ErrSendNowClaimChanged
 	}
 	list := r.entries[sessionID]
@@ -731,10 +744,16 @@ func (r *memoryRepository) AcknowledgeSendNowClaim(_ context.Context, claim *Sen
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	sessionID := claim.Sources[0].SessionID
-	if claim.SessionGeneration != r.sessionGeneration[sessionID] {
+	generations := make(map[string]int64)
+	for _, source := range claim.Sources {
+		if source.TaskID != "" {
+			generations[source.TaskID] = r.generation[source.TaskID]
+		}
+	}
+	if claim.SessionGeneration != r.sessionGeneration[sessionID] &&
+		!sendNowClaimSourcesAllInvalidated(claim, generations) {
 		return ErrSendNowClaimChanged
 	}
-	generations := make(map[string]int64)
 	requested := make(map[string]struct{})
 	for _, source := range claim.Sources {
 		if source.SessionID != sessionID {

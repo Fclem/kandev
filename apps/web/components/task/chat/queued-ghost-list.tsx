@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { stripSystemTags } from "@/lib/utils/system-tags";
 import {
   MergeReferenceOverflowError,
+  QueueEditConflictError,
   QueueEntryNotFoundError,
   QueueReorderError,
   QueueSendNowError,
@@ -118,6 +119,7 @@ function useSendNowPanelHandlers(sendEntryNow: (entryId: string) => Promise<void
   const sendNowErrorMessage = useCallback(
     (err: unknown) => {
       if (err instanceof QueueEntryNotFoundError) return t("chat:sendNowEntryAlreadySent");
+      if (err instanceof QueueEditConflictError) return t("chat:queueEditSaveFailed");
       if (err instanceof QueueSendNowError) {
         const messages: Record<string, string> = {
           queue_empty: "chat:sendNowQueueEmpty",
@@ -170,13 +172,13 @@ function useQueuePanelHandlers({
       entityReferences: EntityReference[],
       lease?: QueueEditLease | null,
     ) => {
-      if (lease) {
-        await editEntry(entryId, content, attachments, entityReferences, lease);
-      } else {
-        await editEntry(entryId, content, attachments, entityReferences);
+      if (!lease) {
+        toast.error(t("chat:queueEditSaveFailed"));
+        return;
       }
+      await editEntry(entryId, content, attachments, entityReferences, lease);
     },
-    [editEntry],
+    [editEntry, t],
   );
   const handleRemove = useCallback(
     async (entryId: string) => {
@@ -407,12 +409,7 @@ export function QueueAffordance({ sessionId, children, renderStatusBar }: QueueA
       content: string,
       refs: EntityReference[],
       attachments?: MessageAttachment[],
-    ) => {
-      if (editLease) {
-        return handlePanelSave(entryId, content, attachments, refs, editLease);
-      }
-      return handlePanelSave(entryId, content, attachments, refs);
-    },
+    ) => handlePanelSave(entryId, content, attachments, refs, editLease),
     [editLease, handlePanelSave],
   );
   const handleEditComplete = useCallback(

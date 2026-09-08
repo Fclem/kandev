@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,9 +85,21 @@ func (r *sqliteRepository) persistSendNowClaimTx(
 		INSERT INTO queue_send_now_claims (session_id, claim_id, claim_json, created_at)
 		VALUES (?, ?, ?, ?)
 	`), sessionID, claim.ClaimID, string(claimJSON), time.Now().UTC()); err != nil {
+		if isDuplicateSendNowClaimError(err) {
+			return ErrSendNowClaimChanged
+		}
 		return fmt.Errorf("persist Send Now claim: %w", err)
 	}
 	return nil
+}
+
+func isDuplicateSendNowClaimError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "duplicate key") ||
+		strings.Contains(message, "unique constraint failed: queue_send_now_claims.session_id")
 }
 
 func (r *sqliteRepository) deleteSendNowClaimTx(

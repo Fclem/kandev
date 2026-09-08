@@ -55,7 +55,8 @@ type Hub struct {
 	userSubscriptionListeners []func(userID string)
 
 	// clientDisconnectListener releases connection-bound resources after a
-	// client is removed from the hub.
+	// client is removed from the hub. It runs asynchronously so durable cleanup
+	// cannot block the hub event loop.
 	clientDisconnectListener func(connectionID string)
 
 	// sessionMode tracks per-session focus state and fires listeners when
@@ -168,7 +169,7 @@ func (h *Hub) closeAllClients() {
 
 	if listener != nil {
 		for _, clientID := range disconnectedIDs {
-			listener(clientID)
+			go listener(clientID)
 		}
 	}
 
@@ -226,7 +227,7 @@ func (h *Hub) removeClient(client *Client) {
 	}
 
 	if listener != nil {
-		listener(client.ID)
+		go listener(client.ID)
 	}
 
 	for _, sessionID := range dedupStrings(affectedSessions) {

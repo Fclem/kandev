@@ -24,6 +24,7 @@ const (
 
 var (
 	ErrSendNowConflict           = errors.New("send-now operation is already in progress")
+	ErrSendNowEditConflict       = errors.New("send-now entry is being edited")
 	ErrSendNowQueueEmpty         = errors.New("send-now queue is empty")
 	ErrSendNowEntryNotFound      = errors.New("send-now entry is no longer pending")
 	ErrSendNowQueueChanged       = errors.New("send-now queue selection changed")
@@ -332,7 +333,7 @@ func (s *Service) claimAndDispatchSendNow(ctx context.Context, sessionID, scope 
 func mapSendNowClaimError(scope string, err error) error {
 	switch {
 	case errors.Is(err, messagequeue.ErrEditConflict):
-		return ErrSendNowConflict
+		return ErrSendNowEditConflict
 	case errors.Is(err, messagequeue.ErrSendNowReservationConflict):
 		return ErrSendNowConflict
 	case errors.Is(err, messagequeue.ErrSendNowClaimChanged):

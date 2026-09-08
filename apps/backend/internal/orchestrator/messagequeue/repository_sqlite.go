@@ -542,6 +542,9 @@ func (r *sqliteRepository) RequeuePreservingFIFO(ctx context.Context, msg *Queue
 // queue position for this coalesce key — supersede→requeue of the same
 // content keeps FIFO at the same slot. Caller owns the tx.
 func (r *sqliteRepository) applyCoalesceReplaceTx(ctx context.Context, tx *sqlx.Tx, msg *QueuedMessage, existingID string) error {
+	if err := r.deleteEditLeaseForEntryTx(ctx, tx, msg.SessionID, existingID); err != nil {
+		return err
+	}
 	attachmentsJSON, err := marshalAttachments(msg.Attachments)
 	if err != nil {
 		return err
@@ -675,7 +678,7 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 	if err := r.guardSessionTx(ctx, tx, msg.SessionID, msg.TaskID); err != nil {
 		return err
 	}
-	if err := r.deleteEditLeasesForSessionTx(ctx, tx, msg.SessionID); err != nil {
+	if err := r.deleteEditLeaseForEntryTx(ctx, tx, msg.SessionID, msg.ID); err != nil {
 		return err
 	}
 	if msg.reservationGenerationsCaptured && !msg.IsDurableLifecycle() {
@@ -1961,9 +1964,11 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 	return claim, nil
 }
 
+const sendNowRestoreAction = "restore"
+
 // RestoreSendNowClaim puts every claimed source back at its original position.
 func (r *sqliteRepository) RestoreSendNowClaim(ctx context.Context, claim *SendNowClaim) error {
-	tx, sessionID, unlock, err := r.beginSendNowClaimTx(ctx, claim, "restore")
+	tx, sessionID, unlock, err := r.beginSendNowClaimTx(ctx, claim, sendNowRestoreAction)
 	if err != nil {
 		return err
 	}
@@ -1977,9 +1982,7 @@ func (r *sqliteRepository) RestoreSendNowClaim(ctx context.Context, claim *SendN
 	if err != nil {
 		return err
 	}
-	if claim.SessionGeneration != sessionGeneration {
-		return ErrSendNowClaimChanged
-	}
+	sessionChanged := claim.SessionGeneration != sessionGeneration
 	generations := make(map[string]int64)
 	for _, source := range claim.Sources {
 		if source.TaskID == "" {
@@ -1990,6 +1993,9 @@ func (r *sqliteRepository) RestoreSendNowClaim(ctx context.Context, claim *SendN
 			return generationErr
 		}
 		generations[source.TaskID] = generation
+	}
+	if sessionChanged && !sendNowClaimSourcesAllInvalidated(claim, generations) {
+		return ErrSendNowClaimChanged
 	}
 	if err := validateSQLiteSendNowRestore(claim, sessionID, stored, generations); err != nil {
 		return err
@@ -2004,7 +2010,7 @@ func (r *sqliteRepository) RestoreSendNowClaim(ctx context.Context, claim *SendN
 		}
 	}
 	if claim.ClaimID != "" {
-		if err := r.deleteExactSendNowClaimTx(ctx, tx, sessionID, claim.ClaimID); err != nil {
+		if err := r.deleteSendNowClaimTx(ctx, tx, sessionID); err != nil {
 			return err
 		}
 	}
@@ -2030,17 +2036,7 @@ func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *S
 	if err != nil {
 		return err
 	}
-	if claim.SessionGeneration != sessionGeneration {
-		if claim.ClaimID != "" {
-			if err := r.deleteExactSendNowClaimTx(ctx, tx, sessionID, claim.ClaimID); err != nil {
-				return err
-			}
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-		return ErrSendNowClaimChanged
-	}
+	sessionChanged := claim.SessionGeneration != sessionGeneration
 	generations := make(map[string]int64)
 	for _, source := range claim.Sources {
 		if source.TaskID == "" {
@@ -2051,6 +2047,17 @@ func (r *sqliteRepository) AcknowledgeSendNowClaim(ctx context.Context, claim *S
 			return generationErr
 		}
 		generations[source.TaskID] = generation
+	}
+	if sessionChanged && !sendNowClaimSourcesAllInvalidated(claim, generations) {
+		if claim.ClaimID != "" {
+			if err := r.deleteExactSendNowClaimTx(ctx, tx, sessionID, claim.ClaimID); err != nil {
+				return err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return ErrSendNowClaimChanged
 	}
 	if err := validateSQLiteSendNowAcknowledge(claim, sessionID, stored, generations); err != nil {
 		return err
@@ -2101,17 +2108,25 @@ func (r *sqliteRepository) beginSendNowClaimTx(
 		err := tx.QueryRowxContext(ctx, r.db.Rebind(`
 			SELECT claim_id FROM queue_send_now_claims WHERE session_id = ?
 		`), sessionID).Scan(&currentClaimID)
-		if errors.Is(err, sql.ErrNoRows) || (err == nil && currentClaimID != claim.ClaimID) {
+		if errors.Is(err, sql.ErrNoRows) && action != sendNowRestoreAction {
 			_ = tx.Rollback()
 			unlock()
 			return nil, "", nil, ErrSendNowClaimChanged
 		}
-		if err != nil {
+		if err == nil && currentClaimID != claim.ClaimID {
+			_ = tx.Rollback()
+			unlock()
+			return nil, "", nil, ErrSendNowClaimChanged
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			_ = tx.Rollback()
 			unlock()
 			return nil, "", nil, fmt.Errorf("validate send-now %s claim: %w", action, err)
 		}
 	}
+	// A task purge deletes the durable claim row along with its source rows.
+	// Restore validates the session and task generations below, so it can
+	// distinguish that destructive invalidation from an unrelated claim race.
 	return tx, sessionID, unlock, nil
 }
 
@@ -2376,7 +2391,8 @@ func validateSQLiteSendNowAcknowledge(
 		if !source.IsDurableLifecycle() {
 			continue
 		}
-		if entry, ok := stored[source.ID]; ok && !entry.message.IsReservedInFlight() {
+		entry, ok := stored[source.ID]
+		if !ok || !entry.message.IsReservedInFlight() {
 			return ErrSendNowClaimChanged
 		}
 	}

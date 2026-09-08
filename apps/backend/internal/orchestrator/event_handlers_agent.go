@@ -796,10 +796,11 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 			}
 			return
 		}
-		// Passthrough has no direct attachment-only delivery path. Keep an
-		// ordinary attachment-only entry queued rather than acknowledging it
-		// without sending anything.
-		s.restoreQueuedMessage(ctx, queuedMsg)
+		// ReserveQueued already removed this degenerate ordinary entry. Restoring
+		// it would leave the same empty row at the head forever.
+		s.logger.Warn("discarding empty queued message for passthrough session",
+			zap.String("session_id", data.SessionID),
+			zap.String("queue_id", queuedMsg.ID))
 		return
 	}
 
@@ -947,7 +948,7 @@ func (s *Service) executeQueuedMessageWithReservation(
 			claimEntryID:    claimEntryID,
 			lifecyclePrompt: lifecyclePrompt,
 			afterClaim:      afterClaim,
-onAccepted: func(turnID string) {
+			onAccepted: func(turnID string) {
 				s.bindQueuedCIAutoFixAttempt(promptCtx, queuedMsg, turnID)
 			},
 			afterDispatch: afterDispatch,

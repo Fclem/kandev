@@ -1098,6 +1098,23 @@ func deleteTaskRecoveryRowsTx(
 // transaction on PostgreSQL. Standalone purges discover sessions from visible
 // queue rows and durable recovery records.
 func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string, taskSessions []string) (int, error) {
+	// Task lifecycle operations can run before the optional queue repository has
+	// been initialized. PostgreSQL aborts a transaction on a missing-table
+	// statement, so inspect every queue table before issuing any queue query.
+	for _, table := range []string{
+		"queued_messages",
+		"lifecycle_queue_generations",
+		"queue_session_locks",
+	} {
+		present, err := internaldb.TableExists(tx, table)
+		if err != nil {
+			return 0, fmt.Errorf("check %s table: %w", table, err)
+		}
+		if !present {
+			return 0, nil
+		}
+	}
+
 	if err := ensureTaskPurgeRecoverySchemas(ctx, tx); err != nil {
 		return 0, err
 	}

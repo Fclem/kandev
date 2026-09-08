@@ -534,6 +534,11 @@ func (c *Client) acceptOrderedSessionSubscription(
 		c.sendSessionStreamFailure(msg, req.SessionID, "invalid_binding", "cannot mint session stream grant", true)
 		return false
 	}
+	replay, claims, err := prepareOrderedReplayDelivery(service, replay, time.Now().UTC())
+	if err != nil {
+		c.sendSessionStreamFailure(msg, req.SessionID, "upstream_failure", "cannot claim session event delivery", true)
+		return false
+	}
 	cursorSequence := replay.cursorSequence
 	if req.ReplaceCursor || replay.result == "invalid_resume" {
 		cursorSequence = replay.watermark
@@ -545,6 +550,7 @@ func (c *Client) acceptOrderedSessionSubscription(
 		cursorErr = service.SessionEvents().RegisterCursor(key, cursorSequence)
 	}
 	if cursorErr != nil {
+		releaseOrderedReplayClaims(service, claims)
 		c.sendSessionStreamFailure(msg, req.SessionID, "upstream_failure", "cannot register session cursor", true)
 		return false
 	}
@@ -553,9 +559,49 @@ func (c *Client) acceptOrderedSessionSubscription(
 	response, _ := ws.NewResponse(msg.ID, msg.Action, payload)
 	c.sendMessage(response)
 	for _, event := range replay.events {
-		c.sendOrderedSessionEvent(event)
+		queued := c.sendOrderedSessionEvent(event)
+		if claim, ok := claims[event.ID]; ok {
+			_ = service.SessionDelivery().Complete(claim, queued, time.Now().UTC())
+		}
 	}
 	return true
+}
+
+func prepareOrderedReplayDelivery(
+	service *plugins.Service,
+	replay orderedSessionReplay,
+	now time.Time,
+) (orderedSessionReplay, map[string]plugins.SessionDeliveryClaim, error) {
+	claims := make(map[string]plugins.SessionDeliveryClaim)
+	for _, event := range replay.events {
+		claim, err := service.SessionDelivery().Claim(event.SessionID, event.ID, now)
+		if err != nil {
+			releaseOrderedReplayClaims(service, claims)
+			return replay, nil, err
+		}
+		switch claim.Disposition {
+		case plugins.SessionDeliveryUntracked:
+		case plugins.SessionDeliveryClaimed:
+			claims[event.ID] = claim
+		default:
+			releaseOrderedReplayClaims(service, claims)
+			replay.events = nil
+			replay.result = "invalid_resume"
+			replay.cursorSequence = replay.watermark
+			return replay, nil, nil
+		}
+	}
+	return replay, claims, nil
+}
+
+func releaseOrderedReplayClaims(
+	service *plugins.Service,
+	claims map[string]plugins.SessionDeliveryClaim,
+) {
+	now := time.Now().UTC()
+	for _, claim := range claims {
+		_ = service.SessionDelivery().Complete(claim, false, now)
+	}
 }
 
 func orderedSessionSubscribePayload(
@@ -668,12 +714,12 @@ func (c *Client) sendSessionStreamFailure(
 	c.sendMessage(response)
 }
 
-func (c *Client) sendOrderedSessionEvent(event plugins.SessionEvent) {
+func (c *Client) sendOrderedSessionEvent(event plugins.SessionEvent) bool {
 	frame, err := sessionEventFrame(event)
 	if err != nil {
-		return
+		return false
 	}
-	c.sendNotification(frame, "session.event")
+	return c.sendNotification(frame, "session.event")
 }
 
 type SessionAckRequest struct {

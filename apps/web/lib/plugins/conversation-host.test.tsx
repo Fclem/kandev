@@ -58,8 +58,8 @@ function Harness({ sessionId, taskId }: { sessionId: string | null; taskId?: str
   );
 }
 
-function TurnsHarness({ sessionId }: { sessionId: string | null }) {
-  currentTurnsState = pluginConversationApi.useSessionTurns(sessionId);
+function TurnsHarness({ sessionId, taskId }: { sessionId: string | null; taskId?: string | null }) {
+  currentTurnsState = pluginConversationApi.useSessionTurns(sessionId, taskId);
   return (
     <div>
       <span data-testid="turns">{currentTurnsState.turns.map((turn) => turn.id).join("|")}</span>
@@ -69,14 +69,14 @@ function TurnsHarness({ sessionId }: { sessionId: string | null }) {
   );
 }
 
-function renderTurnsHarness(sessionId: string | null) {
+function renderTurnsHarness(sessionId: string | null, taskId?: string | null) {
   return render(
     <PluginConversationScopeProvider
       pluginId="plugin-history"
       taskId="task-1"
       sessionId={sessionId}
     >
-      <TurnsHarness sessionId={sessionId} />
+      <TurnsHarness sessionId={sessionId} taskId={taskId} />
     </PluginConversationScopeProvider>,
   );
 }
@@ -200,6 +200,56 @@ describe("plugin conversation Host facade", () => {
     expect(await currentState?.loadMore()).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(transport.request).not.toHaveBeenCalled();
+  });
+
+  it("retries initial binding setup after a transient failure", async () => {
+    let bindingFetches = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith(BINDING_PATH_SUFFIX)) {
+        bindingFetches += 1;
+        if (bindingFetches === 1) {
+          return Promise.resolve(
+            response(
+              { error: { code: "upstream_failure", message: "temporary", retryable: true } },
+              503,
+            ),
+          );
+        }
+        return Promise.resolve(
+          response({ bindingToken: "binding-2", generation: 7, expiresAt: FAR_FUTURE_EXPIRY }),
+        );
+      }
+      return Promise.resolve(response({ messages: [], hasMore: false, cursor: null }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.error?.retryable).toBe(true));
+
+    act(() => currentState?.retry());
+
+    await waitFor(() => expect(currentState?.hydrated).toBe(true));
+    expect(bindingFetches).toBe(2);
+  });
+
+  it("retries initial ordered subscription after a transient failure", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      String(input).endsWith(BINDING_PATH_SUFFIX)
+        ? Promise.resolve(
+            response({ bindingToken: "binding-1", generation: 7, expiresAt: FAR_FUTURE_EXPIRY }),
+          )
+        : Promise.resolve(response({ messages: [], hasMore: false, cursor: null })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    transport.request.mockRejectedValueOnce(new Error("temporary subscribe failure"));
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.error?.retryable).toBe(true));
+
+    act(() => currentState?.retry());
+
+    await waitFor(() => expect(currentState?.hydrated).toBe(true));
+    expect(
+      transport.request.mock.calls.filter(([action]) => action === SESSION_SUBSCRIBE_ACTION),
+    ).toHaveLength(2);
   });
 
   it("commits the authorized snapshot before projecting and acknowledging ordered live events", async () => {
@@ -942,6 +992,37 @@ describe("ordered turns convergence", () => {
     expect(currentTurnsState?.hydrated).toBe(true);
     expect(screen.getByTestId("turns-removed").textContent).toBe("false");
   });
+
+  it.each([
+    { name: "inherited task", selectedTaskId: undefined, removalTaskId: "task-2", removed: false },
+    { name: "explicit task", selectedTaskId: "task-1", removalTaskId: "task-1", removed: true },
+    { name: "session-wide scope", selectedTaskId: null, removalTaskId: "task-2", removed: true },
+  ])(
+    "applies turn removals only within $name",
+    async ({ selectedTaskId, removalTaskId, removed }) => {
+      stubTurnsFetch();
+      renderTurnsHarness("session-1", selectedTaskId);
+      await waitFor(() => expect(currentTurnsState?.hydrated).toBe(true));
+      act(() => {
+        transport.listener?.(
+          event(1, "session.turn.started", {
+            id: "turn-1",
+            started_at: MESSAGE_CREATED_AT,
+            completed_at: null,
+            created_at: MESSAGE_CREATED_AT,
+            updated_at: MESSAGE_CREATED_AT,
+          }),
+        );
+      });
+      await waitFor(() => expect(currentTurnsState?.turns).toHaveLength(1));
+
+      act(() => {
+        transport.listener?.(event(2, "session.turn.removed", { id: "turn-1" }, removalTaskId));
+      });
+
+      expect(currentTurnsState?.turns).toHaveLength(removed ? 0 : 1);
+    },
+  );
 
   it("does not let a retry turns page overwrite a live completion mid-fetch", async () => {
     let resolveRetry: ((value: Response) => void) | undefined;

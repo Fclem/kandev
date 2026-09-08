@@ -43,8 +43,8 @@ func TestSessionEventLogPoisonBlocksAckUntilAuditedRequeue(t *testing.T) {
 	require.NoError(t, log.Acknowledge(cursor, 1))
 	require.ErrorIs(t, log.Acknowledge(cursor, 2), ErrPoisonEvent)
 	base := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	for attempt := 0; attempt < SessionPoisonMaxAttempts; attempt++ {
-		require.NoError(t, dispatcher.RecordFailure("session-1", poison.ID, base.Add(time.Duration(attempt)*time.Minute)))
+	for attempt := range SessionPoisonMaxAttempts {
+		claimAndCompletePoison(t, dispatcher, "session-1", poison.ID, base.Add(time.Duration(attempt)*time.Minute), true)
 	}
 	record, ok := log.Poison("session-1", poison.ID)
 	require.True(t, ok)
@@ -52,6 +52,62 @@ func TestSessionEventLogPoisonBlocksAckUntilAuditedRequeue(t *testing.T) {
 	require.Equal(t, SessionPoisonMaxAttempts, record.Attempts)
 	require.ErrorIs(t, dispatcher.Requeue("session-1", poison.ID, record.OwnerEpoch+1, "admin-1", base), ErrStaleOwnerEpoch)
 	require.NoError(t, dispatcher.Requeue("session-1", poison.ID, record.OwnerEpoch, "admin-1", base))
+}
+
+func TestSessionEventPoisonDeliveryClaimControlsLeaseBackoffExhaustionAndRequeue(t *testing.T) {
+	log, err := NewSessionEventLog("")
+	require.NoError(t, err)
+	dispatcher := NewSessionDeliveryDispatcher(log)
+	plain, err := log.Append("session-1", stringPtr("task-1"), "message.added", validMessageAddedPayload("plain"))
+	require.NoError(t, err)
+	plainClaim, err := dispatcher.Claim("session-1", plain.ID, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, SessionDeliveryUntracked, plainClaim.Disposition)
+
+	poison, err := log.Append("session-1", stringPtr("task-1"), "unknown.event", json.RawMessage(`{"type":"unknown.event","session_id":"session-1","task_id":"task-1"}`))
+	require.NoError(t, err)
+	base := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	first := claimAndCompletePoison(t, dispatcher, "session-1", poison.ID, base, true)
+	require.Equal(t, SessionDeliveryClaimed, first.Disposition)
+	leased, err := dispatcher.Claim("session-1", poison.ID, base.Add(time.Second))
+	require.NoError(t, err)
+	require.Equal(t, SessionDeliveryLeased, leased.Disposition)
+	backoff, err := dispatcher.Claim("session-1", poison.ID, base.Add(SessionPoisonLease))
+	require.NoError(t, err)
+	require.Equal(t, SessionDeliveryBackoff, backoff.Disposition)
+
+	for attempt := 1; attempt < SessionPoisonMaxAttempts; attempt++ {
+		claimAndCompletePoison(t, dispatcher, "session-1", poison.ID, base.Add(time.Duration(attempt)*time.Minute), true)
+	}
+	exhausted, err := dispatcher.Claim("session-1", poison.ID, base.Add(10*time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, SessionDeliveryExhausted, exhausted.Disposition)
+	record, ok := log.Poison("session-1", poison.ID)
+	require.True(t, ok)
+	require.Equal(t, SessionPoisonMaxAttempts, record.Attempts)
+
+	require.NoError(t, dispatcher.Requeue("session-1", poison.ID, record.OwnerEpoch, "admin-1", base.Add(11*time.Minute)))
+	requeued := claimAndCompletePoison(t, dispatcher, "session-1", poison.ID, base.Add(11*time.Minute), true)
+	require.Equal(t, SessionDeliveryClaimed, requeued.Disposition)
+	record, ok = log.Poison("session-1", poison.ID)
+	require.True(t, ok)
+	require.Equal(t, 1, record.Attempts)
+}
+
+func claimAndCompletePoison(
+	t *testing.T,
+	dispatcher *SessionDeliveryDispatcher,
+	sessionID string,
+	eventID string,
+	at time.Time,
+	queued bool,
+) SessionDeliveryClaim {
+	t.Helper()
+	claim, err := dispatcher.Claim(sessionID, eventID, at)
+	require.NoError(t, err)
+	require.Equal(t, SessionDeliveryClaimed, claim.Disposition)
+	require.NoError(t, dispatcher.Complete(claim, queued, at))
+	return claim
 }
 
 func TestSessionEventRetentionKeepsTerminalTombstoneThroughBothBounds(t *testing.T) {
@@ -144,8 +200,8 @@ func TestSessionEventRetentionExpiresExhaustedPoisonState(t *testing.T) {
 	event, err := log.Append("session-1", stringPtr("task-1"), "unknown.event", json.RawMessage(`{"type":"unknown.event","session_id":"session-1","task_id":"task-1"}`))
 	require.NoError(t, err)
 	dispatcher := NewSessionDeliveryDispatcher(log)
-	for attempt := 0; attempt < SessionPoisonMaxAttempts; attempt++ {
-		require.NoError(t, dispatcher.RecordFailure("session-1", event.ID, start.Add(time.Duration(attempt)*time.Minute)))
+	for attempt := range SessionPoisonMaxAttempts {
+		claimAndCompletePoison(t, dispatcher, "session-1", event.ID, start.Add(time.Duration(attempt)*time.Minute), true)
 	}
 	require.NoError(t, log.CollectExpired(start.Add(SessionEventRetention+5*time.Minute)))
 	_, ok := log.Poison("session-1", event.ID)
@@ -218,8 +274,8 @@ func TestSessionEventMaintenanceDoesNotCountUndeliveredPoisonAttempts(t *testing
 		require.Equal(t, 0, record.Attempts)
 		require.Equal(t, SessionPoisonPending, record.State)
 	}
-	// A real delivery observation advances the attempt bookkeeping.
-	require.NoError(t, service.SessionDelivery().RecordFailure("session-1", poison.ID, start.Add(3*SessionPoisonLease)))
+	// A real queued delivery advances the attempt bookkeeping.
+	claimAndCompletePoison(t, service.SessionDelivery(), "session-1", poison.ID, start.Add(3*SessionPoisonLease), true)
 	record, ok := service.SessionEvents().Poison("session-1", poison.ID)
 	require.True(t, ok)
 	require.Equal(t, 1, record.Attempts)
@@ -260,7 +316,8 @@ func TestSessionEventPoisonAttemptRestoresMemoryOnPersistFailure(t *testing.T) {
 	log.path = filepath.Join(t.TempDir(), "missing", "session-events.db")
 
 	base := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	require.Error(t, dispatcher.RecordFailure("session-1", poison.ID, base))
+	_, err = dispatcher.Claim("session-1", poison.ID, base)
+	require.Error(t, err)
 
 	record, ok := log.Poison("session-1", poison.ID)
 	require.True(t, ok)

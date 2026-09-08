@@ -73,53 +73,42 @@ func (h *Hub) appendAndBroadcastOrderedSessionEvent(sessionID string, message *w
 		}
 		return
 	}
-	recipients := h.orderedSessionRecipients(sessionID)
-	if poison, poisoned := service.SessionEvents().Poison(sessionID, event.ID); poisoned {
-		// A delivery attempt is counted only when at least one subscriber
-		// exists to receive the frame; mirroring with nobody subscribed does
-		// not burn an attempt.
-		if len(recipients) > 0 {
-			if failureErr := service.SessionDelivery().RecordFailure(sessionID, event.ID, time.Now().UTC()); failureErr != nil && h.logger != nil {
-				h.logger.Error(
-					"record ordered session poison",
-					zap.String("event_id", event.ID),
-					zap.String("validation_error", poison.LastError),
-					zap.Error(failureErr),
-				)
-			}
-		}
-	}
-	// Poison frames are delivered to live subscribers on every path (append
-	// and mirror, live and replay alike) so clients can run their recovery:
-	// the web core stream treats the frame as poison and re-subscribes with
-	// replace_cursor, and plugin scopes rebind past the poison. Consumers
-	// never acknowledge the poisoned sequence itself, so the ACK block stays
-	// the durable rebind trigger for lagging cursors.
-	for _, client := range recipients {
-		client.sendOrderedSessionEvent(event)
-	}
+	h.deliverOrderedSessionEvent(service, event, h.orderedSessionRecipients(sessionID))
 }
 
 // broadcastCommittedOrderedSessionEvent fans a mirrored primary-journal event
-// out to ordered subscribers with the same poison contract as the append
-// path: the frame is delivered (recovery depends on seeing it), and the
-// delivery attempt is counted only when recipients exist.
+// out through the same atomic delivery claim as locally appended events.
 func (h *Hub) broadcastCommittedOrderedSessionEvent(service *plugins.Service, event plugins.SessionEvent) {
-	recipients := h.orderedSessionRecipients(event.SessionID)
-	if poison, poisoned := service.SessionEvents().Poison(event.SessionID, event.ID); poisoned {
-		if len(recipients) > 0 {
-			if failureErr := service.SessionDelivery().RecordFailure(event.SessionID, event.ID, time.Now().UTC()); failureErr != nil && h.logger != nil {
-				h.logger.Error(
-					"record ordered session poison",
-					zap.String("event_id", event.ID),
-					zap.String("validation_error", poison.LastError),
-					zap.Error(failureErr),
-				)
-			}
-		}
+	h.deliverOrderedSessionEvent(service, event, h.orderedSessionRecipients(event.SessionID))
+}
+
+func (h *Hub) deliverOrderedSessionEvent(
+	service *plugins.Service,
+	event plugins.SessionEvent,
+	recipients []*Client,
+) {
+	if len(recipients) == 0 {
+		return
 	}
+	claim, err := service.SessionDelivery().Claim(event.SessionID, event.ID, time.Now().UTC())
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Error("claim ordered session poison", zap.String("event_id", event.ID), zap.Error(err))
+		}
+		return
+	}
+	if claim.Disposition != plugins.SessionDeliveryUntracked &&
+		claim.Disposition != plugins.SessionDeliveryClaimed {
+		return
+	}
+	queued := false
 	for _, client := range recipients {
-		client.sendOrderedSessionEvent(event)
+		queued = client.sendOrderedSessionEvent(event) || queued
+	}
+	if claim.Disposition == plugins.SessionDeliveryClaimed {
+		if err := service.SessionDelivery().Complete(claim, queued, time.Now().UTC()); err != nil && h.logger != nil {
+			h.logger.Error("complete ordered session poison", zap.String("event_id", event.ID), zap.Error(err))
+		}
 	}
 }
 

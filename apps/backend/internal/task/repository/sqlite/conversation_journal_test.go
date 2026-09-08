@@ -175,6 +175,35 @@ func TestConversationJournalStripsMultiLineAndMultiBlockSystemContent(t *testing
 	}
 }
 
+func TestConversationJournalStripFailsClosedPastDepthLimit(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-journal-strip-deep", "session-journal-strip-deep", "turn-journal-strip-deep")
+	content := strings.Repeat("<kandev-system>secret</kandev-system>", 65) + "visible"
+	message := &models.Message{
+		ID: "message-strip-deep", TaskSessionID: "session-journal-strip-deep", TaskID: "task-journal-strip-deep",
+		TurnID: "turn-journal-strip-deep", AuthorType: models.MessageAuthorUser,
+		Type: models.MessageTypeMessage, Content: content,
+	}
+	if err := repo.CreateMessage(ctx, message); err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	for _, table := range []string{"conversation_message_versions", "conversation_session_events"} {
+		var payload string
+		query := "SELECT payload FROM " + table + " WHERE session_id = ? ORDER BY row_sequence DESC LIMIT 1"
+		if table == "conversation_session_events" {
+			query = "SELECT payload FROM " + table + " WHERE session_id = ? AND event_type = 'message.added' ORDER BY sequence DESC LIMIT 1"
+		}
+		if err := repo.db.Get(&payload, repo.db.Rebind(query), "session-journal-strip-deep"); err != nil {
+			t.Fatalf("read %s payload: %v", table, err)
+		}
+		if strings.Contains(payload, "secret") || strings.Contains(payload, "<kandev-system>") {
+			t.Fatalf("%s persisted system content past sanitizer depth: %s", table, payload)
+		}
+	}
+}
+
 func TestConversationJournalStripKeepsRawTextWhenNoWellFormedBlock(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
@@ -264,56 +293,51 @@ func TestConversationJournalSanitizeMigrationRewritesLegacyRows(t *testing.T) {
 	}
 }
 
-func TestConversationJournalTurnDeleteRemovesJournalHistoryOnly(t *testing.T) {
+func TestConversationJournalTurnDeletePreservesHistoryWithTombstone(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	seedForMsgTest(t, repo, "task-journal-turn-del", "session-journal-turn-del", "turn-journal-turn-del")
 
-	var versionsBefore int
-	if err := repo.db.Get(&versionsBefore, `SELECT COUNT(*) FROM conversation_turn_versions WHERE turn_id = 'turn-journal-turn-del'`); err != nil {
-		t.Fatalf("count turn versions: %v", err)
-	}
-	requireTurnVersionCount := func(want int) {
-		var count int
-		if err := repo.db.Get(&count, `SELECT COUNT(*) FROM conversation_turn_versions WHERE turn_id = 'turn-journal-turn-del'`); err != nil {
-			t.Fatalf("count turn versions: %v", err)
-		}
-		if count != want {
-			t.Fatalf("turn version count = %d, want %d", count, want)
-		}
-	}
-	if versionsBefore != 1 {
-		t.Fatalf("expected one started version from the seed turn, got %d", versionsBefore)
-	}
 	now := time.Now().UTC()
 	if _, err := repo.db.Exec(repo.db.Rebind(`UPDATE task_session_turns SET completed_at = ?, updated_at = ? WHERE id = ?`), now, now, "turn-journal-turn-del"); err != nil {
 		t.Fatalf("complete turn: %v", err)
 	}
-	requireTurnVersionCount(2)
-
-	var eventsBefore int
-	if err := repo.db.Get(&eventsBefore, `SELECT COUNT(*) FROM conversation_session_events WHERE session_id = 'session-journal-turn-del'`); err != nil {
-		t.Fatalf("count events before delete: %v", err)
-	}
-	var watermarkBefore int64
-	if err := repo.db.QueryRow(`SELECT watermark FROM conversation_session_streams WHERE session_id = 'session-journal-turn-del'`).Scan(&watermarkBefore); err != nil {
-		t.Fatalf("read stream watermark: %v", err)
+	var cutoffBefore int64
+	if err := repo.db.Get(&cutoffBefore, `SELECT watermark FROM conversation_session_streams WHERE session_id = 'session-journal-turn-del'`); err != nil {
+		t.Fatalf("read pre-delete cutoff: %v", err)
 	}
 
-	// Deleting an empty turn must drop its journal history...
 	if _, err := repo.db.Exec(repo.db.Rebind(`DELETE FROM task_session_turns WHERE id = ?`), "turn-journal-turn-del"); err != nil {
 		t.Fatalf("delete turn: %v", err)
 	}
-	requireTurnVersionCount(0)
+	var cutoffAfter int64
+	if err := repo.db.Get(&cutoffAfter, `SELECT watermark FROM conversation_session_streams WHERE session_id = 'session-journal-turn-del'`); err != nil {
+		t.Fatalf("read deletion cutoff: %v", err)
+	}
+	if cutoffAfter != cutoffBefore+1 {
+		t.Fatalf("turn delete watermark = %d, want %d", cutoffAfter, cutoffBefore+1)
+	}
 
-	// ...and emits exactly one typed session.turn.removed event so ordered
-	// replays and live subscribers converge with snapshots.
-	var eventsAfter int
-	if err := repo.db.Get(&eventsAfter, `SELECT COUNT(*) FROM conversation_session_events WHERE session_id = 'session-journal-turn-del'`); err != nil {
-		t.Fatalf("count events after delete: %v", err)
+	var versions int
+	if err := repo.db.Get(&versions, `SELECT COUNT(*) FROM conversation_turn_versions WHERE turn_id = 'turn-journal-turn-del'`); err != nil {
+		t.Fatalf("count turn versions: %v", err)
 	}
-	if eventsAfter != eventsBefore+1 {
-		t.Fatalf("turn delete event count = %d, want %d", eventsAfter, eventsBefore+1)
+	if versions != 3 {
+		t.Fatalf("turn version count = %d, want two live versions plus tombstone", versions)
 	}
+	var tombstoneSequence int64
+	if err := repo.db.Get(&tombstoneSequence, `
+		SELECT row_sequence FROM conversation_turn_versions
+		WHERE turn_id = 'turn-journal-turn-del' AND tombstone = TRUE
+	`); err != nil {
+		t.Fatalf("read deletion tombstone: %v", err)
+	}
+	if tombstoneSequence != cutoffAfter {
+		t.Fatalf("tombstone sequence = %d, want deletion cutoff %d", tombstoneSequence, cutoffAfter)
+	}
+
+	assertTurnLiveAtCutoff(t, repo, "session-journal-turn-del", "turn-journal-turn-del", cutoffBefore, true)
+	assertTurnLiveAtCutoff(t, repo, "session-journal-turn-del", "turn-journal-turn-del", cutoffAfter, false)
+
 	var removalEvent string
 	if err := repo.db.Get(&removalEvent, `SELECT event_type FROM conversation_session_events WHERE session_id = 'session-journal-turn-del' ORDER BY sequence DESC LIMIT 1`); err != nil {
 		t.Fatalf("read last event type: %v", err)
@@ -321,12 +345,24 @@ func TestConversationJournalTurnDeleteRemovesJournalHistoryOnly(t *testing.T) {
 	if removalEvent != "session.turn.removed" {
 		t.Fatalf("last event type = %q, want session.turn.removed", removalEvent)
 	}
-	var watermarkAfter int64
-	if err := repo.db.QueryRow(`SELECT watermark FROM conversation_session_streams WHERE session_id = 'session-journal-turn-del'`).Scan(&watermarkAfter); err != nil {
-		t.Fatalf("read stream watermark after delete: %v", err)
+}
+
+func assertTurnLiveAtCutoff(t *testing.T, repo *Repository, sessionID, turnID string, cutoff int64, want bool) {
+	t.Helper()
+	var count int
+	if err := repo.db.Get(&count, repo.db.Rebind(`
+		WITH ranked AS (
+			SELECT tombstone,
+				ROW_NUMBER() OVER (PARTITION BY turn_id ORDER BY row_sequence DESC) AS version_rank
+			FROM conversation_turn_versions
+			WHERE session_id = ? AND turn_id = ? AND row_sequence <= ?
+		)
+		SELECT COUNT(*) FROM ranked WHERE version_rank = 1 AND tombstone = FALSE
+	`), sessionID, turnID, cutoff); err != nil {
+		t.Fatalf("query turn at cutoff %d: %v", cutoff, err)
 	}
-	if watermarkAfter != watermarkBefore+1 {
-		t.Fatalf("turn delete watermark = %d, want %d", watermarkAfter, watermarkBefore+1)
+	if got := count == 1; got != want {
+		t.Fatalf("turn live at cutoff %d = %v, want %v", cutoff, got, want)
 	}
 }
 

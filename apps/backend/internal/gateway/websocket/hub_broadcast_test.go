@@ -293,4 +293,37 @@ func TestBroadcastCommittedPoisonFrameWithoutRecipientsSkipsAttempt(t *testing.T
 	}
 }
 
+func TestBroadcastCommittedPoisonQueueFailureDoesNotCountAttempt(t *testing.T) {
+	h := newTestHub(t)
+	svc := plugins.NewService(nil, plugins.NewRegistry(), nil, testLogger())
+	h.SetPluginConversationService(svc)
+	event, err := svc.SessionEvents().Append(
+		"sess-poison-full", newStringPointer("task-poison"), "message.added",
+		[]byte(`{"type":"message.added","session_id":"sess-poison-full","task_id":"task-poison"}`),
+	)
+	if err != nil {
+		t.Fatalf("append poison event: %v", err)
+	}
+	c := newTestClient("c-poison-full")
+	for range cap(c.send) {
+		c.send <- []byte("occupied")
+	}
+	registerTestClient(h, c)
+	c.orderedSessionSubscriptions = map[string]map[string]plugins.SessionDeliveryCursorKey{
+		"sess-poison-full": {
+			"core-1": {SessionID: "sess-poison-full", ConsumerKind: "core", WireID: "core-1"},
+		},
+	}
+
+	h.broadcastCommittedOrderedSessionEvent(svc, event)
+
+	record, ok := svc.SessionEvents().Poison("sess-poison-full", event.ID)
+	if !ok {
+		t.Fatal("poison record missing after queue failure")
+	}
+	if record.Attempts != 0 || record.State != plugins.SessionPoisonPending {
+		t.Fatalf("poison after queue failure = attempts %d state %q, want pending at zero", record.Attempts, record.State)
+	}
+}
+
 func newStringPointer(value string) *string { return &value }

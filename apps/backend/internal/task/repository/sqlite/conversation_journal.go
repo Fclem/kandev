@@ -419,11 +419,10 @@ func (r *Repository) insertConversationBackfillEvent(
 // multi-line blocks, multiple blocks, and nested evasion - and trims the
 // result, mirroring sysprompt.StripSystemContent. SQLite has no scalar regex
 // replace, so a bounded recursive CTE reapplies first-block removal until no
-// well-formed block remains (an opening tag with no later closing tag, or a
-// stray closing tag, leaves the raw text intact exactly like the Go helper,
-// which only removes full matches). Depth 64 caps adversarial nesting; past
-// that bound the remainder is kept rather than dropped. The final row is the
-// deepest one, so the scalar never evaluates to NULL for text input.
+// well-formed block remains. Depth 64 caps adversarial input. If another full
+// block remains at that bound, the expression keeps only the prefix before it;
+// dropping the unexamined suffix fails closed rather than persisting system
+// content. The final row is always non-NULL for text input.
 func sqliteStripSystemContentExpr(expr string) string {
 	// Go's helper also consumes the whitespace run after each closing tag
 	// (`\s*` in the pattern); ltrim the tail so junction spacing matches.
@@ -442,7 +441,7 @@ func sqliteStripSystemContentExpr(expr string) string {
 			WHERE depth < 64
 				AND instr(substr(x, instr(x, '<kandev-system>') + length('<kandev-system>')), '</kandev-system>') > 0
 		)
-		SELECT x FROM strip ORDER BY depth DESC LIMIT 1
+		SELECT CASE WHEN depth = 64 AND instr(substr(x, instr(x, '<kandev-system>') + length('<kandev-system>')), '</kandev-system>') > 0 THEN substr(x, 1, instr(x, '<kandev-system>') - 1) ELSE x END AS x FROM strip ORDER BY depth DESC LIMIT 1
 	))`
 }
 
@@ -588,21 +587,21 @@ DROP TRIGGER IF EXISTS conversation_turn_delete;
 CREATE TRIGGER IF NOT EXISTS conversation_turn_delete
 AFTER DELETE ON task_session_turns
 BEGIN
-	-- Turn deletions (only possible for turns without messages) remove the
-	-- turn's version history AND emit a typed session.turn.removed event so
-	-- ordered replays and live subscribers converge with snapshots: a replay
-	-- spanning the deletion projects started/completed then removal, and live
-	-- clients drop the empty turn on sight.
-	DELETE FROM conversation_turn_versions
-	WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
 	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
 	VALUES (OLD.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
 	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_turn_versions(session_id, turn_id, row_sequence, task_id, started_at, tombstone, payload)
+	SELECT OLD.task_session_id, OLD.id, watermark, NULLIF(OLD.task_id, ''), OLD.started_at, TRUE,
+		json_object('type','session.turn.removed','session_id',OLD.task_session_id,'task_id',NULLIF(OLD.task_id,''),'id',OLD.id)
+	FROM conversation_session_streams WHERE session_id = OLD.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
 	SELECT OLD.task_session_id, watermark, OLD.task_session_id || ':' || watermark, 'session.turn.removed', NULLIF(OLD.task_id,''),
-		json_object('type','session.turn.removed','session_id',OLD.task_session_id,'task_id',NULLIF(OLD.task_id,''),'id',OLD.id),
-		CURRENT_TIMESTAMP
-	FROM conversation_session_streams WHERE session_id = OLD.task_session_id;
+		payload, CURRENT_TIMESTAMP
+	FROM conversation_session_streams JOIN conversation_turn_versions
+		ON conversation_turn_versions.session_id = conversation_session_streams.session_id
+		AND conversation_turn_versions.turn_id = OLD.id
+		AND conversation_turn_versions.row_sequence = conversation_session_streams.watermark
+	WHERE conversation_session_streams.session_id = OLD.task_session_id;
 END;
 
 DROP TRIGGER IF EXISTS conversation_session_delete;
@@ -703,33 +702,29 @@ CREATE TRIGGER conversation_message_journal_trigger AFTER INSERT OR UPDATE OR DE
 FOR EACH ROW EXECUTE FUNCTION conversation_message_journal();
 
 CREATE OR REPLACE FUNCTION conversation_turn_journal() RETURNS TRIGGER AS $$
-DECLARE seq BIGINT; event_name TEXT;
+DECLARE seq BIGINT; event_name TEXT; source_row task_session_turns%ROWTYPE; deleted BOOLEAN;
 BEGIN
-	IF TG_OP = 'DELETE' THEN
-		-- Turn deletions (only possible for turns without messages) remove the
-		-- turn's version history AND emit a typed session.turn.removed event,
-		-- so ordered replays and live subscribers converge with snapshots.
-		DELETE FROM conversation_turn_versions
-		WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
-		seq := conversation_next_sequence(OLD.task_session_id);
-		INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
-		VALUES (OLD.task_session_id,seq,OLD.task_session_id || ':' || seq,'session.turn.removed',NULLIF(OLD.task_id,''),
-			json_build_object('type','session.turn.removed','session_id',OLD.task_session_id,'task_id',NULLIF(OLD.task_id,''),'id',OLD.id)::text,
-			CURRENT_TIMESTAMP);
-		RETURN OLD;
-	END IF;
-	IF TG_OP = 'UPDATE' AND NOT (OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL) THEN RETURN NEW; END IF;
-	event_name := CASE WHEN TG_OP = 'INSERT' THEN 'session.turn.started' ELSE 'session.turn.completed' END;
-	seq := conversation_next_sequence(NEW.task_session_id);
+	deleted := TG_OP = 'DELETE';
+	IF deleted THEN source_row := OLD; event_name := 'session.turn.removed';
+	ELSIF TG_OP = 'UPDATE' AND NOT (OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL) THEN RETURN NEW;
+	ELSIF TG_OP = 'INSERT' THEN source_row := NEW; event_name := 'session.turn.started';
+	ELSE source_row := NEW; event_name := 'session.turn.completed'; END IF;
+	seq := conversation_next_sequence(source_row.task_session_id);
 	INSERT INTO conversation_turn_versions(session_id,turn_id,row_sequence,task_id,started_at,tombstone,payload)
-	VALUES (NEW.task_session_id,NEW.id,seq,NULLIF(NEW.task_id,''),NEW.started_at,FALSE,
-		json_build_object('type',event_name,'session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
-			'id',NEW.id,'started_at',NEW.started_at,'completed_at',NEW.completed_at,
-			'created_at',NEW.created_at,
-			'updated_at',COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at))::text);
+	VALUES (source_row.task_session_id,source_row.id,seq,NULLIF(source_row.task_id,''),source_row.started_at,deleted,
+		CASE WHEN deleted THEN
+			json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),'id',source_row.id)::text
+		ELSE
+			json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),
+				'id',source_row.id,'started_at',source_row.started_at,'completed_at',source_row.completed_at,
+				'created_at',source_row.created_at,
+				'updated_at',COALESCE(source_row.updated_at,source_row.completed_at,source_row.started_at))::text
+		END);
 	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
-	SELECT NEW.task_session_id,seq,NEW.task_session_id || ':' || seq,event_name,NULLIF(NEW.task_id,''),payload,CURRENT_TIMESTAMP
-	FROM conversation_turn_versions WHERE session_id=NEW.task_session_id AND turn_id=NEW.id AND row_sequence=seq;
+	SELECT source_row.task_session_id,seq,source_row.task_session_id || ':' || seq,event_name,NULLIF(source_row.task_id,''),payload,CURRENT_TIMESTAMP
+	FROM conversation_turn_versions
+	WHERE session_id=source_row.task_session_id AND turn_id=source_row.id AND row_sequence=seq;
+	IF deleted THEN RETURN OLD; END IF;
 	RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

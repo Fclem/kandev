@@ -490,6 +490,7 @@ function useOrderedTurnEvents({
         setState((current) => ({ ...current, removed: true, loading: false }));
         return true;
       }
+      if (!eventMatchesTask(event, taskId)) return true;
       if (event.event_type === "session.turn.removed") {
         const payload = event.payload;
         const turnId =
@@ -506,9 +507,7 @@ function useOrderedTurnEvents({
         }));
         return true;
       }
-      if (!event.event_type.startsWith("session.turn.") || !eventMatchesTask(event, taskId)) {
-        return true;
-      }
+      if (!event.event_type.startsWith("session.turn.")) return true;
       const turn = turnFromEvent(event);
       if (!turn) return false;
       setState((current) => {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/plugins"
+	ws "github.com/kandev/kandev/pkg/websocket"
 )
 
 func TestSessionAckIdentityMatchesExactConsumerBranch(t *testing.T) {
@@ -139,6 +140,62 @@ func TestOrderedReplayIsExplicitOnly(t *testing.T) {
 	}, key)
 	if invalid.result != "invalid_resume" || len(invalid.events) != 0 {
 		t.Fatalf("invalid resume result = %+v, want replacement without replay", invalid)
+	}
+}
+
+func TestOrderedReplayRebindsWhenPoisonDeliveryIsAlreadyClaimed(t *testing.T) {
+	service := plugins.NewService(nil, plugins.NewRegistry(), nil, testLogger())
+	poison, err := service.SessionEvents().Append(
+		"session-poison-replay",
+		nil,
+		"unknown.event",
+		json.RawMessage(`{"type":"unknown.event","session_id":"session-poison-replay"}`),
+	)
+	if err != nil {
+		t.Fatalf("append poison event: %v", err)
+	}
+	claim, err := service.SessionDelivery().Claim(
+		poison.SessionID,
+		poison.ID,
+		time.Now().UTC(),
+	)
+	if err != nil || claim.Disposition != plugins.SessionDeliveryClaimed {
+		t.Fatalf("initial poison claim = %q, %v", claim.Disposition, err)
+	}
+	zero := uint64(0)
+	req := SessionSubscribeRequest{
+		SessionID: "session-poison-replay", ConsumerKind: orderedConsumerCore,
+		WireID: "wire-poison", LastSeenSequence: &zero,
+	}
+	key := plugins.SessionDeliveryCursorKey{
+		SessionID: "session-poison-replay", ConsumerKind: orderedConsumerCore, WireID: "wire-poison",
+	}
+	replay := resolveOrderedSessionReplay(service, req, key)
+	hub := newTestHub(t)
+	hub.SetPluginConversationService(service)
+	client := newTestClient("poison-replay-client")
+	client.hub = hub
+	client.controlSend = make(chan []byte, 1)
+	client.orderedSessionSubscriptions = make(map[string]map[string]plugins.SessionDeliveryCursorKey)
+	msg := &ws.Message{ID: "subscribe-poison", Type: ws.MessageTypeRequest, Action: "session.subscribe"}
+
+	if !client.acceptOrderedSessionSubscription(msg, req, key, "", replay) {
+		t.Fatal("poison replay replacement subscription was rejected")
+	}
+
+	var response struct {
+		Payload struct {
+			Result string `json:"result"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(<-client.controlSend, &response); err != nil {
+		t.Fatalf("decode subscription response: %v", err)
+	}
+	if response.Payload.Result != "invalid_resume" {
+		t.Fatalf("poison replay result = %q, want invalid_resume", response.Payload.Result)
+	}
+	if err := service.SessionEvents().Acknowledge(key, poison.Sequence); err != nil {
+		t.Fatalf("replacement cursor did not advance past poison: %v", err)
 	}
 }
 

@@ -208,8 +208,13 @@ class OrderedConversationScope implements ConversationScope {
   }
 
   ready(): Promise<OrderedReady> {
-    this.readyPromise ??= this.initializeReady();
-    return this.readyPromise.then((current) => this.refreshBindingIfNeeded(current));
+    const pending = (this.readyPromise ??= this.initializeReady());
+    return pending
+      .then((current) => this.refreshBindingIfNeeded(current))
+      .catch((error: unknown) => {
+        if (this.readyPromise === pending) this.readyPromise = null;
+        throw error;
+      });
   }
 
   async renewContinuation(cursor: string) {
@@ -383,8 +388,11 @@ class OrderedConversationScope implements ConversationScope {
   }
 
   private getBinding() {
-    this.bindingPromise ??= fetchBinding(this.pluginId, this.signal);
-    return this.bindingPromise;
+    const pending = (this.bindingPromise ??= fetchBinding(this.pluginId, this.signal));
+    return pending.catch((error: unknown) => {
+      if (this.bindingPromise === pending) this.bindingPromise = null;
+      throw error;
+    });
   }
   private async initializeReady(): Promise<OrderedReady> {
     const binding = await this.getBinding();

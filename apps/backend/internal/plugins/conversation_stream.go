@@ -36,6 +36,27 @@ var (
 	ErrStaleOwnerEpoch = errors.New("stale poison owner epoch")
 )
 
+// SessionDeliveryDisposition is the atomic poison-delivery claim outcome.
+type SessionDeliveryDisposition string
+
+const (
+	SessionDeliveryUntracked SessionDeliveryDisposition = "untracked"
+	SessionDeliveryClaimed   SessionDeliveryDisposition = "claimed"
+	SessionDeliveryLeased    SessionDeliveryDisposition = "leased"
+	SessionDeliveryBackoff   SessionDeliveryDisposition = "backoff"
+	SessionDeliveryExhausted SessionDeliveryDisposition = "exhausted"
+)
+
+// SessionDeliveryClaim is an opaque reservation. Complete must receive the
+// exact claim so a stale sender cannot mutate a newer lease or owner epoch.
+type SessionDeliveryClaim struct {
+	Disposition SessionDeliveryDisposition
+	sessionID   string
+	eventID     string
+	ownerEpoch  uint64
+	leaseUntil  time.Time
+}
+
 // SessionEvent is the immutable Host-only ordered stream envelope.
 type SessionEvent struct {
 	ProtocolVersion int             `json:"protocol_version"`
@@ -136,8 +157,15 @@ func NewSessionDeliveryDispatcher(events *SessionEventLog) *SessionDeliveryDispa
 	return &SessionDeliveryDispatcher{events: events}
 }
 
-func (d *SessionDeliveryDispatcher) RecordFailure(sessionID, eventID string, now time.Time) error {
-	return d.events.recordPoisonAttempt(sessionID, eventID, now)
+// Claim atomically reserves a poison delivery. Untracked events need no
+// completion; claimed poison must be completed after the queue attempt.
+func (d *SessionDeliveryDispatcher) Claim(sessionID, eventID string, now time.Time) (SessionDeliveryClaim, error) {
+	return d.events.claimPoisonDelivery(sessionID, eventID, now)
+}
+
+// Complete records whether a claimed poison frame reached any client queue.
+func (d *SessionDeliveryDispatcher) Complete(claim SessionDeliveryClaim, queued bool, now time.Time) error {
+	return d.events.completePoisonDelivery(claim, queued, now)
 }
 
 func (d *SessionDeliveryDispatcher) Requeue(
@@ -623,38 +651,86 @@ func (l *SessionEventLog) Poison(sessionID, eventID string) (SessionPoisonRecord
 	return *record, true
 }
 
-func (l *SessionEventLog) recordPoisonAttempt(sessionID, eventID string, now time.Time) error {
+func (l *SessionEventLog) claimPoisonDelivery(
+	sessionID string,
+	eventID string,
+	now time.Time,
+) (SessionDeliveryClaim, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	record := l.state.Poison[poisonKey(sessionID, eventID)]
 	if record == nil {
+		return SessionDeliveryClaim{Disposition: SessionDeliveryUntracked}, nil
+	}
+	now = now.UTC()
+	disposition := SessionDeliveryClaimed
+	switch {
+	case record.State == SessionPoisonExhausted:
+		disposition = SessionDeliveryExhausted
+	case record.State == SessionPoisonLeased && record.LeaseUntil.After(now):
+		disposition = SessionDeliveryLeased
+	case record.NextRetry.After(now):
+		disposition = SessionDeliveryBackoff
+	}
+	if disposition != SessionDeliveryClaimed {
+		return SessionDeliveryClaim{Disposition: disposition}, nil
+	}
+	previous := cloneSessionEventLogState(l.state)
+	record.State = SessionPoisonLeased
+	record.LeaseUntil = now.Add(SessionPoisonLease)
+	record.UpdatedAt = now
+	claim := SessionDeliveryClaim{
+		Disposition: SessionDeliveryClaimed,
+		sessionID:   sessionID, eventID: eventID,
+		ownerEpoch: record.OwnerEpoch, leaseUntil: record.LeaseUntil,
+	}
+	if err := l.persistLocked(); err != nil {
+		l.state = previous
+		return SessionDeliveryClaim{}, err
+	}
+	return claim, nil
+}
+
+func (l *SessionEventLog) completePoisonDelivery(
+	claim SessionDeliveryClaim,
+	queued bool,
+	now time.Time,
+) error {
+	if claim.Disposition != SessionDeliveryClaimed {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	record := l.state.Poison[poisonKey(claim.sessionID, claim.eventID)]
+	if record == nil {
 		return ErrPoisonEvent
+	}
+	if record.State != SessionPoisonLeased ||
+		record.OwnerEpoch != claim.ownerEpoch ||
+		!record.LeaseUntil.Equal(claim.leaseUntil) {
+		return ErrStaleOwnerEpoch
 	}
 	previous := cloneSessionEventLogState(l.state)
 	now = now.UTC()
-	if record.State == SessionPoisonExhausted {
-		return nil
-	}
-	if record.State == SessionPoisonLeased && record.LeaseUntil.After(now) {
-		return nil
-	}
-	if record.NextRetry.After(now) {
-		return nil
-	}
-	record.Attempts++
-	record.State = SessionPoisonLeased
-	record.LeaseUntil = now.Add(SessionPoisonLease)
-	backoff := time.Second << min(record.Attempts-1, 5)
-	if backoff > SessionPoisonLease {
-		backoff = SessionPoisonLease
-	}
-	record.NextRetry = record.LeaseUntil.Add(backoff)
-	if record.Attempts >= SessionPoisonMaxAttempts {
-		record.State = SessionPoisonExhausted
+	if !queued {
+		record.State = SessionPoisonPending
 		record.LeaseUntil = time.Time{}
 		record.NextRetry = time.Time{}
+		record.UpdatedAt = now
+	} else {
+		record.Attempts++
+		backoff := time.Second << min(record.Attempts-1, 5)
+		if backoff > SessionPoisonLease {
+			backoff = SessionPoisonLease
+		}
+		record.NextRetry = record.LeaseUntil.Add(backoff)
+		if record.Attempts >= SessionPoisonMaxAttempts {
+			record.State = SessionPoisonExhausted
+			record.LeaseUntil = time.Time{}
+			record.NextRetry = time.Time{}
+		}
+		record.UpdatedAt = now
 	}
-	record.UpdatedAt = now
 	if err := l.persistLocked(); err != nil {
 		l.state = previous
 		return err

@@ -114,8 +114,8 @@ func (a *HermesACP) RemoteAuth() *RemoteAuth {
 	return &RemoteAuth{
 		Methods: []RemoteAuthMethod{
 			{
-				Type:  remoteAuthMethodTypeFiles,
-				Label: remoteAuthLabelCopyFiles,
+				Type:  "files",
+				Label: "Copy auth files",
 				SourceFiles: map[string][]string{
 					"darwin": {".hermes/.env", ".hermes/config.yaml"},
 					"linux":  {".hermes/.env", ".hermes/config.yaml"},

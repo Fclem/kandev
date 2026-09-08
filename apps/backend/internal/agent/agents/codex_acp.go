@@ -137,8 +137,8 @@ func (a *CodexACP) RemoteAuth() *RemoteAuth {
 	return &RemoteAuth{
 		Methods: []RemoteAuthMethod{
 			{
-				Type:  remoteAuthMethodTypeFiles,
-				Label: remoteAuthLabelCopyFiles,
+				Type:  "files",
+				Label: "Copy auth files",
 				SourceFiles: map[string][]string{
 					"darwin": {".codex/auth.json"},
 					"linux":  {".codex/auth.json"},

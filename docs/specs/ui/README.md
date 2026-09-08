@@ -6,23 +6,18 @@ migration: in_progress
 owners:
   - kandev
 ---
-
 # UI
-
 ## Scope
-
 UI owns responsive behavior; other systems own behavior/state.
-
 ## Map
-
 ### Requirements
-
 - [ACP model summary](requirements/acp-model-configuration-summary.md)
 - [ACP Shell Command Output](requirements/acp-shell-command-output.md)
 - [Adaptive Kanban](requirements/adaptive-kanban.md)
 - [Task Add-Panel PR Submenu](requirements/add-panel-pr-submenu.md)
 - [Agent Launch Prompt Composer](requirements/agent-launch-prompt-composer.md)
 - [Dialog containment](requirements/dialog-content-containment.md)
+- [Descriptive select options](requirements/descriptive-select-options.md)
 - [Surface text](requirements/surface-text-hierarchy.md)
 - [Message comments](requirements/agent-message-comments.md)
 - [Agent Todo List Panel](requirements/agent-todo-list-panel.md)
@@ -145,11 +140,11 @@ UI owns responsive behavior; other systems own behavior/state.
 - [WebKit Task Dialog Rendering](requirements/webkit-task-dialog-rendering.md)
 - [Active workspace first in settings](requirements/workspace-active-first-order.md)
 - [WebSocket Connectivity Warning](requirements/ws-connectivity-warning.md)
-
 ### Design
 - [Adaptive Kanban](system-design/adaptive-kanban.md)
 - [Clarification submit feedback](system-design/clarification-submit-feedback.md)
 - [Dialog containment](system-design/dialog-content-containment.md)
+- [Descriptive select options](system-design/descriptive-select-options.md)
 - [Surface text](system-design/surface-text-hierarchy.md)
 - [Agent Todo List Panel](system-design/agent-todo-list-panel.md)
 - [App Status Bar](system-design/app-status-bar.md)
@@ -203,7 +198,5 @@ UI owns responsive behavior; other systems own behavior/state.
 - [Settings Menu Default](system-design/settings-menu-default.md)
 - [Transcript history visibility](system-design/task-prompt-transcript-visibility.md)
 - [Transcript Auto-scroll Stability](system-design/transcript-auto-scroll.md)
-
 ## Related
-
 - [Platform](../platform/README.md)

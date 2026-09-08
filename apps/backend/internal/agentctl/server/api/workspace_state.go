@@ -8,8 +8,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultWorkspaceRefreshTrigger = "manual_refresh"
-
 // SetPollModeRequest is the body for POST /api/v1/workspace/poll-mode.
 type SetPollModeRequest struct {
 	Mode string `json:"mode"`
@@ -69,7 +67,7 @@ func (s *Server) handleRefreshWorkspace(c *gin.Context) {
 	}
 	trigger := req.Trigger
 	if trigger == "" {
-		trigger = defaultWorkspaceRefreshTrigger
+		trigger = "manual_refresh"
 	}
 	s.procMgr.RefreshWorkspace(c.Request.Context(), trigger)
 	c.JSON(http.StatusOK, gin.H{"trigger": process.NormalizeWorkspaceTrigger(trigger)})

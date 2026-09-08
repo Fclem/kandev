@@ -115,7 +115,7 @@ func (a *Auggie) RemoteAuth() *RemoteAuth {
 	return &RemoteAuth{
 		Methods: []RemoteAuthMethod{
 			{
-				Type:  remoteAuthMethodTypeFiles,
+				Type:  "files",
 				Label: "Copy session files",
 				SourceFiles: map[string][]string{
 					"darwin": {".augment/session.json"},

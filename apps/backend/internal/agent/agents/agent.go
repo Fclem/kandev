@@ -463,12 +463,9 @@ type RemoteAuth struct {
 // RemoteAuthFileConflictPolicy defines how a credential transfer handles an existing target.
 type RemoteAuthFileConflictPolicy string
 
-// RemoteAuthFileConflictPolicyMergeJSONObject preserves target-only keys and replaces collisions with source values.
-const RemoteAuthFileConflictPolicyMergeJSONObject RemoteAuthFileConflictPolicy = "merge_json_object"
-
 const (
-	remoteAuthMethodTypeFiles = "files"
-	remoteAuthLabelCopyFiles  = "Copy auth files"
+	// RemoteAuthFileConflictPolicyMergeJSONObject preserves target-only keys and replaces collisions with source values.
+	RemoteAuthFileConflictPolicyMergeJSONObject RemoteAuthFileConflictPolicy = "merge_json_object"
 )
 
 // RemoteAuthMethod describes one way an agent can authenticate in a remote environment.

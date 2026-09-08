@@ -61,15 +61,7 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 }
 
 func (r *sqliteRepository) sharedTablePresent(name string) (bool, error) {
-	var present bool
-	var err error
-	if r.db.DriverName() == "pgx" {
-		err = r.db.Get(&present, `SELECT to_regclass($1) IS NOT NULL`, name)
-	} else {
-		err = r.db.Get(&present, `SELECT EXISTS (
-			SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?
-		)`, name)
-	}
+	present, err := internaldb.TableExists(r.db, name)
 	if err != nil {
 		return false, fmt.Errorf("resolve shared table %s presence: %w", name, err)
 	}

@@ -605,7 +605,7 @@ describe("queue snapshot actions", () => {
       count: 1,
       max: 10,
       mergeEnabled: false,
-      taskId: TASK_ID,
+      autoRun: false,
       sessionIncarnationId: "incarnation-1",
       statusEpoch: "epoch-2",
     };
@@ -655,7 +655,6 @@ describe("queue snapshot actions", () => {
       autoRun: true,
     });
     store.getState().removeQueueEntry(SESSION_ID, "missing-entry");
-    store.getState().setQueueLoading(SESSION_ID, true);
     store.getState().clearQueueStatus(SESSION_ID);
 
     const session = store.getState().taskSessions.items[SESSION_ID];

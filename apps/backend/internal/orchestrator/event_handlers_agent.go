@@ -1007,11 +1007,12 @@ func (s *Service) recordQueuedUserMessage(ctx context.Context, queuedMsg *messag
 	}
 	references := entityrefs.NormalizePersisted(queuedMsg.Metadata[messagequeue.MetadataEntityReferences])
 	promptContent := AppendEntityReferenceContext(queuedMsg.Content, references)
+	promptContent = appendStepHandoffToPrompt(promptContent, stepHandoffFromQueuedMetadata(queuedMsg.Metadata))
 	meta := NewUserMessageMeta().
 		WithPlanMode(queuedMsg.PlanMode).
 		WithAttachments(attachments).
 		WithEntityReferences(references)
-	metaMap := mergeMetadata(meta.ToMap(), metadataWithoutEntityReferences(queuedMsg.Metadata))
+	metaMap := mergeMetadata(meta.ToMap(), metadataWithoutQueueOnlyKeys(queuedMsg.Metadata))
 	if err := s.messageCreator.CreateUserMessage(ctx, queuedMsg.TaskID, promptContent, queuedMsg.SessionID, turnID, metaMap); err != nil {
 		s.logger.Error("failed to create user message for queued message", zap.String("session_id", queuedMsg.SessionID), zap.Error(err))
 		return err
@@ -1110,7 +1111,22 @@ func (s *Service) executeQueuedMessageWithReservation(
 	}
 	references := entityrefs.NormalizePersisted(queuedMsg.Metadata[messagequeue.MetadataEntityReferences])
 	promptContent := AppendEntityReferenceContext(queuedMsg.Content, references)
-	userMessageRecorded := false
+	promptContent = appendStepHandoffToPrompt(promptContent, stepHandoffFromQueuedMetadata(queuedMsg.Metadata))
+
+	// Create user messages for ordinary queue entries now. Lifecycle entries
+	// persist their visible message only after the final active-task claim.
+	// Skip when the queued metadata is tagged user_message_recorded — that means
+	// autoStartStepPrompt already inserted the chat row via recordAutoStartMessage
+	// before queueing (the post-recordAutoStartMessage retry branches). Recording
+	// here would produce the duplicate user message observed when a workflow
+	// auto-start failed transiently and the queue drained on boot_ready.
+	alreadyRecorded, _ := queuedMsg.Metadata[metaKeyUserMessageRecorded].(bool)
+	userMessageRecorded := alreadyRecorded
+	if !lifecyclePrompt {
+		if err := s.recordQueuedUserMessage(promptCtx, queuedMsg, attachments); err == nil && s.messageCreator != nil {
+			userMessageRecorded = true
+		}
+	}
 
 	// Call promptTask with this entry's ID as a second ownership check. The
 	// worker already claimed the handoff before visible side effects; promptTask
@@ -1118,6 +1134,15 @@ func (s *Service) executeQueuedMessageWithReservation(
 	var dispatchIdentity messagequeue.QueueSessionIdentity
 	if reservation != nil {
 		dispatchIdentity = reservation.identity
+	}
+	// Process on_turn_start before sending the queued prompt, just like
+	// dispatchPromptAsync does for user-initiated messages. This allows
+	// workflow transitions (e.g. move_to_next) to fire on auto-started prompts.
+	if session, sErr := s.repo.GetTaskSession(promptCtx, queuedMsg.SessionID); sErr == nil &&
+		s.queuedSessionMatchesIdentity(session, dispatchIdentity) &&
+		!turnStartAlreadyProcessed(queuedMsg.Metadata) {
+		s.processOnTurnStartViaEngine(promptCtx, queuedMsg.TaskID, session)
+		markQueuedTurnStartProcessed(queuedMsg)
 	}
 	afterClaim := s.queuedMessageAfterClaim(
 		promptCtx, dispatchIdentity, queuedMsg, attachments, lifecyclePrompt, &userMessageRecorded,
@@ -1181,6 +1206,7 @@ func (s *Service) queuedMessageAfterClaim(
 			s.queuedSessionMatchesIdentity(session, identity) &&
 			!turnStartAlreadyProcessed(queuedMsg.Metadata) {
 			s.processOnTurnStartViaEngine(ctx, queuedMsg.TaskID, session)
+			markQueuedTurnStartProcessed(queuedMsg)
 		}
 		return nil
 	}
@@ -1516,13 +1542,26 @@ func markQueuedUserMessageRecorded(queuedMsg *messagequeue.QueuedMessage) {
 	queuedMsg.Metadata[metaKeyUserMessageRecorded] = true
 }
 
-func metadataWithoutEntityReferences(metadata map[string]interface{}) map[string]interface{} {
+func markQueuedTurnStartProcessed(queuedMsg *messagequeue.QueuedMessage) {
+	if queuedMsg.Metadata == nil {
+		queuedMsg.Metadata = make(map[string]interface{})
+	}
+	queuedMsg.Metadata[MetaKeyTurnStartAlreadyProcessed] = true
+}
+
+// metadataWithoutQueueOnlyKeys strips queue-transport-only keys before a
+// queued message's metadata is persisted onto a chat message row:
+// entity references are re-added via WithEntityReferences, and a carried
+// completion handoff (messagequeue.MetadataStepHandoff) is already folded
+// into the recorded content by the caller, so neither belongs in the row's
+// own stored metadata.
+func metadataWithoutQueueOnlyKeys(metadata map[string]interface{}) map[string]interface{} {
 	if len(metadata) == 0 {
 		return nil
 	}
 	copy := make(map[string]interface{}, len(metadata))
 	for key, value := range metadata {
-		if key != messagequeue.MetadataEntityReferences {
+		if key != messagequeue.MetadataEntityReferences && key != messagequeue.MetadataStepHandoff {
 			copy[key] = value
 		}
 	}

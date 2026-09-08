@@ -378,6 +378,7 @@ func (s *workflowStore) applyTransition(
 		delete(task.Metadata, models.MetaKeyQueuedMoveExitCompleted)
 		delete(task.Metadata, models.MetaKeyQueuePromotionPending)
 	}
+	s.applyStepHandoffCarry(ctx, task, sessionID, fromStepID, toStepID, trigger)
 	task.UpdatedAt = time.Now().UTC()
 	// engine_transition applies only when no outer caller already declared a
 	// trigger — applyPendingMove sets mcp_deferred_move before reaching this
@@ -416,6 +417,29 @@ func (s *workflowStore) applyTransition(
 	s.pullNextTaskOnVacate(ctx, fromStepID, taskID)
 
 	return nil
+}
+
+func (s *workflowStore) applyStepHandoffCarry(
+	ctx context.Context,
+	task *models.Task,
+	sessionID, fromStepID, toStepID string,
+	trigger engine.Trigger,
+) {
+	if trigger != engine.TriggerOnTurnComplete {
+		return
+	}
+
+	var consumedSignal *models.PendingStepCompletionSignal
+	session, sessionErr := s.repo.GetTaskSession(ctx, sessionID)
+	if sessionErr != nil {
+		s.logger.Debug("failed to load session for step handoff carry",
+			zap.String("session_id", sessionID), zap.Error(sessionErr))
+	} else if session != nil {
+		if signal, has := models.LoadPendingStepSignal(session.Metadata); has && signal.StepID == fromStepID {
+			consumedSignal = &signal
+		}
+		setStepHandoffCarryMetadata(task, toStepID, consumedSignal)
+	}
 }
 
 func transitionContext(

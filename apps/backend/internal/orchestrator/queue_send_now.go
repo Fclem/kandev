@@ -510,6 +510,25 @@ func (s *Service) promptSendNowClaim(ctx context.Context, claim *messagequeue.Se
 	}
 	references := entityrefs.NormalizePersisted(claim.Dispatch.Metadata[messagequeue.MetadataEntityReferences])
 	promptContent := AppendEntityReferenceContext(claim.Dispatch.Content, references)
+	promptContent = appendStepHandoffToPrompt(promptContent, stepHandoffFromQueuedMetadata(claim.Dispatch.Metadata))
+	if err := s.recordQueuedUserMessage(ctx, &claim.Dispatch, attachments); err != nil {
+		s.logger.Warn("failed to record send-now user message before prompt",
+			zap.String("session_id", sessionID), zap.Error(err))
+	} else if s.messageCreator != nil {
+		for i := range claim.Sources {
+			markQueuedUserMessageRecorded(&claim.Sources[i])
+		}
+	}
+	if session, err := s.repo.GetTaskSession(ctx, sessionID); err == nil &&
+		s.queuedSessionMatchesIdentity(session, claim.Identity) &&
+		!turnStartAlreadyProcessed(claim.Dispatch.Metadata) {
+		// This transition is intentionally not rolled back if promptTask later
+		// rejects the replacement. The ordinary FIFO handoff uses the same
+		// ordering: workflow admission precedes executor prompt acceptance, and
+		// the restored claim is retried through the normal ready path.
+		s.processOnTurnStartViaEngine(ctx, claim.Dispatch.TaskID, session)
+		markQueuedTurnStartProcessed(&claim.Dispatch)
+	}
 
 	_, err := s.promptTask(ctx, claim.Dispatch.TaskID, sessionID, promptContent, claim.Dispatch.Model,
 		claim.Dispatch.PlanMode, attachments, false, promptTaskOptions{
@@ -530,6 +549,7 @@ func (s *Service) promptSendNowClaim(ctx context.Context, claim *messagequeue.Se
 					s.queuedSessionMatchesIdentity(session, claim.Identity) &&
 					!turnStartAlreadyProcessed(claim.Dispatch.Metadata) {
 					s.processOnTurnStartViaEngine(ctx, claim.Dispatch.TaskID, session)
+					markQueuedTurnStartProcessed(&claim.Dispatch)
 				}
 				return nil
 			},

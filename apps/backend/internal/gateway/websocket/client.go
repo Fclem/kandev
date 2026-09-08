@@ -466,6 +466,18 @@ func resolveOrderedSessionReplay(
 		lastSeen = *req.LastSeenSequence
 	}
 	events, watermark, terminal := service.SessionEvents().ReplayState(req.SessionID, lastSeen)
+	// A retained replay that starts past lastSeen+1 means intermediate rows
+	// aged out on both sides; replaying it as if contiguous would hide lost
+	// history. Rebind to the watermark instead (same replacement-cursor
+	// machinery as invalid_resume) so the client reconciles from the
+	// authoritative snapshot boundary.
+	retainedGap := lastSeenSupplied && len(events) > 0 && events[0].Sequence > lastSeen+1
+	if retainedGap {
+		return orderedSessionReplay{
+			watermark: watermark, cursorSequence: watermark,
+			result: "invalid_resume", terminal: terminal,
+		}
+	}
 	if req.ResumeToken != "" {
 		if err := service.ValidateSessionResume(req.ResumeToken, key, lastSeen); err != nil {
 			return orderedSessionReplay{

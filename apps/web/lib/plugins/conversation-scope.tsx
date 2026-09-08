@@ -130,17 +130,16 @@ function isValidTurnPayload(payload: Record<string, unknown>, completed: boolean
       (isValidPayloadTime(payload, "completed_at") && isValidPayloadTime(payload, "updated_at")))
   );
 }
-function isCompatibleConversationIdentity(
-  event: RawSessionEvent,
-  payload: Record<string, unknown>,
-  sessionId: string,
-): boolean {
-  return (
-    payload.type === event.event_type &&
-    payload.session_id === sessionId &&
-    (event.task_id === null || payload.task_id === event.task_id)
-  );
-}
+// eventPayloadValidators mirrors backend ProjectSessionEvent's per-event
+// required-field checks. session.removed is intentionally absent: a removal is
+// accepted for the selected session regardless of its task_id.
+const eventPayloadValidators: Record<string, (payload: Record<string, unknown>) => boolean> = {
+  "message.added": (payload) => isValidMessagePayload(payload, false),
+  "message.updated": (payload) => isValidMessagePayload(payload, true),
+  "message.deleted": (payload) => isNonEmptyPayloadString(payload, "message_id"),
+  "session.turn.started": (payload) => isValidTurnPayload(payload, false),
+  "session.turn.completed": (payload) => isValidTurnPayload(payload, true),
+};
 
 function isCompatibleConversationEvent(event: RawSessionEvent, sessionId: string): boolean {
   if (!isRawSessionEvent(event) || event.session_id !== sessionId) return false;
@@ -152,23 +151,14 @@ function isCompatibleConversationEvent(event: RawSessionEvent, sessionId: string
     return false;
   }
   const payload = event.payload as Record<string, unknown>;
-  if (!isCompatibleConversationIdentity(event, payload, sessionId)) return false;
-  switch (event.event_type) {
-    case "message.added":
-      return isValidMessagePayload(payload, false);
-    case "message.updated":
-      return isValidMessagePayload(payload, true);
-    case "message.deleted":
-      return isNonEmptyPayloadString(payload, "message_id");
-    case "session.turn.started":
-      return isValidTurnPayload(payload, false);
-    case "session.turn.completed":
-      return isValidTurnPayload(payload, true);
-    case SESSION_REMOVED_EVENT:
-      return true;
-    default:
-      return false;
+  if (payload.type !== event.event_type || payload.session_id !== sessionId) return false;
+  if (event.event_type === SESSION_REMOVED_EVENT) {
+    return true;
   }
+  // Every non-removal event must match the session's task identity exactly.
+  if (event.task_id !== null && payload.task_id !== event.task_id) return false;
+  const validator = eventPayloadValidators[event.event_type];
+  return validator ? validator(payload) : false;
 }
 
 function snapshotKindForEvent(eventType: string): SnapshotKind | null {
@@ -263,17 +253,26 @@ class OrderedConversationScope implements ConversationScope {
   }
 
   commitSnapshot(kind: SnapshotKind) {
-    if (this.closed) return;
+    if (this.closed || this.terminal) return;
     this.committedSnapshots.add(kind);
     const pending = this.buffered.splice(0).sort((left, right) => left.sequence - right.sequence);
     for (const event of pending) {
+      if (this.terminal) {
+        // A later event after terminal removal is stale; drop it and stop.
+        return;
+      }
       const eventKind = snapshotKindForEvent(event.event_type);
       if (
         (eventKind === null && this.committedSnapshots.size > 0) ||
         (eventKind !== null && this.committedSnapshots.has(eventKind))
       ) {
         if (!this.project(event)) {
-          this.sequenceBlocked = true;
+          // Projection failure takes the durable poison/rebind path instead of
+          // discarding the unprocessed tail: block the sequence so the rebind
+          // reconciles from the snapshot boundary, and leave the remaining
+          // buffered events for that rebind rather than dropping them.
+          this.buffered.unshift(...pending.slice(pending.indexOf(event) + 1));
+          this.blockForPoison();
           return;
         }
       } else {
@@ -400,6 +399,13 @@ class OrderedConversationScope implements ConversationScope {
     if (!ack.success) throw ack.error;
     this.consumerId = ack.consumer_id;
     this.currentResumeToken = ack.resume_token;
+    // The subscribe ACK's watermark is the last durable sequence the server
+    // already holds; live projection starts at watermark+1. Seeding the
+    // cursor here (not at 1) is what lets an existing non-empty session drain
+    // its first live event instead of parking it forever waiting for
+    // sequence 1.
+    this.acknowledgedSequence = ack.event_watermark;
+    this.nextSequence = ack.event_watermark + 1;
     return {
       ...binding,
       snapshotToken: ack.snapshot_token,

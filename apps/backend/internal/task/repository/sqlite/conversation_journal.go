@@ -173,8 +173,16 @@ type conversationJournalTurnSeed struct {
 }
 
 func (r *Repository) backfillConversationJournal() error {
+	// The source SELECTs and the version inserts run in ONE transaction so a
+	// concurrent trigger write cannot allocate a sequence between the read and
+	// the insert, which would let a stale pre-update image win the snapshot.
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("begin conversation journal backfill: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
 	var turns []conversationJournalTurnSeed
-	if err := r.db.Select(&turns, `
+	if err := tx.Select(&turns, `
 		SELECT t.id, t.task_session_id, t.task_id, t.execution_profile_id, t.route_generation,
 			t.metadata, t.started_at, t.completed_at, t.created_at, t.updated_at
 		FROM task_session_turns t
@@ -186,7 +194,7 @@ func (r *Repository) backfillConversationJournal() error {
 		return fmt.Errorf("list conversation turn backfill: %w", err)
 	}
 	var messages []conversationJournalMessageSeed
-	if err := r.db.Select(&messages, `
+	if err := tx.Select(&messages, `
 		SELECT m.id, m.task_session_id, m.task_id, m.turn_id, m.author_type, m.author_id,
 			m.content, m.requests_input, m.type AS message_type, m.metadata,
 			m.created_at, m.updated_at, m.prompt_seq AS prompt_index
@@ -198,22 +206,16 @@ func (r *Repository) backfillConversationJournal() error {
 		ORDER BY m.task_session_id, m.created_at, m.id`); err != nil {
 		return fmt.Errorf("list conversation message backfill: %w", err)
 	}
-	if len(turns) == 0 && len(messages) == 0 {
-		return nil
-	}
-	tx, err := r.db.Beginx()
-	if err != nil {
-		return fmt.Errorf("begin conversation journal backfill: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	for _, turn := range turns {
-		if err := r.backfillConversationTurn(tx, turn); err != nil {
-			return err
+	if len(turns) > 0 || len(messages) > 0 {
+		for _, turn := range turns {
+			if err := r.backfillConversationTurn(tx, turn); err != nil {
+				return err
+			}
 		}
-	}
-	for _, message := range messages {
-		if err := r.backfillConversationMessage(tx, message); err != nil {
-			return err
+		for _, message := range messages {
+			if err := r.backfillConversationMessage(tx, message); err != nil {
+				return err
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -244,6 +246,21 @@ func (r *Repository) nextConversationJournalSequence(tx *sqlx.Tx, sessionID stri
 
 //nolint:goconst // Backfill payload values mirror the public event contract.
 func (r *Repository) backfillConversationTurn(tx *sqlx.Tx, turn conversationJournalTurnSeed) error {
+	// Optimistic re-check: if a concurrent write changed the turn since the
+	// backfill SELECT, its trigger already journaled the current image; a
+	// stale pre-update image must not win the snapshot with a later sequence.
+	var currentCompleted sql.NullTime
+	err := tx.Get(&currentCompleted, r.db.Rebind(`SELECT completed_at FROM task_session_turns WHERE id = ?`), turn.ID)
+	if err == sql.ErrNoRows {
+		return nil // deleted concurrently; its history is gone
+	}
+	if err != nil {
+		return fmt.Errorf("re-check conversation turn backfill %s: %w", turn.ID, err)
+	}
+	completed := turn.CompletedAt != nil
+	if currentCompleted.Valid != completed {
+		return nil // completion state changed concurrently; trigger journaled it
+	}
 	sequence, err := r.nextConversationJournalSequence(tx, turn.TaskSessionID)
 	if err != nil {
 		return err
@@ -273,19 +290,34 @@ func (r *Repository) backfillConversationTurn(tx *sqlx.Tx, turn conversationJour
 
 //nolint:goconst // Backfill payload values mirror the public event contract.
 func (r *Repository) backfillConversationMessage(tx *sqlx.Tx, message conversationJournalMessageSeed) error {
+	// Optimistic re-check: if a concurrent write changed the message since the
+	// backfill SELECT, its trigger already journaled the current image; a
+	// stale pre-update image must not win the snapshot with a later sequence.
+	var currentContent string
+	err := tx.Get(&currentContent, r.db.Rebind(`SELECT content FROM task_session_messages WHERE id = ?`), message.ID)
+	if err == sql.ErrNoRows {
+		return nil // deleted concurrently; its tombstone was journaled
+	}
+	if err != nil {
+		return fmt.Errorf("re-check conversation message backfill %s: %w", message.ID, err)
+	}
+	if currentContent != message.Content {
+		return nil // content changed concurrently; trigger journaled it
+	}
 	sequence, err := r.nextConversationJournalSequence(tx, message.TaskSessionID)
 	if err != nil {
 		return err
 	}
 	var metadata map[string]any
 	_ = json.Unmarshal([]byte(message.Metadata), &metadata)
+	senderTaskID, _ := metadata["sender_task_id"].(string)
 	payload, err := json.Marshal(map[string]any{
 		"type": "message.added", "session_id": message.TaskSessionID, "task_id": journalTaskID(message.TaskID),
 		"message_id": message.ID, "turn_id": message.TurnID, "author_type": message.AuthorType,
 		"content":      sysprompt.StripSystemContent(message.Content),
 		"message_type": message.MessageType, "created_at": message.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updated_at": message.UpdatedAt.UTC().Format(time.RFC3339Nano), "prompt_index": message.PromptIndex,
-		"sender_task_id": metadata["sender_task_id"],
+		"sender_task_id": senderTaskID,
 	})
 	if err != nil {
 		return fmt.Errorf("encode conversation message backfill: %w", err)
@@ -382,7 +414,7 @@ BEGIN
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
 			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
 			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
-			'sender_task_id',CASE WHEN json_valid(NEW.metadata) THEN json_extract(NEW.metadata,'$.sender_task_id') END)
+			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
 	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'message.added', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
@@ -406,7 +438,7 @@ BEGIN
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
 			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
 			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
-			'sender_task_id',CASE WHEN json_valid(NEW.metadata) THEN json_extract(NEW.metadata,'$.sender_task_id') END)
+			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
 	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'message.updated', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
@@ -588,7 +620,13 @@ BEGIN
 			'message_id',source_row.id,'turn_id',NULLIF(source_row.turn_id,''),'author_type',source_row.author_type,
 			'content',conversation_visible_content(source_row.content),'message_type',source_row.type,'created_at',source_row.created_at,
 			'updated_at',COALESCE(source_row.updated_at,source_row.created_at),'prompt_index',source_row.prompt_seq,
-			'sender_task_id',conversation_safe_jsonb(source_row.metadata) ->> 'sender_task_id')::text END);
+			'sender_task_id',CASE WHEN jsonb_typeof(conversation_safe_jsonb(source_row.metadata) -> 'sender_task_id') = 'string' THEN conversation_safe_jsonb(source_row.metadata) ->> 'sender_task_id' END)::text END);
+	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
+	SELECT source_row.task_session_id,seq,source_row.task_session_id || ':' || seq,event_name,NULLIF(source_row.task_id,''),payload,CURRENT_TIMESTAMP
+	FROM conversation_message_versions WHERE session_id=source_row.task_session_id AND message_id=source_row.id AND row_sequence=seq;
+	RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS conversation_message_journal_trigger ON task_session_messages;
 CREATE TRIGGER conversation_message_journal_trigger AFTER INSERT OR UPDATE OR DELETE ON task_session_messages
 FOR EACH ROW EXECUTE FUNCTION conversation_message_journal();

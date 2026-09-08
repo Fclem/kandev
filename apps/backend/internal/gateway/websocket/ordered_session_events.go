@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/kandev/kandev/internal/plugins"
 	"github.com/kandev/kandev/internal/sysprompt"
@@ -10,10 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const orderedMessageDeletedEvent = "message.deleted"
+
 var orderedEventTypeByAction = map[string]string{
 	ws.ActionSessionMessageAdded:   "message.added",
 	ws.ActionSessionMessageUpdated: "message.updated",
-	ws.ActionSessionMessageDeleted: "message.deleted",
+	ws.ActionSessionMessageDeleted: orderedMessageDeletedEvent,
 	ws.ActionSessionTurnStarted:    "session.turn.started",
 	ws.ActionSessionTurnCompleted:  "session.turn.completed",
 	ws.ActionSessionRemoved:        "session.removed",
@@ -69,7 +72,7 @@ func (h *Hub) appendAndBroadcastOrderedSessionEvent(sessionID string, message *w
 		// exists to receive the frame; mirroring with nobody subscribed does
 		// not burn an attempt.
 		if len(recipients) > 0 {
-			if failureErr := service.SessionDelivery().RecordFailure(sessionID, event.ID, event.CreatedAt); failureErr != nil && h.logger != nil {
+			if failureErr := service.SessionDelivery().RecordFailure(sessionID, event.ID, time.Now().UTC()); failureErr != nil && h.logger != nil {
 				h.logger.Error(
 					"record ordered session poison",
 					zap.String("event_id", event.ID),
@@ -98,7 +101,7 @@ func (h *Hub) broadcastCommittedOrderedSessionEvent(service *plugins.Service, ev
 	recipients := h.orderedSessionRecipients(event.SessionID)
 	if poison, poisoned := service.SessionEvents().Poison(event.SessionID, event.ID); poisoned {
 		if len(recipients) > 0 {
-			if failureErr := service.SessionDelivery().RecordFailure(event.SessionID, event.ID, event.CreatedAt); failureErr != nil && h.logger != nil {
+			if failureErr := service.SessionDelivery().RecordFailure(event.SessionID, event.ID, time.Now().UTC()); failureErr != nil && h.logger != nil {
 				h.logger.Error(
 					"record ordered session poison",
 					zap.String("event_id", event.ID),
@@ -132,7 +135,7 @@ func sanitizedOrderedSessionPayload(eventType string, source map[string]any) map
 				payload["sender_task_id"] = senderTaskID
 			}
 		}
-	case "message.deleted":
+	case orderedMessageDeletedEvent:
 		keys = append(keys, "message_id")
 	case "session.turn.started", "session.turn.completed":
 		keys = append(keys, "id", "started_at", "completed_at", "updated_at")
@@ -159,7 +162,17 @@ func (h *Hub) orderedSessionRecipients(sessionID string) []*Client {
 		}
 	}
 	h.mu.RUnlock()
-	return clients
+	// Re-authorize at fanout time, mirroring the legacy session recipients: a
+	// client whose workspace/session membership was revoked after subscribing
+	// must not keep receiving ordered frames. Denied clients lose the ordered
+	// subscription itself (same revocation semantics as the legacy path).
+	allowed, denied := h.partitionAuthorized(clients, sessionID, h.authPolicy.Subscriptions.Session)
+	for _, client := range denied {
+		client.mu.Lock()
+		delete(client.orderedSessionSubscriptions, sessionID)
+		client.mu.Unlock()
+	}
+	return allowed
 }
 
 func (c *Client) hasOrderedSessionSubscription(sessionID string) bool {

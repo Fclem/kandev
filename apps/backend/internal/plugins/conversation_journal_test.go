@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -249,6 +250,7 @@ func TestSyncCommittedSessionEventsStripsSystemContent(t *testing.T) {
 	events, err := service.SyncCommittedSessionEvents(context.Background(), "session-1")
 	require.NoError(t, err)
 	require.Len(t, events, 1)
+	require.Equal(t, "session-1", events[0].SessionID)
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
 	require.Equal(t, "visible", payload["content"])
@@ -284,7 +286,9 @@ func TestSyncCommittedSessionEventsPoisonsMalformedPayloadWithoutRetainingRawByt
 	events, err := service.SyncCommittedSessionEvents(context.Background(), sessionID)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	require.Empty(t, events[0].Payload)
+	require.Equal(t, "{}", string(events[0].Payload))
+	require.NotContains(t, string(events[0].Payload), "private")
+	require.NotContains(t, string(events[0].Payload), "kandev-system")
 	_, projectionErr := ProjectSessionEvent(events[0])
 	require.Error(t, projectionErr)
 }
@@ -316,4 +320,51 @@ func TestConversationMessagesAtErrorsWhenPageCursorWasTombstoned(t *testing.T) {
 		context.Background(), "session-1", 2, nil, nil, "asc", "message-1", 20,
 	)
 	require.ErrorIs(t, err, errConversationCursorGone)
+}
+
+// TestSyncCommittedSessionEventsPoisonsMalformedPayloadOnDurableLog pins that
+// a malformed primary-journal row is mirrored into the FILE-backed durable log
+// as a poison record with a non-nil, non-raw payload (the session_events
+// payload column is BLOB NOT NULL, so nil would fail the append).
+func TestSyncCommittedSessionEventsPoisonsMalformedPayloadOnDurableLog(t *testing.T) {
+	database, err := sqlx.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, database.Close()) })
+	_, err = database.Exec(`
+		CREATE TABLE conversation_session_streams (
+			session_id TEXT PRIMARY KEY, watermark INTEGER NOT NULL
+		);
+		CREATE TABLE conversation_session_events (
+			session_id TEXT NOT NULL, sequence INTEGER NOT NULL, event_id TEXT NOT NULL,
+			protocol_version INTEGER NOT NULL, event_type TEXT NOT NULL, task_id TEXT,
+			payload TEXT NOT NULL, created_at TIMESTAMP NOT NULL
+		);
+		INSERT INTO conversation_session_streams(session_id, watermark) VALUES ('sess-durable-poison', 1);
+		INSERT INTO conversation_session_events VALUES (
+			'sess-durable-poison', 1, 'sess-durable-poison:1', 1, 'message.added', 'task-1',
+			'{"content":"private <kandev-system>secret</kandev-system>"',
+			'2026-09-07T12:00:00Z'
+		);`)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	service := NewService(nil, NewRegistry(), nil, testLogger(t))
+	require.NoError(t, service.SetPluginsDir(dir))
+	service.SetConversationJournalDB(database)
+
+	events, err := service.SyncCommittedSessionEvents(context.Background(), "sess-durable-poison")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "{}", string(events[0].Payload))
+	log := service.SessionEvents()
+	record, ok := log.Poison("sess-durable-poison", events[0].ID)
+	require.True(t, ok)
+	require.NotEmpty(t, record.LastError)
+
+	// A restart of the durable log keeps the poison and the non-raw payload.
+	reopened, err := NewSessionEventLog(filepath.Join(dir, ".host", "session-events.sqlite"))
+	require.NoError(t, err)
+	restored, ok := reopened.Poison("sess-durable-poison", events[0].ID)
+	require.True(t, ok)
+	require.Equal(t, record.Attempts, restored.Attempts)
 }

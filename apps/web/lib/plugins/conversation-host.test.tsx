@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- This integration fixture covers the full conversation lifecycle. */
+/* eslint-disable max-lines,sonarjs/no-duplicate-string,max-lines-per-function -- This integration fixture covers the full conversation lifecycle with many fixture literals. */
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RawSessionEvent } from "@/lib/ws/client";
@@ -318,6 +318,69 @@ describe("strict ordered event validation poisons instead of projecting", () => 
       ),
     );
     expect(screen.getByTestId("removed").textContent).toBe("false");
+  });
+
+  it("projects live events from the subscribe watermark, not sequence one", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      String(input).endsWith(BINDING_PATH_SUFFIX)
+        ? Promise.resolve(
+            response({ bindingToken: "binding-1", generation: 7, expiresAt: FAR_FUTURE_EXPIRY }),
+          )
+        : Promise.resolve(response({ messages: [], hasMore: false, cursor: null })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    // An existing non-empty session subscribes at event_watermark 3; live
+    // frames therefore start at sequence 4 and must not park waiting for 1.
+    transport.request.mockImplementation((action: string) => {
+      if (action === SESSION_SUBSCRIBE_ACTION) {
+        return Promise.resolve({
+          success: true,
+          snapshot_token: "snapshot-1",
+          resume_token: "resume-0",
+          consumer_id: "consumer-1",
+          event_watermark: 3,
+          expires_at: FAR_FUTURE_EXPIRY,
+          result: "fresh",
+        });
+      }
+      if (action === SESSION_ACK_ACTION) {
+        return Promise.resolve({ success: true, resume_token: "resume-next" });
+      }
+      return Promise.resolve({ success: true });
+    });
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.hydrated).toBe(true));
+
+    act(() => {
+      transport.listener?.(
+        event(4, "message.added", { message_id: "message-4", content: "live-four" }),
+      );
+    });
+    expect(screen.getByTestId("messages").textContent).toBe("live-four");
+  });
+
+  it("accepts session.removed whose task_id differs from the session task", async () => {
+    stubEmptySnapshot();
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.hydrated).toBe(true));
+
+    act(() => {
+      transport.listener?.(event(1, SESSION_REMOVED_EVENT, { task_id: "task-moved" }, null));
+    });
+    expect(screen.getByTestId("removed").textContent).toBe("true");
+  });
+
+  it("does not resurrect rows from events delivered after terminal removal", async () => {
+    stubEmptySnapshot();
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.hydrated).toBe(true));
+
+    act(() => {
+      transport.listener?.(event(1, SESSION_REMOVED_EVENT, {}, null));
+      transport.listener?.(event(2, "message.added", { message_id: "late", content: "late" }));
+    });
+    expect(screen.getByTestId("removed").textContent).toBe("true");
+    expect(screen.getByTestId("messages").textContent).toBe("");
   });
 
   it("recovers through a durable rebind after a message with a missing required id", async () => {

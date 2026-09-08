@@ -79,7 +79,7 @@ func (s *Service) SyncCommittedSessionEvents(ctx context.Context, sessionID stri
 	}
 	watermark := s.sessionEvents.Watermark(sessionID)
 	query := s.conversationJournal.Rebind(`
-		SELECT event_id, sequence, protocol_version, event_type, task_id, payload, created_at
+		SELECT session_id, event_id, sequence, protocol_version, event_type, task_id, payload, created_at
 		FROM conversation_session_events
 		WHERE session_id = ? AND sequence > ?
 		ORDER BY sequence ASC`)
@@ -95,7 +95,7 @@ func (s *Service) SyncCommittedSessionEvents(ctx context.Context, sessionID stri
 		var event SessionEvent
 		var taskID sql.NullString
 		var payload string
-		if err := rows.Scan(&event.ID, &event.Sequence, &event.ProtocolVersion, &event.EventType, &taskID, &payload, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event.SessionID, &event.ID, &event.Sequence, &event.ProtocolVersion, &event.EventType, &taskID, &payload, &event.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan committed conversation event: %w", err)
 		}
 		event.Payload = sanitizeConversationEventPayload(event.EventType, json.RawMessage(payload))
@@ -125,10 +125,17 @@ func (s *Service) SyncCommittedSessionEvents(ctx context.Context, sessionID stri
 	return mirrored, nil
 }
 
+// emptyConversationPayload is the durable payload persisted for a
+// primary-journal row whose JSON is malformed. It carries no raw bytes yet is
+// non-nil, so the BLOB NOT NULL session_events column accepts the write and
+// the mirrored row is retained as a poison record instead of failing the
+// append (the projection rejects it because no type/identity fields exist).
+var emptyConversationPayload = json.RawMessage("{}")
+
 func sanitizeConversationEventPayload(eventType string, raw json.RawMessage) json.RawMessage {
 	var source map[string]any
 	if err := json.Unmarshal(raw, &source); err != nil {
-		return nil
+		return emptyConversationPayload
 	}
 	payload := map[string]any{conversationTypeKey: eventType}
 	copyConversationPayloadFields(payload, source, conversationSessionIDKey, conversationTaskIDKey)

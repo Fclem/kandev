@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-duplicate-string -- Transport fixtures repeat wire literals by contract. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WebSocketClient, WebSocketRequestError } from "./client";
@@ -384,6 +385,46 @@ describe("session subscription reconnect recovery", () => {
     socket.close();
 
     await expect(subscription.ready).rejects.toThrow("WebSocket connection closed");
+    subscription.unsubscribe();
+  });
+});
+
+describe("ordered core session validation", () => {
+  it("runs poison recovery for a session.event-shaped frame that fails the strict envelope check", async () => {
+    const { client, socket } = connectClient();
+    const handler = vi.fn();
+    client.on("session.message.added", handler);
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    const ordered = sessionSubscribeRequest(socket, 1);
+    acknowledgeWithResumeToken(socket, ordered, "resume-core");
+    await subscription.ready;
+    const sentBefore = socket.sent.length;
+
+    // protocol_version 2 (unsupported) with an otherwise contiguous shape.
+    socket.receive({
+      type: "session.event",
+      protocol_version: 2,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "event-1",
+      payload: { type: "message.added", message_id: "message-2" },
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+    // One recovery re-subscribe with replace_cursor, no ACK of the malformed
+    // frame.
+    const recovery = socket.sent
+      .slice(sentBefore)
+      .filter((frame) => frame.action === "session.subscribe");
+    expect(recovery).toHaveLength(1);
+    expect(recovery[0]?.payload).toMatchObject({ replace_cursor: true, session_id: "sess-1" });
+    expect(socket.sent.slice(sentBefore).some((frame) => frame.action === "session.ack")).toBe(
+      false,
+    );
     subscription.unsubscribe();
   });
 });

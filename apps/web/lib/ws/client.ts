@@ -506,6 +506,7 @@ export class WebSocketClient {
       this.rawSessionEventHandlers.forEach((handler) => handler(value));
       return;
     }
+    if (this.handleMalformedSessionEnvelope(value)) return;
     if (!value || typeof value !== "object" || !("type" in value)) return;
     const rawMessage = value as RawWebSocketMessage;
     if (this.handleRequestResult(rawMessage)) return;
@@ -520,6 +521,36 @@ export class WebSocketClient {
     }
     dispatchToPluginWsHandlers(action, message.payload);
   }
+  /**
+   * A frame that is session.event-shaped but fails the strict envelope check
+   * (bad protocol version, missing identity fields, malformed payload) can
+   * never be a valid ordered row. If it targets a live core stream at the
+   * expected next sequence, run the same durable poison recovery as a poison
+   * disposition so the stream rebinds to the authoritative watermark instead
+   * of stalling silently on a hole; the malformed frame itself is never
+   * dispatched to consumers.
+   */
+  private handleMalformedSessionEnvelope(value: unknown): boolean {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as { type?: unknown; session_id?: unknown; sequence?: unknown };
+    if (candidate.type !== "session.event") return false;
+    const sessionId = candidate.session_id;
+    const sequence = candidate.sequence;
+    const stream =
+      typeof sessionId === "string" && typeof sequence === "number"
+        ? this.coreSessionStreams.get(sessionId)
+        : undefined;
+    if (stream && sequence === stream.lastSeenSequence + 1) {
+      if (isDebug()) {
+        console.warn(
+          `[ws] malformed ordered session.event frame for "${sessionId}" at ${sequence}`,
+        );
+      }
+      this.recoverCoreSessionPoison(sessionId as string, stream);
+    }
+    return true;
+  }
+
   private handleRequestResult(message: RawWebSocketMessage): boolean {
     if (message.type !== "response" && message.type !== "error") return false;
     if (typeof message.id !== "string") return false;

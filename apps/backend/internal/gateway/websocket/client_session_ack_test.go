@@ -140,3 +140,37 @@ func TestOrderedReplayIsExplicitOnly(t *testing.T) {
 		t.Fatalf("invalid resume result = %+v, want replacement without replay", invalid)
 	}
 }
+
+// TestOrderedReplayRebindsOnRetainedGap pins that a replay whose first
+// retained row starts past lastSeen+1 (intermediate rows aged out on both
+// sides) returns the replacement-cursor result instead of masquerading as a
+// contiguous replay that would hide the lost history.
+func TestOrderedReplayRebindsOnRetainedGap(t *testing.T) {
+	service := plugins.NewService(nil, plugins.NewRegistry(), nil, testLogger())
+	// A fresh durable-log partition with only a high sequence present mirrors
+	// the state after both sides pruned the intermediate rows.
+	appended, err := service.SessionEvents().AppendCommitted(plugins.SessionEvent{
+		SessionID: "session-gap", ID: "session-gap:10", Sequence: 10,
+		EventType: "message.deleted",
+		Payload:   json.RawMessage(`{"type":"message.deleted","session_id":"session-gap","message_id":"message-1"}`),
+	})
+	if err != nil {
+		t.Fatalf("mirror event: %v", err)
+	}
+	if !appended {
+		t.Fatal("expected the gap heal to accept the retained row")
+	}
+	key := plugins.SessionDeliveryCursorKey{
+		SessionID: "session-gap", ConsumerKind: orderedConsumerPlugin,
+		PluginID: "plugin-1", Generation: 7, ConsumerID: "consumer-1", UserID: "user-1",
+	}
+	lastSeen := uint64(5)
+	replay := resolveOrderedSessionReplay(service, SessionSubscribeRequest{
+		SessionID: "session-gap", ConsumerKind: orderedConsumerPlugin,
+		PluginID: "plugin-1", Generation: 7, ConsumerID: "consumer-1",
+		LastSeenSequence: &lastSeen,
+	}, key)
+	if replay.result != "invalid_resume" || len(replay.events) != 0 || replay.cursorSequence != replay.watermark {
+		t.Fatalf("retained-gap result = %+v, want replacement cursor at watermark without replay", replay)
+	}
+}

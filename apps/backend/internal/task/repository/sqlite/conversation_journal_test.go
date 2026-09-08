@@ -364,3 +364,40 @@ func TestConversationJournalBackfillsExistingRowsIdempotently(t *testing.T) {
 		t.Fatalf("backfill content = %q, want existing", content)
 	}
 }
+
+func TestConversationJournalSenderTaskIDRequiresString(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-journal-sender", "session-journal-sender", "turn-journal-sender")
+	if err := repo.CreateMessage(ctx, &models.Message{
+		ID: "message-sender-numeric", TaskSessionID: "session-journal-sender", TaskID: "task-journal-sender",
+		TurnID: "turn-journal-sender", AuthorType: models.MessageAuthorUser,
+		Type: models.MessageTypeMessage, Content: "numeric",
+		Metadata: map[string]any{"sender_task_id": 42},
+	}); err != nil {
+		t.Fatalf("create numeric-sender message: %v", err)
+	}
+	if err := repo.CreateMessage(ctx, &models.Message{
+		ID: "message-sender-string", TaskSessionID: "session-journal-sender", TaskID: "task-journal-sender",
+		TurnID: "turn-journal-sender", AuthorType: models.MessageAuthorAgent,
+		Type: models.MessageTypeMessage, Content: "string",
+		Metadata: map[string]any{"sender_task_id": "task-sender-1"},
+	}); err != nil {
+		t.Fatalf("create string-sender message: %v", err)
+	}
+
+	var numericSender any
+	if err := repo.db.Get(&numericSender, `SELECT json_extract(payload, '$.sender_task_id') FROM conversation_message_versions WHERE message_id = 'message-sender-numeric'`); err != nil {
+		t.Fatalf("read numeric-sender payload: %v", err)
+	}
+	if numericSender != nil {
+		t.Fatalf("numeric sender_task_id stored as %v, want NULL", numericSender)
+	}
+	var stringSender string
+	if err := repo.db.Get(&stringSender, `SELECT json_extract(payload, '$.sender_task_id') FROM conversation_message_versions WHERE message_id = 'message-sender-string'`); err != nil {
+		t.Fatalf("read string-sender payload: %v", err)
+	}
+	if stringSender != "task-sender-1" {
+		t.Fatalf("string sender_task_id = %q, want task-sender-1", stringSender)
+	}
+}

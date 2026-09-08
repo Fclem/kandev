@@ -379,6 +379,9 @@ func (e *Executor) prompt(ctx context.Context, taskID, sessionID string, prompt 
 	if err != nil || executionID == "" {
 		return nil, ErrExecutionNotFound
 	}
+	if session.AgentExecutionID != "" && executionID != session.AgentExecutionID {
+		return nil, ErrExecutionNotFound
+	}
 
 	e.logger.Debug("sending prompt to agent",
 		zap.String("task_id", taskID),

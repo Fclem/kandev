@@ -1200,6 +1200,71 @@ func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskI
 	return int(removed), nil
 }
 
+// PurgeSessionInTransaction removes all durable queue state for a deleted
+// session while the owning task repository transaction is still open. The
+// caller must hold the session lock and must commit the surrounding
+// transaction after this function returns successfully.
+func PurgeSessionInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) (int, error) {
+	for _, table := range []string{"queued_messages", "queue_session_locks"} {
+		present, err := internaldb.TableExists(tx, table)
+		if err != nil {
+			return 0, fmt.Errorf("check %s table: %w", table, err)
+		}
+		if !present {
+			return 0, nil
+		}
+	}
+
+	if err := ensureTaskPurgeRecoverySchemas(ctx, tx); err != nil {
+		return 0, err
+	}
+	if err := lockSessionTxIn(ctx, tx, db, sessionID); err != nil {
+		return 0, err
+	}
+	if err := guardSessionTransferTx(ctx, tx, db, sessionID); err != nil {
+		return 0, err
+	}
+	if err := deleteEditLeasesForSessionIDsTx(ctx, tx, db, []string{sessionID}); err != nil {
+		return 0, err
+	}
+
+	result, err := tx.ExecContext(ctx, db.Rebind(`
+		DELETE FROM queued_messages WHERE session_id = ?
+	`), sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("purge queued session entries: %w", err)
+	}
+	removed, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("purge queued session entries rows affected: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, db.Rebind(`
+		DELETE FROM pending_moves WHERE session_id = ?
+	`), sessionID); err != nil {
+		return 0, fmt.Errorf("purge session pending move: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, db.Rebind(`
+		INSERT INTO queue_session_state (session_id, auto_run, send_now_generation)
+		VALUES (?, 1, 1)
+		ON CONFLICT(session_id) DO UPDATE SET
+			auto_run = 1,
+			send_now_generation = queue_session_state.send_now_generation + 1
+	`), sessionID); err != nil {
+		return 0, fmt.Errorf("advance deleted session queue generation: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, db.Rebind(`
+		DELETE FROM queue_send_now_claims WHERE session_id = ?
+	`), sessionID); err != nil {
+		return 0, fmt.Errorf("purge session Send Now claim: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, db.Rebind(`
+		DELETE FROM queue_dispatch_claims WHERE session_id = ?
+	`), sessionID); err != nil {
+		return 0, fmt.Errorf("purge session dispatch claims: %w", err)
+	}
+	return int(removed), nil
+}
+
 // replaceCoalesced overwrites the existing coalesced row with msg inside the transaction.
 func (r *sqliteRepository) replaceCoalesced(ctx context.Context, tx *sqlx.Tx, existing, msg *QueuedMessage) (*QueuedMessage, error) {
 	if msg.QueuedAt.IsZero() {

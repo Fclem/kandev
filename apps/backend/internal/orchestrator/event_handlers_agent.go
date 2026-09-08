@@ -416,6 +416,9 @@ func (s *Service) handleAgentBootReady(ctx context.Context, data watcher.AgentEv
 	// above is the guarded admission decision; the drain performs its own
 	// cancellation check and leaves the queue untouched if a new cancellation
 	// claims the session in this handoff.
+	if s.isQueuedDispatchInFlight(data.SessionID) {
+		s.markQueuedDispatchDrainPending(data.SessionID)
+	}
 	lock.Unlock()
 	guardLocked = false
 	s.drainQueuedMessageForPromptableSession(ctx, data.SessionID)
@@ -832,11 +835,12 @@ func (s *Service) recordQueuedUserMessage(ctx context.Context, queuedMsg *messag
 	}
 	references := entityrefs.NormalizePersisted(queuedMsg.Metadata[messagequeue.MetadataEntityReferences])
 	promptContent := AppendEntityReferenceContext(queuedMsg.Content, references)
+	promptContent = appendStepHandoffToPrompt(promptContent, stepHandoffFromQueuedMetadata(queuedMsg.Metadata))
 	meta := NewUserMessageMeta().
 		WithPlanMode(queuedMsg.PlanMode).
 		WithAttachments(attachments).
 		WithEntityReferences(references)
-	metaMap := mergeMetadata(meta.ToMap(), metadataWithoutEntityReferences(queuedMsg.Metadata))
+	metaMap := mergeMetadata(meta.ToMap(), metadataWithoutQueueOnlyKeys(queuedMsg.Metadata))
 	if err := s.messageCreator.CreateUserMessage(ctx, queuedMsg.TaskID, promptContent, queuedMsg.SessionID, turnID, metaMap); err != nil {
 		s.logger.Error("failed to create user message for queued message", zap.String("session_id", queuedMsg.SessionID), zap.Error(err))
 		return err
@@ -864,6 +868,7 @@ func (s *Service) executeQueuedMessageWithReservation(
 	}
 	defer func() {
 		s.clearQueuedDispatchInFlightIfCurrent(reservedSessionID, reservation)
+		s.drainQueuedDispatchIfPending(reservedSessionID)
 		if s.onQueuedMessageExecutionComplete != nil {
 			s.onQueuedMessageExecutionComplete()
 		}
@@ -907,6 +912,7 @@ func (s *Service) executeQueuedMessageWithReservation(
 	}
 	references := entityrefs.NormalizePersisted(queuedMsg.Metadata[messagequeue.MetadataEntityReferences])
 	promptContent := AppendEntityReferenceContext(queuedMsg.Content, references)
+	promptContent = appendStepHandoffToPrompt(promptContent, stepHandoffFromQueuedMetadata(queuedMsg.Metadata))
 
 	// Create user messages for ordinary queue entries now. Lifecycle entries
 	// persist their visible message only after the final active-task claim.
@@ -934,7 +940,9 @@ func (s *Service) executeQueuedMessageWithReservation(
 				zap.String("queue_id", queuedMsg.ID))
 			return
 		}
-		s.processOnTurnStartViaEngine(promptCtx, queuedMsg.TaskID, session)
+		if !turnStartAlreadyProcessed(queuedMsg.Metadata) {
+			s.processOnTurnStartViaEngine(promptCtx, queuedMsg.TaskID, session)
+		}
 	}
 
 	// Call promptTask with this entry's ID as a second ownership check. The
@@ -1072,7 +1080,8 @@ func (s *Service) handleQueuedMessageExecutionError(
 	if passthroughAttachmentRecovery || lifecyclePrompt || errors.Is(err, errLifecyclePromptClaim) ||
 		errors.Is(err, errLifecyclePromptMessagePersistence) ||
 		isSessionBusyError(err) || isTransientPromptError(err) || manualRecovery ||
-		errors.Is(err, lifecycle.ErrCancelEscalated) || isSessionResetInProgressError(err) {
+		errors.Is(err, lifecycle.ErrCancelEscalated) || isSessionResetInProgressError(err) ||
+		errors.Is(err, ErrSessionRuntimeUnavailable) {
 		if userMessageRecorded {
 			markQueuedUserMessageRecorded(queuedMsg)
 		}
@@ -1260,13 +1269,19 @@ func markQueuedUserMessageRecorded(queuedMsg *messagequeue.QueuedMessage) {
 	queuedMsg.Metadata[metaKeyUserMessageRecorded] = true
 }
 
-func metadataWithoutEntityReferences(metadata map[string]interface{}) map[string]interface{} {
+// metadataWithoutQueueOnlyKeys strips queue-transport-only keys before a
+// queued message's metadata is persisted onto a chat message row:
+// entity references are re-added via WithEntityReferences, and a carried
+// completion handoff (messagequeue.MetadataStepHandoff) is already folded
+// into the recorded content by the caller, so neither belongs in the row's
+// own stored metadata.
+func metadataWithoutQueueOnlyKeys(metadata map[string]interface{}) map[string]interface{} {
 	if len(metadata) == 0 {
 		return nil
 	}
 	copy := make(map[string]interface{}, len(metadata))
 	for key, value := range metadata {
-		if key != messagequeue.MetadataEntityReferences {
+		if key != messagequeue.MetadataEntityReferences && key != messagequeue.MetadataStepHandoff {
 			copy[key] = value
 		}
 	}

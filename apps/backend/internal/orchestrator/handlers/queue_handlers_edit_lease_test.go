@@ -39,6 +39,27 @@ func TestWsUpdateMessageDoesNotReleaseUnclaimedAttachmentsOnLeaseConflict(t *tes
 	require.Empty(t, claimer.releases)
 	require.NoError(t, queue.EndEdit(ctx, entry.SessionID, entry.ID, secondLease.LeaseID, "connection-b"))
 }
+
+func TestWsBeginEditReturnsEntryNotFoundForDrainedEntry(t *testing.T) {
+	handlers, queue := setupQueueHandlers(t)
+	ctx := context.Background()
+	entry, err := queue.QueueMessage(ctx, "session", "task", "original", "", messagequeue.QueuedByUser, false, nil)
+	require.NoError(t, err)
+	_, ok := queue.TakeQueued(ctx, entry.SessionID)
+	require.True(t, ok)
+
+	response, err := handlers.wsBeginEdit(
+		ws.WithConnectionID(ctx, "connection"),
+		createTestMessage(t, ws.ActionMessageQueueEditBegin, map[string]interface{}{
+			"session_id": entry.SessionID,
+			"entry_id":   entry.ID,
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeError, response.Type)
+	require.Equal(t, queueErrorCodeEntryNotFound, parseError(t, response).Code)
+}
+
 func TestWsEndEditDispatchesOnlyAfterSuccessfulSave(t *testing.T) {
 	drainer := &mockQueueDrainer{}
 	handlers, queue := setupQueueHandlersWithDrainer(t, drainer)

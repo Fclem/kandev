@@ -131,9 +131,9 @@ func TestTakeAndMergeHandoffMessageDiscardsEmptyEntry(t *testing.T) {
 		t.Fatalf("queue empty handoff: %v", err)
 	}
 
-	msg, prompt, attachments, references := svc.takeAndMergeHandoffMessage(ctx, "session-empty-handoff", "base")
-	if msg != nil || prompt != "base" || attachments != nil || references != nil {
-		t.Fatalf("empty handoff result = msg:%v prompt:%q attachments:%v references:%v", msg, prompt, attachments, references)
+	msg, prompt, attachments, references, handoff := svc.takeAndMergeHandoffMessage(ctx, "session-empty-handoff", "base")
+	if msg != nil || prompt != "base" || attachments != nil || references != nil || handoff != "" {
+		t.Fatalf("empty handoff result = msg:%v prompt:%q attachments:%v references:%v handoff:%q", msg, prompt, attachments, references, handoff)
 	}
 	if got := svc.messageQueue.GetStatus(ctx, "session-empty-handoff").Count; got != 0 {
 		t.Fatalf("empty handoff count = %d, want discarded entry", got)

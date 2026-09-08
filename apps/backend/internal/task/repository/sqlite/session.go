@@ -2858,6 +2858,22 @@ func (r *Repository) queueSessionLockTablePresent(ctx context.Context) (bool, er
 	return db.TableExistsContext(ctx, r.db, "queue_session_locks")
 }
 
+func purgeLegacySessionQueueRows(ctx context.Context, tx *sqlx.Tx, conn *sqlx.DB, sessionID string) error {
+	statements := []struct {
+		name  string
+		query string
+	}{
+		{name: "queued messages", query: `DELETE FROM queued_messages WHERE session_id = ?`},
+		{name: "pending move", query: `DELETE FROM pending_moves WHERE session_id = ?`},
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, conn.Rebind(statement.query), sessionID); err != nil && !db.IsMissingTableError(err) {
+			return fmt.Errorf("purge %s for session %s: %w", statement.name, sessionID, err)
+		}
+	}
+	return nil
+}
+
 // DeleteTaskSession deletes an agent session by ID and any pending queue rows
 // keyed to that session. Without the queue purge, orphan rows keep inflating
 // task-scoped queued_prompt_count after the session is gone.
@@ -2897,17 +2913,12 @@ func (r *Repository) DeleteTaskSession(ctx context.Context, id string) error {
 			return fmt.Errorf("purge prompt history for session %s: %w", id, err)
 		}
 	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM queued_messages WHERE session_id = ?`), id); err != nil {
-		// Isolated unit tests may omit the messagequeue schema. Production
-		// always has queued_messages; treat a missing table as already-purged.
-		if !db.IsMissingTableError(err) {
-			return fmt.Errorf("purge queued messages for session %s: %w", id, err)
+	if queueLockPresent {
+		if _, err := messagequeue.PurgeSessionInTransaction(ctx, tx, r.db, id); err != nil {
+			return fmt.Errorf("purge queue state for session %s: %w", id, err)
 		}
-	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM pending_moves WHERE session_id = ?`), id); err != nil {
-		if !db.IsMissingTableError(err) {
-			return fmt.Errorf("purge pending move for session %s: %w", id, err)
-		}
+	} else if err := purgeLegacySessionQueueRows(ctx, tx, r.db, id); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return err

@@ -46,6 +46,13 @@ const MetadataCoalesceKey = "coalesce_key"
 // queued message.
 const MetadataEntityReferences = "entity_references"
 
+// MetadataStepHandoff carries a completion-handoff carry token's claimed text
+// for a queued workflow auto-start prompt, so a dispatch path that defers
+// delivery through the queue (rather than sending it directly) still appends
+// the handoff at actual dispatch time, after entity-reference context, rather
+// than losing it at claim time or appending it out of order.
+const MetadataStepHandoff = "step_handoff"
+
 // MetadataContextFiles carries path/name references and optional directory
 // identity for queued user messages.
 const MetadataContextFiles = "context_files"
@@ -212,7 +219,7 @@ func (m *QueuedMessage) IsDurableLifecycle() bool {
 		return true
 	}
 	origin, _ := m.Metadata["origin"].(string)
-return origin == lifecycleOriginGitHubPR || origin == "ci_automation" || origin == lifecycleOriginGitLabMR
+	return origin == lifecycleOriginGitHubPR || origin == "ci_automation" || origin == lifecycleOriginGitLabMR
 }
 
 // IsReservedInFlight reports whether this durable row was already reserved for

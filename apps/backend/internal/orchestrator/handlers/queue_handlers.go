@@ -856,6 +856,10 @@ func (h *QueueHandlers) queueEditError(msg *ws.Message, err error) *ws.Message {
 		response, _ := ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound,
 			"Queue entry was already drained or is no longer editable", nil)
 		return response
+	case errors.Is(err, messagequeue.ErrEditLeaseNotFound):
+		response, _ := ws.NewError(msg.ID, msg.Action, queueErrorCodeEntryNotFound,
+			"Queue entry was already drained or is no longer editable", nil)
+		return response
 	case errors.Is(err, messagequeue.ErrEditConflict):
 		response, _ := ws.NewError(msg.ID, msg.Action, "edit_conflict",
 			"Queue entry is being edited by another view", nil)

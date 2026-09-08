@@ -183,6 +183,56 @@ func TestDeleteTaskSessionPurgesQueuedMessages(t *testing.T) {
 	}
 }
 
+func TestDeleteTaskSessionPurgesDurableQueueClaimsInTransaction(t *testing.T) {
+	repo := newRepoForArchiveTests(t, "task-session-recovery-purge")
+	ctx := context.Background()
+	const sessionID = "session-recovery-purge"
+	seedLiveSessionForQueue(t, repo, sessionID, "task-session-recovery-purge")
+
+	mqRepo, err := messagequeue.NewSQLiteRepository(repo.db, repo.db)
+	if err != nil {
+		t.Fatalf("NewSQLiteRepository: %v", err)
+	}
+	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "console"})
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	queue := messagequeue.NewService(mqRepo, messagequeue.DefaultMaxPerSession, log)
+	dispatchEntry, err := queue.QueueMessage(ctx, sessionID, "task-session-recovery-purge", "dispatch", "", "user", false, nil)
+	if err != nil {
+		t.Fatalf("queue dispatch entry: %v", err)
+	}
+	if reserved, ok := queue.ReserveQueued(ctx, sessionID); !ok || reserved.ID != dispatchEntry.ID {
+		t.Fatalf("reserved dispatch entry = %#v, ok=%t", reserved, ok)
+	}
+	sendNowEntry, err := queue.QueueMessage(ctx, sessionID, "task-session-recovery-purge", "send now", "", "user", false, nil)
+	if err != nil {
+		t.Fatalf("queue Send Now entry: %v", err)
+	}
+	if _, err := mqRepo.ClaimSendNow(ctx, sessionID, []messagequeue.QueuedMessage{*sendNowEntry}); err != nil {
+		t.Fatalf("claim Send Now entry: %v", err)
+	}
+
+	if err := repo.DeleteTaskSession(ctx, sessionID); err != nil {
+		t.Fatalf("DeleteTaskSession: %v", err)
+	}
+	dispatches, err := mqRepo.(interface {
+		ListPendingQueueDispatches(context.Context) ([]messagequeue.PendingQueueDispatch, error)
+	}).ListPendingQueueDispatches(ctx)
+	if err != nil {
+		t.Fatalf("list dispatch claims: %v", err)
+	}
+	sendNowClaims, err := mqRepo.(interface {
+		ListPendingSendNowClaims(context.Context) ([]messagequeue.PendingSendNowClaim, error)
+	}).ListPendingSendNowClaims(ctx)
+	if err != nil {
+		t.Fatalf("list Send Now claims: %v", err)
+	}
+	if len(dispatches) != 0 || len(sendNowClaims) != 0 {
+		t.Fatalf("durable claims after session delete: dispatches=%#v send_now=%#v", dispatches, sendNowClaims)
+	}
+}
+
 func TestDeleteTaskSessionRejectsActiveQueueTransfer(t *testing.T) {
 	repo := newRepoForArchiveTests(t, "task-session-transfer")
 	ctx := context.Background()

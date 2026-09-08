@@ -83,9 +83,7 @@ func TestDeleteSessionPublishesOneQueueStatusNotification(t *testing.T) {
 	t.Cleanup(func() { eventBus.Close() })
 	svc.eventBus = eventBus
 	repo.SetTaskSessionQueuePurgeNotifier(func(ctx context.Context, taskID, sessionID string) {
-		svc.messageQueue.InvalidateEditLeasesForSession(sessionID)
-		_, _ = svc.messageQueue.PurgeSession(ctx, sessionID)
-		svc.publishTaskQueueStatusEvent(ctx, taskID, sessionID)
+		svc.purgeDeletedSessionQueue(ctx, taskID, sessionID)
 	})
 	svc.sessionQueuePurgeNotifierRegistered = true
 
@@ -105,7 +103,7 @@ func TestDeleteSessionPublishesOneQueueStatusNotification(t *testing.T) {
 	}
 }
 
-func TestDeletedSessionQueueCleanupIgnoresCancelledContext(t *testing.T) {
+func TestDeletedSessionQueueNotificationIgnoresCancelledContext(t *testing.T) {
 	queue := messagequeue.NewServiceMemory(testLogger())
 	entry, err := queue.QueueMessage(
 		context.Background(),
@@ -127,8 +125,8 @@ func TestDeletedSessionQueueCleanupIgnoresCancelledContext(t *testing.T) {
 
 	svc.purgeDeletedSessionQueue(ctx, entry.TaskID, entry.SessionID)
 
-	if got := queue.GetStatus(context.Background(), entry.SessionID).Count; got != 0 {
-		t.Fatalf("deleted session queue count = %d, want 0", got)
+	if got := queue.GetStatus(context.Background(), entry.SessionID).Count; got != 1 {
+		t.Fatalf("post-commit notification changed queue count = %d, want 1", got)
 	}
 }
 

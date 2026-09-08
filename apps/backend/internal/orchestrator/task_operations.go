@@ -79,6 +79,28 @@ var ErrAgentPromptInProgress = errors.New("agent is currently processing a promp
 var ErrAgentNotReadyForPrompt = errors.New("agent not ready for prompt")
 var ErrSessionResetInProgress = errors.New("session reset in progress")
 
+// ErrSessionRuntimeUnavailable is returned by promptTask when
+// ensureSessionRunning fails for the single reason that is safe to treat as
+// "not yet launched" (see errSessionAwaitingRuntimeLaunch) — e.g. a session
+// promoted by a workflow step move whose runtime has not finished launching
+// yet. Callers can safely queue the prompt for delivery once the runtime
+// comes up instead of reporting it as failed, because nothing was
+// dispatched. Every other ensureSessionRunning failure (a real launch
+// error, an office-scheduler refusal, an exhausted resume retry) keeps
+// surfacing as a plain, visible error instead.
+var ErrSessionRuntimeUnavailable = errors.New("session runtime unavailable")
+
+// errSessionAwaitingRuntimeLaunch marks attemptColdResume's "prepared but
+// not launched yet" outcome: the session has no executors_running row
+// because the launch that creates one has not run yet, not because a launch
+// attempt failed. This is the only ensureSessionRunning failure narrow
+// enough to be classified ErrSessionRuntimeUnavailable — a session that
+// tried and failed to come up (bad SSH handshake, exhausted cold-resume
+// retries, an office-scheduler refusal) must not be silently queued with no
+// visible error and no log, since there is no future launch that will drain
+// the queue for it.
+var errSessionAwaitingRuntimeLaunch = errors.New("session is not resumable: no executor record")
+
 type primarySessionTaskStateUpdater interface {
 	UpdateTaskStateIfPrimarySessionState(
 		ctx context.Context,
@@ -2487,7 +2509,23 @@ func (s *Service) StartSessionForWorkflowStep(ctx context.Context, taskID, sessi
 		return nil
 	}
 
-	_, err = s.PromptTask(ctx, taskID, sessionID, effectivePrompt, "", stepPlanMode, nil, false)
+	// Claimed after the actionability decision above, over content that
+	// excludes the handoff text, then appended last. Queue promotion and
+	// manual auto-start dispatch once with no replacement launch, so no
+	// shared stepHandoffOnce is needed here.
+	handoffText, _ := s.claimStepHandoffCarryText(ctx, taskID, workflowStepID)
+	effectivePrompt = appendStepHandoffToPrompt(effectivePrompt, handoffText)
+	composedLaunchPrompt := appendStepHandoffToPrompt(promptForEmptinessCheck, handoffText)
+
+	// effectivePrompt is already fully composed for this step entry (handoff
+	// included): if promptTask's own internal ErrExecutionNotFound recovery
+	// fires, it must reuse this composed prompt rather than recomposing from
+	// the destination step's own template and discarding the handoff.
+	_, err = s.promptTask(ctx, taskID, sessionID, effectivePrompt, "", stepPlanMode, nil, false, promptTaskOptions{
+		promptAlreadyComposed: true,
+		fallbackLaunchPrompt:  composedLaunchPrompt,
+		fallbackRetryPrompt:   effectivePrompt,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to prompt session: %w", err)
 	}
@@ -2631,8 +2669,11 @@ func (s *Service) attemptColdResume(
 	}
 
 	running, lookupErr := s.repo.GetExecutorRunningBySessionID(ctx, sessionID)
-	if lookupErr != nil || running == nil {
-		return false, fmt.Errorf("session is not resumable: no executor record (state: %s)", session.State)
+	if lookupErr != nil && !errors.Is(lookupErr, models.ErrExecutorRunningNotFound) {
+		return false, fmt.Errorf("get executor running row: %w", lookupErr)
+	}
+	if running == nil {
+		return false, fmt.Errorf("%w (state: %s)", errSessionAwaitingRuntimeLaunch, session.State)
 	}
 
 	s.noteMissingWorktreesBeforeResume(sessionID, session)
@@ -3603,22 +3644,15 @@ func (s *Service) publishTaskSessionErrorEvent(
 	))
 }
 
-// purgeDeletedSessionQueue invalidates in-process edit state and removes the
-// deleted session's queue using a post-commit context. The task repository
-// invokes its queue purge notifier after the session row and durable queue
-// transaction commit, so request cancellation must not prevent cleanup.
+// purgeDeletedSessionQueue invalidates in-process edit state and publishes the
+// queue update after the task repository commits the durable session purge.
+// Request cancellation must not prevent this post-commit notification.
 func (s *Service) purgeDeletedSessionQueue(ctx context.Context, taskID, sessionID string) {
 	cleanupCtx := context.WithoutCancel(ctx)
 	if s.messageQueue == nil {
 		return
 	}
 	s.messageQueue.InvalidateEditLeasesForSession(sessionID)
-	if _, err := s.messageQueue.PurgeSession(cleanupCtx, sessionID); err != nil {
-		s.logger.Warn("failed to purge queue after task session deletion",
-			zap.String("task_id", taskID),
-			zap.String("session_id", sessionID),
-			zap.Error(err))
-	}
 	s.publishTaskQueueStatusEvent(cleanupCtx, taskID, sessionID)
 }
 
@@ -4243,6 +4277,21 @@ type promptTaskOptions struct {
 	// waits for the turn to finish. Automation callers use it to bind durable
 	// attempt identity to the exact turn.
 	onAccepted func(turnID string)
+	// promptAlreadyComposed and fallbackRetryPrompt mirror the composed-prompt
+	// seam autoStartStepPrompt's own ErrExecutionNotFound branch uses (see
+	// fallbackFreshLaunchOnMissingExecution). When promptAlreadyComposed is
+	// true, handlePromptDispatchFailure's own internal ErrExecutionNotFound
+	// recovery relaunches via startCreatedSessionWithComposedPrompt
+	// (fallbackRetryPrompt as its dispatch value) instead of the public
+	// StartCreatedSession, so a caller that already composed the prompt itself
+	// (e.g. appending a claimed step handoff) is not silently recomposed from
+	// the destination step's own template.
+	promptAlreadyComposed bool
+	// fallbackLaunchPrompt is the fully composed prompt for fresh-launch
+	// recovery. The normal dispatch still receives the raw prompt so it can
+	// apply session transforms exactly once.
+	fallbackLaunchPrompt string
+	fallbackRetryPrompt  string
 }
 
 type promptDispatchOutcome struct {
@@ -4372,6 +4421,9 @@ func (s *Service) promptTask(ctx context.Context, taskID, sessionID string, prom
 	resumedForPrompt := !hadExecutionBeforeEnsure
 	if err := s.ensureSessionRunning(ctx, sessionID, session); err != nil {
 		s.releaseForegroundClaimOnFailure(ctx, taskID, sessionID, foregroundClaim)
+		if errors.Is(err, errSessionAwaitingRuntimeLaunch) {
+			return nil, fmt.Errorf("%w: failed to ensure session is running: %w", ErrSessionRuntimeUnavailable, err)
+		}
 		return nil, fmt.Errorf("failed to ensure session is running: %w", err)
 	}
 
@@ -4505,6 +4557,11 @@ func (s *Service) promptTask(ctx context.Context, taskID, sessionID string, prom
 	)
 	dispatchAccepted, publicationErr := dispatchOutcome.snapshot()
 	if err != nil {
+		// Missing-execution recovery reacquires the cancel guard while it resets
+		// the session. Release dispatch admission before entering that path.
+		if releaseDispatchGuard != nil {
+			releaseDispatchGuard()
+		}
 		return s.finishPromptDispatchFailure(
 			ctx, taskID, sessionID, prompt, planMode, resumedForPrompt, attachments,
 			rollback, options, err, foregroundDispatch, dispatchAccepted, publicationErr,
@@ -4539,6 +4596,7 @@ func (s *Service) finishPromptDispatchFailure(
 	failureResult, failureErr := s.handlePromptDispatchFailure(
 		failureCtx, taskID, sessionID, prompt, planMode, resumedForPrompt,
 		attachments, rollback, options.lifecyclePrompt, dispatchAccepted, promptErr,
+		options.promptAlreadyComposed, options.fallbackLaunchPrompt, options.fallbackRetryPrompt,
 	)
 	return failureResult, wrapAcceptedPromptDispatchFailure(
 		dispatchAccepted,
@@ -5008,6 +5066,11 @@ func (s *Service) restoreLifecycleTaskState(
 // it falls back to a fresh launch instead of surfacing the error to the
 // caller. Otherwise — or if that fallback launch itself fails — it
 // delegates to handlePromptError for the caller-facing result.
+// promptAlreadyComposed/fallbackRetryPrompt are the caller's promptTaskOptions
+// values, forwarded to fallbackFreshLaunchOnMissingExecution so a caller that
+// already composed the dispatch prompt (e.g. autoStartStepPrompt, which
+// appends a claimed step handoff) is not silently recomposed from the
+// destination step's own template by this internal recovery.
 func (s *Service) handlePromptDispatchFailure(
 	ctx context.Context,
 	taskID, sessionID, prompt string,
@@ -5017,14 +5080,21 @@ func (s *Service) handlePromptDispatchFailure(
 	lifecyclePrompt bool,
 	dispatchAccepted bool,
 	promptErr error,
+	promptAlreadyComposed bool,
+	fallbackLaunchPrompt string,
+	fallbackRetryPrompt string,
 ) (*PromptResult, error) {
 	if resumedForPrompt && !dispatchAccepted && !rollback.reservedTurnAccepted && rollback.reservedTurn == nil &&
 		errors.Is(promptErr, executor.ErrExecutionNotFound) {
 		s.logger.Warn("prompt after lazy resume hit missing execution; falling back to fresh launch",
 			zap.String("task_id", taskID),
 			zap.String("session_id", sessionID))
+		fallbackPrompt := prompt
+		if fallbackLaunchPrompt != "" {
+			fallbackPrompt = fallbackLaunchPrompt
+		}
 		if freshErr := s.fallbackFreshLaunchOnMissingExecution(
-			ctx, taskID, sessionID, prompt, planMode, nil, attachments, nil,
+			ctx, taskID, sessionID, fallbackPrompt, promptAlreadyComposed, fallbackRetryPrompt, planMode, nil, attachments, nil,
 		); freshErr == nil {
 			return &PromptResult{}, nil
 		} else {

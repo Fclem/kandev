@@ -370,6 +370,41 @@ describe("strict ordered event validation poisons instead of projecting", () => 
     expect(screen.getByTestId("removed").textContent).toBe("false");
   });
 
+  it("projects attachment-only messages with empty content through add and update", async () => {
+    stubEmptySnapshot();
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.hydrated).toBe(true));
+
+    act(() => {
+      transport.listener?.(
+        event(1, "message.added", {
+          message_id: "message-attachment-only",
+          content: "",
+          created_at: MESSAGE_CREATED_AT,
+        }),
+      );
+    });
+    expect(currentState?.messages).toHaveLength(1);
+    expect(currentState?.messages[0]?.content).toBe("");
+
+    act(() => {
+      transport.listener?.(
+        event(2, "message.updated", {
+          message_id: "message-attachment-only",
+          content: "",
+          created_at: MESSAGE_CREATED_AT,
+          updated_at: "2026-09-07T12:01:00Z",
+        }),
+      );
+    });
+    expect(currentState?.messages).toHaveLength(1);
+    expect(currentState?.messages[0]).toMatchObject({
+      id: "message-attachment-only",
+      content: "",
+      updatedAt: "2026-09-07T12:01:00Z",
+    });
+  });
+
   it("does not let a retry page overwrite a live event projected mid-fetch", async () => {
     let resolveRetryPage: ((value: Response) => void) | undefined;
     const retryPage = new Promise<Response>((resolve) => {

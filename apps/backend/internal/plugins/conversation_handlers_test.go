@@ -267,6 +267,75 @@ func TestConversationMessageCursorIsOpaqueAndQueryBound(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, tampered.Code)
 }
 
+// @covers AC-PLUGINS-PROMPT-HISTORY-HOST-002.4
+// @covers AC-PLUGINS-PROMPT-HISTORY-HOST-002.13
+func TestConversationStreamGrantFirstPageRenewsQueryBoundCursor(t *testing.T) {
+	installedAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	reader := &fakeConversationReader{
+		session: &taskmodels.TaskSession{ID: "session-1", TaskID: "task-1"},
+		messages: []*taskmodels.Message{{
+			ID:            "message-1",
+			TaskSessionID: "session-1",
+			TaskID:        "task-1",
+			AuthorType:    taskmodels.MessageAuthorUser,
+			Content:       "Visible prompt.",
+			CreatedAt:     installedAt,
+		}},
+		hasMore: true,
+	}
+	_, service := newTestRouter(t)
+	service.registry.Add(conversationPluginRecord("kandev-plugin-history", installedAt))
+	router := registerPluginRoutesWithIdentity(
+		t,
+		service,
+		authn.Identity{UserID: "user_1", Role: authn.RoleMember},
+		reader,
+	)
+	binding := conversationBindingToken(t, router, "kandev-plugin-history")
+	snapshot, _, _, err := service.MintSessionStreamGrant(
+		"kandev-plugin-history",
+		"user_1",
+		conversationGeneration(installedAt),
+		"session-1",
+		"consumer-1",
+		"",
+		0,
+	)
+	require.NoError(t, err)
+	headers := map[string]string{
+		"X-Kandev-Plugin-Binding": binding,
+		"X-Kandev-Snapshot-Token": snapshot,
+	}
+
+	first := doAuthedRequest(
+		router,
+		http.MethodGet,
+		"/api/plugins/kandev-plugin-history/conversation/task-sessions/session-1/messages?task_id=task-1&author_type=user&sort=desc&limit=1",
+		"",
+		headers,
+	)
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	var page conversationMessagesResponse
+	require.NoError(t, json.Unmarshal(first.Body.Bytes(), &page))
+	require.NotNil(t, page.Cursor)
+
+	renewed := doAuthedRequest(
+		router,
+		http.MethodPost,
+		"/api/plugins/kandev-plugin-history/conversation/continuation/renew",
+		`{"cursor":"`+*page.Cursor+`","snapshot_token":"`+snapshot+`"}`,
+		map[string]string{
+			"Content-Type":            "application/json",
+			"X-Kandev-Plugin-Binding": binding,
+		},
+	)
+	require.Equal(t, http.StatusOK, renewed.Code, renewed.Body.String())
+	var continuation conversationContinuationRenewResponse
+	require.NoError(t, json.Unmarshal(renewed.Body.Bytes(), &continuation))
+	require.NotEqual(t, *page.Cursor, continuation.Cursor)
+	require.NotEqual(t, snapshot, continuation.SnapshotToken)
+}
+
 // @covers AC-PLUGINS-PROMPT-HISTORY-HOST-002.1
 // @covers AC-PLUGINS-PROMPT-HISTORY-HOST-002.3
 func TestConversationTurnsReturnNarrowNullableDTOs(t *testing.T) {

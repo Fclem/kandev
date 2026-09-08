@@ -23,6 +23,7 @@ export type OrderedReady = {
 type Binding = Pick<OrderedReady, "bindingToken" | "generation" | "expiresAt">;
 type SnapshotKind = "messages" | "turns";
 type ConversationEventListener = (event: RawSessionEvent) => boolean;
+type SnapshotKey = string;
 type OrderedSubscribeAck =
   | {
       success: true;
@@ -53,19 +54,19 @@ export type ConversationScope = {
   sessionId: string | null;
   signal: AbortSignal;
   ready(): Promise<OrderedReady>;
-  renewContinuation(cursor: string): Promise<{ cursor: string; binding: OrderedReady }>;
-  subscribe(listener: ConversationEventListener): () => void;
+  renewContinuation(
+    cursor: string,
+    queryIdentity?: string,
+  ): Promise<{ cursor: string; binding: OrderedReady }>;
+  subscribe(
+    listener: ConversationEventListener,
+    kind: SnapshotKind,
+    snapshotKey: SnapshotKey,
+  ): () => void;
   subscribeRebind(listener: () => void): () => void;
   isTerminal(): boolean;
-  commitSnapshot(kind: SnapshotKind): void;
-  /**
-   * Drops the committed-snapshot marker for `kind` so live events of that
-   * kind buffer again. Fresh full-page loads (retry or binding refresh) call
-   * this before their fetch so a concurrent live update cannot be projected
-   * mid-flight and then overwritten by the stale page; the later
-   * commitSnapshot drains the buffered events on top of the new page.
-   */
-  invalidateSnapshot(kind: SnapshotKind): void;
+  commitSnapshot(kind: SnapshotKind, snapshotKey?: SnapshotKey): void;
+  invalidateSnapshot(kind: SnapshotKind, snapshotKey?: SnapshotKey): void;
   reconnect(): void;
   accept(event: RawSessionEvent): void;
   close(): void;
@@ -181,10 +182,13 @@ class OrderedConversationScope implements ConversationScope {
   readonly signal: AbortSignal;
   private bindingPromise: Promise<Binding> | null = null;
   private readyPromise: Promise<OrderedReady> | null = null;
-  private renewalPromise: Promise<{ cursor: string; binding: OrderedReady }> | null = null;
+  private readonly renewalPromises = new Map<
+    string,
+    Promise<{ cursor: string; binding: OrderedReady }>
+  >();
   private bindingRefreshPromise: Promise<OrderedReady> | null = null;
   private currentResumeToken = "";
-  private readonly committedSnapshots = new Set<SnapshotKind>();
+  private readonly committedSnapshots = new Set<string>();
   private acknowledgedSequence = 0;
   private nextSequence = 1;
   private sequenceBlocked = false;
@@ -192,6 +196,8 @@ class OrderedConversationScope implements ConversationScope {
   private closed = false;
   private ackChain = Promise.resolve();
   private readonly listeners = new Set<ConversationEventListener>();
+  private readonly listenerSnapshotKeys = new Map<ConversationEventListener, string>();
+  private readonly listenerSnapshotKinds = new Map<ConversationEventListener, SnapshotKind>();
   private readonly rebindListeners = new Set<() => void>();
   private poisonRebindPromise: Promise<void> | null = null;
   private readonly buffered: RawSessionEvent[] = [];
@@ -217,12 +223,14 @@ class OrderedConversationScope implements ConversationScope {
       });
   }
 
-  async renewContinuation(cursor: string) {
+  async renewContinuation(cursor: string, queryIdentity = "") {
     const current = await this.ready();
     if (new Date(current.snapshotExpiresAt).getTime() - Date.now() > 2 * 60 * 1000) {
       return { cursor, binding: current };
     }
-    if (this.renewalPromise) return this.renewalPromise;
+    const renewalKey = JSON.stringify([queryIdentity, cursor]);
+    const existing = this.renewalPromises.get(renewalKey);
+    if (existing) return existing;
     const pending = fetch(
       pluginConversationUrl(this.pluginId, "/conversation/continuation/renew"),
       {
@@ -248,15 +256,24 @@ class OrderedConversationScope implements ConversationScope {
         return { cursor: renewed.cursor, binding: next };
       })
       .finally(() => {
-        if (this.renewalPromise === pending) this.renewalPromise = null;
+        if (this.renewalPromises.get(renewalKey) === pending) {
+          this.renewalPromises.delete(renewalKey);
+        }
       });
-    this.renewalPromise = pending;
+    this.renewalPromises.set(renewalKey, pending);
     return pending;
   }
 
-  subscribe(listener: ConversationEventListener) {
+  subscribe(listener: ConversationEventListener, kind: SnapshotKind, snapshotKey: SnapshotKey) {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    this.listenerSnapshotKeys.set(listener, snapshotKey);
+    this.listenerSnapshotKinds.set(listener, kind);
+    return () => {
+      this.listeners.delete(listener);
+      this.listenerSnapshotKeys.delete(listener);
+      this.listenerSnapshotKinds.delete(listener);
+      this.drainBuffered();
+    };
   }
 
   subscribeRebind(listener: () => void) {
@@ -267,36 +284,31 @@ class OrderedConversationScope implements ConversationScope {
     return this.terminal;
   }
 
-  invalidateSnapshot(kind: SnapshotKind) {
+  invalidateSnapshot(kind: SnapshotKind, snapshotKey = "") {
     if (this.closed) return;
-    this.committedSnapshots.delete(kind);
+    this.committedSnapshots.delete(`${kind}:${snapshotKey}`);
   }
 
-  commitSnapshot(kind: SnapshotKind) {
+  commitSnapshot(kind: SnapshotKind, snapshotKey = "") {
     if (this.closed || this.terminal) return;
-    this.committedSnapshots.add(kind);
+    this.committedSnapshots.add(`${kind}:${snapshotKey}`);
+    this.drainBuffered();
+  }
+
+  private drainBuffered() {
     const pending = this.buffered.splice(0).sort((left, right) => left.sequence - right.sequence);
-    for (const event of pending) {
-      if (this.terminal) {
-        // A later event after terminal removal is stale; drop it and stop.
+    for (let index = 0; index < pending.length; index += 1) {
+      const event = pending[index];
+      if (!event) continue;
+      if (this.terminal) return;
+      if (this.shouldBuffer(event)) {
+        this.buffered.push(...pending.slice(index));
         return;
       }
-      const eventKind = snapshotKindForEvent(event.event_type);
-      if (
-        (eventKind === null && this.committedSnapshots.size > 0) ||
-        (eventKind !== null && this.committedSnapshots.has(eventKind))
-      ) {
-        if (!this.project(event)) {
-          // Projection failure takes the durable poison/rebind path instead of
-          // discarding the unprocessed tail: block the sequence so the rebind
-          // reconciles from the snapshot boundary, and leave the remaining
-          // buffered events for that rebind rather than dropping them.
-          this.buffered.unshift(...pending.slice(pending.indexOf(event) + 1));
-          this.blockForPoison();
-          return;
-        }
-      } else {
-        this.buffered.push(event);
+      if (!this.project(event)) {
+        this.buffered.unshift(...pending.slice(index + 1));
+        this.blockForPoison();
+        return;
       }
     }
   }
@@ -354,12 +366,15 @@ class OrderedConversationScope implements ConversationScope {
   }
 
   private shouldBuffer(event: RawSessionEvent) {
+    if (this.listeners.size === 0) return true;
     const eventKind = snapshotKindForEvent(event.event_type);
-    return (
-      (eventKind !== null && !this.committedSnapshots.has(eventKind)) ||
-      (eventKind === null && this.committedSnapshots.size === 0) ||
-      this.listeners.size === 0
-    );
+    if (eventKind === null) return false;
+    for (const listener of this.listeners) {
+      if (this.listenerSnapshotKinds.get(listener) !== eventKind) continue;
+      const snapshotKey = this.listenerSnapshotKeys.get(listener) ?? "";
+      if (!this.committedSnapshots.has(`${eventKind}:${snapshotKey}`)) return true;
+    }
+    return false;
   }
 
   reconnect() {
@@ -372,6 +387,8 @@ class OrderedConversationScope implements ConversationScope {
     this.buffered.length = 0;
     this.rebindListeners.clear();
     this.listeners.clear();
+    this.listenerSnapshotKeys.clear();
+    this.listenerSnapshotKinds.clear();
     this.pendingBySequence.clear();
     if (!this.sessionId || !this.readyPromise) return;
     void this.readyPromise

@@ -688,8 +688,9 @@ BEGIN
 		CASE WHEN deleted THEN json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),'message_id',source_row.id)::text
 		ELSE json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),
 			'message_id',source_row.id,'turn_id',NULLIF(source_row.turn_id,''),'author_type',source_row.author_type,
-			'content',conversation_visible_content(source_row.content),'message_type',source_row.type,'created_at',source_row.created_at,
-			'updated_at',COALESCE(source_row.updated_at,source_row.created_at),'prompt_index',source_row.prompt_seq,
+			'content',conversation_visible_content(source_row.content),'message_type',source_row.type,
+			'created_at',to_char(source_row.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+			'updated_at',to_char(COALESCE(source_row.updated_at,source_row.created_at),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'prompt_index',source_row.prompt_seq,
 			'sender_task_id',CASE WHEN jsonb_typeof(conversation_safe_jsonb(source_row.metadata) -> 'sender_task_id') = 'string' THEN conversation_safe_jsonb(source_row.metadata) ->> 'sender_task_id' END)::text END);
 	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
 	SELECT source_row.task_session_id,seq,source_row.task_session_id || ':' || seq,event_name,NULLIF(source_row.task_id,''),payload,CURRENT_TIMESTAMP
@@ -716,9 +717,10 @@ BEGIN
 			json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),'id',source_row.id)::text
 		ELSE
 			json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),
-				'id',source_row.id,'started_at',source_row.started_at,'completed_at',source_row.completed_at,
-				'created_at',source_row.created_at,
-				'updated_at',COALESCE(source_row.updated_at,source_row.completed_at,source_row.started_at))::text
+				'id',source_row.id,'started_at',to_char(source_row.started_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+			'completed_at',CASE WHEN source_row.completed_at IS NULL THEN NULL ELSE to_char(source_row.completed_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+			'created_at',to_char(source_row.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+			'updated_at',to_char(COALESCE(source_row.updated_at,source_row.completed_at,source_row.started_at),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))::text
 		END);
 	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
 	SELECT source_row.task_session_id,seq,source_row.task_session_id || ':' || seq,event_name,NULLIF(source_row.task_id,''),payload,CURRENT_TIMESTAMP

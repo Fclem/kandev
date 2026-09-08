@@ -271,6 +271,44 @@ describe("ordered core session validation", () => {
     subscription.unsubscribe();
   });
 
+  it("delivers valid poison and turn removal envelopes to raw session consumers", async () => {
+    const { client, socket } = connectClient();
+    const rawHandler = vi.fn();
+    client.onRawSessionEvent(rawHandler);
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledge(socket, sessionSubscribeRequest(socket, 1));
+    await subscription.ready;
+
+    const poison = {
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "event-poison",
+      payload: { type: "message.updated", message_id: "message-1" },
+    };
+    const turnRemoval = {
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "session.turn.removed",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 2,
+      event_id: "event-turn-removed",
+      payload: { type: "session.turn.removed", id: "turn-1" },
+    };
+
+    socket.receive(poison);
+    socket.receive(turnRemoval);
+
+    expect(rawHandler.mock.calls.map(([event]) => event)).toEqual([poison, turnRemoval]);
+    subscription.unsubscribe();
+  });
+
   it("acknowledges a registry-approved ignorable event without projection", async () => {
     const { client, socket } = connectClient();
     const subscription = client.subscribeSessionWithReady("sess-1");
@@ -393,7 +431,6 @@ describe("ordered core session validation", () => {
   it("runs poison recovery for a session.event-shaped frame that fails the strict envelope check", async () => {
     const { client, socket } = connectClient();
     const handler = vi.fn();
-    client.on("session.message.added", handler);
     const subscription = client.subscribeSessionWithReady("sess-1");
     acknowledge(socket, sessionSubscribeRequest(socket));
     await Promise.resolve();

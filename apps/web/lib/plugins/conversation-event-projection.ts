@@ -13,6 +13,16 @@ export function eventString(event: RawSessionEvent, key: string): string | null 
   return typeof value === "string" && value !== "" ? value : null;
 }
 
+export function compareConversationMessages(
+  left: Pick<PluginConversationMessage, "createdAt" | "id">,
+  right: Pick<PluginConversationMessage, "createdAt" | "id">,
+  sort: "asc" | "desc",
+): number {
+  const created = left.createdAt.localeCompare(right.createdAt);
+  const ordered = created === 0 ? left.id.localeCompare(right.id) : created;
+  return sort === "asc" ? ordered : -ordered;
+}
+
 export function eventMatchesTask(event: RawSessionEvent, taskId: string | null): boolean {
   return taskId === null || event.task_id === taskId;
 }
@@ -20,7 +30,8 @@ export function eventMatchesTask(event: RawSessionEvent, taskId: string | null):
 export function messageFromEvent(event: RawSessionEvent): PluginConversationMessage | null {
   const id = eventString(event, "message_id");
   const authorType = eventString(event, "author_type");
-  const content = eventString(event, "content");
+  const contentValue = eventField(event, "content");
+  const content = typeof contentValue === "string" ? contentValue : null;
   const createdAt = eventString(event, "created_at");
   const explicitUpdatedAt = eventString(event, "updated_at");
   const updatedAt = explicitUpdatedAt ?? (event.event_type === "message.added" ? createdAt : null);

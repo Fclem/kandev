@@ -502,7 +502,6 @@ export class WebSocketClient {
     if (isRawSessionEvent(value)) {
       const disposition = orderedCoreDisposition(value);
       this.handleCoreSessionEvent(value, disposition);
-      if (disposition === "poison") return;
       this.rawSessionEventHandlers.forEach((handler) => handler(value));
       return;
     }
@@ -532,10 +531,16 @@ export class WebSocketClient {
    */
   private handleMalformedSessionEnvelope(value: unknown): boolean {
     if (!value || typeof value !== "object") return false;
-    const candidate = value as { type?: unknown; session_id?: unknown; sequence?: unknown };
+    const candidate = value as {
+      type?: unknown;
+      session_id?: unknown;
+      task_id?: unknown;
+      sequence?: unknown;
+    };
     if (candidate.type !== "session.event") return false;
     const sessionId = candidate.session_id;
     const sequence = candidate.sequence;
+    const taskId = candidate.task_id;
     const stream =
       typeof sessionId === "string" && typeof sequence === "number"
         ? this.coreSessionStreams.get(sessionId)
@@ -548,7 +553,35 @@ export class WebSocketClient {
       }
       this.recoverCoreSessionPoison(sessionId as string, stream);
     }
+    if (
+      typeof sessionId === "string" &&
+      Number.isSafeInteger(sequence) &&
+      (sequence as number) > 0
+    ) {
+      this.notifyMalformedSessionEvent(
+        sessionId,
+        sequence as number,
+        typeof taskId === "string" ? taskId : null,
+      );
+    }
     return true;
+  }
+  private notifyMalformedSessionEvent(sessionId: string, sequence: number, taskId: string | null) {
+    const poison: RawSessionEvent = {
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "session.event.poison",
+      session_id: sessionId,
+      task_id: taskId,
+      sequence,
+      event_id: `poison:${sessionId}:${sequence}`,
+      payload: {
+        type: "session.event.poison",
+        session_id: sessionId,
+        task_id: taskId,
+      },
+    };
+    this.rawSessionEventHandlers.forEach((handler) => handler(poison));
   }
 
   private handleRequestResult(message: RawWebSocketMessage): boolean {

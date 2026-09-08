@@ -631,9 +631,6 @@ func matchingContinuationClaims(
 		cursor.UserID == snapshot.UserID &&
 		cursor.Generation == snapshot.Generation &&
 		cursor.SessionID == snapshot.SessionID &&
-		equalOptionalString(cursor.TaskID, snapshot.TaskID) &&
-		cursor.Sort == snapshot.Sort &&
-		equalStrings(cursor.Authors, snapshot.Authors) &&
 		cursor.Cutoff == snapshot.Cutoff &&
 		cursor.Fingerprint != "" &&
 		cursor.Fingerprint == snapshot.Fingerprint

@@ -26,7 +26,10 @@ const ORDERED_EVENT_ACTIONS: Readonly<Record<string, BackendMessageType>> = {
   "session.turn.completed": "session.turn.completed",
 };
 
-const IGNORABLE_ORDERED_EVENT_TYPES = new Set(["session.workspace_sources.updated"]);
+const IGNORABLE_ORDERED_EVENT_TYPES: Readonly<Record<string, true>> = {
+  "session.turn.removed": true,
+  "session.workspace_sources.updated": true,
+};
 
 export type OrderedCoreDisposition = "project" | "ignore" | "terminal" | "poison";
 
@@ -43,7 +46,7 @@ export function orderedCoreDisposition(event: RawSessionEvent): OrderedCoreDispo
   }
   if (orderedCoreAction(event.event_type)) return "project";
   if (event.event_type === "session.removed") return "terminal";
-  if (IGNORABLE_ORDERED_EVENT_TYPES.has(event.event_type)) return "ignore";
+  if (IGNORABLE_ORDERED_EVENT_TYPES[event.event_type]) return "ignore";
   return "poison";
 }
 

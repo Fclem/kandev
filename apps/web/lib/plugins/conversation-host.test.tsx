@@ -320,6 +320,95 @@ describe("strict ordered event validation poisons instead of projecting", () => 
     expect(screen.getByTestId("removed").textContent).toBe("false");
   });
 
+  it("does not let a retry page overwrite a live event projected mid-fetch", async () => {
+    let resolveRetryPage: ((value: Response) => void) | undefined;
+    const retryPage = new Promise<Response>((resolve) => {
+      resolveRetryPage = resolve;
+    });
+    let messageFetches = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(BINDING_PATH_SUFFIX)) {
+        return Promise.resolve(
+          response({ bindingToken: "binding-1", generation: 7, expiresAt: FAR_FUTURE_EXPIRY }),
+        );
+      }
+      messageFetches += 1;
+      if (messageFetches === 1) {
+        return Promise.resolve(
+          response({
+            messages: [
+              {
+                id: "message-original",
+                taskId: "task-1",
+                sessionId: "session-1",
+                authorType: "user",
+                type: "message",
+                content: "original",
+                createdAt: MESSAGE_CREATED_AT,
+                updatedAt: MESSAGE_CREATED_AT,
+              },
+            ],
+            hasMore: true,
+            cursor: "cursor-1",
+          }),
+        );
+      }
+      if (messageFetches === 2) {
+        return Promise.reject(new TypeError("network down"));
+      }
+      return retryPage;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderHarness("session-1");
+    await waitFor(() => expect(screen.getByTestId("messages").textContent).toBe("original"));
+
+    await expect(currentState?.loadMore()).rejects.toBeTruthy();
+    await waitFor(() => expect(currentState?.error?.retryable).toBe(true));
+
+    act(() => currentState?.retry());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    // A live update lands while the retry page is still in flight.
+    act(() => {
+      transport.listener?.(
+        event(1, "message.added", {
+          message_id: "message-live",
+          content: "live-during-retry",
+          created_at: "2026-09-07T12:00:01Z",
+          updated_at: "2026-09-07T12:00:01Z",
+        }),
+      );
+    });
+    expect(screen.getByTestId("messages").textContent).toBe("");
+
+    await act(async () => {
+      resolveRetryPage?.(
+        response({
+          messages: [
+            {
+              id: "message-original",
+              taskId: "task-1",
+              sessionId: "session-1",
+              authorType: "user",
+              type: "message",
+              content: "original",
+              createdAt: MESSAGE_CREATED_AT,
+              updatedAt: MESSAGE_CREATED_AT,
+            },
+          ],
+          hasMore: false,
+          cursor: null,
+        }),
+      );
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("messages").textContent).toContain("live-during-retry"),
+    );
+    expect(screen.getByTestId("messages").textContent).toContain("original");
+  });
+
   it("projects live events from the subscribe watermark, not sequence one", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) =>
       String(input).endsWith(BINDING_PATH_SUFFIX)

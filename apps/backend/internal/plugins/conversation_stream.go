@@ -480,9 +480,55 @@ func (l *SessionEventLog) Acknowledge(key SessionDeliveryCursorKey, sequence uin
 	previous := cursor.AcknowledgedSequence
 	cursor.AcknowledgedSequence = sequence
 	cursor.UpdatedAt = l.now().UTC()
-	if err := l.persistLocked(); err != nil {
+	// ACKs are per contiguous event, so persist only the advanced cursor row
+	// (one upsert) instead of rewriting every retained partition, event,
+	// cursor, poison record, and audit with the full-state transaction.
+	if err := l.persistCursorRowLocked(encodedKey, cursor); err != nil {
 		cursor.AcknowledgedSequence = previous
 		return err
+	}
+	return nil
+}
+
+// persistCursorRowLocked writes exactly one session_delivery_cursors row,
+// leaving every other row untouched. Called on the hot ACK path; full-state
+// rewrites remain for structural changes (collection, poison transitions,
+// registration of the first cursor).
+func (l *SessionEventLog) persistCursorRowLocked(encodedKey string, cursor *SessionDeliveryCursor) error {
+	if l.path == "" {
+		return nil
+	}
+	db, err := sql.Open("sqlite3", l.path)
+	if err != nil {
+		return fmt.Errorf("open session event log: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin session event cursor transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	binding, err := json.Marshal(cursor.Key)
+	if err != nil {
+		return fmt.Errorf("encode delivery cursor: %w", err)
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO session_delivery_cursors(cursor_key, binding, acknowledged_sequence, owner_epoch, lease_until, retry_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(cursor_key) DO UPDATE SET
+			binding = excluded.binding,
+			acknowledged_sequence = excluded.acknowledged_sequence,
+			owner_epoch = excluded.owner_epoch,
+			lease_until = excluded.lease_until,
+			retry_at = excluded.retry_at,
+			updated_at = excluded.updated_at`,
+		encodedKey, binding, cursor.AcknowledgedSequence, cursor.OwnerEpoch,
+		nullableTime(cursor.LeaseUntil), nullableTime(cursor.RetryAt),
+		cursor.UpdatedAt.Format(time.RFC3339Nano)); err != nil {
+		return fmt.Errorf("persist delivery cursor row: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit session event cursor transaction: %w", err)
 	}
 	return nil
 }

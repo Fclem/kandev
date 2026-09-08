@@ -58,6 +58,14 @@ export type ConversationScope = {
   subscribeRebind(listener: () => void): () => void;
   isTerminal(): boolean;
   commitSnapshot(kind: SnapshotKind): void;
+  /**
+   * Drops the committed-snapshot marker for `kind` so live events of that
+   * kind buffer again. Fresh full-page loads (retry or binding refresh) call
+   * this before their fetch so a concurrent live update cannot be projected
+   * mid-flight and then overwritten by the stale page; the later
+   * commitSnapshot drains the buffered events on top of the new page.
+   */
+  invalidateSnapshot(kind: SnapshotKind): void;
   reconnect(): void;
   accept(event: RawSessionEvent): void;
   close(): void;
@@ -250,6 +258,11 @@ class OrderedConversationScope implements ConversationScope {
   }
   isTerminal() {
     return this.terminal;
+  }
+
+  invalidateSnapshot(kind: SnapshotKind) {
+    if (this.closed) return;
+    this.committedSnapshots.delete(kind);
   }
 
   commitSnapshot(kind: SnapshotKind) {

@@ -201,6 +201,11 @@ function useInitialMessagePage({
     setState,
   ]);
 }
+function invalidateFreshMessagesSnapshot(scope: ConversationScope, append: boolean): void {
+  if (append) return;
+  scope.invalidateSnapshot("messages");
+}
+
 function isScopeRequestable(scope: ConversationScope): boolean {
   return !scope.signal.aborted && !scope.isTerminal();
 }
@@ -244,6 +249,11 @@ function useMessagePageLoader({
     async (cursor: string | null, append: boolean): Promise<number> => {
       if (!scope || !sessionId || !isScopeRequestable(scope)) return 0;
       if (error) throw error;
+      // A fresh full page (initial load, retry, or binding refresh) must not
+      // let a concurrent live update project and then be overwritten by the
+      // stale page response: buffer live events until the new snapshot
+      // commits, then drain them on top.
+      invalidateFreshMessagesSnapshot(scope, append);
       const capturedRevision = requestRevisionRef.current;
       let binding = await scope.ready();
       let pageCursor = cursor;

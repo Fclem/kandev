@@ -304,3 +304,36 @@ func validMessageAddedPayload(messageID string) json.RawMessage {
 func validSessionRemovedPayload() json.RawMessage {
 	return json.RawMessage(`{"type":"session.removed","session_id":"session-1","task_id":"task-1"}`)
 }
+
+func TestSessionEventAcknowledgePersistsOnlyTheCursorRow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session-events.db")
+	log, err := NewSessionEventLog(path)
+	require.NoError(t, err)
+	event, err := log.Append("session-1", stringPtr("task-1"), "message.added", validMessageAddedPayload("m1"))
+	require.NoError(t, err)
+	_, err = log.AppendCommitted(SessionEvent{
+		SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: event.Sequence + 1,
+		ID: "session-1:2", EventType: "message.added", ProtocolVersion: 1,
+		Payload: validMessageAddedPayload("m2"), CreatedAt: event.CreatedAt,
+	})
+	require.NoError(t, err)
+	cursorA := testCursor()
+	cursorA.ConsumerID = "consumer-a"
+	cursorB := testCursor()
+	cursorB.ConsumerID = "consumer-b"
+	require.NoError(t, log.RegisterCursor(cursorA, 0))
+	require.NoError(t, log.RegisterCursor(cursorB, 0))
+	require.NoError(t, log.Acknowledge(cursorA, 2))
+
+	reopened, err := NewSessionEventLog(path)
+	require.NoError(t, err)
+	restoredA := reopened.state.Cursors[deliveryCursorKey(cursorA)]
+	require.Equal(t, uint64(2), restoredA.AcknowledgedSequence)
+	restoredB := reopened.state.Cursors[deliveryCursorKey(cursorB)]
+	require.Equal(t, uint64(0), restoredB.AcknowledgedSequence)
+	// The partition and both event rows survive the delta write untouched.
+	events, terminal := reopened.EventsAfter("session-1", 0)
+	require.False(t, terminal)
+	require.Len(t, events, 2)
+	require.Equal(t, uint64(2), reopened.Watermark("session-1"))
+}

@@ -3665,14 +3665,16 @@ func TestCancelIntentDoesNotFollowSharedGuard(t *testing.T) {
 
 func requirePersistedSessionLaunchError(t *testing.T, repo *sqliterepo.Repository, sessionID string) models.LastAgentError {
 	t.Helper()
-	session, err := repo.GetTaskSession(context.Background(), sessionID)
-	if err != nil {
-		t.Fatalf("GetTaskSession: %v", err)
-	}
-	lastError, ok := models.LoadLastAgentError(session.Metadata)
-	if !ok {
-		t.Fatalf("session %q has no typed launch error: %#v", sessionID, session.Metadata)
-	}
+	var lastError models.LastAgentError
+	require.Eventually(t, func() bool {
+		session, err := repo.GetTaskSession(context.Background(), sessionID)
+		if err != nil {
+			return false
+		}
+		var ok bool
+		lastError, ok = models.LoadLastAgentError(session.Metadata)
+		return ok
+	}, time.Second, 10*time.Millisecond, "session %q has no typed launch error", sessionID)
 	if lastError.Code == "" || lastError.Stamp() == "" {
 		t.Fatalf("session %q has incomplete typed launch error: %#v", sessionID, lastError)
 	}

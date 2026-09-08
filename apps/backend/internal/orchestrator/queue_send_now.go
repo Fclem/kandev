@@ -432,7 +432,10 @@ func (s *Service) executeSendNowClaimWithContext(
 	if reservation == nil {
 		reservation = s.queuedDispatchReservationForEntry(sessionID, claim.Dispatch.ID)
 	}
-	defer s.clearQueuedDispatchInFlightIfCurrent(sessionID, reservation)
+	defer func() {
+		s.clearQueuedDispatchInFlightIfCurrent(sessionID, reservation)
+		s.drainQueuedDispatchIfPending(sessionID)
+	}()
 
 	restore := func() {
 		if err := s.restoreSendNowClaimWithRetry(ctx, claim); err != nil {
@@ -524,7 +527,8 @@ func (s *Service) promptSendNowClaim(ctx context.Context, claim *messagequeue.Se
 					}
 				}
 				if session, loadErr := s.repo.GetTaskSession(ctx, sessionID); loadErr == nil &&
-					s.queuedSessionMatchesIdentity(session, claim.Identity) {
+					s.queuedSessionMatchesIdentity(session, claim.Identity) &&
+					!turnStartAlreadyProcessed(claim.Dispatch.Metadata) {
 					s.processOnTurnStartViaEngine(ctx, claim.Dispatch.TaskID, session)
 				}
 				return nil

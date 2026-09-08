@@ -309,9 +309,9 @@ func (s *Service) AuthorizeTaskSessionAccess(ctx context.Context, taskID, sessio
 	return nil
 }
 
-// AuthorizeEnvironmentAccess checks reach of a task environment via its task's
-// workspace. Used by the terminal environment-shell route, which resolves
-// executions by environment ID rather than session ID.
+// AuthorizeEnvironmentAccess checks visibility of a task environment via its
+// task's workspace. Used by the terminal environment-shell route, which
+// resolves executions by environment ID rather than session ID.
 func (s *Service) AuthorizeEnvironmentAccess(ctx context.Context, taskEnvironmentID string) error {
 	return s.AuthorizeEnvironmentScope(ctx, taskEnvironmentID, authz.ScopeWorkspaceRead)
 }

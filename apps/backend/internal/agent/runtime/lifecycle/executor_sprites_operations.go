@@ -24,7 +24,6 @@ import (
 )
 
 // validSlugRe matches slugs that are safe for use in shell commands and file paths.
-
 var validSlugRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 func spriteProjectSkillDir(metadata map[string]interface{}) string {

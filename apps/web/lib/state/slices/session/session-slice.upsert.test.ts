@@ -195,6 +195,91 @@ describe("cancellation revision ordering", () => {
   });
 });
 
+describe("parked-on-background-work revision ordering", () => {
+  it("rejects a stale snapshot with a lower revision in the same epoch", () => {
+    const store = makeStore();
+
+    store
+      .getState()
+      .upsertTaskSessionFromEvent(
+        TASK_ID,
+        makeSession({ parked_on_background_work: true, revision: 2, parked_epoch: 100 }),
+      );
+    store
+      .getState()
+      .setTaskSessionsForTask(
+        TASK_ID,
+        [makeSession({ parked_on_background_work: false, revision: 1, parked_epoch: 100 })],
+        {},
+      );
+
+    const session = store.getState().taskSessions.items[SESSION_ID];
+    expect(session.parked_on_background_work).toBe(true);
+    expect(session.revision).toBe(2);
+  });
+
+  it("rejects a snapshot from an older process epoch even with a higher revision", () => {
+    const store = makeStore();
+
+    store
+      .getState()
+      .upsertTaskSessionFromEvent(
+        TASK_ID,
+        makeSession({ parked_on_background_work: true, revision: 1, parked_epoch: 200 }),
+      );
+    store
+      .getState()
+      .setTaskSessionsForTask(
+        TASK_ID,
+        [makeSession({ parked_on_background_work: false, revision: 99, parked_epoch: 100 })],
+        {},
+      );
+
+    const session = store.getState().taskSessions.items[SESSION_ID];
+    expect(session.parked_on_background_work).toBe(true);
+    expect(session.parked_epoch).toBe(200);
+  });
+
+  it("accepts a newer epoch even with a lower revision", () => {
+    const store = makeStore();
+
+    store
+      .getState()
+      .upsertTaskSessionFromEvent(
+        TASK_ID,
+        makeSession({ parked_on_background_work: true, revision: 50, parked_epoch: 100 }),
+      );
+    store
+      .getState()
+      .upsertTaskSessionFromEvent(
+        TASK_ID,
+        makeSession({ parked_on_background_work: false, revision: 1, parked_epoch: 200 }),
+      );
+
+    const session = store.getState().taskSessions.items[SESSION_ID];
+    expect(session.parked_on_background_work).toBe(false);
+    expect(session.revision).toBe(1);
+    expect(session.parked_epoch).toBe(200);
+  });
+
+  it("preserves the parked projection across an update that omits it entirely", () => {
+    const store = makeStore();
+
+    store
+      .getState()
+      .upsertTaskSessionFromEvent(
+        TASK_ID,
+        makeSession({ parked_on_background_work: true, revision: 1, parked_epoch: 100 }),
+      );
+    store.getState().upsertTaskSessionFromEvent(TASK_ID, makeSession({ state: "RUNNING" }));
+
+    const session = store.getState().taskSessions.items[SESSION_ID];
+    expect(session.parked_on_background_work).toBe(true);
+    expect(session.revision).toBe(1);
+    expect(session.parked_epoch).toBe(100);
+  });
+});
+
 describe("setTaskSessionsForTask preserves WS-seeded fields", () => {
   it("merges incoming sessions with existing rows so task_environment_id is not clobbered", () => {
     const store = makeStore();
@@ -472,8 +557,10 @@ describe("queue actions", () => {
       mergeEnabled: false,
       autoRun: false,
     });
-    expect(store.getState().queue.metaBySessionId[SESSION_ID]?.mergeEnabled).toBe(false);
-    expect(store.getState().queue.metaBySessionId[SESSION_ID]?.autoRun).toBe(false);
+    expect(store.getState().queue.metaBySessionId[SESSION_ID]).toMatchObject({
+      mergeEnabled: false,
+      autoRun: false,
+    });
   });
 
   it("removeQueueEntry drops a single entry by id and refreshes meta.count", () => {
@@ -489,8 +576,7 @@ describe("queue actions", () => {
     store.getState().removeQueueEntry(SESSION_ID, "e2");
 
     expect(store.getState().queue.bySessionId[SESSION_ID].map((e) => e.id)).toEqual(["e1", "e3"]);
-    expect(store.getState().queue.metaBySessionId[SESSION_ID].count).toBe(2);
-    expect(store.getState().queue.metaBySessionId[SESSION_ID].max).toBe(10);
+    expect(store.getState().queue.metaBySessionId[SESSION_ID]).toMatchObject({ count: 2, max: 10 });
   });
 
   it("removeQueueEntry is a no-op when the session has no entries", () => {
@@ -498,7 +584,9 @@ describe("queue actions", () => {
     store.getState().removeQueueEntry(SESSION_ID, "missing");
     expect(store.getState().queue.bySessionId[SESSION_ID]).toBeUndefined();
   });
+});
 
+describe("queue snapshot actions", () => {
   it("requires an authoritative snapshot to replace the accepted status epoch", () => {
     const store = makeStore();
     store.getState().setTaskSession(makeSession({ queue_incarnation_id: "incarnation-1" }));
@@ -511,18 +599,15 @@ describe("queue actions", () => {
       taskId: TASK_ID,
       sessionIncarnationId: "incarnation-1",
       statusEpoch: "epoch-1",
-      statusGeneration: 5,
     });
     const replacementEntries = [makeEntry({ id: "replacement" })];
     const replacementMeta = {
       count: 1,
       max: 10,
       mergeEnabled: false,
-      autoRun: false,
       taskId: TASK_ID,
       sessionIncarnationId: "incarnation-1",
       statusEpoch: "epoch-2",
-      statusGeneration: 99,
     };
 
     store.getState().setQueueEntries(SESSION_ID, replacementEntries, replacementMeta);
@@ -549,6 +634,34 @@ describe("queue actions", () => {
 
     expect(store.getState().queue.bySessionId[SESSION_ID]).toBeUndefined();
     expect(store.getState().queue.metaBySessionId[SESSION_ID]).toBeUndefined();
+  });
+
+  it("does not clear parked_on_background_work or foreground_activity as a side effect of queue actions", () => {
+    const store = makeStore();
+    store.getState().upsertTaskSessionFromEvent(
+      TASK_ID,
+      makeSession({
+        parked_on_background_work: true,
+        revision: 1,
+        parked_epoch: 100,
+        foreground_activity: null,
+      }),
+    );
+
+    store.getState().setQueueEntries(SESSION_ID, [makeEntry()], {
+      count: 1,
+      max: 10,
+      mergeEnabled: true,
+      autoRun: true,
+    });
+    store.getState().removeQueueEntry(SESSION_ID, "missing-entry");
+    store.getState().setQueueLoading(SESSION_ID, true);
+    store.getState().clearQueueStatus(SESSION_ID);
+
+    const session = store.getState().taskSessions.items[SESSION_ID];
+    expect(session.parked_on_background_work).toBe(true);
+    expect(session.revision).toBe(1);
+    expect(session.parked_epoch).toBe(100);
   });
 });
 

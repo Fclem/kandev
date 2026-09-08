@@ -550,7 +550,9 @@ func (c *Client) acceptOrderedSessionSubscription(
 		cursorErr = service.SessionEvents().RegisterCursor(key, cursorSequence)
 	}
 	if cursorErr != nil {
-		releaseOrderedReplayClaims(service, claims)
+		if releaseErr := releaseOrderedReplayClaims(service, claims); releaseErr != nil && c.logger != nil {
+			c.logger.Error("release ordered replay claims", zap.Error(releaseErr))
+		}
 		c.sendSessionStreamFailure(msg, req.SessionID, "upstream_failure", "cannot register session cursor", true)
 		return false
 	}
@@ -561,7 +563,9 @@ func (c *Client) acceptOrderedSessionSubscription(
 	for _, event := range replay.events {
 		queued := c.sendOrderedSessionEvent(event)
 		if claim, ok := claims[event.ID]; ok {
-			_ = service.SessionDelivery().Complete(claim, queued, time.Now().UTC())
+			if err := service.SessionDelivery().Complete(claim, queued, time.Now().UTC()); err != nil && c.logger != nil {
+				c.logger.Error("complete ordered replay poison", zap.String("event_id", event.ID), zap.Error(err))
+			}
 		}
 	}
 	return true
@@ -576,15 +580,17 @@ func prepareOrderedReplayDelivery(
 	for _, event := range replay.events {
 		claim, err := service.SessionDelivery().Claim(event.SessionID, event.ID, now)
 		if err != nil {
-			releaseOrderedReplayClaims(service, claims)
-			return replay, nil, err
+			releaseErr := releaseOrderedReplayClaims(service, claims)
+			return replay, nil, errors.Join(err, releaseErr)
 		}
 		switch claim.Disposition {
 		case plugins.SessionDeliveryUntracked:
 		case plugins.SessionDeliveryClaimed:
 			claims[event.ID] = claim
 		default:
-			releaseOrderedReplayClaims(service, claims)
+			if err := releaseOrderedReplayClaims(service, claims); err != nil {
+				return replay, nil, err
+			}
 			replay.events = nil
 			replay.result = "invalid_resume"
 			replay.cursorSequence = replay.watermark
@@ -597,11 +603,13 @@ func prepareOrderedReplayDelivery(
 func releaseOrderedReplayClaims(
 	service *plugins.Service,
 	claims map[string]plugins.SessionDeliveryClaim,
-) {
+) error {
 	now := time.Now().UTC()
+	var result error
 	for _, claim := range claims {
-		_ = service.SessionDelivery().Complete(claim, false, now)
+		result = errors.Join(result, service.SessionDelivery().Complete(claim, false, now))
 	}
+	return result
 }
 
 func orderedSessionSubscribePayload(

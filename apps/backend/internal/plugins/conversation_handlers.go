@@ -59,6 +59,27 @@ type conversationMessageDTO struct {
 	SenderTaskID *string `json:"senderTaskId,omitempty"`
 }
 
+func loadFallbackTurns(ctx context.Context, reader ConversationReader, sessionID, taskID string) ([]*taskmodels.Turn, error) {
+	turns, err := reader.ListTurnsBySession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return filterTurnsByTask(turns, taskID), nil
+}
+
+func filterTurnsByTask(turns []*taskmodels.Turn, taskID string) []*taskmodels.Turn {
+	if taskID == "" {
+		return turns
+	}
+	filtered := make([]*taskmodels.Turn, 0, len(turns))
+	for _, turn := range turns {
+		if turn.TaskID == taskID {
+			filtered = append(filtered, turn)
+		}
+	}
+	return filtered
+}
+
 type conversationMessagesResponse struct {
 	Messages []conversationMessageDTO `json:"messages"`
 	HasMore  bool                     `json:"hasMore"`
@@ -335,7 +356,10 @@ func (c *Controller) conversationTurns(ctx *gin.Context) {
 	if c.svc.HasConversationJournal() {
 		turns, err = c.svc.conversationTurnsAt(ctx.Request.Context(), sessionID, uint64(snapshot.Cutoff), taskID)
 	} else {
-		turns, err = c.conversationReader.ListTurnsBySession(ctx.Request.Context(), sessionID)
+		// The no-journal fallback must honor the requested/inherited task
+		// scope like the journal branch: a session that ever accumulated
+		// mixed-task turn rows must not leak turns outside the validated task.
+		turns, err = loadFallbackTurns(ctx, c.conversationReader, sessionID, session.TaskID)
 	}
 	if err != nil {
 		writeConversationError(ctx, http.StatusInternalServerError, "upstream_failure", "conversation service unavailable", true)

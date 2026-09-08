@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- The facade hook centralizes ordered snapshot/live state coordination. */
 "use client";
 
 import * as React from "react";
@@ -489,6 +490,22 @@ function useOrderedTurnEvents({
         setState((current) => ({ ...current, removed: true, loading: false }));
         return true;
       }
+      if (event.event_type === "session.turn.removed") {
+        const payload = event.payload;
+        const turnId =
+          payload &&
+          typeof payload === "object" &&
+          "id" in payload &&
+          typeof payload.id === "string"
+            ? payload.id
+            : undefined;
+        if (!turnId) return false;
+        setState((current) => ({
+          ...current,
+          turns: current.turns.filter((item) => item.id !== turnId),
+        }));
+        return true;
+      }
       if (!event.event_type.startsWith("session.turn.") || !eventMatchesTask(event, taskId)) {
         return true;
       }
@@ -537,6 +554,11 @@ function useSessionTurns(
       return;
     }
     let current = true;
+    // A fresh turns page (initial load, retry, or binding refresh) must not
+    // let a concurrent live turn event project and then be overwritten by the
+    // stale page response: buffer live events until the new snapshot commits,
+    // then drain them on top.
+    scope.invalidateSnapshot("turns");
     setState((previous) =>
       revision === 0
         ? { ...EMPTY_TURNS, turns: [], loading: true }

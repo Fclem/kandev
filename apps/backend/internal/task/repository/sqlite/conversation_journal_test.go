@@ -39,8 +39,8 @@ func TestConversationJournalVersionsMutationsAndTerminalDeletion(t *testing.T) {
 	if err := repo.db.QueryRow(`SELECT watermark, terminal FROM conversation_session_streams WHERE session_id = 'session-journal'`).Scan(&watermark, &terminal); err != nil {
 		t.Fatalf("read stream: %v", err)
 	}
-	if !terminal || watermark != 5 {
-		t.Fatalf("stream = watermark %d terminal %v, want 5 true", watermark, terminal)
+	if !terminal || watermark != 6 {
+		t.Fatalf("stream = watermark %d terminal %v, want 6 true", watermark, terminal)
 	}
 	rows, err := repo.db.Query(`SELECT event_type FROM conversation_session_events WHERE session_id = 'session-journal' ORDER BY sequence`)
 	if err != nil {
@@ -55,7 +55,7 @@ func TestConversationJournalVersionsMutationsAndTerminalDeletion(t *testing.T) {
 		}
 		eventTypes = append(eventTypes, eventType)
 	}
-	want := []string{"session.turn.started", "message.added", "message.updated", "message.deleted", "session.removed"}
+	want := []string{"session.turn.started", "message.added", "message.updated", "message.deleted", "session.turn.removed", "session.removed"}
 	if len(eventTypes) != len(want) {
 		t.Fatalf("event types = %v, want %v", eventTypes, want)
 	}
@@ -305,21 +305,28 @@ func TestConversationJournalTurnDeleteRemovesJournalHistoryOnly(t *testing.T) {
 	}
 	requireTurnVersionCount(0)
 
-	// ...without consuming a stream sequence or emitting a new event row, so
-	// ordered mirroring and replay never observe a gap.
+	// ...and emits exactly one typed session.turn.removed event so ordered
+	// replays and live subscribers converge with snapshots.
 	var eventsAfter int
 	if err := repo.db.Get(&eventsAfter, `SELECT COUNT(*) FROM conversation_session_events WHERE session_id = 'session-journal-turn-del'`); err != nil {
 		t.Fatalf("count events after delete: %v", err)
 	}
-	if eventsAfter != eventsBefore {
-		t.Fatalf("turn delete changed event count from %d to %d", eventsBefore, eventsAfter)
+	if eventsAfter != eventsBefore+1 {
+		t.Fatalf("turn delete event count = %d, want %d", eventsAfter, eventsBefore+1)
+	}
+	var removalEvent string
+	if err := repo.db.Get(&removalEvent, `SELECT event_type FROM conversation_session_events WHERE session_id = 'session-journal-turn-del' ORDER BY sequence DESC LIMIT 1`); err != nil {
+		t.Fatalf("read last event type: %v", err)
+	}
+	if removalEvent != "session.turn.removed" {
+		t.Fatalf("last event type = %q, want session.turn.removed", removalEvent)
 	}
 	var watermarkAfter int64
 	if err := repo.db.QueryRow(`SELECT watermark FROM conversation_session_streams WHERE session_id = 'session-journal-turn-del'`).Scan(&watermarkAfter); err != nil {
 		t.Fatalf("read stream watermark after delete: %v", err)
 	}
-	if watermarkAfter != watermarkBefore {
-		t.Fatalf("turn delete advanced stream watermark from %d to %d", watermarkBefore, watermarkAfter)
+	if watermarkAfter != watermarkBefore+1 {
+		t.Fatalf("turn delete watermark = %d, want %d", watermarkAfter, watermarkBefore+1)
 	}
 }
 
@@ -399,5 +406,104 @@ func TestConversationJournalSenderTaskIDRequiresString(t *testing.T) {
 	}
 	if stringSender != "task-sender-1" {
 		t.Fatalf("string sender_task_id = %q, want task-sender-1", stringSender)
+	}
+}
+
+// TestBackfillSkipsStaleMessageImageWithSameContent pins the round-9 fix: a
+// concurrent update that only touches metadata (same content) must not let the
+// stale pre-update backfill image win a later version.
+func TestBackfillSkipsStaleMessageImageWithSameContent(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-backfill-stale", "session-backfill-stale", "turn-backfill-stale")
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	message := &models.Message{
+		ID: "message-stale", TaskSessionID: "session-backfill-stale", TaskID: "task-backfill-stale",
+		TurnID: "turn-backfill-stale", AuthorType: models.MessageAuthorUser,
+		Type: models.MessageTypeMessage, Content: "same-content",
+		Metadata: map[string]any{"sender_task_id": "sender-1"}, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repo.CreateMessage(ctx, message); err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	// A concurrent metadata-only update journals its own version.
+	message.Metadata = map[string]any{"sender_task_id": "sender-2"}
+	message.UpdatedAt = now.Add(time.Minute)
+	if err := repo.UpdateMessage(ctx, message); err != nil {
+		t.Fatalf("update message: %v", err)
+	}
+	var versionsAfterUpdate int
+	if err := repo.db.Get(&versionsAfterUpdate, `SELECT COUNT(*) FROM conversation_message_versions WHERE message_id = 'message-stale'`); err != nil {
+		t.Fatalf("count versions: %v", err)
+	}
+
+	tx, err := repo.db.Beginx()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The backfill seed reflects the pre-update image (same content, older
+	// timestamp): it must be skipped entirely.
+	stale := conversationJournalMessageSeed{
+		ID: "message-stale", TaskSessionID: "session-backfill-stale", TaskID: "task-backfill-stale",
+		TurnID: "turn-backfill-stale", AuthorType: string(models.MessageAuthorUser),
+		Content: "same-content", MessageType: string(models.MessageTypeMessage),
+		Metadata: `{"sender_task_id":"sender-1"}`, CreatedAt: now, UpdatedAt: now, PromptIndex: message.PromptIndex,
+	}
+	if err := repo.backfillConversationMessage(tx, stale); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("backfill stale image: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	var versions int
+	if err := repo.db.Get(&versions, `SELECT COUNT(*) FROM conversation_message_versions WHERE message_id = 'message-stale'`); err != nil {
+		t.Fatalf("count versions: %v", err)
+	}
+	if versions != versionsAfterUpdate {
+		t.Fatalf("stale backfill added a version: %d -> %d", versionsAfterUpdate, versions)
+	}
+}
+
+// TestConversationJournalSanitizeMigrationSkipsMalformedRows pins the
+// round-9 fix: a pre-existing malformed payload must not abort the boot-time
+// sanitize migration; the row is preserved verbatim so the mirror path can
+// turn it into a durable poison record.
+func TestConversationJournalSanitizeMigrationSkipsMalformedRows(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-journal-malformed", "session-journal-malformed", "turn-journal-malformed")
+	message := &models.Message{
+		ID: "message-malformed", TaskSessionID: "session-journal-malformed", TaskID: "task-journal-malformed",
+		TurnID: "turn-journal-malformed", AuthorType: models.MessageAuthorUser,
+		Type: models.MessageTypeMessage, Content: "placeholder",
+	}
+	if err := repo.CreateMessage(ctx, message); err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	malformed := `{"content":"not valid json`
+	if _, err := repo.db.Exec(`
+		UPDATE conversation_message_versions SET payload = ? WHERE message_id = 'message-malformed';
+		UPDATE conversation_session_events SET payload = ? WHERE session_id = 'session-journal-malformed' AND event_type = 'message.added';
+	`, malformed, malformed); err != nil {
+		t.Fatalf("seed malformed rows: %v", err)
+	}
+
+	if err := repo.initSQLiteConversationJournalTriggers(); err != nil {
+		t.Fatalf("re-init triggers (runs sanitize migration): %v", err)
+	}
+	var versionPayload string
+	if err := repo.db.Get(&versionPayload, `SELECT payload FROM conversation_message_versions WHERE message_id = 'message-malformed'`); err != nil {
+		t.Fatalf("read version payload: %v", err)
+	}
+	if versionPayload != malformed {
+		t.Fatalf("malformed version payload was rewritten to %q", versionPayload)
+	}
+	var eventPayload string
+	if err := repo.db.Get(&eventPayload, `SELECT payload FROM conversation_session_events WHERE session_id = 'session-journal-malformed' AND event_type = 'message.added'`); err != nil {
+		t.Fatalf("read event payload: %v", err)
+	}
+	if eventPayload != malformed {
+		t.Fatalf("malformed event payload was rewritten to %q", eventPayload)
 	}
 }

@@ -30,6 +30,7 @@ const (
 	conversationMessageIDKey  = "message_id"
 	conversationAuthorTypeKey = "author_type"
 	conversationTurnCompleted = "session.turn.completed"
+	conversationTurnRemoved   = "session.turn.removed"
 	conversationTurnStarted   = "session.turn.started"
 )
 
@@ -147,7 +148,7 @@ func sanitizeConversationEventPayload(eventType string, raw json.RawMessage) jso
 		sanitizeConversationMessagePayload(payload, source)
 	case events.MessageDeleted:
 		copyConversationPayloadFields(payload, source, conversationMessageIDKey)
-	case conversationTurnStarted, conversationTurnCompleted:
+	case conversationTurnStarted, conversationTurnCompleted, conversationTurnRemoved:
 		copyConversationPayloadFields(payload, source, "id", "started_at", "completed_at", "updated_at")
 	case events.SessionRemoved:
 		// The common identity fields above are the complete public removal DTO.

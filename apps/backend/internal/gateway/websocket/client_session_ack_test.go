@@ -3,6 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/plugins"
@@ -172,5 +173,43 @@ func TestOrderedReplayRebindsOnRetainedGap(t *testing.T) {
 	}, key)
 	if replay.result != "invalid_resume" || len(replay.events) != 0 || replay.cursorSequence != replay.watermark {
 		t.Fatalf("retained-gap result = %+v, want replacement cursor at watermark without replay", replay)
+	}
+}
+
+// TestOrderedReplayRebindsWhenPartitionWatermarkAheadWithNoRows pins the
+// fully-pruned case: the partition watermark is ahead of the cursor but every
+// retained event row aged out, so the reconnect must rebind rather than treat
+// the empty replay as a fresh success.
+func TestOrderedReplayRebindsWhenPartitionWatermarkAheadWithNoRows(t *testing.T) {
+	service := plugins.NewService(nil, plugins.NewRegistry(), nil, testLogger())
+	base := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	appended, err := service.SessionEvents().AppendCommitted(plugins.SessionEvent{
+		SessionID: "session-pruned", ID: "session-pruned:10", Sequence: 10,
+		EventType: "message.added", ProtocolVersion: 1,
+		Payload:   json.RawMessage(`{"type":"message.added","session_id":"session-pruned","message_id":"m1","author_type":"user","content":"x","created_at":"2026-09-07T12:00:00Z"}`),
+		CreatedAt: base,
+	})
+	if err != nil || !appended {
+		t.Fatalf("mirror event appended=%v err=%v", appended, err)
+	}
+	// Age the only retained row out: the partition keeps its watermark.
+	if err := service.SessionEvents().CollectExpired(base.Add(plugins.SessionEventRetention + time.Hour)); err != nil {
+		t.Fatalf("collect expired: %v", err)
+	}
+	key := plugins.SessionDeliveryCursorKey{
+		SessionID: "session-pruned", ConsumerKind: orderedConsumerPlugin,
+		PluginID: "plugin-1", Generation: 7, ConsumerID: "consumer-1", UserID: "user-1",
+	}
+	lastSeen := uint64(5)
+	replay := resolveOrderedSessionReplay(service, SessionSubscribeRequest{
+		SessionID: "session-pruned", ConsumerKind: orderedConsumerPlugin,
+		PluginID: "plugin-1", Generation: 7, ConsumerID: "consumer-1",
+		LastSeenSequence: &lastSeen,
+	}, key)
+	if replay.result != "invalid_resume" || len(replay.events) != 0 || replay.cursorSequence != replay.watermark {
+		t.Fatalf("pruned-gap result = %+v, want replacement cursor at watermark without replay", replay)
+	}
+	if replay.watermark != 10 {
+		t.Fatalf("watermark = %d, want 10", replay.watermark)
 	}
 }

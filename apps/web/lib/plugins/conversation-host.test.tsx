@@ -892,3 +892,115 @@ describe("plugin conversation pagination", () => {
     expect(screen.getByTestId("messages").textContent).toContain("page-2");
   });
 });
+
+describe("ordered turns convergence", () => {
+  function stubTurnsFetch() {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(BINDING_PATH_SUFFIX)) {
+        return Promise.resolve(
+          response({ bindingToken: "binding-1", generation: 7, expiresAt: FAR_FUTURE_EXPIRY }),
+        );
+      }
+      return Promise.resolve(response({ turns: [], hasMore: false, cursor: null }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("drops a turn from live state when session.turn.removed arrives", async () => {
+    stubTurnsFetch();
+    renderTurnsHarness("session-1");
+    await waitFor(() => expect(currentTurnsState?.hydrated).toBe(true));
+
+    act(() => {
+      transport.listener?.(
+        event(1, "session.turn.started", {
+          id: "turn-1",
+          started_at: MESSAGE_CREATED_AT,
+          completed_at: null,
+          created_at: MESSAGE_CREATED_AT,
+          updated_at: MESSAGE_CREATED_AT,
+        }),
+      );
+      transport.listener?.(
+        event(2, "session.turn.completed", {
+          id: "turn-1",
+          started_at: MESSAGE_CREATED_AT,
+          completed_at: MESSAGE_CREATED_AT,
+          created_at: MESSAGE_CREATED_AT,
+          updated_at: MESSAGE_CREATED_AT,
+        }),
+      );
+    });
+    await waitFor(() => expect(currentTurnsState?.turns).toHaveLength(1));
+
+    act(() => {
+      transport.listener?.(event(3, "session.turn.removed", { id: "turn-1" }));
+    });
+    expect(currentTurnsState?.turns).toHaveLength(0);
+    expect(currentTurnsState?.hydrated).toBe(true);
+    expect(screen.getByTestId("turns-removed").textContent).toBe("false");
+  });
+
+  it("does not let a retry turns page overwrite a live completion mid-fetch", async () => {
+    let resolveRetry: ((value: Response) => void) | undefined;
+    const retryPage = new Promise<Response>((resolve) => {
+      resolveRetry = resolve;
+    });
+    let turnFetches = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(BINDING_PATH_SUFFIX)) {
+        return Promise.resolve(
+          response({ bindingToken: "binding-1", generation: 7, expiresAt: FAR_FUTURE_EXPIRY }),
+        );
+      }
+      turnFetches += 1;
+      if (turnFetches === 1) {
+        return Promise.reject(new TypeError("network down"));
+      }
+      return retryPage;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderTurnsHarness("session-1");
+    await waitFor(() => expect(currentTurnsState?.error?.retryable).toBe(true));
+
+    // Retry starts a fresh page that is still in flight when live events land.
+    act(() => currentTurnsState?.retry());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    act(() => {
+      transport.listener?.(
+        event(1, "session.turn.started", {
+          id: "turn-1",
+          started_at: MESSAGE_CREATED_AT,
+          completed_at: null,
+          created_at: MESSAGE_CREATED_AT,
+          updated_at: MESSAGE_CREATED_AT,
+        }),
+      );
+      transport.listener?.(
+        event(2, "session.turn.completed", {
+          id: "turn-1",
+          started_at: MESSAGE_CREATED_AT,
+          completed_at: MESSAGE_CREATED_AT,
+          created_at: MESSAGE_CREATED_AT,
+          updated_at: MESSAGE_CREATED_AT,
+        }),
+      );
+    });
+
+    await act(async () => {
+      resolveRetry?.(response({ turns: [], hasMore: false, cursor: null }));
+      await Promise.resolve();
+    });
+    // The buffered live events drain on top of the (empty) retry page instead
+    // of being lost, and the completion survives the page assignment.
+    await waitFor(() =>
+      expect(currentTurnsState?.turns.find((turn) => turn.id === "turn-1")?.completedAt).toBe(
+        MESSAGE_CREATED_AT,
+      ),
+    );
+  });
+});

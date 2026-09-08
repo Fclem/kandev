@@ -103,14 +103,15 @@ async function fetchBinding(pluginId: string, signal: AbortSignal): Promise<Bind
 const SESSION_REMOVED_EVENT = "session.removed";
 const SESSION_SUBSCRIBE_ACTION = "session.subscribe";
 
-const ORDERED_EVENT_TYPES = new Set([
-  "message.added",
-  "message.updated",
-  "message.deleted",
-  "session.turn.started",
-  "session.turn.completed",
-  SESSION_REMOVED_EVENT,
-]);
+const ORDERED_EVENT_TYPES: Record<string, true> = {
+  "message.added": true,
+  "message.updated": true,
+  "message.deleted": true,
+  "session.turn.started": true,
+  "session.turn.completed": true,
+  "session.turn.removed": true,
+  [SESSION_REMOVED_EVENT]: true,
+};
 
 function isNonEmptyPayloadString(payload: Record<string, unknown>, key: string): boolean {
   return typeof payload[key] === "string" && (payload[key] as string).length > 0;
@@ -147,12 +148,13 @@ const eventPayloadValidators: Record<string, (payload: Record<string, unknown>) 
   "message.deleted": (payload) => isNonEmptyPayloadString(payload, "message_id"),
   "session.turn.started": (payload) => isValidTurnPayload(payload, false),
   "session.turn.completed": (payload) => isValidTurnPayload(payload, true),
+  "session.turn.removed": (payload) => isNonEmptyPayloadString(payload, "id"),
 };
 
 function isCompatibleConversationEvent(event: RawSessionEvent, sessionId: string): boolean {
   if (!isRawSessionEvent(event) || event.session_id !== sessionId) return false;
   if (
-    !ORDERED_EVENT_TYPES.has(event.event_type) ||
+    !(event.event_type in ORDERED_EVENT_TYPES) ||
     !event.payload ||
     typeof event.payload !== "object"
   ) {

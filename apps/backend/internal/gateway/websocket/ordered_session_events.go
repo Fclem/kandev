@@ -11,15 +11,22 @@ import (
 	"go.uber.org/zap"
 )
 
-const orderedMessageDeletedEvent = "message.deleted"
+const (
+	orderedMessageAddedEvent   = "message.added"
+	orderedMessageUpdatedEvent = "message.updated"
+	orderedMessageDeletedEvent = "message.deleted"
+	orderedTurnStartedEvent    = "session.turn.started"
+	orderedTurnCompletedEvent  = "session.turn.completed"
+	orderedSessionRemovedEvent = "session.removed"
+)
 
 var orderedEventTypeByAction = map[string]string{
-	ws.ActionSessionMessageAdded:   "message.added",
-	ws.ActionSessionMessageUpdated: "message.updated",
+	ws.ActionSessionMessageAdded:   orderedMessageAddedEvent,
+	ws.ActionSessionMessageUpdated: orderedMessageUpdatedEvent,
 	ws.ActionSessionMessageDeleted: orderedMessageDeletedEvent,
-	ws.ActionSessionTurnStarted:    "session.turn.started",
-	ws.ActionSessionTurnCompleted:  "session.turn.completed",
-	ws.ActionSessionRemoved:        "session.removed",
+	ws.ActionSessionTurnStarted:    orderedTurnStartedEvent,
+	ws.ActionSessionTurnCompleted:  orderedTurnCompletedEvent,
+	ws.ActionSessionRemoved:        orderedSessionRemovedEvent,
 }
 
 const orderedContentPayloadKey = "content"
@@ -120,7 +127,7 @@ func sanitizedOrderedSessionPayload(eventType string, source map[string]any) map
 	payload := map[string]any{eventTypePayloadKey: eventType}
 	keys := []string{sessionIDPayloadKey, taskIDPayloadKey}
 	switch eventType {
-	case "message.added", "message.updated":
+	case orderedMessageAddedEvent, orderedMessageUpdatedEvent:
 		keys = append(keys,
 			"message_id", "turn_id", "author_type", orderedContentPayloadKey,
 			"created_at", "updated_at", "prompt_index",
@@ -137,7 +144,7 @@ func sanitizedOrderedSessionPayload(eventType string, source map[string]any) map
 		}
 	case orderedMessageDeletedEvent:
 		keys = append(keys, "message_id")
-	case "session.turn.started", "session.turn.completed":
+	case orderedTurnStartedEvent, orderedTurnCompletedEvent:
 		keys = append(keys, "id", "started_at", "completed_at", "updated_at")
 	}
 	for _, key := range keys {
@@ -165,10 +172,25 @@ func (h *Hub) orderedSessionRecipients(sessionID string) []*Client {
 	// Re-authorize at fanout time, mirroring the legacy session recipients: a
 	// client whose workspace/session membership was revoked after subscribing
 	// must not keep receiving ordered frames. Denied clients lose the ordered
-	// subscription itself (same revocation semantics as the legacy path).
+	// subscription itself AND its durable cursors (same revocation semantics
+	// as the legacy path), so the partition stops being pinned by them and
+	// retention can reclaim it.
 	allowed, denied := h.partitionAuthorized(clients, sessionID, h.authPolicy.Subscriptions.Session)
+	service := h.pluginConversationService
 	for _, client := range denied {
 		client.mu.Lock()
+		byConsumer := client.orderedSessionSubscriptions[sessionID]
+		if service != nil {
+			for _, key := range byConsumer {
+				if err := service.SessionEvents().ReleaseCursor(key); err != nil && h.logger != nil {
+					h.logger.Warn(
+						"release revoked ordered session cursor",
+						zap.String("session_id", sessionID),
+						zap.Error(err),
+					)
+				}
+			}
+		}
 		delete(client.orderedSessionSubscriptions, sessionID)
 		client.mu.Unlock()
 	}

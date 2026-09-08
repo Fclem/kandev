@@ -277,6 +277,7 @@ func TestConversationTurnsReturnNarrowNullableDTOs(t *testing.T) {
 		turns: []*taskmodels.Turn{{
 			ID:            "turn-1",
 			TaskSessionID: "session-1",
+			TaskID:        "task-1",
 			StartedAt:     started,
 			CompletedAt:   &completed,
 			Metadata:      map[string]any{"secret": "must not leak"},
@@ -303,7 +304,7 @@ func TestConversationTurnsReturnNarrowNullableDTOs(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.JSONEq(t, `{"turns":[{
 		"id":"turn-1",
-		"taskId":null,
+		"taskId":"task-1",
 		"sessionId":"session-1",
 		"startedAt":"2026-09-07T12:00:00Z",
 		"completedAt":"2026-09-07T12:01:00Z",
@@ -428,5 +429,20 @@ func conversationReadHeaders(
 	return map[string]string{
 		"X-Kandev-Plugin-Binding": binding,
 		"X-Kandev-Snapshot-Token": snapshot,
+	}
+}
+
+func TestFilterTurnsByTaskNarrowsMixedTaskSession(t *testing.T) {
+	turns := []*taskmodels.Turn{
+		{ID: "turn-a", TaskID: "task-session"},
+		{ID: "turn-b", TaskID: "task-other"},
+		{ID: "turn-c", TaskID: "task-session"},
+	}
+	filtered := filterTurnsByTask(turns, "task-session")
+	if len(filtered) != 2 || filtered[0].ID != "turn-a" || filtered[1].ID != "turn-c" {
+		t.Fatalf("filtered = %+v, want only the session task's turns", filtered)
+	}
+	if filtered := filterTurnsByTask(turns, ""); len(filtered) != 3 {
+		t.Fatalf("empty task filter must be a no-op, got %d", len(filtered))
 	}
 }

@@ -72,6 +72,12 @@ const journalSchemaVersion = 2
 
 // journalBackfillKey records that the one-time backfill of pre-trigger source
 // rows completed, so boot does not re-scan the whole message/turn corpus.
+const (
+	// Repeated payload/column keys kept as constants for goconst.
+	jKeySessionID = "session_id"
+	jKeyTaskID    = "task_id"
+)
+
 const journalBackfillKey = "backfill.complete"
 
 func (r *Repository) initConversationJournalSchema() error {
@@ -244,22 +250,62 @@ func (r *Repository) nextConversationJournalSequence(tx *sqlx.Tx, sessionID stri
 	return 1, nil
 }
 
+// sameTurnSourceImage reports whether the freshly read source row still
+// matches the backfill seed for every payload-bound field.
+//
 //nolint:goconst // Backfill payload values mirror the public event contract.
+func sameTurnSourceImage(current struct {
+	TaskID             string     `db:"task_id"`
+	ExecutionProfileID string     `db:"execution_profile_id"`
+	RouteGeneration    int64      `db:"route_generation"`
+	Metadata           string     `db:"metadata"`
+	StartedAt          time.Time  `db:"started_at"`
+	CompletedAt        *time.Time `db:"completed_at"`
+	CreatedAt          time.Time  `db:"created_at"`
+	UpdatedAt          time.Time  `db:"updated_at"`
+}, turn conversationJournalTurnSeed) bool {
+	completedAtEqual := (current.CompletedAt == nil) == (turn.CompletedAt == nil)
+	if current.CompletedAt != nil && turn.CompletedAt != nil && !current.CompletedAt.Equal(*turn.CompletedAt) {
+		return false
+	}
+	return completedAtEqual &&
+		current.TaskID == turn.TaskID &&
+		current.ExecutionProfileID == turn.ExecutionProfileID &&
+		current.RouteGeneration == turn.RouteGeneration &&
+		current.Metadata == turn.Metadata &&
+		current.StartedAt.Equal(turn.StartedAt) &&
+		current.CreatedAt.Equal(turn.CreatedAt) &&
+		current.UpdatedAt.Equal(turn.UpdatedAt)
+}
+
 func (r *Repository) backfillConversationTurn(tx *sqlx.Tx, turn conversationJournalTurnSeed) error {
-	// Optimistic re-check: if a concurrent write changed the turn since the
-	// backfill SELECT, its trigger already journaled the current image; a
-	// stale pre-update image must not win the snapshot with a later sequence.
-	var currentCompleted sql.NullTime
-	err := tx.Get(&currentCompleted, r.db.Rebind(`SELECT completed_at FROM task_session_turns WHERE id = ?`), turn.ID)
+	// Optimistic re-check of the complete source image: if any payload-bound
+	// field changed since the backfill SELECT, its trigger already journaled
+	// the current image, and a stale pre-update image must not win the
+	// snapshot with a later sequence. Comparing completion state alone would
+	// let a same-state update (metadata, profile, timestamps) pass.
+	var current struct {
+		TaskID             string     `db:"task_id"`
+		ExecutionProfileID string     `db:"execution_profile_id"`
+		RouteGeneration    int64      `db:"route_generation"`
+		Metadata           string     `db:"metadata"`
+		StartedAt          time.Time  `db:"started_at"`
+		CompletedAt        *time.Time `db:"completed_at"`
+		CreatedAt          time.Time  `db:"created_at"`
+		UpdatedAt          time.Time  `db:"updated_at"`
+	}
+	err := tx.Get(&current, r.db.Rebind(`
+		SELECT task_id, execution_profile_id, route_generation, metadata,
+			started_at, completed_at, created_at, updated_at
+		FROM task_session_turns WHERE id = ?`), turn.ID)
 	if err == sql.ErrNoRows {
 		return nil // deleted concurrently; its history is gone
 	}
 	if err != nil {
 		return fmt.Errorf("re-check conversation turn backfill %s: %w", turn.ID, err)
 	}
-	completed := turn.CompletedAt != nil
-	if currentCompleted.Valid != completed {
-		return nil // completion state changed concurrently; trigger journaled it
+	if !sameTurnSourceImage(current, turn) {
+		return nil // source image changed concurrently; trigger journaled it
 	}
 	sequence, err := r.nextConversationJournalSequence(tx, turn.TaskSessionID)
 	if err != nil {
@@ -270,11 +316,11 @@ func (r *Repository) backfillConversationTurn(tx *sqlx.Tx, turn conversationJour
 		eventType = "session.turn.completed"
 	}
 	payload, err := json.Marshal(map[string]any{
-		"type": eventType, "session_id": turn.TaskSessionID, "task_id": journalTaskID(turn.TaskID),
+		"type": eventType, jKeySessionID: turn.TaskSessionID, jKeyTaskID: journalTaskID(turn.TaskID),
 		"id": turn.ID, "execution_profile_id": turn.ExecutionProfileID, "route_generation": turn.RouteGeneration,
 		"started_at": turn.StartedAt.UTC().Format(time.RFC3339Nano), "completed_at": journalTime(turn.CompletedAt),
-		"metadata_json": turn.Metadata, "created_at": turn.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at": turn.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"metadata_json": turn.Metadata, columnCreatedAt: turn.CreatedAt.UTC().Format(time.RFC3339Nano),
+		columnUpdatedAt: turn.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	})
 	if err != nil {
 		return fmt.Errorf("encode conversation turn backfill: %w", err)
@@ -290,19 +336,39 @@ func (r *Repository) backfillConversationTurn(tx *sqlx.Tx, turn conversationJour
 
 //nolint:goconst // Backfill payload values mirror the public event contract.
 func (r *Repository) backfillConversationMessage(tx *sqlx.Tx, message conversationJournalMessageSeed) error {
-	// Optimistic re-check: if a concurrent write changed the message since the
-	// backfill SELECT, its trigger already journaled the current image; a
-	// stale pre-update image must not win the snapshot with a later sequence.
-	var currentContent string
-	err := tx.Get(&currentContent, r.db.Rebind(`SELECT content FROM task_session_messages WHERE id = ?`), message.ID)
+	// Optimistic re-check of the complete source image: if any payload-bound
+	// field changed since the backfill SELECT, its trigger already journaled
+	// the current image, and a stale pre-update image must not win the
+	// snapshot with a later sequence. Comparing content alone would let a
+	// same-content update (metadata, task/turn/type/author, timestamps) pass.
+	var current struct {
+		TaskID     string    `db:"task_id"`
+		TurnID     string    `db:"turn_id"`
+		AuthorType string    `db:"author_type"`
+		Content    string    `db:"content"`
+		Type       string    `db:"type"`
+		Metadata   string    `db:"metadata"`
+		CreatedAt  time.Time `db:"created_at"`
+		UpdatedAt  time.Time `db:"updated_at"`
+	}
+	err := tx.Get(&current, r.db.Rebind(`
+		SELECT task_id, turn_id, author_type, content, type, metadata, created_at, updated_at
+		FROM task_session_messages WHERE id = ?`), message.ID)
 	if err == sql.ErrNoRows {
 		return nil // deleted concurrently; its tombstone was journaled
 	}
 	if err != nil {
 		return fmt.Errorf("re-check conversation message backfill %s: %w", message.ID, err)
 	}
-	if currentContent != message.Content {
-		return nil // content changed concurrently; trigger journaled it
+	if current.TaskID != message.TaskID ||
+		current.TurnID != message.TurnID ||
+		current.AuthorType != message.AuthorType ||
+		current.Content != message.Content ||
+		current.Type != message.MessageType ||
+		current.Metadata != message.Metadata ||
+		!current.CreatedAt.Equal(message.CreatedAt) ||
+		!current.UpdatedAt.Equal(message.UpdatedAt) {
+		return nil // source image changed concurrently; trigger journaled it
 	}
 	sequence, err := r.nextConversationJournalSequence(tx, message.TaskSessionID)
 	if err != nil {
@@ -312,11 +378,11 @@ func (r *Repository) backfillConversationMessage(tx *sqlx.Tx, message conversati
 	_ = json.Unmarshal([]byte(message.Metadata), &metadata)
 	senderTaskID, _ := metadata["sender_task_id"].(string)
 	payload, err := json.Marshal(map[string]any{
-		"type": "message.added", "session_id": message.TaskSessionID, "task_id": journalTaskID(message.TaskID),
+		"type": "message.added", jKeySessionID: message.TaskSessionID, jKeyTaskID: journalTaskID(message.TaskID),
 		"message_id": message.ID, "turn_id": message.TurnID, "author_type": message.AuthorType,
 		"content":      sysprompt.StripSystemContent(message.Content),
-		"message_type": message.MessageType, "created_at": message.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at": message.UpdatedAt.UTC().Format(time.RFC3339Nano), "prompt_index": message.PromptIndex,
+		"message_type": message.MessageType, columnCreatedAt: message.CreatedAt.UTC().Format(time.RFC3339Nano),
+		columnUpdatedAt: message.UpdatedAt.UTC().Format(time.RFC3339Nano), "prompt_index": message.PromptIndex,
 		"sender_task_id": senderTaskID,
 	})
 	if err != nil {
@@ -523,17 +589,20 @@ CREATE TRIGGER IF NOT EXISTS conversation_turn_delete
 AFTER DELETE ON task_session_turns
 BEGIN
 	-- Turn deletions (only possible for turns without messages) remove the
-	-- turn's journal history so snapshots stop reporting the phantom turn.
-	-- No stream sequence or event row is consumed, so ordered mirroring and
-	-- replay are unaffected; a completed-but-deleted turn simply disappears
-	-- from journal reads, matching the first-party session.
-	-- Accepted divergence: an ordered replay that spans the deletion (within
-	-- retention) may still project that empty turn's started/completed events
-	-- because no turn.removed marker exists, while the snapshot taken after
-	-- the deletion omits it. The window is bounded by retention and only
-	-- affects message-less turns.
+	-- turn's version history AND emit a typed session.turn.removed event so
+	-- ordered replays and live subscribers converge with snapshots: a replay
+	-- spanning the deletion projects started/completed then removal, and live
+	-- clients drop the empty turn on sight.
 	DELETE FROM conversation_turn_versions
 	WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
+	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
+	VALUES (OLD.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
+	ON CONFLICT(session_id) DO UPDATE SET watermark = watermark + 1, updated_at = CURRENT_TIMESTAMP;
+	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
+	SELECT OLD.task_session_id, watermark, OLD.task_session_id || ':' || watermark, 'session.turn.removed', NULLIF(OLD.task_id,''),
+		json_object('type','session.turn.removed','session_id',OLD.task_session_id,'task_id',NULLIF(OLD.task_id,''),'id',OLD.id),
+		CURRENT_TIMESTAMP
+	FROM conversation_session_streams WHERE session_id = OLD.task_session_id;
 END;
 
 DROP TRIGGER IF EXISTS conversation_session_delete;
@@ -555,7 +624,8 @@ END;
 	messageMigrate := `
 		UPDATE conversation_message_versions
 		SET payload = json_set(payload, '$.content', __SQLITE_STRIP_SYSTEM__)
-		WHERE json_extract(payload, '$.content') LIKE '%<kandev-system>%'
+		WHERE json_valid(payload)
+		  AND json_extract(payload, '$.content') LIKE '%<kandev-system>%'
 	`
 	contentExpr := sqliteStripSystemContentExpr("json_extract(payload, '$.content')")
 	if _, err := r.db.Exec(strings.ReplaceAll(messageMigrate, sqliteStripSystemToken, contentExpr)); err != nil {
@@ -564,7 +634,8 @@ END;
 	eventMigrate := `
 		UPDATE conversation_session_events
 		SET payload = json_set(payload, '$.content', __SQLITE_STRIP_SYSTEM__)
-		WHERE json_extract(payload, '$.content') LIKE '%<kandev-system>%'
+		WHERE json_valid(payload)
+		  AND json_extract(payload, '$.content') LIKE '%<kandev-system>%'
 	`
 	if _, err := r.db.Exec(strings.ReplaceAll(eventMigrate, sqliteStripSystemToken, contentExpr)); err != nil {
 		return fmt.Errorf("sanitize SQLite conversation event journal: %w", err)
@@ -636,13 +707,15 @@ DECLARE seq BIGINT; event_name TEXT;
 BEGIN
 	IF TG_OP = 'DELETE' THEN
 		-- Turn deletions (only possible for turns without messages) remove the
-		-- turn's journal history so snapshots stop reporting the phantom turn,
-		-- without consuming a stream sequence or emitting an event row.
-		-- Accepted divergence (mirrors SQLite): a mid-retention replay may
-		-- still project the deleted empty turn's events, while snapshots after
-		-- the deletion omit it; bounded by retention and message-less turns.
+		-- turn's version history AND emit a typed session.turn.removed event,
+		-- so ordered replays and live subscribers converge with snapshots.
 		DELETE FROM conversation_turn_versions
 		WHERE session_id = OLD.task_session_id AND turn_id = OLD.id;
+		seq := conversation_next_sequence(OLD.task_session_id);
+		INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
+		VALUES (OLD.task_session_id,seq,OLD.task_session_id || ':' || seq,'session.turn.removed',NULLIF(OLD.task_id,''),
+			json_build_object('type','session.turn.removed','session_id',OLD.task_session_id,'task_id',NULLIF(OLD.task_id,''),'id',OLD.id)::text,
+			CURRENT_TIMESTAMP);
 		RETURN OLD;
 	END IF;
 	IF TG_OP = 'UPDATE' AND NOT (OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL) THEN RETURN NEW; END IF;
@@ -685,8 +758,7 @@ FOR EACH ROW EXECUTE FUNCTION conversation_session_delete_journal();
 		UPDATE conversation_message_versions
 		SET payload = jsonb_set(payload::jsonb, '{content}',
 			to_jsonb(conversation_visible_content(payload::jsonb ->> 'content')))::text
-		WHERE payload::jsonb ? 'content'
-		  AND payload::jsonb ->> 'content' LIKE '%<kandev-system>%'
+		WHERE conversation_safe_jsonb(payload) ->> 'content' LIKE '%<kandev-system>%'
 	`); err != nil {
 		return fmt.Errorf("sanitize PostgreSQL conversation message journal: %w", err)
 	}
@@ -694,8 +766,7 @@ FOR EACH ROW EXECUTE FUNCTION conversation_session_delete_journal();
 		UPDATE conversation_session_events
 		SET payload = jsonb_set(payload::jsonb, '{content}',
 			to_jsonb(conversation_visible_content(payload::jsonb ->> 'content')))::text
-		WHERE payload::jsonb ? 'content'
-		  AND payload::jsonb ->> 'content' LIKE '%<kandev-system>%'
+		WHERE conversation_safe_jsonb(payload) ->> 'content' LIKE '%<kandev-system>%'
 	`); err != nil {
 		return fmt.Errorf("sanitize PostgreSQL conversation event journal: %w", err)
 	}

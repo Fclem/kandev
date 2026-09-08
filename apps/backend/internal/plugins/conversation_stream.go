@@ -746,7 +746,7 @@ func ProjectSessionEvent(event SessionEvent) (json.RawMessage, error) {
 	}
 	switch event.EventType {
 	case "message.added", "message.updated", "message.deleted",
-		"session.turn.started", "session.turn.completed", "session.removed":
+		"session.turn.started", "session.turn.completed", "session.turn.removed", "session.removed":
 	default:
 		return nil, fmt.Errorf("%w: unsupported event type", ErrPoisonEvent)
 	}
@@ -826,6 +826,9 @@ func validateSessionEventPayload(eventType string, payload map[string]any) error
 		}
 	case "message.deleted":
 		_, err := requiredString("message_id")
+		return err
+	case "session.turn.removed":
+		_, err := requiredString("id")
 		return err
 	case "session.turn.started", "session.turn.completed":
 		if _, err := requiredString("id"); err != nil {

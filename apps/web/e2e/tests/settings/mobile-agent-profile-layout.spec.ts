@@ -53,4 +53,41 @@ test.describe("Agent settings profile layout on mobile", () => {
       new RegExp(`/settings/agents/${encodeURIComponent(agent.name)}\\?mode=create$`),
     );
   });
+
+  test("wraps the saved fallback summary without horizontal overflow", async ({
+    testPage,
+    apiClient,
+  }) => {
+    const { agents } = await apiClient.listAgents();
+    const agent = agents[0];
+    if (!agent || agent.profiles.length === 0) {
+      throw new Error("The E2E fixture must provide a configured agent profile");
+    }
+
+    const fallbackModel = "saved-explicit-model";
+    const profile = await apiClient.createAgentProfile(agent.id, "Mobile fallback summary", {
+      model: agent.profiles[0].model,
+      fallback_model: fallbackModel,
+    });
+
+    try {
+      await testPage.goto("/settings/agents");
+      await expect
+        .poll(
+          async () =>
+            testPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          { timeout: 15_000 },
+        )
+        .toBe(true);
+
+      const row = testPage.getByTestId("agent-profile-row").filter({ hasText: profile.name });
+      await expect(row).toBeVisible({ timeout: 15_000 });
+      await expect(row.locator('[data-slot="badge"]')).toHaveText([
+        profile.model,
+        `fallback: ${fallbackModel}`,
+      ]);
+    } finally {
+      await apiClient.deleteAgentProfile(profile.id, true);
+    }
+  });
 });

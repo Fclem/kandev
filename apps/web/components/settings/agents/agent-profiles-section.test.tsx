@@ -115,6 +115,35 @@ function renderRows() {
     </>,
   );
 }
+describe("ProfileRow fallback summary", () => {
+  beforeEach(() => {
+    storeState = {
+      settingsAgents: { items: [] },
+      agentProfiles: { items: [] },
+      auth: { mode: undefined, user: undefined },
+    };
+    mocks.responsive.isFullDesktop = false;
+    mocks.responsive.isFinePointer = false;
+  });
+  afterEach(() => cleanup());
+
+  it("renders the opaque fallback badge immediately after the model badge", () => {
+    const fallbackModel = "  provider/model:with spaces  ";
+    const fallbackProfile = {
+      ...profile("p-fallback", "Fallback"),
+      model: "start-model",
+      fallbackModel,
+      autoFallback: false,
+    } as AgentProfile;
+
+    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={fallbackProfile} />);
+
+    const badges = Array.from(
+      screen.getByTestId("agent-profile-row").querySelectorAll('[data-slot="badge"]'),
+    ).map((badge) => badge.textContent);
+    expect(badges).toEqual(["start-model", `fallback: ${fallbackModel}`]);
+  });
+});
 
 function confirmDeleteFor(name: string) {
   const row = screen.getByLabelText(name).closest(PROFILE_ROW_SELECTOR);

@@ -498,7 +498,7 @@ Copying this entire file is unnecessary and can freeze old defaults in a deploym
 | `features.multiTenancy` | `KANDEV_FEATURES_MULTI_TENANCY` | off | Experimental organizations above authenticated users. Requires `features.auth`; startup is refused otherwise. |
 | `features.dynamicAgentRouting` | `KANDEV_FEATURES_DYNAMIC_AGENT_ROUTING` | off | Experimental dynamic profiles with ordered provider-error fallback. |
 | `features.canvases` | `KANDEV_FEATURES_CANVASES` | off | Experimental agent-authored isolated web-app canvases for tasks and workspaces. High risk. |
-| `features.officeSessionIdentity` | `KANDEV_FEATURES_OFFICE_SESSION_IDENTITY` | off | Experimental Office participant sessions. On the Office session creation path, the live `(task_id, agent_profile_id)` pair is guarded in-transaction, not by a table-level index. Pre-existing duplicate rows are retained and resolved by selection. Two Kandev processes must not write the same SQLite file. |
+| `features.officeSessionIdentity` | `KANDEV_FEATURES_OFFICE_SESSION_IDENTITY` | on | Office participant sessions: each participant agent gets its own session per task. The live `(task_id, agent_profile_id)` pair is guarded in-transaction, not by a table-level index. Pre-existing duplicate rows are retained and resolved by selection. Two Kandev processes must not write the same SQLite file. |
 | `debug.devMode` | `KANDEV_DEBUG_DEV_MODE` | off | High-risk diagnostic endpoints and ACP frame logging. |
 
 The `KANDEV_FEATURES_*` values have no canonical YAML keys. They are selected
@@ -516,12 +516,13 @@ The database can contain canvas migrations, but Kandev does not read or change
 canvas data while the flag is off. See [Agent-authored Canvases](canvases.md)
 for the experimental user workflow.
 
-For a risky release feature, keep the flag off in the shipped profiles, enable it
-only on a selected install through an admin override or explicit environment,
-restart, and test it there. Promote the `prod` profile default only after the
-feature is ready for everyone; keep the registry entry as a kill-switch until
-the rollout is complete, then remove the live flag and move its key and
-environment variable to the runtime registry's append-only retired identities.
+For a risky release feature that has not graduated, keep the flag off in the
+shipped profiles, enable it only on a selected install through an admin override
+or explicit environment, restart, and test it there. Promote the `prod` profile
+default only after the feature is ready for everyone. Keep the registry entry as
+a kill-switch until the planned retirement release, then remove the live flag and
+move its key and environment variable to the runtime registry's append-only
+retired identities.
 Plugins are part of the base product and are not a runtime toggle.
 
 The source checkout's `make dev` activates the embedded development profile, which enables Office, debug surfaces, ACP logging, and a mock agent; authentication, organizations, and Claude background prompt handoff remain opt-in. Installed `run`/desktop builds select the safe production profile unless the environment explicitly opts in. E2E mock variables and routes are test-only and must never be enabled on a public deployment.

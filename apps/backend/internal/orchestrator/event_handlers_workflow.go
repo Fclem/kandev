@@ -4354,32 +4354,39 @@ func (s *Service) resolveAutoStartPromptContext(
 	ctx context.Context,
 	taskID string,
 	session *models.TaskSession,
-) (bool, *models.Task, bool, error) {
+) (bool, *models.Task, bool, bool, error) {
 	isOfficeTask, err := s.lookupOfficeTask(ctx, taskID)
 	if err != nil {
-		return false, nil, false, fmt.Errorf("resolve MCP mode for workflow auto-start: %w", err)
+		return false, nil, false, false, fmt.Errorf("resolve MCP mode for workflow auto-start: %w", err)
 	}
 	if isOfficeTask {
-		return true, nil, false, nil
+		return true, nil, false, false, nil
 	}
 
 	taskForPrompt, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return false, nil, false, fmt.Errorf("load task for autopilot prompt: %w", err)
+		return false, nil, false, false, fmt.Errorf("load task for autopilot prompt: %w", err)
+	}
+	configMode, _ := session.Metadata["config_mode"].(bool)
+	includeCanvasGuidance := false
+	if !session.IsPassthrough && !configMode {
+		includeCanvasGuidance, err = s.taskSessionCanvasGuidanceEnabled(ctx, taskID, session, true)
+		if err != nil {
+			return false, nil, false, false, fmt.Errorf("resolve canvas prompt capability for workflow auto-start: %w", err)
+		}
 	}
 	if session.State != models.TaskSessionStateCreated {
-		return false, taskForPrompt, false, nil
+		return false, taskForPrompt, false, includeCanvasGuidance, nil
 	}
 
-	configMode, _ := session.Metadata["config_mode"].(bool)
 	if configMode {
-		return false, taskForPrompt, false, nil
+		return false, taskForPrompt, false, includeCanvasGuidance, nil
 	}
 	titleOwner, err := s.ClaimTaskTitleSession(ctx, taskID, session.ID)
 	if err != nil {
-		return false, nil, false, fmt.Errorf("claim task title for workflow auto-start: %w", err)
+		return false, nil, false, false, fmt.Errorf("claim task title for workflow auto-start: %w", err)
 	}
-	return false, taskForPrompt, titleOwner, nil
+	return false, taskForPrompt, titleOwner, includeCanvasGuidance, nil
 }
 
 // handleCreatedAutoStartLaunchFailure preserves a workflow prompt when the
@@ -4507,12 +4514,13 @@ func (s *Service) autoStartStepPrompt(
 	dispatchPrompt := agentPrompt
 	titleOwner := false
 	isOfficeTask := false
+	includeCanvasGuidance := false
 	var taskForPrompt *models.Task
 	needsRuntimeContext := session.State == models.TaskSessionStateCreated ||
 		(step != nil && step.HasOnEnterAction(wfmodels.OnEnterResetAgentContext))
 	if needsRuntimeContext {
 		var contextErr error
-		isOfficeTask, taskForPrompt, titleOwner, contextErr = s.resolveAutoStartPromptContext(ctx, taskID, session)
+		isOfficeTask, taskForPrompt, titleOwner, includeCanvasGuidance, contextErr = s.resolveAutoStartPromptContext(ctx, taskID, session)
 		if contextErr != nil {
 			requeueTaken()
 			return contextErr
@@ -4545,6 +4553,7 @@ func (s *Service) autoStartStepPrompt(
 				RequiresCompletionSignal:       requiresSignal,
 				IncludeCoordinatorTaskControls: !configMode,
 				IncludeTaskTitleTool:           !configMode && titleOwner,
+				IncludeCanvasGuidance:          includeCanvasGuidance,
 				Autopilot:                      taskForPrompt != nil && taskForPrompt.Autopilot,
 				IncludeUserQuestionTool:        taskForPrompt == nil || !taskForPrompt.Autopilot,
 				IncludeParentQuestionTool:      taskForPrompt != nil && taskForPrompt.Autopilot && taskForPrompt.ParentID != "",
@@ -4553,6 +4562,7 @@ func (s *Service) autoStartStepPrompt(
 				RequiresCompletionSignal:       requiresSignal,
 				IncludeCoordinatorTaskControls: !configMode,
 				IncludeTaskTitleTool:           !configMode && titleOwner,
+				IncludeCanvasGuidance:          includeCanvasGuidance,
 				Autopilot:                      taskForPrompt != nil && taskForPrompt.Autopilot,
 				IncludeUserQuestionTool:        taskForPrompt == nil || !taskForPrompt.Autopilot,
 				IncludeParentQuestionTool:      taskForPrompt != nil && taskForPrompt.Autopilot && taskForPrompt.ParentID != "",

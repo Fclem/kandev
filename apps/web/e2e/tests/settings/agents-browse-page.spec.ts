@@ -111,13 +111,22 @@ test.describe("Agents browse page", () => {
     }
 
     const fallbackModel = "saved-explicit-model";
-    const profile = await apiClient.createAgentProfile(agent.id, "Desktop fallback summary", {
-      model: agent.profiles[0].model,
-      fallback_model: fallbackModel,
-    });
+    const profileName = "Desktop fallback summary";
+    let profileId: string | undefined;
 
     try {
       await testPage.goto("/settings/agents");
+      const seededRow = testPage
+        .getByTestId("agent-profile-row")
+        .filter({ hasText: agent.profiles[0].name });
+      await expect(seededRow).toBeVisible({ timeout: 15_000 });
+
+      const profile = await apiClient.createAgentProfile(agent.id, profileName, {
+        model: agent.profiles[0].model,
+        fallback_model: fallbackModel,
+      });
+      profileId = profile.id;
+      await testPage.reload();
 
       const row = testPage.getByTestId("agent-profile-row").filter({ hasText: profile.name });
       await expect(row).toBeVisible({ timeout: 15_000 });
@@ -126,7 +135,9 @@ test.describe("Agents browse page", () => {
         `fallback: ${fallbackModel}`,
       ]);
     } finally {
-      await apiClient.deleteAgentProfile(profile.id, true);
+      if (profileId) {
+        await apiClient.deleteAgentProfile(profileId, true);
+      }
     }
   });
 });

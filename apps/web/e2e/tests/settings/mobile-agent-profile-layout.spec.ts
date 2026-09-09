@@ -65,13 +65,23 @@ test.describe("Agent settings profile layout on mobile", () => {
     }
 
     const fallbackModel = `saved-explicit-model-${"x".repeat(128)}`;
-    const profile = await apiClient.createAgentProfile(agent.id, "Mobile fallback summary", {
-      model: agent.profiles[0].model,
-      fallback_model: fallbackModel,
-    });
+    const profileName = "Mobile fallback summary";
+    let profileId: string | undefined;
 
     try {
       await testPage.goto("/settings/agents");
+      const seededRow = testPage
+        .getByTestId("agent-profile-row")
+        .filter({ hasText: agent.profiles[0].name });
+      await expect(seededRow).toBeVisible({ timeout: 15_000 });
+
+      const profile = await apiClient.createAgentProfile(agent.id, profileName, {
+        model: agent.profiles[0].model,
+        fallback_model: fallbackModel,
+      });
+      profileId = profile.id;
+      await testPage.reload();
+
       const row = testPage.getByTestId("agent-profile-row").filter({ hasText: profile.name });
       await expect(row).toBeVisible({ timeout: 15_000 });
       await expect
@@ -102,7 +112,9 @@ test.describe("Agent settings profile layout on mobile", () => {
       expect(badgeBox!.y).toBeGreaterThanOrEqual(rowBox!.y - 1);
       expect(badgeBox!.y + badgeBox!.height).toBeLessThanOrEqual(rowBox!.y + rowBox!.height + 1);
     } finally {
-      await apiClient.deleteAgentProfile(profile.id, true);
+      if (profileId) {
+        await apiClient.deleteAgentProfile(profileId, true);
+      }
     }
   });
 });

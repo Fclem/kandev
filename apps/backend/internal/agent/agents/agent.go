@@ -15,11 +15,6 @@ import (
 	"github.com/kandev/kandev/pkg/agent"
 )
 
-const (
-	remoteAuthMethodTypeFiles = "files"
-	remoteAuthCopyFilesLabel  = "Copy auth files"
-)
-
 // ErrNotSupported is returned when an agent does not support an operation.
 var ErrNotSupported = errors.New("not supported by this agent")
 
@@ -468,9 +463,12 @@ type RemoteAuth struct {
 // RemoteAuthFileConflictPolicy defines how a credential transfer handles an existing target.
 type RemoteAuthFileConflictPolicy string
 
+// RemoteAuthFileConflictPolicyMergeJSONObject preserves target-only keys and replaces collisions with source values.
+const RemoteAuthFileConflictPolicyMergeJSONObject RemoteAuthFileConflictPolicy = "merge_json_object"
+
 const (
-	// RemoteAuthFileConflictPolicyMergeJSONObject preserves target-only keys and replaces collisions with source values.
-	RemoteAuthFileConflictPolicyMergeJSONObject RemoteAuthFileConflictPolicy = "merge_json_object"
+	remoteAuthMethodTypeFiles = "files"
+	remoteAuthLabelCopyFiles  = "Copy auth files"
 )
 
 // RemoteAuthMethod describes one way an agent can authenticate in a remote environment.

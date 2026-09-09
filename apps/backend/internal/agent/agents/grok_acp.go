@@ -96,7 +96,7 @@ func (a *GrokACP) RemoteAuth() *RemoteAuth {
 		Methods: []RemoteAuthMethod{
 			{
 				Type:  remoteAuthMethodTypeFiles,
-				Label: remoteAuthCopyFilesLabel,
+				Label: remoteAuthLabelCopyFiles,
 				SourceFiles: map[string][]string{
 					"darwin": {".grok/auth.json"},
 					"linux":  {".grok/auth.json"},

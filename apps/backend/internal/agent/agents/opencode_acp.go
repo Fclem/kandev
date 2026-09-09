@@ -128,7 +128,7 @@ func (a *OpenCodeACP) RemoteAuth() *RemoteAuth {
 		Methods: []RemoteAuthMethod{
 			{
 				Type:               remoteAuthMethodTypeFiles,
-				Label:              remoteAuthCopyFilesLabel,
+				Label:              remoteAuthLabelCopyFiles,
 				FileConflictPolicy: RemoteAuthFileConflictPolicyMergeJSONObject,
 				SourceFiles: map[string][]string{
 					"darwin": {".local/share/opencode/auth.json"},

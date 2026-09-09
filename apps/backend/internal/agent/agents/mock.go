@@ -190,7 +190,7 @@ func (a *MockAgent) RemoteAuth() *RemoteAuth {
 	return &RemoteAuth{Methods: []RemoteAuthMethod{
 		{
 			Type:  remoteAuthMethodTypeFiles,
-			Label: remoteAuthCopyFilesLabel,
+			Label: remoteAuthLabelCopyFiles,
 			SourceFiles: map[string][]string{
 				"darwin": {".codex/auth.json"},
 				"linux":  {".codex/auth.json"},

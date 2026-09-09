@@ -106,7 +106,7 @@ func (a *Gemini) RemoteAuth() *RemoteAuth {
 		Methods: []RemoteAuthMethod{
 			{
 				Type:  remoteAuthMethodTypeFiles,
-				Label: remoteAuthCopyFilesLabel,
+				Label: remoteAuthLabelCopyFiles,
 				SourceFiles: map[string][]string{
 					"darwin": {".gemini/oauth_creds.json", ".gemini/settings.json", ".gemini/google_accounts.json"},
 					"linux":  {".gemini/oauth_creds.json", ".gemini/settings.json", ".gemini/google_accounts.json"},

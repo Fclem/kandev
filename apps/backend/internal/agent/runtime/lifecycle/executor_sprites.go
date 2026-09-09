@@ -24,8 +24,6 @@ import (
 	"github.com/kandev/kandev/internal/task/models"
 )
 
-const fileReadOperation = "read"
-
 type RemoteAuthAgentLister interface {
 	ListEnabled() []agents.Agent
 }

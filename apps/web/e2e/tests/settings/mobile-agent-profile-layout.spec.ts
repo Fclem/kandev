@@ -64,7 +64,7 @@ test.describe("Agent settings profile layout on mobile", () => {
       throw new Error("The E2E fixture must provide a configured agent profile");
     }
 
-    const fallbackModel = "saved-explicit-model";
+    const fallbackModel = `saved-explicit-model-${"x".repeat(128)}`;
     const profile = await apiClient.createAgentProfile(agent.id, "Mobile fallback summary", {
       model: agent.profiles[0].model,
       fallback_model: fallbackModel,
@@ -86,6 +86,17 @@ test.describe("Agent settings profile layout on mobile", () => {
         profile.model,
         `fallback: ${fallbackModel}`,
       ]);
+      const fallbackBadge = row.locator('[data-slot="badge"]').nth(1);
+      const [badgeBox, rowBox] = await Promise.all([
+        fallbackBadge.boundingBox(),
+        row.boundingBox(),
+      ]);
+      expect(badgeBox).not.toBeNull();
+      expect(rowBox).not.toBeNull();
+      expect(badgeBox!.width).toBeLessThanOrEqual(rowBox!.width);
+      expect(
+        await fallbackBadge.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+      ).toBe(true);
     } finally {
       await apiClient.deleteAgentProfile(profile.id, true);
     }

@@ -18,7 +18,8 @@ function profile(id: string, name: string): AgentProfile {
 }
 
 const ALPHA_PROFILE_NAME = "Alpha";
-const PROFILE_ROW_SELECTOR = '[data-testid="agent-profile-row"]';
+const PROFILE_ROW_TEST_ID = "agent-profile-row";
+const PROFILE_ROW_SELECTOR = `[data-testid="${PROFILE_ROW_TEST_ID}"]`;
 const PROFILE_ACTIONS_MENU_SELECTOR = '[data-testid="profile-actions-menu-p-1"]';
 
 const AGENT = {
@@ -116,6 +117,8 @@ function renderRows() {
   );
 }
 describe("ProfileRow fallback summary", () => {
+  const MODEL_BADGE_SELECTOR = '[data-slot="badge"]';
+  const MODEL_NAME = "start-model";
   beforeEach(() => {
     storeState = {
       settingsAgents: { items: [] },
@@ -131,7 +134,7 @@ describe("ProfileRow fallback summary", () => {
     const fallbackModel = "  provider/model:with spaces  ";
     const fallbackProfile = {
       ...profile("p-fallback", "Fallback"),
-      model: "start-model",
+      model: MODEL_NAME,
       fallbackModel,
       autoFallback: false,
     } as AgentProfile;
@@ -139,9 +142,35 @@ describe("ProfileRow fallback summary", () => {
     renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={fallbackProfile} />);
 
     const badges = Array.from(
-      screen.getByTestId("agent-profile-row").querySelectorAll('[data-slot="badge"]'),
+      screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(MODEL_BADGE_SELECTOR),
     ).map((badge) => badge.textContent);
-    expect(badges).toEqual(["start-model", `fallback: ${fallbackModel}`]);
+    expect(badges).toEqual([MODEL_NAME, `fallback: ${fallbackModel}`]);
+  });
+  it("renders the strict fallback label", () => {
+    const strictProfile = {
+      ...profile("p-strict", "Strict"),
+      model: MODEL_NAME,
+      fallbackModel: "",
+      autoFallback: false,
+    } as AgentProfile;
+
+    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={strictProfile} />);
+
+    const badges = screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(MODEL_BADGE_SELECTOR);
+    expect(badges[1]?.textContent).toBe("fallback: none");
+  });
+  it("renders next when automatic fallback takes precedence", () => {
+    const automaticProfile = {
+      ...profile("p-automatic", "Automatic"),
+      model: MODEL_NAME,
+      fallbackModel: "saved-explicit-model",
+      autoFallback: true,
+    } as AgentProfile;
+
+    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={automaticProfile} />);
+
+    const badges = screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(MODEL_BADGE_SELECTOR);
+    expect(badges[1]?.textContent).toBe("fallback: next");
   });
 });
 
@@ -373,7 +402,7 @@ describe("AgentProfilesSubList layout", () => {
     renderWithTooltipProvider(<AgentProfilesSubList savedAgent={AGENT} agentName="claude" />);
 
     expect(screen.queryByText("2 profiles", { exact: true })).toBeNull();
-    expect(screen.getAllByTestId("agent-profile-row")).toHaveLength(2);
+    expect(screen.getAllByTestId(PROFILE_ROW_TEST_ID)).toHaveLength(2);
     expect(screen.queryByTestId("new-profile-claude")).toBeNull();
   });
 

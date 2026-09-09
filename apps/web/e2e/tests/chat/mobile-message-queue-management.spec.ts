@@ -129,15 +129,23 @@ test("mobile edit queued message retains target while earlier backlog drains", a
   await expect(rows).toHaveCount(2);
   await rows.nth(1).getByTestId("queue-entry-edit").tap();
   await panel.getByTestId("queue-edit-textarea").fill(scriptedQueueMessage("mobile second edited"));
-  await panel.getByRole("button", { name: "Save", exact: true }).tap();
 
-  await expect(panel.getByTestId("queue-entry-text").last()).toContainText("mobile second edited");
+  // The edit lease holds the later entry while the earlier FIFO turn drains.
   await expect(
     chat.locator("[data-agent-message-body][data-message-id]").filter({
       hasText: "mobile first queued",
     }),
   ).toHaveCount(1, { timeout: 60_000 });
-  await expect(panel.getByTestId("queue-entry-text")).toContainText("mobile second edited");
+  await expect(panel.getByTestId("queue-edit-textarea")).toBeVisible();
+
+  await panel.getByRole("button", { name: "Save", exact: true }).tap();
+
+  await expect(
+    chat.locator("[data-agent-message-body][data-message-id]").filter({
+      hasText: "mobile second edited",
+    }),
+  ).toHaveCount(1, { timeout: 45_000 });
+  await expect(panel.getByTestId("queue-entry")).toHaveCount(0, { timeout: 15_000 });
   await assertNoDocumentHorizontalOverflow(testPage);
 });
 
@@ -163,7 +171,8 @@ test("mobile saving the held head after its turn completes resumes Auto-run", as
   await expect(chat.getByText("Slow response complete", { exact: false })).toBeVisible({
     timeout: 60_000,
   });
-  await expect(panel.getByTestId("queue-entry")).toHaveCount(1);
+  // The edited row remains mounted as an editor while its lease is held.
+  await expect(panel.getByTestId("queue-edit-textarea")).toBeVisible();
 
   await panel.getByRole("button", { name: "Save", exact: true }).tap();
   await expect(

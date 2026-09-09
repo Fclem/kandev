@@ -600,15 +600,19 @@ test.describe("Task session queue", () => {
     const textarea = testPage.getByTestId("queue-edit-textarea");
     await expect(textarea).toBeVisible({ timeout: 5_000 });
     await textarea.fill(scriptedQueueMessage("second edited"));
+
+    // The later entry stays leased while the earlier FIFO turn drains.
+    await waitForAgentMessage(apiClient, session.sessionId, "first queued");
+    await expect.poll(async () => (await apiClient.getQueueStatus(queueIdentity)).count).toBe(1);
+
     const saveResponse = gateway.waitForResponse("message.queue.update");
     await testPage.getByRole("button", { name: "Save", exact: true }).click();
     await saveResponse;
 
-    // The first entry remains eligible while the later target is held.
-    await waitForAgentMessage(apiClient, session.sessionId, "first queued");
-    await expect.poll(async () => (await apiClient.getQueueStatus(queueIdentity)).count).toBe(1);
-    await expect(rows).toHaveCount(1);
-    await expect(testPage.getByTestId("queue-entry-text")).toContainText("second edited");
+    // Saving releases the lease and resumes Auto-run for the edited entry.
+    await waitForAgentMessage(apiClient, session.sessionId, "second edited");
+    await expect.poll(async () => (await apiClient.getQueueStatus(queueIdentity)).count).toBe(0);
+    await expect(rows).toHaveCount(0);
   });
 
   test("saving the held head after its turn completes resumes Auto-run", async ({

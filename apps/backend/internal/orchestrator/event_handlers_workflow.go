@@ -535,6 +535,8 @@ func (s *Service) executeStepTransition(ctx context.Context, taskID, sessionID s
 		if !ok {
 			return
 		}
+		// The legacy engine-less path settles before dispatch. The engine-backed
+		// path preserves an admitted turn's RUNNING state in its transition hook.
 		s.setSessionWaitingForInput(ctx, taskID, effectiveSession.ID)
 	}
 }
@@ -6145,7 +6147,11 @@ func (s *Service) applyEngineTransitionWithCommitMode(
 		if !ok {
 			return false
 		}
-		s.setSessionWaitingForInput(ctx, taskID, effectiveSession.ID)
+		// A queued prompt has already claimed RUNNING before its turn-start
+		// hook. Preserve that claim when profile preparation keeps the session.
+		if effectiveSession.ID != session.ID || session.State != models.TaskSessionStateRunning {
+			s.setSessionWaitingForInput(ctx, taskID, effectiveSession.ID)
+		}
 		return true
 	}
 

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -203,7 +202,9 @@ func (e *ACPInferenceExecutor) executeACPSession(
 
 	// Create ACP connection
 	conn := acp.NewClientSideConnection(client, stdin, stdout)
-	conn.SetLogger(slog.Default().With("component", "acp-inference"))
+	// NewClientSideConnection starts the SDK receive goroutine immediately.
+	// The SDK logger setter is not synchronized with that goroutine, so use the
+	// client logger above instead of mutating the connection after construction.
 
 	// Initialize ACP handshake
 	// Same client capabilities the session adapter and the probe send. This
@@ -896,7 +897,9 @@ func (e *ACPInferenceExecutor) probeACPSessionWithContext(
 	)
 
 	conn := acp.NewClientSideConnection(client, stdin, stdout)
-	conn.SetLogger(slog.Default().With("component", "acp-probe"))
+	// NewClientSideConnection starts the SDK receive goroutine immediately.
+	// The SDK logger setter is not synchronized with that goroutine, so use the
+	// client logger above instead of mutating the connection after construction.
 
 	// Advertise the same model-picker capability the live session adapter sends.
 	// cursor-agent picks its model picker mode from this handshake, so a probe

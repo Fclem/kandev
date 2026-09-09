@@ -286,7 +286,7 @@ function ProfileRowCard({
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 pl-3.5">
             {profile.model && <Badge variant="outline">{profile.model}</Badge>}
             <Badge
-              className="max-w-full min-w-0 whitespace-normal break-all text-left"
+              className="h-auto min-h-5 max-w-full min-w-0 overflow-visible whitespace-normal break-all text-left"
               variant="secondary"
             >
               {fallbackLabel}

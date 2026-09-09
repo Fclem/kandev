@@ -72,6 +72,8 @@ test.describe("Agent settings profile layout on mobile", () => {
 
     try {
       await testPage.goto("/settings/agents");
+      const row = testPage.getByTestId("agent-profile-row").filter({ hasText: profile.name });
+      await expect(row).toBeVisible({ timeout: 15_000 });
       await expect
         .poll(
           async () =>
@@ -79,9 +81,6 @@ test.describe("Agent settings profile layout on mobile", () => {
           { timeout: 15_000 },
         )
         .toBe(true);
-
-      const row = testPage.getByTestId("agent-profile-row").filter({ hasText: profile.name });
-      await expect(row).toBeVisible({ timeout: 15_000 });
       await expect(row.locator('[data-slot="badge"]')).toHaveText([
         profile.model,
         `fallback: ${fallbackModel}`,
@@ -97,6 +96,11 @@ test.describe("Agent settings profile layout on mobile", () => {
       expect(
         await fallbackBadge.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
       ).toBe(true);
+      expect(
+        await fallbackBadge.evaluate((element) => element.scrollHeight <= element.clientHeight + 1),
+      ).toBe(true);
+      expect(badgeBox!.y).toBeGreaterThanOrEqual(rowBox!.y - 1);
+      expect(badgeBox!.y + badgeBox!.height).toBeLessThanOrEqual(rowBox!.y + rowBox!.height + 1);
     } finally {
       await apiClient.deleteAgentProfile(profile.id, true);
     }

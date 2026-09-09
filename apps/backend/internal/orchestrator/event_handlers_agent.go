@@ -1281,9 +1281,10 @@ func (s *Service) finishQueuedMessageExecution(
 	var reselected *lifecyclePromptReselectedError
 	if errors.As(err, &reselected) {
 		if !exactReservation {
-			queuedMsg.SessionID = reselected.sessionID
+			retry := *queuedMsg
+			retry.SessionID = reselected.sessionID
 			if s.requeueLifecycleMessage(
-				ctx, queuedMsg, queuedMsg.QueuedBy, messageCoalesceKey(queuedMsg),
+				ctx, &retry, retry.QueuedBy, messageCoalesceKey(&retry),
 			) {
 				s.acknowledgeLifecycleQueueEntry(ctx, reservedSessionID, queuedMsg)
 			}
@@ -1397,7 +1398,12 @@ func (s *Service) handleQueuedMessageExecutionError(
 		case reservation != nil && reservation.identity.SessionIncarnationID != "":
 			_ = s.requeueMessageForSession(ctx, reservation.identity, queuedMsg, "workflow-auto-start-retry")
 		case manualRecovery && lifecyclePrompt:
-			s.requeueLifecycleMessage(ctx, queuedMsg, queuedMsg.QueuedBy, messageCoalesceKey(queuedMsg))
+			if s.requeueLifecycleMessage(ctx, queuedMsg, queuedMsg.QueuedBy, messageCoalesceKey(queuedMsg)) {
+				// A reserved lifecycle row remains in the queue while its retry
+				// successor is inserted. Settle the original reservation so
+				// manual recovery leaves one visible entry, not two.
+				s.acknowledgeLifecycleQueueEntry(ctx, queuedMsg.SessionID, queuedMsg)
+			}
 		case manualRecovery:
 			s.restoreQueuedMessage(ctx, queuedMsg)
 		default:

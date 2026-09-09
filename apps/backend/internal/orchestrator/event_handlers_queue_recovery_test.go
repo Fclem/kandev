@@ -19,6 +19,7 @@ import (
 func TestDispatchTakenQueuedMessageDiscardsEmptyOrdinaryEntry(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
+	seedSession(t, repo, "task-empty", "session-empty", "step1")
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 
 	_, err := svc.messageQueue.QueueMessage(ctx, "session-empty", "task-empty", "", "", messagequeue.QueuedByUser, false, nil)
@@ -125,6 +126,7 @@ func TestDispatchTakenQueuedMessageAcknowledgesEmptyLifecycleAfterCancellation(t
 func TestTakeAndMergeHandoffMessageDiscardsEmptyEntry(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
+	seedSession(t, repo, "task-empty-handoff", "session-empty-handoff", "step1")
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	_, err := svc.messageQueue.QueueMessage(ctx, "session-empty-handoff", "task-empty-handoff", "", "", messagequeue.QueuedByUser, false, nil)
 	if err != nil {

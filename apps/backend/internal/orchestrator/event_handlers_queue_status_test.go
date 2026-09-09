@@ -57,7 +57,9 @@ func TestHandleAgentReadyPassthroughPublishesStatusAfterReservation(t *testing.T
 	}
 }
 func TestPublishQueueStatusDetachesCancelledRequest(t *testing.T) {
-	svc := createTestService(setupTestRepo(t), newMockStepGetter(), newMockTaskRepo())
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "task-cancelled-status", "session-cancelled-status", "step1")
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	recorded := &recordingEventBus{}
 	svc.eventBus = recorded
 

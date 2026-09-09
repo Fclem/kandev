@@ -582,6 +582,10 @@ test.describe("Task session queue", () => {
     await session.sendMessage("/slow 10s");
     await expect(session.agentStatus()).toBeVisible({ timeout: 15_000 });
     await waitForComposerQueueMode(testPage);
+    const queueIdentity = await apiClient.getQueueSessionIdentity(
+      session.taskId,
+      session.sessionId,
+    );
 
     await queueMessages(apiClient, session.taskId, session.sessionId, [
       scriptedQueueMessage("first queued"),
@@ -602,9 +606,7 @@ test.describe("Task session queue", () => {
 
     // The first entry remains eligible while the later target is held.
     await waitForAgentMessage(apiClient, session.sessionId, "first queued");
-    await expect
-      .poll(async () => (await apiClient.getQueueStatus(session.sessionId)).count)
-      .toBe(1);
+    await expect.poll(async () => (await apiClient.getQueueStatus(queueIdentity)).count).toBe(1);
     await expect(rows).toHaveCount(1);
     await expect(testPage.getByTestId("queue-entry-text")).toContainText("second edited");
   });
@@ -626,6 +628,10 @@ test.describe("Task session queue", () => {
     await session.sendMessage("/slow 10s");
     await expect(session.agentStatus()).toBeVisible({ timeout: 15_000 });
     await waitForComposerQueueMode(testPage);
+    const queueIdentity = await apiClient.getQueueSessionIdentity(
+      session.taskId,
+      session.sessionId,
+    );
     await queueMessages(apiClient, session.taskId, session.sessionId, [
       scriptedQueueMessage("edited head dispatched"),
     ]);
@@ -638,17 +644,13 @@ test.describe("Task session queue", () => {
       .fill(scriptedQueueMessage("edited head dispatched after save"));
 
     await waitForAgentMessage(apiClient, session.sessionId, "Slow response complete");
-    await expect
-      .poll(async () => (await apiClient.getQueueStatus(session.sessionId)).count)
-      .toBe(1);
+    await expect.poll(async () => (await apiClient.getQueueStatus(queueIdentity)).count).toBe(1);
 
     const saveResponse = gateway.waitForResponse("message.queue.update");
     await testPage.getByRole("button", { name: "Save", exact: true }).click();
     await saveResponse;
     await waitForAgentMessage(apiClient, session.sessionId, "edited head dispatched after save");
-    await expect
-      .poll(async () => (await apiClient.getQueueStatus(session.sessionId)).count)
-      .toBe(0);
+    await expect.poll(async () => (await apiClient.getQueueStatus(queueIdentity)).count).toBe(0);
     await expect(testPage.getByTestId("queue-entry")).toHaveCount(0);
   });
 

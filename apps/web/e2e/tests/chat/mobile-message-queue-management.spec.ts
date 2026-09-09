@@ -118,8 +118,9 @@ test("mobile edit queued message retains target while earlier backlog drains", a
 }) => {
   test.setTimeout(120_000);
   const { session, taskId, sessionId } = await seedBusyQueueTask(testPage, apiClient, seedData);
-  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("mobile first queued"));
-  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("mobile second queued"));
+  const queueIdentity = await apiClient.getQueueSessionIdentity(taskId, sessionId);
+  await apiClient.queueMessage(queueIdentity, scriptedQueueMessage("mobile first queued"));
+  await apiClient.queueMessage(queueIdentity, scriptedQueueMessage("mobile second queued"));
 
   const chat = session.activeChat();
   const panel = chat.getByTestId("queued-ghost-list");
@@ -147,7 +148,8 @@ test("mobile saving the held head after its turn completes resumes Auto-run", as
 }) => {
   test.setTimeout(120_000);
   const { session, taskId, sessionId } = await seedBusyQueueTask(testPage, apiClient, seedData);
-  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("mobile edited head"));
+  const queueIdentity = await apiClient.getQueueSessionIdentity(taskId, sessionId);
+  await apiClient.queueMessage(queueIdentity, scriptedQueueMessage("mobile edited head"));
 
   const chat = session.activeChat();
   const panel = chat.getByTestId("queued-ghost-list");
@@ -202,8 +204,9 @@ test("mobile edit queued message reconciles after a session switch", async ({
   );
 
   const { session, taskId, sessionId } = await seedBusyQueueTask(testPage, apiClient, seedData);
-  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("switch first"));
-  await apiClient.queueMessage(taskId, sessionId, scriptedQueueMessage("switch second"));
+  const queueIdentity = await apiClient.getQueueSessionIdentity(taskId, sessionId);
+  await apiClient.queueMessage(queueIdentity, scriptedQueueMessage("switch first"));
+  await apiClient.queueMessage(queueIdentity, scriptedQueueMessage("switch second"));
 
   const chat = session.activeChat();
   const panel = chat.getByTestId("queued-ghost-list");

@@ -135,7 +135,9 @@ func TestAdmissionAttachmentCleanupRemovesEntryAfterRestart(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		_, getErr := restartedQueue.GetEntry(ctx, entry.SessionID, entry.ID)
-		return errors.Is(getErr, messagequeue.ErrEntryNotFound) && claimer.released.Load() == 1
+		cleanups, listErr := restartedQueue.ListAttachmentCleanups(ctx)
+		return errors.Is(getErr, messagequeue.ErrEntryNotFound) &&
+			claimer.released.Load() == 1 && listErr == nil && len(cleanups) == 0
 	}, time.Second, 10*time.Millisecond)
 	cleanups, err := restartedQueue.ListAttachmentCleanups(ctx)
 	require.NoError(t, err)
@@ -408,7 +410,9 @@ func TestAdmissionCleanupFollowsTransferredEntryAfterRestart(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		_, getErr := restartedQueue.GetEntry(ctx, destinationSessionID, entry.ID)
-		return errors.Is(getErr, messagequeue.ErrEntryNotFound) && claimer.releases.Load() == 1
+		cleanups, listErr := restartedQueue.ListAttachmentCleanups(ctx)
+		return errors.Is(getErr, messagequeue.ErrEntryNotFound) &&
+			claimer.releases.Load() == 1 && listErr == nil && len(cleanups) == 0
 	}, time.Second, 10*time.Millisecond)
 	cleanups, err := restartedQueue.ListAttachmentCleanups(ctx)
 	require.NoError(t, err)

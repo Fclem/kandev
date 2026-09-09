@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { QueueOperationToken } from "@/lib/state/slices/session/types";
 
 const queueApiMock = vi.hoisted(() => ({
   QueueEntryNotFoundError: class QueueEntryNotFoundError extends Error {},
@@ -13,17 +14,30 @@ const queueApiMock = vi.hoisted(() => ({
   reorderQueuedEntries: vi.fn(),
   sendQueuedNow: vi.fn(),
   setQueueAutoRun: vi.fn(),
+  setQueueAutoMerge: vi.fn(),
 }));
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     selector({
-      queue: { bySessionId: {}, metaBySessionId: {}, isLoading: {} },
+      queue: {
+        bySessionId: {},
+        metaBySessionId: {},
+        activeOperationBySessionId: {} as Record<string, QueueOperationToken>,
+      },
       connection: { status: "connected" },
-      taskSessions: { items: {} },
+      taskSessions: {
+        items: {
+          [SESSION_ID]: { task_id: "task-retry", queue_incarnation_id: "incarnation-retry" },
+        },
+      },
       setQueueEntries: vi.fn(),
       removeQueueEntry: vi.fn(),
-      setQueueLoading: vi.fn(),
+      beginQueueOperation: vi.fn().mockReturnValue({
+        sessionIncarnationId: "incarnation-retry",
+        generation: 1,
+      }),
+      finishQueueOperation: vi.fn(),
     }),
 }));
 vi.mock("@/hooks/use-foreground-refresh", () => ({ useForegroundRefresh: vi.fn() }));
@@ -34,7 +48,14 @@ import { useQueue } from "./use-queue";
 const SESSION_ID = "retry-session";
 
 beforeEach(() => {
-  queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
+  queueApiMock.getQueueStatus.mockResolvedValue({
+    task_id: "task-retry",
+    session_id: SESSION_ID,
+    session_incarnation_id: "incarnation-retry",
+    entries: [],
+    count: 0,
+    max: 10,
+  });
   queueApiMock.updateQueuedMessage.mockResolvedValue({ entry_id: "q-1", target_revision: 2 });
 });
 

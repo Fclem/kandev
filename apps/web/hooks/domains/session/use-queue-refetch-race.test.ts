@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { QueuedMessage } from "@/lib/state/slices/session/types";
+import type { QueueOperationToken, QueuedMessage } from "@/lib/state/slices/session/types";
 
 const queueApiMock = vi.hoisted(() => ({
   QueueEntryNotFoundError: class QueueEntryNotFoundError extends Error {},
@@ -14,19 +14,26 @@ const queueApiMock = vi.hoisted(() => ({
   reorderQueuedEntries: vi.fn(),
   sendQueuedNow: vi.fn(),
   setQueueAutoRun: vi.fn(),
+  setQueueAutoMerge: vi.fn(),
 }));
 
 type MockState = {
   queue: {
     bySessionId: Record<string, QueuedMessage[]>;
     metaBySessionId: Record<string, { count: number; max: number }>;
-    isLoading: Record<string, boolean>;
+    activeOperationBySessionId: Record<string, QueueOperationToken>;
   };
   connection: { status: string };
-  taskSessions: { items: Record<string, { cancellation_pending?: boolean }> };
+  taskSessions: {
+    items: Record<
+      string,
+      { task_id?: string; queue_incarnation_id?: string; cancellation_pending?: boolean }
+    >;
+  };
   setQueueEntries: ReturnType<typeof vi.fn>;
   removeQueueEntry: ReturnType<typeof vi.fn>;
-  setQueueLoading: ReturnType<typeof vi.fn>;
+  beginQueueOperation: ReturnType<typeof vi.fn>;
+  finishQueueOperation: ReturnType<typeof vi.fn>;
 };
 
 let mockState: MockState;
@@ -41,6 +48,11 @@ import { useQueue } from "./use-queue";
 
 const SESSION_ID = "sess-refetch";
 const TASK_ID = "task-refetch";
+const IDENTITY = {
+  task_id: TASK_ID,
+  session_id: SESSION_ID,
+  session_incarnation_id: "incarnation-refetch",
+};
 
 function entry(id: string, content = id): QueuedMessage {
   return {
@@ -56,19 +68,30 @@ function entry(id: string, content = id): QueuedMessage {
 
 function resetMockState() {
   mockState = {
-    queue: { bySessionId: {}, metaBySessionId: {}, isLoading: {} },
+    queue: { bySessionId: {}, metaBySessionId: {}, activeOperationBySessionId: {} },
     connection: { status: "connected" },
-    taskSessions: { items: {} },
+    taskSessions: {
+      items: {
+        [SESSION_ID]: {
+          task_id: TASK_ID,
+          queue_incarnation_id: IDENTITY.session_incarnation_id,
+        },
+      },
+    },
     setQueueEntries: vi.fn(),
     removeQueueEntry: vi.fn(),
-    setQueueLoading: vi.fn(),
+    beginQueueOperation: vi.fn().mockReturnValue({
+      sessionIncarnationId: IDENTITY.session_incarnation_id,
+      generation: 1,
+    }),
+    finishQueueOperation: vi.fn(),
   };
 }
 
 describe("queue refetch lifecycle fencing", () => {
   beforeEach(() => {
     resetMockState();
-    queueApiMock.getQueueStatus.mockResolvedValue({ entries: [], count: 0, max: 10 });
+    queueApiMock.getQueueStatus.mockResolvedValue({ ...IDENTITY, entries: [], count: 0, max: 10 });
   });
 
   afterEach(() => {
@@ -83,6 +106,7 @@ describe("queue refetch lifecycle fencing", () => {
       max: number;
     }>();
     queueApiMock.getQueueStatus.mockReturnValueOnce(pendingSnapshot.promise).mockResolvedValueOnce({
+      ...IDENTITY,
       entries: [entry("new-entry", "new snapshot")],
       count: 1,
       max: 10,
@@ -99,12 +123,13 @@ describe("queue refetch lifecycle fencing", () => {
         SESSION_ID,
         [expect.objectContaining({ id: "new-entry" })],
         expect.anything(),
+        expect.anything(),
       ),
     );
     mockState.setQueueEntries.mockClear();
 
     await act(async () => {
-      pendingSnapshot.resolve({ entries: [entry("stale-entry")], count: 1, max: 10 });
+      pendingSnapshot.resolve({ ...IDENTITY, entries: [entry("stale-entry")], count: 1, max: 10 });
       await Promise.resolve();
     });
 
@@ -135,7 +160,12 @@ describe("queue refetch lifecycle fencing", () => {
     second.unmount();
 
     await act(async () => {
-      pendingSnapshot.resolve({ entries: [entry("surviving-entry")], count: 1, max: 10 });
+      pendingSnapshot.resolve({
+        ...IDENTITY,
+        entries: [entry("surviving-entry")],
+        count: 1,
+        max: 10,
+      });
       await refetchPromise;
     });
 
@@ -143,8 +173,9 @@ describe("queue refetch lifecycle fencing", () => {
       SESSION_ID,
       [expect.objectContaining({ id: "surviving-entry" })],
       expect.anything(),
+      expect.anything(),
     );
-    expect(mockState.setQueueLoading).toHaveBeenLastCalledWith(SESSION_ID, false);
+    expect(mockState.finishQueueOperation).toHaveBeenCalled();
     first.unmount();
   });
 

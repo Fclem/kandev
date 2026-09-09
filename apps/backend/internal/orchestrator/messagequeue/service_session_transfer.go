@@ -69,6 +69,7 @@ func (s *Service) TransferSessionWithDurableAttachmentPreparation(
 	}
 	err := s.transferSession(
 		transferCtx,
+		taskID,
 		oldSessionID,
 		newSessionID,
 		state.operationID,

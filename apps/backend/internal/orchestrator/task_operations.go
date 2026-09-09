@@ -3535,8 +3535,11 @@ func (s *Service) DeleteSession(ctx context.Context, sessionID string) error {
 	s.clearTurnActivity(sessionID)
 
 	// Queue rows and per-session policy are removed atomically with the task
-	// session row. Publish only the task-scoped recount after commit.
-	s.publishTaskQueueStatusEvent(ctx, taskID, "")
+	// session row. The repository callback publishes a session-scoped event
+	// when it owns the purge; focused compositions use the task-scoped fallback.
+	if !s.sessionQueuePurgeNotifierRegistered {
+		s.publishTaskQueueStatusEvent(ctx, taskID, "")
+	}
 
 	// Auto-promote another session if we deleted the primary
 	if wasPrimary {

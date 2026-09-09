@@ -126,6 +126,14 @@ func (r *transferFailureQueueRepository) TransferSession(context.Context, string
 	return r.err
 }
 
+func (r *transferFailureQueueRepository) TransferSessionIdentities(
+	context.Context,
+	messagequeue.QueueSessionIdentity,
+	messagequeue.QueueSessionIdentity,
+) error {
+	return r.err
+}
+
 func TestCreateNewSessionForStepFailsClosedWhenQueueTransferFails(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
@@ -159,7 +167,7 @@ func TestCreateNewSessionForStepFailsClosedWhenQueueTransferFails(t *testing.T) 
 	svc := createTestServiceWithScheduler(repo, newMockStepGetter(), taskRepo, agentMgr)
 	transferErr := errors.New("queue transfer failed")
 	svc.messageQueue = messagequeue.NewService(
-		&transferFailureQueueRepository{Repository: messagequeue.NewMemoryRepository(), err: transferErr},
+		&transferFailureQueueRepository{Repository: newAuthoritativeMemoryRepository(repo), err: transferErr},
 		messagequeue.DefaultMaxPerSession,
 		testLogger(),
 	)

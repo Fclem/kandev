@@ -3167,7 +3167,7 @@ func (s *Service) SnapshotSessionForIdentity(ctx context.Context, identity Queue
 // old session — a transfer that no-ops without a signal would let the workflow
 // step move forward while the queue sticks behind.
 func (s *Service) TransferSession(ctx context.Context, oldSessionID, newSessionID string) error {
-	return s.transferSession(ctx, oldSessionID, newSessionID, "", nil, nil)
+	return s.transferSession(ctx, "", oldSessionID, newSessionID, "", nil, nil)
 }
 
 // TransferSessionWithPreparation runs preparation while both session
@@ -3181,11 +3181,12 @@ func (s *Service) TransferSessionWithPreparation(
 	prepare func(context.Context) error,
 	rollback func(context.Context) error,
 ) error {
-	return s.transferSession(ctx, oldSessionID, newSessionID, "", prepare, rollback)
+	return s.transferSession(ctx, "", oldSessionID, newSessionID, "", prepare, rollback)
 }
 
 func (s *Service) transferSession(
 	ctx context.Context,
+	taskID string,
 	oldSessionID, newSessionID, operationID string,
 	prepare func(context.Context) error,
 	rollback func(context.Context) error,
@@ -3209,8 +3210,8 @@ func (s *Service) transferSession(
 				return rollbackPreparation(err)
 			}
 		}
-		if err := s.transferRepositorySession(
-			admittedCtx, oldSessionID, newSessionID, operationID,
+		if err := s.transferRepositorySessionForTask(
+			admittedCtx, taskID, oldSessionID, newSessionID, operationID,
 		); err != nil {
 			return rollbackPreparation(err)
 		}
@@ -3228,6 +3229,31 @@ func (s *Service) transferSession(
 		zap.String("from_session_id", oldSessionID),
 		zap.String("to_session_id", newSessionID))
 	return nil
+}
+
+func (s *Service) transferRepositorySessionForTask(
+	ctx context.Context,
+	taskID, oldSessionID, newSessionID, operationID string,
+) error {
+	// Transfers that do not have a durable compensation record can use the
+	// immutable session identities. This fences a workflow handoff to one task
+	// and lets repositories reject a stale or cross-task destination. Durable
+	// transfers keep the owned-operation path because it also carries the
+	// compensation lease and operation token.
+	if taskID != "" && operationID == "" {
+		source, sourceErr := s.repo.ResolveSessionIdentity(ctx, taskID, oldSessionID)
+		if sourceErr != nil && !errors.Is(sourceErr, ErrSessionIdentityMismatch) {
+			return sourceErr
+		}
+		destination, destinationErr := s.repo.ResolveSessionIdentity(ctx, taskID, newSessionID)
+		if destinationErr != nil && !errors.Is(destinationErr, ErrSessionIdentityMismatch) {
+			return destinationErr
+		}
+		if sourceErr == nil && destinationErr == nil {
+			return s.repo.TransferSessionIdentities(ctx, source, destination)
+		}
+	}
+	return s.transferRepositorySession(ctx, oldSessionID, newSessionID, operationID)
 }
 
 type attachmentCleanupRepository interface {

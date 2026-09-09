@@ -243,14 +243,24 @@ func (s *Service) publishTaskQueueStatusEventSnapshot(ctx context.Context, taskI
 		queueStatusScopeKey: queueStatusScopeTask,
 	}
 	if sessionID != "" && s.messageQueue != nil {
-		queueStatus, err := s.queueStatusSnapshot(ctx, sessionID)
-		if err != nil {
-			s.logger.Warn("snapshot task queue status event",
-				zap.String(metaKeyTaskID, taskID),
-				zap.String(metaKeySessionID, sessionID),
-				zap.Error(err))
-		} else {
+		if s.repo == nil {
+			// Focused adapters can provide only the queue service. Use its
+			// authoritative in-memory snapshot when no task repository is
+			// available to resolve the session identity.
+			queueStatus := s.messageQueue.GetStatus(ctx, sessionID)
+			queueStatus.TaskID = taskID
+			queueStatus.SessionID = sessionID
 			eventData = queueStatusEventData(queueStatus)
+		} else {
+			queueStatus, err := s.queueStatusSnapshot(ctx, sessionID)
+			if err != nil {
+				s.logger.Warn("snapshot task queue status event",
+					zap.String(metaKeyTaskID, taskID),
+					zap.String(metaKeySessionID, sessionID),
+					zap.Error(err))
+			} else {
+				eventData = queueStatusEventData(queueStatus)
+			}
 		}
 	}
 	s.logger.Debug("publishing task queue status changed event",
@@ -275,7 +285,7 @@ func (s *Service) requeueMessage(ctx context.Context, queuedMsg *messagequeue.Qu
 	if queuedMsg.QueuedBy != "" && coalesceKey != "" {
 		queuedBy = queuedMsg.QueuedBy
 	}
-	if isLifecycleAutomationMessage(queuedMsg) {
+	if isLifecycleAutomationMessage(queuedMsg) && queuedMsg.IsReservedLifecycleDelivery() {
 		s.requeueLifecycleMessage(ctx, queuedMsg, queuedBy, coalesceKey)
 		return
 	}

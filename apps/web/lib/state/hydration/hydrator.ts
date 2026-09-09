@@ -26,6 +26,7 @@ import {
   readMcpAttachmentHistory,
   shouldReplaceMcpAttachmentHistory,
 } from "@/lib/state/slices/session-runtime/mcp-attachment-reconciliation";
+import { normalizeAgentProfiles } from "@/lib/api/domains/agent-profile-normalize";
 import { preserveOmittedExecutorFields } from "@/lib/kanban/map-task";
 import { mergeStepOrderRevisions } from "@/lib/kanban/workflow-step-order";
 import { deepMerge, mergeSessionMap, mergeLoadingState } from "./merge-strategies";
@@ -165,6 +166,12 @@ function hydrateKanbanAndWorkspace(draft: Draft<AppState>, state: HydrationState
 function hydrateSettings(draft: Draft<AppState>, state: HydrationState): void {
   if (state.executors) deepMerge(draft.executors, state.executors);
   if (state.agentDiscovery) deepMerge(draft.agentDiscovery, state.agentDiscovery);
+  if (state.settingsAgents) {
+    deepMerge(draft.settingsAgents, {
+      ...state.settingsAgents,
+      items: state.settingsAgents.items.map(normalizeAgentProfiles),
+    });
+  }
   mergeWithLoading(draft.availableAgents, state.availableAgents);
   const preserveLiveAgentProfiles =
     (state.agentProfiles?.version ?? 0) < draft.agentProfiles.version;

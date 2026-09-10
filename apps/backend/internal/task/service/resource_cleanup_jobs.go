@@ -798,7 +798,11 @@ func (s *Service) StartPreparedTaskResourceCleanup(ctx context.Context, operatio
 	for {
 		job, err := s.resourceCleanups.GetTaskResourceCleanupJobByOperationID(transitionCtx, operationID)
 		if err == nil {
-			err = s.activatePreparedTaskResourceCleanupJob(transitionCtx, job)
+			if job == nil {
+				err = fmt.Errorf("prepared cleanup job %q not found", operationID)
+			} else {
+				err = s.activatePreparedTaskResourceCleanupJob(transitionCtx, job)
+			}
 			if err == nil {
 				return nil
 			}

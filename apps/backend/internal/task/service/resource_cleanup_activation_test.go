@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -62,6 +63,33 @@ func (r *transientStartCleanupRepository) StartPreparedTaskResourceCleanupJob(
 	}
 	r.mu.Unlock()
 	return r.TaskResourceCleanupRepository.StartPreparedTaskResourceCleanupJob(ctx, id)
+}
+
+type nilPreparedCleanupLookupRepository struct {
+	repository.TaskResourceCleanupRepository
+}
+
+func (nilPreparedCleanupLookupRepository) GetTaskResourceCleanupJobByOperationID(
+	context.Context, string,
+) (*models.TaskResourceCleanupJob, error) {
+	return nil, nil
+}
+
+func TestStartPreparedCleanupReturnsErrorWhenJobLookupIsEmpty(t *testing.T) {
+	taskSvc, _ := setupOfficeTest(t)
+	taskSvc.resourceCleanups = nilPreparedCleanupLookupRepository{
+		TaskResourceCleanupRepository: taskSvc.resourceCleanups,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	err := taskSvc.StartPreparedTaskResourceCleanup(ctx, "delete:missing")
+	if err == nil {
+		t.Fatal("StartPreparedTaskResourceCleanup unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "prepared cleanup job") {
+		t.Fatalf("error = %v, want missing prepared cleanup job", err)
+	}
 }
 
 type blockingTaskMutationRepository struct {

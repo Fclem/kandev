@@ -426,8 +426,13 @@ func (h *Handlers) handleDeleteTask(ctx context.Context, msg *ws.Message) (*ws.M
 	// preserves shared-environment ownership before the task row is removed.
 	if h.handoffSvc != nil {
 		if _, err := h.handoffSvc.DeleteTaskTree(ctx, taskID, false); err != nil {
-			h.logger.Error("failed to delete task", zap.Error(err))
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to delete task", nil)
+			var postCommitErr *service.CascadePostCommitError
+			if !errors.As(err, &postCommitErr) {
+				h.logger.Error("failed to delete task", zap.Error(err))
+				return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to delete task", nil)
+			}
+			h.logger.Warn("task deleted but post-commit housekeeping failed",
+				zap.String("task_id", taskID), zap.Error(err))
 		}
 		return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})
 	}
@@ -458,8 +463,13 @@ func (h *Handlers) handleArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 	if h.handoffSvc != nil {
 		out, err := h.handoffSvc.ArchiveTaskTree(ctx, taskID, false)
 		if err != nil {
-			h.logger.Error("failed to archive task", zap.Error(err))
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to archive task", nil)
+			var postCommitErr *service.CascadePostCommitError
+			if !errors.As(err, &postCommitErr) {
+				h.logger.Error("failed to archive task", zap.Error(err))
+				return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to archive task", nil)
+			}
+			h.logger.Warn("task archived but post-commit housekeeping failed",
+				zap.String("task_id", taskID), zap.Error(err))
 		}
 		response := map[string]interface{}{"success": true}
 		if out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0 {

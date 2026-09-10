@@ -77,7 +77,6 @@ describe("isMessageRowRendered", () => {
       { type: "message", message: { id: "direct-prompt" } },
     ] as unknown as RenderItem[];
 
-    expect(typeof isMessageRowRendered).toBe("function");
     expect(isMessageRowRendered(items, "grouped-prompt")).toBe(false);
     expect(isMessageRowRendered(items, "direct-prompt")).toBe(true);
   });

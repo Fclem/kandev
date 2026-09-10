@@ -1049,6 +1049,9 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     groupedItems,
     isInitialMessagesLoading,
   );
+  // Kanban previews intentionally pass `isVisible=false` so they do not
+  // advance the read cursor, but their transcript is rendered in a visible
+  // non-Dockview host. Keep read visibility separate from scroll geometry.
   const transcriptIsVisible = panelId === null || isVisible;
   const dockviewTargetMessageId = useDockviewStore(
     (state) => state.scrollTarget?.messageId ?? null,

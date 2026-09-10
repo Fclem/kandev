@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/kandev/kandev/internal/task/archivecascade"
 	"github.com/kandev/kandev/internal/task/models"
 	taskrepo "github.com/kandev/kandev/internal/task/repository"
 	"github.com/kandev/kandev/internal/worktree"
@@ -351,16 +352,17 @@ func (s *Service) preparedTaskCleanupMutationCommitted(
 		return false, nil
 	}
 }
-
 func (s *Service) processTaskResourceCleanupJob(ctx context.Context, id string) error {
-	candidate, err := s.resourceCleanups.GetTaskResourceCleanupJob(ctx, id)
+	operationCtx, cancel := context.WithDeadline(ctx, archivecascade.ArchiveDeadline(ctx))
+	defer cancel()
+	candidate, err := s.resourceCleanups.GetTaskResourceCleanupJob(operationCtx, id)
 	if err != nil {
 		return err
 	}
-	runCtx, run := s.registerTaskResourceCleanupRun(ctx, candidate)
+	runCtx, run := s.registerTaskResourceCleanupRun(operationCtx, candidate)
 	defer s.finishTaskResourceCleanupRun(run)
 
-	claimed, err := s.resourceCleanups.MarkTaskResourceCleanupJobRunning(ctx, id)
+	claimed, err := s.resourceCleanups.MarkTaskResourceCleanupJobRunning(operationCtx, id)
 	if err != nil || !claimed {
 		return err
 	}
@@ -619,7 +621,7 @@ func (s *Service) retryTaskResourceCleanupJob(ctx context.Context, job *models.T
 		next := time.Now().UTC().Add(taskResourceCleanupRetryDelayForAttempt(job.Attempts))
 		nextAttempt = &next
 	}
-	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
+	transitionCtx, cancel := detachedCleanupTransitionContext(context.WithoutCancel(ctx))
 	defer cancel()
 	_, err := s.resourceCleanups.CompleteClaimedTaskResourceCleanupJob(
 		transitionCtx, job.ID, job.Attempts, state, cleanupErr.Error(), nextAttempt,

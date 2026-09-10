@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kandev/kandev/internal/task/models"
 )
@@ -60,5 +61,40 @@ func TestDurableDeleteCleanupRemovesTaskAttachments(t *testing.T) {
 	}
 	if _, err := os.Stat(attachmentPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("attachment bytes error = %v, want os.ErrNotExist", err)
+	}
+}
+
+func TestRetryTaskResourceCleanupPersistsAfterDeadlineExpiry(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	ctx := context.Background()
+	job := &models.TaskResourceCleanupJob{
+		ID: "job-expired-retry", OperationID: "delete:expired-retry",
+		TaskID: "task-expired-retry", Trigger: models.TaskResourceCleanupTriggerDelete,
+		State: models.TaskResourceCleanupStatePending, ResourceSnapshot: `{}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(ctx, job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+	claimed, err := repo.MarkTaskResourceCleanupJobRunning(ctx, job.ID)
+	if err != nil || !claimed {
+		t.Fatalf("MarkTaskResourceCleanupJobRunning = %v, %v", claimed, err)
+	}
+	job, err = repo.GetTaskResourceCleanupJob(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJob: %v", err)
+	}
+
+	expiredCtx, cancel := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+	defer cancel()
+	cleanupErr := errors.New("cleanup deadline exceeded")
+	if err := taskSvc.retryTaskResourceCleanupJob(expiredCtx, job, cleanupErr); !errors.Is(err, cleanupErr) {
+		t.Fatalf("retryTaskResourceCleanupJob error = %v, want cleanup error", err)
+	}
+	got, err := repo.GetTaskResourceCleanupJob(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("reload cleanup job: %v", err)
+	}
+	if got.State != models.TaskResourceCleanupStateRetryWait {
+		t.Fatalf("cleanup state = %q, want retry_wait", got.State)
 	}
 }

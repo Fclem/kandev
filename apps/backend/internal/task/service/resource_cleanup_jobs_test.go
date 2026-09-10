@@ -1098,6 +1098,29 @@ func TestCancelPreparedTaskResourceCleanupIgnoresCallerCancellation(t *testing.T
 	}
 }
 
+func TestCancelPreparedTaskResourceCleanupRetainsExpiredDeadline(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	operationID := "cascade_cancel:expired-deadline"
+	if err := taskSvc.PrepareTaskResourceCleanup(context.Background(), "task-expired-deadline",
+		models.TaskResourceCleanupTriggerCascadeDelete, operationID, true); err != nil {
+		t.Fatalf("PrepareTaskResourceCleanup: %v", err)
+	}
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Millisecond))
+	defer cancel()
+	err := taskSvc.CancelPreparedTaskResourceCleanup(ctx, operationID)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("CancelPreparedTaskResourceCleanup error = %v, want deadline exceeded", err)
+	}
+	job, err := repo.GetTaskResourceCleanupJobByOperationID(context.Background(), operationID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJobByOperationID: %v", err)
+	}
+	if job.State != models.TaskResourceCleanupStatePrepared {
+		t.Fatalf("cleanup state = %q, want prepared after expired transition", job.State)
+	}
+}
+
 func TestRetryTaskResourceCleanupJobPersistsAfterRunContextCancellation(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	ctx := context.Background()

@@ -2490,6 +2490,17 @@ func (s *Service) updateTaskWorkspaceMetadata(ctx context.Context, task *models.
 	return s.tasks.UpdateTask(ctx, task)
 }
 
+func waitForCancellationRetry(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 // finalizeCancelledSessions finalizes an archived task's active sessions in
 // the DB and publishes a session.state_changed event for each one actually
 // cancelled. The async cleanup that follows tears down the agent processes;
@@ -2526,8 +2537,8 @@ func (s *Service) finalizeCancelledSessions(
 		if cancelErr == nil {
 			break
 		}
-		if attempt < maxCancelAttempts {
-			time.Sleep(cancelRetryBackoff)
+		if attempt < maxCancelAttempts && !waitForCancellationRetry(ctx, cancelRetryBackoff) {
+			return
 		}
 	}
 	if cancelErr != nil {

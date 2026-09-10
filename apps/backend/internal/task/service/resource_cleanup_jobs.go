@@ -621,7 +621,7 @@ func (s *Service) retryTaskResourceCleanupJob(ctx context.Context, job *models.T
 		next := time.Now().UTC().Add(taskResourceCleanupRetryDelayForAttempt(job.Attempts))
 		nextAttempt = &next
 	}
-	transitionCtx, cancel := detachedCleanupTransitionContext(context.WithoutCancel(ctx))
+	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
 	defer cancel()
 	_, err := s.resourceCleanups.CompleteClaimedTaskResourceCleanupJob(
 		transitionCtx, job.ID, job.Attempts, state, cleanupErr.Error(), nextAttempt,
@@ -841,7 +841,7 @@ func (s *Service) CancelPreparedTaskResourceCleanup(ctx context.Context, operati
 	if !ok {
 		return errors.New("cleanup repository lacks fenced cancellation")
 	}
-	transitionCtx, cancel := detachedCleanupTransitionContext(context.WithoutCancel(ctx))
+	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
 	defer cancel()
 	job, err := s.resourceCleanups.GetTaskResourceCleanupJobByOperationID(transitionCtx, operationID)
 	if err != nil {

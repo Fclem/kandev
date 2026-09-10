@@ -2419,6 +2419,22 @@ func TestService_ArchiveTaskRetriesTransientSessionCancellationFailure(t *testin
 	}
 }
 
+func TestFinalizeCancelledSessionsStopsRetryAtDeadline(t *testing.T) {
+	flaky := &flakyCancelSessionRepository{failuresLeft: 3}
+	svc, _, _ := createTestServiceWithSessionsRepo(t, func(repo *sqliterepo.Repository) repository.SessionRepository {
+		flaky.Repository = repo
+		return flaky
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	svc.finalizeCancelledSessions(ctx, "task-deadline", nil, time.Now().Add(20*time.Millisecond))
+
+	if got := flaky.callCount(); got != 1 {
+		t.Fatalf("CancelActiveTaskSessionsByTaskID call count = %d, want 1 after deadline", got)
+	}
+}
+
 // TestService_ArchiveTaskPublishesEventsForAllCancelledSessions is the
 // regression test for the shared-deadline bug: publishSessionsCancelled used
 // to run its per-session Publish call under one deadline shared across the

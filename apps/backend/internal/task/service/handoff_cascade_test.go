@@ -78,6 +78,9 @@ type fakeWSGroupRepoCascade struct {
 	releaseCalls []struct {
 		groupID, taskID, reason, cascadeID string
 	}
+	restoreCalls []struct {
+		taskID, cascadeID string
+	}
 	cleanupStatuses map[string]string
 	// allMembers records every member that ever joined the group
 	// (including released ones). Tests opt-in by populating it
@@ -285,9 +288,9 @@ func TestDeleteTaskTree_MembershipReleaseFailureCancelsEveryPreparedCleanup(t *t
 }
 
 func (f *fakeWSGroupRepoCascade) RestoreWorkspaceGroupMemberByCascade(_ context.Context, taskID, cascadeID string) error {
-	// no-op for these tests
-	_ = taskID
-	_ = cascadeID
+	f.restoreCalls = append(f.restoreCalls, struct {
+		taskID, cascadeID string
+	}{taskID, cascadeID})
 	return nil
 }
 
@@ -707,6 +710,29 @@ func TestDeleteTaskTree_DoesNotFinalizeSessionWhenDeleteFails(t *testing.T) {
 	}
 	if len(sessions.cancelCalls) != 0 {
 		t.Fatalf("cancel calls = %v, want none after failed delete", sessions.cancelCalls)
+	}
+}
+
+func TestDeleteTaskTreeRestoresMembershipAfterDeleteFailure(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	groups := newCascadeWSGroupRepo()
+	groups.groups["group-1"] = &orchmodels.WorkspaceGroup{ID: "group-1", WorkspaceID: "ws-1"}
+	groups.members["group-1"] = map[string]string{"root": orchmodels.WorkspaceMemberRoleOwner}
+	deleteErr := errors.New("delete unavailable")
+	svc := NewHandoffService(&deleteErrorCascadeRepo{
+		fakeDeleteRepo: &fakeDeleteRepo{fakeCascadeRepo: newCascadeRepo(tasks)},
+		err:            deleteErr,
+	}, nil, nil, nil, groups, nil)
+
+	if _, err := svc.DeleteTaskTree(context.Background(), "root", false); !errors.Is(err, deleteErr) {
+		t.Fatalf("delete error = %v, want %v", err, deleteErr)
+	}
+	if len(groups.restoreCalls) != 1 || groups.restoreCalls[0].taskID != "root" {
+		t.Fatalf("membership restore calls = %v, want root restore", groups.restoreCalls)
+	}
+	if groups.restoreCalls[0].cascadeID == "" {
+		t.Fatal("membership restore did not retain cascade identity")
 	}
 }
 

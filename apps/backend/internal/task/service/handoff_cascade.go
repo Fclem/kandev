@@ -461,8 +461,10 @@ func (s *HandoffService) deleteTaskTree(
 	groupIDs, err := s.releaseMembershipsForCascade(postDeleteCtx, all, orchmodels.WorkspaceReleaseReasonDeleted, cascadeID)
 	if err != nil {
 		cancelErr := s.cancelCascadeResourceCleanupRange(deleteCompensationCtx, all, cleanupOps)
-		rollbackErr := s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(deleteCompensationCtx, ownershipTransfers, err)
-		return out, errors.Join(err, rollbackErr, cancelErr)
+		rollbackErr := s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(
+			deleteCompensationCtx, ownershipTransfers, err)
+		restoreErr := s.restoreReleasedMemberships(deleteCompensationCtx, all, cascadeID, nil)
+		return out, errors.Join(err, rollbackErr, cancelErr, restoreErr)
 	}
 	out.ReleasedGroupIDs = groupIDs
 
@@ -478,7 +480,10 @@ func (s *HandoffService) deleteTaskTree(
 		out, ownershipTransfers, vacatedStepIDs, reason,
 	)
 	if err != nil {
-		return out, err
+		restoreErr := s.restoreReleasedMemberships(
+			deleteCompensationCtx, all, cascadeID, out.ArchivedTaskIDs,
+		)
+		return out, errors.Join(err, restoreErr)
 	}
 
 	for _, gid := range groupIDs {
@@ -487,6 +492,30 @@ func (s *HandoffService) deleteTaskTree(
 		}
 	}
 	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
+}
+func (s *HandoffService) restoreReleasedMemberships(
+	ctx context.Context,
+	taskIDs []string,
+	cascadeID string,
+	deletedTaskIDs []string,
+) error {
+	if s.wsGroups == nil || cascadeID == "" {
+		return nil
+	}
+	deleted := make(map[string]struct{}, len(deletedTaskIDs))
+	for _, taskID := range deletedTaskIDs {
+		deleted[taskID] = struct{}{}
+	}
+	var errs []error
+	for _, taskID := range taskIDs {
+		if _, ok := deleted[taskID]; ok {
+			continue
+		}
+		if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(ctx, taskID, cascadeID); err != nil {
+			errs = append(errs, fmt.Errorf("restore membership for task %s: %w", taskID, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *HandoffService) deleteTaskTreeRows(

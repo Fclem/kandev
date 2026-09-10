@@ -845,13 +845,15 @@ func (s *HandoffService) finalizeActiveSessions(
 // The cascade ID scope prevents resurrection of unrelated archive rows.
 func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (*CascadeOutcome, error) {
 	deadline := archivecascade.ArchiveDeadline(ctx)
-	if err := s.authorizeTask(ctx, rootID); err != nil {
+	unarchiveCtx, cancelUnarchive := context.WithDeadline(ctx, deadline)
+	defer cancelUnarchive()
+	if err := s.authorizeTask(unarchiveCtx, rootID); err != nil {
 		return nil, err
 	}
 	if rootID == "" {
 		return nil, errors.New("rootID is required")
 	}
-	root, err := s.tasks.GetTask(ctx, rootID)
+	root, err := s.tasks.GetTask(unarchiveCtx, rootID)
 	if err != nil {
 		return nil, err
 	}

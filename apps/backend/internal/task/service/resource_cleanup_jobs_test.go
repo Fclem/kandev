@@ -108,6 +108,35 @@ type blockingResumeCleanupRepository struct {
 	release chan struct{}
 }
 
+type workspaceDeleteCancellationRecorder struct {
+	repository.TaskResourceCleanupRepository
+	cancelledIDs []string
+	completedIDs []string
+}
+
+func (r *workspaceDeleteCancellationRecorder) CancelTaskResourceCleanupJobIfPending(
+	ctx context.Context,
+	id string,
+) (bool, error) {
+	r.cancelledIDs = append(r.cancelledIDs, id)
+	return r.TaskResourceCleanupRepository.CancelTaskResourceCleanupJobIfPending(ctx, id)
+}
+
+func (r *workspaceDeleteCancellationRecorder) CompleteTaskResourceCleanupJob(
+	ctx context.Context,
+	id string,
+	state models.TaskResourceCleanupState,
+	lastError string,
+	nextAttemptAt *time.Time,
+) error {
+	if state == models.TaskResourceCleanupStateCancelled {
+		r.completedIDs = append(r.completedIDs, id)
+	}
+	return r.TaskResourceCleanupRepository.CompleteTaskResourceCleanupJob(
+		ctx, id, state, lastError, nextAttemptAt,
+	)
+}
+
 type commitThenErrorTaskRepository struct {
 	repository.TaskRepository
 	err error
@@ -1323,6 +1352,42 @@ func TestCancelWorkspaceDeleteCleanupUsesDetachedContext(t *testing.T) {
 	}
 	if got.State != models.TaskResourceCleanupStateCancelled {
 		t.Fatalf("cleanup state = %q, want cancelled", got.State)
+	}
+}
+func TestCancelWorkspaceDeleteCleanupDoesNotOverwriteClaim(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	recorder := &workspaceDeleteCancellationRecorder{
+		TaskResourceCleanupRepository: repo,
+	}
+	taskSvc.resourceCleanups = recorder
+	job := &models.TaskResourceCleanupJob{
+		ID: "workspace-delete-running-cancel", OperationID: "workspace_delete:running-cancel",
+		TaskID: "task-running-cancel", Trigger: models.TaskResourceCleanupTriggerWorkspaceDelete,
+		State: models.TaskResourceCleanupStateRunning, ResourceSnapshot: `{}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(context.Background(), job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+
+	err := taskSvc.cancelWorkspaceDeleteTaskCleanupJobs(
+		context.Background(), []workspaceDeleteTaskCleanup{{cleanupJob: job}},
+	)
+	if !errors.Is(err, ErrCleanupCancellationRace) {
+		t.Fatalf("cancelWorkspaceDeleteTaskCleanupJobs error = %v, want cleanup race", err)
+	}
+
+	if len(recorder.cancelledIDs) != 1 || recorder.cancelledIDs[0] != job.ID {
+		t.Fatalf("pending cancellation IDs = %v, want [%s]", recorder.cancelledIDs, job.ID)
+	}
+	if len(recorder.completedIDs) != 0 {
+		t.Fatalf("unconditional completion IDs = %v, want none", recorder.completedIDs)
+	}
+	got, err := repo.GetTaskResourceCleanupJob(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJob: %v", err)
+	}
+	if got.State != models.TaskResourceCleanupStateRunning {
+		t.Fatalf("cleanup state = %q, want running", got.State)
 	}
 }
 

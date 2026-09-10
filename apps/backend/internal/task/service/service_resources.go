@@ -320,17 +320,17 @@ func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspa
 		deletedTasks, deletedWorkflows, err = s.workspaces.DeleteWorkspaceCascadeWithName(ctx, workspace.ID, *confirmedName)
 	}
 	if err != nil {
-		s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
-		return s.mapWorkspaceDeleteError(workspace.ID, err)
+		cancelErr := s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
+		return s.mapWorkspaceDeleteError(workspace.ID, errors.Join(err, cancelErr))
 	}
 	if s.attachmentSvc != nil {
 		s.attachmentSvc.RemoveBytes(deletedWorkspaceAttachments)
 	}
 	if s.workspaceSecretDeleter != nil && (!hasTransactionalCleanup || !hasTransactionalCascade) {
 		if err := s.workspaceSecretDeleter.DeleteWorkspaceSecrets(ctx, workspace.ID); err != nil {
-			s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
+			cancelErr := s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
 			s.logger.Error("failed to delete workspace secrets", zap.String("workspace_id", workspace.ID), zap.Error(err))
-			return err
+			return errors.Join(err, cancelErr)
 		}
 	}
 	cleanups = s.appendWorkspaceDeleteMissingTaskCleanups(ctx, cleanups, deletedTasks)
@@ -349,8 +349,8 @@ func (s *Service) prepareWorkspaceDeleteTaskCleanups(ctx context.Context, tasks 
 		}
 		cleanup, err := s.prepareWorkspaceDeleteTaskCleanup(ctx, task)
 		if err != nil {
-			s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
-			return nil, err
+			cancelErr := s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
+			return nil, errors.Join(err, cancelErr)
 		}
 		cleanups = append(cleanups, cleanup)
 	}
@@ -420,22 +420,34 @@ func (s *Service) prepareWorkspaceDeleteTaskCleanup(ctx context.Context, task *m
 	)
 	return cleanup, err
 }
-
-func (s *Service) cancelWorkspaceDeleteTaskCleanupJobs(ctx context.Context, cleanups []workspaceDeleteTaskCleanup) {
+func (s *Service) cancelWorkspaceDeleteTaskCleanupJobs(ctx context.Context, cleanups []workspaceDeleteTaskCleanup) error {
 	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
 	defer cancel()
+	var cancellationErrs []error
 	for _, cleanup := range cleanups {
 		if cleanup.cleanupJob == nil || s.resourceCleanups == nil {
 			continue
 		}
-		if err := s.resourceCleanups.CompleteTaskResourceCleanupJob(
-			transitionCtx, cleanup.cleanupJob.ID, models.TaskResourceCleanupStateCancelled, "", nil,
-		); err != nil {
-			s.logger.Warn("cancel workspace delete task cleanup job",
-				zap.String("job_id", cleanup.cleanupJob.ID),
-				zap.String("task_id", cleanup.cleanupJob.TaskID), zap.Error(err))
+		cas, ok := s.resourceCleanups.(taskResourceCleanupCancellationCAS)
+		if !ok {
+			cancellationErrs = append(cancellationErrs,
+				fmt.Errorf("%w: cleanup repository cannot fence cancellation for %s",
+					ErrCleanupCancellationRace, cleanup.cleanupJob.ID))
+			continue
+		}
+		cancelled, err := cas.CancelTaskResourceCleanupJobIfPending(transitionCtx, cleanup.cleanupJob.ID)
+		if err != nil {
+			cancellationErrs = append(cancellationErrs, err)
+		} else if !cancelled {
+			cancellationErrs = append(cancellationErrs,
+				fmt.Errorf("%w: workspace-delete cleanup %s was claimed concurrently",
+					ErrCleanupCancellationRace, cleanup.cleanupJob.ID))
 		}
 	}
+	if len(cancellationErrs) > 0 {
+		return errors.Join(cancellationErrs...)
+	}
+	return nil
 }
 
 func (s *Service) publishWorkspaceDeleteChildEvents(ctx context.Context, tasks []*models.Task, workflows []*models.Workflow) {

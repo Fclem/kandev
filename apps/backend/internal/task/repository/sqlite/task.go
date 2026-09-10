@@ -3618,6 +3618,58 @@ func (r *Repository) ArchiveTaskIfActive(ctx context.Context, id, cascadeID stri
 	return changed, err
 }
 
+// ArchiveTaskIfAutoArchiveEligible atomically archives a candidate returned
+// by ListTasksForAutoArchive only while its task timestamp is unchanged and
+// its current workflow step still has an active auto-archive policy.
+func (r *Repository) ArchiveTaskIfAutoArchiveEligible(
+	ctx context.Context,
+	id string,
+	expectedUpdatedAt time.Time,
+	cascadeID string,
+) (bool, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	now := time.Now().UTC()
+	query := fmt.Sprintf(`
+		UPDATE tasks AS t
+		SET archived_at = ?, archived_by_cascade_id = ?, updated_at = ?
+		WHERE t.id = ? AND t.archived_at IS NULL AND t.updated_at = ?
+			AND EXISTS (
+				SELECT 1
+				FROM workflow_steps ws
+				WHERE ws.id = t.workflow_step_id
+					AND ws.auto_archive_after_hours > 0
+					AND t.updated_at <= %s
+			)
+	`, dialect.NowMinusHours(r.db.DriverName(), "ws.auto_archive_after_hours"))
+	result, err := tx.ExecContext(ctx, r.db.Rebind(query), now, cascadeID, now, id, expectedUpdatedAt)
+	if err != nil {
+		return false, err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	sessions, err := r.taskQueueSessionsInTx(ctx, tx, id)
+	if err != nil {
+		return false, err
+	}
+	if err := r.purgeTaskQueueInTx(ctx, tx, id, sessions); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	r.notifyTaskQueuePurged(ctx, id)
+	return true, nil
+}
+
 // ArchiveTaskIfActiveWithVacatedStep archives an active task and returns the
 // workflow step read under the same task-row lock as the archive mutation.
 func (r *Repository) ArchiveTaskIfActiveWithVacatedStep(

@@ -42,8 +42,13 @@ func (s *Service) runAutoArchive(ctx context.Context) {
 	}
 
 	s.logger.Info("auto-archive: found candidates", zap.Int("count", len(tasks)))
+	if s.autoArchiveCoordinator == nil {
+		s.logger.Error("auto-archive: lifecycle coordinator is not configured")
+		return
+	}
 	for _, task := range tasks {
-		if err := s.ArchiveTask(runCtx, task.ID); err != nil {
+		_, err := s.autoArchiveCoordinator.ArchiveAutoTask(runCtx, task)
+		if err != nil {
 			s.logger.Warn("auto-archive: failed to archive task",
 				zap.String("task_id", task.ID),
 				zap.Error(err))

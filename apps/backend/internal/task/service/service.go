@@ -401,6 +401,7 @@ type Service struct {
 	subagentContexts                repository.SubagentContextRepository
 	usage                           repository.UsageRepository
 	workspacePolicyAttacher         WorkspacePolicyAttacher
+	autoArchiveCoordinator          AutoArchiveCoordinator
 	attachmentSvc                   *AttachmentService
 	statusSummaryPRs                TaskStatusSummaryPRReader
 	statusSummaryProjector          TaskStatusSummaryEventProjector
@@ -536,6 +537,13 @@ type WorkspacePolicyAttacher interface {
 	AttachWorkspacePolicy(ctx context.Context, taskID, parentID string, policy WorkspacePolicy) error
 }
 
+// AutoArchiveCoordinator owns the full lifecycle transition for automatic
+// archive candidates, including workspace-group membership release and
+// resource cleanup.
+type AutoArchiveCoordinator interface {
+	ArchiveAutoTask(ctx context.Context, candidate *models.Task) (*CascadeOutcome, error)
+}
+
 // WorkspacePolicyMembershipReleaser removes a task's workspace-group
 // membership after a post-create rollback. It is an optional companion to
 // WorkspacePolicyAttacher because lightweight task-service test harnesses may
@@ -580,6 +588,12 @@ func (s *Service) SetWorkspaceSecretDeleter(deleter WorkspaceSecretDeleter) {
 // coordinator used by every CreateTask caller.
 func (s *Service) SetWorkspacePolicyAttacher(attacher WorkspacePolicyAttacher) {
 	s.workspacePolicyAttacher = attacher
+}
+
+// SetAutoArchiveCoordinator installs the lifecycle coordinator used by the
+// automatic archive loop.
+func (s *Service) SetAutoArchiveCoordinator(coordinator AutoArchiveCoordinator) {
+	s.autoArchiveCoordinator = coordinator
 }
 
 // NewService creates a new task service

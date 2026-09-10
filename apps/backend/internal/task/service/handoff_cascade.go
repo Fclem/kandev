@@ -29,6 +29,12 @@ type workspaceScopedTaskReparenter interface {
 type structuralChildLister interface {
 	ListStructuralChildrenLimited(ctx context.Context, parentID string, limit int) ([]*models.Task, error)
 }
+type autoArchiveTaskRepository interface {
+	ArchiveTaskIfAutoArchiveEligible(
+		ctx context.Context, id string, expectedUpdatedAt time.Time, cascadeID string,
+	) (bool, error)
+}
+
 type workspaceEnvironmentOwnershipTransfer struct {
 	groupID             string
 	environmentID       string
@@ -218,6 +224,24 @@ func cascadePostCommitError(out *CascadeOutcome, err error) error {
 //     archived, stamping the cascade ID on the released row.
 //  6. Evaluate cleanup once per affected group.
 func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cascade bool) (*CascadeOutcome, error) {
+	return s.archiveTaskTree(ctx, rootID, cascade, nil)
+}
+
+// ArchiveAutoTask archives a candidate only if the task row and its current
+// workflow step still satisfy the auto-archive policy.
+func (s *HandoffService) ArchiveAutoTask(ctx context.Context, candidate *models.Task) (*CascadeOutcome, error) {
+	if candidate == nil {
+		return nil, errors.New("auto-archive candidate is required")
+	}
+	return s.archiveTaskTree(ctx, candidate.ID, false, candidate)
+}
+
+func (s *HandoffService) archiveTaskTree(
+	ctx context.Context,
+	rootID string,
+	cascade bool,
+	autoArchiveCandidate *models.Task,
+) (*CascadeOutcome, error) {
 	archiveDeadline := archivecascade.ArchiveDeadline(ctx)
 	archiveCtx, cancelArchive := context.WithDeadline(ctx, archiveDeadline)
 	defer cancelArchive()
@@ -284,49 +308,12 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 	defer func() {
 		s.pullTasksForVacatedSteps(postArchiveCtx, archiveDeadline, vacatedStepIDs)
 	}()
-	var cleanupErrors []error
-	for i := len(all) - 1; i >= 0; i-- {
-		vacatedStepID, ok, err := s.archiveTaskWithVacatedStep(postArchiveCtx, all[i], cascadeID)
-		if err != nil {
-			cancelErr := s.cancelCascadeResourceCleanupRange(postArchiveCtx, all[:i+1], cleanupOps)
-			return out, errors.Join(fmt.Errorf("archive %s: %w", all[i], err), cancelErr)
-		}
-		if ok {
-			// The archive mutation committed, so finalization and cleanup must
-			// survive a disconnected caller.
-			out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
-			recordVacatedStep(vacatedStepIDs, vacatedStepID)
-			// The archive mutation committed, so it is now safe to finalize
-			// any session that the runtime canceller could not update.
-			s.finalizeActiveSessions(postArchiveCtx, archiveDeadline, all[i], models.SessionArchiveTreeCancelReason)
-			// Re-read the row so the published event carries the freshly
-			// stamped archived_at; the WS handler removes archived tasks
-			// from the kanban board by checking that field.
-			if err := s.publishUpdatedTask(postArchiveCtx, all[i]); err != nil {
-				cleanupErrors = append(cleanupErrors, fmt.Errorf("publish archived task %s: %w", all[i], err))
-			}
-			// Stamp any inherit_parent children of this archived task as
-			// orphaned. WS/HTTP archive always prefer this cascade path
-			// over Service.ArchiveTask whenever a HandoffService is wired
-			// (see backendapp's registerRoutes), so without this call the
-			// marker only ever fires via the MCP archive_task_kandev tool.
-			s.markOrphanedInheritParentChildren(postArchiveCtx, &models.Task{ID: all[i]})
-			// Tear down runtime resources (container/sandbox/worktree).
-			// Cancellation above stopped the agent but does not remove the
-			// container. Archive preserves the env row (deleteEnvRow=false).
-			if operationID := cleanupOps[all[i]]; operationID != "" {
-				if err := s.startCascadeResourceCleanup(postArchiveCtx, operationID); err != nil {
-					cleanupErrors = append(cleanupErrors, fmt.Errorf("start cleanup %s: %w", operationID, err))
-				}
-			} else if s.resourceCleaner != nil {
-				s.resourceCleaner.CleanupTaskResources(postArchiveCtx, all[i], false)
-			}
-		} else {
-			if err := s.cancelCascadeResourceCleanup(postArchiveCtx, cleanupOps[all[i]]); err != nil {
-				cleanupErrors = append(cleanupErrors, fmt.Errorf("cancel cleanup %s: %w", cleanupOps[all[i]], err))
-			}
-			out.SkippedTaskIDs = append(out.SkippedTaskIDs, all[i])
-		}
+	cleanupErrors, mutationErr := s.applyArchiveTaskMutations(
+		postArchiveCtx, archiveDeadline, all, cascadeID, autoArchiveCandidate,
+		cleanupOps, out, vacatedStepIDs,
+	)
+	if mutationErr != nil {
+		return out, mutationErr
 	}
 
 	// Release group memberships for THIS cascade's tasks. Memberships
@@ -344,6 +331,49 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 		}
 	}
 	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
+}
+func (s *HandoffService) applyArchiveTaskMutations(
+	ctx context.Context,
+	archiveDeadline time.Time,
+	all []string,
+	cascadeID string,
+	autoArchiveCandidate *models.Task,
+	cleanupOps map[string]string,
+	out *CascadeOutcome,
+	vacatedStepIDs map[string]struct{},
+) ([]error, error) {
+	var cleanupErrors []error
+	for i := len(all) - 1; i >= 0; i-- {
+		vacatedStepID, ok, err := s.archiveTaskWithVacatedStep(
+			ctx, all[i], cascadeID, autoArchiveCandidate,
+		)
+		if err != nil {
+			cancelErr := s.cancelCascadeResourceCleanupRange(ctx, all[:i+1], cleanupOps)
+			return nil, errors.Join(fmt.Errorf("archive %s: %w", all[i], err), cancelErr)
+		}
+		if ok {
+			out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
+			recordVacatedStep(vacatedStepIDs, vacatedStepID)
+			s.finalizeActiveSessions(ctx, archiveDeadline, all[i], models.SessionArchiveTreeCancelReason)
+			if err := s.publishUpdatedTask(ctx, all[i]); err != nil {
+				cleanupErrors = append(cleanupErrors, fmt.Errorf("publish archived task %s: %w", all[i], err))
+			}
+			s.markOrphanedInheritParentChildren(ctx, &models.Task{ID: all[i]})
+			if operationID := cleanupOps[all[i]]; operationID != "" {
+				if err := s.startCascadeResourceCleanup(ctx, operationID); err != nil {
+					cleanupErrors = append(cleanupErrors, fmt.Errorf("start cleanup %s: %w", operationID, err))
+				}
+			} else if s.resourceCleaner != nil {
+				s.resourceCleaner.CleanupTaskResources(ctx, all[i], false)
+			}
+		} else {
+			if err := s.cancelCascadeResourceCleanup(ctx, cleanupOps[all[i]]); err != nil {
+				cleanupErrors = append(cleanupErrors, fmt.Errorf("cancel cleanup %s: %w", cleanupOps[all[i]], err))
+			}
+			out.SkippedTaskIDs = append(out.SkippedTaskIDs, all[i])
+		}
+	}
+	return cleanupErrors, nil
 }
 
 // DeleteTaskTree is the inverse-of-archive operation: it walks rootID's
@@ -489,7 +519,21 @@ func (s *HandoffService) archiveTaskWithVacatedStep(
 	ctx context.Context,
 	taskID string,
 	cascadeID string,
+	autoArchiveCandidate *models.Task,
 ) (string, bool, error) {
+	if autoArchiveCandidate != nil {
+		repo, ok := s.tasks.(autoArchiveTaskRepository)
+		if !ok {
+			return "", false, errors.New("task repo cannot validate auto-archive eligibility atomically")
+		}
+		changed, err := repo.ArchiveTaskIfAutoArchiveEligible(
+			ctx, taskID, autoArchiveCandidate.UpdatedAt, cascadeID,
+		)
+		if !changed || err != nil {
+			return "", changed, err
+		}
+		return autoArchiveCandidate.WorkflowStepID, true, nil
+	}
 	repo, ok := s.tasks.(cascadeArchiveTaskRepository)
 	if !ok {
 		return "", false, errors.New("task repo cannot capture archive vacancy atomically")

@@ -8,6 +8,7 @@ import { seedRunningGeneratingSession } from "../../helpers/generating-session";
 import { waitForAgentMessage, waitForSessionDone } from "../../helpers/session";
 import { expectFullQueueScrolls, seedFullQueueTask } from "./message-queue-scroll-helpers";
 import { waitForQuickChatComposerReady } from "./quick-chat-helpers";
+import { expectSendNowWorkflowRunning } from "./message-queue-workflow-helpers";
 import {
   registerSeparateQueueRows,
   requestMessageQueueSettings,
@@ -15,6 +16,10 @@ import {
 import { watchWs } from "../../helpers/causal-waits";
 
 registerSeparateQueueRows(test);
+
+test("Send Now keeps a workflow transition running", async ({ testPage, apiClient, seedData }) => {
+  await expectSendNowWorkflowRunning(testPage, apiClient, seedData, false);
+});
 
 // ---------------------------------------------------------------------------
 // Quick Chat queue tests

@@ -550,6 +550,8 @@ func (s *Service) executeStepTransition(ctx context.Context, taskID, sessionID s
 		if !ok {
 			return
 		}
+		// The legacy engine-less path settles before dispatch. The engine-backed
+		// path preserves an admitted turn's RUNNING state in its transition hook.
 		s.setSessionWaitingForInput(ctx, taskID, effectiveSession.ID)
 	}
 }
@@ -4289,6 +4291,16 @@ func (s *Service) drainQueuedMessageForPromptableSessionWithTaskAdmission(
 	ctx context.Context,
 	taskID, sessionID string,
 ) queueDrainOutcome {
+	return s.drainQueuedMessageForPromptableSessionWithTaskAdmissionAndIdentity(
+		ctx, taskID, sessionID, nil,
+	)
+}
+
+func (s *Service) drainQueuedMessageForPromptableSessionWithTaskAdmissionAndIdentity(
+	ctx context.Context,
+	taskID, sessionID string,
+	identity *messagequeue.QueueSessionIdentity,
+) queueDrainOutcome {
 	lock, release := s.acquireCancelInFlightGuard(sessionID)
 	defer release()
 	lock.Lock()
@@ -4305,6 +4317,12 @@ func (s *Service) drainQueuedMessageForPromptableSessionWithTaskAdmission(
 	if session == nil {
 		return queueDrainSkipped
 	}
+	if session.TaskID != taskID {
+		return queueDrainSkipped
+	}
+	if identity != nil && session.QueueIncarnationID != identity.SessionIncarnationID {
+		return queueDrainSkipped
+	}
 	if err := s.checkSessionPromptable(session.TaskID, sessionID, session.State); err != nil {
 		return queueDrainSkipped
 	}
@@ -4316,7 +4334,9 @@ func (s *Service) drainQueuedMessageForPromptableSessionWithTaskAdmission(
 	if s.sessionHasLiveClarification(ctx, sessionID) {
 		return queueDrainSkipped
 	}
-	return s.drainQueuedMessageForPromptableSessionLockedWithTaskAdmission(ctx, taskID, sessionID)
+	return s.drainQueuedMessageForPromptableSessionLockedWithTaskAdmissionAndIdentity(
+		ctx, taskID, sessionID, identity,
+	)
 }
 
 // drainQueuedMessageForPromptableSessionLocked takes the next queued
@@ -4342,16 +4362,52 @@ func (s *Service) drainQueuedMessageForPromptableSessionLockedWithTaskAdmission(
 	ctx context.Context,
 	taskID, sessionID string,
 ) queueDrainOutcome {
+	return s.drainQueuedMessageForPromptableSessionLockedWithTaskAdmissionAndIdentity(
+		ctx, taskID, sessionID, nil,
+	)
+}
+
+func (s *Service) resolveQueueDrainIdentity(
+	ctx context.Context,
+	taskID, sessionID string,
+	identity *messagequeue.QueueSessionIdentity,
+) (messagequeue.QueueSessionIdentity, bool) {
+	if identity != nil {
+		if identity.TaskID != taskID || identity.SessionID != sessionID {
+			return messagequeue.QueueSessionIdentity{}, false
+		}
+		return *identity, true
+	}
+	queueIdentity, err := s.messageQueue.ResolveSessionIdentity(ctx, taskID, sessionID)
+	return queueIdentity, err == nil
+}
+
+func (s *Service) resolveQueueDrainTaskID(
+	ctx context.Context,
+	taskID, sessionID string,
+) (string, bool) {
+	if taskID != "" {
+		return taskID, true
+	}
+	session, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil || session == nil {
+		return "", false
+	}
+	return session.TaskID, true
+}
+
+func (s *Service) drainQueuedMessageForPromptableSessionLockedWithTaskAdmissionAndIdentity(
+	ctx context.Context,
+	taskID, sessionID string,
+	identity *messagequeue.QueueSessionIdentity,
+) queueDrainOutcome {
 	if s.messageQueue == nil || s.isCancelInFlight(sessionID) ||
 		s.isQueuedDispatchInFlight(sessionID) || s.isSteerInFlight(sessionID) {
 		return queueDrainSkipped
 	}
-	if taskID == "" {
-		session, err := s.repo.GetTaskSession(ctx, sessionID)
-		if err != nil || session == nil {
-			return queueDrainSkipped
-		}
-		taskID = session.TaskID
+	var ok bool
+	if taskID, ok = s.resolveQueueDrainTaskID(ctx, taskID, sessionID); !ok {
+		return queueDrainSkipped
 	}
 	task, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
@@ -4362,18 +4418,18 @@ func (s *Service) drainQueuedMessageForPromptableSessionLockedWithTaskAdmission(
 	if task == nil || (!task.WIPAdmitted && task.QueuedForStepID != "") {
 		return queueDrainSkipped
 	}
-	identity, err := s.messageQueue.ResolveSessionIdentity(ctx, taskID, sessionID)
-	if err != nil {
+	queueIdentity, ok := s.resolveQueueDrainIdentity(ctx, taskID, sessionID, identity)
+	if !ok {
 		return queueDrainSkipped
 	}
-	queuedMsg, ok, autoRun, err := s.messageQueue.ReserveQueuedWithAutoRunForSession(ctx, identity)
+	queuedMsg, ok, autoRun, err := s.messageQueue.ReserveQueuedWithAutoRunForSession(ctx, queueIdentity)
 	if err != nil {
 		return queueDrainSkipped
 	}
 	if !autoRun {
 		return queueDrainPaused
 	}
-	if s.dispatchTakenQueuedMessageForSession(ctx, identity, queuedMsg, ok) {
+	if s.dispatchTakenQueuedMessageForSession(ctx, queueIdentity, queuedMsg, ok) {
 		return queueDrainDispatched
 	}
 	return queueDrainSkipped
@@ -4592,32 +4648,39 @@ func (s *Service) resolveAutoStartPromptContext(
 	ctx context.Context,
 	taskID string,
 	session *models.TaskSession,
-) (bool, *models.Task, bool, error) {
+) (bool, *models.Task, bool, bool, error) {
 	isOfficeTask, err := s.lookupOfficeTask(ctx, taskID)
 	if err != nil {
-		return false, nil, false, fmt.Errorf("resolve MCP mode for workflow auto-start: %w", err)
+		return false, nil, false, false, fmt.Errorf("resolve MCP mode for workflow auto-start: %w", err)
 	}
 	if isOfficeTask {
-		return true, nil, false, nil
+		return true, nil, false, false, nil
 	}
 
 	taskForPrompt, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return false, nil, false, fmt.Errorf("load task for autopilot prompt: %w", err)
+		return false, nil, false, false, fmt.Errorf("load task for autopilot prompt: %w", err)
+	}
+	configMode, _ := session.Metadata["config_mode"].(bool)
+	includeCanvasGuidance := false
+	if !session.IsPassthrough && !configMode {
+		includeCanvasGuidance, err = s.taskSessionCanvasGuidanceEnabled(ctx, taskID, session, true)
+		if err != nil {
+			return false, nil, false, false, fmt.Errorf("resolve canvas prompt capability for workflow auto-start: %w", err)
+		}
 	}
 	if session.State != models.TaskSessionStateCreated {
-		return false, taskForPrompt, false, nil
+		return false, taskForPrompt, false, includeCanvasGuidance, nil
 	}
 
-	configMode, _ := session.Metadata["config_mode"].(bool)
 	if configMode {
-		return false, taskForPrompt, false, nil
+		return false, taskForPrompt, false, includeCanvasGuidance, nil
 	}
 	titleOwner, err := s.ClaimTaskTitleSession(ctx, taskID, session.ID)
 	if err != nil {
-		return false, nil, false, fmt.Errorf("claim task title for workflow auto-start: %w", err)
+		return false, nil, false, false, fmt.Errorf("claim task title for workflow auto-start: %w", err)
 	}
-	return false, taskForPrompt, titleOwner, nil
+	return false, taskForPrompt, titleOwner, includeCanvasGuidance, nil
 }
 
 // handleCreatedAutoStartLaunchFailure preserves a workflow prompt when the
@@ -4745,12 +4808,13 @@ func (s *Service) autoStartStepPrompt(
 	dispatchPrompt := agentPrompt
 	titleOwner := false
 	isOfficeTask := false
+	includeCanvasGuidance := false
 	var taskForPrompt *models.Task
 	needsRuntimeContext := session.State == models.TaskSessionStateCreated ||
 		(step != nil && step.HasOnEnterAction(wfmodels.OnEnterResetAgentContext))
 	if needsRuntimeContext {
 		var contextErr error
-		isOfficeTask, taskForPrompt, titleOwner, contextErr = s.resolveAutoStartPromptContext(ctx, taskID, session)
+		isOfficeTask, taskForPrompt, titleOwner, includeCanvasGuidance, contextErr = s.resolveAutoStartPromptContext(ctx, taskID, session)
 		if contextErr != nil {
 			requeueTaken()
 			return contextErr
@@ -4783,6 +4847,7 @@ func (s *Service) autoStartStepPrompt(
 				RequiresCompletionSignal:       requiresSignal,
 				IncludeCoordinatorTaskControls: !configMode,
 				IncludeTaskTitleTool:           !configMode && titleOwner,
+				IncludeCanvasGuidance:          includeCanvasGuidance,
 				Autopilot:                      taskForPrompt != nil && taskForPrompt.Autopilot,
 				IncludeUserQuestionTool:        taskForPrompt == nil || !taskForPrompt.Autopilot,
 				IncludeParentQuestionTool:      taskForPrompt != nil && taskForPrompt.Autopilot && taskForPrompt.ParentID != "",
@@ -4791,6 +4856,7 @@ func (s *Service) autoStartStepPrompt(
 				RequiresCompletionSignal:       requiresSignal,
 				IncludeCoordinatorTaskControls: !configMode,
 				IncludeTaskTitleTool:           !configMode && titleOwner,
+				IncludeCanvasGuidance:          includeCanvasGuidance,
 				Autopilot:                      taskForPrompt != nil && taskForPrompt.Autopilot,
 				IncludeUserQuestionTool:        taskForPrompt == nil || !taskForPrompt.Autopilot,
 				IncludeParentQuestionTool:      taskForPrompt != nil && taskForPrompt.Autopilot && taskForPrompt.ParentID != "",
@@ -6391,7 +6457,11 @@ func (s *Service) applyEngineTransitionWithCommitMode(
 		if !ok {
 			return false
 		}
-		s.setSessionWaitingForInput(ctx, taskID, effectiveSession.ID)
+		// A queued prompt has already claimed RUNNING before its turn-start
+		// hook. Preserve that claim when profile preparation keeps the session.
+		if effectiveSession.ID != session.ID || session.State != models.TaskSessionStateRunning {
+			s.setSessionWaitingForInput(ctx, taskID, effectiveSession.ID)
+		}
 		return true
 	}
 

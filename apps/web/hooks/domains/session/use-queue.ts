@@ -607,6 +607,7 @@ export function useQueue(sessionId: string | null) {
   return {
     entries,
     ...queueSummary(meta, entries),
+    isQueueReady: identity !== null,
     isLoading,
     cancellationPending,
     queue,

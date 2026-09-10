@@ -783,9 +783,12 @@ func (s *Service) PrepareTaskResourceCleanup(
 	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
-		return fmt.Errorf("encode task resource cleanup snapshot: %w", err)
+		return cancelPrepared(fmt.Errorf("encode task resource cleanup snapshot: %w", err))
 	}
-	return s.resourceCleanups.UpdateTaskResourceCleanupSnapshot(ctx, barrierOperationID, string(encoded))
+	if err := s.resourceCleanups.UpdateTaskResourceCleanupSnapshot(ctx, barrierOperationID, string(encoded)); err != nil {
+		return cancelPrepared(fmt.Errorf("persist task resource cleanup snapshot: %w", err))
+	}
+	return nil
 }
 
 func (s *Service) StartPreparedTaskResourceCleanup(ctx context.Context, operationID string) error {

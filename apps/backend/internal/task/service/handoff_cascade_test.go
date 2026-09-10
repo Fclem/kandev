@@ -185,7 +185,6 @@ func TestDeleteTaskTree_NoCascadeNormalizesInheritedChildren(t *testing.T) {
 		},
 		"keep": "this field",
 	}
-
 	svc := NewHandoffService(&fakeDeleteRepo{fakeCascadeRepo: newCascadeRepo(tasks)}, nil, nil, nil, nil, nil)
 	if _, err := svc.DeleteTaskTree(context.Background(), "root", false); err != nil {
 		t.Fatalf("DeleteTaskTree: %v", err)
@@ -776,6 +775,25 @@ func TestDeleteTaskTree_RemovesAllAndCancelsRuns(t *testing.T) {
 		if c.taskID == "root" && c.reason != orchmodels.WorkspaceReleaseReasonDeleted {
 			t.Errorf("root release reason = %q, want deleted", c.reason)
 		}
+	}
+}
+
+func TestDeleteTaskTreeRemovesDependencyEdges(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	tasks.addTask("dependent", "", "ws-1")
+	blockers := &fakeBlockerRepo{}
+	blockers.blockers = append(blockers.blockers, &orchmodels.TaskBlocker{
+		TaskID: "dependent", BlockerTaskID: "root",
+	})
+	repo := &fakeDeleteRepo{fakeCascadeRepo: newCascadeRepo(tasks)}
+	svc := NewHandoffService(repo, nil, nil, blockers, nil, nil)
+
+	if _, err := svc.DeleteTaskTree(context.Background(), "root", false); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if got := len(blockers.blockers); got != 0 {
+		t.Fatalf("dependency edges after delete = %d, want 0", got)
 	}
 }
 

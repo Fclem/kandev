@@ -197,6 +197,19 @@ func (f *fakeBlockerRepo) DeleteTaskBlocker(_ context.Context, taskID, blockerTa
 	return nil
 }
 
+func (f *fakeBlockerRepo) DeleteTaskBlockersForTask(_ context.Context, taskID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	kept := f.blockers[:0]
+	for _, blocker := range f.blockers {
+		if blocker.TaskID != taskID && blocker.BlockerTaskID != taskID {
+			kept = append(kept, blocker)
+		}
+	}
+	f.blockers = kept
+	return nil
+}
+
 func (f *fakeBlockerRepo) ListTasksBlockedBy(_ context.Context, blockerTaskID string) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

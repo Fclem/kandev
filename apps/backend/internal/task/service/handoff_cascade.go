@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/common/taskdependencies"
 	orchmodels "github.com/kandev/kandev/internal/office/models"
 	"github.com/kandev/kandev/internal/task/archivecascade"
 	"github.com/kandev/kandev/internal/task/models"
@@ -532,9 +533,10 @@ func (s *HandoffService) deleteTaskTreeRows(
 		}
 		recordVacatedStep(vacatedStepIDs, vacatedStepID)
 		out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
-		// The delete mutation committed, so it is now safe to finalize
-		// any session row that was not removed with the task.
 		s.finalizeActiveSessions(postDeleteCtx, deleteDeadline, all[i], "task tree deleted")
+		if err := s.deleteTaskDependencyEdges(postDeleteCtx, all[i]); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("clean up task dependencies %s: %w", all[i], err))
+		}
 		if operationID := cleanupOps[all[i]]; operationID != "" {
 			if err := s.startCascadeResourceCleanup(postDeleteCtx, operationID); err != nil {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("start cleanup %s: %w", operationID, err))
@@ -587,6 +589,19 @@ func (s *HandoffService) archiveTaskWithVacatedStep(
 		return "", false, errors.New("task repo cannot capture archive vacancy atomically")
 	}
 	return repo.ArchiveTaskIfActiveWithVacatedStep(ctx, taskID, cascadeID)
+}
+
+func (s *HandoffService) deleteTaskDependencyEdges(ctx context.Context, taskID string) error {
+	if s.blockers == nil {
+		return nil
+	}
+	cleaner, ok := s.blockers.(taskDependencyCleaner)
+	if !ok {
+		return nil
+	}
+	unlock := taskdependencies.AcquireMutationLock()
+	defer unlock()
+	return cleaner.DeleteTaskBlockersForTask(ctx, taskID)
 }
 
 func (s *HandoffService) deleteTaskWithVacatedStep(ctx context.Context, taskID string) (string, error) {

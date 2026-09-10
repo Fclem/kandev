@@ -43,6 +43,8 @@ import { useLazyLoadMessages } from "@/hooks/use-lazy-load-messages";
 import { findUnreadDividerItemId, lastRenderedMessageId } from "@/lib/session-unread-divider";
 import { useSessionReadTracking } from "./chat/use-session-read-tracking";
 import { useDrainOlderMessages } from "@/components/task/chat/use-drain-older-messages";
+import type { RenderItem } from "@/hooks/use-processed-messages";
+
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { getSessionWorkspacePath } from "@/lib/session-workspace-path";
 import type { AppState } from "@/lib/state/store";
@@ -76,6 +78,10 @@ export type PendingMessageScrollTarget = {
   token: number;
   hostPanelId: string;
 };
+/** Reports whether a target has a dedicated DOM row in the transcript. */
+export function isMessageRowRendered(items: readonly RenderItem[], messageId: string): boolean {
+  return items.some((item) => item.type === "message" && item.message.id === messageId);
+}
 
 /** Scrolls a non-Dockview host target after the message row becomes rendered. */
 type PendingMessageScrollOptions = {
@@ -1043,9 +1049,6 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     groupedItems,
     isInitialMessagesLoading,
   );
-  // Kanban previews intentionally pass `isVisible=false` so they do not
-  // advance the read cursor, but their transcript is rendered in a visible
-  // non-Dockview host. Keep read visibility separate from scroll geometry.
   const transcriptIsVisible = panelId === null || isVisible;
   const dockviewTargetMessageId = useDockviewStore(
     (state) => state.scrollTarget?.messageId ?? null,
@@ -1057,8 +1060,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     messageListRef,
     isInitialMessagesLoading,
     targetRendered: Boolean(
-      dockviewTargetMessageId &&
-      allMessages.some((message) => message.id === dockviewTargetMessageId),
+      dockviewTargetMessageId && isMessageRowRendered(groupedItems, dockviewTargetMessageId),
     ),
     renderedMessageCount: allMessages.length,
   });

@@ -136,12 +136,14 @@ func (s *HandoffService) evaluateWorkspaceGroupCleanup(ctx context.Context, grou
 // hasActiveExecutionsForGroup walks every task that ever belonged to
 // the group (active + released) and checks whether any of its sessions
 // still has an executors_running row. Returns true on the first hit so
-// the cleanup state machine can short-circuit. When the
-// SessionWorktreeReader isn't wired we conservatively report no
-// activity (legacy / test path).
+// cleanup state machine can short-circuit. Missing session evidence is an
+// error, never proof of inactivity.
 func (s *HandoffService) hasActiveExecutionsForGroup(ctx context.Context, groupID string) (bool, error) {
-	if s.sessions == nil || s.wsGroups == nil {
-		return false, nil
+	if s.sessions == nil {
+		return false, errors.New("session reader unavailable for workspace cleanup")
+	}
+	if s.wsGroups == nil {
+		return false, errors.New("workspace group repository unavailable for workspace cleanup")
 	}
 	all, err := s.wsGroups.ListWorkspaceGroupMembers(ctx, groupID)
 	if err != nil {
@@ -837,6 +839,7 @@ func (s *HandoffService) finalizeActiveSessions(
 // Manual archives and members of earlier cascades remain archived.
 // The cascade ID scope prevents resurrection of unrelated archive rows.
 func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (*CascadeOutcome, error) {
+	deadline := archivecascade.ArchiveDeadline(ctx)
 	if err := s.authorizeTask(ctx, rootID); err != nil {
 		return nil, err
 	}
@@ -850,14 +853,16 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	if root == nil {
 		return nil, fmt.Errorf("task %s not found", rootID)
 	}
+	operationCtx, cancelOperation := archivecascade.ContinuationContextUntil(ctx, deadline)
+	defer cancelOperation()
 	cascadeID := root.ArchivedByCascadeID
 	if cascadeID == "" {
-		return s.unarchiveManualRoot(ctx, root)
+		return s.unarchiveManualRoot(operationCtx, root)
 	}
 	out := &CascadeOutcome{CascadeID: cascadeID}
 	// The descendant walk filters archived rows by this cascade ID, so
 	// manually archived descendants remain untouched during restoration.
-	all, err := s.collectArchivedTreeByCascade(ctx, rootID, cascadeID)
+	all, err := s.collectArchivedTreeByCascade(operationCtx, rootID, cascadeID)
 	if err != nil {
 		return nil, err
 	}
@@ -865,10 +870,10 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	// before children are queried by anyone watching the bus.
 	for _, id := range all {
 		operationID := string(models.TaskResourceCleanupTriggerCascadeArchive) + ":" + cascadeID + ":" + id
-		if err := s.cancelArchiveResourceCleanup(ctx, id, operationID); err != nil {
+		if err := s.cancelArchiveResourceCleanup(operationCtx, id, operationID); err != nil {
 			return out, fmt.Errorf("cancel archive cleanup %s: %w", id, err)
 		}
-		ok, err := s.tasks.UnarchiveTaskByCascade(ctx, id, cascadeID)
+		ok, err := s.tasks.UnarchiveTaskByCascade(operationCtx, id, cascadeID)
 		if err != nil {
 			return out, fmt.Errorf("unarchive %s: %w", id, err)
 		}
@@ -876,13 +881,13 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 			out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, id)
 			// Publish per restored task. The WS handler keys off
 			// archived_at=null to put the card back on the kanban.
-			if err := s.publishUpdatedTask(ctx, id); err != nil {
+			if err := s.publishUpdatedTask(operationCtx, id); err != nil {
 				return out, err
 			}
 			// This task may itself be a parent whose inherit_parent
 			// children were marked orphaned by this same archive; the
 			// marker's "parent_archived" claim is no longer true.
-			s.clearOrphanedInheritParentChildren(ctx, id)
+			s.clearOrphanedInheritParentChildren(operationCtx, id)
 		} else {
 			out.SkippedTaskIDs = append(out.SkippedTaskIDs, id)
 		}
@@ -894,12 +899,12 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	var restorationErrors []error
 	if s.wsGroups != nil {
 		for _, id := range out.ArchivedTaskIDs {
-			if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(ctx, id, cascadeID); err != nil {
+			if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID); err != nil {
 				restorationErrors = append(restorationErrors,
 					fmt.Errorf("restore membership for task %s: %w", id, err))
 				continue
 			}
-			g, err := s.wsGroups.GetWorkspaceGroupForTask(ctx, id)
+			g, err := s.wsGroups.GetWorkspaceGroupForTask(operationCtx, id)
 			if err != nil {
 				restorationErrors = append(restorationErrors,
 					fmt.Errorf("lookup workspace group for task %s: %w", id, err))
@@ -916,7 +921,7 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 			ids = append(ids, id)
 		}
 		out.ReleasedGroupIDs = ids
-		restorationErrors = append(restorationErrors, s.restoreCleanedGroups(ctx, ids))
+		restorationErrors = append(restorationErrors, s.restoreCleanedGroups(operationCtx, ids))
 	}
 	return out, errors.Join(restorationErrors...)
 }

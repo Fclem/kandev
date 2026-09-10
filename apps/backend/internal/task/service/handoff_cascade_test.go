@@ -511,6 +511,7 @@ func TestEvaluateWorkspaceGroupCleanup_PendingWhenLastMemberLeavesKandevGroup(t 
 	}
 	groups.members["g1"] = map[string]string{}
 	svc := newCascadeService(t, tasks, groups)
+	svc.SetSessionReader(newFakeSessionReader())
 
 	if err := svc.evaluateWorkspaceGroupCleanup(context.Background(), "g1"); err != nil {
 		t.Fatalf("evaluate: %v", err)

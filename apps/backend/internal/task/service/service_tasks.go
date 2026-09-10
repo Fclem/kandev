@@ -2400,7 +2400,7 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 
 	// 6. Background: Stop agents and cleanup worktrees
 	if cleanupJob != nil {
-		if err := s.StartPreparedTaskResourceCleanup(finalizeCtx, cleanupJob.OperationID); err != nil {
+		if err := s.StartPreparedTaskResourceCleanup(context.WithoutCancel(finalizeCtx), cleanupJob.OperationID); err != nil {
 			s.logger.Warn("start committed archive resource cleanup",
 				zap.String("job_id", cleanupJob.ID), zap.String("task_id", id), zap.Error(err))
 		}
@@ -2602,10 +2602,13 @@ func (s *Service) DeleteTaskWithReason(ctx context.Context, id, reason string) e
 }
 
 func (s *Service) deleteTaskWithReason(ctx context.Context, id, reason string) error {
-	if err := s.authorizeTaskID(ctx, id); err != nil {
+	deadline := archivecascade.ArchiveDeadline(ctx)
+	operationCtx, cancelOperation := context.WithDeadline(ctx, deadline)
+	defer cancelOperation()
+	if err := s.authorizeTaskID(operationCtx, id); err != nil {
 		return err
 	}
-	_, err := s.deleteTaskWithReasonAndDBDelete(ctx, id, reason, models.TaskResourceCleanupTriggerDelete, func(ctx context.Context, id string) (bool, error) {
+	_, err := s.deleteTaskWithReasonAndDBDelete(operationCtx, id, reason, models.TaskResourceCleanupTriggerDelete, func(ctx context.Context, id string) (bool, error) {
 		if err := s.tasks.DeleteTask(ctx, id); err != nil {
 			return false, err
 		}
@@ -2632,32 +2635,35 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 	deleteFromDB func(context.Context, string) (bool, error),
 ) (bool, error) {
 	start := time.Now()
+	archiveDeadline := archivecascade.ArchiveDeadline(ctx)
+	operationCtx, cancelOperation := context.WithDeadline(ctx, archiveDeadline)
+	defer cancelOperation()
 
 	// 1. Get task (sync, fast)
-	task, err := s.tasks.GetTask(ctx, id)
+	task, err := s.tasks.GetTask(operationCtx, id)
 	if err != nil {
 		return false, err
 	}
 
 	// 2. Gather data needed for cleanup BEFORE delete (sync, fast)
-	sessions, err := s.sessions.ListTaskSessions(ctx, id)
+	sessions, err := s.sessions.ListTaskSessions(operationCtx, id)
 	if err != nil {
 		return false, fmt.Errorf("list task sessions for delete: %w", err)
 	}
 
-	worktrees, err := s.gatherWorktreesForDelete(ctx, id)
+	worktrees, err := s.gatherWorktreesForDelete(operationCtx, id)
 	if err != nil {
 		return false, fmt.Errorf("list worktrees for delete: %w", err)
 	}
-	taskEnv, err := s.gatherTaskEnvironmentForCleanup(ctx, id)
+	taskEnv, err := s.gatherTaskEnvironmentForCleanup(operationCtx, id)
 	if err != nil {
 		return false, fmt.Errorf("lookup task environment for delete: %w", err)
 	}
-	stopTargets, err := s.deleteTaskStopTargets(ctx, id)
+	stopTargets, err := s.deleteTaskStopTargets(operationCtx, id)
 	if err != nil {
 		return false, err
 	}
-	if preserved, err := s.preserveTaskEnvironmentForActiveBorrower(ctx, id, taskEnv); err != nil {
+	if preserved, err := s.preserveTaskEnvironmentForActiveBorrower(operationCtx, id, taskEnv); err != nil {
 		return false, err
 	} else if preserved {
 		s.logger.Info("transferred borrowed task environment before task delete",
@@ -2668,25 +2674,25 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 
 	envCleanup := taskEnvironmentCleanup{env: taskEnv, deleteRow: false}
 	cleanupJob, err := s.persistTaskResourceCleanup(
-		ctx, id, trigger, "", sessions, worktrees, stopTargets, envCleanup, true, true,
+		operationCtx, id, trigger, "", sessions, worktrees, stopTargets, envCleanup, true, true,
 	)
 	if err != nil {
 		return false, err
 	}
 
 	// 4. Delete from DB (sync, fast)
-	deleted, err := deleteFromDB(ctx, id)
+	deleted, err := deleteFromDB(operationCtx, id)
 	if err != nil {
-		s.resolveTaskResourceCleanupAfterMutationError(ctx, cleanupJob)
+		s.resolveTaskResourceCleanupAfterMutationError(operationCtx, cleanupJob)
 		s.logger.Error("failed to delete task", zap.String("task_id", id), zap.Error(err))
 		return false, err
 	}
 	if !deleted {
-		s.resolveTaskResourceCleanupAfterMutationError(ctx, cleanupJob)
+		s.resolveTaskResourceCleanupAfterMutationError(operationCtx, cleanupJob)
 		return false, nil
 	}
 	if s.attachmentSvc != nil {
-		if err := s.attachmentSvc.DeleteByTask(context.WithoutCancel(ctx), id); err != nil {
+		if err := s.attachmentSvc.DeleteByTask(operationCtx, id); err != nil {
 			s.logger.Warn("failed to remove task attachment bytes",
 				zap.String("task_id", id), zap.Error(err))
 		}
@@ -2695,15 +2701,15 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 	// tasks foreign key so nothing cascades, and a left-over edge would keep a
 	// dependent blocked forever on a task that no longer exists. Dependents are
 	// refreshed but deliberately not started: deletion is not success.
-	s.deleteDependencyEdgesForTask(context.WithoutCancel(ctx), id)
+	s.deleteDependencyEdgesForTask(operationCtx, id)
 
 	// 5. Publish event (sync, fast) - frontend removes task immediately
 	var extra map[string]interface{}
 	if reason != "" {
 		extra = map[string]interface{}{"reason": reason}
 	}
-	s.publishTaskEventWithExtra(ctx, events.TaskDeleted, task, nil, extra)
-	s.pullNextTaskOnVacate(ctx, task.WorkflowStepID, task.ID)
+	s.publishTaskEventWithExtra(operationCtx, events.TaskDeleted, task, nil, extra)
+	s.pullNextTaskOnVacate(operationCtx, task.WorkflowStepID, task.ID)
 	s.forgetTaskActivity(id)
 	s.logger.Info("task deleted",
 		zap.String("task_id", id),
@@ -2715,7 +2721,7 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 	//    cleanup running when only the env needs reclaiming).
 	hasCleanup := len(stopTargets) > 0 || s.worktreeCleanup != nil || len(sessions) > 0 || task.IsEphemeral || taskEnv != nil
 	if cleanupJob != nil {
-		if err := s.StartPreparedTaskResourceCleanup(ctx, cleanupJob.OperationID); err != nil {
+		if err := s.StartPreparedTaskResourceCleanup(context.WithoutCancel(operationCtx), cleanupJob.OperationID); err != nil {
 			s.logger.Warn("start committed delete resource cleanup",
 				zap.String("job_id", cleanupJob.ID), zap.String("task_id", id), zap.Error(err))
 		}

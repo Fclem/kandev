@@ -436,7 +436,7 @@ func (h *Handlers) handleDeleteTask(ctx context.Context, msg *ws.Message) (*ws.M
 		}
 		return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})
 	}
-	if err := h.taskSvc.DeleteTask(ctx, taskID); err != nil {
+	if err := h.taskSvc.DeleteTaskWithLifecycle(ctx, taskID); err != nil {
 		h.logger.Error("failed to delete task", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to delete task", nil)
 	}

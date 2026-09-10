@@ -2279,12 +2279,14 @@ func (s *Service) RestoreTaskMessageRollback(
 // Active agent sessions are stopped and worktrees cleaned up in background.
 func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 	archiveDeadline := archivecascade.ArchiveDeadline(ctx)
+	archiveCtx, cancelArchive := context.WithDeadline(ctx, archiveDeadline)
+	defer cancelArchive()
 	start := time.Now()
-	if err := s.authorizeTaskID(ctx, id); err != nil {
+	if err := s.authorizeTaskID(archiveCtx, id); err != nil {
 		return err
 	}
 	// 1. Get task and verify it exists
-	task, err := s.tasks.GetTask(ctx, id)
+	task, err := s.tasks.GetTask(archiveCtx, id)
 	if err != nil {
 		return err
 	}
@@ -2295,12 +2297,12 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 
 	// 2. Gather data needed for cleanup BEFORE archive
 	var stopTargets []taskStopTarget
-	activeSessions, err := s.sessions.ListActiveTaskSessionsByTaskID(ctx, id)
+	activeSessions, err := s.sessions.ListActiveTaskSessionsByTaskID(archiveCtx, id)
 	if err != nil {
 		return fmt.Errorf("list active task sessions for archive: %w", err)
 	}
 	if s.executionStopper != nil {
-		stopTargets, err = s.buildStopTargets(ctx, id, activeSessions)
+		stopTargets, err = s.buildStopTargets(archiveCtx, id, activeSessions)
 		if err != nil {
 			return fmt.Errorf("list runtime cleanup inventory: %w", err)
 		}
@@ -2313,7 +2315,7 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 			if sess == nil || sess.ID == "" {
 				continue
 			}
-			snapCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			snapCtx, cancel := context.WithTimeout(archiveCtx, 10*time.Second)
 			err := s.gitArchiveCapture.CaptureArchiveSnapshot(snapCtx, sess.ID)
 			cancel()
 			if err != nil {
@@ -2325,22 +2327,22 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 		}
 	}
 
-	sessions, err := s.sessions.ListTaskSessions(ctx, id)
+	sessions, err := s.sessions.ListTaskSessions(archiveCtx, id)
 	if err != nil {
 		return fmt.Errorf("list task sessions for archive: %w", err)
 	}
 
-	worktrees, err := s.gatherWorktreesForDelete(ctx, id)
+	worktrees, err := s.gatherWorktreesForDelete(archiveCtx, id)
 	if err != nil {
 		return fmt.Errorf("list worktrees for archive: %w", err)
 	}
-	taskEnv, err := s.gatherTaskEnvironmentForCleanup(ctx, id)
+	taskEnv, err := s.gatherTaskEnvironmentForCleanup(archiveCtx, id)
 	if err != nil {
 		return fmt.Errorf("lookup task environment for archive: %w", err)
 	}
 	envCleanup := taskEnvironmentCleanup{env: taskEnv, deleteRow: false, preserveBranches: true}
 	cleanupJob, err := s.persistTaskResourceCleanup(
-		ctx, id, models.TaskResourceCleanupTriggerArchive, "",
+		archiveCtx, id, models.TaskResourceCleanupTriggerArchive, "",
 		sessions, worktrees, stopTargets, envCleanup, true,
 	)
 	if err != nil {
@@ -2348,8 +2350,8 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 	}
 
 	// 3. Set archived_at in DB
-	if err := s.tasks.ArchiveTask(ctx, id); err != nil {
-		s.resolveTaskResourceCleanupAfterMutationError(ctx, cleanupJob)
+	if err := s.tasks.ArchiveTask(archiveCtx, id); err != nil {
+		s.resolveTaskResourceCleanupAfterMutationError(archiveCtx, cleanupJob)
 		return err
 	}
 

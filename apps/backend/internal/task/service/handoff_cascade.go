@@ -197,7 +197,9 @@ type CascadeOutcome struct {
 //  6. Evaluate cleanup once per affected group.
 func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cascade bool) (*CascadeOutcome, error) {
 	archiveDeadline := archivecascade.ArchiveDeadline(ctx)
-	if err := s.authorizeTask(ctx, rootID); err != nil {
+	archiveCtx, cancelArchive := context.WithDeadline(ctx, archiveDeadline)
+	defer cancelArchive()
+	if err := s.authorizeTask(archiveCtx, rootID); err != nil {
 		return nil, err
 	}
 	if rootID == "" {
@@ -209,7 +211,7 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 	// Validate the root exists up front. The CAS archive below treats a
 	// zero-row update as "skipped" (idempotent re-archive), which would
 	// silently report success for a task ID that doesn't exist at all.
-	if root, err := s.tasks.GetTask(ctx, rootID); err != nil {
+	if root, err := s.tasks.GetTask(archiveCtx, rootID); err != nil {
 		return nil, err
 	} else if root == nil {
 		return nil, fmt.Errorf("task %s not found", rootID)
@@ -219,7 +221,7 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 
 	var all []string
 	if cascade {
-		descendants, err := s.collectTaskTree(ctx, rootID)
+		descendants, err := s.collectTaskTree(archiveCtx, rootID)
 		if err != nil {
 			return nil, err
 		}
@@ -233,12 +235,12 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 	transferCompensationCtx, cancelTransferCompensation := archivecascade.ContinuationContextUntil(ctx, archiveDeadline)
 	defer cancelTransferCompensation()
 	ownershipTransfers, err := s.transferSharedWorkspaceEnvironmentOwnership(
-		ctx, transferCompensationCtx, all)
+		archiveCtx, transferCompensationCtx, all)
 	if err != nil {
 		return out, err
 	}
 	cleanupOps, err := s.prepareCascadeResourceCleanupWithCompensation(
-		ctx, transferCompensationCtx, archiveDeadline, all, cascadeID,
+		archiveCtx, transferCompensationCtx, archiveDeadline, all, cascadeID,
 		models.TaskResourceCleanupTriggerCascadeArchive)
 	if err != nil {
 		return out, s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(
@@ -340,7 +342,9 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 // for symmetry with archive.
 func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, cascade bool) (*CascadeOutcome, error) {
 	deleteDeadline := archivecascade.ArchiveDeadline(ctx)
-	if err := s.authorizeTask(ctx, rootID); err != nil {
+	deleteCtx, cancelDelete := context.WithDeadline(ctx, deleteDeadline)
+	defer cancelDelete()
+	if err := s.authorizeTask(deleteCtx, rootID); err != nil {
 		return nil, err
 	}
 	if rootID == "" {
@@ -351,19 +355,20 @@ func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, casc
 	}
 	cascadeID := uuid.New().String()
 	out := &CascadeOutcome{CascadeID: cascadeID}
-	all, err := s.resolveDeleteSet(ctx, rootID, cascade)
+	all, err := s.resolveDeleteSet(deleteCtx, rootID, cascade)
 	if err != nil {
 		return nil, err
 	}
-	transferCompensationCtx, cancelTransferCompensation := archivecascade.ContinuationContextUntil(ctx, deleteDeadline)
+	transferCompensationCtx, cancelTransferCompensation :=
+		archivecascade.ContinuationContextUntil(ctx, deleteDeadline)
 	defer cancelTransferCompensation()
 	ownershipTransfers, err := s.transferSharedWorkspaceEnvironmentOwnership(
-		ctx, transferCompensationCtx, all)
+		deleteCtx, transferCompensationCtx, all)
 	if err != nil {
 		return out, err
 	}
 	cleanupOps, err := s.prepareCascadeResourceCleanup(
-		ctx, deleteDeadline, all, cascadeID, models.TaskResourceCleanupTriggerCascadeDelete)
+		deleteCtx, deleteDeadline, all, cascadeID, models.TaskResourceCleanupTriggerCascadeDelete)
 	if err != nil {
 		return out, s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(
 			transferCompensationCtx, ownershipTransfers, err)

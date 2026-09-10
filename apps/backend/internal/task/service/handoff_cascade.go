@@ -177,6 +177,28 @@ type CascadeOutcome struct {
 	ReleasedGroupIDs []string // workspace groups whose membership was released
 }
 
+// CascadePostCommitError reports housekeeping failure after the lifecycle
+// mutation has committed. Callers can acknowledge the durable task outcome
+// while retaining the error for observability and retry handling.
+type CascadePostCommitError struct {
+	Err error
+}
+
+func (e *CascadePostCommitError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *CascadePostCommitError) Unwrap() error {
+	return e.Err
+}
+
+func cascadePostCommitError(out *CascadeOutcome, err error) error {
+	if err == nil || out == nil || len(out.ArchivedTaskIDs) == 0 {
+		return err
+	}
+	return &CascadePostCommitError{Err: err}
+}
+
 // ArchiveTaskTree archives rootID and every non-archived descendant under
 // a single cascade ID. Already-archived descendants are skipped so the
 // later UnarchiveTaskTree restores exactly what this cascade owned.
@@ -313,7 +335,7 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 	if err != nil {
 		// Archive mutations are committed; retain prepared cleanup intents and
 		// report membership release alongside any cleanup errors.
-		return out, errors.Join(err, errors.Join(cleanupErrors...))
+		return out, cascadePostCommitError(out, errors.Join(err, errors.Join(cleanupErrors...)))
 	}
 	out.ReleasedGroupIDs = groupIDs
 	for _, gid := range groupIDs {
@@ -321,7 +343,7 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("evaluate workspace group cleanup %s: %w", gid, err))
 		}
 	}
-	return out, errors.Join(cleanupErrors...)
+	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
 }
 
 // DeleteTaskTree is the inverse-of-archive operation: it walks rootID's
@@ -460,7 +482,7 @@ func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, casc
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("evaluate workspace group cleanup %s: %w", gid, err))
 		}
 	}
-	return out, errors.Join(cleanupErrors...)
+	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
 }
 
 func (s *HandoffService) archiveTaskWithVacatedStep(

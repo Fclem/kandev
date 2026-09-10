@@ -53,12 +53,13 @@ func (successfulWSLaunchOrchestrator) EnsureSession(context.Context, string, ...
 type wsTaskRepo struct {
 	mockRepository
 
-	updated       []*models.Task
-	deleted       []string
-	archived      []string
-	stateUpdates  []string
-	sessionsCalls []string
-	created       []*models.Task
+	updated        []*models.Task
+	deleted        []string
+	cascadeDeleted []string
+	archived       []string
+	stateUpdates   []string
+	sessionsCalls  []string
+	created        []*models.Task
 }
 
 func (r *wsTaskRepo) GetTask(_ context.Context, id string) (*models.Task, error) {
@@ -86,6 +87,19 @@ func (r *wsTaskRepo) UpdateTaskWithExplicitPosition(ctx context.Context, task *m
 
 func (r *wsTaskRepo) DeleteTask(_ context.Context, id string) error {
 	r.deleted = append(r.deleted, id)
+	return nil
+}
+
+func (r *wsTaskRepo) DeleteTaskWithVacatedStep(_ context.Context, id string) (string, error) {
+	r.cascadeDeleted = append(r.cascadeDeleted, id)
+	return "", nil
+}
+
+func (r *wsTaskRepo) ListStructuralChildrenLimited(_ context.Context, _ string, _ int) ([]*models.Task, error) {
+	return nil, nil
+}
+
+func (r *wsTaskRepo) ReparentDirectChildrenInWorkspace(_ context.Context, _, _, _ string) error {
 	return nil
 }
 
@@ -238,6 +252,20 @@ func TestWSTaskMutationsDenyForeignTask(t *testing.T) {
 			require.Zero(t, tc.writes(repo), "a denied mutation must not reach the repository")
 		})
 	}
+}
+
+func TestWSDeleteTaskUsesHandoffCascadeWhenWired(t *testing.T) {
+	repo := &wsTaskRepo{}
+	h := newWSTaskHandlers(t, repo)
+	h.handoffSvc = service.NewHandoffService(repo, nil, nil, nil, nil, h.logger)
+
+	resp, err := h.wsDeleteTask(asUser("user-a"), wsWorkflowRequest(t, ws.ActionTaskDelete,
+		map[string]any{"id": "task-b"}))
+
+	require.NoError(t, err)
+	require.Equal(t, ws.MessageTypeResponse, resp.Type)
+	require.Equal(t, []string{"task-b"}, repo.cascadeDeleted)
+	require.Empty(t, repo.deleted, "wired handoff deletion must not use the legacy service path")
 }
 
 // TestWSCreateTaskDeniesForeignWorkspace stops a caller from planting a task in

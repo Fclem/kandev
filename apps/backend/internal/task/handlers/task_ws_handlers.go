@@ -378,6 +378,19 @@ func (h *TaskHandlers) wsUpdateTask(ctx context.Context, msg *ws.Message) (*ws.M
 func (h *TaskHandlers) wsDeleteTask(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	return wsHandleIDRequest(ctx, msg, h.logger, "failed to delete task",
 		func(ctx context.Context, id string) (any, error) {
+			// Route through HandoffService when wired so WS deletion has the
+			// same child reparenting, membership release, and cleanup
+			// orchestration as the HTTP path.
+			if h.handoffSvc != nil {
+				if _, err := h.handoffSvc.DeleteTaskTree(ctx, id, false); err != nil {
+					if !isCascadePostCommitError(err) {
+						return nil, err
+					}
+					h.logger.Warn("task deleted but post-commit housekeeping failed",
+						zap.String("task_id", id), zap.Error(err))
+				}
+				return dto.SuccessResponse{Success: true}, nil
+			}
 			if err := h.service.DeleteTask(ctx, id); err != nil {
 				return nil, err
 			}
@@ -395,7 +408,11 @@ func (h *TaskHandlers) wsArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 			// no cascade flag.
 			if h.handoffSvc != nil {
 				if _, err := h.handoffSvc.ArchiveTaskTree(ctx, id, false); err != nil {
-					return nil, err
+					if !isCascadePostCommitError(err) {
+						return nil, err
+					}
+					h.logger.Warn("task archived but post-commit housekeeping failed",
+						zap.String("task_id", id), zap.Error(err))
 				}
 				return dto.SuccessResponse{Success: true}, nil
 			}

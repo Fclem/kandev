@@ -1855,8 +1855,12 @@ func (h *TaskHandlers) httpDeleteTask(c *gin.Context) {
 				DiscardWorktreeChanges: discardWorktreeChanges,
 			},
 		); err != nil {
-			handleNotFound(c, h.logger, err, "task not deleted")
-			return
+			if !isCascadePostCommitError(err) {
+				handleNotFound(c, h.logger, err, "task not deleted")
+				return
+			}
+			h.logger.Warn("task deleted but post-commit housekeeping failed",
+				zap.String("task_id", taskID), zap.Error(err))
 		}
 		c.JSON(http.StatusOK, dto.SuccessResponse{Success: true})
 		return
@@ -1880,8 +1884,12 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 	// (legacy / tests) fall back to the single-task path.
 	if h.handoffSvc != nil {
 		if _, err := h.handoffSvc.ArchiveTaskTree(c.Request.Context(), taskID, cascade); err != nil {
-			handleNotFound(c, h.logger, err, "task not archived")
-			return
+			if !isCascadePostCommitError(err) {
+				handleNotFound(c, h.logger, err, "task not archived")
+				return
+			}
+			h.logger.Warn("task archived but post-commit housekeeping failed",
+				zap.String("task_id", taskID), zap.Error(err))
 		}
 		c.JSON(http.StatusOK, dto.SuccessResponse{Success: true})
 		return
@@ -1899,11 +1907,14 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 func cascadeQueryParam(c *gin.Context) bool {
 	return strings.EqualFold(c.Query("cascade"), "true")
 }
-
 func discardWorktreeChangesQueryParam(c *gin.Context) bool {
 	return strings.EqualFold(c.Query("discard_worktree_changes"), "true")
 }
 
+func isCascadePostCommitError(err error) bool {
+	var postCommitErr *service.CascadePostCommitError
+	return errors.As(err, &postCommitErr)
+}
 // httpTaskSubtaskCount returns the count of direct, non-archived,
 // non-ephemeral subtasks for a task. Used by the frontend's archive /
 // delete confirmation dialogs to decide whether to render the

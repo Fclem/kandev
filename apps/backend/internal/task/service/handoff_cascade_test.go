@@ -129,6 +129,7 @@ func (f *fakeWSGroupRepoCascade) ReleaseWorkspaceGroupMember(_ context.Context, 
 type recordingCleanupCoordinator struct {
 	mu                    sync.Mutex
 	prepareErr            error
+	startErr              error
 	prepared              []string
 	deleteEnvironmentRows []bool
 	started               []string
@@ -233,7 +234,7 @@ func (c *recordingCleanupCoordinator) StartPreparedTaskResourceCleanup(_ context
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.started = append(c.started, operationID)
-	return nil
+	return c.startErr
 }
 
 func (c *recordingCleanupCoordinator) CancelPreparedTaskResourceCleanup(_ context.Context, operationID string) error {

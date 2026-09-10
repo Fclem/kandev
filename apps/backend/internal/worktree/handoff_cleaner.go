@@ -80,6 +80,9 @@ func (c *HandoffCleaner) CleanupSingleRepoWorktree(ctx context.Context, worktree
 // root path is validated against the managed-roots set first; if the
 // guard fails the per-repo removals are also skipped.
 func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath string, worktreeIDs []string) error {
+	if c.manager == nil {
+		return errors.New("worktree manager not configured")
+	}
 	if rootPath == "" {
 		return errors.New("multi-repo root path is required")
 	}

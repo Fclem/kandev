@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/kandev/kandev/internal/task/archivecascade"
 )
 
 // StartAutoArchiveLoop starts a background goroutine that periodically archives tasks
@@ -26,7 +28,11 @@ func (s *Service) StartAutoArchiveLoop(ctx context.Context) {
 }
 
 func (s *Service) runAutoArchive(ctx context.Context) {
-	tasks, err := s.tasks.ListTasksForAutoArchive(ctx)
+	deadline := archivecascade.ArchiveDeadline(ctx)
+	runCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
+	tasks, err := s.tasks.ListTasksForAutoArchive(runCtx)
 	if err != nil {
 		s.logger.Error("auto-archive: failed to list candidates", zap.Error(err))
 		return
@@ -37,7 +43,7 @@ func (s *Service) runAutoArchive(ctx context.Context) {
 
 	s.logger.Info("auto-archive: found candidates", zap.Int("count", len(tasks)))
 	for _, task := range tasks {
-		if err := s.ArchiveTask(ctx, task.ID); err != nil {
+		if err := s.ArchiveTask(runCtx, task.ID); err != nil {
 			s.logger.Warn("auto-archive: failed to archive task",
 				zap.String("task_id", task.ID),
 				zap.Error(err))

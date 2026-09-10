@@ -142,6 +142,16 @@ func TestCleanupMultiRepoRoot_RejectsPathOutsideManagedRoot(t *testing.T) {
 		t.Error("multi-repo root outside managed root must be rejected")
 	}
 }
+func TestCleanupMultiRepoRoot_RequiresWorktreeManager(t *testing.T) {
+	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json"})
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	c := NewHandoffCleaner(nil, log, t.TempDir())
+	if err := c.CleanupMultiRepoRoot(context.Background(), t.TempDir(), nil); err == nil {
+		t.Fatal("multi-repo cleanup must reject a missing worktree manager")
+	}
+}
 
 func TestIsDescendant_HappyAndUnhappyPaths(t *testing.T) {
 	cases := []struct {

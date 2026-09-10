@@ -997,7 +997,7 @@ func (h *TaskHandlers) httpCreateTask(c *gin.Context) {
 	if err := h.service.ClaimMessageAttachments(c.Request.Context(), task.ID, "", body.Attachments); err != nil {
 		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 10*time.Second)
 		defer cancel()
-		if deleteErr := h.service.DeleteTask(rollbackCtx, task.ID); deleteErr != nil {
+		if deleteErr := h.service.DeleteTaskWithLifecycle(rollbackCtx, task.ID); deleteErr != nil {
 			h.logger.Warn("failed to roll back task after attachment claim", zap.String("task_id", task.ID), zap.Error(deleteErr))
 		}
 		switch {
@@ -1231,7 +1231,7 @@ func (h *TaskHandlers) commitFreshBranch(
 }
 
 func (h *TaskHandlers) rollbackFreshBranchTask(ctx context.Context, taskID string) {
-	if err := h.service.DeleteTask(ctx, taskID); err != nil {
+	if err := h.service.DeleteTaskWithLifecycle(ctx, taskID); err != nil {
 		h.logger.Warn("failed to compensate by deleting task after fresh-branch failure",
 			zap.String("task_id", taskID), zap.Error(err))
 	}
@@ -2164,7 +2164,7 @@ func (h *TaskHandlers) httpStartQuickChat(c *gin.Context) {
 		// in this file so a future change to the constant covers this path too.
 		rollbackCtx, cancel := context.WithTimeout(context.Background(), constants.TaskDeleteTimeout)
 		defer cancel()
-		if deleteErr := h.service.DeleteTask(rollbackCtx, task.ID); deleteErr != nil {
+		if deleteErr := h.service.DeleteTaskWithLifecycle(rollbackCtx, task.ID); deleteErr != nil {
 			h.logger.Error("failed to rollback quick chat task",
 				zap.String("task_id", task.ID),
 				zap.Error(deleteErr))
@@ -2343,7 +2343,7 @@ func (h *TaskHandlers) httpStartConfigChat(c *gin.Context) {
 }
 
 func (h *TaskHandlers) deleteTaskOnError(taskID, label string, err error) {
-	if deleteErr := h.service.DeleteTask(context.Background(), taskID); deleteErr != nil {
+	if deleteErr := h.service.DeleteTaskWithLifecycle(context.Background(), taskID); deleteErr != nil {
 		h.logger.Error("failed to rollback "+label+" task",
 			zap.String("task_id", taskID), zap.Error(deleteErr))
 	}

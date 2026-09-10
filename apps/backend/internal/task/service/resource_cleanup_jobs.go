@@ -83,6 +83,7 @@ func (s *Service) persistTaskResourceCleanup(
 	stopTargets []taskStopTarget,
 	envCleanup taskEnvironmentCleanup,
 	prepared bool,
+	collectSSH bool,
 ) (*models.TaskResourceCleanupJob, error) {
 	if s.resourceCleanups == nil {
 		return nil, nil
@@ -101,10 +102,7 @@ func (s *Service) persistTaskResourceCleanup(
 		DeleteEnvironmentRow:  envCleanup.deleteRow,
 		LegacyWorktreeCleanup: s.hasLegacyWorktreeCleanup(),
 	}
-	if !prepared {
-		// A prepared job stores a deliberately empty placeholder snapshot that
-		// PrepareTaskResourceCleanup replaces once the barrier is reserved;
-		// gathering here would be discarded by that replacement.
+	if collectSSH {
 		sshTaskDirs, err := s.gatherSSHReclaimTargets(ctx, taskID)
 		if err != nil {
 			return nil, fmt.Errorf("list remote task directories for cleanup snapshot: %w", err)
@@ -731,7 +729,7 @@ func (s *Service) PrepareTaskResourceCleanup(
 	// reject new ownership while this prepared barrier is active, so the
 	// snapshot below cannot miss a resource admitted mid-preparation.
 	job, err := s.persistTaskResourceCleanup(ctx, taskID, trigger, operationID,
-		nil, nil, nil, taskEnvironmentCleanup{}, true)
+		nil, nil, nil, taskEnvironmentCleanup{}, true, false)
 	if err != nil {
 		return err
 	}
@@ -739,29 +737,32 @@ func (s *Service) PrepareTaskResourceCleanup(
 		return nil
 	}
 	barrierOperationID := job.OperationID
+	cancelPrepared := func(cause error) error {
+		return errors.Join(cause, s.CancelPreparedTaskResourceCleanup(ctx, barrierOperationID))
+	}
 	sessions, err := s.sessions.ListTaskSessions(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("list task sessions for cleanup snapshot: %w", err)
+		return cancelPrepared(fmt.Errorf("list task sessions for cleanup snapshot: %w", err))
 	}
 	stopTargets, err := s.buildStopTargets(ctx, taskID, sessions)
 	if err != nil {
-		return fmt.Errorf("list runtime cleanup inventory: %w", err)
+		return cancelPrepared(fmt.Errorf("list runtime cleanup inventory: %w", err))
 	}
 	worktrees, err := s.gatherWorktreesForDelete(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("list worktrees for cleanup snapshot: %w", err)
+		return cancelPrepared(fmt.Errorf("list worktrees for cleanup snapshot: %w", err))
 	}
 	worktreeHeadOIDs, err := s.captureWorktreeCleanupHeadOIDs(ctx, worktrees)
 	if err != nil {
-		return err
+		return cancelPrepared(err)
 	}
 	taskEnv, err := s.gatherTaskEnvironmentForCleanup(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("lookup task environment for cleanup snapshot: %w", err)
+		return cancelPrepared(fmt.Errorf("lookup task environment for cleanup: %w", err))
 	}
 	sshTaskDirs, err := s.gatherSSHReclaimTargets(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("list remote task directories for cleanup snapshot: %w", err)
+		return cancelPrepared(fmt.Errorf("list remote task directories for cleanup snapshot: %w", err))
 	}
 	snapshot := taskResourceCleanupSnapshot{
 		Sessions: sessions, Worktrees: worktrees, WorktreeHeadOIDs: worktreeHeadOIDs,

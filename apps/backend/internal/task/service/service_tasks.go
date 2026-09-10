@@ -2343,7 +2343,7 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 	envCleanup := taskEnvironmentCleanup{env: taskEnv, deleteRow: false, preserveBranches: true}
 	cleanupJob, err := s.persistTaskResourceCleanup(
 		archiveCtx, id, models.TaskResourceCleanupTriggerArchive, "",
-		sessions, worktrees, stopTargets, envCleanup, true,
+		sessions, worktrees, stopTargets, envCleanup, true, true,
 	)
 	if err != nil {
 		return err
@@ -2668,7 +2668,7 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 
 	envCleanup := taskEnvironmentCleanup{env: taskEnv, deleteRow: false}
 	cleanupJob, err := s.persistTaskResourceCleanup(
-		ctx, id, trigger, "", sessions, worktrees, stopTargets, envCleanup, true,
+		ctx, id, trigger, "", sessions, worktrees, stopTargets, envCleanup, true, true,
 	)
 	if err != nil {
 		return false, err

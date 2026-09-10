@@ -416,7 +416,7 @@ func (s *Service) prepareWorkspaceDeleteTaskCleanup(ctx context.Context, task *m
 		ctx, task.ID, models.TaskResourceCleanupTriggerWorkspaceDelete,
 		newTaskResourceCleanupOperationID(models.TaskResourceCleanupTriggerWorkspaceDelete, task.ID),
 		cleanup.sessions, cleanup.worktrees, cleanup.stopTargets,
-		taskEnvironmentCleanup{env: cleanup.taskEnv, deleteRow: false}, true,
+		taskEnvironmentCleanup{env: cleanup.taskEnv, deleteRow: false}, true, true,
 	)
 	return cleanup, err
 }

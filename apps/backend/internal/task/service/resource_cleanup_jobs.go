@@ -825,7 +825,7 @@ func (s *Service) CancelPreparedTaskResourceCleanup(ctx context.Context, operati
 	if !ok {
 		return errors.New("cleanup repository lacks fenced cancellation")
 	}
-	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
+	transitionCtx, cancel := detachedCleanupTransitionContext(context.WithoutCancel(ctx))
 	defer cancel()
 	job, err := s.resourceCleanups.GetTaskResourceCleanupJobByOperationID(transitionCtx, operationID)
 	if err != nil {

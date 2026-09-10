@@ -1013,6 +1013,28 @@ func TestPreparedCascadeCleanupSnapshotPersistsWorktreeTaskDirNames(t *testing.T
 	}
 }
 
+func TestCancelPreparedTaskResourceCleanupIgnoresCallerCancellation(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	operationID := "cascade_cancel:prepared-cancel"
+	if err := taskSvc.PrepareTaskResourceCleanup(context.Background(), "task-prepared-cancel",
+		models.TaskResourceCleanupTriggerCascadeDelete, operationID, true); err != nil {
+		t.Fatalf("PrepareTaskResourceCleanup: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := taskSvc.CancelPreparedTaskResourceCleanup(ctx, operationID); err != nil {
+		t.Fatalf("CancelPreparedTaskResourceCleanup: %v", err)
+	}
+	job, err := repo.GetTaskResourceCleanupJobByOperationID(context.Background(), operationID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJobByOperationID: %v", err)
+	}
+	if job.State != models.TaskResourceCleanupStateCancelled {
+		t.Fatalf("cleanup state = %q, want cancelled", job.State)
+	}
+}
+
 func TestRetryTaskResourceCleanupJobPersistsAfterRunContextCancellation(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	ctx := context.Background()

@@ -26,7 +26,7 @@ type memoryCredentialUploader struct {
 func (u *memoryCredentialUploader) ReadFile(_ context.Context, path string) ([]byte, error) {
 	data, ok := u.files[path]
 	if !ok {
-		return nil, &os.PathError{Op: fileReadOperation, Path: path, Err: fs.ErrNotExist}
+		return nil, &os.PathError{Op: "read", Path: path, Err: fs.ErrNotExist}
 	}
 	return append([]byte(nil), data...), nil
 }

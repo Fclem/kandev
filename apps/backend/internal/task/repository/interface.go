@@ -306,6 +306,7 @@ type AttachmentRepository interface {
 	CreateMessageAttachment(ctx context.Context, attachment *models.TaskMessageAttachment) error
 	GetMessageAttachment(ctx context.Context, id string) (*models.TaskMessageAttachment, error)
 	ListMessageAttachments(ctx context.Context, ids []string) ([]*models.TaskMessageAttachment, error)
+	ListMessageAttachmentsByTask(ctx context.Context, taskID string) ([]*models.TaskMessageAttachment, error)
 	ClaimMessageAttachments(ctx context.Context, ids []string, ownerID, workspaceID, taskID, sessionID string) error
 	DeleteClaimedMessageAttachments(ctx context.Context, ids []string, ownerID, taskID, sessionID string) ([]*models.TaskMessageAttachment, error)
 	DeleteMessageAttachmentsByTask(ctx context.Context, taskID string) ([]*models.TaskMessageAttachment, error)

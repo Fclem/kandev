@@ -96,6 +96,31 @@ func (r *Repository) ListMessageAttachments(ctx context.Context, ids []string) (
 	return out, nil
 }
 
+func (r *Repository) ListMessageAttachmentsByTask(ctx context.Context, taskID string) ([]*models.TaskMessageAttachment, error) {
+	if taskID == "" {
+		return nil, nil
+	}
+	rows, err := r.ro.QueryxContext(ctx, r.ro.Rebind(`
+		SELECT `+attachmentSelectColumns+` FROM task_message_attachments WHERE task_id = ?
+	`), taskID)
+	if err != nil {
+		return nil, fmt.Errorf("list task message attachments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*models.TaskMessageAttachment
+	for rows.Next() {
+		attachment := &models.TaskMessageAttachment{}
+		if err := rows.StructScan(attachment); err != nil {
+			return nil, fmt.Errorf("scan task message attachment: %w", err)
+		}
+		out = append(out, attachment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate task message attachments: %w", err)
+	}
+	return out, nil
+}
+
 func (r *Repository) ClaimMessageAttachments(ctx context.Context, ids []string, ownerID, workspaceID, taskID, sessionID string) error {
 	if len(ids) == 0 {
 		return nil

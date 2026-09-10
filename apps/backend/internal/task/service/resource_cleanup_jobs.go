@@ -419,10 +419,34 @@ func (s *Service) processTaskResourceCleanupJob(ctx context.Context, id string) 
 	if !updated {
 		return nil
 	}
-	_, err = s.resourceCleanups.CompleteClaimedTaskResourceCleanupJob(
+	updated, err = s.resourceCleanups.CompleteClaimedTaskResourceCleanupJob(
 		runCtx, job.ID, job.Attempts, models.TaskResourceCleanupStateSucceeded, "", nil,
 	)
-	return err
+	if err != nil {
+		return s.recoverTaskResourceCleanupCompletion(runCtx, job, err)
+	}
+	if !updated {
+		return nil
+	}
+	return nil
+}
+
+func (s *Service) recoverTaskResourceCleanupCompletion(
+	ctx context.Context,
+	job *models.TaskResourceCleanupJob,
+	completionErr error,
+) error {
+	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
+	defer cancel()
+	current, reloadErr := s.resourceCleanups.GetTaskResourceCleanupJob(transitionCtx, job.ID)
+	if reloadErr == nil && current != nil {
+		if current.State != models.TaskResourceCleanupStateRunning || current.Attempts != job.Attempts {
+			return nil
+		}
+		job = current
+	}
+	retryErr := s.retryTaskResourceCleanupJob(transitionCtx, job, completionErr)
+	return errors.Join(completionErr, reloadErr, retryErr)
 }
 
 func (s *Service) registerTaskResourceCleanupRun(

@@ -18,6 +18,28 @@ import (
 	"github.com/kandev/kandev/internal/worktree"
 )
 
+type completionFailureCleanupRepository struct {
+	repository.TaskResourceCleanupRepository
+	failNextCompletion bool
+}
+
+func (r *completionFailureCleanupRepository) CompleteClaimedTaskResourceCleanupJob(
+	ctx context.Context,
+	id string,
+	attempt int,
+	state models.TaskResourceCleanupState,
+	lastError string,
+	nextAttemptAt *time.Time,
+) (bool, error) {
+	if r.failNextCompletion {
+		r.failNextCompletion = false
+		return false, errors.New("simulated cleanup completion persistence failure")
+	}
+	return r.TaskResourceCleanupRepository.CompleteClaimedTaskResourceCleanupJob(
+		ctx, id, attempt, state, lastError, nextAttemptAt,
+	)
+}
+
 type cancellableCleanupBarrier struct {
 	started chan struct{}
 	stopped chan struct{}
@@ -1098,6 +1120,36 @@ func TestCancelPreparedTaskResourceCleanupIgnoresCallerCancellation(t *testing.T
 	}
 }
 
+func TestTaskResourceCleanupRetriesCompletionPersistenceFailure(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	job := &models.TaskResourceCleanupJob{
+		ID: "completion-failure", OperationID: "delete:completion-failure",
+		TaskID: "task-completion-failure", Trigger: models.TaskResourceCleanupTriggerDelete,
+		State: models.TaskResourceCleanupStatePending, ResourceSnapshot: `{}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(context.Background(), job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+	taskSvc.resourceCleanups = &completionFailureCleanupRepository{
+		TaskResourceCleanupRepository: repo,
+		failNextCompletion:            true,
+	}
+
+	err := taskSvc.processTaskResourceCleanupJob(context.Background(), job.ID)
+	if err == nil {
+		t.Fatal("processTaskResourceCleanupJob succeeded after completion persistence failure")
+	}
+	got, err := repo.GetTaskResourceCleanupJob(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJob: %v", err)
+	}
+	if got.State != models.TaskResourceCleanupStateRetryWait {
+		t.Fatalf("cleanup state = %q, want retry_wait", got.State)
+	}
+	if got.NextAttemptAt == nil {
+		t.Fatal("retry_wait cleanup has no next attempt time")
+	}
+}
 func TestCancelPreparedTaskResourceCleanupRetainsExpiredDeadline(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	operationID := "cascade_cancel:expired-deadline"

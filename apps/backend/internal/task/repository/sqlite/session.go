@@ -2920,14 +2920,7 @@ func unmarshalSessionSnapshots(
 // in this task transaction. Some repository unit tests intentionally omit the
 // message queue schema; production databases always include it.
 func (r *Repository) queueSessionLockTablePresent(ctx context.Context) (bool, error) {
-	var present bool
-	var err error
-	if dialect.IsPostgres(r.db.DriverName()) {
-		err = r.db.GetContext(ctx, &present, `SELECT to_regclass('queue_session_locks') IS NOT NULL`)
-	} else {
-		err = r.db.GetContext(ctx, &present, `SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'queue_session_locks')`)
-	}
-	return present, err
+	return db.TableExistsContext(ctx, r.db, "queue_session_locks")
 }
 
 // DeleteTaskSession deletes the exact session incarnation and its pending queue

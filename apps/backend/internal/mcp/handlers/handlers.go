@@ -920,7 +920,8 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 	// The MCP skip is a data-loss guard, not just an optimization: the steps
 	// below resolve remote contributions from the REQUEST (resolveMCPRemote
 	// Contributions above) but index them against the RETURNED task's
-	// repositories, and every rollback path on a mismatch calls DeleteTask.
+	// repositories, and every rollback path on a mismatch uses the lifecycle
+	// coordinator when one is wired.
 	// A retry landing on a Found outcome — the existing task, whose
 	// repository list need not match this retry's payload — would then
 	// misindex, roll back, and delete the task the caller was trying to
@@ -946,7 +947,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 			continue
 		}
 		if index >= len(task.Repositories) || task.Repositories[index] == nil {
-			if delErr := h.taskSvc.DeleteTask(ctx, task.ID); delErr != nil {
+			if delErr := h.taskSvc.DeleteTaskWithLifecycle(ctx, task.ID); delErr != nil {
 				h.logger.Error("rollback delete failed after missing task repository",
 					zap.String("task_id", task.ID), zap.Error(delErr))
 			}
@@ -956,7 +957,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		if err := h.remoteContributionSvc.Associate(ctx, req.WorkspaceID, identity.UserID, task.ID, task.Repositories[index].RepositoryID, resolution); err != nil {
 			h.logger.Error("associate remote contribution; rolling back task creation",
 				zap.String("task_id", task.ID), zap.Error(err))
-			if delErr := h.taskSvc.DeleteTask(ctx, task.ID); delErr != nil {
+			if delErr := h.taskSvc.DeleteTaskWithLifecycle(ctx, task.ID); delErr != nil {
 				h.logger.Error("rollback delete failed after contribution association error",
 					zap.String("task_id", task.ID), zap.Error(delErr))
 			}

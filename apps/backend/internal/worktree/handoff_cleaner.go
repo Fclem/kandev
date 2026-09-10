@@ -89,9 +89,12 @@ func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath stri
 	if err := c.requireManagedRoot(rootPath); err != nil {
 		return err
 	}
+	if len(worktreeIDs) == 0 {
+		return errors.New("multi-repo worktree inventory is empty")
+	}
 	for _, id := range worktreeIDs {
-		if id == "" {
-			continue
+		if strings.TrimSpace(id) == "" {
+			return errors.New("multi-repo worktree inventory contains an empty ID")
 		}
 		if err := c.manager.RemoveByID(ctx, id, false); err != nil {
 			c.logger.Warn("multi-repo worktree remove failed",

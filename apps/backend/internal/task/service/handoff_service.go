@@ -282,6 +282,10 @@ type TaskEventPublisher interface {
 	PublishTaskDeleted(ctx context.Context, task *models.Task)
 }
 
+type TaskDeletedEventPublisherWithExtra interface {
+	PublishTaskDeletedWithExtra(ctx context.Context, task *models.Task, extra map[string]interface{})
+}
+
 // VacatedStepReconciler backfills capacity in a workflow step after admitted
 // work leaves it.
 type VacatedStepReconciler interface {

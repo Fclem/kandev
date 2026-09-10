@@ -402,6 +402,7 @@ type Service struct {
 	usage                           repository.UsageRepository
 	workspacePolicyAttacher         WorkspacePolicyAttacher
 	autoArchiveCoordinator          AutoArchiveCoordinator
+	taskLifecycleCoordinator        TaskLifecycleCoordinator
 	attachmentSvc                   *AttachmentService
 	statusSummaryPRs                TaskStatusSummaryPRReader
 	statusSummaryProjector          TaskStatusSummaryEventProjector
@@ -544,6 +545,16 @@ type AutoArchiveCoordinator interface {
 	ArchiveAutoTask(ctx context.Context, candidate *models.Task) (*CascadeOutcome, error)
 }
 
+// TaskLifecycleCoordinator owns destructive task lifecycle transitions that
+// must release workspace-group state before or alongside deleting the task.
+type TaskLifecycleCoordinator interface {
+	DeleteTaskTree(ctx context.Context, rootID string, cascade bool) (*CascadeOutcome, error)
+}
+
+type taskLifecycleCoordinatorWithReason interface {
+	DeleteTaskTreeWithReason(ctx context.Context, rootID string, cascade bool, reason string) (*CascadeOutcome, error)
+}
+
 // WorkspacePolicyMembershipReleaser removes a task's workspace-group
 // membership after a post-create rollback. It is an optional companion to
 // WorkspacePolicyAttacher because lightweight task-service test harnesses may
@@ -588,6 +599,43 @@ func (s *Service) SetWorkspaceSecretDeleter(deleter WorkspaceSecretDeleter) {
 // coordinator used by every CreateTask caller.
 func (s *Service) SetWorkspacePolicyAttacher(attacher WorkspacePolicyAttacher) {
 	s.workspacePolicyAttacher = attacher
+}
+
+// SetTaskLifecycleCoordinator installs the canonical destructive task
+// transition used by automatic cleanup callers.
+func (s *Service) SetTaskLifecycleCoordinator(coordinator TaskLifecycleCoordinator) {
+	s.taskLifecycleCoordinator = coordinator
+}
+
+// DeleteTaskWithLifecycle deletes a task through the canonical coordinator
+// when one is wired, preserving the legacy service path for isolated callers.
+func (s *Service) DeleteTaskWithLifecycle(ctx context.Context, id string) error {
+	if s.taskLifecycleCoordinator == nil {
+		return s.DeleteTask(ctx, id)
+	}
+	_, err := s.taskLifecycleCoordinator.DeleteTaskTree(ctx, id, false)
+	var postCommitErr *CascadePostCommitError
+	if errors.As(err, &postCommitErr) {
+		return nil
+	}
+	return err
+}
+
+// DeleteTaskWithLifecycleAndReason preserves deletion attribution when the
+// configured coordinator supports reason-aware task-deleted events.
+func (s *Service) DeleteTaskWithLifecycleAndReason(ctx context.Context, id, reason string) error {
+	if s.taskLifecycleCoordinator == nil {
+		return s.DeleteTaskWithReason(ctx, id, reason)
+	}
+	if coordinator, ok := s.taskLifecycleCoordinator.(taskLifecycleCoordinatorWithReason); ok {
+		_, err := coordinator.DeleteTaskTreeWithReason(ctx, id, false, reason)
+		var postCommitErr *CascadePostCommitError
+		if errors.As(err, &postCommitErr) {
+			return nil
+		}
+		return err
+	}
+	return s.DeleteTaskWithLifecycle(ctx, id)
 }
 
 // SetAutoArchiveCoordinator installs the lifecycle coordinator used by the

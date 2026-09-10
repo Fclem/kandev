@@ -152,6 +152,22 @@ func TestCleanupMultiRepoRoot_RequiresWorktreeManager(t *testing.T) {
 		t.Fatal("multi-repo cleanup must reject a missing worktree manager")
 	}
 }
+func TestCleanupMultiRepoRoot_RequiresWorktreeInventory(t *testing.T) {
+	tasksRoot := t.TempDir()
+	root := filepath.Join(tasksRoot, "task-empty-inventory")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("mkdir root: %v", err)
+	}
+	c := newCleanerWithTasksRoot(t, tasksRoot)
+
+	err := c.CleanupMultiRepoRoot(context.Background(), root, nil)
+	if err == nil {
+		t.Fatal("multi-repo cleanup accepted an empty worktree inventory")
+	}
+	if _, statErr := os.Stat(root); statErr != nil {
+		t.Fatalf("multi-repo root was removed after invalid inventory: %v", statErr)
+	}
+}
 
 func TestIsDescendant_HappyAndUnhappyPaths(t *testing.T) {
 	cases := []struct {

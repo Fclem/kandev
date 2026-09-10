@@ -393,6 +393,20 @@ func (s *HandoffService) applyArchiveTaskMutations(
 // because deletion is unconditional; the cascade ID is stamped only
 // for symmetry with archive.
 func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, cascade bool) (*CascadeOutcome, error) {
+	return s.deleteTaskTree(ctx, rootID, cascade, "")
+}
+
+// DeleteTaskTreeWithReason preserves the machine-readable reason on the
+// task.deleted event while using the same cascade lifecycle.
+func (s *HandoffService) DeleteTaskTreeWithReason(
+	ctx context.Context, rootID string, cascade bool, reason string,
+) (*CascadeOutcome, error) {
+	return s.deleteTaskTree(ctx, rootID, cascade, reason)
+}
+
+func (s *HandoffService) deleteTaskTree(
+	ctx context.Context, rootID string, cascade bool, reason string,
+) (*CascadeOutcome, error) {
 	deleteDeadline := archivecascade.ArchiveDeadline(ctx)
 	deleteCtx, cancelDelete := context.WithDeadline(ctx, deleteDeadline)
 	defer cancelDelete()
@@ -451,13 +465,39 @@ func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, casc
 	}
 	out.ReleasedGroupIDs = groupIDs
 
-	// Delete deepest first; failures abort the cascade and surface so
-	// the caller can retry. We do NOT roll back partial deletions —
+	// Delete deepest first; failures abort the cascade and surface so the
+	// caller can retry. We do NOT roll back partial deletions —
 	// delete is destructive by design and re-running is idempotent.
 	vacatedStepIDs := make(map[string]struct{})
 	defer func() {
 		s.pullTasksForVacatedSteps(postDeleteCtx, deleteDeadline, vacatedStepIDs)
 	}()
+	cleanupErrors, err := s.deleteTaskTreeRows(
+		postDeleteCtx, deleteCompensationCtx, deleteDeadline, all, cleanupOps,
+		out, ownershipTransfers, vacatedStepIDs, reason,
+	)
+	if err != nil {
+		return out, err
+	}
+
+	for _, gid := range groupIDs {
+		if err := s.evaluateWorkspaceGroupCleanup(postDeleteCtx, gid); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("evaluate workspace group cleanup %s: %w", gid, err))
+		}
+	}
+	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
+}
+
+func (s *HandoffService) deleteTaskTreeRows(
+	postDeleteCtx, deleteCompensationCtx context.Context,
+	deleteDeadline time.Time,
+	all []string,
+	cleanupOps map[string]string,
+	out *CascadeOutcome,
+	ownershipTransfers []workspaceEnvironmentOwnershipTransfer,
+	vacatedStepIDs map[string]struct{},
+	reason string,
+) ([]error, error) {
 	var cleanupErrors []error
 	for i := len(all) - 1; i >= 0; i-- {
 		// Snapshot the task row BEFORE deletion so the published event
@@ -475,7 +515,7 @@ func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, casc
 						errors.Join(snapshotErr, errors.New("task snapshot is missing before delete")),
 					)
 				}
-				return out, errors.Join(snapshotErr, cancelErr)
+				return nil, errors.Join(snapshotErr, cancelErr)
 			}
 		}
 		// Tear down runtime resources BEFORE the DB delete so the env / worktree
@@ -488,8 +528,10 @@ func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, casc
 			if len(out.ArchivedTaskIDs) == 0 {
 				deleteErr = s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(deleteCompensationCtx, ownershipTransfers, deleteErr)
 			}
-			return out, errors.Join(deleteErr, cancelErr)
+			return nil, errors.Join(deleteErr, cancelErr)
 		}
+		recordVacatedStep(vacatedStepIDs, vacatedStepID)
+		out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
 		// The delete mutation committed, so it is now safe to finalize
 		// any session row that was not removed with the task.
 		s.finalizeActiveSessions(postDeleteCtx, deleteDeadline, all[i], "task tree deleted")
@@ -500,19 +542,25 @@ func (s *HandoffService) DeleteTaskTree(ctx context.Context, rootID string, casc
 		} else if s.resourceCleaner != nil {
 			s.resourceCleaner.CleanupTaskResources(postDeleteCtx, all[i], true)
 		}
-		out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
-		recordVacatedStep(vacatedStepIDs, vacatedStepID)
 		if s.eventPublisher != nil && snapshot != nil {
-			s.eventPublisher.PublishTaskDeleted(postDeleteCtx, snapshot)
+			s.publishDeletedTaskEvent(postDeleteCtx, snapshot, reason)
 		}
 	}
+	return cleanupErrors, nil
+}
 
-	for _, gid := range groupIDs {
-		if err := s.evaluateWorkspaceGroupCleanup(postDeleteCtx, gid); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("evaluate workspace group cleanup %s: %w", gid, err))
+func (s *HandoffService) publishDeletedTaskEvent(
+	ctx context.Context,
+	task *models.Task,
+	reason string,
+) {
+	if reason != "" {
+		if publisher, ok := s.eventPublisher.(TaskDeletedEventPublisherWithExtra); ok {
+			publisher.PublishTaskDeletedWithExtra(ctx, task, map[string]interface{}{"reason": reason})
+			return
 		}
 	}
-	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
+	s.eventPublisher.PublishTaskDeleted(ctx, task)
 }
 
 func (s *HandoffService) archiveTaskWithVacatedStep(

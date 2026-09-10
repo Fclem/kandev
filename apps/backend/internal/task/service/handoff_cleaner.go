@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	orchmodels "github.com/kandev/kandev/internal/office/models"
@@ -129,27 +130,32 @@ func (s *HandoffService) runWorkspaceGroupCleanup(ctx context.Context, g *orchmo
 		// so the operator sees the group is awaiting cleanup.
 		return nil
 	}
-	rc, _ := decodeRestoreConfig(g.RestoreConfigJSON)
-	switch g.MaterializedKind {
-	case orchmodels.WorkspaceGroupKindPlainFolder:
+	if g.MaterializedKind == orchmodels.WorkspaceGroupKindPlainFolder {
 		if g.MaterializedPath == "" {
 			return errors.New("plain folder cleanup: materialized_path is empty")
 		}
 		return s.cleaner.CleanupPlainFolder(ctx, g.MaterializedPath)
+	}
+	rc, err := decodeRestoreConfig(g.RestoreConfigJSON)
+	if err != nil {
+		return fmt.Errorf("decode restore_config_json: %w", err)
+	}
+	switch g.MaterializedKind {
 	case orchmodels.WorkspaceGroupKindSingleRepo:
-		if len(rc.WorktreeIDs) == 0 {
-			return errors.New("single-repo cleanup: no worktree IDs in restore_config_json")
+		ids, err := restoreWorktreeIDs(rc.WorktreeIDs, "single-repo")
+		if err != nil {
+			return err
 		}
-		for _, wtID := range rc.WorktreeIDs {
+		for _, wtID := range ids {
 			if err := s.cleaner.CleanupSingleRepoWorktree(ctx, wtID); err != nil {
 				return fmt.Errorf("worktree %s: %w", wtID, err)
 			}
 		}
 		return nil
 	case orchmodels.WorkspaceGroupKindMultiRepo:
-		ids := make([]string, 0, len(rc.WorktreeIDs))
-		for _, id := range rc.WorktreeIDs {
-			ids = append(ids, id)
+		ids, err := restoreWorktreeIDs(rc.WorktreeIDs, "multi-repo")
+		if err != nil {
+			return err
 		}
 		return s.cleaner.CleanupMultiRepoRoot(ctx, g.MaterializedPath, ids)
 	case orchmodels.WorkspaceGroupKindRemoteEnvironment:
@@ -160,4 +166,19 @@ func (s *HandoffService) runWorkspaceGroupCleanup(ctx context.Context, g *orchmo
 	default:
 		return fmt.Errorf("unknown materialized kind: %q", g.MaterializedKind)
 	}
+
+}
+
+func restoreWorktreeIDs(worktreeIDs map[string]string, kind string) ([]string, error) {
+	if len(worktreeIDs) == 0 {
+		return nil, fmt.Errorf("%s cleanup: no worktree IDs in restore_config_json", kind)
+	}
+	ids := make([]string, 0, len(worktreeIDs))
+	for repositoryID, worktreeID := range worktreeIDs {
+		if strings.TrimSpace(repositoryID) == "" || strings.TrimSpace(worktreeID) == "" {
+			return nil, fmt.Errorf("%s cleanup: restore_config_json contains an empty worktree identity", kind)
+		}
+		ids = append(ids, worktreeID)
+	}
+	return ids, nil
 }

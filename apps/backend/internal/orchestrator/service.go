@@ -741,7 +741,7 @@ type Service struct {
 
 	// taskAccessCheck is the task-keyed sibling of sessionAccessCheck, for
 	// entry points that name a task rather than a session (session.launch,
-	// session.ensure). Nil = unscoped.
+	// session.ensure). Nil = unscoped. See SetTaskAccessChecker.
 	taskAccessCheck func(ctx context.Context, taskID string) error
 
 	// retrackedSessionCheck reports whether the lifecycle manager
@@ -754,6 +754,9 @@ type Service struct {
 	// SetRetrackedSessionChecker.
 	retrackedSessionCheck func(sessionID string) bool
 
+	// taskLifecycleDeleter owns cleanup of automation tasks abandoned before
+	// their run was durably recorded.
+	taskLifecycleDeleter taskLifecycleDeleter
 	// routeActionHandler is owned by the dynamic conductor composition. The
 	// orchestrator only validates/authorizes the request and returns the
 	// authoritative route snapshot; concrete and dynamic callers share this
@@ -2048,6 +2051,10 @@ func (s *Service) wasSessionRetracked(sessionID string) bool {
 	return s.retrackedSessionCheck(sessionID)
 }
 
+// SetTaskLifecycleDeleter wires durable task cleanup for automation rollback.
+func (s *Service) SetTaskLifecycleDeleter(deleter taskLifecycleDeleter) {
+	s.taskLifecycleDeleter = deleter
+}
 // authorizeSession applies the configured per-user session check. No-op when
 // unwired.
 func (s *Service) authorizeSession(ctx context.Context, sessionID string) error {

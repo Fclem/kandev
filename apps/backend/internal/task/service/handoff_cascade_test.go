@@ -1110,7 +1110,8 @@ func (f *fakeResourceCleaner) CleanupTaskResources(_ context.Context, taskID str
 }
 
 type fakeWorkspaceCleaner struct {
-	plainFolders []string
+	plainFolders   []string
+	multiRepoRoots []string
 }
 
 func (f *fakeWorkspaceCleaner) CleanupPlainFolder(_ context.Context, path string) error {
@@ -1122,12 +1123,31 @@ func (f *fakeWorkspaceCleaner) CleanupSingleRepoWorktree(context.Context, string
 	return nil
 }
 
-func (f *fakeWorkspaceCleaner) CleanupMultiRepoRoot(context.Context, string, []string) error {
+func (f *fakeWorkspaceCleaner) CleanupMultiRepoRoot(_ context.Context, root string, _ []string) error {
+	f.multiRepoRoots = append(f.multiRepoRoots, root)
 	return nil
 }
 
 func (f *fakeWorkspaceCleaner) CleanupRemoteEnvironment(context.Context, string, string) error {
 	return nil
+}
+func TestRunWorkspaceGroupCleanupRejectsMalformedMultiRepoConfig(t *testing.T) {
+	handoff := NewHandoffService(nil, nil, nil, nil, nil, nil)
+	cleaner := &fakeWorkspaceCleaner{}
+	handoff.SetWorkspaceCleaner(cleaner)
+	group := &orchmodels.WorkspaceGroup{
+		ID:                "group-malformed-restore",
+		MaterializedKind:  orchmodels.WorkspaceGroupKindMultiRepo,
+		MaterializedPath:  "/managed/root",
+		RestoreConfigJSON: "{malformed",
+	}
+
+	if err := handoff.runWorkspaceGroupCleanup(context.Background(), group); err == nil {
+		t.Fatal("malformed multi-repo restore config was accepted")
+	}
+	if len(cleaner.multiRepoRoots) != 0 {
+		t.Fatalf("multi-repo cleanup calls = %d, want none", len(cleaner.multiRepoRoots))
+	}
 }
 
 type flippingActiveSessionReader struct {

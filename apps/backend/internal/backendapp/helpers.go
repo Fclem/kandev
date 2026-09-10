@@ -782,6 +782,7 @@ func registerRoutes(p routeParams) {
 	p.taskSvc.SetWorkspacePolicyAttacher(handoffSvc)
 	p.taskSvc.SetWorkspaceGroupMembershipReader(p.officeRepo)
 	p.taskSvc.SetAutoArchiveCoordinator(handoffSvc)
+	p.taskSvc.SetTaskLifecycleCoordinator(handoffSvc)
 	handoffSvc.SetCommentReader(&officeCommentReaderAdapter{reader: p.officeRepo})
 	// Phase 6 wirings — materializer hook + disk cleaner. The
 	// SessionWorktreeReader and WorkspaceCleaner interfaces are both
@@ -825,6 +826,7 @@ func registerRoutes(p routeParams) {
 	// runCanceller but its container leaks because the cascade bypasses
 	// Service.ArchiveTask's runAsyncTaskCleanup branch.
 	handoffSvc.SetTaskResourceCleaner(p.taskSvc)
+	p.orchestratorSvc.SetTaskLifecycleDeleter(p.taskSvc)
 	// Watch reset (Reset button on integration settings) cascade-deletes
 	// every task a watch previously created. The integrations re-use the
 	// shared HandoffService so the reset path goes through the same

@@ -1538,11 +1538,6 @@ func sameQueuedMessageContent(left, right *QueuedMessage) bool {
 	}
 	leftCopy := cloneQueuedMessage(left)
 	rightCopy := cloneQueuedMessage(right)
-	// PostgreSQL stores TIMESTAMP values at microsecond precision. Normalize
-	// both snapshots before comparing so a caller's nanosecond timestamp does
-	// not look like a queue mutation after a round trip through the database.
-	leftCopy.QueuedAt = leftCopy.QueuedAt.Truncate(time.Microsecond)
-	rightCopy.QueuedAt = rightCopy.QueuedAt.Truncate(time.Microsecond)
 	leftCopy.Metadata = clearReservedMetadata(leftCopy.Metadata)
 	rightCopy.Metadata = clearReservedMetadata(rightCopy.Metadata)
 	leftCopy.reservedLifecycleDelivery = false

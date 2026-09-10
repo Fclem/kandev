@@ -1947,9 +1947,13 @@ func (h *TaskHandlers) httpUnarchiveTask(c *gin.Context) {
 	}
 	taskID := c.Param("id")
 	outcome, err := h.handoffSvc.UnarchiveTaskTree(c.Request.Context(), taskID)
-	if err != nil {
+	if err != nil && !isCascadePostCommitError(err) {
 		handleNotFound(c, h.logger, err, "task not unarchived")
 		return
+	}
+	if err != nil {
+		h.logger.Warn("task unarchive committed with post-commit errors",
+			zap.String("task_id", taskID), zap.Error(err))
 	}
 	// Probe branch recoverability for every restored task: archive deleted
 	// the local branch + worktree, so report whether the branch still

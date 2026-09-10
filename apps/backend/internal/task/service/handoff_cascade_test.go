@@ -75,6 +75,7 @@ func (r *fakeCascadeRepo) UnarchiveTask(_ context.Context, id string) (bool, err
 type fakeWSGroupRepoCascade struct {
 	*fakeWSGroupRepo
 	releaseErr   error
+	restoreErr   error
 	releaseCalls []struct {
 		groupID, taskID, reason, cascadeID string
 	}
@@ -291,7 +292,7 @@ func (f *fakeWSGroupRepoCascade) RestoreWorkspaceGroupMemberByCascade(_ context.
 	f.restoreCalls = append(f.restoreCalls, struct {
 		taskID, cascadeID string
 	}{taskID, cascadeID})
-	return nil
+	return f.restoreErr
 }
 
 func (f *fakeWSGroupRepoCascade) ListActiveWorkspaceGroupMembers(_ context.Context, groupID string) ([]orchmodels.WorkspaceGroupMember, error) {

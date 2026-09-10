@@ -1036,18 +1036,18 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	for _, id := range all {
 		operationID := string(models.TaskResourceCleanupTriggerCascadeArchive) + ":" + cascadeID + ":" + id
 		if err := s.cancelArchiveResourceCleanup(operationCtx, id, operationID); err != nil {
-			return out, fmt.Errorf("cancel archive cleanup %s: %w", id, err)
+			return out, cascadePostCommitError(out, fmt.Errorf("cancel archive cleanup %s: %w", id, err))
 		}
 		ok, err := s.tasks.UnarchiveTaskByCascade(operationCtx, id, cascadeID)
 		if err != nil {
-			return out, fmt.Errorf("unarchive %s: %w", id, err)
+			return out, cascadePostCommitError(out, fmt.Errorf("unarchive %s: %w", id, err))
 		}
 		if ok {
 			out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, id)
 			// Publish per restored task. The WS handler keys off
 			// archived_at=null to put the card back on the kanban.
 			if err := s.publishUpdatedTask(operationCtx, id); err != nil {
-				return out, err
+				return out, cascadePostCommitError(out, err)
 			}
 			// This task may itself be a parent whose inherit_parent
 			// children were marked orphaned by this same archive; the
@@ -1088,7 +1088,7 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 		out.ReleasedGroupIDs = ids
 		restorationErrors = append(restorationErrors, s.restoreCleanedGroups(operationCtx, ids))
 	}
-	return out, errors.Join(restorationErrors...)
+	return out, cascadePostCommitError(out, errors.Join(restorationErrors...))
 }
 
 // unarchiveManualRoot restores a single task that was archived without a
@@ -1114,7 +1114,7 @@ func (s *HandoffService) unarchiveManualRoot(ctx context.Context, root *models.T
 	}
 	out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, root.ID)
 	if err := s.publishUpdatedTask(ctx, root.ID); err != nil {
-		return out, err
+		return out, cascadePostCommitError(out, err)
 	}
 	s.clearOrphanedInheritParentChildren(ctx, root.ID)
 	// Legacy archives never released group memberships, but the group may
@@ -1125,12 +1125,12 @@ func (s *HandoffService) unarchiveManualRoot(ctx context.Context, root *models.T
 	if s.wsGroups != nil {
 		g, err := s.wsGroups.GetWorkspaceGroupForTask(ctx, root.ID)
 		if err != nil {
-			return out, fmt.Errorf("lookup workspace group for unarchived task: %w", err)
+			return out, cascadePostCommitError(out, fmt.Errorf("lookup workspace group for unarchived task: %w", err))
 		}
 		if g != nil {
 			out.ReleasedGroupIDs = []string{g.ID}
 			if err := s.restoreCleanedGroups(ctx, []string{g.ID}); err != nil {
-				return out, err
+				return out, cascadePostCommitError(out, err)
 			}
 		}
 	}

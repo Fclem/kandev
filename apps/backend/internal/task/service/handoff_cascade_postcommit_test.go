@@ -52,3 +52,25 @@ func TestDeleteTaskTreeMarksCleanupStartFailureAsPostCommit(t *testing.T) {
 		t.Fatalf("deleted task = %#v, want nil", deleted)
 	}
 }
+
+func TestUnarchiveTaskTreeMarksRestorationFailureAsPostCommit(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addArchivedTask("root", "", "ws-1", "cascade-1")
+	groups := newCascadeWSGroupRepo()
+	restoreErr := errors.New("membership restoration unavailable")
+	groups.restoreErr = restoreErr
+	svc := NewHandoffService(newCascadeRepo(tasks), nil, nil, nil, groups, nil)
+
+	out, err := svc.UnarchiveTaskTree(context.Background(), "root")
+	if out == nil || len(out.ArchivedTaskIDs) != 1 || out.ArchivedTaskIDs[0] != "root" {
+		t.Fatalf("unarchive outcome = %#v, want committed root restoration", out)
+	}
+	var postCommitErr *CascadePostCommitError
+	if !errors.As(err, &postCommitErr) || !errors.Is(err, restoreErr) {
+		t.Fatalf("unarchive error = %v, want post-commit restoration error", err)
+	}
+	restored, getErr := tasks.GetTask(context.Background(), "root")
+	if getErr != nil || restored == nil || restored.ArchivedAt != nil {
+		t.Fatalf("restored task = %#v, error = %v, want active task", restored, getErr)
+	}
+}

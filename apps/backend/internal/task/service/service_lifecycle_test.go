@@ -62,3 +62,16 @@ func TestDeleteTaskWithLifecycleAndReasonUsesReasonAwareCoordinator(t *testing.T
 		t.Fatalf("reasoned deletion = %v, reason %q", coordinator.reasoned, coordinator.reason)
 	}
 }
+
+func TestRollbackPartialTaskUsesLifecycleCoordinator(t *testing.T) {
+	cause := errors.New("post-insert finalization failed")
+	coordinator := &recordingTaskLifecycleCoordinator{}
+	svc := &Service{taskLifecycleCoordinator: coordinator}
+
+	if err := svc.rollbackPartialTask(context.Background(), "task-rollback", cause); !errors.Is(err, cause) {
+		t.Fatalf("rollbackPartialTask error = %v, want original cause", err)
+	}
+	if len(coordinator.calls) != 1 || coordinator.calls[0] != "task-rollback" {
+		t.Fatalf("coordinator calls = %v, want [task-rollback]", coordinator.calls)
+	}
+}

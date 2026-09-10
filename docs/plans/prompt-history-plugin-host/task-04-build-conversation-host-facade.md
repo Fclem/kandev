@@ -97,4 +97,3 @@ Verified:
 - Focused browser Host, scope, registry, and task-panel suites
 - `cd apps/web && pnpm run typecheck`
 - `cd apps/web && pnpm run lint`
-

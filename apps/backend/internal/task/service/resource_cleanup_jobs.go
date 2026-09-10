@@ -560,10 +560,11 @@ func (s *Service) cancelIfTaskUnarchived(ctx context.Context, job *models.TaskRe
 		if current.State == models.TaskResourceCleanupStateRunning {
 			return false, ErrCleanupCancellationRace
 		}
-		_, completeErr := s.resourceCleanups.CompleteClaimedTaskResourceCleanupJob(
-			ctx, job.ID, current.Attempts, models.TaskResourceCleanupStateCancelled, "", nil,
-		)
-		return true, completeErr
+		cancelled, cancelErr := s.resourceCleanups.CancelTaskResourceCleanupJobIfPending(ctx, job.ID)
+		if cancelErr != nil {
+			return false, cancelErr
+		}
+		return cancelled, nil
 	}
 	return false, nil
 }

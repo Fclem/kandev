@@ -549,6 +549,40 @@ func TestUnarchiveTaskTreeCancelsPendingArchiveCleanup(t *testing.T) {
 	}
 }
 
+func TestCancelIfTaskUnarchivedCancelsPendingJobWithoutClaim(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	ctx := context.Background()
+	taskResult, err := taskSvc.CreateTask(ctx, &CreateTaskRequest{
+		WorkspaceID: "ws-1", Title: "Active task", ProjectID: "proj-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	job := &models.TaskResourceCleanupJob{
+		ID: "pending-archive-job", OperationID: "archive:active-task",
+		TaskID: taskResult.Task.ID, Trigger: models.TaskResourceCleanupTriggerArchive,
+		State: models.TaskResourceCleanupStatePending, ResourceSnapshot: `{}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(ctx, job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+
+	cancelled, err := taskSvc.cancelIfTaskUnarchived(ctx, job)
+	if err != nil {
+		t.Fatalf("cancelIfTaskUnarchived: %v", err)
+	}
+	if !cancelled {
+		t.Fatal("cancelIfTaskUnarchived = false, want true")
+	}
+	got, err := repo.GetTaskResourceCleanupJob(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJob: %v", err)
+	}
+	if got.State != models.TaskResourceCleanupStateCancelled {
+		t.Fatalf("cleanup state = %q, want cancelled", got.State)
+	}
+}
+
 func TestResumeTaskResourceCleanupJobsReconstructsInterruptedJob(t *testing.T) {
 	svc, _, repo := createTestService(t)
 	ctx := context.Background()

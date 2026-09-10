@@ -456,6 +456,9 @@ type TaskResourceCleanupRepository interface {
 	MarkTaskResourceCleanupJobRunning(ctx context.Context, id string) (bool, error)
 	CompleteClaimedTaskResourceCleanupJob(ctx context.Context, id string, attempt int, state models.TaskResourceCleanupState, lastError string, nextAttemptAt *time.Time) (bool, error)
 	CompleteTaskResourceCleanupJob(ctx context.Context, id string, state models.TaskResourceCleanupState, lastError string, nextAttemptAt *time.Time) error
+	// CancelTaskResourceCleanupJobIfPending fences cancellation against a
+	// concurrent worker claim and only changes an eligible non-running state.
+	CancelTaskResourceCleanupJobIfPending(ctx context.Context, id string) (bool, error)
 	CancelArchiveTaskResourceCleanupJobs(ctx context.Context, taskID string) error
 	ResetRunningTaskResourceCleanupJobs(ctx context.Context) error
 }

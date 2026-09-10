@@ -365,6 +365,27 @@ func TestArchiveTaskTree_StampsCascadeAcrossDescendants(t *testing.T) {
 		}
 	}
 }
+func TestArchiveTaskTree_ReusesExistingCascadeIDOnRetry(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addArchivedTask("root", "", "ws-1", "cascade-1")
+	tasks.addTask("child", "root", "ws-1")
+	svc := newCascadeService(t, tasks, newCascadeWSGroupRepo())
+
+	out, err := svc.ArchiveTaskTree(context.Background(), "root", true)
+	if err != nil {
+		t.Fatalf("archive retry: %v", err)
+	}
+	if out.CascadeID != "cascade-1" {
+		t.Fatalf("cascade ID = %q, want cascade-1", out.CascadeID)
+	}
+	child, err := tasks.GetTask(context.Background(), "child")
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if child.ArchivedByCascadeID != "cascade-1" {
+		t.Fatalf("child cascade ID = %q, want cascade-1", child.ArchivedByCascadeID)
+	}
+}
 
 func TestArchiveTaskTree_TransfersSharedEnvironmentFromDepartingOwner(t *testing.T) {
 	tasks := newFakeTaskRepo()

@@ -211,12 +211,17 @@ func (s *HandoffService) ArchiveTaskTree(ctx context.Context, rootID string, cas
 	// Validate the root exists up front. The CAS archive below treats a
 	// zero-row update as "skipped" (idempotent re-archive), which would
 	// silently report success for a task ID that doesn't exist at all.
-	if root, err := s.tasks.GetTask(archiveCtx, rootID); err != nil {
+	root, err := s.tasks.GetTask(archiveCtx, rootID)
+	if err != nil {
 		return nil, err
-	} else if root == nil {
+	}
+	if root == nil {
 		return nil, fmt.Errorf("task %s not found", rootID)
 	}
-	cascadeID := uuid.New().String()
+	cascadeID := root.ArchivedByCascadeID
+	if cascadeID == "" {
+		cascadeID = uuid.New().String()
+	}
 	out := &CascadeOutcome{CascadeID: cascadeID}
 
 	var all []string

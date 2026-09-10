@@ -812,6 +812,12 @@ func registerRoutes(p routeParams) {
 	if p.services.Office != nil {
 		p.services.Office.SetWorkspaceGroupCleaner(handoffSvc)
 	}
+	if p.services.Office != nil {
+		p.services.Office.SetTaskTreeDeleter(func(ctx context.Context, taskID string) error {
+			_, err := handoffSvc.DeleteTaskTree(ctx, taskID, false)
+			return err
+		})
+	}
 	// Config sync's own tables (office_config_sync_configs,
 	// office_config_sync_manifest) have no FK/cascade onto the workspace
 	// row, so DeleteWorkspace must release them explicitly or the poller

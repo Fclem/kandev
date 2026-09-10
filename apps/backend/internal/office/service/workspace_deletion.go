@@ -92,16 +92,11 @@ func (s *Service) DeleteWorkspace(ctx context.Context, workspaceID string) error
 	}
 	dataDeleteCtx, cancelDataDelete := workspaceDeletionPhaseContext(cleanupBaseCtx)
 	defer cancelDataDelete()
+	if err := s.deleteWorkspaceTasks(dataDeleteCtx, tasks); err != nil {
+		return err
+	}
 	if err := s.repo.DeleteWorkspaceData(dataDeleteCtx, workspaceID); err != nil {
 		return fmt.Errorf("delete office workspace data: %w", err)
-	}
-	for _, task := range tasks {
-		if task == nil || task.ID == "" {
-			continue
-		}
-		if err := s.taskWorkspace.DeleteTask(dataDeleteCtx, task.ID); err != nil {
-			return fmt.Errorf("delete task %s: %w", task.ID, err)
-		}
 	}
 	if err := s.taskWorkspace.DeleteWorkspace(dataDeleteCtx, workspaceID); err != nil {
 		return fmt.Errorf("delete workspace row: %w", err)
@@ -115,6 +110,24 @@ func (s *Service) DeleteWorkspace(ctx context.Context, workspaceID string) error
 		zap.String("workspace_id", workspaceID),
 		zap.String("workspace_name", workspace.Name),
 		zap.Int("tasks", len(tasks)))
+	return nil
+}
+
+func (s *Service) deleteWorkspaceTasks(ctx context.Context, tasks []*taskmodels.Task) error {
+	for _, task := range tasks {
+		if task == nil || task.ID == "" {
+			continue
+		}
+		if s.taskTreeDeleter != nil {
+			if err := s.taskTreeDeleter(ctx, task.ID); err != nil {
+				return fmt.Errorf("delete task %s through lifecycle: %w", task.ID, err)
+			}
+			continue
+		}
+		if err := s.taskWorkspace.DeleteTask(ctx, task.ID); err != nil {
+			return fmt.Errorf("delete task %s: %w", task.ID, err)
+		}
+	}
 	return nil
 }
 

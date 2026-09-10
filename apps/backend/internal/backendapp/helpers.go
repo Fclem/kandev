@@ -815,6 +815,10 @@ func registerRoutes(p routeParams) {
 	if p.services.Office != nil {
 		p.services.Office.SetTaskTreeDeleter(func(ctx context.Context, taskID string) error {
 			_, err := handoffSvc.DeleteTaskTree(ctx, taskID, false)
+			var postCommitErr *taskservice.CascadePostCommitError
+			if errors.As(err, &postCommitErr) {
+				return nil
+			}
 			return err
 		})
 	}

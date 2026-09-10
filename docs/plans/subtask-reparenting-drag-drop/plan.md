@@ -14,17 +14,23 @@ The backend reparent contract (`PATCH /api/v1/tasks/:id` with `parent_id`, valid
 
 ## Backend
 
-### Canonical update normalization (`apps/backend/internal/task/service/service_tasks.go`)
+### Canonical parent commands
 
-In `Service.UpdateTask`, the parent block (~line 1225) already resolves and assigns `task.ParentID` only when the parent effectively changed. After that block, add a small helper `normalizeWorkspaceModeAfterReparent(task)` that copies `task.Metadata["workspace"]` and changes only `mode: "inherit_parent"` → `"shared_group"` — the exact detach semantics — applied whenever the effective parent changed (set or cleared). The existing full-row persist writes the metadata; the existing `parent_id` event emission (explicit nil on clear) is unchanged. This covers core PATCH, WS update, the sidebar menu, the Office parent picker (`updateTask`), and the drag-drop, all through one path.
+`Service.UpdateTask` validates parent changes with `resolveParentID` and
+`validateReparentDepth`, then delegates non-empty effective changes to the narrow
+`Store.SetTaskParent` aggregate command. Clearing the parent delegates to
+`Store.DetachTask`, which owns conditional stewardship, lifecycle revision, and
+outbox publication. No service or Office repository method writes `parent_id` or
+workspace metadata directly.
 
-### Office dashboard parity (`apps/backend/internal/office/dashboard/service_tasks.go`)
-
-`DashboardService.UpdateTaskParentID` non-empty path currently writes `parent_id` directly and publishes `["parent_id"]`. Change it so that after the repo write it loads the task, and if workspace mode is `inherit_parent`, persists `shared_group` and publishes fields `["parent_id", "metadata"]`. Add `UpdateTaskWorkspaceMode(ctx, taskID, mode)` to the office sqlite repository (dialect-aware JSON set, mirroring `detachTaskQuery`'s mode branch) and to the `DashboardService` repo interface. The empty-parent path keeps routing to the canonical detacher.
+`DashboardService.UpdateTaskParentID` uses the same command split: non-empty
+reparenting uses `SetTaskParent`; empty parent uses `DetachTask`. Both commands
+return the committed task and event result. Existing validation remains unchanged.
 
 ### Events
 
-No new event types. `task.updated` already carries `parent_id` (nil when cleared) and `metadata`; the normalization rides along. Office `OfficeTaskUpdated` gains `metadata` in its `fields` list only when the mode changed.
+The canonical outbox emits `task.updated` with explicit `parent_id` and changed
+metadata. No direct publisher or new event type is introduced.
 
 ## Frontend
 

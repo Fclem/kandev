@@ -2971,20 +2971,13 @@ func (r *Repository) NextQueuedTaskForStepExcluding(ctx context.Context, feederS
 // Returns an empty list when parentID is empty (so root tasks resolve to
 // "no children" cleanly).
 func (r *Repository) ListChildren(ctx context.Context, parentID string) ([]*models.Task, error) {
-	if parentID == "" {
-		return []*models.Task{}, nil
-	}
-	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
-		SELECT `+taskSelectColumns("t")+`
-		FROM tasks t
-		WHERE t.parent_id = ? AND t.archived_at IS NULL AND t.is_ephemeral = 0`+andNotAutomationOriginT+`
-		ORDER BY t.created_at ASC, t.id ASC
-	`), parentID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	return r.scanTasks(rows)
+	return r.listChildren(ctx, parentID, false, "", 0)
+}
+
+// ListChildrenLimited returns at most limit active children without
+// materializing the complete sibling list.
+func (r *Repository) ListChildrenLimited(ctx context.Context, parentID string, limit int) ([]*models.Task, error) {
+	return r.listChildren(ctx, parentID, false, "", limit)
 }
 
 // ListChildCompletionRows returns active direct children with the compact
@@ -3011,15 +3004,82 @@ func (r *Repository) ListChildCompletionRows(ctx context.Context, parentID strin
 // unarchive cascade (phase 6) to walk a previously-archived descendant
 // subtree.
 func (r *Repository) ListChildrenIncludingArchived(ctx context.Context, parentID string) ([]*models.Task, error) {
+	return r.listChildren(ctx, parentID, true, "", 0)
+}
+
+// ListChildrenIncludingArchivedLimited returns at most limit children,
+// including archived rows, for bounded cascade recovery.
+func (r *Repository) ListChildrenIncludingArchivedLimited(ctx context.Context, parentID string, limit int) ([]*models.Task, error) {
+	return r.listChildren(ctx, parentID, true, "", limit)
+}
+
+// ListStructuralChildrenLimited returns every direct child row, including
+// ephemeral and automation-origin rows. Structural lifecycle validation must
+// inspect these rows before a parent is deleted.
+func (r *Repository) ListStructuralChildrenLimited(
+	ctx context.Context, parentID string, limit int,
+) ([]*models.Task, error) {
 	if parentID == "" {
 		return []*models.Task{}, nil
+	}
+	if limit <= 0 {
+		limit = 1
 	}
 	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
 		SELECT `+taskSelectColumns("t")+`
 		FROM tasks t
-		WHERE t.parent_id = ? AND t.is_ephemeral = 0`+andNotAutomationOriginT+`
+		WHERE t.parent_id = ?
 		ORDER BY t.created_at ASC, t.id ASC
-	`), parentID)
+		LIMIT ?
+	`), parentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	return r.scanTasks(rows)
+}
+
+// ListChildrenIncludingArchivedByCascadeLimited returns at most limit
+// children belonging to cascadeID, including archived rows.
+func (r *Repository) ListChildrenIncludingArchivedByCascadeLimited(
+	ctx context.Context,
+	parentID, cascadeID string,
+	limit int,
+) ([]*models.Task, error) {
+	return r.listChildren(ctx, parentID, true, cascadeID, limit)
+}
+
+func (r *Repository) listChildren(
+	ctx context.Context,
+	parentID string,
+	includeArchived bool,
+	cascadeID string,
+	limit int,
+) ([]*models.Task, error) {
+	if parentID == "" {
+		return []*models.Task{}, nil
+	}
+	archivedClause := " AND t.archived_at IS NULL"
+	if includeArchived {
+		archivedClause = ""
+	}
+	cascadeClause := ""
+	args := []any{parentID}
+	if cascadeID != "" {
+		cascadeClause = " AND t.archived_by_cascade_id = ?"
+		args = append(args, cascadeID)
+	}
+	limitClause := ""
+	if limit > 0 {
+		limitClause = " LIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
+		SELECT `+taskSelectColumns("t")+`
+		FROM tasks t
+		WHERE t.parent_id = ?`+archivedClause+cascadeClause+` AND t.is_ephemeral = 0`+andNotAutomationOriginT+`
+		ORDER BY t.created_at ASC, t.id ASC`+limitClause+`
+	`), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -3039,6 +3099,22 @@ func (r *Repository) ReparentDirectChildren(ctx context.Context, oldParentID, ne
 		UPDATE tasks SET parent_id = ?, updated_at = ?
 		WHERE parent_id = ?
 	`), newParentID, time.Now().UTC(), oldParentID)
+	return err
+}
+
+// ReparentDirectChildrenInWorkspace limits no-cascade reparenting to the
+// authorized root's workspace so a corrupt cross-workspace parent edge cannot
+// mutate an unrelated task.
+func (r *Repository) ReparentDirectChildrenInWorkspace(
+	ctx context.Context, oldParentID, newParentID, workspaceID string,
+) error {
+	if oldParentID == "" || workspaceID == "" {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE tasks SET parent_id = ?, updated_at = ?
+		WHERE parent_id = ? AND workspace_id = ?
+	`), newParentID, time.Now().UTC(), oldParentID, workspaceID)
 	return err
 }
 

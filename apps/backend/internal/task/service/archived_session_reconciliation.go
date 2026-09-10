@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/kandev/kandev/internal/task/archivecascade"
 	"go.uber.org/zap"
 )
 
@@ -74,6 +75,6 @@ func (s *Service) runArchivedSessionReconciliation(ctx context.Context) {
 			// between the candidate list query and this read.
 			continue
 		}
-		s.finalizeCancelledSessions(ctx, taskID, activeSessions)
+		s.finalizeCancelledSessions(ctx, taskID, activeSessions, archivecascade.ArchiveDeadline(ctx))
 	}
 }

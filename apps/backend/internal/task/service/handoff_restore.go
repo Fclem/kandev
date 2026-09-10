@@ -29,13 +29,19 @@ import (
 //     paths and base branches to be valid on disk — work that the
 //     normal launch already handles correctly.
 //   - remote_environment: same as repo kinds — restorable, deferred.
-func (s *HandoffService) restoreCleanedGroups(ctx context.Context, groupIDs []string) {
+func (s *HandoffService) restoreCleanedGroups(ctx context.Context, groupIDs []string) error {
 	if s.wsGroups == nil {
-		return
+		return nil
 	}
+	var errs []error
 	for _, gid := range groupIDs {
 		g, err := s.wsGroups.GetWorkspaceGroup(ctx, gid)
-		if err != nil || g == nil {
+		if err != nil {
+			errs = append(errs, fmt.Errorf("load workspace group %s: %w", gid, err))
+			continue
+		}
+		if g == nil {
+			errs = append(errs, fmt.Errorf("workspace group %s not found", gid))
 			continue
 		}
 		if g.CleanupStatus != orchmodels.WorkspaceCleanupStatusCleaned {
@@ -44,11 +50,13 @@ func (s *HandoffService) restoreCleanedGroups(ctx context.Context, groupIDs []st
 		if err := s.restoreCleanedGroup(ctx, g); err != nil {
 			s.logf().Error("restore cleaned group",
 				zap.String("group_id", g.ID), zap.Error(err))
-			_ = s.wsGroups.UpdateWorkspaceGroupRestoreStatus(ctx, g.ID,
+			statusErr := s.wsGroups.UpdateWorkspaceGroupRestoreStatus(ctx, g.ID,
 				orchmodels.WorkspaceRestoreStatusFailed, err.Error())
-			continue
+			errs = append(errs, errors.Join(
+				fmt.Errorf("restore workspace group %s: %w", gid, err), statusErr))
 		}
 	}
+	return errors.Join(errs...)
 }
 
 func (s *HandoffService) restoreCleanedGroup(ctx context.Context, g *orchmodels.WorkspaceGroup) error {

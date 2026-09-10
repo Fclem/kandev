@@ -5,15 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/kandev/kandev/internal/agent/runtime/activity"
-	"github.com/kandev/kandev/internal/agentruntime"
 	orchmodels "github.com/kandev/kandev/internal/office/models"
 
 	"github.com/kandev/kandev/internal/task/models"
@@ -326,7 +323,7 @@ func (c *cancellableCleanupBarrier) CleanupWorktreesPreservingBranches(
 	return c.CleanupWorktrees(ctx, worktrees)
 }
 
-func TestUnarchiveCancelsAndJoinsClaimedArchiveCleanup(t *testing.T) {
+func TestUnarchiveRefusesClaimedArchiveCleanup(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	ctx := context.Background()
 	coordinator := activity.NewCoordinator(activity.Options{})
@@ -334,10 +331,10 @@ func TestUnarchiveCancelsAndJoinsClaimedArchiveCleanup(t *testing.T) {
 	taskResult, err := taskSvc.CreateTask(ctx, &CreateTaskRequest{
 		WorkspaceID: "ws-1", Title: "Archived task", ProjectID: "proj-1",
 	})
-	task := taskResult.Task
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
+	task := taskResult.Task
 	if err := repo.ArchiveTask(ctx, task.ID); err != nil {
 		t.Fatalf("ArchiveTask: %v", err)
 	}
@@ -355,125 +352,6 @@ func TestUnarchiveCancelsAndJoinsClaimedArchiveCleanup(t *testing.T) {
 	if err := repo.CreateTaskResourceCleanupJob(ctx, job); err != nil {
 		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
 	}
-	barrier := newJoinCleanupBarrier()
-	taskSvc.SetWorktreeCleanup(barrier)
-	processDone := make(chan error, 1)
-	go func() { processDone <- taskSvc.processTaskResourceCleanupJob(ctx, job.ID) }()
-	select {
-	case <-barrier.started:
-	case <-time.After(time.Second):
-		t.Fatal("cleanup did not reach the post-claim barrier")
-	}
-
-	handoff := NewHandoffService(repo, repo, nil, nil, nil, nil)
-	handoff.SetTaskResourceCleaner(taskSvc)
-	type unarchiveResult struct {
-		outcome *CascadeOutcome
-		err     error
-	}
-	unarchiveDone := make(chan unarchiveResult, 1)
-	go func() {
-		outcome, err := handoff.UnarchiveTaskTree(ctx, task.ID)
-		unarchiveDone <- unarchiveResult{outcome: outcome, err: err}
-	}()
-	select {
-	case <-barrier.cancelled:
-	case <-time.After(time.Second):
-		t.Fatal("cleanup did not observe unarchive cancellation")
-	}
-	select {
-	case result := <-unarchiveDone:
-		t.Fatalf("unarchive returned before claimed cleanup joined: outcome=%#v err=%v", result.outcome, result.err)
-	case <-time.After(100 * time.Millisecond):
-	}
-	close(barrier.release)
-	select {
-	case <-barrier.stopped:
-	case <-time.After(time.Second):
-		t.Fatal("cleanup did not stop after release")
-	}
-	var unarchiveErr error
-	select {
-	case result := <-unarchiveDone:
-		unarchiveErr = result.err
-	case <-time.After(time.Second):
-		t.Fatal("unarchive did not return after cleanup joined")
-	}
-	if unarchiveErr != nil {
-		t.Fatalf("UnarchiveTaskTree: %v", unarchiveErr)
-	}
-	var processErr error
-	select {
-	case processErr = <-processDone:
-	case <-time.After(time.Second):
-		t.Fatal("cleanup processor did not return after release")
-	}
-	if processErr != nil && !errors.Is(processErr, context.Canceled) {
-		t.Fatalf("cleanup worker error = %v, want nil or context cancellation", processErr)
-	}
-	got, err := repo.GetTaskResourceCleanupJob(ctx, job.ID)
-	if err != nil {
-		t.Fatalf("GetTaskResourceCleanupJob: %v", err)
-	}
-	if got.State != models.TaskResourceCleanupStateCancelled {
-		t.Fatalf("cleanup state = %q, want cancelled", got.State)
-	}
-	if got.Attempts != 1 {
-		t.Fatalf("cleanup attempts = %d, want claimed generation 1 preserved", got.Attempts)
-	}
-	lease, _, err := coordinator.TryAcquireMaintenance(ctx, 0)
-	if err != nil {
-		t.Fatalf("cancelled cleanup activity lease was not released: %v", err)
-	}
-	lease.Release()
-}
-
-func TestUnarchiveCancellationPreservesCleanupResourcesAfterBlockedCleaner(t *testing.T) {
-	taskSvc, repo := setupOfficeTest(t)
-	ctx := context.Background()
-	taskResult, err := taskSvc.CreateTask(ctx, &CreateTaskRequest{
-		WorkspaceID: "ws-1", Title: "Archived task", ProjectID: "proj-1",
-	})
-	task := taskResult.Task
-	if err != nil {
-		t.Fatalf("CreateTask: %v", err)
-	}
-	const sessionID = "session-cancel-boundary"
-	if err := repo.CreateTaskSession(ctx, &models.TaskSession{
-		ID: sessionID, TaskID: task.ID, State: models.TaskSessionStateCompleted,
-	}); err != nil {
-		t.Fatalf("CreateTaskSession: %v", err)
-	}
-	if err := repo.UpsertExecutorRunning(ctx, &models.ExecutorRunning{
-		ID: sessionID, SessionID: sessionID, TaskID: task.ID, ExecutorID: "executor-1",
-		Runtime: agentruntime.RuntimeStandalone, Status: models.ExecutorRunningStatusStarting,
-	}); err != nil {
-		t.Fatalf("UpsertExecutorRunning: %v", err)
-	}
-	quickChatRoot := t.TempDir()
-	taskSvc.SetQuickChatDir(quickChatRoot)
-	sessionDir := filepath.Join(quickChatRoot, sessionID)
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("create quick-chat session directory: %v", err)
-	}
-	if err := repo.ArchiveTask(ctx, task.ID); err != nil {
-		t.Fatalf("ArchiveTask: %v", err)
-	}
-	snapshot, err := json.Marshal(taskResourceCleanupSnapshot{
-		Sessions:  []*models.TaskSession{{ID: sessionID, TaskID: task.ID}},
-		Worktrees: []*worktree.Worktree{{ID: "worktree-cancel-boundary", TaskID: task.ID}},
-	})
-	if err != nil {
-		t.Fatalf("marshal cleanup snapshot: %v", err)
-	}
-	job := &models.TaskResourceCleanupJob{
-		ID: "archive-job-cancel-boundary", OperationID: "archive:" + task.ID,
-		TaskID: task.ID, Trigger: models.TaskResourceCleanupTriggerArchive,
-		State: models.TaskResourceCleanupStatePending, ResourceSnapshot: string(snapshot),
-	}
-	if err := repo.CreateTaskResourceCleanupJob(ctx, job); err != nil {
-		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
-	}
 	barrier := newCancellableCleanupBarrier()
 	taskSvc.SetWorktreeCleanup(barrier)
 	processDone := make(chan error, 1)
@@ -481,29 +359,37 @@ func TestUnarchiveCancellationPreservesCleanupResourcesAfterBlockedCleaner(t *te
 	select {
 	case <-barrier.started:
 	case <-time.After(time.Second):
-		t.Fatal("cleanup did not reach the blocked worktree cleaner")
+		t.Fatal("cleanup did not reach physical cleanup")
 	}
 
 	handoff := NewHandoffService(repo, repo, nil, nil, nil, nil)
 	handoff.SetTaskResourceCleaner(taskSvc)
-	if _, err := handoff.UnarchiveTaskTree(ctx, task.ID); err != nil {
-		t.Fatalf("UnarchiveTaskTree: %v", err)
+	if _, err := handoff.UnarchiveTaskTree(ctx, task.ID); !errors.Is(err, ErrCleanupCancellationRace) {
+		t.Fatalf("UnarchiveTaskTree error = %v, want cleanup cancellation race", err)
 	}
-	if err := <-processDone; err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("cleanup worker error = %v, want nil or context cancellation", err)
+	stillArchived, err := repo.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask after rejected unarchive: %v", err)
 	}
-	if _, err := os.Stat(sessionDir); err != nil {
-		t.Fatalf("quick-chat session directory removed after cancellation: %v", err)
+	if stillArchived == nil || stillArchived.ArchivedAt == nil {
+		t.Fatal("task became active while cleanup claim was running")
 	}
-	if _, err := repo.GetExecutorRunningBySessionID(ctx, sessionID); err != nil {
-		t.Fatalf("executor runtime row removed after cancellation: %v", err)
+
+	close(barrier.release)
+	select {
+	case <-barrier.stopped:
+	case <-time.After(time.Second):
+		t.Fatal("cleanup did not finish after release")
+	}
+	if err := <-processDone; err != nil {
+		t.Fatalf("cleanup processor: %v", err)
 	}
 	got, err := repo.GetTaskResourceCleanupJob(ctx, job.ID)
 	if err != nil {
 		t.Fatalf("GetTaskResourceCleanupJob: %v", err)
 	}
-	if got.State != models.TaskResourceCleanupStateCancelled {
-		t.Fatalf("cleanup state = %q, want cancelled", got.State)
+	if got.State != models.TaskResourceCleanupStateSucceeded {
+		t.Fatalf("cleanup state = %q, want succeeded", got.State)
 	}
 }
 
@@ -1223,6 +1109,34 @@ func TestRetryTaskResourceCleanupJobUsesBoundedBackoffAndTerminalState(t *testin
 				t.Fatalf("retry delay = %v, want about %v", delta, test.wantDelay)
 			}
 		})
+	}
+}
+
+func TestRetryCascadeCleanupJobNeverBecomesTerminal(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	job := &models.TaskResourceCleanupJob{
+		ID: "retry-cascade", OperationID: "cascade_archive:retry-cascade", TaskID: "task-retry-cascade",
+		Trigger: models.TaskResourceCleanupTriggerCascadeArchive,
+		State:   models.TaskResourceCleanupStateRunning, Attempts: taskResourceCleanupMaxAttempts,
+		ResourceSnapshot: `{}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(context.Background(), job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+
+	cleanupErr := errors.New("persistent cascade cleanup failure")
+	if err := taskSvc.retryTaskResourceCleanupJob(context.Background(), job, cleanupErr); !errors.Is(err, cleanupErr) {
+		t.Fatalf("retryTaskResourceCleanupJob error = %v, want cleanup error", err)
+	}
+	got, err := repo.GetTaskResourceCleanupJob(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("reload cleanup job: %v", err)
+	}
+	if got.State != models.TaskResourceCleanupStateRetryWait {
+		t.Fatalf("cascade cleanup state = %q, want retry_wait", got.State)
+	}
+	if got.NextAttemptAt == nil || got.CompletedAt != nil {
+		t.Fatalf("cascade retry metadata = next=%v completed=%v, want non-nil/nil", got.NextAttemptAt, got.CompletedAt)
 	}
 }
 

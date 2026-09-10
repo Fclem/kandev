@@ -476,12 +476,18 @@ func (s *Service) executeTaskResourceCleanupJob(
 	if cancelled, err := s.cancelIfTaskUnarchived(ctx, job); err != nil || cancelled {
 		return err
 	}
-	errs := s.performTaskCleanup(ctx, job.TaskID, snapshot.Sessions, snapshot.Worktrees, targets,
+	var errs []error
+	if taskResourceCleanupDeletesTask(job.Trigger) && s.attachmentSvc != nil {
+		if err := s.attachmentSvc.DeleteByTask(ctx, job.TaskID); err != nil {
+			errs = append(errs, fmt.Errorf("delete task attachments: %w", err))
+		}
+	}
+	errs = append(errs, s.performTaskCleanup(ctx, job.TaskID, snapshot.Sessions, snapshot.Worktrees, targets,
 		taskEnvironmentCleanup{
 			env: snapshot.TaskEnvironment, deleteRow: snapshot.DeleteEnvironmentRow,
 			preserveBranches: job.IsArchive(),
 		},
-		taskCleanupPreserveRows(stopOutcome))
+		taskCleanupPreserveRows(stopOutcome))...)
 	if cause := context.Cause(ctx); cause != nil {
 		return errors.Join(append(errs, cause)...)
 	}

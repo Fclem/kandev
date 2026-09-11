@@ -1870,6 +1870,12 @@ func (h *TaskHandlers) httpDeleteTask(c *gin.Context) {
 			}
 			h.logger.Warn("task deleted but post-commit housekeeping failed",
 				zap.String("task_id", taskID), zap.Error(err))
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				responseKeySuccess: false,
+				responseKeyPending: true,
+				"task_id":          taskID,
+			})
+			return
 		}
 		c.JSON(http.StatusOK, dto.SuccessResponse{Success: true})
 		return
@@ -1877,6 +1883,16 @@ func (h *TaskHandlers) httpDeleteTask(c *gin.Context) {
 	if err := h.service.DeleteTaskWithOptions(deleteCtx, taskID, service.DeleteTaskOptions{
 		DiscardWorktreeChanges: discardWorktreeChanges,
 	}); err != nil {
+		if isCascadePostCommitError(err) {
+			h.logger.Warn("task deleted but post-commit housekeeping failed",
+				zap.String("task_id", taskID), zap.Error(err))
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				responseKeySuccess: false,
+				responseKeyPending: true,
+				"task_id":          taskID,
+			})
+			return
+		}
 		handleNotFound(c, h.logger, err, "task not deleted")
 		return
 	}
@@ -1905,6 +1921,12 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 			}
 			h.logger.Warn("task archived but post-commit housekeeping failed",
 				zap.String("task_id", taskID), zap.Error(err))
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				responseKeySuccess: false,
+				responseKeyPending: true,
+				"task_id":          taskID,
+			})
+			return
 		}
 		response := gin.H{responseKeySuccess: true}
 		if out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0 {
@@ -1924,6 +1946,12 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 		}
 		h.logger.Warn("task archived but post-commit task projection failed",
 			zap.String("task_id", taskID), zap.Error(err))
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			responseKeySuccess: false,
+			responseKeyPending: true,
+			"task_id":          taskID,
+		})
+		return
 	}
 	c.JSON(http.StatusOK, dto.SuccessResponse{Success: true})
 }

@@ -303,7 +303,7 @@ func TestHTTPArchiveTaskSurvivesCancelledRequestContext(t *testing.T) {
 	require.False(t, repo.sawCancelled, "archive must receive a detached context")
 }
 
-func TestHTTPArchiveFallbackAcknowledgesCommittedProjectionFailure(t *testing.T) {
+func TestHTTPArchiveFallbackReportsCommittedProjectionFailureAsPending(t *testing.T) {
 	repo := &httpArchiveOutcomeRepo{
 		task:     &models.Task{ID: "task-1", WorkspaceID: "ws-1"},
 		failRead: true,
@@ -321,8 +321,8 @@ func TestHTTPArchiveFallbackAcknowledgesCommittedProjectionFailure(t *testing.T)
 
 	h.httpArchiveTask(c)
 
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.JSONEq(t, `{"success":true}`, rec.Body.String())
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	require.JSONEq(t, `{"pending":true,"success":false,"task_id":"task-1"}`, rec.Body.String())
 	require.True(t, repo.archived, "archive mutation must remain committed")
 }
 func TestHTTPArchiveTaskReportsAlreadyArchivedOutcome(t *testing.T) {

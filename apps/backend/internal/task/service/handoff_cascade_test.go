@@ -500,6 +500,39 @@ func TestArchiveTaskTree_IgnoresConflictingIndependentChildCascades(t *testing.T
 	}
 }
 
+func TestArchiveTaskTreeDoesNotAdoptIndependentChildCascade(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	tasks.addTask("child", "root", "ws-1")
+	repo := newCascadeRepo(tasks)
+	svc := NewHandoffService(repo, nil, nil, nil, newCascadeWSGroupRepo(), nil)
+
+	if _, err := svc.ArchiveTaskTree(context.Background(), "child", false); err != nil {
+		t.Fatalf("archive child: %v", err)
+	}
+	child, _ := tasks.GetTask(context.Background(), "child")
+	childCascadeID := child.ArchivedByCascadeID
+
+	out, err := svc.ArchiveTaskTree(context.Background(), "root", true)
+	if err != nil {
+		t.Fatalf("archive parent: %v", err)
+	}
+	root, _ := tasks.GetTask(context.Background(), "root")
+	if root.ArchivedByCascadeID == "" || root.ArchivedByCascadeID == childCascadeID {
+		t.Fatalf("parent cascade ID = %q, child cascade ID = %q", root.ArchivedByCascadeID, childCascadeID)
+	}
+	if _, err := svc.UnarchiveTaskTree(context.Background(), "root"); err != nil {
+		t.Fatalf("unarchive parent: %v", err)
+	}
+	child, _ = tasks.GetTask(context.Background(), "child")
+	if child.ArchivedAt == nil {
+		t.Fatal("independently archived child was restored with parent")
+	}
+	if len(out.ArchivedTaskIDs) != 1 || out.ArchivedTaskIDs[0] != "root" {
+		t.Fatalf("parent archive IDs = %v, want [root]", out.ArchivedTaskIDs)
+	}
+}
+
 func TestArchiveTaskTree_TransfersSharedEnvironmentFromDepartingOwner(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	tasks.addTask("root", "", "ws-1")

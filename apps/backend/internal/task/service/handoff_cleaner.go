@@ -69,18 +69,10 @@ func (s *HandoffService) CleanupWorkspaceGroups(ctx context.Context, workspaceID
 		}
 		mu := s.workspaceGroupLock.lockFor(g.ID)
 		mu.Lock()
-		activeMembers, err := s.wsGroups.ListActiveWorkspaceGroupMembers(ctx, g.ID)
+		hasActive, err := s.hasActiveExecutionsForGroup(ctx, g.ID)
 		if err != nil {
 			mu.Unlock()
-			return fmt.Errorf("list active workspace group members %s: %w", g.ID, err)
-		}
-		hasActive := false
-		if len(activeMembers) > 0 {
-			hasActive, err = s.hasActiveExecutionsForGroup(ctx, g.ID)
-			if err != nil {
-				mu.Unlock()
-				return fmt.Errorf("check active workspace group %s: %w", g.ID, err)
-			}
+			return fmt.Errorf("check active workspace group %s: %w", g.ID, err)
 		}
 		if hasActive {
 			s.logf().Warn("workspace group cleanup: active executions remain",

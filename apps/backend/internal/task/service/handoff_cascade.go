@@ -385,7 +385,7 @@ func (s *HandoffService) applyArchiveTaskMutations(
 				s.resourceCleaner.CleanupTaskResources(ctx, all[i], false)
 			}
 		} else {
-			if err := s.cancelCascadeResourceCleanup(ctx, cleanupOps[all[i]]); err != nil {
+			if err := s.cancelSkippedCascadeResourceCleanup(ctx, all[i], cascadeID, cleanupOps[all[i]]); err != nil {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("cancel cleanup %s: %w", cleanupOps[all[i]], err))
 			}
 			out.SkippedTaskIDs = append(out.SkippedTaskIDs, all[i])
@@ -393,6 +393,23 @@ func (s *HandoffService) applyArchiveTaskMutations(
 	}
 
 	return cleanupErrors, nil
+}
+
+func (s *HandoffService) cancelSkippedCascadeResourceCleanup(
+	ctx context.Context,
+	taskID, cascadeID, operationID string,
+) error {
+	if operationID == "" {
+		return nil
+	}
+	task, err := s.tasks.GetTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task != nil && task.ArchivedByCascadeID == cascadeID {
+		return nil
+	}
+	return s.cancelCascadeResourceCleanup(ctx, operationID)
 }
 
 func appendTaskCleanupError(cleanupErrors []error, err error) []error {
@@ -636,11 +653,13 @@ func (s *HandoffService) deleteTaskTreeRows(
 			}
 		}
 		// Remove dependency edges before the task row so a transient cleanup
-		// failure cannot leave edges pointing at a deleted task. Preserve the
-		// exact edge set so a failed task delete can restore it.
-		dependencySnapshot, err := s.deleteTaskDependencyEdges(postDeleteCtx, all[i])
+		// failure cannot leave edges pointing at a deleted task. Keep the
+		// process-wide mutation boundary through deletion and compensation.
+		dependencyUnlock := taskdependencies.AcquireMutationLock()
+		dependencySnapshot, err := s.deleteTaskDependencyEdgesLocked(postDeleteCtx, all[i])
 		if err != nil {
-			restoreErr := s.restoreTaskDependencyEdges(deleteCompensationCtx, dependencySnapshot)
+			restoreErr := s.restoreTaskDependencyEdgesLocked(deleteCompensationCtx, dependencySnapshot)
+			dependencyUnlock()
 			cancelErr := s.cancelCascadeResourceCleanupRange(deleteCompensationCtx, all[:i+1], cleanupOps)
 			deleteErr := fmt.Errorf("clean up task dependencies %s: %w", all[i], err)
 			if len(out.ArchivedTaskIDs) == 0 {
@@ -653,7 +672,8 @@ func (s *HandoffService) deleteTaskTreeRows(
 		// runs async after this returns. Delete cascade removes the env row.
 		vacatedStepID, err := s.deleteTaskWithVacatedStep(postDeleteCtx, all[i])
 		if err != nil {
-			restoreErr := s.restoreTaskDependencyEdges(deleteCompensationCtx, dependencySnapshot)
+			restoreErr := s.restoreTaskDependencyEdgesLocked(deleteCompensationCtx, dependencySnapshot)
+			dependencyUnlock()
 			cancelErr := s.cancelCascadeResourceCleanupRange(deleteCompensationCtx, all[:i+1], cleanupOps)
 			deleteErr := fmt.Errorf("delete %s: %w", all[i], err)
 			if len(out.ArchivedTaskIDs) == 0 {
@@ -661,6 +681,7 @@ func (s *HandoffService) deleteTaskTreeRows(
 			}
 			return nil, errors.Join(deleteErr, restoreErr, cancelErr)
 		}
+		dependencyUnlock()
 		recordVacatedStep(vacatedStepIDs, vacatedStepID)
 		out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
 		cleanupErrors = appendTaskCleanupError(
@@ -721,7 +742,10 @@ func (s *HandoffService) archiveTaskWithVacatedStep(
 	return repo.ArchiveTaskIfActiveWithVacatedStep(ctx, taskID, cascadeID)
 }
 
-func (s *HandoffService) deleteTaskDependencyEdges(ctx context.Context, taskID string) (*taskDependencySnapshot, error) {
+func (s *HandoffService) deleteTaskDependencyEdgesLocked(
+	ctx context.Context,
+	taskID string,
+) (*taskDependencySnapshot, error) {
 	if s.blockers == nil {
 		return nil, nil
 	}
@@ -729,8 +753,6 @@ func (s *HandoffService) deleteTaskDependencyEdges(ctx context.Context, taskID s
 	if !ok {
 		return nil, errors.New("blocker repository cannot delete task dependency edges")
 	}
-	unlock := taskdependencies.AcquireMutationLock()
-	defer unlock()
 	var snapshot *taskDependencySnapshot
 	if snapshotter, ok := s.blockers.(taskDependencySnapshotter); ok {
 		outgoing, err := snapshotter.ListTaskBlockers(ctx, taskID)
@@ -749,12 +771,13 @@ func (s *HandoffService) deleteTaskDependencyEdges(ctx context.Context, taskID s
 	return snapshot, nil
 }
 
-func (s *HandoffService) restoreTaskDependencyEdges(ctx context.Context, snapshot *taskDependencySnapshot) error {
+func (s *HandoffService) restoreTaskDependencyEdgesLocked(
+	ctx context.Context,
+	snapshot *taskDependencySnapshot,
+) error {
 	if snapshot == nil || s.blockers == nil {
 		return nil
 	}
-	unlock := taskdependencies.AcquireMutationLock()
-	defer unlock()
 	var errs []error
 	for _, blocker := range snapshot.outgoing {
 		if blocker == nil {
@@ -1318,6 +1341,7 @@ func (s *HandoffService) unarchiveManualRoot(ctx context.Context, root *models.T
 		return nil, errors.New("task is not archived")
 	}
 	out := &CascadeOutcome{}
+	var restorationErrors []error
 	if err := s.cancelArchiveResourceCleanup(ctx, root.ID, ""); err != nil {
 		return out, fmt.Errorf("cancel archive cleanup %s: %w", root.ID, err)
 	}
@@ -1331,7 +1355,7 @@ func (s *HandoffService) unarchiveManualRoot(ctx context.Context, root *models.T
 	}
 	out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, root.ID)
 	if err := s.publishUpdatedTask(ctx, root.ID); err != nil {
-		return out, cascadePostCommitError(out, err)
+		restorationErrors = append(restorationErrors, fmt.Errorf("publish unarchived task %s: %w", root.ID, err))
 	}
 	s.clearOrphanedInheritParentChildren(ctx, root.ID)
 	// Legacy archives never released group memberships, but the group may
@@ -1342,16 +1366,16 @@ func (s *HandoffService) unarchiveManualRoot(ctx context.Context, root *models.T
 	if s.wsGroups != nil {
 		g, err := s.wsGroups.GetWorkspaceGroupForTask(ctx, root.ID)
 		if err != nil {
-			return out, cascadePostCommitError(out, fmt.Errorf("lookup workspace group for unarchived task: %w", err))
-		}
-		if g != nil {
+			restorationErrors = append(restorationErrors,
+				fmt.Errorf("lookup workspace group for unarchived task: %w", err))
+		} else if g != nil {
 			out.ReleasedGroupIDs = []string{g.ID}
 			if err := s.restoreCleanedGroups(ctx, []string{g.ID}); err != nil {
-				return out, cascadePostCommitError(out, err)
+				restorationErrors = append(restorationErrors, err)
 			}
 		}
 	}
-	return out, nil
+	return out, cascadePostCommitError(out, errors.Join(restorationErrors...))
 }
 
 func (s *HandoffService) cancelArchiveResourceCleanup(ctx context.Context, taskID, operationID string) error {
@@ -1590,34 +1614,20 @@ func (s *HandoffService) resolveArchiveCascade(ctx context.Context, rootID strin
 // mutation. Reusing its identity keeps already-archived descendants in the
 // same resumable unarchive scope.
 func (s *HandoffService) findArchiveRetryCascade(ctx context.Context, rootID string) (string, []string, error) {
+	root, err := s.tasks.GetTask(ctx, rootID)
+	if err != nil {
+		return "", nil, err
+	}
+	if root == nil || root.ArchivedByCascadeID == "" {
+		// An active root provides no provenance for archived descendants.
+		// They may belong to independent manual or auto archives.
+		return "", nil, nil
+	}
 	all, err := s.collectTaskTreeIncludingArchived(ctx, rootID)
 	if err != nil {
 		return "", nil, err
 	}
-	var cascadeID string
-	for _, id := range all[1:] {
-		task, err := s.tasks.GetTask(ctx, id)
-		if err != nil {
-			return "", nil, err
-		}
-		if task == nil || task.ArchivedAt == nil || task.ArchivedByCascadeID == "" {
-			continue
-		}
-		if cascadeID == "" {
-			cascadeID = task.ArchivedByCascadeID
-			continue
-		}
-		if cascadeID != task.ArchivedByCascadeID {
-			// Multiple identities prove these descendants were not
-			// one interrupted cascade. Start a new parent cascade and
-			// leave the independently archived rows untouched.
-			return "", nil, nil
-		}
-	}
-	if cascadeID == "" {
-		return "", nil, nil
-	}
-	return cascadeID, all, nil
+	return root.ArchivedByCascadeID, all, nil
 }
 
 type childLister func(ctx context.Context, parentID string) ([]*models.Task, error)

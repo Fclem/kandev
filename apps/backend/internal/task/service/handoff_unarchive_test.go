@@ -116,6 +116,7 @@ func TestUnarchiveTaskTree_CascadePublishesTaskUpdatedPerTask(t *testing.T) {
 type unarchivePublicationFailureRepo struct {
 	*fakeCascadeRepo
 	failEnabled bool
+	failTaskID  string
 	failed      bool
 }
 
@@ -125,7 +126,7 @@ func (r *unarchivePublicationFailureRepo) GetTask(
 ) (*models.Task, error) {
 	r.base.mu.Lock()
 	task := r.base.tasks[id]
-	shouldFail := r.failEnabled && id == "c1" && task != nil && task.ArchivedAt == nil && !r.failed
+	shouldFail := r.failEnabled && id == r.failTaskID && task != nil && task.ArchivedAt == nil && !r.failed
 	if shouldFail {
 		r.failed = true
 	}
@@ -140,7 +141,9 @@ func TestUnarchiveTaskTreeContinuesAfterProjectionPublicationFailure(t *testing.
 	tasks := newFakeTaskRepo()
 	tasks.addTask("root", "", "ws-1")
 	tasks.addTask("c1", "root", "ws-1")
-	repo := &unarchivePublicationFailureRepo{fakeCascadeRepo: newCascadeRepo(tasks)}
+	repo := &unarchivePublicationFailureRepo{
+		fakeCascadeRepo: newCascadeRepo(tasks), failTaskID: "c1",
+	}
 	svc := NewHandoffService(repo, nil, nil, nil, newCascadeWSGroupRepo(), nil)
 	svc.SetTaskEventPublisher(&fakeEventPublisher{})
 	if _, err := svc.ArchiveTaskTree(context.Background(), "root", true); err != nil {
@@ -156,5 +159,24 @@ func TestUnarchiveTaskTreeContinuesAfterProjectionPublicationFailure(t *testing.
 		if task.ArchivedAt != nil {
 			t.Errorf("%s remained archived after publication failure: %v", id, task.ArchivedAt)
 		}
+	}
+}
+
+func TestUnarchiveManualRootContinuesAfterProjectionPublicationFailure(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addArchivedTask("root", "", "ws-1", "")
+	repo := &unarchivePublicationFailureRepo{
+		fakeCascadeRepo: newCascadeRepo(tasks), failTaskID: "root",
+	}
+	svc := NewHandoffService(repo, nil, nil, nil, newCascadeWSGroupRepo(), nil)
+	svc.SetTaskEventPublisher(&fakeEventPublisher{})
+	repo.failEnabled = true
+
+	if _, err := svc.UnarchiveTaskTree(context.Background(), "root"); err == nil {
+		t.Fatal("manual unarchive succeeded despite projection publication failure")
+	}
+	root, _ := tasks.GetTask(context.Background(), "root")
+	if root.ArchivedAt != nil {
+		t.Fatal("manual unarchive left root archived after publication failure")
 	}
 }

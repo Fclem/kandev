@@ -110,6 +110,9 @@ func (s *HandoffService) restorePlainFolder(ctx context.Context, g *orchmodels.W
 	if s.cleaner == nil {
 		return errors.New("plain folder restore: managed-root validator is not configured")
 	}
+	if err := s.cleaner.ValidateManagedRoot(g.MaterializedPath); err != nil {
+		return err
+	}
 	if creator, ok := s.cleaner.(managedDirectoryCreator); ok {
 		if err := creator.CreateManagedDirectory(g.MaterializedPath, 0o755); err != nil {
 			return err

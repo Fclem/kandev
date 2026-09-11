@@ -1586,6 +1586,23 @@ func (l leakyListTaskRepo) ListTasks(ctx context.Context, workflowID string) ([]
 	return append(real, l.extra...), nil
 }
 
+func (l leakyListTaskRepo) ListTasksByWorkspace(
+	ctx context.Context,
+	workspaceID, workflowID, repositoryID, query string,
+	page, pageSize int,
+	sort string,
+	includeArchived, includeEphemeral, onlyEphemeral, excludeConfig bool,
+) ([]*models.Task, int, error) {
+	real, total, err := l.TaskRepository.ListTasksByWorkspace(
+		ctx, workspaceID, workflowID, repositoryID, query, page, pageSize, sort,
+		includeArchived, includeEphemeral, onlyEphemeral, excludeConfig,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	return append(real, l.extra...), total + len(l.extra), nil
+}
+
 // TestService_DeleteWorkflow_SkipsConcurrentlyArchivedTask covers the
 // TOCTOU race window between Service.tasks.ListTasks and Service.ArchiveTask:
 // if a task is archived by another caller in that window, ArchiveTask

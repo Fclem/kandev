@@ -226,6 +226,9 @@ func (s *Service) authorizeWorkflowID(ctx context.Context, workflowID string) er
 	if err != nil {
 		return err
 	}
+	if workflow == nil {
+		return repoerrors.ErrWorkspaceNotFound
+	}
 	if workflow.WorkspaceID == "" {
 		return nil
 	}

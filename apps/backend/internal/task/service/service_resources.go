@@ -807,6 +807,26 @@ func (s *Service) SetWorkflowSource(ctx context.Context, id, source, sourcePath 
 // they do not linger as orphan rows pointing at a workflow_id that no longer
 // exists (the tasks.workflow_id FK was dropped to support empty workflow_id
 // on ephemeral tasks, so SQLite cannot cascade for us).
+func (s *Service) listWorkflowTasksForDelete(
+	ctx context.Context,
+	workflow *models.Workflow,
+) ([]*models.Task, error) {
+	var all []*models.Task
+	for page := 1; ; page++ {
+		tasks, total, err := s.tasks.ListTasksByWorkspace(
+			ctx, workflow.WorkspaceID, workflow.ID, "", "", page, workspaceDeletePageSize,
+			"", true, true, false, false,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("list tasks for workflow delete cascade: %w", err)
+		}
+		all = append(all, tasks...)
+		if len(tasks) == 0 || len(all) >= total {
+			return all, nil
+		}
+	}
+}
+
 func (s *Service) DeleteWorkflow(ctx context.Context, id string) error {
 	if err := s.authorizeWorkflowID(ctx, id); err != nil {
 		return err
@@ -819,7 +839,7 @@ func (s *Service) DeleteWorkflow(ctx context.Context, id string) error {
 		return fmt.Errorf("workflow not found: %s", id)
 	}
 
-	tasks, err := s.tasks.ListTasks(ctx, id)
+	tasks, err := s.listWorkflowTasksForDelete(ctx, workflow)
 	if err != nil {
 		s.logger.Error("failed to list tasks for workflow delete cascade",
 			zap.String("workflow_id", id), zap.Error(err))

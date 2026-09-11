@@ -1258,9 +1258,11 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 		if !ok {
 			return nil
 		}
+		recoveryCtx, cancel := archivecascade.ContinuationContext(context.WithoutCancel(ctx))
+		defer cancel()
 		var errs []error
 		for _, operationID := range cancelledCleanupOperations {
-			if err := restorer.RestoreCancelledTaskResourceCleanup(operationCtx, operationID); err != nil {
+			if err := restorer.RestoreCancelledTaskResourceCleanup(recoveryCtx, operationID); err != nil {
 				errs = append(errs, fmt.Errorf("restore archive cleanup %s: %w", operationID, err))
 			}
 		}
@@ -1303,28 +1305,42 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	if mutationErr != nil {
 		restorationErrors = append(restorationErrors, mutationErr, restoreCancelledCleanup())
 	}
+	groupRestoreCtx := operationCtx
+	var cancelGroupRestore context.CancelFunc
+	if mutationErr != nil {
+		groupRestoreCtx, cancelGroupRestore = archivecascade.ContinuationContext(context.WithoutCancel(ctx))
+		defer cancelGroupRestore()
+	}
 	// Restore group memberships scoped to the same cascade. Track the
 	// set of affected groups so we can also re-evaluate cleanup state
 	// (cleanup_status=cleaned → active + restored / restorable).
+	membershipRestoreFailedIDs := map[string]struct{}{}
+	membershipRestoreFailed := false
 	groupIDs := map[string]bool{}
 	if s.wsGroups != nil {
 		for _, id := range out.ArchivedTaskIDs {
-			g, err := s.wsGroups.GetWorkspaceGroupForTask(operationCtx, id)
+			g, err := s.wsGroups.GetWorkspaceGroupForTask(groupRestoreCtx, id)
 			if err != nil {
+				membershipRestoreFailed = true
+				membershipRestoreFailedIDs[id] = struct{}{}
 				restorationErrors = append(restorationErrors,
 					fmt.Errorf("lookup workspace group for task %s: %w", id, err))
 				continue
 			}
 			restored := false
 			if g == nil {
-				if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID); err != nil {
+				if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(groupRestoreCtx, id, cascadeID); err != nil {
+					membershipRestoreFailed = true
+					membershipRestoreFailedIDs[id] = struct{}{}
 					restorationErrors = append(restorationErrors,
 						fmt.Errorf("restore membership for task %s: %w", id, err))
 					continue
 				}
 				restored = true
-				g, err = s.wsGroups.GetWorkspaceGroupForTask(operationCtx, id)
+				g, err = s.wsGroups.GetWorkspaceGroupForTask(groupRestoreCtx, id)
 				if err != nil {
+					membershipRestoreFailed = true
+					membershipRestoreFailedIDs[id] = struct{}{}
 					restorationErrors = append(restorationErrors,
 						fmt.Errorf("lookup restored workspace group for task %s: %w", id, err))
 					continue
@@ -1338,9 +1354,11 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 			if !restored {
 				mu := s.workspaceGroupLock.lockFor(g.ID)
 				mu.Lock()
-				err = s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID)
+				err = s.wsGroups.RestoreWorkspaceGroupMemberByCascade(groupRestoreCtx, id, cascadeID)
 				mu.Unlock()
 				if err != nil {
+					membershipRestoreFailed = true
+					membershipRestoreFailedIDs[id] = struct{}{}
 					restorationErrors = append(restorationErrors,
 						fmt.Errorf("restore membership for task %s: %w", id, err))
 					continue
@@ -1349,15 +1367,49 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 			groupIDs[g.ID] = true
 		}
 	}
+	if membershipRestoreFailed {
+		restorationErrors = append(restorationErrors, s.preserveCascadeAfterMembershipFailure(
+			groupRestoreCtx, rootID, cascadeID, membershipRestoreFailedIDs, restoreCancelledCleanup,
+		))
+	}
 	if len(groupIDs) > 0 {
 		ids := make([]string, 0, len(groupIDs))
 		for id := range groupIDs {
 			ids = append(ids, id)
 		}
 		out.ReleasedGroupIDs = ids
-		restorationErrors = append(restorationErrors, s.restoreCleanedGroups(operationCtx, ids))
+		restorationErrors = append(restorationErrors, s.restoreCleanedGroups(groupRestoreCtx, ids))
 	}
 	return out, cascadePostCommitError(out, errors.Join(restorationErrors...))
+}
+
+func (s *HandoffService) preserveCascadeAfterMembershipFailure(
+	ctx context.Context,
+	rootID, cascadeID string,
+	failedTaskIDs map[string]struct{},
+	restoreCleanup func() error,
+) error {
+	archiver, ok := s.tasks.(interface {
+		ArchiveTaskIfActive(context.Context, string, string) (bool, error)
+	})
+	if !ok {
+		return errors.New("task repository cannot preserve cascade provenance after membership failure")
+	}
+	restoreIDs := make([]string, 0, len(failedTaskIDs)+1)
+	restoreIDs = append(restoreIDs, rootID)
+	for id := range failedTaskIDs {
+		if id != rootID {
+			restoreIDs = append(restoreIDs, id)
+		}
+	}
+	var errs []error
+	for _, id := range restoreIDs {
+		if _, err := archiver.ArchiveTaskIfActive(ctx, id, cascadeID); err != nil {
+			errs = append(errs, fmt.Errorf("preserve cascade restore for task %s: %w", id, err))
+		}
+	}
+	errs = append(errs, restoreCleanup())
+	return errors.Join(errs...)
 }
 
 // unarchiveManualRoot restores a single task that was archived without a
@@ -1378,6 +1430,7 @@ func (s *HandoffService) unarchiveManualRoot(ctx context.Context, root *models.T
 	if err != nil {
 		return out, fmt.Errorf("unarchive %s: %w", root.ID, err)
 	}
+
 	if !ok {
 		out.SkippedTaskIDs = append(out.SkippedTaskIDs, root.ID)
 		return out, nil

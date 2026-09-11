@@ -70,7 +70,7 @@ func TestUnarchiveTaskTreeMarksRestorationFailureAsPostCommit(t *testing.T) {
 		t.Fatalf("unarchive error = %v, want post-commit restoration error", err)
 	}
 	restored, getErr := tasks.GetTask(context.Background(), "root")
-	if getErr != nil || restored == nil || restored.ArchivedAt != nil {
-		t.Fatalf("restored task = %#v, error = %v, want active task", restored, getErr)
+	if getErr != nil || restored == nil || restored.ArchivedAt == nil || restored.ArchivedByCascadeID != "cascade-1" {
+		t.Fatalf("restored task = %#v, error = %v, want archived task retaining cascade provenance", restored, getErr)
 	}
 }

@@ -2008,6 +2008,7 @@ func (h *TaskHandlers) httpUnarchiveTask(c *gin.Context) {
 	}
 	taskID := c.Param("id")
 	outcome, err := h.handoffSvc.UnarchiveTaskTree(c.Request.Context(), taskID)
+	postCommitError := false
 	if err != nil {
 		if !isCascadePostCommitError(err) {
 			handleNotFound(c, h.logger, err, "task not unarchived")
@@ -2015,12 +2016,7 @@ func (h *TaskHandlers) httpUnarchiveTask(c *gin.Context) {
 		}
 		h.logger.Warn("task unarchive committed with post-commit errors",
 			zap.String("task_id", taskID), zap.Error(err))
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"success": false,
-			"error":   "task unarchive requires retry",
-			"task_id": taskID,
-		})
-		return
+		postCommitError = true
 	}
 	// Probe branch recoverability for every restored task: archive deleted
 	// the local branch + worktree, so report whether the branch still
@@ -2043,6 +2039,20 @@ func (h *TaskHandlers) httpUnarchiveTask(c *gin.Context) {
 		for _, id := range outcome.ArchivedTaskIDs {
 			workspaceRecovery = append(workspaceRecovery, h.workspaceRestorer.RestoreTask(recoveryCtx, id))
 		}
+	}
+	if postCommitError {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success":            false,
+			"error":              "task unarchive requires retry",
+			"task_id":            taskID,
+			"cascade_id":         outcome.CascadeID,
+			"unarchived_ids":     outcome.ArchivedTaskIDs,
+			"skipped_ids":        outcome.SkippedTaskIDs,
+			"affected_group_ids": outcome.ReleasedGroupIDs,
+			"workspace_recovery": workspaceRecovery,
+			"recovery":           recovery,
+		})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success":            true,

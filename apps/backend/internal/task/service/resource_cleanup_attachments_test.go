@@ -189,6 +189,26 @@ func TestWorkspaceDeleteCleanupFailsClosedWithoutAttachmentListing(t *testing.T)
 	}
 }
 
+func TestWorkspaceDeleteCleanupFailsClosedWithoutPersistence(t *testing.T) {
+	taskSvc, _ := setupOfficeTest(t)
+	taskSvc.resourceCleanups = nil
+	taskSvc.attachmentSvc = &AttachmentService{}
+
+	if _, err := taskSvc.prepareWorkspaceAttachmentCleanup(context.Background(), "ws-1"); err == nil {
+		t.Fatal("prepareWorkspaceAttachmentCleanup succeeded without cleanup persistence")
+	}
+}
+
+func TestWorkspaceDeleteCleanupFailsClosedWithoutExecutor(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	taskSvc.attachmentSvc = nil
+	taskSvc.attachments = repo
+
+	if _, err := taskSvc.prepareWorkspaceAttachmentCleanup(context.Background(), "ws-1"); err == nil {
+		t.Fatal("prepareWorkspaceAttachmentCleanup succeeded without cleanup executor")
+	}
+}
+
 func TestRetryTaskResourceCleanupPersistsAfterDeadlineExpiry(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	ctx := context.Background()

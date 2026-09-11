@@ -245,8 +245,14 @@ func (s *Service) DeleteWorkspaceWithConfirmName(ctx context.Context, id, confir
 	return s.deleteWorkspace(ctx, workspace, &confirmName)
 }
 func (s *Service) prepareWorkspaceAttachmentCleanup(ctx context.Context, workspaceID string) (*models.TaskResourceCleanupJob, error) {
+	if s.attachmentSvc != nil && s.resourceCleanups == nil {
+		return nil, fmt.Errorf("workspace attachment cleanup persistence is unavailable")
+	}
 	if s.resourceCleanups == nil {
 		return nil, nil
+	}
+	if s.attachmentSvc == nil && s.attachments != nil {
+		return nil, fmt.Errorf("workspace attachment cleanup executor is unavailable")
 	}
 	attachmentRepo := s.attachments
 	if attachmentRepo == nil && s.attachmentSvc != nil {

@@ -341,9 +341,7 @@ func (s *HandoffService) archiveTaskTree(
 	if mutationErr != nil {
 		return out, mutationErr
 	}
-	if cascade {
-		s.forgetPartialArchiveCascade(rootID)
-	}
+	s.forgetPartialArchiveCascade(rootID)
 	cleanupErrors = append(cleanupErrors, s.rollbackAutoArchiveCASLoss(
 		transferCompensationCtx, ownershipTransfers, autoArchiveCandidate, out,
 		cleanupErrors,
@@ -1876,6 +1874,13 @@ func (s *HandoffService) collectArchiveRetryTree(ctx context.Context, rootID, ca
 		children, err := s.listCascadeChildrenIncludingArchived(ctx, node.id)
 		if err != nil {
 			return nil, err
+		}
+		if len(children) > archiveCascadeMaxMembers {
+			return nil, &archivecascade.SizeExceededError{
+				Dimension: cascadeMembersDimension,
+				Limit:     archiveCascadeMaxMembers,
+				Submitted: len(children),
+			}
 		}
 		for _, child := range children {
 			if child.ArchivedAt != nil && child.ArchivedByCascadeID != cascadeID {

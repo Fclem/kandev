@@ -206,7 +206,7 @@ func (s *Store) GetRetryGroup(ctx context.Context, id string) (*RetryGroup, erro
 
 // FinalizeRetryFailure settles an attempt and inserts its unique child.
 //
-//nolint:gocognit,cyclop,funlen // One transaction owns all parent, child, and outbox CAS.
+//nolint:gocognit,cyclop,funlen,nestif // One transaction owns all parent, child, and outbox CAS.
 func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generation int64, raw error, phase string) (*AutomationRun, error) {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -230,6 +230,23 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	if group.State != RetryGroupLive || group.Generation != generation {
 		return nil, ErrRetryGenerationMismatch
 	}
+	if parent.Status == RunStatusFailed && parent.RetryState == RetryStateCompleted {
+		var existing AutomationRun
+		err := tx.GetContext(ctx, &existing, tx.Rebind(`
+			SELECT * FROM automation_runs
+			WHERE retry_group_id = ? AND retry_parent_run_id = ? AND attempt_number = ?`),
+			parent.RetryGroupID, parent.ID, parent.AttemptNumber+1)
+		if err == nil {
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			return &existing, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		return nil, ErrRetryGenerationMismatch
+	}
 	failure := SanitizeAutomationFailure(raw, phase, nil)
 	policy, err := retryPolicyFromSnapshot(parent.RetryPolicySnapshot)
 	if err != nil {
@@ -238,14 +255,20 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	nextNumber := parent.AttemptNumber + 1
 	maxRetries, _ := parseRetryDecimal(policy.MaxRetries)
 	if policy.Mode == RetryModeDisabled || (policy.Mode == RetryModeFinite && parent.AttemptNumber > maxRetries) {
-		_, err = tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_failure_phase = ?, retry_failure_class = ?, error_message = ? WHERE id = ? AND retry_group_generation = ?`),
+		parentResult, execErr := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_failure_phase = ?, retry_failure_class = ?, error_message = ? WHERE id = ? AND retry_group_generation = ?`),
 			RunStatusFailed, RetryStateExhausted, failure.FailurePhase, failure.FailureClass, failure.Message, runID, generation)
-		if err != nil {
-			return nil, err
+		if execErr != nil {
+			return nil, execErr
 		}
-		_, err = tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET state = ?, updated_at = ? WHERE id = ? AND generation = ?`), RetryGroupCompleted, time.Now().UTC(), group.ID, generation)
-		if err != nil {
-			return nil, err
+		if affected, _ := parentResult.RowsAffected(); affected != 1 {
+			return nil, ErrRetryGenerationMismatch
+		}
+		groupResult, execErr := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET state = ?, updated_at = ? WHERE id = ? AND generation = ?`), RetryGroupCompleted, time.Now().UTC(), group.ID, generation)
+		if execErr != nil {
+			return nil, execErr
+		}
+		if affected, _ := groupResult.RowsAffected(); affected != 1 {
+			return nil, ErrRetryGenerationMismatch
 		}
 		if err := tx.Commit(); err != nil {
 			return nil, err
@@ -285,10 +308,13 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	}
 	child.DisplayTitle = FormatRetryTitle(child.RetryBaseTitle, nextNumber)
 	child.CreatedAt = time.Now().UTC()
-	_, err = tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_failure_phase = ?, retry_failure_class = ?, error_message = ? WHERE id = ? AND retry_state IN (?, ?)`),
+	parentResult, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_failure_phase = ?, retry_failure_class = ?, error_message = ? WHERE id = ? AND retry_state IN (?, ?)`),
 		RunStatusFailed, RetryStateCompleted, failure.FailurePhase, failure.FailureClass, failure.Message, runID, RetryStateTriggered, RetryStateNone)
 	if err != nil {
 		return nil, err
+	}
+	if affected, _ := parentResult.RowsAffected(); affected != 1 {
+		return nil, ErrRetryGenerationMismatch
 	}
 	if _, err = tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO automation_runs (id, automation_id, trigger_id, trigger_type, task_id, status, dedup_key, trigger_data,
@@ -351,8 +377,12 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 		return nil, err
 	}
 	if delayErr != nil {
-		if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET state = ?, updated_at = ? WHERE id = ? AND generation = ?`), RetryGroupCompleted, time.Now().UTC(), group.ID, generation); err != nil {
-			return nil, err
+		groupResult, execErr := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET state = ?, updated_at = ? WHERE id = ? AND generation = ?`), RetryGroupCompleted, time.Now().UTC(), group.ID, generation)
+		if execErr != nil {
+			return nil, execErr
+		}
+		if affected, _ := groupResult.RowsAffected(); affected != 1 {
+			return nil, ErrRetryGenerationMismatch
 		}
 		if err := tx.Commit(); err != nil {
 			return nil, err

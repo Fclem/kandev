@@ -509,9 +509,6 @@ func (h *Handlers) validateAutomationArchiveTarget(ctx context.Context, callerTa
 	}
 	caller, err := h.taskSvc.GetTask(ctx, callerTaskID)
 	if err != nil || caller == nil {
-		if err != nil {
-			return fmt.Errorf("archive caller task cannot be resolved: %w", err)
-		}
 		return errors.New("archive caller task cannot be resolved")
 	}
 	if caller.Origin != models.TaskOriginAutomationRun ||

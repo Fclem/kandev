@@ -68,4 +68,30 @@ test.describe("Automation deletion confirmation on mobile", () => {
       timeout: 10_000,
     });
   });
+  test("keeps retry controls usable on a phone", async ({ testPage, seedData, apiClient }) => {
+    const automation = await apiClient.seedAutomation({
+      workspaceId: seedData.workspaceId,
+      name: "Mobile Retry Settings",
+      workflowId: seedData.workflowId,
+      workflowStepId: seedData.startStepId,
+    });
+
+    await testPage.goto(
+      `/settings/workspaces/${seedData.workspaceId}/automations/${automation.id}`,
+    );
+    await expect(testPage.getByTestId("automation-editor")).toBeVisible({ timeout: 15_000 });
+
+    const finite = testPage.getByRole("radio", { name: "Retry a fixed number of times" });
+    await finite.tap();
+    await expect(finite).toBeChecked();
+    const finiteCard = testPage.locator('label[for="automation-retry-finite"]');
+    const finiteCardBox = await finiteCard.boundingBox();
+    expect(finiteCardBox).not.toBeNull();
+    expect(finiteCardBox!.height).toBeGreaterThanOrEqual(44);
+
+    await testPage.locator("#automation-retry-max").fill("2");
+    await testPage.locator("#automation-retry-history").selectOption("timeline");
+    await expect(testPage.locator("#automation-retry-history")).toHaveValue("timeline");
+    await assertNoDocumentHorizontalOverflow(testPage, "mobile retry settings");
+  });
 });

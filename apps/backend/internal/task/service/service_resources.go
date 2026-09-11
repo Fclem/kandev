@@ -254,7 +254,7 @@ func (s *Service) prepareWorkspaceAttachmentCleanup(ctx context.Context, workspa
 	}
 	lister, ok := attachmentRepo.(workspaceAttachmentLister)
 	if !ok {
-		if s.attachmentSvc != nil {
+		if attachmentRepo != nil {
 			return nil, fmt.Errorf("workspace attachment repository cannot list attachments")
 		}
 		return nil, nil
@@ -297,6 +297,12 @@ func (s *Service) DeleteOrganizationWorkspaces(ctx context.Context, orgID string
 }
 
 func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspace, confirmedName *string) error {
+	if s.attachmentSvc != nil {
+		// Stage takes the same lock so no upload can commit after this snapshot
+		// and before the workspace cascade removes its descriptor row.
+		s.attachmentSvc.lifecycleMu.Lock()
+		defer s.attachmentSvc.lifecycleMu.Unlock()
+	}
 	tasks, err := s.listAllTasksForWorkspaceDelete(ctx, workspace.ID)
 	if err != nil {
 		return err

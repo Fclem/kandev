@@ -106,6 +106,8 @@ func (s *AttachmentService) SetTaskAuthorizer(authorizer func(context.Context, s
 // removes both the temporary and committed file so callers never observe a
 // usable row without bytes.
 func (s *AttachmentService) Stage(ctx context.Context, ownerID, workspaceID, name, mimeType, kind, deliveryMode string, src io.Reader) (*models.TaskMessageAttachment, error) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if workspaceID == "" || ownerID == "" || src == nil {
 		return nil, ErrAttachmentInvalid
 	}

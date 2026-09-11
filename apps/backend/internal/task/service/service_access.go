@@ -189,19 +189,23 @@ func (s *Service) authorizeTaskScope(ctx context.Context, taskID string, scope a
 	if err != nil {
 		return err
 	}
+	if task == nil {
+		return repoerrors.ErrTaskNotFound
+	}
 	if task.WorkspaceID == "" {
 		return nil
 	}
 	workspace, err := s.workspaces.GetWorkspace(ctx, task.WorkspaceID)
-	if err != nil {
-		// A dangling workspace reference (the row is genuinely gone) should
-		// not hide the task from the single user who can already see
-		// everything else about it. Any OTHER lookup failure fails closed: a
-		// transient database error must not read as "granted".
-		if errors.Is(err, repoerrors.ErrWorkspaceNotFound) {
-			return nil
-		}
+	switch {
+	case errors.Is(err, repoerrors.ErrWorkspaceNotFound):
+		// A task can outlive its workspace row during durable cleanup. Its
+		// own row remains readable because there is no workspace owner left
+		// to authorize against.
+		return nil
+	case err != nil:
 		return err
+	case workspace == nil:
+		return repoerrors.ErrTaskNotFound
 	}
 	decision := s.workspaceDecision(ctx, workspace)
 	if !decision.CanRead() {

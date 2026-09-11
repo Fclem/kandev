@@ -485,6 +485,10 @@ func (s *AttachmentService) RemoveBytes(attachments []*models.TaskMessageAttachm
 func (s *AttachmentService) DeleteDescriptors(ctx context.Context, attachments []*models.TaskMessageAttachment) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
+	return s.deleteDescriptors(ctx, attachments)
+}
+
+func (s *AttachmentService) deleteDescriptors(ctx context.Context, attachments []*models.TaskMessageAttachment) error {
 	var errs []error
 	for _, attachment := range attachments {
 		if attachment == nil {

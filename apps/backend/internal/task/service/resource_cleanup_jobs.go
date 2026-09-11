@@ -540,13 +540,19 @@ func (s *Service) executeTaskResourceCleanupJob(
 	if snapshot == nil {
 		return errors.New("resource cleanup snapshot is nil")
 	}
-	targets, err := s.refreshTaskRuntimeStopTargets(
-		ctx,
-		job.TaskID,
-		restoreStopTargets(snapshot.StopTargets),
+	var (
+		targets []taskStopTarget
+		err     error
 	)
-	if err != nil {
-		return fmt.Errorf("refresh task cleanup runtime inventory: %w", err)
+	if job.TaskID != "" {
+		targets, err = s.refreshTaskRuntimeStopTargets(
+			ctx,
+			job.TaskID,
+			restoreStopTargets(snapshot.StopTargets),
+		)
+		if err != nil {
+			return fmt.Errorf("refresh task cleanup runtime inventory: %w", err)
+		}
 	}
 	s.registerTaskRuntimeStopOwners(targets, true)
 	stopOutcome := s.stopTaskRuntimeTargetsWithTaskDeleted(
@@ -564,7 +570,25 @@ func (s *Service) executeTaskResourceCleanupJob(
 	}
 	var errs []error
 	if taskResourceCleanupDeletesTask(job.Trigger) && s.attachmentSvc != nil {
-		attachmentErr := s.attachmentSvc.DeleteByTask(ctx, job.TaskID)
+		var attachmentErr error
+		if job.Trigger == models.TaskResourceCleanupTriggerWorkspaceDelete {
+			attachments := make([]*models.TaskMessageAttachment, 0, len(snapshot.Attachments))
+			for _, attachment := range snapshot.Attachments {
+				attachments = append(attachments, &models.TaskMessageAttachment{
+					ID: attachment.ID, OwnerID: attachment.OwnerID, StorageKey: attachment.StorageKey,
+				})
+			}
+			attachmentErr = s.attachmentSvc.DeleteDescriptors(ctx, attachments)
+		} else {
+			attachmentErr = s.attachmentSvc.DeleteByTask(ctx, job.TaskID)
+			attachments := make([]*models.TaskMessageAttachment, 0, len(snapshot.Attachments))
+			for _, attachment := range snapshot.Attachments {
+				attachments = append(attachments, &models.TaskMessageAttachment{
+					ID: attachment.ID, OwnerID: attachment.OwnerID, StorageKey: attachment.StorageKey,
+				})
+			}
+			attachmentErr = errors.Join(attachmentErr, s.attachmentSvc.DeleteDescriptors(ctx, attachments))
+		}
 		if attachmentErr != nil {
 			errs = append(errs, fmt.Errorf("delete task attachments: %w", attachmentErr))
 		}

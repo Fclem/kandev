@@ -2731,6 +2731,7 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 	}
 	if s.attachmentSvc != nil {
 		attachmentErr := s.attachmentSvc.deleteByTask(operationCtx, id)
+		attachmentErr = errors.Join(attachmentErr, s.attachmentSvc.deleteDescriptors(operationCtx, attachments))
 		if attachmentErr != nil {
 			s.logger.Warn("failed to remove task attachment bytes",
 				zap.String("task_id", id), zap.Error(attachmentErr))

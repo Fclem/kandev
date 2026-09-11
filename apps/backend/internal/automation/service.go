@@ -1217,6 +1217,9 @@ func (s *Service) lockRun(ctx context.Context, runID string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
+	if run == nil {
+		return nil, ErrAutomationRunNotDispatchable
+	}
 	if retryRunLockHeld(ctx, run.AutomationID) {
 		return func() {}, nil
 	}

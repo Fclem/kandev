@@ -119,6 +119,43 @@ func TestStopRun(t *testing.T) {
 		})
 	}
 }
+func TestBindRunTaskMissingRunIsNotDispatchable(t *testing.T) {
+	svc := newTestService(t)
+	require.ErrorIs(t, svc.BindRunTask(context.Background(), "missing-run", "task"), ErrAutomationRunNotDispatchable)
+}
+func TestRetrySuccessWinsAgainstDisableAtAutomationLock(t *testing.T) {
+	svc := newTestService(t)
+	svc.store.db.SetMaxOpenConns(1)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-success-disable", Name: "success disable", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{
+		ID: "group-success-disable", AutomationID: a.ID, Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		TaskID: "task-success-disable", SessionID: "session-success-disable", TurnID: "turn-success-disable",
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+
+	disableStarted := make(chan struct{})
+	disableDone := make(chan error, 1)
+	require.NoError(t, svc.WithRetryRunLock(ctx, run.ID, func(locked context.Context) error {
+		go func() {
+			close(disableStarted)
+			disableDone <- svc.DisableAutomation(ctx, a.ID)
+		}()
+		<-disableStarted
+		return svc.MarkAutomationRetrySucceeded(locked, run.ID, 1)
+	}))
+	require.NoError(t, <-disableDone)
+	stored, err := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusSucceeded, stored.Status)
+	require.Equal(t, RetryStateCompleted, stored.RetryState)
+}
 
 type recordingRunStopper struct {
 	taskID, sessionID, turnID string

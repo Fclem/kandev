@@ -34,12 +34,12 @@ func NormalizeLspStatusLocation(value string) string {
 const (
 	StartupPageTaskOverview = "task_overview"
 	StartupPageLastTask     = "last_task"
+	StartupPageThreads      = "threads"
 )
 
-// NormalizeStartupPage returns the canonical startup page: last_task is
-// accepted as-is, anything else is coerced to task_overview.
+// NormalizeStartupPage preserves supported choices and defaults to task_overview.
 func NormalizeStartupPage(value string) string {
-	if value == StartupPageLastTask {
+	if value == StartupPageLastTask || value == StartupPageThreads {
 		return value
 	}
 	return StartupPageTaskOverview
@@ -149,6 +149,8 @@ type UserSettings struct {
 	ThreadActiveViewID                string                            `json:"thread_active_view_id"`
 	ThreadViewDraft                   *ThreadViewDraft                  `json:"thread_view_draft"`
 	SidebarTaskPrefs                  SidebarTaskPrefs                  `json:"sidebar_task_prefs"`
+	SidebarTaskColorAutomation        SidebarTaskColorAutomation        `json:"sidebar_task_color_automation"`
+	SidebarTaskColors                 map[string]*string                `json:"sidebar_task_colors"`
 	TaskCreateLastUsed                TaskCreateLastUsed                `json:"task_create_last_used"`
 	JiraSavedViews                    json.RawMessage                   `json:"jira_saved_views"`
 	JiraTaskPresets                   json.RawMessage                   `json:"jira_task_presets"`

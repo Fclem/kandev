@@ -115,6 +115,7 @@ const (
 	TaskPlanDeleted         = "task_plan.deleted"
 	TaskPlanRevisionCreated = "task_plan.revision.created"
 	TaskPlanReverted        = "task_plan.reverted"
+	TaskPlanCommentsChanged = "task_plan.comments.changed"
 )
 
 // Event types for task walkthroughs (agent-authored guided code tours)
@@ -212,6 +213,7 @@ const PluginUserStateUpdated = "plugin.user-state.updated"
 // every state transition and broadcast to all WebSocket clients.
 const (
 	SystemJobUpdate                 = "system.job.update"
+	SystemStorageAnalysisUpdated    = "system.storage.analysis.updated"
 	AgentRuntimeAvailabilityChanged = "system.agent_runtime.availability_changed"
 )
 

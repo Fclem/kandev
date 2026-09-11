@@ -35,6 +35,8 @@ type TaskHandlers struct {
 	orchestrator                  OrchestratorStarter
 	foregroundActivity            dto.ForegroundActivityProvider
 	cancellationPending           dto.CancellationPendingProvider
+	parkedProjection              dto.ParkedProvider
+	taskParkedProjection          dto.TaskParkedProvider
 	repo                          handlerRepo
 	planService                   *service.PlanService
 	handoffSvc                    *service.HandoffService
@@ -157,6 +159,12 @@ func NewTaskHandlers(svc *service.Service, orchestrator OrchestratorStarter, rep
 	if cancellation, ok := orchestrator.(dto.CancellationPendingProvider); ok {
 		h.cancellationPending = cancellation
 	}
+	if parked, ok := orchestrator.(dto.ParkedProvider); ok {
+		h.parkedProjection = parked
+	}
+	if taskParked, ok := orchestrator.(dto.TaskParkedProvider); ok {
+		h.taskParkedProjection = taskParked
+	}
 	return h
 }
 
@@ -253,6 +261,10 @@ func (h *TaskHandlers) registerWS(dispatcher *ws.Dispatcher) {
 	dispatcher.RegisterFunc(ws.ActionTaskPlanRevisionGet, h.wsGetTaskPlanRevision)
 	dispatcher.RegisterFunc(ws.ActionTaskPlanRevert, h.wsRevertTaskPlan)
 	dispatcher.RegisterFunc(ws.ActionTaskPlanImplement, h.wsMarkTaskPlanImplementationStarted)
+	dispatcher.RegisterFunc(ws.ActionTaskPlanCommentsList, h.wsListTaskPlanComments)
+	dispatcher.RegisterFunc(ws.ActionTaskPlanCommentCreate, h.wsCreateTaskPlanComment)
+	dispatcher.RegisterFunc(ws.ActionTaskPlanCommentUpdate, h.wsUpdateTaskPlanComment)
+	dispatcher.RegisterFunc(ws.ActionTaskPlanCommentDelete, h.wsDeleteTaskPlanComment)
 }
 
 // convertToServiceRepos converts dto.TaskRepositoryInput slice to service.TaskRepositoryInput slice.

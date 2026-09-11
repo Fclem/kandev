@@ -98,7 +98,7 @@ func (s *Service) DeleteSessionAndPublishRemoval(ctx context.Context, sessionID 
 	if err != nil {
 		return err
 	}
-	if err := s.sessions.DeleteTaskSession(ctx, sessionID); err != nil {
+	if err := s.sessions.DeleteTaskSession(ctx, session); err != nil {
 		return err
 	}
 	if s.eventBus == nil {

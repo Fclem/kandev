@@ -39,6 +39,8 @@ feedback.
 
 ### System design
 
+- [Database Storage Analysis System Design](system-design/storage-database-footprint.md)
+
 
 
 - [Backup location and action guidance](system-design/backup-location-actions.md)
@@ -46,6 +48,7 @@ feedback.
 - [Storage Maintenance System Design Part 1](system-design/storage-maintenance-01.md)
 - [Storage Maintenance System Design Part 2](system-design/storage-maintenance-02.md)
 - [Storage Maintenance System Design Part 3](system-design/storage-maintenance-03.md)
+- [Progressive storage analysis](system-design/storage-analysis-progress.md)
 - [System pages System Design Part 1](system-design/system-page-01.md)
 - [System pages System Design Part 2](system-design/system-page-02.md)
 

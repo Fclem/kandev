@@ -15,7 +15,8 @@ import { PanelRoot } from "./panel-primitives";
 import { TaskSidebarScrollArea } from "./task-sidebar-scroll-area";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { useWorkspaceSidebarTasks } from "@/hooks/domains/kanban/use-workspace-sidebar-tasks";
-import { useTaskActions, useArchiveAndSwitchTask } from "@/hooks/use-task-actions";
+import { useTaskActions, type TaskActionOptions } from "@/hooks/use-task-actions";
+import { useTaskMenuActions } from "@/hooks/use-task-menu-actions";
 import { useTaskDetachDialog } from "@/hooks/use-detach-task";
 import { useNestTaskByDrag } from "@/hooks/use-nest-task";
 import { useSidebarSelection, SidebarBulkDialogs } from "./task-session-sidebar-selection";
@@ -63,6 +64,9 @@ function useSidebarData(workspaceId: string | null) {
   const acknowledgedAgentErrors = useAppStore((state) => state.acknowledgedAgentErrors);
   const dismissedAgentErrors = useAppStore((state) => state.dismissedAgentErrors);
   const repositoriesByWorkspace = useAppStore((state) => state.repositories.itemsByWorkspaceId);
+  const automaticColorSettings = useAppStore(
+    (state) => state.userSettings.sidebarTaskColorAutomation,
+  );
   const archivedState = useArchivedTaskState();
 
   const selectedTaskId = useMemo(() => {
@@ -86,6 +90,12 @@ function useSidebarData(workspaceId: string | null) {
     const repositorySlugById = new Map(
       repositories.map((repo: Repository) => [repo.id, repositorySlug(repo)]),
     );
+    const repositoriesById = new Map(
+      Object.values(repositoriesByWorkspace)
+        .flat()
+        .map((repo: Repository) => [repo.id, repo]),
+    );
+    const stepColorById = new Map(allSteps.map((step) => [step.id, step.color]));
     const titleById = new Map(allTasks.map((t) => [t.id, t.title]));
     const workflowNameById = new Map(workflows.map((w) => [w.id, w.name]));
     const stepTitleById = new Map(allSteps.map((s) => [s.id, s.title]));
@@ -97,6 +107,10 @@ function useSidebarData(workspaceId: string | null) {
       wipQueueByTaskId,
       acknowledgedAgentErrors,
       dismissedAgentErrors,
+      workspaceId: workspaceId ?? undefined,
+      repositoriesById,
+      stepColorById,
+      automaticColorSettings,
     };
     const items: TaskSwitcherItem[] = allTasks.map((task) => buildSidebarItem(task, mapCtx));
     if (
@@ -104,7 +118,7 @@ function useSidebarData(workspaceId: string | null) {
       archivedState.archivedTaskId &&
       !items.some((t) => t.id === archivedState.archivedTaskId)
     ) {
-      items.unshift(buildArchivedSidebarItem(archivedState));
+      items.unshift(buildArchivedSidebarItem(archivedState, mapCtx));
     }
     return items;
   }, [
@@ -117,6 +131,7 @@ function useSidebarData(workspaceId: string | null) {
     wipQueueByTaskId,
     acknowledgedAgentErrors,
     dismissedAgentErrors,
+    automaticColorSettings,
   ]);
 
   return {
@@ -136,7 +151,7 @@ type StoreApi = ReturnType<typeof useAppStoreApi>;
 
 function useArchiveActions(store: StoreApi) {
   const { t } = useTranslation();
-  const archiveAndSwitch = useArchiveAndSwitchTask({ useLayoutSwitch: true });
+  const { runArchive: archiveAndSwitch } = useTaskMenuActions({ useLayoutSwitch: true });
   const [archivingTask, setArchivingTask] = useState<{
     id: string;
     title: string;
@@ -146,7 +161,7 @@ function useArchiveActions(store: StoreApi) {
   const [isArchiving, setIsArchiving] = useState(false);
 
   const runArchive = useCallback(
-    async (taskId: string, opts: { cascade?: boolean }) => {
+    async (taskId: string, opts: TaskActionOptions) => {
       setIsArchiving(true);
       setArchivingTaskId(taskId);
       try {
@@ -163,7 +178,7 @@ function useArchiveActions(store: StoreApi) {
   );
 
   const handleArchiveTask = useCallback(
-    (taskId: string, opts?: { cascade?: boolean }) => {
+    (taskId: string, opts?: TaskActionOptions) => {
       if (opts) {
         void runArchive(taskId, opts);
         return;
@@ -197,12 +212,9 @@ function useArchiveActions(store: StoreApi) {
   };
 }
 
-function useDeleteActions(
-  store: StoreApi,
-  removeTaskFromBoard: ReturnType<typeof useTaskRemoval>["removeTaskFromBoard"],
-) {
+function useDeleteActions(store: StoreApi) {
   const { t } = useTranslation();
-  const { deleteTaskById } = useTaskActions();
+  const { runDelete } = useTaskMenuActions({ useLayoutSwitch: true });
   const [deletingTask, setDeletingTask] = useState<{
     id: string;
     title: string;
@@ -224,15 +236,12 @@ function useDeleteActions(
   );
 
   const handleDeleteConfirm = useCallback(
-    async (opts: { cascade: boolean }) => {
+    async (opts: TaskActionOptions & { cascade: boolean; discardWorktreeChanges: boolean }) => {
       if (!deletingTask || isDeleting) return;
       const taskId = deletingTask.id;
       setIsDeleting(true);
-      const { activeTaskId: wasActiveTaskId, activeSessionId: wasActiveSessionId } =
-        store.getState().tasks;
       try {
-        await deleteTaskById(taskId, opts);
-        await removeTaskFromBoard(taskId, { wasActiveTaskId, wasActiveSessionId });
+        await runDelete(taskId, opts);
       } catch (error) {
         console.error("Failed to delete task:", error);
       } finally {
@@ -240,7 +249,7 @@ function useDeleteActions(
         setDeletingTask(null);
       }
     },
-    [deletingTask, isDeleting, deleteTaskById, removeTaskFromBoard, store],
+    [deletingTask, isDeleting, runDelete],
   );
 
   const deletingTaskId = isDeleting ? (deletingTask?.id ?? null) : null;
@@ -338,7 +347,7 @@ export function useSidebarActions(store: StoreApi) {
   const { renameTaskById } = useTaskActions();
   const router = useRouter();
   const pathname = usePathname();
-  const { removeTaskFromBoard, loadTaskSessionsForTask } = useTaskRemoval({
+  const { loadTaskSessionsForTask } = useTaskRemoval({
     store,
     useLayoutSwitch: true,
   });
@@ -354,7 +363,7 @@ export function useSidebarActions(store: StoreApi) {
   });
 
   const archiveActions = useArchiveActions(store);
-  const deleteActions = useDeleteActions(store, removeTaskFromBoard);
+  const deleteActions = useDeleteActions(store);
   const detachActions = useTaskDetachDialog(store);
   const handleNestTask = useNestTaskByDrag();
   const linkActions = useSidebarLinkActions(store);

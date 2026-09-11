@@ -1,4 +1,5 @@
 import type React from "react";
+import type { RefObject } from "react";
 import type {
   LocalRepository,
   Repository,
@@ -30,6 +31,7 @@ import type {
   useExecutorProfileOptions,
 } from "@/components/task-create-dialog-options";
 import type { useToast } from "@/components/toast-provider";
+import type { TaskCreateLaunchPreview } from "@/components/task-create-dialog-launch-preview";
 
 export type TaskCreateSubmit = (
   payload: Parameters<typeof createTask>[0],
@@ -84,6 +86,10 @@ export interface TaskCreateDialogProps {
   extraFormSlot?: React.ReactNode;
   bottomSlot?: React.ReactNode;
   submitBlockedReason?: string | null;
+  /** Element to return keyboard focus to on close, confirmed or cancelled.
+   * Omitted callers keep Radix's default restore-to-previously-focused-element
+   * behavior. */
+  focusReturnRef?: RefObject<HTMLElement | null>;
 }
 
 export type DialogPromptEnhance = {
@@ -167,6 +173,7 @@ export type StepType = {
   workflowId?: string;
   position?: number;
   is_start_step?: boolean;
+  prompt?: string;
   events?: {
     on_enter?: Array<{ type: string; config?: Record<string, unknown> }>;
     on_turn_complete?: Array<{ type: string; config?: Record<string, unknown> }>;
@@ -602,6 +609,7 @@ export type DialogFormBodyProps = {
   workflows: WorkflowsState["items"];
   snapshots: KanbanMultiState["snapshots"];
   effectiveWorkflowId: string | null;
+  launchPreview: TaskCreateLaunchPreview | null;
   fs: DialogFormState;
   editDependencies: TaskEditDialogDependenciesState;
   handleKeyDown: ReturnType<typeof useKeyboardShortcutHandler>;

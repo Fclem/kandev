@@ -85,6 +85,15 @@ describe("agent profile recent-use websocket sync", () => {
 });
 
 describe("startup page websocket sync", () => {
+  it("retains Threads through live updates that omit the startup choice", () => {
+    const store = makeStore();
+    const handler = registerUsersHandlers(store)["user.settings.updated"];
+    handler?.(userSettingsMessage({ startup_page: "threads" }));
+    expect(store.getState().userSettings.startupPage).toBe("threads");
+    handler?.(userSettingsMessage({ tasks_list_show_details: true }));
+    expect(store.getState().userSettings.startupPage).toBe("threads");
+  });
+
   it("applies startup page preferences and normalizes unknown values", () => {
     const store = makeStore();
 
@@ -177,6 +186,26 @@ describe("session hostname resolution websocket sync", () => {
 
     handler?.(userSettingsMessage({}));
     expect(store.getState().userSettings.resolveSessionHostnames).toBe(true);
+  });
+});
+
+describe("manual task-color websocket sync", () => {
+  it("applies the normalized server map, including clear tombstones", () => {
+    const store = makeStore();
+    registerUsersHandlers(store)["user.settings.updated"]?.(
+      userSettingsMessage({
+        revision: 1,
+        sidebar_task_colors: {
+          "task-red": "red",
+          "task-cleared": null,
+        },
+      }),
+    );
+
+    expect(store.getState().userSettings.sidebarTaskColors).toEqual({
+      "task-red": "red",
+      "task-cleared": null,
+    });
   });
 });
 

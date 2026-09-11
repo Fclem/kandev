@@ -108,6 +108,7 @@ function CreateModeBody(props: DialogFormBodyProps) {
         onPendingAttachmentUploadsChange={fs.setHasPendingAttachmentUploads}
         handleKeyDown={props.handleKeyDown}
         enhance={props.enhance}
+        launchPreview={props.launchPreview}
         workspaceId={workspaceId}
         onJiraImport={onJiraImport}
         onLinearImport={onLinearImport}
@@ -190,6 +191,7 @@ function DialogFormBody(props: DialogFormBodyProps) {
         effectiveWorkflowId={props.effectiveWorkflowId}
         onWorkflowChange={props.onWorkflowChange}
         agentProfiles={props.agentProfiles}
+        launchPreview={props.launchPreview}
         workflowLocked={props.workflowLocked}
       />
       <TaskCreateAdvancedSettings
@@ -271,6 +273,12 @@ export function TaskCreateDialog(props: TaskCreateDialogProps) {
         ref={setPopoverContainer}
         onEscapeKeyDown={(event) => {
           if (setup.isCreateMode) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          const target = props.focusReturnRef?.current;
+          if (!target || !document.contains(target)) return;
+          event.preventDefault();
+          target.focus();
         }}
         data-testid="create-task-dialog"
         data-webkit-safe-motion="true"

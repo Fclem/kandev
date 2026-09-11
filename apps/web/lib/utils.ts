@@ -2,6 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { t } from "@/lib/i18n";
 export { generateUUID } from "./uuid";
+import { parseStrictRfc3339Timestamp } from "@/lib/utils/strict-timestamp";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -154,6 +155,7 @@ export const DEFAULT_LOCAL_EXECUTOR_TYPE = "worktree";
  * @returns Formatted relative time string
  */
 export function formatRelativeTime(dateString: string): string {
+  if (parseStrictRfc3339Timestamp(dateString) === null) return "";
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();

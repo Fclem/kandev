@@ -30,7 +30,11 @@ func TestConversationJournalVersionsMutationsAndTerminalDeletion(t *testing.T) {
 	if err := repo.DeleteMessage(ctx, message.ID); err != nil {
 		t.Fatalf("delete message: %v", err)
 	}
-	if err := repo.DeleteTaskSession(ctx, "session-journal"); err != nil {
+	session, err := repo.GetTaskSession(ctx, "session-journal")
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if err := repo.DeleteTaskSession(ctx, session); err != nil {
 		t.Fatalf("delete session: %v", err)
 	}
 

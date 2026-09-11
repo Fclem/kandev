@@ -2343,7 +2343,7 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 	envCleanup := taskEnvironmentCleanup{env: taskEnv, deleteRow: false, preserveBranches: true}
 	cleanupJob, err := s.persistTaskResourceCleanup(
 		archiveCtx, id, models.TaskResourceCleanupTriggerArchive, "",
-		sessions, worktrees, stopTargets, envCleanup, true, true,
+		sessions, worktrees, stopTargets, nil, envCleanup, true, true,
 	)
 	if err != nil {
 		return err
@@ -2682,6 +2682,17 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 	if err != nil {
 		return false, fmt.Errorf("lookup task environment for delete: %w", err)
 	}
+	var attachments []*models.TaskMessageAttachment
+	attachmentRepo := s.attachments
+	if attachmentRepo == nil && s.attachmentSvc != nil {
+		attachmentRepo = s.attachmentSvc.repo
+	}
+	if attachmentRepo != nil {
+		attachments, err = attachmentRepo.ListMessageAttachmentsByTask(operationCtx, id)
+		if err != nil {
+			return false, fmt.Errorf("list attachments for delete: %w", err)
+		}
+	}
 	stopTargets, err := s.deleteTaskStopTargets(operationCtx, id)
 	if err != nil {
 		return false, err
@@ -2697,7 +2708,7 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 
 	envCleanup := taskEnvironmentCleanup{env: taskEnv, deleteRow: false}
 	cleanupJob, err := s.persistTaskResourceCleanup(
-		operationCtx, id, trigger, "", sessions, worktrees, stopTargets, envCleanup, true, true,
+		operationCtx, id, trigger, "", sessions, worktrees, stopTargets, attachments, envCleanup, true, true,
 	)
 	if err != nil {
 		return false, err
@@ -2715,9 +2726,15 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 		return false, nil
 	}
 	if s.attachmentSvc != nil {
-		if err := s.attachmentSvc.DeleteByTask(operationCtx, id); err != nil {
+		var attachmentErr error
+		if len(attachments) > 0 {
+			attachmentErr = s.attachmentSvc.DeleteDescriptors(operationCtx, attachments)
+		} else {
+			attachmentErr = s.attachmentSvc.DeleteByTask(operationCtx, id)
+		}
+		if attachmentErr != nil {
 			s.logger.Warn("failed to remove task attachment bytes",
-				zap.String("task_id", id), zap.Error(err))
+				zap.String("task_id", id), zap.Error(attachmentErr))
 		}
 	}
 	// Remove dependency edges in both directions. task_blockers predates the

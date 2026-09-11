@@ -50,12 +50,19 @@ type persistedTaskStopTarget struct {
 	Terminal    bool   `json:"terminal,omitempty"`
 }
 
+type persistedTaskAttachment struct {
+	ID         string `json:"id"`
+	OwnerID    string `json:"owner_id"`
+	StorageKey string `json:"storage_key"`
+}
+
 type taskResourceCleanupSnapshot struct {
 	Sessions              []*models.TaskSession     `json:"sessions,omitempty"`
 	Worktrees             []*worktree.Worktree      `json:"worktrees,omitempty"`
 	WorktreeHeadOIDs      map[string]string         `json:"worktree_head_oids,omitempty"`
 	StopTargets           []persistedTaskStopTarget `json:"stop_targets,omitempty"`
 	TaskEnvironment       *models.TaskEnvironment   `json:"task_environment,omitempty"`
+	Attachments           []persistedTaskAttachment `json:"attachments,omitempty"`
 	DeleteEnvironmentRow  bool                      `json:"delete_environment_row,omitempty"`
 	LegacyWorktreeCleanup bool                      `json:"legacy_worktree_cleanup,omitempty"`
 	// SSHTaskDirs records the remote task directories this task launched into.
@@ -73,7 +80,6 @@ type taskResourceCleanupRun struct {
 func newTaskResourceCleanupOperationID(trigger models.TaskResourceCleanupTrigger, taskID string) string {
 	return string(trigger) + ":" + taskID + ":" + uuid.NewString()
 }
-
 func (s *Service) persistTaskResourceCleanup(
 	ctx context.Context,
 	taskID string,
@@ -82,6 +88,7 @@ func (s *Service) persistTaskResourceCleanup(
 	sessions []*models.TaskSession,
 	worktrees []*worktree.Worktree,
 	stopTargets []taskStopTarget,
+	attachments []*models.TaskMessageAttachment,
 	envCleanup taskEnvironmentCleanup,
 	prepared bool,
 	collectSSH bool,
@@ -96,9 +103,18 @@ func (s *Service) persistTaskResourceCleanup(
 	if err != nil {
 		return nil, err
 	}
+	persistedAttachments := make([]persistedTaskAttachment, 0, len(attachments))
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		persistedAttachments = append(persistedAttachments, persistedTaskAttachment{
+			ID: attachment.ID, OwnerID: attachment.OwnerID, StorageKey: attachment.StorageKey,
+		})
+	}
 	snapshot := taskResourceCleanupSnapshot{
 		Sessions: sessions, Worktrees: worktrees, WorktreeHeadOIDs: worktreeHeadOIDs,
-		StopTargets:           persistStopTargets(stopTargets),
+		StopTargets: persistStopTargets(stopTargets), Attachments: persistedAttachments,
 		TaskEnvironment:       envCleanup.env,
 		DeleteEnvironmentRow:  envCleanup.deleteRow,
 		LegacyWorktreeCleanup: s.hasLegacyWorktreeCleanup(),
@@ -528,8 +544,20 @@ func (s *Service) executeTaskResourceCleanupJob(
 	}
 	var errs []error
 	if taskResourceCleanupDeletesTask(job.Trigger) && s.attachmentSvc != nil {
-		if err := s.attachmentSvc.DeleteByTask(ctx, job.TaskID); err != nil {
-			errs = append(errs, fmt.Errorf("delete task attachments: %w", err))
+		var attachmentErr error
+		if len(snapshot.Attachments) > 0 {
+			attachments := make([]*models.TaskMessageAttachment, 0, len(snapshot.Attachments))
+			for _, attachment := range snapshot.Attachments {
+				attachments = append(attachments, &models.TaskMessageAttachment{
+					ID: attachment.ID, OwnerID: attachment.OwnerID, StorageKey: attachment.StorageKey,
+				})
+			}
+			attachmentErr = s.attachmentSvc.DeleteDescriptors(ctx, attachments)
+		} else {
+			attachmentErr = s.attachmentSvc.DeleteByTask(ctx, job.TaskID)
+		}
+		if attachmentErr != nil {
+			errs = append(errs, fmt.Errorf("delete task attachments: %w", attachmentErr))
 		}
 	}
 	errs = append(errs, s.performTaskCleanup(ctx, job.TaskID, snapshot.Sessions, snapshot.Worktrees, targets,
@@ -786,7 +814,7 @@ func (s *Service) PrepareTaskResourceCleanup(
 	// reject new ownership while this prepared barrier is active, so the
 	// snapshot below cannot miss a resource admitted mid-preparation.
 	job, err := s.persistTaskResourceCleanup(ctx, taskID, trigger, operationID,
-		nil, nil, nil, taskEnvironmentCleanup{}, true, false)
+		nil, nil, nil, nil, taskEnvironmentCleanup{}, true, false)
 	if err != nil {
 		return err
 	}

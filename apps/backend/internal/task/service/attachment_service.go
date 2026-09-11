@@ -473,6 +473,28 @@ func (s *AttachmentService) RemoveBytes(attachments []*models.TaskMessageAttachm
 	}
 }
 
+// DeleteDescriptors removes the private bytes represented by a previously
+// captured attachment snapshot. The registry row may already be gone after a
+// workspace cascade, so byte cleanup does not depend on a live task row.
+func (s *AttachmentService) DeleteDescriptors(ctx context.Context, attachments []*models.TaskMessageAttachment) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	var errs []error
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		if err := s.removeBytes(attachment); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, attachment.OwnerID); err != nil &&
+			!errors.Is(err, ErrAttachmentNotFound) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
 func (s *AttachmentService) Descriptor(attachment *models.TaskMessageAttachment) AttachmentDescriptor {
 	return AttachmentDescriptor{
 		ID: attachment.ID, Name: attachment.Name, MimeType: attachment.MimeType,

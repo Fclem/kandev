@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -60,6 +61,61 @@ func TestDurableDeleteCleanupRemovesTaskAttachments(t *testing.T) {
 		t.Fatalf("attachment row error = %v, want ErrAttachmentNotFound", err)
 	}
 	if _, err := os.Stat(attachmentPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("attachment bytes error = %v, want os.ErrNotExist", err)
+	}
+}
+
+func TestWorkspaceDeleteCleanupSnapshotsAttachments(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	ctx := context.Background()
+	taskResult, err := taskSvc.CreateTask(ctx, &CreateTaskRequest{
+		WorkspaceID: "ws-1", Title: "Workspace attachment", ProjectID: "proj-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	storageRoot := t.TempDir()
+	attachmentSvc, err := NewAttachmentService(repo, storageRoot, nil, accessTestLogger(t))
+	if err != nil {
+		t.Fatalf("NewAttachmentService: %v", err)
+	}
+	taskSvc.attachmentSvc = attachmentSvc
+	attachment, err := attachmentSvc.Stage(
+		ctx, "owner", "ws-1", "workspace.txt", "text/plain", "resource", "",
+		strings.NewReader("workspace attachment"),
+	)
+	if err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+	path := filepath.Join(storageRoot, "attachments", attachment.StorageKey)
+
+	if err := attachmentSvc.Claim(ctx, "owner", "ws-1", taskResult.Task.ID, "", []string{attachment.ID}); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	cleanup, err := taskSvc.prepareWorkspaceDeleteTaskCleanup(ctx, taskResult.Task)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDeleteTaskCleanup: %v", err)
+	}
+	var snapshot taskResourceCleanupSnapshot
+	if err := json.Unmarshal([]byte(cleanup.cleanupJob.ResourceSnapshot), &snapshot); err != nil {
+		t.Fatalf("decode cleanup snapshot: %v", err)
+	}
+	if len(snapshot.Attachments) != 1 ||
+		snapshot.Attachments[0].ID != attachment.ID ||
+		snapshot.Attachments[0].StorageKey != attachment.StorageKey {
+		t.Fatalf("snapshot attachments = %+v, want attachment %s with storage key", snapshot.Attachments, attachment.ID)
+	}
+	if err := repo.DeleteMessageAttachment(ctx, attachment.ID, attachment.OwnerID); err != nil {
+		t.Fatalf("delete attachment registry row: %v", err)
+	}
+	descriptor := &models.TaskMessageAttachment{
+		ID: snapshot.Attachments[0].ID, OwnerID: snapshot.Attachments[0].OwnerID,
+		StorageKey: snapshot.Attachments[0].StorageKey,
+	}
+	if err := attachmentSvc.DeleteDescriptors(ctx, []*models.TaskMessageAttachment{descriptor}); err != nil {
+		t.Fatalf("DeleteDescriptors: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("attachment bytes error = %v, want os.ErrNotExist", err)
 	}
 }

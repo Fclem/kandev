@@ -2373,15 +2373,24 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 	// 3b. Finalize active sessions in the DB and publish their cancellation
 	// events. See finalizeCancelledSessions for the detailed rationale.
 	s.finalizeCancelledSessions(finalizeCtx, id, activeSessions, archiveDeadline)
+	var postCommitErr error
 
-	// 4. Re-read task for updated archived_at field
+	// 4. Re-read task for updated archived_at field. The archive row is
+	// already durable, so a projection read failure must not skip cleanup.
+	archivedTask := task
 	task, err = s.tasks.GetTask(finalizeCtx, id)
 	if err != nil {
-		return err
+		task = archivedTask
+		postCommitErr = &CascadePostCommitError{
+			Err: fmt.Errorf("reload archived task %s: %w", id, err),
+		}
+		s.logger.Warn("failed to reload committed archived task",
+			zap.String("task_id", id), zap.Error(err))
+	} else {
+		// 5. Publish task.updated event so frontend removes from board
+		s.publishTaskEvent(finalizeCtx, events.TaskUpdated, task, nil)
 	}
 
-	// 5. Publish task.updated event so frontend removes from board
-	s.publishTaskEvent(finalizeCtx, events.TaskUpdated, task, nil)
 	// 5b. Archive cleanup tears down this task's runtime resources (worktree,
 	// container/sandbox) but preserves its task_environments row
 	// (deleteRow: false above) — the row is deleted only by a DELETE cascade
@@ -2409,6 +2418,9 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 			"task archived", "failed to stop session on task archive", "task archive cleanup completed")
 	}
 
+	if postCommitErr != nil {
+		return postCommitErr
+	}
 	return nil
 }
 

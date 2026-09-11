@@ -1898,7 +1898,7 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 			h.logger.Warn("task archived but post-commit housekeeping failed",
 				zap.String("task_id", taskID), zap.Error(err))
 		}
-		response := gin.H{"success": true}
+		response := gin.H{responseKeySuccess: true}
 		if out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0 {
 			response["already_archived"] = true
 		}
@@ -1906,8 +1906,16 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 		return
 	}
 	if err := h.service.ArchiveTask(archiveCtx, taskID); err != nil {
-		handleNotFound(c, h.logger, err, "task not archived")
-		return
+		if errors.Is(err, service.ErrTaskAlreadyArchived) {
+			c.JSON(http.StatusOK, gin.H{"success": true, "already_archived": true})
+			return
+		}
+		if !isCascadePostCommitError(err) {
+			handleNotFound(c, h.logger, err, "task not archived")
+			return
+		}
+		h.logger.Warn("task archived but post-commit task projection failed",
+			zap.String("task_id", taskID), zap.Error(err))
 	}
 	c.JSON(http.StatusOK, dto.SuccessResponse{Success: true})
 }

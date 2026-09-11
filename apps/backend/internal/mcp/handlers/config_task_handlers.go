@@ -488,6 +488,12 @@ func (h *Handlers) handleArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 				"already_archived": true,
 			})
 		}
+		var postCommitErr *service.CascadePostCommitError
+		if errors.As(err, &postCommitErr) {
+			h.logger.Warn("task archived but post-commit task projection failed",
+				zap.String("task_id", taskID), zap.Error(err))
+			return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})
+		}
 		h.logger.Error("failed to archive task", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to archive task", nil)
 	}

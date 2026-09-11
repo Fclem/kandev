@@ -79,11 +79,20 @@ type httpArchiveOutcomeRepo struct {
 	mockRepository
 	task         *models.Task
 	archived     bool
+	failRead     bool
 	sawCancelled bool
 }
 
 func (r *httpArchiveOutcomeRepo) GetTask(_ context.Context, _ string) (*models.Task, error) {
+	if r.archived && r.failRead {
+		return nil, errors.New("post-archive task read failed")
+	}
 	return r.task, nil
+}
+
+func (r *httpArchiveOutcomeRepo) ArchiveTask(_ context.Context, _ string) error {
+	r.archived = true
+	return nil
 }
 
 func (r *httpArchiveOutcomeRepo) ArchiveTaskIfActive(ctx context.Context, _ string, _ string) (bool, error) {
@@ -294,6 +303,28 @@ func TestHTTPArchiveTaskSurvivesCancelledRequestContext(t *testing.T) {
 	require.False(t, repo.sawCancelled, "archive must receive a detached context")
 }
 
+func TestHTTPArchiveFallbackAcknowledgesCommittedProjectionFailure(t *testing.T) {
+	repo := &httpArchiveOutcomeRepo{
+		task:     &models.Task{ID: "task-1", WorkspaceID: "ws-1"},
+		failRead: true,
+	}
+	log := newTestLogger(t)
+	svc := service.NewService(service.Repos{
+		Workspaces: repo, Tasks: repo, TaskRepos: repo,
+		Workflows: repo, Messages: repo, Turns: repo,
+		Sessions: repo, GitSnapshots: repo, RepoEntities: repo,
+		Executors: repo, Environments: repo, TaskEnvironments: repo,
+		Reviews: repo,
+	}, nil, log, service.RepositoryDiscoveryConfig{})
+	h := &TaskHandlers{service: svc, logger: log}
+	c, rec := taskRequestAs(t, "", http.MethodDelete, "/api/v1/tasks/task-1", "task-1")
+
+	h.httpArchiveTask(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"success":true}`, rec.Body.String())
+	require.True(t, repo.archived, "archive mutation must remain committed")
+}
 func TestHTTPArchiveTaskReportsAlreadyArchivedOutcome(t *testing.T) {
 	repo := &httpArchiveOutcomeRepo{
 		task:     &models.Task{ID: "task-1", WorkspaceID: "ws-1"},

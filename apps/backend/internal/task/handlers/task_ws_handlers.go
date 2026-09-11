@@ -417,6 +417,14 @@ func (h *TaskHandlers) wsArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 				return dto.SuccessResponse{Success: true}, nil
 			}
 			if err := h.service.ArchiveTask(ctx, id); err != nil {
+				if errors.Is(err, service.ErrTaskAlreadyArchived) {
+					return map[string]interface{}{responseKeySuccess: true, "already_archived": true}, nil
+				}
+				if isCascadePostCommitError(err) {
+					h.logger.Warn("task archived but post-commit task projection failed",
+						zap.String("task_id", id), zap.Error(err))
+					return dto.SuccessResponse{Success: true}, nil
+				}
 				return nil, err
 			}
 			return dto.SuccessResponse{Success: true}, nil

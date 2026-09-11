@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kandev/kandev/internal/task/models"
+	taskrepo "github.com/kandev/kandev/internal/task/repository"
 	"github.com/kandev/kandev/internal/task/service"
 	ws "github.com/kandev/kandev/pkg/websocket"
 )
@@ -122,5 +123,42 @@ func TestWsArchiveTask_ReportsAlreadyArchivedOutcome(t *testing.T) {
 	}
 	if payload["already_archived"] != true {
 		t.Fatalf("already_archived = %v, want true", payload["already_archived"])
+	}
+}
+
+type missingArchiveRepo struct {
+	mockRepository
+}
+
+func (r *missingArchiveRepo) GetTask(_ context.Context, _ string) (*models.Task, error) {
+	return nil, taskrepo.ErrTaskNotFound
+}
+
+func TestWsArchiveTask_ReportsMissingTask(t *testing.T) {
+	h := &TaskHandlers{
+		handoffSvc: service.NewHandoffService(&missingArchiveRepo{}, nil, nil, nil, nil, nil),
+		logger:     newTestLogger(t),
+	}
+	msg := &ws.Message{
+		ID:      "msg-1",
+		Action:  ws.ActionTaskArchive,
+		Payload: json.RawMessage(`{"id":"missing-task"}`),
+	}
+
+	resp, err := h.wsArchiveTask(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("wsArchiveTask: %v", err)
+	}
+	if resp.Type != ws.MessageTypeError {
+		t.Fatalf("response type = %s, want error", resp.Type)
+	}
+	var payload struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Code != string(ws.ErrorCodeNotFound) {
+		t.Fatalf("error code = %q, want %q", payload.Code, ws.ErrorCodeNotFound)
 	}
 }

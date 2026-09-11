@@ -741,8 +741,8 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION conversation_visible_content(value TEXT) RETURNS TEXT AS $$
 BEGIN
-	-- PostgreSQL's dot does not match newlines unless the embedded s flag is set.
-	RETURN btrim(regexp_replace(value, '(?s)<kandev-system>.*?</kandev-system>[[:space:]]*', '', 'g'));
+	-- Match every character explicitly because PostgreSQL's dot handling differs across regex modes.
+	RETURN btrim(regexp_replace(value, '<kandev-system>[\s\S]*?</kandev-system>[[:space:]]*', '', 'g'));
 END;
 $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION conversation_message_journal() RETURNS TRIGGER AS $$

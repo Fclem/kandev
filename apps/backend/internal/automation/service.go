@@ -1141,7 +1141,8 @@ func (s *Service) EnableAutomation(ctx context.Context, id string) error {
 	return s.store.UpdateAutomation(ctx, id, &UpdateAutomationRequest{Enabled: &enabled})
 }
 
-// DisableAutomation sets enabled = false and fences pending retries.
+// DisableAutomation sets enabled = false, stops bound turns, and fences
+// pending retries while holding the automation run lock.
 func (s *Service) DisableAutomation(ctx context.Context, id string) error {
 	if err := s.authorizeAutomation(ctx, id); err != nil {
 		return err
@@ -1153,6 +1154,9 @@ func (s *Service) DisableAutomation(ctx context.Context, id string) error {
 		return err
 	}
 	if err := s.store.UpdateAutomation(ctx, id, &UpdateAutomationRequest{Enabled: &enabled}); err != nil {
+		return err
+	}
+	if err := s.stopOpenAutomationRuns(ctx, id); err != nil {
 		return err
 	}
 	return s.CancelAutomationRetries(ctx, id)
@@ -1402,6 +1406,32 @@ func (s *Service) GetRun(ctx context.Context, id string) (*AutomationRun, error)
 	return run, nil
 }
 
+type retryRunLockContextKey struct{}
+
+func retryRunLockHeld(ctx context.Context, automationID string) bool {
+	held, _ := ctx.Value(retryRunLockContextKey{}).(string)
+	return held == automationID
+}
+
+// WithRetryRunLock holds the automation-wide run lock across retry admission,
+// the external side effect, and durable binding.
+func (s *Service) WithRetryRunLock(ctx context.Context, runID string, fn func(context.Context) error) error {
+	if fn == nil {
+		return errors.New("retry run lock callback is required")
+	}
+	run, err := s.store.GetRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return ErrAutomationRunNotDispatchable
+	}
+	unlock := s.automationRunLock(run.AutomationID)
+	defer unlock()
+	lockedCtx := context.WithValue(ctx, retryRunLockContextKey{}, run.AutomationID)
+	return fn(lockedCtx)
+}
+
 // automationRunLock returns an unlock func for the per-automation mutex that
 // serializes run creation (createRunLocked) against DeleteAllRuns.
 func (s *Service) automationRunLock(automationID string) func() {
@@ -1435,9 +1465,11 @@ func (s *Service) DispatchRun(
 	if run == nil {
 		return ErrAutomationRunNotDispatchable
 	}
-	unlock := s.automationRunLock(run.AutomationID)
-	defer unlock()
-
+	var unlock func()
+	if !retryRunLockHeld(ctx, run.AutomationID) {
+		unlock = s.automationRunLock(run.AutomationID)
+		defer unlock()
+	}
 	run, err = s.store.GetRun(ctx, runID)
 	if err != nil {
 		return err
@@ -1481,8 +1513,8 @@ func (s *Service) lockRun(ctx context.Context, runID string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if run == nil {
-		return nil, ErrAutomationRunNotDispatchable
+	if retryRunLockHeld(ctx, run.AutomationID) {
+		return func() {}, nil
 	}
 	return s.automationRunLock(run.AutomationID), nil
 }

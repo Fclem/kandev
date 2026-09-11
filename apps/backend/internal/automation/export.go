@@ -36,6 +36,7 @@ type exportAutomation struct {
 	ContinuationPolicy ContinuationPolicy     `yaml:"continuation_policy"`
 	TaskMode           TaskMode               `yaml:"task_mode"`
 	RepositoryMode     RepositoryMode         `yaml:"repository_mode"`
+	RetryPolicy        exportRetryPolicy      `yaml:"retry_policy"`
 	TaskTitleTemplate  string                 `yaml:"task_title_template,omitempty"`
 	Prompt             *yaml.Node             `yaml:"prompt,omitempty"`
 	AgentProfile       *exportAgentProfile    `yaml:"agent_profile,omitempty"`
@@ -43,6 +44,14 @@ type exportAutomation struct {
 	Workflow           *exportWorkflow        `yaml:"workflow,omitempty"`
 	Repositories       []string               `yaml:"repositories,omitempty"`
 	Triggers           []exportTrigger        `yaml:"triggers"`
+}
+
+type exportRetryPolicy struct {
+	Mode         RetryMode        `yaml:"mode"`
+	MaxRetries   string           `yaml:"max_retries"`
+	DelaySeconds string           `yaml:"delay_seconds"`
+	Backoff      RetryBackoff     `yaml:"backoff"`
+	HistoryMode  RetryHistoryMode `yaml:"history_mode"`
 }
 
 // exportAgentProfile is the portable {agent_name, model, mode} descriptor resolved

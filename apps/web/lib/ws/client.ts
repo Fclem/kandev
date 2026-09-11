@@ -55,6 +55,84 @@ type SessionSubscriptionReadiness = {
   requestStarted: boolean;
   settled: boolean;
 };
+
+type OrderedSessionResponse = Record<string, unknown>;
+
+// i18n-exempt: transport protocol validation diagnostics are never rendered as user-facing copy.
+function invalidOrderedSessionResponse(): Error {
+  return new Error("Invalid ordered session response");
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function requiredOrderedString(response: OrderedSessionResponse, key: string): string {
+  const value = response[key];
+  if (typeof value !== "string" || value === "") throw invalidOrderedSessionResponse();
+  return value;
+}
+
+// eslint-disable-next-line complexity -- The wire contract is validated field-by-field before state mutation.
+function validateOrderedSubscribeResponse(
+  response: unknown,
+  sessionId: string,
+  wireId: string,
+): { eventWatermark: number; resumeToken: string } {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    throw invalidOrderedSessionResponse();
+  }
+  const payload = response as OrderedSessionResponse;
+  if (payload.success !== true || payload.session_id !== sessionId || payload.wire_id !== wireId) {
+    throw invalidOrderedSessionResponse();
+  }
+  const eventWatermark = payload.event_watermark;
+  if (
+    !isNonNegativeSafeInteger(eventWatermark) ||
+    payload.snapshot_cutoff !== eventWatermark ||
+    !["fresh", "replay", "invalid_resume"].includes(payload.result as string)
+  ) {
+    throw invalidOrderedSessionResponse();
+  }
+  requiredOrderedString(payload, "snapshot_token");
+  const resumeToken = requiredOrderedString(payload, "resume_token");
+  requiredOrderedString(payload, "expires_at");
+  if (payload.result === "replay") {
+    const replayFrom = payload.replay_from;
+    const replayTo = payload.replay_to;
+    if (
+      !isNonNegativeSafeInteger(replayFrom) ||
+      replayFrom === 0 ||
+      !isNonNegativeSafeInteger(replayTo) ||
+      replayTo < replayFrom ||
+      replayTo > eventWatermark
+    ) {
+      throw invalidOrderedSessionResponse();
+    }
+  }
+  return { eventWatermark, resumeToken };
+}
+
+function validateOrderedAckResponse(
+  response: unknown,
+  sessionId: string,
+  wireId: string,
+  sequence: number,
+): string {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    throw invalidOrderedSessionResponse();
+  }
+  const payload = response as OrderedSessionResponse;
+  if (
+    payload.success !== true ||
+    payload.session_id !== sessionId ||
+    payload.wire_id !== wireId ||
+    payload.acknowledged_sequence !== sequence
+  ) {
+    throw invalidOrderedSessionResponse();
+  }
+  return requiredOrderedString(payload, "resume_token");
+}
 type RawWebSocketMessage = {
   type?: unknown;
   id?: unknown;
@@ -719,11 +797,7 @@ export class WebSocketClient {
       .then(() => {
         if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
         const stream = this.getOrCreateCoreSessionStream(sessionId);
-        return this.request<{
-          success: boolean;
-          event_watermark?: number;
-          resume_token?: string;
-        }>("session.subscribe", {
+        return this.request<unknown>("session.subscribe", {
           session_id: sessionId,
           consumer_kind: "core",
           wire_id: stream.wireId,
@@ -732,14 +806,9 @@ export class WebSocketClient {
             : {}),
           ...(stream.resumeToken ? { resume_token: stream.resumeToken } : {}),
         }).then((response) => {
-          if (!response.success) {
-            throw new Error("Ordered session subscription was rejected");
-          }
-          stream.lastSeenSequence = Math.max(
-            stream.lastSeenSequence,
-            response.event_watermark ?? stream.lastSeenSequence,
-          );
-          stream.resumeToken = response.resume_token;
+          const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
+          stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
+          stream.resumeToken = validated.resumeToken;
         });
       })
       .then(() => {
@@ -774,7 +843,11 @@ export class WebSocketClient {
     const stream = this.coreSessionStreams.get(event.session_id);
     if (!stream) return;
     if (event.sequence <= stream.lastSeenSequence) {
-      void this.acknowledgeCoreSessionEvent(event.session_id, stream, stream.lastSeenSequence);
+      void this.acknowledgeCoreSessionEvent(
+        event.session_id,
+        stream,
+        stream.lastSeenSequence,
+      ).catch(() => this.recoverCoreSessionPoison(event.session_id, stream));
       return;
     }
     if (event.sequence !== stream.lastSeenSequence + 1) return;
@@ -797,7 +870,9 @@ export class WebSocketClient {
       dispatchToPluginWsHandlers(action, payload);
     }
     stream.lastSeenSequence = event.sequence;
-    void this.acknowledgeCoreSessionEvent(event.session_id, stream, event.sequence);
+    void this.acknowledgeCoreSessionEvent(event.session_id, stream, event.sequence).catch(() =>
+      this.recoverCoreSessionPoison(event.session_id, stream),
+    );
   }
 
   private recoverCoreSessionPoison(sessionId: string, stream: CoreSessionStream) {
@@ -811,14 +886,9 @@ export class WebSocketClient {
       replace_cursor: true,
     })
       .then((response) => {
-        const payload = response as {
-          success?: boolean;
-          event_watermark?: number;
-          resume_token?: string;
-        };
-        if (!payload.success) throw new Error("Core session poison recovery was rejected");
-        stream.lastSeenSequence = Math.max(stream.lastSeenSequence, payload.event_watermark ?? 0);
-        if (payload.resume_token) stream.resumeToken = payload.resume_token;
+        const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
+        stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
+        stream.resumeToken = validated.resumeToken;
       })
       .catch(() => undefined)
       .finally(() => {
@@ -831,14 +901,14 @@ export class WebSocketClient {
     stream: CoreSessionStream,
     sequence: number,
   ) {
-    const response = await this.request<{ resume_token?: string }>("session.ack", {
+    const response = await this.request<unknown>("session.ack", {
       session_id: sessionId,
       consumer_kind: "core",
       wire_id: stream.wireId,
       sequence,
       resume_token: stream.resumeToken,
     });
-    if (response.resume_token) stream.resumeToken = response.resume_token;
+    stream.resumeToken = validateOrderedAckResponse(response, sessionId, stream.wireId, sequence);
   }
   private cancelSessionSubscriptionReadiness(sessionId: string) {
     const readiness = this.sessionSubscriptionReadiness.get(sessionId);

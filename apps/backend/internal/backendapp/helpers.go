@@ -1502,12 +1502,16 @@ func registerSecondaryRoutes(
 			// mints + sets the session cookie (the plugin never sees the token).
 			p.services.Plugins.SetAuthLoginBridge(pluginSSOBridge{auth: p.authSvc})
 		}
+		conversationReaders := make([]plugins.ConversationReader, 0, 1)
+		if p.services.Task != nil {
+			conversationReaders = append(conversationReaders, p.services.Task)
+		}
 		plugins.RegisterRoutes(
 			p.router,
 			p.services.Plugins,
 			p.services.Plugins.Deliverer(),
 			p.log,
-			p.services.Task,
+			conversationReaders...,
 		)
 		if p.features.Canvases {
 			plugins.RegisterWebAppRuntimeRoutes(p.router, p.services.Plugins.WebRuntime())

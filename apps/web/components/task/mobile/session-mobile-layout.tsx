@@ -669,7 +669,7 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
   const handleNavigateToPrompt = useCallback(
     (messageId: string): PluginOpenMessageResult => {
       const normalizedMessageId = messageId.trim();
-      if (!effectiveSessionId || normalizedMessageId === "") {
+      if (isPassthroughMode || !effectiveSessionId || normalizedMessageId === "") {
         return { status: "unavailable" };
       }
       const token = ++mobileScrollTokenRef.current;
@@ -682,7 +682,7 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
       handlePanelChangeAndClearSheet("chat");
       return { status: "accepted" };
     },
-    [effectiveSessionId, handlePanelChangeAndClearSheet],
+    [effectiveSessionId, handlePanelChangeAndClearSheet, isPassthroughMode],
   );
   const handleMobileScrollTargetConsumed = useCallback(() => {
     setMobileScrollTarget(null);

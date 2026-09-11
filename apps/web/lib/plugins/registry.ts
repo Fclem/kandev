@@ -179,13 +179,15 @@ class PluginRegistryStore {
   };
   runAtomicMutation<T>(operation: () => T): T {
     const snapshot = this.captureState();
+    const deferredWorkAborts = new Set(this.deferredWorkAborts);
+    const mutationDirty = this.mutationDirty;
     this.mutationDepth += 1;
     try {
       return operation();
     } catch (error) {
       this.restoreState(snapshot);
-      this.deferredWorkAborts.clear();
-      this.mutationDirty = true;
+      this.deferredWorkAborts = deferredWorkAborts;
+      this.mutationDirty = mutationDirty;
       throw error;
     } finally {
       this.mutationDepth -= 1;

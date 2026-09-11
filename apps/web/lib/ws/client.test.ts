@@ -72,20 +72,50 @@ function sessionSubscribeRequest(socket: FakeWebSocket, index = 0) {
   return request;
 }
 
+function coreRequestPayload(request: SentRequest): Record<string, unknown> | null {
+  if (typeof request.payload !== "object" || request.payload === null) return null;
+  const payload = request.payload as Record<string, unknown>;
+  return payload.consumer_kind === "core" ? payload : null;
+}
+
 function acknowledge(socket: FakeWebSocket, request: SentRequest) {
-  socket.receive({
-    id: request.id,
-    type: "response",
-    payload: { success: true },
-  });
+  const payload: Record<string, unknown> = { success: true };
+  const requestPayload = coreRequestPayload(request);
+  if (requestPayload) {
+    payload.session_id = requestPayload.session_id;
+    payload.wire_id = requestPayload.wire_id;
+    if (request.action === "session.ack") {
+      payload.acknowledged_sequence = requestPayload.sequence;
+      payload.resume_token = "resume-core";
+    } else {
+      payload.result = "fresh";
+      payload.event_watermark = 0;
+      payload.snapshot_cutoff = 0;
+      payload.snapshot_token = "snapshot-core";
+      payload.resume_token = "resume-core";
+      payload.expires_at = "2026-09-07T12:00:00Z";
+    }
+  }
+  socket.receive({ id: request.id, type: "response", payload });
 }
 
 function acknowledgeWithResumeToken(socket: FakeWebSocket, request: SentRequest, token: string) {
-  socket.receive({
-    id: request.id,
-    type: "response",
-    payload: { success: true, resume_token: token },
-  });
+  const payload: Record<string, unknown> = { success: true, resume_token: token };
+  const requestPayload = coreRequestPayload(request);
+  if (requestPayload) {
+    payload.session_id = requestPayload.session_id;
+    payload.wire_id = requestPayload.wire_id;
+    if (request.action === "session.ack") {
+      payload.acknowledged_sequence = requestPayload.sequence;
+    } else {
+      payload.result = "fresh";
+      payload.event_watermark = 0;
+      payload.snapshot_cutoff = 0;
+      payload.snapshot_token = "snapshot-core";
+      payload.expires_at = "2026-09-07T12:00:00Z";
+    }
+  }
+  socket.receive({ id: request.id, type: "response", payload });
 }
 
 beforeEach(() => {
@@ -219,6 +249,10 @@ describe("ordered core session compatibility", () => {
         session_id: "sess-1",
         message_id: "message-1",
         message_type: "message",
+        task_id: "task-1",
+        author_type: "user",
+        content: "hello",
+        created_at: "2026-09-07T12:00:00Z",
       },
     });
 
@@ -325,7 +359,11 @@ describe("ordered core session validation", () => {
       task_id: "task-1",
       sequence: 1,
       event_id: "event-ignored",
-      payload: { type: "session.workspace_sources.updated" },
+      payload: {
+        type: "session.workspace_sources.updated",
+        session_id: "sess-1",
+        task_id: "task-1",
+      },
     });
 
     expect(socket.sent.at(-1)).toMatchObject({

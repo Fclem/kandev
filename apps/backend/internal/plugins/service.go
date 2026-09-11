@@ -686,6 +686,15 @@ func (s *Service) Shutdown() {
 	}
 }
 
+// Close releases durable plugin conversation state after workers stop.
+func (s *Service) Close() error {
+	s.Shutdown()
+	if s.sessionEvents == nil {
+		return nil
+	}
+	return s.sessionEvents.Close()
+}
+
 // SetPluginsDir wires the root directory pkgtar.Install/pkgtar.Remove
 // operate under and initializes mandatory durable conversation state.
 func (s *Service) SetPluginsDir(dir string) error {
@@ -703,24 +712,30 @@ func (s *Service) SetPluginsDir(dir string) error {
 	sessionDelivery := NewSessionDeliveryDispatcher(sessionEvents)
 	now := time.Now().UTC()
 	if err := sessionDelivery.ReclaimExpiredLeases(now); err != nil {
+		_ = sessionEvents.Close()
 		return fmt.Errorf("reclaim plugin session event leases: %w", err)
 	}
 	if err := sessionEvents.CollectExpired(now); err != nil {
+		_ = sessionEvents.Close()
 		return fmt.Errorf("collect expired plugin session events: %w", err)
 	}
+	previousSessionEvents := s.sessionEvents
 	s.pluginsDir = dir
 	s.conversationTokens = conversationTokens
 	s.sessionEvents = sessionEvents
 	s.sessionDelivery = sessionDelivery
+	if previousSessionEvents != nil {
+		_ = previousSessionEvents.Close()
+	}
 	return nil
 }
 
-func (s *Service) maintainSessionEvents(now time.Time) error {
+func (s *Service) maintainSessionEvents(ctx context.Context, now time.Time) error {
 	// A failing partition must not freeze the rest of maintenance: mirror
 	// errors are isolated per session (syncAll collects them), and the
 	// remaining passes still run so healthy sessions are collected and the
 	// primary journal is pruned every tick.
-	events, syncErr := s.syncAllCommittedSessionEvents(context.Background())
+	events, syncErr := s.syncAllCommittedSessionEvents(ctx)
 	s.mu.Lock()
 	sink := s.sessionEventSink
 	s.mu.Unlock()
@@ -741,7 +756,7 @@ func (s *Service) maintainSessionEvents(now time.Time) error {
 	}
 	retained := s.sessionEvents.RetainedSessionIDs(now)
 	if err := s.pruneConversationJournal(
-		context.Background(), now.UTC().Add(-SessionEventRetention), retained,
+		ctx, now.UTC().Add(-SessionEventRetention), retained,
 	); err != nil {
 		return fmt.Errorf("prune primary conversation journal: %w", err)
 	}
@@ -765,7 +780,7 @@ func (s *Service) StartSessionEventMaintenanceWorker(ctx context.Context) func()
 			case <-workerContext.Done():
 				return
 			case now := <-ticker.C:
-				if err := s.maintainSessionEvents(now.UTC()); err != nil && s.log != nil {
+				if err := s.maintainSessionEvents(workerContext, now.UTC()); err != nil && s.log != nil {
 					s.log.Error("plugins: maintain session event stream", zap.Error(err))
 				}
 			}

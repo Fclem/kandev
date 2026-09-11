@@ -87,8 +87,8 @@ type RegistrationStage = {
   open: boolean;
 };
 
-const registrationStages = new Map<string, RegistrationStage>();
-const registrationQueues = new Map<string, Promise<void>>();
+let registrationStage: RegistrationStage | undefined;
+let registrationQueue = Promise.resolve();
 
 /**
  * Latest load "generation" claimed per pluginId. `loadPlugin` claims a fresh
@@ -180,8 +180,8 @@ function setPluginDeclarations(plugin: ActivePlugin): void {
 /** Defines `window.registerKandevPlugin` before any bundle loads. Idempotent. */
 export function installPluginGlobal(win: Window = window): void {
   (win as PluginGlobalWindow).registerKandevPlugin = (id, plugin) => {
-    const stage = registrationStages.get(id);
-    if (!stage || !stage.open || stage.plugin) return;
+    const stage = registrationStage;
+    if (!stage || !stage.open || stage.pluginId !== id || stage.plugin) return;
     stage.plugin = plugin;
   };
 }
@@ -209,6 +209,7 @@ export async function loadPlugins(
   }
 }
 
+// eslint-disable-next-line max-lines-per-function -- Plugin loading keeps the guarded lifecycle in one transaction.
 async function loadPlugin(
   plugin: ActivePlugin,
   hostFactory: PluginHostFactory,
@@ -235,7 +236,12 @@ async function loadPlugin(
   const isActiveGeneration = () => generationOpen && isCurrentLoad(plugin.id, generation);
   try {
     injectStyles(plugin.id, plugin.styleUrls, apiBaseUrl, generation);
-    registeredPlugin = await resolveRegistration(plugin, importer, apiBaseUrl);
+    registeredPlugin = await resolveRegistration(
+      plugin,
+      importer,
+      apiBaseUrl,
+      previousRuntime?.plugin,
+    );
     if (!registeredPlugin) {
       console.error(`[plugins] "${plugin.id}" bundle did not call registerKandevPlugin`);
       generationOpen = false;
@@ -256,7 +262,6 @@ async function loadPlugin(
       return;
     }
     resources = new PluginLoadResources(plugin.id);
-    setPluginDeclarations(plugin);
     const host = generationFencedHost(
       hostFactory(plugin.id),
       () => isActiveGeneration() || isCurrentPublished(plugin.id, generation),
@@ -389,31 +394,44 @@ async function resolveRegistration(
   plugin: ActivePlugin,
   importer: BundleImporter,
   apiBaseUrl: string,
+  previousRuntimePlugin?: KandevPlugin,
 ): Promise<KandevPlugin | undefined> {
   const bundleUrl = resolvePluginUrl(plugin.bundleUrl, apiBaseUrl);
-  const cached = registeredPlugins.get(plugin.id);
-  if (cached?.bundleUrl === bundleUrl) return cached.plugin;
-  const previousRegistration = registrationQueues.get(plugin.id) ?? Promise.resolve();
+  const cachedRegistration = () => {
+    const cached = registeredPlugins.get(plugin.id);
+    if (cached?.bundleUrl !== bundleUrl) return undefined;
+    return cached.plugin === previousRuntimePlugin ? { ...cached.plugin } : cached.plugin;
+  };
+  const cached = cachedRegistration();
+  if (cached) return cached;
+
+  const previousRegistration = registrationQueue;
   let releaseRegistration!: () => void;
   const registrationTurn = new Promise<void>((resolve) => {
     releaseRegistration = resolve;
   });
   const queuedRegistration = previousRegistration.then(() => registrationTurn);
-  registrationQueues.set(plugin.id, queuedRegistration);
-  await previousRegistration;
-  const stage: RegistrationStage = { pluginId: plugin.id, bundleUrl, open: true };
-  registrationStages.set(plugin.id, stage);
+  registrationQueue = queuedRegistration;
   try {
-    await importer(bundleUrl);
-    if (stage.plugin) {
-      registeredPlugins.set(plugin.id, { bundleUrl, plugin: stage.plugin });
+    await previousRegistration;
+    const queuedCached = cachedRegistration();
+    if (queuedCached) return queuedCached;
+
+    const stage: RegistrationStage = { pluginId: plugin.id, bundleUrl, open: true };
+    registrationStage = stage;
+    try {
+      await importer(bundleUrl);
+      if (stage.plugin) {
+        registeredPlugins.set(plugin.id, { bundleUrl, plugin: stage.plugin });
+      }
+      return stage.plugin;
+    } finally {
+      stage.open = false;
+      if (registrationStage === stage) registrationStage = undefined;
     }
-    return stage.plugin;
   } finally {
-    stage.open = false;
-    if (registrationQueues.get(plugin.id) === queuedRegistration)
-      registrationQueues.delete(plugin.id);
     releaseRegistration();
+    if (registrationQueue === queuedRegistration) registrationQueue = Promise.resolve();
   }
 }
 

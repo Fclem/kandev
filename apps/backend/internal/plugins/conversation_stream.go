@@ -126,16 +126,16 @@ type sessionEventLogState struct {
 	Audits   []SessionPoisonAudit              `json:"audits"`
 }
 
-func cloneSessionEventLogState(state sessionEventLogState) sessionEventLogState {
+func cloneSessionEventLogState(state sessionEventLogState) (sessionEventLogState, error) {
 	encoded, err := json.Marshal(state)
 	if err != nil {
-		panic(err)
+		return sessionEventLogState{}, fmt.Errorf("clone session event log state: %w", err)
 	}
 	var clone sessionEventLogState
 	if err := json.Unmarshal(encoded, &clone); err != nil {
-		panic(err)
+		return sessionEventLogState{}, fmt.Errorf("clone session event log state: %w", err)
 	}
-	return clone
+	return clone, nil
 }
 
 // SessionEventLog serializes append, versioning, poison, terminal tombstones,
@@ -212,11 +212,19 @@ func NewSessionEventLog(path string) (*SessionEventLog, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	if err := db.Close(); err != nil {
-		return nil, fmt.Errorf("close session event log: %w", err)
-	}
-	log.db = nil
 	return log, nil
+}
+
+// Close releases the durable event log database.
+func (l *SessionEventLog) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.db == nil {
+		return nil
+	}
+	err := l.db.Close()
+	l.db = nil
+	return err
 }
 func mustSessionEventLog() *SessionEventLog {
 	log, err := NewSessionEventLog("")
@@ -232,6 +240,9 @@ func (l *SessionEventLog) Append(
 	eventType string,
 	payload json.RawMessage,
 ) (SessionEvent, error) {
+	if !json.Valid(payload) {
+		return SessionEvent{}, fmt.Errorf("%w: malformed payload", ErrPoisonEvent)
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	partition := l.state.Sessions[sessionID]
@@ -285,6 +296,9 @@ func (l *SessionEventLog) Append(
 // AppendCommitted mirrors an event whose sequence and identity were allocated
 // in the source mutation's primary-database transaction.
 func (l *SessionEventLog) AppendCommitted(event SessionEvent) (bool, error) {
+	if !json.Valid(event.Payload) {
+		return false, fmt.Errorf("%w: malformed payload", ErrPoisonEvent)
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	partition := l.state.Sessions[event.SessionID]
@@ -293,6 +307,7 @@ func (l *SessionEventLog) AppendCommitted(event SessionEvent) (bool, error) {
 		partition = &sessionEventPartition{}
 		l.state.Sessions[event.SessionID] = partition
 	}
+	previousWatermark := partition.Watermark
 	if event.Sequence <= partition.Watermark {
 		for _, existing := range partition.Events {
 			if existing.Sequence == event.Sequence {
@@ -338,7 +353,7 @@ func (l *SessionEventLog) AppendCommitted(event SessionEvent) (bool, error) {
 	}
 	if err := l.persistAppendLocked(event, poison); err != nil {
 		partition.Events = partition.Events[:len(partition.Events)-1]
-		partition.Watermark--
+		partition.Watermark = previousWatermark
 		partition.Terminal = previousTerminal
 		delete(l.state.Poison, poisonKey(event.SessionID, event.ID))
 		if newPartition {
@@ -455,7 +470,10 @@ func (l *SessionEventLog) ReplaceCursor(key SessionDeliveryCursorKey, sequence u
 		return ErrForwardGap
 	}
 	encodedKey := deliveryCursorKey(key)
-	previous := cloneSessionEventLogState(l.state)
+	previous, err := cloneSessionEventLogState(l.state)
+	if err != nil {
+		return err
+	}
 	cursor := l.state.Cursors[encodedKey]
 	if cursor == nil {
 		cursor = &SessionDeliveryCursor{Key: key}
@@ -526,12 +544,10 @@ func (l *SessionEventLog) persistCursorRowLocked(encodedKey string, cursor *Sess
 	if l.path == "" {
 		return nil
 	}
-	db, err := sql.Open("sqlite3", l.path)
-	if err != nil {
-		return fmt.Errorf("open session event log: %w", err)
+	if l.db == nil {
+		return errors.New("session event log database is closed")
 	}
-	defer func() { _ = db.Close() }()
-	tx, err := db.Begin()
+	tx, err := l.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin session event cursor transaction: %w", err)
 	}
@@ -564,10 +580,15 @@ func (l *SessionEventLog) persistCursorRowLocked(encodedKey string, cursor *Sess
 // CollectExpired removes replay state only after both the binding-token and
 // reconnect-grace windows have elapsed. A live cursor retains its complete
 // partition so reconnect never observes a partially collected history.
+//
+//nolint:cyclop // Collection coordinates cursor, poison, tombstone, and partition retention.
 func (l *SessionEventLog) CollectExpired(now time.Time) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	previous := cloneSessionEventLogState(l.state)
+	previous, err := cloneSessionEventLogState(l.state)
+	if err != nil {
+		return err
+	}
 	cutoff := now.UTC().Add(-SessionEventRetention)
 	activeSessions := make(map[string]struct{})
 	for encodedKey, cursor := range l.state.Cursors {
@@ -675,7 +696,10 @@ func (l *SessionEventLog) claimPoisonDelivery(
 	if disposition != SessionDeliveryClaimed {
 		return SessionDeliveryClaim{Disposition: disposition}, nil
 	}
-	previous := cloneSessionEventLogState(l.state)
+	previous, err := cloneSessionEventLogState(l.state)
+	if err != nil {
+		return SessionDeliveryClaim{}, err
+	}
 	record.State = SessionPoisonLeased
 	record.LeaseUntil = now.Add(SessionPoisonLease)
 	record.UpdatedAt = now
@@ -710,7 +734,10 @@ func (l *SessionEventLog) completePoisonDelivery(
 		!record.LeaseUntil.Equal(claim.leaseUntil) {
 		return ErrStaleOwnerEpoch
 	}
-	previous := cloneSessionEventLogState(l.state)
+	previous, err := cloneSessionEventLogState(l.state)
+	if err != nil {
+		return err
+	}
 	now = now.UTC()
 	if !queued {
 		record.State = SessionPoisonPending
@@ -770,7 +797,10 @@ func (l *SessionEventLog) requeuePoison(
 	if record.OwnerEpoch != expectedOwnerEpoch {
 		return ErrStaleOwnerEpoch
 	}
-	previous := cloneSessionEventLogState(l.state)
+	previous, err := cloneSessionEventLogState(l.state)
+	if err != nil {
+		return err
+	}
 	priorState := record.State
 	priorAttempts := record.Attempts
 	record.State = SessionPoisonRequeued
@@ -795,7 +825,10 @@ func (l *SessionEventLog) requeuePoison(
 func (l *SessionEventLog) reclaimExpiredLeases(now time.Time) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	previous := cloneSessionEventLogState(l.state)
+	previous, err := cloneSessionEventLogState(l.state)
+	if err != nil {
+		return err
+	}
 	changed := false
 	for _, record := range l.state.Poison {
 		if record.State == SessionPoisonLeased && !record.LeaseUntil.After(now) {
@@ -929,12 +962,10 @@ func (l *SessionEventLog) persistAppendLocked(event SessionEvent, poison *Sessio
 	if l.path == "" {
 		return nil
 	}
-	db, err := sql.Open("sqlite3", l.path)
-	if err != nil {
-		return fmt.Errorf("open session event log: %w", err)
+	if l.db == nil {
+		return errors.New("session event log database is closed")
 	}
-	defer func() { _ = db.Close() }()
-	tx, err := db.Begin()
+	tx, err := l.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin session event append: %w", err)
 	}
@@ -962,12 +993,10 @@ func (l *SessionEventLog) persistLocked() error {
 	if l.path == "" {
 		return nil
 	}
-	db, err := sql.Open("sqlite3", l.path)
-	if err != nil {
-		return fmt.Errorf("open session event log: %w", err)
+	if l.db == nil {
+		return errors.New("session event log database is closed")
 	}
-	defer func() { _ = db.Close() }()
-	tx, err := db.Begin()
+	tx, err := l.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin session event transaction: %w", err)
 	}
@@ -1125,6 +1154,10 @@ func (l *SessionEventLog) loadPartitions() error {
 		}
 		l.state.Sessions[sessionID] = &sessionEventPartition{Watermark: watermark, Terminal: terminal}
 	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate session partitions: %w", err)
+	}
 	if err := rows.Close(); err != nil {
 		return fmt.Errorf("close session partitions: %w", err)
 	}
@@ -1151,6 +1184,10 @@ func (l *SessionEventLog) loadEvents() error {
 		if event.Sequence > partition.Watermark {
 			partition.Watermark = event.Sequence
 		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate session events: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return fmt.Errorf("close session events: %w", err)

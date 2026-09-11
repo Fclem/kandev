@@ -434,9 +434,13 @@ func (c *Client) handleOrderedSessionSubscribe(msg *ws.Message, req SessionSubsc
 	}
 	c.hub.orderedSessionMu.Lock()
 	defer c.hub.orderedSessionMu.Unlock()
-	if _, err := service.SyncCommittedSessionEvents(context.Background(), req.SessionID); err != nil {
+	committedEvents, err := service.SyncCommittedSessionEvents(context.Background(), req.SessionID)
+	if err != nil {
 		c.sendSessionStreamFailure(msg, req.SessionID, "upstream_failure", "session stream unavailable", true)
 		return
+	}
+	for _, event := range committedEvents {
+		c.hub.broadcastCommittedOrderedSessionEvent(service, event)
 	}
 	replay := resolveOrderedSessionReplay(service, req, key)
 	if replay.terminal && (replay.resumeValid || service.SessionEvents().HasCursor(key)) {
@@ -726,9 +730,16 @@ func (c *Client) sendSessionStreamFailure(
 func (c *Client) sendOrderedSessionEvent(event plugins.SessionEvent) bool {
 	frame, err := sessionEventFrame(event)
 	if err != nil {
+		c.closeSend()
 		return false
 	}
-	return c.sendNotification(frame, "session.event")
+	if c.sendNotification(frame, "session.event") {
+		return true
+	}
+	// An ordered frame that is not queued cannot be acknowledged safely. End
+	// this connection so the client reconnects and replays from its cursor.
+	c.closeSend()
+	return false
 }
 
 type SessionAckRequest struct {

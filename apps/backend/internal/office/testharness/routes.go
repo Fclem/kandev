@@ -999,8 +999,12 @@ func completeTurnHandler(
 		}
 		data := map[string]interface{}{
 			"id": turn.ID, testSessionIDKey: turn.TaskSessionID, testTaskIDKey: turn.TaskID,
-			"started_at": turn.StartedAt, testCompletedAtKey: turn.CompletedAt,
-			"updated_at": turn.UpdatedAt,
+			"started_at":       turn.StartedAt.UTC().Format(time.RFC3339Nano),
+			testCompletedAtKey: nil,
+			"updated_at":       turn.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		}
+		if turn.CompletedAt != nil {
+			data[testCompletedAtKey] = turn.CompletedAt.UTC().Format(time.RFC3339Nano)
 		}
 		if eventBus != nil {
 			if err := eventBus.Publish(

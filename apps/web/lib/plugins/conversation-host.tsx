@@ -291,6 +291,7 @@ async function fetchMessagePage({
     ),
     {
       credentials: "include",
+      cache: "no-store",
       headers: {
         "X-Kandev-Plugin-Binding": binding.bindingToken,
         "X-Kandev-Snapshot-Token": binding.snapshotToken,
@@ -506,7 +507,10 @@ function useSessionMessages(query: PluginSessionMessagesQuery): PluginSessionMes
   const loadMoreRef = React.useRef<Promise<number> | null>(null);
   const messagesRef = React.useRef<readonly PluginConversationMessage[]>([]);
   const requestRevisionRef = React.useRef(0);
-  const resolved = scope ? resolveTaskId(scope, query.taskId) : { taskId: null, error: null };
+  const resolved = React.useMemo(
+    () => (scope ? resolveTaskId(scope, query.taskId) : { taskId: null, error: null }),
+    [query.taskId, scope],
+  );
   const authorsKey = [...(query.authorTypes ?? [])].join(",");
   const sort = query.sort ?? "desc";
   const limit = query.pageSize ?? 20;
@@ -647,7 +651,10 @@ function useSessionTurns(
     ...EMPTY_TURNS,
     turns: [],
   });
-  const resolved = scope ? resolveTaskId(scope, taskId) : { taskId: null, error: null };
+  const resolved = React.useMemo(
+    () => (scope ? resolveTaskId(scope, taskId) : { taskId: null, error: null }),
+    [scope, taskId],
+  );
   const snapshotKey = JSON.stringify([sessionId, resolved.taskId]);
 
   useOrderedTurnEvents({
@@ -692,6 +699,7 @@ function useSessionTurns(
           ),
           {
             credentials: "include",
+            cache: "no-store",
             headers: {
               "X-Kandev-Plugin-Binding": binding.bindingToken,
               "X-Kandev-Snapshot-Token": binding.snapshotToken,

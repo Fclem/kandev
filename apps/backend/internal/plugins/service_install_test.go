@@ -150,6 +150,7 @@ func TestServiceInstallUpgradeSaveFailurePreservesOldVersionAndData(t *testing.T
 	svc.SetPluginsDir(dir)
 	rt := newFakeRuntime()
 	svc.SetRuntime(rt)
+	t.Cleanup(func() { _ = svc.Close() })
 
 	rec1 := installTestPlugin(t, svc, "kandev-plugin-slack") // v1.0.0, active + running
 	if !rt.Running("kandev-plugin-slack") {

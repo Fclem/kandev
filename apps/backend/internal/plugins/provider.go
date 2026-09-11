@@ -144,8 +144,7 @@ func ProvideWithStoreErrors(cfg *config.Config, dbPool *db.Pool, secrets SecretV
 		stopArtifactCleanup()
 		stopSessionEventMaintenance()
 		svc.closeWebAppEvents()
-		rt.StopAll()
-		return nil
+		return svc.Close()
 	}
 	return svc, cleanup, storeErrors
 }

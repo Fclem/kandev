@@ -57,12 +57,13 @@ func toAnySlice(values []string) []any {
 }
 
 func (s *Service) conversationTableExists(ctx context.Context, table string) (bool, error) {
-	query := `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '` + table + `'`
+	query := `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`
 	if strings.Contains(strings.ToLower(s.conversationJournal.DriverName()), "postgres") {
-		query = `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '` + table + `'`
+		query = `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?`
 	}
 	var present int
-	err := s.conversationJournal.GetContext(ctx, &present, query)
+	query = s.conversationJournal.Rebind(query)
+	err := s.conversationJournal.GetContext(ctx, &present, query, table)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}

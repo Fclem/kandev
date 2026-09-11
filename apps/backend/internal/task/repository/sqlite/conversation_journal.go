@@ -178,54 +178,106 @@ type conversationJournalTurnSeed struct {
 	UpdatedAt          time.Time  `db:"updated_at"`
 }
 
+const conversationJournalBackfillBatchSize = 100
+
+//nolint:cyclop,dupl,gocognit,funlen // Turn and message backfills intentionally share bounded keyset control flow.
 func (r *Repository) backfillConversationJournal() error {
-	// The source SELECTs and the version inserts run in ONE transaction so a
-	// concurrent trigger write cannot allocate a sequence between the read and
-	// the insert, which would let a stale pre-update image win the snapshot.
-	tx, err := r.db.Beginx()
-	if err != nil {
-		return fmt.Errorf("begin conversation journal backfill: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	var turns []conversationJournalTurnSeed
-	if err := tx.Select(&turns, `
-		SELECT t.id, t.task_session_id, t.task_id, t.execution_profile_id, t.route_generation,
-			t.metadata, t.started_at, t.completed_at, t.created_at, t.updated_at
-		FROM task_session_turns t
-		WHERE NOT EXISTS (
-			SELECT 1 FROM conversation_turn_versions v
-			WHERE v.session_id = t.task_session_id AND v.turn_id = t.id
-		)
-		ORDER BY t.task_session_id, t.started_at, t.id`); err != nil {
-		return fmt.Errorf("list conversation turn backfill: %w", err)
-	}
-	var messages []conversationJournalMessageSeed
-	if err := tx.Select(&messages, `
-		SELECT m.id, m.task_session_id, m.task_id, m.turn_id, m.author_type, m.author_id,
-			m.content, m.requests_input, m.type AS message_type, m.metadata,
-			m.created_at, m.updated_at, m.prompt_seq AS prompt_index
-		FROM task_session_messages m
-		WHERE NOT EXISTS (
-			SELECT 1 FROM conversation_message_versions v
-			WHERE v.session_id = m.task_session_id AND v.message_id = m.id
-		)
-		ORDER BY m.task_session_id, m.created_at, m.id`); err != nil {
-		return fmt.Errorf("list conversation message backfill: %w", err)
-	}
-	if len(turns) > 0 || len(messages) > 0 {
+	var lastSessionID string
+	var lastStartedAt time.Time
+	var lastTurnID string
+	//nolint:dupl // Turn and message batches use the same transaction boundaries.
+	for {
+		tx, err := r.db.Beginx()
+		if err != nil {
+			return fmt.Errorf("begin conversation turn journal backfill: %w", err)
+		}
+		var turns []conversationJournalTurnSeed
+		query := `
+			SELECT t.id, t.task_session_id, t.task_id, t.execution_profile_id, t.route_generation,
+				t.metadata, t.started_at, t.completed_at, t.created_at, t.updated_at
+			FROM task_session_turns t
+			WHERE NOT EXISTS (
+				SELECT 1 FROM conversation_turn_versions v
+				WHERE v.session_id = t.task_session_id AND v.turn_id = t.id
+			)`
+		args := []any{}
+		if lastTurnID != "" {
+			query += `
+				AND (t.task_session_id > ? OR
+					(t.task_session_id = ? AND
+						(t.started_at > ? OR (t.started_at = ? AND t.id > ?))))`
+			args = append(args, lastSessionID, lastSessionID, lastStartedAt, lastStartedAt, lastTurnID)
+		}
+		query += ` ORDER BY t.task_session_id, t.started_at, t.id LIMIT ?`
+		args = append(args, conversationJournalBackfillBatchSize)
+		if err := tx.Select(&turns, r.db.Rebind(query), args...); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("list conversation turn backfill: %w", err)
+		}
+		if len(turns) == 0 {
+			_ = tx.Rollback()
+			break
+		}
 		for _, turn := range turns {
 			if err := r.backfillConversationTurn(tx, turn); err != nil {
+				_ = tx.Rollback()
 				return err
 			}
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit conversation turn journal backfill: %w", err)
+		}
+		lastTurn := turns[len(turns)-1]
+		lastSessionID, lastStartedAt, lastTurnID = lastTurn.TaskSessionID, lastTurn.StartedAt, lastTurn.ID
+	}
+
+	lastSessionID = ""
+	var lastCreatedAt time.Time
+	var lastMessageID string
+	for {
+		tx, err := r.db.Beginx()
+		if err != nil {
+			return fmt.Errorf("begin conversation message journal backfill: %w", err)
+		}
+		var messages []conversationJournalMessageSeed
+		query := `
+			SELECT m.id, m.task_session_id, m.task_id, m.turn_id, m.author_type, m.author_id,
+				m.content, m.requests_input, m.type AS message_type, m.metadata,
+				m.created_at, m.updated_at, m.prompt_seq AS prompt_index
+			FROM task_session_messages m
+			WHERE NOT EXISTS (
+				SELECT 1 FROM conversation_message_versions v
+				WHERE v.session_id = m.task_session_id AND v.message_id = m.id
+			)`
+		args := []any{}
+		if lastMessageID != "" {
+			query += `
+				AND (m.task_session_id > ? OR
+					(m.task_session_id = ? AND
+						(m.created_at > ? OR (m.created_at = ? AND m.id > ?))))`
+			args = append(args, lastSessionID, lastSessionID, lastCreatedAt, lastCreatedAt, lastMessageID)
+		}
+		query += ` ORDER BY m.task_session_id, m.created_at, m.id LIMIT ?`
+		args = append(args, conversationJournalBackfillBatchSize)
+		if err := tx.Select(&messages, r.db.Rebind(query), args...); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("list conversation message backfill: %w", err)
+		}
+		if len(messages) == 0 {
+			_ = tx.Rollback()
+			break
 		}
 		for _, message := range messages {
 			if err := r.backfillConversationMessage(tx, message); err != nil {
+				_ = tx.Rollback()
 				return err
 			}
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit conversation journal backfill: %w", err)
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit conversation message journal backfill: %w", err)
+		}
+		lastMessage := messages[len(messages)-1]
+		lastSessionID, lastCreatedAt, lastMessageID = lastMessage.TaskSessionID, lastMessage.CreatedAt, lastMessage.ID
 	}
 	return nil
 }
@@ -439,9 +491,10 @@ func sqliteStripSystemContentExpr(expr string) string {
 					` + whitespace + `), depth + 1
 			FROM strip
 			WHERE depth < 64
+				AND instr(x, '<kandev-system>') > 0
 				AND instr(substr(x, instr(x, '<kandev-system>') + length('<kandev-system>')), '</kandev-system>') > 0
 		)
-		SELECT CASE WHEN depth = 64 AND instr(substr(x, instr(x, '<kandev-system>') + length('<kandev-system>')), '</kandev-system>') > 0 THEN substr(x, 1, instr(x, '<kandev-system>') - 1) ELSE x END AS x FROM strip ORDER BY depth DESC LIMIT 1
+		SELECT CASE WHEN depth = 64 AND instr(x, '<kandev-system>') > 0 AND instr(substr(x, instr(x, '<kandev-system>') + length('<kandev-system>')), '</kandev-system>') > 0 THEN substr(x, 1, instr(x, '<kandev-system>') - 1) ELSE x END AS x FROM strip ORDER BY depth DESC LIMIT 1
 	))`
 }
 

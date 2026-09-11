@@ -35,13 +35,18 @@ describe("ordered session event envelopes", () => {
     ).toBe("poison");
   });
 
-  it("classifies turn removal as a canonical event that core may ignore", () => {
+  it("classifies turn removal as a projectable ordered event", () => {
     expect(
       orderedCoreDisposition({
         ...validEvent,
         event_type: "session.turn.removed",
-        payload: { type: "session.turn.removed", id: "turn-1" },
+        payload: {
+          type: "session.turn.removed",
+          session_id: "session-1",
+          task_id: "task-1",
+          id: "turn-1",
+        },
       }),
-    ).toBe("ignore");
+    ).toBe("project");
   });
 });

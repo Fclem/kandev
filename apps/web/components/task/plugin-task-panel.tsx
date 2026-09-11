@@ -88,10 +88,11 @@ export function PluginTaskPanel({
     sessionKind,
     presentation,
   };
+  const registrationVisible = registration ? registrationIsVisible(registration, context) : false;
 
   const lease = useMemo(
     () => ({ active: true }),
-    [panelId, panelKey, pluginId, presentation, sessionId, taskId],
+    [generation, panelId, panelKey, pluginId, presentation, registrationVisible, sessionId, taskId],
   );
   useEffect(
     () => () => {
@@ -118,7 +119,7 @@ export function PluginTaskPanel({
     [lease, onOpenMessage, presentation, session?.name, sessionId, t],
   );
 
-  if (!registration || !taskId || !registrationIsVisible(registration, context)) {
+  if (!registration || !taskId || !registrationVisible) {
     return <PluginTaskPanelUnavailable />;
   }
 

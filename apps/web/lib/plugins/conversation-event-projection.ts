@@ -13,13 +13,39 @@ export function eventString(event: RawSessionEvent, key: string): string | null 
   return typeof value === "string" && value !== "" ? value : null;
 }
 
+function compareConversationTimestamps(left: string, right: string): number {
+  const leftMilliseconds = Date.parse(left);
+  const rightMilliseconds = Date.parse(right);
+  if (Number.isFinite(leftMilliseconds) && Number.isFinite(rightMilliseconds)) {
+    if (leftMilliseconds !== rightMilliseconds)
+      return leftMilliseconds < rightMilliseconds ? -1 : 1;
+    const leftFraction = left.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? "";
+    const rightFraction = right.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? "";
+    const leftNanoseconds = leftFraction.padEnd(9, "0").slice(0, 9);
+    const rightNanoseconds = rightFraction.padEnd(9, "0").slice(0, 9);
+    if (leftNanoseconds !== rightNanoseconds) {
+      return leftNanoseconds < rightNanoseconds ? -1 : 1;
+    }
+    return 0;
+  }
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function compareConversationIds(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 export function compareConversationMessages(
   left: Pick<PluginConversationMessage, "createdAt" | "id">,
   right: Pick<PluginConversationMessage, "createdAt" | "id">,
   sort: "asc" | "desc",
 ): number {
-  const created = left.createdAt.localeCompare(right.createdAt);
-  const ordered = created === 0 ? left.id.localeCompare(right.id) : created;
+  const created = compareConversationTimestamps(left.createdAt, right.createdAt);
+  const ordered = created === 0 ? compareConversationIds(left.id, right.id) : created;
   return sort === "asc" ? ordered : -ordered;
 }
 

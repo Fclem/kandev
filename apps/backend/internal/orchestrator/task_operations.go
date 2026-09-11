@@ -3789,11 +3789,16 @@ func (s *Service) deleteSessionAndPublishRemoval(ctx context.Context, taskID, se
 		return err
 	}
 	if s.eventBus != nil {
-		return s.eventBus.Publish(ctx, events.SessionRemoved, bus.NewEvent(
+		if err := s.eventBus.Publish(ctx, events.SessionRemoved, bus.NewEvent(
 			events.SessionRemoved,
 			"orchestrator",
 			map[string]interface{}{metaKeySessionID: sessionID, metaKeyTaskID: taskID},
-		))
+		)); err != nil {
+			s.logger.Warn("session deleted but removal event publish failed",
+				zap.String("task_id", taskID),
+				zap.String("session_id", sessionID),
+				zap.Error(err))
+		}
 	}
 	return nil
 

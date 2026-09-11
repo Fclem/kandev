@@ -89,10 +89,10 @@ func TestSessionEventMaintenanceDispatchesUnsignaledCommittedRowsOnce(t *testing
 		dispatched = append(dispatched, event)
 	})
 
-	require.NoError(t, service.maintainSessionEvents(time.Now().UTC()))
+	require.NoError(t, service.maintainSessionEvents(context.Background(), time.Now().UTC()))
 	require.Len(t, dispatched, 1)
 	require.Equal(t, uint64(1), dispatched[0].Sequence)
-	require.NoError(t, service.maintainSessionEvents(time.Now().UTC()))
+	require.NoError(t, service.maintainSessionEvents(context.Background(), time.Now().UTC()))
 	require.Len(t, dispatched, 1)
 }
 
@@ -350,6 +350,7 @@ func TestSyncCommittedSessionEventsPoisonsMalformedPayloadOnDurableLog(t *testin
 	dir := t.TempDir()
 	service := NewService(nil, NewRegistry(), nil, testLogger(t))
 	require.NoError(t, service.SetPluginsDir(dir))
+	t.Cleanup(func() { _ = service.Close() })
 	service.SetConversationJournalDB(database)
 
 	events, err := service.SyncCommittedSessionEvents(context.Background(), "sess-durable-poison")
@@ -364,6 +365,7 @@ func TestSyncCommittedSessionEventsPoisonsMalformedPayloadOnDurableLog(t *testin
 	// A restart of the durable log keeps the poison and the non-raw payload.
 	reopened, err := NewSessionEventLog(filepath.Join(dir, ".host", "session-events.sqlite"))
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = reopened.Close() })
 	restored, ok := reopened.Poison("sess-durable-poison", events[0].ID)
 	require.True(t, ok)
 	require.Equal(t, record.Attempts, restored.Attempts)

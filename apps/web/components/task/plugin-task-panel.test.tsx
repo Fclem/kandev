@@ -205,3 +205,51 @@ describe("PluginTaskPanel failure containment", () => {
     console.error = originalConsoleError;
   });
 });
+describe("PluginTaskPanel lease", () => {
+  it("revokes a panel navigation lease when visibility changes", () => {
+    let visible = true;
+    let openMessage: ((messageId: string) => { status: string }) | undefined;
+    const onOpenMessage = vi.fn(() => ({ status: "accepted" as const }));
+    function Notes(props: {
+      conversation: { openMessage: (messageId: string) => { status: string } };
+    }) {
+      openMessage = props.conversation.openMessage;
+      return <div>visible panel</div>;
+    }
+    pluginRegistry.forPlugin("plugin-a").registerTaskPanel({
+      id: "notes",
+      title: "Notes",
+      Component: Notes,
+      mobileEnabled: true,
+      visible: () => visible,
+    });
+
+    const view = render(
+      <PluginTaskPanel
+        pluginId="plugin-a"
+        panelKey="notes"
+        panelId="plugin:plugin-a:notes"
+        presentation="mobile"
+        onOpenMessage={onOpenMessage}
+      />,
+    );
+    const initialOpenMessage = openMessage;
+    expect(initialOpenMessage?.("message-1").status).toBe("accepted");
+    expect(onOpenMessage).toHaveBeenCalledWith("message-1");
+
+    visible = false;
+    view.rerender(
+      <PluginTaskPanel
+        pluginId="plugin-a"
+        panelKey="notes"
+        panelId="plugin:plugin-a:notes"
+        presentation="mobile"
+        onOpenMessage={onOpenMessage}
+      />,
+    );
+
+    expect(screen.getByText("This panel is no longer available.")).not.toBeNull();
+    expect(initialOpenMessage?.("message-2").status).toBe("unavailable");
+    expect(onOpenMessage).toHaveBeenCalledTimes(1);
+  });
+});

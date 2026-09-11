@@ -163,6 +163,7 @@ func (c *Controller) conversationRecord(pluginID string) (*store.Record, bool) {
 
 //nolint:cyclop,goconst // This handler owns authorization, snapshot validation, pagination, and cursor minting.
 func (c *Controller) conversationMessages(ctx *gin.Context) {
+	ctx.Header("Cache-Control", conversationNoStore)
 	record, identity, ok := c.authorizeConversationRequest(ctx)
 	if !ok || !c.validBinding(ctx, record, identity.UserID) {
 		return
@@ -325,7 +326,9 @@ func (c *Controller) buildConversationMessagesResponse(
 	return response, true
 }
 
+//nolint:cyclop // Turn lookup supports primary, task-scoped, and fallback sources.
 func (c *Controller) conversationTurns(ctx *gin.Context) {
+	ctx.Header("Cache-Control", conversationNoStore)
 	record, identity, ok := c.authorizeConversationRequest(ctx)
 	if !ok || !c.validBinding(ctx, record, identity.UserID) {
 		return
@@ -353,13 +356,17 @@ func (c *Controller) conversationTurns(ctx *gin.Context) {
 		taskID = &rawTaskID
 	}
 	var turns []*taskmodels.Turn
+	scopedTaskID := taskID
+	if scopedTaskID == nil {
+		scopedTaskID = &session.TaskID
+	}
 	if c.svc.HasConversationJournal() {
-		turns, err = c.svc.conversationTurnsAt(ctx.Request.Context(), sessionID, uint64(snapshot.Cutoff), taskID)
+		turns, err = c.svc.conversationTurnsAt(ctx.Request.Context(), sessionID, uint64(snapshot.Cutoff), scopedTaskID)
 	} else {
 		// The no-journal fallback must honor the requested/inherited task
 		// scope like the journal branch: a session that ever accumulated
 		// mixed-task turn rows must not leak turns outside the validated task.
-		turns, err = loadFallbackTurns(ctx, c.conversationReader, sessionID, session.TaskID)
+		turns, err = loadFallbackTurns(ctx.Request.Context(), c.conversationReader, sessionID, *scopedTaskID)
 	}
 	if err != nil {
 		writeConversationError(ctx, http.StatusInternalServerError, "upstream_failure", "conversation service unavailable", true)

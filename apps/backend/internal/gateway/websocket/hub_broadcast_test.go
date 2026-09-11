@@ -324,6 +324,9 @@ func TestBroadcastCommittedPoisonQueueFailureDoesNotCountAttempt(t *testing.T) {
 	if record.Attempts != 0 || record.State != plugins.SessionPoisonPending {
 		t.Fatalf("poison after queue failure = attempts %d state %q, want pending at zero", record.Attempts, record.State)
 	}
+	if !c.closed {
+		t.Fatal("ordered queue failure must close the client for replay")
+	}
 }
 
 func newStringPointer(value string) *string { return &value }

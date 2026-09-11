@@ -179,6 +179,28 @@ func TestConversationJournalStripsMultiLineAndMultiBlockSystemContent(t *testing
 	}
 }
 
+func TestConversationJournalStripIgnoresClosingTagWithoutOpeningTag(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-journal-closing-tag", "session-journal-closing-tag", "turn-journal-closing-tag")
+	content := "visible</kandev-system>tail"
+	message := &models.Message{
+		ID: "message-closing-tag", TaskSessionID: "session-journal-closing-tag",
+		TaskID: "task-journal-closing-tag", TurnID: "turn-journal-closing-tag",
+		AuthorType: models.MessageAuthorUser, Type: models.MessageTypeMessage, Content: content,
+	}
+	if err := repo.CreateMessage(ctx, message); err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	var eventContent string
+	if err := repo.db.Get(&eventContent, `SELECT json_extract(payload, '$.content') FROM conversation_session_events WHERE session_id = 'session-journal-closing-tag' AND event_type = 'message.added'`); err != nil {
+		t.Fatalf("read message event content: %v", err)
+	}
+	if eventContent != content {
+		t.Fatalf("event content = %q, want %q", eventContent, content)
+	}
+}
+
 func TestConversationJournalStripFailsClosedPastDepthLimit(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()

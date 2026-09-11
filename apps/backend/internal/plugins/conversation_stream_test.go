@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"strconv"
@@ -14,15 +15,18 @@ func TestSessionEventLogPersistsSequenceAndTerminalRemoval(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session-events.db")
 	log, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
 	first, err := log.Append("session-1", stringPtr("task-1"), "message.added", validMessageAddedPayload("m1"))
 	require.NoError(t, err)
 	removed, err := log.Append("session-1", stringPtr("task-1"), "session.removed", validSessionRemovedPayload())
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), first.Sequence)
 	require.Equal(t, uint64(2), removed.Sequence)
+	require.NoError(t, log.Close())
 
 	reopened, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
 	events, terminal := reopened.EventsAfter("session-1", 0)
 	require.True(t, terminal)
 	require.Equal(t, []uint64{1, 2}, []uint64{events[0].Sequence, events[1].Sequence})
@@ -130,11 +134,12 @@ func TestSessionEventResyncAfterTerminalCollectionHealsForwardGap(t *testing.T) 
 	path := filepath.Join(t.TempDir(), "session-events.db")
 	log, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
 	start := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	log.now = func() time.Time { return start }
 	removed, err := log.AppendCommitted(SessionEvent{
 		SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: 3,
-		ID: "session-1:3", EventType: "session.removed",
+		ID: "session-1:3", ProtocolVersion: SessionEventProtocolVersion, EventType: "session.removed",
 		Payload: validSessionRemovedPayload(), CreatedAt: start,
 	})
 	require.NoError(t, err)
@@ -151,7 +156,7 @@ func TestSessionEventResyncAfterTerminalCollectionHealsForwardGap(t *testing.T) 
 	// gap instead of failing forever.
 	removed, err = log.AppendCommitted(SessionEvent{
 		SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: 3,
-		ID: "session-1:3", EventType: "session.removed",
+		ID: "session-1:3", ProtocolVersion: SessionEventProtocolVersion, EventType: "session.removed",
 		Payload: validSessionRemovedPayload(), CreatedAt: start.Add(time.Hour),
 	})
 	require.NoError(t, err)
@@ -172,7 +177,7 @@ func TestSessionEventResyncAfterTruncationHealsForwardGap(t *testing.T) {
 	for _, sequence := range []uint64{1, 2} {
 		_, err := log.AppendCommitted(SessionEvent{
 			SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: sequence,
-			ID: "session-1:" + strconv.FormatUint(sequence, 10), EventType: "message.added",
+			ID: "session-1:" + strconv.FormatUint(sequence, 10), ProtocolVersion: SessionEventProtocolVersion, EventType: "message.added",
 			Payload: validMessageAddedPayload("m" + strconv.FormatUint(sequence, 10)), CreatedAt: start,
 		})
 		require.NoError(t, err)
@@ -184,7 +189,7 @@ func TestSessionEventResyncAfterTruncationHealsForwardGap(t *testing.T) {
 
 	appended, err := log.AppendCommitted(SessionEvent{
 		SessionID: "session-1", TaskID: stringPtr("task-1"), Sequence: 4,
-		ID: "session-1:4", EventType: "message.added",
+		ID: "session-1:4", ProtocolVersion: SessionEventProtocolVersion, EventType: "message.added",
 		Payload: validMessageAddedPayload("m4"), CreatedAt: start.Add(time.Hour),
 	})
 	require.NoError(t, err)
@@ -238,6 +243,7 @@ func TestSessionEventCursorLifecycleFieldsSurviveRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session-events.db")
 	log, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
 	key := testCursor()
 	key.Generation = 4
 	require.NoError(t, log.RegisterCursor(key, 2))
@@ -252,8 +258,11 @@ func TestSessionEventCursorLifecycleFieldsSurviveRestart(t *testing.T) {
 	log.mu.Unlock()
 	require.NoError(t, err)
 
+	require.NoError(t, log.Close())
+
 	reopened, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
 	restored := reopened.state.Cursors[deliveryCursorKey(key)]
 	require.Equal(t, uint64(9), restored.OwnerEpoch)
 	require.Equal(t, leaseUntil, restored.LeaseUntil)
@@ -268,7 +277,7 @@ func TestSessionEventMaintenanceDoesNotCountUndeliveredPoisonAttempts(t *testing
 	// Maintenance runs many times; without any actual delivery attempt the
 	// poison must stay pending at zero attempts instead of being exhausted.
 	for _, at := range []time.Time{start, start.Add(SessionPoisonLease), start.Add(2 * SessionPoisonLease)} {
-		require.NoError(t, service.maintainSessionEvents(at))
+		require.NoError(t, service.maintainSessionEvents(context.Background(), at))
 		record, ok := service.SessionEvents().Poison("session-1", poison.ID)
 		require.True(t, ok)
 		require.Equal(t, 0, record.Attempts)
@@ -286,12 +295,14 @@ func TestSessionEventCursorReplacementRestoresMemoryOnPersistFailure(t *testing.
 	path := filepath.Join(t.TempDir(), "session-events.db")
 	log, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
 	key := testCursor()
 	require.NoError(t, log.RegisterCursor(key, 0))
 	event, err := log.Append("session-1", stringPtr("task-1"), "message.added", validMessageAddedPayload("m1"))
 	require.NoError(t, err)
-	// Persistence reopens the SQLite file per write; point it at a location
-	// that cannot open so the next commit fails after the in-memory mutation.
+	// Close the held database before redirecting the path so persistence
+	// failures exercise the closed-log guard.
+	require.NoError(t, log.Close())
 	log.path = filepath.Join(t.TempDir(), "missing", "session-events.db")
 
 	require.Error(t, log.ReplaceCursor(key, event.Sequence))
@@ -301,8 +312,11 @@ func TestSessionEventCursorReplacementRestoresMemoryOnPersistFailure(t *testing.
 	restored := log.state.Cursors[deliveryCursorKey(key)]
 	require.Equal(t, uint64(0), restored.AcknowledgedSequence)
 	require.Equal(t, uint64(1), restored.OwnerEpoch)
+	require.NoError(t, log.Close())
+
 	reopened, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
 	require.Equal(t, uint64(0), reopened.state.Cursors[deliveryCursorKey(key)].AcknowledgedSequence)
 }
 
@@ -310,9 +324,11 @@ func TestSessionEventPoisonAttemptRestoresMemoryOnPersistFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session-events.db")
 	log, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
 	dispatcher := NewSessionDeliveryDispatcher(log)
 	poison, err := log.Append("session-1", stringPtr("task-1"), "unknown.event", json.RawMessage(`{"type":"unknown.event","session_id":"session-1","task_id":"task-1"}`))
 	require.NoError(t, err)
+	require.NoError(t, log.Close())
 	log.path = filepath.Join(t.TempDir(), "missing", "session-events.db")
 
 	base := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
@@ -329,6 +345,7 @@ func TestSessionEventCollectionRestoresMemoryOnPersistFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session-events.db")
 	log, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
 	start := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	log.now = func() time.Time { return start }
 	_, err = log.Append("session-1", stringPtr("task-1"), "message.added", validMessageAddedPayload("m1"))
@@ -336,6 +353,7 @@ func TestSessionEventCollectionRestoresMemoryOnPersistFailure(t *testing.T) {
 	_, err = log.Append("session-1", stringPtr("task-1"), "session.removed", validSessionRemovedPayload())
 	require.NoError(t, err)
 	require.NoError(t, log.RegisterCursor(testCursor(), 0))
+	require.NoError(t, log.Close())
 	log.path = filepath.Join(t.TempDir(), "missing", "session-events.db")
 
 	require.Error(t, log.CollectExpired(start.Add(SessionEventRetention+time.Hour)))
@@ -366,6 +384,7 @@ func TestSessionEventAcknowledgePersistsOnlyTheCursorRow(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session-events.db")
 	log, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
 	event, err := log.Append("session-1", stringPtr("task-1"), "message.added", validMessageAddedPayload("m1"))
 	require.NoError(t, err)
 	_, err = log.AppendCommitted(SessionEvent{
@@ -382,8 +401,10 @@ func TestSessionEventAcknowledgePersistsOnlyTheCursorRow(t *testing.T) {
 	require.NoError(t, log.RegisterCursor(cursorB, 0))
 	require.NoError(t, log.Acknowledge(cursorA, 2))
 
+	require.NoError(t, log.Close())
 	reopened, err := NewSessionEventLog(path)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
 	restoredA := reopened.state.Cursors[deliveryCursorKey(cursorA)]
 	require.Equal(t, uint64(2), restoredA.AcknowledgedSequence)
 	restoredB := reopened.state.Cursors[deliveryCursorKey(cursorB)]

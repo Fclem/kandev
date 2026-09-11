@@ -1707,7 +1707,7 @@ func (s *HandoffService) findArchiveRetryCascade(ctx context.Context, rootID str
 		// They may belong to independent manual or auto archives.
 		return "", nil, nil
 	}
-	all, err := s.collectTaskTreeIncludingArchived(ctx, rootID)
+	all, err := s.collectArchivedTreeByCascade(ctx, rootID, root.ArchivedByCascadeID)
 	if err != nil {
 		return "", nil, err
 	}

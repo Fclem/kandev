@@ -1276,14 +1276,13 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	}
 	// Unarchive deep→shallow so a partial failure leaves the root archived
 	// with its cascade ID, allowing a retry to discover remaining members.
+	var mutationErr error
 	for i := len(all) - 1; i >= 0; i-- {
 		id := all[i]
 		ok, err := s.tasks.UnarchiveTaskByCascade(operationCtx, id, cascadeID)
 		if err != nil {
-			return out, cascadePostCommitError(out, errors.Join(
-				fmt.Errorf("unarchive %s: %w", id, err),
-				restoreCancelledCleanup(),
-			))
+			mutationErr = fmt.Errorf("unarchive %s: %w", id, err)
+			break
 		}
 		if ok {
 			out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, id)
@@ -1300,6 +1299,9 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 		} else {
 			out.SkippedTaskIDs = append(out.SkippedTaskIDs, id)
 		}
+	}
+	if mutationErr != nil {
+		restorationErrors = append(restorationErrors, mutationErr, restoreCancelledCleanup())
 	}
 	// Restore group memberships scoped to the same cascade. Track the
 	// set of affected groups so we can also re-evaluate cleanup state

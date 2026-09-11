@@ -528,6 +528,7 @@ type AutomationTriggeredEvent struct {
 	DedupKey             string          `json:"dedup_key,omitempty"`
 	RetryClaimToken      string          `json:"retry_claim_token,omitempty"`
 	RetryGroupGeneration int64           `json:"retry_group_generation,omitempty"`
+	RetryExternalID      string          `json:"retry_external_id,omitempty"`
 	SnapshotVersion      int64           `json:"snapshot_version,omitempty"`
 }
 

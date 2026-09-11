@@ -1355,11 +1355,23 @@ func (s *Store) AdoptTriggeredRun(ctx context.Context, r *AutomationRun) (bool, 
 func (s *Store) BindRunTask(ctx context.Context, runID, taskID string) error {
 	res, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE automation_runs SET task_id = ?
-		WHERE id = ? AND status = ?`), taskID, runID, string(RunStatusTriggered))
+		WHERE id = ? AND status = ? AND (
+			retry_group_id = '' OR EXISTS (
+				SELECT 1 FROM automation_retry_groups rg
+				JOIN automations a ON a.id = automation_runs.automation_id
+				WHERE rg.id = automation_runs.retry_group_id
+					AND rg.generation = automation_runs.retry_group_generation
+					AND rg.state = ? AND a.enabled = TRUE
+			)
+		)`), taskID, runID, string(RunStatusTriggered), RetryGroupLive)
 	if err != nil {
 		return err
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
+		var groupID string
+		if lookupErr := s.db.Get(&groupID, `SELECT retry_group_id FROM automation_runs WHERE id = ?`, runID); lookupErr == nil && groupID != "" {
+			return ErrRetryGenerationMismatch
+		}
 		return fmt.Errorf("automation run %s is not an admitted triggered run", runID)
 	}
 	if err := s.bindRetryIntentTask(ctx, runID, taskID, retryIntentCreated); err != nil {
@@ -1382,14 +1394,22 @@ func (s *Store) BindRun(ctx context.Context, runID, taskID, sessionID, turnID st
 	res, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE automation_runs
 		SET task_id = ?, session_id = ?, turn_id = ?, thread_action = ?, thread_reason = ?, status = ?
-		WHERE id = ? AND status IN (?, ?)`),
+		WHERE id = ? AND status IN (?, ?) AND (
+			retry_group_id = '' OR EXISTS (
+				SELECT 1 FROM automation_retry_groups rg
+				JOIN automations a ON a.id = automation_runs.automation_id
+				WHERE rg.id = automation_runs.retry_group_id
+					AND rg.generation = automation_runs.retry_group_generation
+					AND rg.state = ? AND a.enabled = TRUE
+			)
+		)`),
 		taskID, sessionID, turnID, action, reason, string(RunStatusTaskCreated),
-		runID, string(RunStatusTriggered), string(RunStatusTaskCreated))
+		runID, string(RunStatusTriggered), string(RunStatusTaskCreated), RetryGroupLive)
 	if err != nil {
 		return err
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
-		return fmt.Errorf("automation run %s is not bindable", runID)
+		return ErrRetryGenerationMismatch
 	}
 	if err := s.bindRetryIntentTask(ctx, runID, taskID, retryIntentBound); err != nil {
 		return err

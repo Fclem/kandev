@@ -41,6 +41,9 @@ const (
 	retryOperationCommitted = "committed"
 	retryOperationAbandoned = "abandoned"
 	retryOperationAmbiguous = "ambiguous"
+	retryOutboxPending      = "pending"
+	retryOutboxLeased       = "leased"
+	retryOutboxRevoked      = "revoked"
 )
 
 // RetryDelay returns the checked delay for retry number one-based.
@@ -52,18 +55,35 @@ func RetryDelay(policy RetryPolicy, retryNumber int64) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	if policy.Backoff == RetryBackoffExponential {
-		for i := int64(1); i < retryNumber; i++ {
-			if seconds > math.MaxInt64/2 {
+	if seconds == 0 || policy.Backoff != RetryBackoffExponential || retryNumber == 1 {
+		if seconds > math.MaxInt64/int64(time.Second) {
+			return 0, ErrRetryDelayOverflow
+		}
+		return time.Duration(seconds) * time.Second, nil
+	}
+
+	power := retryNumber - 1
+	result := seconds
+	factor := int64(2)
+	for power > 0 {
+		if power&1 == 1 {
+			if result > math.MaxInt64/factor {
 				return 0, ErrRetryDelayOverflow
 			}
-			seconds *= 2
+			result *= factor
+		}
+		power >>= 1
+		if power > 0 {
+			if factor > math.MaxInt64/2 {
+				return 0, ErrRetryDelayOverflow
+			}
+			factor *= 2
 		}
 	}
-	if seconds > math.MaxInt64/int64(time.Second) {
+	if result > math.MaxInt64/int64(time.Second) {
 		return 0, ErrRetryDelayOverflow
 	}
-	return time.Duration(seconds) * time.Second, nil
+	return time.Duration(result) * time.Second, nil
 }
 
 // FormatRetryTitle prefixes an immutable root title with its attempt number.
@@ -92,15 +112,24 @@ type RetryFailure struct {
 	FailurePhase string `json:"failure_phase"`
 }
 
-var secretPattern = regexp.MustCompile(`(?i)(token|secret|password|authorization|bearer|credential)\s*[:=]\s*[^\s,;]+`)
-var pathPattern = regexp.MustCompile(`(?:^|\s)(?:/|[A-Za-z]:\\)[^\s]+`)
+var (
+	secretAssignmentPattern = regexp.MustCompile(`(?i)(?:"?'?(?:authorization|token|secret|password|credential|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key)"?'?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)`)
+	bearerPattern           = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9][A-Za-z0-9._~+/=-]*`)
+	pathPattern             = regexp.MustCompile(`(?:^|\s)(?:/|[A-Za-z]:\\)[^\s]+`)
+)
 
 // SanitizeAutomationFailure removes credentials and mutable user/provider data.
-func SanitizeAutomationFailure(raw error, phase string, _ map[string]string) RetryFailure {
+func SanitizeAutomationFailure(raw error, phase string, secrets map[string]string) RetryFailure {
 	message := "automation attempt failed"
 	if raw != nil {
 		message = strings.TrimSpace(raw.Error())
-		message = secretPattern.ReplaceAllString(message, "$1=[redacted]")
+		for _, secret := range secrets {
+			if secret = strings.TrimSpace(secret); secret != "" {
+				message = strings.ReplaceAll(message, secret, "[redacted]")
+			}
+		}
+		message = bearerPattern.ReplaceAllString(message, "Bearer [redacted]")
+		message = secretAssignmentPattern.ReplaceAllString(message, "$1[redacted]")
 		message = pathPattern.ReplaceAllString(message, " [path redacted]")
 		message = strings.Join(strings.Fields(message), " ")
 	}
@@ -290,12 +319,21 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 			return nil, errors.New("retry child consistency mismatch")
 		}
 	}
+	if delayErr != nil {
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET state = ?, updated_at = ? WHERE id = ? AND generation = ?`), RetryGroupCompleted, time.Now().UTC(), group.ID, generation); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return &child, nil
+	}
 	payload, marshalErr := json.Marshal(&AutomationTriggeredEvent{RunID: child.ID, SnapshotVersion: child.RetryLaunchConfigVersion})
 	if marshalErr != nil {
 		return nil, marshalErr
 	}
 	now := time.Now().UTC()
-	if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO automation_retry_outbox (event_id, run_id, snapshot_version, payload_hash, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`), fmt.Sprintf("%s:%d", child.ID, child.RetryLaunchConfigVersion), child.ID, child.RetryLaunchConfigVersion, retryPayloadHash(payload), "pending", now, now); err != nil {
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO automation_retry_outbox (event_id, run_id, snapshot_version, payload_hash, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`), fmt.Sprintf("%s:%d", child.ID, child.RetryLaunchConfigVersion), child.ID, child.RetryLaunchConfigVersion, retryPayloadHash(payload), retryOutboxPending, now, now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -373,6 +411,12 @@ func (s *Store) CancelRetryGroup(ctx context.Context, groupID string, generation
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET retry_state = ?, retry_cancelled_at = ?, retry_claim_token = '', retry_claimed_at = NULL, retry_claim_expires_at = NULL WHERE retry_group_id = ? AND retry_group_generation = ? AND retry_state IN (?, ?)`), RetryStateCancelled, now, groupID, generation, RetryStateScheduled, RetryStateClaimed); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_run_operations SET state = ?, updated_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE retry_group_id = ? AND retry_group_generation = ?) AND state NOT IN (?, ?)`), retryOperationAbandoned, now, groupID, generation, retryOperationCommitted, retryOperationAbandoned); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_outbox SET state = ?, updated_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE retry_group_id = ? AND retry_group_generation = ?) AND state IN (?, ?)`), retryOutboxRevoked, now, groupID, generation, retryOutboxPending, retryOutboxLeased); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -446,7 +490,7 @@ func (s *Store) CreateRetryOutbox(ctx context.Context, outbox *RetryOutbox) erro
 	now := time.Now().UTC()
 	outbox.CreatedAt, outbox.UpdatedAt = now, now
 	if outbox.State == "" {
-		outbox.State = "pending"
+		outbox.State = retryOutboxPending
 	}
 	_, err := s.db.ExecContext(ctx, s.db.Rebind(`INSERT INTO automation_retry_outbox (event_id, run_id, snapshot_version, payload_hash, state, lease_token, lease_expires_at, enqueued_at, acknowledged_at, attempts, safe_error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), outbox.EventID, nullableString(outbox.RunID), outbox.SnapshotVersion, outbox.PayloadHash, outbox.State, outbox.LeaseToken, outbox.LeaseExpiresAt, outbox.EnqueuedAt, outbox.AcknowledgedAt, outbox.Attempts, outbox.SafeError, outbox.CreatedAt, outbox.UpdatedAt)
 	return err
@@ -469,7 +513,7 @@ func (s *Store) AcknowledgeRetryEvent(ctx context.Context, eventID, runID string
 }
 func (s *Store) FailRetryOutbox(ctx context.Context, eventID string, raw error) error {
 	failure := SanitizeAutomationFailure(raw, "launch", nil)
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE automation_retry_outbox SET state = ?, safe_error = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ? AND state IN (?, ?)`), "revoked", failure.Message, eventID, "pending", "leased")
+	_, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE automation_retry_outbox SET state = ?, safe_error = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ? AND state IN (?, ?)`), retryOutboxRevoked, failure.Message, eventID, retryOutboxPending, retryOutboxLeased)
 	return err
 }
 

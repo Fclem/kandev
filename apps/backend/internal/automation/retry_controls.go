@@ -27,6 +27,9 @@ func (s *Store) CancelRetryGroupsByAutomation(ctx context.Context, automationID 
 	if err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_outbox SET state = ?, updated_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id = ?) AND state IN (?, ?)`), retryOutboxRevoked, now, automationID, retryOutboxPending, retryOutboxLeased); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

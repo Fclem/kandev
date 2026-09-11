@@ -65,6 +65,16 @@ type automationRetrySuccess interface {
 type automationRetryReceipt interface {
 	AcknowledgeRetryEvent(ctx context.Context, runID string, version int64) error
 }
+type automationRetryOperation interface {
+	BeginRetryTaskOperation(ctx context.Context, runID string, generation int64) (*automation.RetryOperation, error)
+	CommitRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken, taskID string) error
+}
+
+const retryOperationCommittedState = "committed"
+
+type reviewTaskAdopter interface {
+	GetReviewTaskByExternalID(ctx context.Context, workspaceID, externalID string) (*models.Task, error)
+}
 
 type automationContinuationState interface {
 	SetContinuationTaskID(ctx context.Context, automationID, taskID string) error
@@ -293,6 +303,13 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 			evt.AutomationID, evt.TriggerID, evt.TriggerType = retryRun.AutomationID, retryRun.TriggerID, retryRun.TriggerType
 		}
 	}
+	retryOperation, operationErr := s.beginRetryTaskOperation(ctx, evt, retryRun)
+	if operationErr != nil {
+		if !errors.Is(operationErr, automation.ErrRetryGenerationMismatch) {
+			s.recordFailedRun(ctx, evt, operationErr.Error())
+		}
+		return
+	}
 	a, err := s.automationService.GetAutomation(ctx, evt.AutomationID)
 	if err != nil || a == nil {
 		s.logger.Error("failed to load automation for trigger",
@@ -340,12 +357,35 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 		metadata[models.MetaKeyAutomationTargetTaskID] = triggerData.TaskID
 	}
 
-	task, continuationSession, action, reason, taskErr := s.prepareAutomationTask(
-		ctx, a, evt, title, prompt, metadata,
-	)
+	var task *models.Task
+	var continuationSession *models.TaskSession
+	action := automation.ThreadActionCreated
+	var reason string
+	var taskErr error
+	if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
+		task, taskErr = s.adoptCommittedRetryTask(ctx, a, evt)
+	} else {
+		task, continuationSession, action, reason, taskErr = s.prepareAutomationTask(
+			ctx, a, evt, title, prompt, metadata,
+		)
+	}
 	if taskErr != nil {
 		s.recordFailedRun(ctx, evt, taskErr.Error())
 		return
+	}
+	if retryOperation != nil && retryOperation.State != retryOperationCommittedState {
+		operationService, operationOK := s.automationService.(automationRetryOperation)
+		if !operationOK {
+			s.deleteAbandonedTask(ctx, a.ID, task.ID)
+			s.recordFailedRun(ctx, evt, "retry operation ledger unavailable")
+			return
+		}
+		if err := operationService.CommitRetryTaskOperation(ctx, evt.RunID,
+			evt.RetryGroupGeneration, retryOperation.LeaseToken, task.ID); err != nil {
+			s.deleteAbandonedTask(ctx, a.ID, task.ID)
+			s.recordFailedRun(ctx, evt, err.Error())
+			return
+		}
 	}
 
 	// The run row is the record that this firing happened and carries its exact
@@ -391,6 +431,38 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 	// auto_start_agent setting is irrelevant here because the automation
 	// trigger is the start signal for both hidden runs and visible normal tasks.
 	s.autoStartAutomationTaskForRun(ctx, a, task, task.WorkflowStepID, evt.RunID, action, reason)
+}
+
+func (s *Service) adoptCommittedRetryTask(ctx context.Context, a *automation.Automation, evt *automation.AutomationTriggeredEvent) (*models.Task, error) {
+	adopter, ok := s.reviewTaskCreator.(reviewTaskAdopter)
+	if !ok {
+		return nil, errors.New("retry task adoption unavailable")
+	}
+	task, err := adopter.GetReviewTaskByExternalID(ctx, a.WorkspaceID, evt.RetryExternalID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, errors.New("retry task identity is committed but task is missing")
+	}
+	return task, nil
+}
+
+func (s *Service) beginRetryTaskOperation(ctx context.Context, evt *automation.AutomationTriggeredEvent, retryRun *automation.AutomationRun) (*automation.RetryOperation, error) {
+	if retryRun == nil {
+		return nil, nil
+	}
+	if evt.RetryGroupGeneration == 0 {
+		evt.RetryGroupGeneration = retryRun.RetryGroupGeneration
+	}
+	if evt.RetryExternalID == "" {
+		evt.RetryExternalID = automation.RetryTaskExternalID(evt.RunID, evt.RetryGroupGeneration)
+	}
+	operationService, ok := s.automationService.(automationRetryOperation)
+	if !ok {
+		return nil, errors.New("retry operation ledger unavailable")
+	}
+	return operationService.BeginRetryTaskOperation(ctx, evt.RunID, evt.RetryGroupGeneration)
 }
 
 func (s *Service) prepareAutomationTask(
@@ -444,6 +516,7 @@ func (s *Service) prepareAutomationTask(
 		Repositories:   repositories,
 		Metadata:       metadata,
 		Origin:         taskOrigin,
+		ExternalID:     evt.RetryExternalID,
 	})
 	if err != nil {
 		return nil, nil, action, reason, fmt.Errorf("create automation task: %w", err)

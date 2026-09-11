@@ -14,6 +14,42 @@ import (
 // TriggerType identifies the kind of trigger.
 type TriggerType string
 
+// RetryMode controls whether failed automation attempts are retried.
+type RetryMode string
+
+const (
+	RetryModeDisabled RetryMode = "disabled"
+	RetryModeFinite   RetryMode = "finite"
+	RetryModeInfinite RetryMode = "infinite"
+)
+
+// RetryBackoff controls how delay grows for subsequent retries.
+type RetryBackoff string
+
+const (
+	RetryBackoffFixed       RetryBackoff = "fixed"
+	RetryBackoffExponential RetryBackoff = "exponential"
+)
+
+// RetryHistoryMode controls how a retry chain is presented in automation
+// history.
+type RetryHistoryMode string
+
+const (
+	RetryHistoryAttempts RetryHistoryMode = "attempts"
+	RetryHistoryTimeline RetryHistoryMode = "timeline"
+)
+
+// RetryPolicy is the persisted automation retry configuration. Decimal
+// quantities remain strings on the wire to avoid JavaScript precision loss.
+type RetryPolicy struct {
+	Mode         RetryMode        `json:"mode"`
+	MaxRetries   string           `json:"max_retries"`
+	DelaySeconds string           `json:"delay_seconds"`
+	Backoff      RetryBackoff     `json:"backoff"`
+	HistoryMode  RetryHistoryMode `json:"history_mode"`
+}
+
 const (
 	TriggerTypeScheduled      TriggerType = "scheduled"
 	TriggerTypeGitHubPR       TriggerType = "github_pr"
@@ -22,6 +58,7 @@ const (
 	TriggerTypeGitHubCI       TriggerType = "github_ci"
 	TriggerTypeWebhook        TriggerType = "webhook"
 	TriggerTypePluginEvent    TriggerType = "plugin_event"
+	TriggerTypeManual         TriggerType = "manual"
 )
 
 // ManagedConversationDestination is a portable reference to an existing
@@ -153,6 +190,9 @@ type Automation struct {
 	Enabled                          bool                            `json:"enabled" db:"enabled"`
 	MaxConcurrentRuns                int                             `json:"max_concurrent_runs" db:"max_concurrent_runs"`
 	ContinuationPolicy               ContinuationPolicy              `json:"continuation_policy" db:"continuation_policy"`
+	RetryPolicy                      RetryPolicy                     `json:"retry_policy" db:"-"`
+	RetryPolicyJSON                  string                          `json:"-" db:"retry_policy"`
+	AutomationRevision               int64                           `json:"-" db:"automation_revision"`
 	// ContinuationTaskID is runtime state. It is intentionally omitted from
 	// the public automation JSON because the saved task is not portable
 	// configuration and may be deleted or replaced by the server.
@@ -193,6 +233,7 @@ type AutomationTrigger struct {
 	Config          json.RawMessage `json:"config" db:"-"`
 	ConfigJSON      string          `json:"-" db:"config"`
 	Enabled         bool            `json:"enabled" db:"enabled"`
+	TriggerRevision int64           `json:"-" db:"trigger_revision"`
 	LastEvaluatedAt *time.Time      `json:"last_evaluated_at,omitempty" db:"last_evaluated_at"`
 	CreatedAt       time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at" db:"updated_at"`
@@ -450,6 +491,7 @@ type CreateAutomationRequest struct {
 	TaskMode           TaskMode                        `json:"task_mode,omitempty"`
 	ManagedDestination *ManagedConversationDestination `json:"managed_destination,omitempty"`
 	RepositoryMode     RepositoryMode                  `json:"repository_mode,omitempty"`
+	RetryPolicy        RetryPolicy                     `json:"retry_policy"`
 	Triggers           []CreateTriggerSpec             `json:"triggers"`
 	Enabled            *bool                           `json:"enabled,omitempty"`
 }
@@ -484,6 +526,7 @@ type UpdateAutomationRequest struct {
 	ManagedDestinationInstallationID string                          `json:"-"`
 	ManagedDestinationConversationID string                          `json:"-"`
 	RepositoryMode                   *RepositoryMode                 `json:"repository_mode,omitempty"`
+	RetryPolicy                      *RetryPolicy                    `json:"retry_policy,omitempty"`
 }
 
 // AddTriggerRequest adds a trigger to an existing automation.

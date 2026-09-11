@@ -271,6 +271,8 @@ func (s *AttachmentService) OpenClaimed(ctx context.Context, id, taskID, session
 }
 
 func (s *AttachmentService) Delete(ctx context.Context, ownerID, id string) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	attachment, err := s.Get(ctx, ownerID, id)
 	if err != nil {
 		return err

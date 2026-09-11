@@ -18,6 +18,7 @@ import (
 type fakeCascadeRepo struct {
 	*phase4TaskRepo
 	autoArchiveCASLoss bool
+	unarchiveErr       error
 }
 
 func newCascadeRepo(base *fakeTaskRepo) *fakeCascadeRepo {
@@ -57,10 +58,12 @@ func (r *fakeCascadeRepo) ArchiveTaskIfActiveWithVacatedStep(
 	t.ArchivedByCascadeID = cascadeID
 	return t.WorkflowStepID, true, nil
 }
-
 func (r *fakeCascadeRepo) UnarchiveTaskByCascade(_ context.Context, id, cascadeID string) (bool, error) {
 	r.base.mu.Lock()
 	defer r.base.mu.Unlock()
+	if r.unarchiveErr != nil {
+		return false, r.unarchiveErr
+	}
 	t := r.base.tasks[id]
 	if t == nil || t.ArchivedByCascadeID != cascadeID {
 		return false, nil
@@ -152,6 +155,7 @@ type recordingCleanupCoordinator struct {
 	deleteEnvironmentRows []bool
 	started               []string
 	cancelled             []string
+	restored              []string
 	cleaned               []string
 }
 
@@ -294,6 +298,13 @@ func (c *recordingCleanupCoordinator) CancelPreparedTaskResourceCleanup(_ contex
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cancelled = append(c.cancelled, operationID)
+	return nil
+}
+
+func (c *recordingCleanupCoordinator) RestoreCancelledTaskResourceCleanup(_ context.Context, operationID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.restored = append(c.restored, operationID)
 	return nil
 }
 
@@ -493,6 +504,27 @@ func TestUnarchiveTaskTree_LeavesPriorlyArchivedDescendantsAlone(t *testing.T) {
 	c2, _ := tasks.GetTask(context.Background(), "c2")
 	if c2.ArchivedAt == nil {
 		t.Error("c2 should remain archived (different cascade id)")
+	}
+}
+
+func TestUnarchiveTaskTree_RestoresCleanupAfterMutationFailure(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addArchivedTask("root", "", "ws-1", "cascade-1")
+	repo := newCascadeRepo(tasks)
+	repo.unarchiveErr = errors.New("unarchive unavailable")
+	coordinator := &recordingCleanupCoordinator{}
+	svc := NewHandoffService(repo, nil, nil, nil, nil, nil)
+	svc.SetTaskResourceCleaner(coordinator)
+
+	_, err := svc.UnarchiveTaskTree(context.Background(), "root")
+	if err == nil {
+		t.Fatal("UnarchiveTaskTree unexpectedly succeeded")
+	}
+	if len(coordinator.cancelled) != 1 || coordinator.cancelled[0] != "cascade_archive:cascade-1:root" {
+		t.Fatalf("cancelled cleanup operations = %v", coordinator.cancelled)
+	}
+	if len(coordinator.restored) != 1 || coordinator.restored[0] != "cascade_archive:cascade-1:root" {
+		t.Fatalf("restored cleanup operations = %v", coordinator.restored)
 	}
 }
 

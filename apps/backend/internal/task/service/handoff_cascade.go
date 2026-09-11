@@ -710,7 +710,7 @@ func (s *HandoffService) deleteTaskDependencyEdges(ctx context.Context, taskID s
 	}
 	cleaner, ok := s.blockers.(taskDependencyCleaner)
 	if !ok {
-		return nil, nil
+		return nil, errors.New("blocker repository cannot delete task dependency edges")
 	}
 	unlock := taskdependencies.AcquireMutationLock()
 	defer unlock()
@@ -1190,10 +1190,25 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	// Fence every cleanup before restoring any task. A later cancellation
 	// failure must not leave a partially restored tree that cannot be retried
 	// from its archived root.
+	cancelledCleanupOperations := make([]string, 0, len(all))
+	restoreCancelledCleanup := func() error {
+		restorer, ok := s.resourceCleaner.(taskResourceCleanupRestorer)
+		if !ok {
+			return nil
+		}
+		var errs []error
+		for _, operationID := range cancelledCleanupOperations {
+			if err := restorer.RestoreCancelledTaskResourceCleanup(operationCtx, operationID); err != nil {
+				errs = append(errs, fmt.Errorf("restore archive cleanup %s: %w", operationID, err))
+			}
+		}
+		return errors.Join(errs...)
+	}
 	for _, id := range all {
 		operationID := string(models.TaskResourceCleanupTriggerCascadeArchive) + ":" + cascadeID + ":" + id
+		cancelledCleanupOperations = append(cancelledCleanupOperations, operationID)
 		if err := s.cancelArchiveResourceCleanup(operationCtx, id, operationID); err != nil {
-			return out, fmt.Errorf("cancel archive cleanup %s: %w", id, err)
+			return out, errors.Join(fmt.Errorf("cancel archive cleanup %s: %w", id, err), restoreCancelledCleanup())
 		}
 	}
 	// Unarchive shallow→deep so the root's restored state is visible
@@ -1201,7 +1216,10 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	for _, id := range all {
 		ok, err := s.tasks.UnarchiveTaskByCascade(operationCtx, id, cascadeID)
 		if err != nil {
-			return out, cascadePostCommitError(out, fmt.Errorf("unarchive %s: %w", id, err))
+			return out, cascadePostCommitError(out, errors.Join(
+				fmt.Errorf("unarchive %s: %w", id, err),
+				restoreCancelledCleanup(),
+			))
 		}
 		if ok {
 			out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, id)

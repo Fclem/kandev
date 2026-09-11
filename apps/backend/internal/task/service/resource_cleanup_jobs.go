@@ -917,3 +917,24 @@ func (s *Service) CancelPreparedTaskResourceCleanup(ctx context.Context, operati
 	}
 	return fmt.Errorf("%w: operation %s is in state %s", ErrCleanupCancellationRace, operationID, current.State)
 }
+
+// RestoreCancelledTaskResourceCleanup returns a cancelled generation to the
+// prepared state so the reconciler can verify the lifecycle mutation outcome.
+func (s *Service) RestoreCancelledTaskResourceCleanup(ctx context.Context, operationID string) error {
+	if s.resourceCleanups == nil || operationID == "" {
+		return nil
+	}
+	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
+	defer cancel()
+	job, err := s.resourceCleanups.GetTaskResourceCleanupJobByOperationID(transitionCtx, operationID)
+	if err != nil {
+		return err
+	}
+	if job == nil || job.State != models.TaskResourceCleanupStateCancelled {
+		return nil
+	}
+	return s.resourceCleanups.CompleteTaskResourceCleanupJob(
+		transitionCtx, job.ID, models.TaskResourceCleanupStatePrepared,
+		taskResourceCleanupMutationOutcomeUnknown, nil,
+	)
+}

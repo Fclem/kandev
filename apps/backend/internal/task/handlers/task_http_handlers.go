@@ -2007,7 +2007,9 @@ func (h *TaskHandlers) httpUnarchiveTask(c *gin.Context) {
 		return
 	}
 	taskID := c.Param("id")
-	outcome, err := h.handoffSvc.UnarchiveTaskTree(c.Request.Context(), taskID)
+	unarchiveCtx, cancelUnarchive := archivecascade.ContinuationContext(c.Request.Context())
+	defer cancelUnarchive()
+	outcome, err := h.handoffSvc.UnarchiveTaskTree(unarchiveCtx, taskID)
 	postCommitError := false
 	if err != nil {
 		if !isCascadePostCommitError(err) {

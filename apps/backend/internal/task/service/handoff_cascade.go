@@ -60,6 +60,12 @@ type workspaceEnvironmentOwnershipTransfer struct {
 	resultingGeneration int64
 }
 
+func (s *HandoffService) lockArchiveCascade(rootID string) func() {
+	lock := s.archiveCascadeLock.lockFor(rootID)
+	lock.Lock()
+	return lock.Unlock
+}
+
 // publishUpdatedTask re-reads the task row and forwards it to the event
 // publisher. Used by ArchiveTaskTree after stamping archived_at so the
 // WS payload reflects the new column value (the frontend keys off
@@ -518,6 +524,7 @@ func (s *HandoffService) deleteTaskTree(
 	if s.tasks == nil {
 		return nil, errors.New("task repo not configured")
 	}
+	defer s.lockArchiveCascade(rootID)()
 	cascadeID := uuid.New().String()
 	out := &CascadeOutcome{CascadeID: cascadeID}
 	all, err := s.resolveDeleteSet(deleteCtx, rootID, cascade)

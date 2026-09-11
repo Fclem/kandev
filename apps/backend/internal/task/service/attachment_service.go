@@ -291,6 +291,11 @@ func (s *AttachmentService) Delete(ctx context.Context, ownerID, id string) erro
 func (s *AttachmentService) Claim(ctx context.Context, ownerID, workspaceID, taskID, sessionID string, ids []string) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
+	if s.authorizeTask != nil {
+		if err := s.authorizeTask(ctx, taskID); err != nil {
+			return err
+		}
+	}
 	if s.authorizeWorkspace != nil {
 		if err := s.authorizeWorkspace(ctx, workspaceID); err != nil {
 			return err

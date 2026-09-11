@@ -1708,7 +1708,8 @@ func (s *Service) FireTrigger(ctx context.Context, automationID, triggerID strin
 	var evt *AutomationTriggeredEvent
 	if admittedRun.RetryGroupID != "" {
 		evt = &AutomationTriggeredEvent{
-			RunID: admittedRun.ID, SnapshotVersion: admittedRun.RetryLaunchConfigVersion,
+			RunID: admittedRun.ID, RetryExternalID: RetryTaskExternalID(admittedRun.ID, admittedRun.RetryGroupGeneration),
+			SnapshotVersion: admittedRun.RetryLaunchConfigVersion,
 		}
 	} else {
 		evt = &AutomationTriggeredEvent{
@@ -1813,7 +1814,7 @@ func (s *Service) admitTriggerLocked(
 	if policy.Mode != RetryModeDisabled {
 		safeTriggerData := SafeRetryTriggerProjection(triggerType, triggerID, triggerData, dedupKey)
 		run.TriggerData = safeTriggerData
-		run.DisplayTitle = RenderRunDisplayTitle(a, triggerType, safeTriggerData)
+		run.DisplayTitle = RenderRunDisplayTitle(a, triggerType, triggerData)
 		groupID := uuid.NewString()
 		policyJSON, _ := json.Marshal(policy)
 		run.RetryGroupID = groupID
@@ -1823,7 +1824,7 @@ func (s *Service) admitTriggerLocked(
 		run.RetryResolvedTitle = run.DisplayTitle
 		run.RetryPolicySnapshot = string(policyJSON)
 		run.RetryTriggerSnapshot = string(safeTriggerData)
-		run.RetryResolvedPrompt = InterpolatePrompt(a.Prompt, triggerType, safeTriggerData)
+		run.RetryResolvedPrompt = InterpolatePrompt(a.Prompt, triggerType, triggerData)
 		run.RetryLaunchConfigVersion = 1
 	}
 	snapshotManagedAutomationDestination(a, run)

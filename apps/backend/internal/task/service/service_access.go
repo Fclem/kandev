@@ -285,6 +285,10 @@ func (s *Service) AuthorizeWorkflowAccess(ctx context.Context, workflowID string
 // authorizing the workflow, so step-count endpoints cannot disclose another
 // workspace's task count.
 func (s *Service) AuthorizeWorkflowStepAccess(ctx context.Context, stepID string) error {
+	_, scoped := callerScope(ctx)
+	if !scoped {
+		return nil
+	}
 	if s.workflowStepGetter == nil {
 		return repoerrors.ErrTaskNotFound
 	}

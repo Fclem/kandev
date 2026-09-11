@@ -14,6 +14,8 @@ export interface RawSessionEvent {
 export type CoreSessionStream = {
   wireId: string;
   lastSeenSequence: number;
+  ready: boolean;
+  pendingEvents: RawSessionEvent[];
   resumeToken?: string;
   poisonRecovery?: Promise<void>;
 };

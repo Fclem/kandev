@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/components/state-provider";
 import { PluginErrorBoundary } from "@/components/plugins/plugin-error-boundary";
@@ -61,6 +61,22 @@ export function registrationIsVisible(
   }
 }
 
+type RememberedSession = { taskId: string | null; sessionId: string };
+
+function useRememberedPanelSessionId(
+  taskId: string | null,
+  activeSessionId: string | null,
+): string | null {
+  const rememberedSession = useRef<RememberedSession | null>(null);
+  if (activeSessionId) {
+    rememberedSession.current = { taskId, sessionId: activeSessionId };
+  }
+  return (
+    activeSessionId ??
+    (rememberedSession.current?.taskId === taskId ? rememberedSession.current.sessionId : null)
+  );
+}
+
 /** Resolves and contains one plugin-contributed task panel. */
 export function PluginTaskPanel({
   pluginId,
@@ -72,7 +88,9 @@ export function PluginTaskPanel({
   usePluginRegistry();
   const { t } = useTranslation();
   const taskId = useAppStore((state) => state.tasks.activeTaskId);
-  const sessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
+  // Keep the deleted session identity until the host unmounts this panel.
+  const sessionId = useRememberedPanelSessionId(taskId, activeSessionId);
   const session = useAppStore((state) =>
     sessionId ? state.taskSessions?.items?.[sessionId] : undefined,
   );

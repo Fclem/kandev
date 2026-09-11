@@ -135,6 +135,37 @@ describe("PluginTaskPanel", () => {
     expect(onOpenMessage).toHaveBeenCalledWith("message-1");
   });
 });
+describe("PluginTaskPanel session lifecycle", () => {
+  it("keeps the panel bound to a deleted active session", () => {
+    function Notes(props: { sessionId: string | null }) {
+      return <div data-testid="notes-session">{props.sessionId}</div>;
+    }
+    pluginRegistry
+      .forPlugin("plugin-a")
+      .registerTaskPanel({ id: "notes", title: "Notes", Component: Notes });
+
+    const view = render(
+      <PluginTaskPanel
+        pluginId="plugin-a"
+        panelKey="notes"
+        panelId="plugin:plugin-a:notes"
+        presentation="desktop"
+      />,
+    );
+    expect(screen.getByTestId("notes-session").textContent).toBe("session_1");
+
+    mockActiveSessionId = null;
+    view.rerender(
+      <PluginTaskPanel
+        pluginId="plugin-a"
+        panelKey="notes"
+        panelId="plugin:plugin-a:notes"
+        presentation="desktop"
+      />,
+    );
+    expect(screen.getByTestId("notes-session").textContent).toBe("session_1");
+  });
+});
 
 describe("PluginTaskPanel failure containment", () => {
   it("fails closed when a managed visibility predicate throws", () => {

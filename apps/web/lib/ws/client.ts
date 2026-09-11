@@ -798,6 +798,8 @@ export class WebSocketClient {
     if (readiness.requestStarted) return;
     readiness.requestStarted = true;
     const stream = this.getOrCreateCoreSessionStream(sessionId);
+    stream.ready = false;
+    stream.pendingEvents.length = 0;
     const legacySubscription = this.request("session.subscribe", { session_id: sessionId });
     const orderedSubscription = this.request<unknown>("session.subscribe", {
       session_id: sessionId,
@@ -813,6 +815,8 @@ export class WebSocketClient {
         stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
       }
       stream.resumeToken = validated.resumeToken;
+      stream.ready = true;
+      this.drainCoreSessionEvents(stream);
     });
     void Promise.all([legacySubscription, orderedSubscription])
       .then(() => {
@@ -821,6 +825,8 @@ export class WebSocketClient {
         readiness.resolve();
       })
       .catch((error: unknown) => {
+        stream.ready = false;
+        stream.pendingEvents.length = 0;
         if (this.sessionSubscriptionReadiness.get(sessionId) === readiness) {
           this.sessionSubscriptionReadiness.delete(sessionId);
         }
@@ -835,6 +841,8 @@ export class WebSocketClient {
     const stream = {
       wireId: `core:web:${generateUUID()}`,
       lastSeenSequence: 0,
+      ready: false,
+      pendingEvents: [],
     };
     this.coreSessionStreams.set(sessionId, stream);
     return stream;
@@ -846,6 +854,36 @@ export class WebSocketClient {
   ) {
     const stream = this.coreSessionStreams.get(event.session_id);
     if (!stream) return;
+    if (!stream.ready) {
+      stream.pendingEvents.push(event);
+      return;
+    }
+    if (stream.pendingEvents.length > 0) {
+      stream.pendingEvents.push(event);
+      this.drainCoreSessionEvents(stream);
+      return;
+    }
+    this.processCoreSessionEvent(event, stream, disposition);
+    this.drainCoreSessionEvents(stream);
+  }
+
+  private drainCoreSessionEvents(stream: CoreSessionStream) {
+    if (!stream.ready || stream.pendingEvents.length === 0) return;
+    stream.pendingEvents.sort((left, right) => left.sequence - right.sequence);
+    while (stream.pendingEvents.length > 0) {
+      const event = stream.pendingEvents[0];
+      if (!event) return;
+      if (event.sequence > stream.lastSeenSequence + 1) return;
+      stream.pendingEvents.shift();
+      this.processCoreSessionEvent(event, stream);
+    }
+  }
+
+  private processCoreSessionEvent(
+    event: RawSessionEvent,
+    stream: CoreSessionStream,
+    disposition = orderedCoreDisposition(event),
+  ) {
     if (event.sequence <= stream.lastSeenSequence) {
       void this.acknowledgeCoreSessionEvent(
         event.session_id,

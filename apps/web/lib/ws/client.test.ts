@@ -278,6 +278,62 @@ describe("ordered core session compatibility", () => {
     subscription.unsubscribe();
   });
 });
+it("buffers ordered events until the core subscription watermark is known", async () => {
+  const { client, socket } = connectClient();
+  const handler = vi.fn();
+  client.on("session.message.added", handler);
+  const subscription = client.subscribeSessionWithReady("sess-1");
+  const legacy = sessionSubscribeRequest(socket);
+  const ordered = sessionSubscribeRequest(socket, 1);
+  acknowledge(socket, legacy);
+
+  socket.receive({
+    type: "session.event",
+    protocol_version: 1,
+    event_type: "message.added",
+    session_id: "sess-1",
+    task_id: "task-1",
+    sequence: 4,
+    event_id: "event-4",
+    payload: {
+      type: "message.added",
+      session_id: "sess-1",
+      message_id: "message-4",
+      task_id: "task-1",
+      author_type: "user",
+      content: "hello",
+      created_at: "2026-09-07T12:00:00Z",
+    },
+  });
+
+  expect(handler).not.toHaveBeenCalled();
+  expect(socket.sent.some((message) => message.action === "session.ack")).toBe(false);
+
+  const requestPayload = coreRequestPayload(ordered);
+  socket.receive({
+    id: ordered.id,
+    type: "response",
+    payload: {
+      success: true,
+      session_id: "sess-1",
+      wire_id: requestPayload?.wire_id,
+      result: "fresh",
+      event_watermark: 3,
+      snapshot_cutoff: 3,
+      snapshot_token: "snapshot-core",
+      resume_token: "resume-core",
+      expires_at: "2026-09-07T12:00:00Z",
+    },
+  });
+
+  await subscription.ready;
+  expect(handler).toHaveBeenCalledTimes(1);
+  expect(socket.sent.at(-1)).toMatchObject({
+    action: "session.ack",
+    payload: { session_id: "sess-1", consumer_kind: "core", sequence: 4 },
+  });
+  subscription.unsubscribe();
+});
 
 describe("ordered core session validation", () => {
   it("does not project or acknowledge a mismatched payload type", async () => {

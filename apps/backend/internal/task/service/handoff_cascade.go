@@ -30,6 +30,16 @@ type workspaceScopedTaskReparenter interface {
 type structuralChildLister interface {
 	ListStructuralChildrenLimited(ctx context.Context, parentID string, limit int) ([]*models.Task, error)
 }
+type taskDependencySnapshotter interface {
+	ListTaskBlockers(context.Context, string) ([]*orchmodels.TaskBlocker, error)
+	ListTasksBlockedBy(context.Context, string) ([]string, error)
+}
+
+type taskDependencySnapshot struct {
+	taskID   string
+	outgoing []*orchmodels.TaskBlocker
+	incoming []string
+}
 type autoArchiveTaskRepository interface {
 	ArchiveTaskIfAutoArchiveEligible(
 		ctx context.Context, id string, expectedUpdatedAt time.Time, cascadeID string,
@@ -612,26 +622,30 @@ func (s *HandoffService) deleteTaskTreeRows(
 			}
 		}
 		// Remove dependency edges before the task row so a transient cleanup
-		// failure cannot leave edges pointing at a deleted task.
-		if err := s.deleteTaskDependencyEdges(postDeleteCtx, all[i]); err != nil {
+		// failure cannot leave edges pointing at a deleted task. Preserve the
+		// exact edge set so a failed task delete can restore it.
+		dependencySnapshot, err := s.deleteTaskDependencyEdges(postDeleteCtx, all[i])
+		if err != nil {
+			restoreErr := s.restoreTaskDependencyEdges(deleteCompensationCtx, dependencySnapshot)
 			cancelErr := s.cancelCascadeResourceCleanupRange(deleteCompensationCtx, all[:i+1], cleanupOps)
 			deleteErr := fmt.Errorf("clean up task dependencies %s: %w", all[i], err)
 			if len(out.ArchivedTaskIDs) == 0 {
 				deleteErr = s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(deleteCompensationCtx, ownershipTransfers, deleteErr)
 			}
-			return nil, errors.Join(deleteErr, cancelErr)
+			return nil, errors.Join(deleteErr, restoreErr, cancelErr)
 		}
 		// Tear down runtime resources BEFORE the DB delete so the env / worktree
 		// rows are still queryable for the gather step. The actual destroy work
 		// runs async after this returns. Delete cascade removes the env row.
 		vacatedStepID, err := s.deleteTaskWithVacatedStep(postDeleteCtx, all[i])
 		if err != nil {
+			restoreErr := s.restoreTaskDependencyEdges(deleteCompensationCtx, dependencySnapshot)
 			cancelErr := s.cancelCascadeResourceCleanupRange(deleteCompensationCtx, all[:i+1], cleanupOps)
 			deleteErr := fmt.Errorf("delete %s: %w", all[i], err)
 			if len(out.ArchivedTaskIDs) == 0 {
 				deleteErr = s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(deleteCompensationCtx, ownershipTransfers, deleteErr)
 			}
-			return nil, errors.Join(deleteErr, cancelErr)
+			return nil, errors.Join(deleteErr, restoreErr, cancelErr)
 		}
 		recordVacatedStep(vacatedStepIDs, vacatedStepID)
 		out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
@@ -690,17 +704,57 @@ func (s *HandoffService) archiveTaskWithVacatedStep(
 	return repo.ArchiveTaskIfActiveWithVacatedStep(ctx, taskID, cascadeID)
 }
 
-func (s *HandoffService) deleteTaskDependencyEdges(ctx context.Context, taskID string) error {
+func (s *HandoffService) deleteTaskDependencyEdges(ctx context.Context, taskID string) (*taskDependencySnapshot, error) {
 	if s.blockers == nil {
-		return nil
+		return nil, nil
 	}
 	cleaner, ok := s.blockers.(taskDependencyCleaner)
 	if !ok {
+		return nil, nil
+	}
+	unlock := taskdependencies.AcquireMutationLock()
+	defer unlock()
+	var snapshot *taskDependencySnapshot
+	if snapshotter, ok := s.blockers.(taskDependencySnapshotter); ok {
+		outgoing, err := snapshotter.ListTaskBlockers(ctx, taskID)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot outgoing task dependencies: %w", err)
+		}
+		incoming, err := snapshotter.ListTasksBlockedBy(ctx, taskID)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot incoming task dependencies: %w", err)
+		}
+		snapshot = &taskDependencySnapshot{taskID: taskID, outgoing: outgoing, incoming: incoming}
+	}
+	if err := cleaner.DeleteTaskBlockersForTask(ctx, taskID); err != nil {
+		return snapshot, err
+	}
+	return snapshot, nil
+}
+
+func (s *HandoffService) restoreTaskDependencyEdges(ctx context.Context, snapshot *taskDependencySnapshot) error {
+	if snapshot == nil || s.blockers == nil {
 		return nil
 	}
 	unlock := taskdependencies.AcquireMutationLock()
 	defer unlock()
-	return cleaner.DeleteTaskBlockersForTask(ctx, taskID)
+	var errs []error
+	for _, blocker := range snapshot.outgoing {
+		if blocker == nil {
+			continue
+		}
+		if err := s.blockers.CreateTaskBlocker(ctx, blocker); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	for _, dependentID := range snapshot.incoming {
+		if err := s.blockers.CreateTaskBlocker(ctx, &orchmodels.TaskBlocker{
+			TaskID: dependentID, BlockerTaskID: snapshot.taskID,
+		}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *HandoffService) deleteTaskWithVacatedStep(ctx context.Context, taskID string) (string, error) {

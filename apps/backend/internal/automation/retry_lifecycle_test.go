@@ -70,6 +70,33 @@ func TestFinalizeRetrySchedulingOverflowDoesNotEnqueueOutbox(t *testing.T) {
 		`SELECT COUNT(*) FROM automation_retry_outbox WHERE run_id = ?`, child.ID))
 	require.Zero(t, outboxCount)
 }
+func TestFinalizedRetryChildCanBeClaimedAndPromoted(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-child-claim", WorkspaceID: "ws-child-claim", Name: "child claim", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-child-claim", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	parent := &AutomationRun{
+		ID: "run-child-claim", AutomationID: a.ID, TriggerType: TriggerTypeManual,
+		Status: RunStatusTriggered, RetryGroupID: group.ID, RetryGroupGeneration: 1,
+		AttemptNumber: 1, RetryState: RetryStateTriggered,
+		RetryPolicySnapshot: `{"mode":"finite","max_retries":"2","delay_seconds":"0","backoff":"fixed"}`,
+	}
+	require.NoError(t, store.CreateRun(ctx, parent))
+	child, err := store.FinalizeRetryFailure(ctx, parent.ID, 1, errors.New("attempt failed"), "launch")
+	require.NoError(t, err)
+
+	claimed, token, err := store.ClaimDueRetry(ctx, time.Now().UTC().Add(time.Second), time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, child.ID, claimed.ID)
+	require.NotEmpty(t, token)
+	require.NoError(t, store.PromoteClaimedRetry(ctx, child.ID, token, 1))
+	promoted, err := store.GetRun(ctx, child.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusTriggered, promoted.Status)
+	require.Equal(t, RetryStateTriggered, promoted.RetryState)
+}
 
 func TestRetrySnapshotInterpolatesBeforeSafeProjection(t *testing.T) {
 	store := setupTestStore(t)
@@ -235,6 +262,13 @@ func TestRetryFailureSanitizesSecretsAndCreatesOneChild(t *testing.T) {
 	var count int
 	require.NoError(t, store.db.Get(&count, `SELECT COUNT(*) FROM automation_runs WHERE retry_group_id = ?`, group.ID))
 	require.Equal(t, 2, count)
+	var intents, operations int
+	require.NoError(t, store.db.Get(&intents,
+		`SELECT COUNT(*) FROM automation_run_task_intents WHERE run_id = ?`, child.ID))
+	require.NoError(t, store.db.Get(&operations,
+		`SELECT COUNT(*) FROM automation_run_operations WHERE run_id = ?`, child.ID))
+	require.Equal(t, 1, intents)
+	require.Equal(t, 1, operations)
 }
 
 func TestRetryClaimLeaseIsSingleUseAndGenerationFenced(t *testing.T) {
@@ -248,6 +282,14 @@ func TestRetryClaimLeaseIsSingleUseAndGenerationFenced(t *testing.T) {
 	run := &AutomationRun{ID: "run-claim", AutomationID: a.ID, Status: RunStatusScheduledRetry, RetryGroupID: group.ID,
 		AttemptNumber: 2, RetryState: RetryStateScheduled, RetryScheduledAt: &due, RetryGroupGeneration: 4}
 	require.NoError(t, store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{ID: "intent-claim", RunID: run.ID,
+		GroupGeneration: 4, State: retryIntentAdmitted}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "operation-claim", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 4, Kind: retryTaskOperationKind,
+		State: retryOperationRequested,
+	}))
 
 	claimed, token, err := store.ClaimDueRetry(ctx, time.Now().UTC(), time.Minute)
 	require.NoError(t, err)
@@ -372,6 +414,56 @@ func TestBeginRetryTaskOperationRejectsCancelledGeneration(t *testing.T) {
 
 	_, err := store.BeginRetryTaskOperation(ctx, run.ID, 1)
 	require.ErrorIs(t, err, ErrRetryGenerationMismatch)
+}
+func TestListAutomationTaskIDsIncludesCommittedRetryTask(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-cleanup-retry", WorkspaceID: "ws-cleanup-retry",
+		Name: "cleanup retry", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-cleanup-retry", AutomationID: a.ID,
+		Generation: 1, State: RetryGroupLive}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{ID: "run-cleanup-retry", AutomationID: a.ID,
+		Status: RunStatusTriggered, RetryGroupID: group.ID,
+		RetryGroupGeneration: 1, RetryState: RetryStateTriggered}
+	require.NoError(t, store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{ID: "intent-cleanup-retry", RunID: run.ID,
+		GroupGeneration: 1, State: retryIntentAdmitted}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "operation-cleanup-retry", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind,
+		State: retryOperationCommitted, ExternalTaskID: "task-committed-before-bind",
+	}))
+
+	taskIDs, err := store.ListAutomationTaskIDs(ctx, a.ID)
+	require.NoError(t, err)
+	require.Contains(t, taskIDs, "task-committed-before-bind")
+}
+
+func TestClaimDueRetryTerminalizesMissingOperation(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-poison-retry", WorkspaceID: "ws-poison-retry",
+		Name: "poison retry", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-poison-retry", AutomationID: a.ID,
+		Generation: 1, State: RetryGroupLive}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	due := time.Now().UTC().Add(-time.Second)
+	run := &AutomationRun{ID: "run-poison-retry", AutomationID: a.ID,
+		Status: RunStatusScheduledRetry, RetryState: RetryStateScheduled,
+		RetryGroupID: group.ID, RetryGroupGeneration: 1,
+		RetryScheduledAt: &due}
+	require.NoError(t, store.CreateRun(ctx, run))
+
+	_, _, err := store.ClaimDueRetry(ctx, time.Now().UTC(), time.Minute)
+	require.ErrorIs(t, err, ErrNoDueRetry)
+	stored, err := store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusRetrySchedulingFailed, stored.Status)
+	require.Equal(t, RetryStateSchedulingFailed, stored.RetryState)
 }
 
 func TestRetryTaskExternalIDIsStableAcrossRecovery(t *testing.T) {

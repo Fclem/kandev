@@ -17,7 +17,7 @@ func (s *Store) CancelRetryGroupsByAutomation(ctx context.Context, automationID 
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET generation = generation + 1, state = ?, updated_at = ? WHERE automation_id = ? AND state = ?`), RetryGroupCancelled, now, automationID, RetryGroupLive); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET retry_state = ?, retry_cancelled_at = ?, retry_claim_token = '', retry_claimed_at = NULL, retry_claim_expires_at = NULL WHERE automation_id = ? AND retry_state IN (?, ?)`), RetryStateCancelled, now, automationID, RetryStateScheduled, RetryStateClaimed); err != nil {
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_cancelled_at = ?, retry_claim_token = '', retry_claimed_at = NULL, retry_claim_expires_at = NULL WHERE automation_id = ? AND retry_state NOT IN (?, ?, ?, ?, ?)`), RunStatusFailed, RetryStateCancelled, now, automationID, RetryStateCompleted, RetryStateExhausted, RetryStateCancelled, RetryStateSuperseded, RetryStateSchedulingFailed); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_run_task_intents SET state = ?, automation_deleted_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id = ?) AND state != ?`), retryIntentAbandoned, now, automationID, retryIntentAbandoned); err != nil {

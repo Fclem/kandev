@@ -2688,6 +2688,10 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 		attachmentRepo = s.attachmentSvc.repo
 	}
 	if attachmentRepo != nil {
+		if s.attachmentSvc != nil {
+			s.attachmentSvc.lifecycleMu.Lock()
+			defer s.attachmentSvc.lifecycleMu.Unlock()
+		}
 		attachments, err = attachmentRepo.ListMessageAttachmentsByTask(operationCtx, id)
 		if err != nil {
 			return false, fmt.Errorf("list attachments for delete: %w", err)
@@ -2726,12 +2730,7 @@ func (s *Service) deleteTaskWithReasonAndDBDelete(
 		return false, nil
 	}
 	if s.attachmentSvc != nil {
-		var attachmentErr error
-		if len(attachments) > 0 {
-			attachmentErr = s.attachmentSvc.DeleteDescriptors(operationCtx, attachments)
-		} else {
-			attachmentErr = s.attachmentSvc.DeleteByTask(operationCtx, id)
-		}
+		attachmentErr := s.attachmentSvc.deleteByTask(operationCtx, id)
 		if attachmentErr != nil {
 			s.logger.Warn("failed to remove task attachment bytes",
 				zap.String("task_id", id), zap.Error(attachmentErr))

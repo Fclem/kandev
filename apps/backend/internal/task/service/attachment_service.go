@@ -391,6 +391,10 @@ func (s *AttachmentService) ReleaseForCleanup(
 func (s *AttachmentService) DeleteByTask(ctx context.Context, taskID string) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
+	return s.deleteByTask(ctx, taskID)
+}
+
+func (s *AttachmentService) deleteByTask(ctx context.Context, taskID string) error {
 	preparer, prepared := s.repo.(attachmentTaskDeletePreparer)
 	var attachments []*models.TaskMessageAttachment
 	var err error

@@ -755,7 +755,7 @@ func (s *Service) deleteDependencyEdgesForTask(ctx context.Context, taskID strin
 	if !ok {
 		return
 	}
-	var dependents []string
+	var dependents, blockers []string
 	var cleanupErr error
 	func() {
 		unlock := taskdependencies.AcquireMutationLock()
@@ -766,6 +766,13 @@ func (s *Service) deleteDependencyEdgesForTask(ctx context.Context, taskID strin
 			s.logger.Warn("failed to list dependents before edge cleanup",
 				zap.String("task_id", taskID), zap.Error(err))
 		}
+		predecessors, err := s.blockers.ListBlockersForTasks(ctx, []string{taskID})
+		if err != nil {
+			s.logger.Warn("failed to list blockers before edge cleanup",
+				zap.String("task_id", taskID), zap.Error(err))
+		} else {
+			blockers = append(blockers, predecessors[taskID]...)
+		}
 		cleanupErr = cleaner.DeleteTaskBlockersForTask(ctx, taskID)
 	}()
 	if cleanupErr != nil {
@@ -773,8 +780,7 @@ func (s *Service) deleteDependencyEdgesForTask(ctx context.Context, taskID strin
 			zap.String("task_id", taskID), zap.Error(cleanupErr))
 		return
 	}
-	// Dependents may now be unblocked, so refresh them. Deliberately no
-	// auto-start: deletion is not success, and a chain must not advance
-	// because a predecessor was removed.
-	s.publishDependencyChange(ctx, dependents...)
+	// Dependents may now be unblocked, and blockers may have lost a
+	// dependent. Refresh both surviving sides without auto-starting anything.
+	s.publishDependencyChange(ctx, append(dependents, blockers...)...)
 }

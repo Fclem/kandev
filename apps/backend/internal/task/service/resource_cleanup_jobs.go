@@ -564,18 +564,7 @@ func (s *Service) executeTaskResourceCleanupJob(
 	}
 	var errs []error
 	if taskResourceCleanupDeletesTask(job.Trigger) && s.attachmentSvc != nil {
-		var attachmentErr error
-		if len(snapshot.Attachments) > 0 {
-			attachments := make([]*models.TaskMessageAttachment, 0, len(snapshot.Attachments))
-			for _, attachment := range snapshot.Attachments {
-				attachments = append(attachments, &models.TaskMessageAttachment{
-					ID: attachment.ID, OwnerID: attachment.OwnerID, StorageKey: attachment.StorageKey,
-				})
-			}
-			attachmentErr = s.attachmentSvc.DeleteDescriptors(ctx, attachments)
-		} else {
-			attachmentErr = s.attachmentSvc.DeleteByTask(ctx, job.TaskID)
-		}
+		attachmentErr := s.attachmentSvc.DeleteByTask(ctx, job.TaskID)
 		if attachmentErr != nil {
 			errs = append(errs, fmt.Errorf("delete task attachments: %w", attachmentErr))
 		}

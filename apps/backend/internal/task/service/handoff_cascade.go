@@ -1229,6 +1229,9 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	if rootID == "" {
 		return nil, errors.New("rootID is required")
 	}
+	unlockArchiveCascade := s.archiveCascadeLock.lockFor(rootID)
+	unlockArchiveCascade.Lock()
+	defer unlockArchiveCascade.Unlock()
 	root, err := s.tasks.GetTask(unarchiveCtx, rootID)
 	if err != nil {
 		return nil, err

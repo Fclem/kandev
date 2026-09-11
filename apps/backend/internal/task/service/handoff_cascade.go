@@ -1277,8 +1277,8 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 					continue
 				}
 				if g == nil {
-					restorationErrors = append(restorationErrors,
-						fmt.Errorf("workspace group missing after restoring membership for task %s", id))
+					// A task without historical group membership is a
+					// valid no-op for the restore repository.
 					continue
 				}
 			}

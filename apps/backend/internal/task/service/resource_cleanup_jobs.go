@@ -63,6 +63,7 @@ type taskResourceCleanupSnapshot struct {
 	StopTargets           []persistedTaskStopTarget `json:"stop_targets,omitempty"`
 	TaskEnvironment       *models.TaskEnvironment   `json:"task_environment,omitempty"`
 	Attachments           []persistedTaskAttachment `json:"attachments,omitempty"`
+	WorkspaceID           string                    `json:"workspace_id,omitempty"`
 	DeleteEnvironmentRow  bool                      `json:"delete_environment_row,omitempty"`
 	LegacyWorktreeCleanup bool                      `json:"legacy_worktree_cleanup,omitempty"`
 	// SSHTaskDirs records the remote task directories this task launched into.
@@ -92,10 +93,8 @@ func (s *Service) persistTaskResourceCleanup(
 	envCleanup taskEnvironmentCleanup,
 	prepared bool,
 	collectSSH bool,
+	workspaceID string,
 ) (*models.TaskResourceCleanupJob, error) {
-	if s.resourceCleanups == nil {
-		return nil, nil
-	}
 	if operationID == "" {
 		operationID = newTaskResourceCleanupOperationID(trigger, taskID)
 	}
@@ -115,6 +114,7 @@ func (s *Service) persistTaskResourceCleanup(
 	snapshot := taskResourceCleanupSnapshot{
 		Sessions: sessions, Worktrees: worktrees, WorktreeHeadOIDs: worktreeHeadOIDs,
 		StopTargets: persistStopTargets(stopTargets), Attachments: persistedAttachments,
+		WorkspaceID:           workspaceID,
 		TaskEnvironment:       envCleanup.env,
 		DeleteEnvironmentRow:  envCleanup.deleteRow,
 		LegacyWorktreeCleanup: s.hasLegacyWorktreeCleanup(),
@@ -350,7 +350,27 @@ func (s *Service) preparedTaskCleanupMutationCommitted(
 	ctx context.Context,
 	job *models.TaskResourceCleanupJob,
 ) (bool, error) {
-	if job == nil || s.tasks == nil {
+	if job == nil {
+		return false, errors.New("cleanup job is unavailable")
+	}
+	if job.Trigger == models.TaskResourceCleanupTriggerWorkspaceDelete && job.TaskID == "" {
+		if s.workspaces == nil {
+			return false, errors.New("workspace repository is unavailable")
+		}
+		var snapshot taskResourceCleanupSnapshot
+		if err := json.Unmarshal([]byte(job.ResourceSnapshot), &snapshot); err != nil {
+			return false, fmt.Errorf("decode workspace cleanup snapshot: %w", err)
+		}
+		if snapshot.WorkspaceID == "" {
+			return false, errors.New("workspace cleanup snapshot lacks workspace identity")
+		}
+		workspace, err := s.workspaces.GetWorkspace(ctx, snapshot.WorkspaceID)
+		if err != nil && !errors.Is(err, taskrepo.ErrWorkspaceNotFound) {
+			return false, err
+		}
+		return err != nil || workspace == nil, nil
+	}
+	if s.tasks == nil {
 		return false, errors.New("task repository is unavailable")
 	}
 	task, err := s.tasks.GetTask(ctx, job.TaskID)
@@ -812,16 +832,31 @@ func (s *Service) PrepareTaskResourceCleanup(
 	// reject new ownership while this prepared barrier is active, so the
 	// snapshot below cannot miss a resource admitted mid-preparation.
 	job, err := s.persistTaskResourceCleanup(ctx, taskID, trigger, operationID,
-		nil, nil, nil, nil, taskEnvironmentCleanup{}, true, false)
+		nil, nil, nil, nil, taskEnvironmentCleanup{}, true, false, "")
 	if err != nil {
 		return err
 	}
 	if s.resourceCleanups == nil {
 		return nil
 	}
+	if job == nil {
+		return nil
+	}
 	barrierOperationID := job.OperationID
 	cancelPrepared := func(cause error) error {
 		return errors.Join(cause, s.CancelPreparedTaskResourceCleanup(ctx, barrierOperationID))
+	}
+	if job.State == models.TaskResourceCleanupStateCancelled {
+		if err := s.RestoreCancelledTaskResourceCleanup(ctx, job.OperationID); err != nil {
+			return fmt.Errorf("re-prepare cancelled cleanup intent: %w", err)
+		}
+		job, err = s.resourceCleanups.GetTaskResourceCleanupJobByOperationID(ctx, job.OperationID)
+		if err != nil {
+			return fmt.Errorf("reload re-prepared cleanup intent: %w", err)
+		}
+	}
+	if job.State != models.TaskResourceCleanupStatePrepared {
+		return nil
 	}
 	sessions, err := s.sessions.ListTaskSessions(ctx, taskID)
 	if err != nil {

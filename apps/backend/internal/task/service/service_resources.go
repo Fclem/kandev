@@ -275,7 +275,7 @@ func (s *Service) prepareWorkspaceAttachmentCleanup(ctx context.Context, workspa
 	return s.persistTaskResourceCleanup(
 		ctx, "", models.TaskResourceCleanupTriggerWorkspaceDelete,
 		newTaskResourceCleanupOperationID(models.TaskResourceCleanupTriggerWorkspaceDelete, "workspace-attachments:"+workspaceID),
-		nil, nil, nil, attachments, taskEnvironmentCleanup{}, true, false,
+		nil, nil, nil, attachments, taskEnvironmentCleanup{}, true, false, workspaceID,
 	)
 }
 
@@ -441,7 +441,7 @@ func (s *Service) appendWorkspaceDeleteMissingTaskCleanups(
 			if job, persistErr := s.persistTaskResourceCleanup(
 				ctx, task.ID, models.TaskResourceCleanupTriggerWorkspaceDelete,
 				newTaskResourceCleanupOperationID(models.TaskResourceCleanupTriggerWorkspaceDelete, task.ID),
-				nil, nil, nil, nil, taskEnvironmentCleanup{}, false, false,
+				nil, nil, nil, nil, taskEnvironmentCleanup{}, false, false, "",
 			); persistErr != nil {
 				errs = append(errs, fmt.Errorf("persist late workspace task cleanup %q: %w", task.ID, persistErr))
 			} else if job != nil {
@@ -494,7 +494,7 @@ func (s *Service) prepareWorkspaceDeleteTaskCleanup(ctx context.Context, task *m
 		ctx, task.ID, models.TaskResourceCleanupTriggerWorkspaceDelete,
 		newTaskResourceCleanupOperationID(models.TaskResourceCleanupTriggerWorkspaceDelete, task.ID),
 		cleanup.sessions, cleanup.worktrees, cleanup.stopTargets, cleanup.attachments,
-		taskEnvironmentCleanup{env: cleanup.taskEnv, deleteRow: false}, true, true,
+		taskEnvironmentCleanup{env: cleanup.taskEnv, deleteRow: false}, true, true, "",
 	)
 	return cleanup, err
 }

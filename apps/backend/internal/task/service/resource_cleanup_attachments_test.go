@@ -210,6 +210,44 @@ func TestWorkspaceDeleteCleanupFailsClosedWithoutExecutor(t *testing.T) {
 	}
 }
 
+func TestWorkspaceAttachmentCleanupRequiresCommittedWorkspaceDeletion(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	ctx := context.Background()
+	const workspaceID = "ws-prepared-attachment-cleanup"
+	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: workspaceID, Name: "Prepared cleanup"}); err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	job := &models.TaskResourceCleanupJob{
+		ID:          "workspace-attachment-prepared",
+		OperationID: "workspace_delete:workspace-attachments:" + workspaceID,
+		Trigger:     models.TaskResourceCleanupTriggerWorkspaceDelete,
+		State:       models.TaskResourceCleanupStatePrepared,
+		ResourceSnapshot: `{"workspace_id":"` + workspaceID +
+			`","attachments":[{"id":"attachment-1","owner_id":"owner","storage_key":"key"}]}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(ctx, job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+
+	committed, err := taskSvc.preparedTaskCleanupMutationCommitted(ctx, job)
+	if err != nil {
+		t.Fatalf("preparedTaskCleanupMutationCommitted before deletion: %v", err)
+	}
+	if committed {
+		t.Fatal("workspace attachment cleanup committed before workspace deletion")
+	}
+	if err := repo.DeleteWorkspace(ctx, workspaceID); err != nil {
+		t.Fatalf("DeleteWorkspace: %v", err)
+	}
+	committed, err = taskSvc.preparedTaskCleanupMutationCommitted(ctx, job)
+	if err != nil {
+		t.Fatalf("preparedTaskCleanupMutationCommitted after deletion: %v", err)
+	}
+	if !committed {
+		t.Fatal("workspace attachment cleanup not committed after workspace deletion")
+	}
+}
+
 func TestRetryTaskResourceCleanupPersistsAfterDeadlineExpiry(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	ctx := context.Background()

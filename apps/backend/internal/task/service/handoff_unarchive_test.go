@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/kandev/kandev/internal/task/models"
 )
 
 // Manual/legacy archives (empty cascade id — WS handler, MCP tool, or rows
@@ -107,5 +110,51 @@ func TestUnarchiveTaskTree_CascadePublishesTaskUpdatedPerTask(t *testing.T) {
 	}
 	if len(want) > 0 {
 		t.Errorf("missing PublishTaskUpdated for: %v", want)
+	}
+}
+
+type unarchivePublicationFailureRepo struct {
+	*fakeCascadeRepo
+	failEnabled bool
+	failed      bool
+}
+
+func (r *unarchivePublicationFailureRepo) GetTask(
+	ctx context.Context,
+	id string,
+) (*models.Task, error) {
+	r.base.mu.Lock()
+	task := r.base.tasks[id]
+	shouldFail := r.failEnabled && id == "c1" && task != nil && task.ArchivedAt == nil && !r.failed
+	if shouldFail {
+		r.failed = true
+	}
+	r.base.mu.Unlock()
+	if shouldFail {
+		return nil, errors.New("transient task projection failure")
+	}
+	return r.fakeCascadeRepo.GetTask(ctx, id)
+}
+
+func TestUnarchiveTaskTreeContinuesAfterProjectionPublicationFailure(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	tasks.addTask("c1", "root", "ws-1")
+	repo := &unarchivePublicationFailureRepo{fakeCascadeRepo: newCascadeRepo(tasks)}
+	svc := NewHandoffService(repo, nil, nil, nil, newCascadeWSGroupRepo(), nil)
+	svc.SetTaskEventPublisher(&fakeEventPublisher{})
+	if _, err := svc.ArchiveTaskTree(context.Background(), "root", true); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	repo.failEnabled = true
+
+	if _, err := svc.UnarchiveTaskTree(context.Background(), "root"); err == nil {
+		t.Fatal("unarchive succeeded despite projection publication failure")
+	}
+	for _, id := range []string{"root", "c1"} {
+		task, _ := tasks.GetTask(context.Background(), id)
+		if task.ArchivedAt != nil {
+			t.Errorf("%s remained archived after publication failure: %v", id, task.ArchivedAt)
+		}
 	}
 }

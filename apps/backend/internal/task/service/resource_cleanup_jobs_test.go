@@ -1148,6 +1148,35 @@ func TestCancelPreparedTaskResourceCleanupIgnoresCallerCancellation(t *testing.T
 	}
 }
 
+func TestPrepareTaskResourceCleanupReadmitsCancelledIntent(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	taskSvc.StopTaskResourceCleanupWorker()
+	ctx := context.Background()
+	operationID := "cascade_archive:retry-cancelled-intent"
+	if err := taskSvc.PrepareTaskResourceCleanup(
+		ctx, "task-retry-cancelled", models.TaskResourceCleanupTriggerCascadeArchive,
+		operationID, false,
+	); err != nil {
+		t.Fatalf("initial PrepareTaskResourceCleanup: %v", err)
+	}
+	if err := taskSvc.CancelPreparedTaskResourceCleanup(ctx, operationID); err != nil {
+		t.Fatalf("CancelPreparedTaskResourceCleanup: %v", err)
+	}
+	if err := taskSvc.PrepareTaskResourceCleanup(
+		ctx, "task-retry-cancelled", models.TaskResourceCleanupTriggerCascadeArchive,
+		operationID, false,
+	); err != nil {
+		t.Fatalf("retry PrepareTaskResourceCleanup: %v", err)
+	}
+	job, err := repo.GetTaskResourceCleanupJobByOperationID(ctx, operationID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJobByOperationID: %v", err)
+	}
+	if job.State != models.TaskResourceCleanupStatePrepared {
+		t.Fatalf("cleanup state = %q, want prepared after retry", job.State)
+	}
+}
+
 func TestTaskResourceCleanupRetriesCompletionPersistenceFailure(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	job := &models.TaskResourceCleanupJob{

@@ -1217,6 +1217,7 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 		}
 		return errors.Join(errs...)
 	}
+	var restorationErrors []error
 	for _, id := range all {
 		operationID := string(models.TaskResourceCleanupTriggerCascadeArchive) + ":" + cascadeID + ":" + id
 		cancelledCleanupOperations = append(cancelledCleanupOperations, operationID)
@@ -1239,7 +1240,8 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 			// Publish per restored task. The WS handler keys off
 			// archived_at=null to put the card back on the kanban.
 			if err := s.publishUpdatedTask(operationCtx, id); err != nil {
-				return out, cascadePostCommitError(out, err)
+				restorationErrors = append(restorationErrors,
+					fmt.Errorf("publish restored task %s: %w", id, err))
 			}
 			// This task may itself be a parent whose inherit_parent
 			// children were marked orphaned by this same archive; the
@@ -1253,7 +1255,6 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	// set of affected groups so we can also re-evaluate cleanup state
 	// (cleanup_status=cleaned → active + restored / restorable).
 	groupIDs := map[string]bool{}
-	var restorationErrors []error
 	if s.wsGroups != nil {
 		for _, id := range out.ArchivedTaskIDs {
 			g, err := s.wsGroups.GetWorkspaceGroupForTask(operationCtx, id)
@@ -1607,7 +1608,10 @@ func (s *HandoffService) findArchiveRetryCascade(ctx context.Context, rootID str
 			continue
 		}
 		if cascadeID != task.ArchivedByCascadeID {
-			return "", nil, fmt.Errorf("archive retry has conflicting cascade identities under %s", rootID)
+			// Multiple identities prove these descendants were not
+			// one interrupted cascade. Start a new parent cascade and
+			// leave the independently archived rows untouched.
+			return "", nil, nil
 		}
 	}
 	if cascadeID == "" {

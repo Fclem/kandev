@@ -78,3 +78,49 @@ func TestWsArchiveTask_StampsCascadeID(t *testing.T) {
 		t.Fatal("cascade ID must be stamped so the task stays unarchivable")
 	}
 }
+
+type alreadyArchivedRepo struct {
+	mockRepository
+}
+
+func (r *alreadyArchivedRepo) GetTask(_ context.Context, id string) (*models.Task, error) {
+	return &models.Task{ID: id, WorkspaceID: "ws-1"}, nil
+}
+
+func (r *alreadyArchivedRepo) ArchiveTaskIfActive(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
+func (r *alreadyArchivedRepo) ArchiveTaskIfActiveWithVacatedStep(
+	ctx context.Context,
+	id string,
+	cascadeID string,
+) (string, bool, error) {
+	changed, err := r.ArchiveTaskIfActive(ctx, id, cascadeID)
+	return "", changed, err
+}
+
+func TestWsArchiveTask_ReportsAlreadyArchivedOutcome(t *testing.T) {
+	repo := &alreadyArchivedRepo{}
+	h := &TaskHandlers{
+		handoffSvc: service.NewHandoffService(repo, nil, nil, nil, nil, nil),
+		logger:     newTestLogger(t),
+	}
+
+	msg := &ws.Message{
+		ID:      "msg-1",
+		Action:  ws.ActionTaskArchive,
+		Payload: json.RawMessage(`{"id":"task-1"}`),
+	}
+	resp, err := h.wsArchiveTask(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("wsArchiveTask: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["already_archived"] != true {
+		t.Fatalf("already_archived = %v, want true", payload["already_archived"])
+	}
+}

@@ -407,14 +407,19 @@ func (h *TaskHandlers) wsArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 			// unarchivable. cascade=false matches the WS payload, which has
 			// no cascade flag.
 			if h.handoffSvc != nil {
-				if _, err := h.handoffSvc.ArchiveTaskTree(ctx, id, false); err != nil {
+				out, err := h.handoffSvc.ArchiveTaskTree(ctx, id, false)
+				if err != nil {
 					if !isCascadePostCommitError(err) {
 						return nil, err
 					}
 					h.logger.Warn("task archived but post-commit housekeeping failed",
 						zap.String("task_id", id), zap.Error(err))
 				}
-				return dto.SuccessResponse{Success: true}, nil
+				response := map[string]interface{}{responseKeySuccess: true}
+				if out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0 {
+					response["already_archived"] = true
+				}
+				return response, nil
 			}
 			if err := h.service.ArchiveTask(ctx, id); err != nil {
 				if errors.Is(err, service.ErrTaskAlreadyArchived) {

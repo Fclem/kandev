@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
@@ -739,6 +740,9 @@ func (s *Service) DeleteAutomation(ctx context.Context, id string) error {
 	}
 	unlock := s.automationRunLock(id)
 	defer unlock()
+	if err := s.CancelAutomationRetries(ctx, id); err != nil {
+		return err
+	}
 	if err := s.stopOpenAutomationRuns(ctx, id); err != nil {
 		return err
 	}
@@ -903,8 +907,18 @@ func (s *Service) StopRun(ctx context.Context, automationID, runID string) (*Aut
 	if err != nil {
 		return nil, fmt.Errorf("get run: %w", err)
 	}
-	if run == nil || run.AutomationID != automationID ||
-		(run.Status != RunStatusTriggered && run.Status != RunStatusTaskCreated) {
+	if run == nil || run.AutomationID != automationID {
+		return nil, ErrAutomationNotFound
+	}
+	if run.RetryGroupID != "" && (run.RetryState == RetryStateScheduled || run.RetryState == RetryStateClaimed) {
+		if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
+			return nil, err
+		}
+		run.Status = RunStatusCancelled
+		run.RetryState = RetryStateCancelled
+		return run, nil
+	}
+	if run.Status != RunStatusTriggered && run.Status != RunStatusTaskCreated {
 		return nil, ErrAutomationNotFound
 	}
 	if run.TaskID != "" && run.SessionID != "" && run.TurnID != "" {
@@ -941,18 +955,18 @@ func (s *Service) EnableAutomation(ctx context.Context, id string) error {
 	return s.store.UpdateAutomation(ctx, id, &UpdateAutomationRequest{Enabled: &enabled})
 }
 
-// DisableAutomation sets enabled = false.
+// DisableAutomation sets enabled = false and fences pending retries.
 func (s *Service) DisableAutomation(ctx context.Context, id string) error {
 	if err := s.authorizeAutomation(ctx, id); err != nil {
 		return err
 	}
 	enabled := false
-	return s.store.UpdateAutomation(ctx, id, &UpdateAutomationRequest{Enabled: &enabled})
+	if err := s.store.UpdateAutomation(ctx, id, &UpdateAutomationRequest{Enabled: &enabled}); err != nil {
+		return err
+	}
+	return s.CancelAutomationRetries(ctx, id)
 }
 
-// --- Trigger CRUD ---
-
-// validateScheduledConfig rejects a cron expression the scheduler could never
 // run. Without it the editor's regex is the only gate, and it is both too
 // permissive (accepting "60 * * * *", "*/0 * * * *", reversed ranges like
 // "10-5 * * * *") and too strict (rejecting named fields such as MON or JAN
@@ -1397,18 +1411,34 @@ func (s *Service) FireTrigger(ctx context.Context, automationID, triggerID strin
 		return FireResult{Skipped: true, Reason: capReason}, nil
 	}
 
-	evt := &AutomationTriggeredEvent{
-		AutomationID: automationID,
-		RunID:        admittedRun.ID,
-		TriggerID:    triggerID,
-		TriggerType:  triggerType,
-		TriggerData:  triggerData,
-		DedupKey:     dedupKey,
+	var evt *AutomationTriggeredEvent
+	if admittedRun.RetryGroupID != "" {
+		evt = &AutomationTriggeredEvent{
+			RunID: admittedRun.ID, SnapshotVersion: admittedRun.RetryLaunchConfigVersion,
+		}
+	} else {
+		evt = &AutomationTriggeredEvent{
+			AutomationID: automationID,
+			RunID:        admittedRun.ID,
+			TriggerID:    triggerID,
+			TriggerType:  triggerType,
+			TriggerData:  triggerData,
+			DedupKey:     dedupKey,
+		}
 	}
 
 	event := bus.NewEvent(events.AutomationTriggered, "automation_service", evt)
 	if err := s.eventBus.Publish(ctx, events.AutomationTriggered, event); err != nil {
-		if markErr := s.store.MarkRunTerminal(ctx, admittedRun.ID, "", "", RunStatusFailed, err.Error()); markErr != nil {
+		if admittedRun.RetryGroupID != "" {
+			eventID := fmt.Sprintf("%s:%d", admittedRun.ID, admittedRun.RetryLaunchConfigVersion)
+			if revokeErr := s.store.FailRetryOutbox(ctx, eventID, err); revokeErr != nil {
+				s.logger.Warn("failed to revoke retry outbox event", zap.Error(revokeErr))
+			}
+			_, finalizeErr := s.FinalizeAutomationRetryFailure(ctx, admittedRun.ID, admittedRun.RetryGroupGeneration, err, "launch")
+			if finalizeErr != nil {
+				return FireResult{}, fmt.Errorf("publish automation triggered: %w; finalize retry: %v", err, finalizeErr)
+			}
+		} else if markErr := s.store.MarkRunTerminal(ctx, admittedRun.ID, "", "", RunStatusFailed, err.Error()); markErr != nil {
 			return FireResult{}, fmt.Errorf("publish automation triggered: %w; mark admitted run failed: %v", err, markErr)
 		}
 		return FireResult{}, fmt.Errorf("publish automation triggered: %w", err)
@@ -1468,16 +1498,51 @@ func (s *Service) admitTriggerLocked(
 	}
 
 	run := &AutomationRun{
-		AutomationID: a.ID,
-		TriggerID:    triggerID,
-		TriggerType:  triggerType,
-		Status:       RunStatusTriggered,
-		DedupKey:     dedupKey,
-		TriggerData:  triggerData,
-		DisplayTitle: RenderRunDisplayTitle(a, triggerType, triggerData),
+		AutomationID:  a.ID,
+		TriggerID:     triggerID,
+		TriggerType:   triggerType,
+		Status:        RunStatusTriggered,
+		DedupKey:      dedupKey,
+		TriggerData:   triggerData,
+		DisplayTitle:  RenderRunDisplayTitle(a, triggerType, triggerData),
+		AttemptNumber: 1,
+		RetryState:    RetryStateNone,
+	}
+	policy, policyErr := NormalizeRetryPolicy(a.RetryPolicy)
+	if policyErr != nil {
+		return nil, "", false, policyErr
+	}
+	if policy.Mode != RetryModeDisabled {
+		safeTriggerData := SafeRetryTriggerProjection(triggerType, triggerID, triggerData, dedupKey)
+		run.TriggerData = safeTriggerData
+		run.DisplayTitle = RenderRunDisplayTitle(a, triggerType, safeTriggerData)
+		groupID := uuid.NewString()
+		policyJSON, _ := json.Marshal(policy)
+		run.RetryGroupID = groupID
+		run.RetryGroupGeneration = 1
+		run.RetryState = RetryStateTriggered
+		run.RetryBaseTitle = run.DisplayTitle
+		run.RetryResolvedTitle = run.DisplayTitle
+		run.RetryPolicySnapshot = string(policyJSON)
+		run.RetryTriggerSnapshot = string(safeTriggerData)
+		run.RetryResolvedPrompt = InterpolatePrompt(a.Prompt, triggerType, safeTriggerData)
+		run.RetryLaunchConfigVersion = 1
 	}
 	if err := s.store.CreateRun(ctx, run); err != nil {
 		return nil, "", false, fmt.Errorf("record admitted run: %w", err)
+	}
+	if run.RetryGroupID != "" {
+		if err := s.store.CreateRetryGroup(ctx, &RetryGroup{
+			ID: run.RetryGroupID, AutomationID: a.ID, TriggerID: triggerID,
+			Generation: 1, State: RetryGroupLive,
+		}); err != nil {
+			_ = s.store.DeleteRun(ctx, run.ID)
+			return nil, "", false, fmt.Errorf("record retry group: %w", err)
+		}
+		if err := s.persistRetryAdmission(ctx, run); err != nil {
+			_ = s.store.DeleteRun(ctx, run.ID)
+			return nil, "", false, fmt.Errorf("record retry admission: %w", err)
+		}
 	}
 	return run, "", false, nil
 }

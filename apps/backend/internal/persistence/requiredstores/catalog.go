@@ -79,7 +79,7 @@ var catalog = []Descriptor{
 	{ID: "azure-devops", OwnerPackage: "internal/azuredevops", RequiredTables: []string{"azure_devops_configs"}, DependsOn: []string{"task", "user"}, Capabilities: []Capability{CapabilityBoolean, CapabilityTimestamp, CapabilityConflict}},
 	{ID: "workflow-sync", OwnerPackage: "internal/workflowsync", RequiredTables: []string{"workflow_sync_configs"}, DependsOn: []string{"workflow"}, Capabilities: []Capability{CapabilityBoolean, CapabilityTimestamp, CapabilityConflict}},
 	{ID: "office-config-sync", OwnerPackage: "internal/office/configsync", RequiredTables: []string{"office_config_sync_configs"}, DependsOn: []string{"office"}, Capabilities: []Capability{CapabilityBoolean, CapabilityTimestamp, CapabilityConflict}},
-	{ID: "automation", OwnerPackage: "internal/automation", RequiredTables: []string{"automations", "automation_runs"}, DependsOn: []string{"task", "user"}, Capabilities: []Capability{CapabilityBoolean, CapabilityTimestamp, CapabilityConflict, CapabilityTransaction}},
+	{ID: "automation", OwnerPackage: "internal/automation", RequiredTables: []string{"automations", "automation_runs", "automation_retry_groups", "automation_run_task_intents", "automation_run_operations", "automation_retry_outbox", "automation_retry_event_receipts"}, DependsOn: []string{"task", "user"}, Capabilities: []Capability{CapabilityBoolean, CapabilityTimestamp, CapabilityConflict, CapabilityTransaction}},
 }
 
 // Catalog returns a deep copy of the authoritative store catalog.

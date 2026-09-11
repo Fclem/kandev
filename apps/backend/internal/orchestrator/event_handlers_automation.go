@@ -70,6 +70,10 @@ type automationRetryOperation interface {
 	CommitRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken, taskID string) error
 }
 
+type automationRetryOperationFence interface {
+	VerifyRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken string) error
+}
+
 const retryOperationCommittedState = "committed"
 
 type reviewTaskAdopter interface {
@@ -366,11 +370,16 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 		task, taskErr = s.adoptCommittedRetryTask(ctx, a, evt)
 	} else {
 		task, continuationSession, action, reason, taskErr = s.prepareAutomationTask(
-			ctx, a, evt, title, prompt, metadata,
-		)
+			ctx, a, evt, title, prompt, metadata, retryOperation)
 	}
 	if taskErr != nil {
 		s.recordFailedRun(ctx, evt, taskErr.Error())
+		return
+	}
+	if retryRun != nil && retryOperation != nil &&
+		retryOperation.State == retryOperationCommittedState &&
+		s.retryRunHasExactBinding(ctx, evt.RunID) {
+		s.acknowledgeRetryEventAfterBinding(ctx, evt)
 		return
 	}
 	if retryOperation != nil && retryOperation.State != retryOperationCommittedState {
@@ -401,13 +410,6 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 		}
 		return
 	}
-	if retryRun != nil {
-		if receipt, ok := s.automationService.(automationRetryReceipt); ok {
-			if err := receipt.AcknowledgeRetryEvent(ctx, evt.RunID, evt.SnapshotVersion); err != nil {
-				s.logger.Warn("failed to acknowledge automation retry event", zap.Error(err))
-			}
-		}
-	}
 
 	// Associate PR with task for github_pr triggers (same as PR Watcher).
 	if evt.TriggerType == automation.TriggerTypeGitHubPR {
@@ -422,7 +424,9 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 		zap.String("trigger_type", string(evt.TriggerType)))
 
 	if continuationSession != nil {
-		s.dispatchAutomationContinuation(ctx, a, task, continuationSession, prompt, metadata, evt.RunID, action, reason)
+		if s.dispatchAutomationContinuation(ctx, a, task, continuationSession, prompt, metadata, evt.RunID, action, reason, retryOperation) && retryRun != nil {
+			s.acknowledgeRetryEventAfterBinding(ctx, evt)
+		}
 		return
 	}
 
@@ -430,7 +434,9 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 	// it, so the trigger has to be the start signal. A workflow step's
 	// auto_start_agent setting is irrelevant here because the automation
 	// trigger is the start signal for both hidden runs and visible normal tasks.
-	s.autoStartAutomationTaskForRun(ctx, a, task, task.WorkflowStepID, evt.RunID, action, reason)
+	if s.autoStartAutomationTaskForRun(ctx, a, task, task.WorkflowStepID, evt.RunID, action, reason) && retryRun != nil {
+		s.acknowledgeRetryEventAfterBinding(ctx, evt)
+	}
 }
 
 func (s *Service) adoptCommittedRetryTask(ctx context.Context, a *automation.Automation, evt *automation.AutomationTriggeredEvent) (*models.Task, error) {
@@ -464,6 +470,17 @@ func (s *Service) beginRetryTaskOperation(ctx context.Context, evt *automation.A
 	}
 	return operationService.BeginRetryTaskOperation(ctx, evt.RunID, evt.RetryGroupGeneration)
 }
+func (s *Service) verifyRetryTaskOperation(ctx context.Context, evt *automation.AutomationTriggeredEvent, operations ...*automation.RetryOperation) error {
+	if len(operations) == 0 || operations[0] == nil {
+		return nil
+	}
+	fence, ok := s.automationService.(automationRetryOperationFence)
+	if !ok {
+		return errors.New("retry operation fence unavailable")
+	}
+	operation := operations[0]
+	return fence.VerifyRetryTaskOperation(ctx, evt.RunID, evt.RetryGroupGeneration, operation.LeaseToken)
+}
 
 func (s *Service) prepareAutomationTask(
 	ctx context.Context,
@@ -471,9 +488,10 @@ func (s *Service) prepareAutomationTask(
 	evt *automation.AutomationTriggeredEvent,
 	title, prompt string,
 	metadata map[string]interface{},
+	operations ...*automation.RetryOperation,
 ) (*models.Task, *models.TaskSession, automation.ThreadAction, string, error) {
-	action := automation.ThreadActionCreated
 	reason := "new task created for automation run"
+	action := automation.ThreadActionCreated
 	taskMode := a.TaskMode
 	if taskMode == "" {
 		taskMode = automation.TaskModeAutomationRun
@@ -507,6 +525,9 @@ func (s *Service) prepareAutomationTask(
 	}
 
 	repositories := s.resolveAutomationRepository(ctx, a, evt)
+	if err := s.verifyRetryTaskOperation(ctx, evt, operations...); err != nil {
+		return nil, nil, action, reason, err
+	}
 	task, err := s.reviewTaskCreator.CreateReviewTask(ctx, &ReviewTaskRequest{
 		WorkspaceID:    a.WorkspaceID,
 		WorkflowID:     a.WorkflowID,
@@ -861,7 +882,7 @@ func (s *Service) bindAutomationRun(
 	return false
 }
 
-func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automation.Automation, task *models.Task, session *models.TaskSession, prompt string, metadata map[string]interface{}, runID string, action automation.ThreadAction, reason string) {
+func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automation.Automation, task *models.Task, session *models.TaskSession, prompt string, metadata map[string]interface{}, runID string, action automation.ThreadAction, reason string, operations ...*automation.RetryOperation) bool {
 	var snapshot *automationContinuationMetadataSnapshot
 	restore := func() {
 		if snapshot == nil {
@@ -880,6 +901,15 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		if err != nil {
 			return automation.RunDispatch{}, err
 		}
+		if len(operations) > 0 && operations[0] != nil {
+			operation := operations[0]
+			event := &automation.AutomationTriggeredEvent{
+				RunID: runID, RetryGroupGeneration: operation.GroupGeneration,
+			}
+			if err := s.verifyRetryTaskOperation(ctx, event, operation); err != nil {
+				return automation.RunDispatch{}, err
+			}
+		}
 		result, err := s.promptAutomationContinuation(ctx, task, session, prompt)
 		if err != nil {
 			restore()
@@ -888,7 +918,7 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		return result, nil
 	}
 	if s.dispatchAutomationRun(ctx, a.ID, task.ID, session.ID, runID, action, reason, "continuation", dispatch, restore) {
-		return
+		return s.retryRunHasExactBinding(ctx, runID)
 	}
 
 	dispatchResult, err := dispatch()
@@ -898,14 +928,24 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) {
 			s.markAutomationRunTerminal(ctx, task.ID, false, err.Error())
 		}
-		return
+		return false
 	}
 	if !s.bindAutomationRun(ctx, runID, dispatchResult.TaskID, dispatchResult.SessionID, dispatchResult.TurnID, action, reason, "continuation") {
 		restore()
-		return
+		return false
 	}
+	return s.retryRunHasExactBinding(ctx, runID)
 }
 
+func (s *Service) cancelAutomationDispatch(ctx context.Context, taskID, sessionID string) {
+	if s.turnService == nil || s.executor == nil {
+		return
+	}
+	if _, err := s.stopTaskSessionForCoordinator(ctx, taskID, sessionID); err != nil {
+		s.logger.Warn("failed to cancel automation dispatch without a turn identity",
+			zap.String("task_id", taskID), zap.String("session_id", sessionID), zap.Error(err))
+	}
+}
 func (s *Service) promptAutomationContinuation(
 	ctx context.Context,
 	task *models.Task,
@@ -933,16 +973,6 @@ func (s *Service) promptAutomationContinuation(
 	return automation.RunDispatch{TaskID: task.ID, SessionID: session.ID, TurnID: turnID}, nil
 }
 
-func (s *Service) cancelAutomationDispatch(ctx context.Context, taskID, sessionID string) {
-	if s.turnService == nil || s.executor == nil {
-		return
-	}
-	if _, err := s.stopTaskSessionForCoordinator(ctx, taskID, sessionID); err != nil {
-		s.logger.Warn("failed to cancel automation dispatch without a turn identity",
-			zap.String("task_id", taskID), zap.String("session_id", sessionID), zap.Error(err))
-	}
-}
-
 func (s *Service) recordAutomationContinuationMessage(ctx context.Context, taskID, sessionID, turnID, prompt string) {
 	if s.messageCreator == nil || prompt == "" || turnID == "" {
 		return
@@ -953,36 +983,57 @@ func (s *Service) recordAutomationContinuationMessage(ctx context.Context, taskI
 	}
 }
 
+func (s *Service) retryRunHasExactBinding(ctx context.Context, runID string) bool {
+	if runID == "" {
+		return true
+	}
+	binding, ok := s.automationService.(automationRunBinding)
+	if !ok {
+		return false
+	}
+	run, err := binding.GetRun(ctx, runID)
+	return err == nil && run != nil && run.Status == automation.RunStatusTaskCreated &&
+		run.SessionID != "" && run.TurnID != ""
+}
+func (s *Service) acknowledgeRetryEventAfterBinding(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
+	receipt, ok := s.automationService.(automationRetryReceipt)
+	if !ok {
+		s.logger.Warn("retry event acknowledgement is unavailable",
+			zap.String("run_id", evt.RunID))
+		return
+	}
+	if err := receipt.AcknowledgeRetryEvent(ctx, evt.RunID, evt.SnapshotVersion); err != nil {
+		s.logger.Warn("failed to acknowledge automation retry event", zap.Error(err))
+	}
+}
+
 func (s *Service) autoStartAutomationTask(ctx context.Context, a *automation.Automation, task *models.Task, workflowStepID string) {
 	s.autoStartAutomationTaskForRun(ctx, a, task, workflowStepID, "", automation.ThreadActionCreated, "")
 }
 
-func (s *Service) autoStartAutomationTaskForRun(ctx context.Context, a *automation.Automation, task *models.Task, workflowStepID, runID string, action automation.ThreadAction, reason string) {
+func (s *Service) autoStartAutomationTaskForRun(ctx context.Context, a *automation.Automation, task *models.Task, workflowStepID, runID string, action automation.ThreadAction, reason string) bool {
 	if s.dispatchAutomationRun(ctx, a.ID, task.ID, "", runID, action, reason, "auto-start", func() (automation.RunDispatch, error) {
 		return s.startAutomationTask(ctx, a, task, workflowStepID)
 	}, nil) {
-		return
+		return s.retryRunHasExactBinding(ctx, runID)
 	}
 
 	dispatch, err := s.startAutomationTask(ctx, a, task, workflowStepID)
 	if err != nil {
 		s.logger.Error("failed to auto-start automation task",
 			zap.String("task_id", task.ID), zap.Error(err))
-		// The run row was written before the launch, so a start that never
-		// happened would otherwise sit at task_created forever and hold a
-		// max_concurrent_runs slot — one failed launch would stop the
-		// automation permanently, with no completion event coming to free it.
 		if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) {
 			s.markAutomationRunTerminal(ctx, task.ID, false, err.Error())
 		}
-		return
+		return false
 	}
 	if !s.bindAutomationRun(ctx, runID, dispatch.TaskID, dispatch.SessionID, dispatch.TurnID, action, reason, "auto-start") {
-		return
+		return false
 	}
 	s.logger.Info("auto-started automation task",
 		zap.String("task_id", task.ID),
 		zap.String("automation_id", a.ID))
+	return s.retryRunHasExactBinding(ctx, runID)
 }
 
 func (s *Service) startAutomationTask(

@@ -979,7 +979,12 @@ func (s *Store) DeleteAutomationWithCleanup(ctx context.Context, id string, clea
 func (s *Store) ListAutomationTaskIDs(ctx context.Context, id string) ([]string, error) {
 	var taskIDs []string
 	if err := s.ro.SelectContext(ctx, &taskIDs, s.ro.Rebind(
-		`SELECT DISTINCT task_id FROM automation_runs WHERE automation_id = ? AND task_id != ''`), id); err != nil {
+		`SELECT DISTINCT task_id FROM automation_runs WHERE automation_id = ? AND task_id != ''
+		 UNION
+		 SELECT DISTINCT o.external_task_id
+		 FROM automation_run_operations o
+		 JOIN automation_runs ar ON ar.id = o.run_id
+		 WHERE ar.automation_id = ? AND o.state = ? AND o.external_task_id != ''`), id, id, retryOperationCommitted); err != nil {
 		return nil, err
 	}
 	var continuationTaskID string
@@ -1001,11 +1006,15 @@ func loadAutomationCleanupOwner(ctx context.Context, tx *sqlx.Tx, id string) (au
 	}
 	return owner, err == nil, err
 }
-
 func listAutomationCleanupTaskIDs(ctx context.Context, tx *sqlx.Tx, id, continuationTaskID string) ([]string, error) {
 	var taskIDs []string
 	if err := tx.SelectContext(ctx, &taskIDs, tx.Rebind(
-		`SELECT DISTINCT task_id FROM automation_runs WHERE automation_id = ? AND task_id != ''`), id); err != nil {
+		`SELECT DISTINCT task_id FROM automation_runs WHERE automation_id = ? AND task_id != ''
+		 UNION
+		 SELECT DISTINCT o.external_task_id
+		 FROM automation_run_operations o
+		 JOIN automation_runs ar ON ar.id = o.run_id
+		 WHERE ar.automation_id = ? AND o.state = ? AND o.external_task_id != ''`), id, id, retryOperationCommitted); err != nil {
 		return nil, err
 	}
 	if continuationTaskID != "" {

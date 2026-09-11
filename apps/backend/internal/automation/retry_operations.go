@@ -103,6 +103,31 @@ func (s *Store) BeginRetryTaskOperation(ctx context.Context, runID string, gener
 	return &operation, nil
 }
 
+// VerifyRetryTaskOperation is the final durable admission fence immediately
+// before provider task creation.
+func (s *Store) VerifyRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken string) error {
+	var live int
+	err := s.ro.GetContext(ctx, &live, s.ro.Rebind(`
+		SELECT COUNT(*) FROM automation_run_operations o
+		JOIN automation_runs ar ON ar.id = o.run_id
+		JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
+		JOIN automations a ON a.id = ar.automation_id
+		WHERE o.run_id = ? AND o.group_generation = ? AND o.operation_kind = ?
+			AND o.state = ? AND o.lease_token = ?
+			AND ar.status = ? AND ar.retry_state = ?
+			AND ar.retry_group_generation = ? AND rg.generation = ?
+			AND rg.state = ? AND a.enabled = TRUE`),
+		runID, generation, retryTaskOperationKind, retryOperationLeased, leaseToken,
+		RunStatusTriggered, RetryStateTriggered, generation, generation, RetryGroupLive)
+	if err != nil {
+		return err
+	}
+	if live != 1 {
+		return ErrRetryGenerationMismatch
+	}
+	return nil
+}
+
 // CommitRetryTaskOperation records the provider task identity before the run
 // is bound. The identity remains durable if the process crashes afterward.
 func (s *Store) CommitRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken, taskID string) error {
@@ -131,4 +156,20 @@ func (s *Store) CommitRetryTaskOperation(ctx context.Context, runID string, gene
 		return getErr
 	}
 	return ErrRetryGenerationMismatch
+}
+
+func (s *Service) GetRetryTaskOperation(ctx context.Context, runID string, generation int64) (*RetryOperation, error) {
+	return s.store.GetRetryTaskOperation(ctx, runID, generation)
+}
+
+func (s *Service) BeginRetryTaskOperation(ctx context.Context, runID string, generation int64) (*RetryOperation, error) {
+	return s.store.BeginRetryTaskOperation(ctx, runID, generation)
+}
+
+func (s *Service) VerifyRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken string) error {
+	return s.store.VerifyRetryTaskOperation(ctx, runID, generation, leaseToken)
+}
+
+func (s *Service) CommitRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken, taskID string) error {
+	return s.store.CommitRetryTaskOperation(ctx, runID, generation, leaseToken, taskID)
 }

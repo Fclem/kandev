@@ -910,9 +910,12 @@ func (s *Service) StopRun(ctx context.Context, automationID, runID string) (*Aut
 	if run == nil || run.AutomationID != automationID {
 		return nil, ErrAutomationNotFound
 	}
-	if run.RetryGroupID != "" && (run.RetryState == RetryStateScheduled || run.RetryState == RetryStateClaimed) {
+	if run.RetryGroupID != "" && !retryRunIsTerminal(run) {
 		if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
 			return nil, err
+		}
+		if run.TaskID != "" && run.SessionID != "" && run.TurnID != "" && s.runStopper != nil {
+			_, _ = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
 		}
 		run.Status = RunStatusCancelled
 		run.RetryState = RetryStateCancelled

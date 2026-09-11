@@ -294,6 +294,9 @@ type TaskEventPublisher interface {
 	PublishTaskUpdated(ctx context.Context, task *models.Task, oldWorkflowIDs ...string)
 	PublishTaskDeleted(ctx context.Context, task *models.Task)
 }
+type dependencyChangePublisher interface {
+	PublishDependencyChange(context.Context, ...string)
+}
 
 type TaskDeletedEventPublisherWithExtra interface {
 	PublishTaskDeletedWithExtra(ctx context.Context, task *models.Task, extra map[string]interface{})

@@ -35,6 +35,10 @@ const (
 	workspaceDeleteCleanupConcurrency = 8
 )
 
+type workflowDeleteTaskLister interface {
+	ListTasksForDeletion(context.Context, string, string, int, int) ([]*models.Task, int, error)
+}
+
 var ErrWorkspaceConfirmNameMismatch = errors.New("confirm_name does not match workspace name")
 
 const maxRepositorySecretBindings = 100
@@ -813,9 +817,12 @@ func (s *Service) listWorkflowTasksForDelete(
 ) ([]*models.Task, error) {
 	var all []*models.Task
 	for page := 1; ; page++ {
-		tasks, total, err := s.tasks.ListTasksByWorkspace(
-			ctx, workflow.WorkspaceID, workflow.ID, "", "", page, workspaceDeletePageSize,
-			"", true, true, false, false,
+		lister, ok := s.tasks.(workflowDeleteTaskLister)
+		if !ok {
+			return nil, errors.New("task repository cannot enumerate all task origins for workflow deletion")
+		}
+		tasks, total, err := lister.ListTasksForDeletion(
+			ctx, workflow.WorkspaceID, workflow.ID, page, workspaceDeletePageSize,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("list tasks for workflow delete cascade: %w", err)

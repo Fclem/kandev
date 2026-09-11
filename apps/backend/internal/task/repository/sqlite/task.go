@@ -3279,6 +3279,87 @@ func (r *Repository) ListTasksByWorkspaceWithArchiveMode(ctx context.Context, wo
 	return tasks, total, nil
 }
 
+// ListTasksForDeletion returns every task in a workspace or workflow,
+// including archived, ephemeral, and automation-origin tasks. Destructive
+// callers use this contract instead of the user-facing list filters.
+func (r *Repository) ListTasksForDeletion(
+	ctx context.Context,
+	workspaceID, workflowID string,
+	page, pageSize int,
+) ([]*models.Task, int, error) {
+	ctx, span := tracing.Tracer("kandev-db").Start(ctx, "db.ListTasksForDeletion")
+	defer span.End()
+	offset := (page - 1) * pageSize
+	if offset < 0 {
+		offset = 0
+	}
+	if pageSize <= 0 {
+		pageSize = 1
+	}
+	rows, total, err := r.queryAllTasks(ctx, workspaceID, "", workflowID, "", pageSize, offset, "")
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	tasks, err := r.scanTasks(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return tasks, total, nil
+}
+
+// RestoreTaskParentIfUnchanged restores only the structural fields changed by
+// no-cascade deletion. The row lock and parent comparison are in one
+// transaction so compensation cannot overwrite a concurrent reparent or edit.
+func (r *Repository) RestoreTaskParentIfUnchanged(
+	ctx context.Context,
+	taskID, expectedParentID, restoredParentID string,
+	restoredWorkspaceMode string,
+) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	query := `SELECT parent_id, metadata FROM tasks WHERE id = ?`
+	if dialect.IsPostgres(r.db.DriverName()) {
+		query += ` FOR UPDATE`
+	}
+	var currentParent sql.NullString
+	var metadataJSON []byte
+	if err := tx.QueryRowxContext(ctx, r.db.Rebind(query), taskID).Scan(&currentParent, &metadataJSON); err != nil {
+		return err
+	}
+	if currentParent.String != expectedParentID {
+		return fmt.Errorf("task %s parent changed during compensation", taskID)
+	}
+
+	metadata := map[string]interface{}{}
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &metadata); err != nil {
+			return fmt.Errorf("decode task %s metadata during compensation: %w", taskID, err)
+		}
+	}
+	if restoredWorkspaceMode == "inherit_parent" {
+		if workspace, ok := metadata["workspace"].(map[string]interface{}); ok &&
+			workspace["mode"] == "shared_group" {
+			workspace["mode"] = restoredWorkspaceMode
+		}
+	}
+	metadataJSON, err = json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("encode task %s metadata during compensation: %w", taskID, err)
+	}
+	_, err = tx.ExecContext(ctx, r.db.Rebind(`
+		UPDATE tasks SET parent_id = ?, metadata = ?, updated_at = ? WHERE id = ?
+	`), restoredParentID, string(metadataJSON), r.nowUTC(), taskID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // queryAllTasks fetches all tasks (no search) for a workspace with pagination.
 func (r *Repository) queryAllTasks(ctx context.Context, workspaceID, taskFilter, workflowID, repositoryID string, pageSize, offset int, sort string) (*sql.Rows, int, error) {
 	args := []interface{}{workspaceID}

@@ -3046,6 +3046,13 @@ func TestService_DeleteWorkflow(t *testing.T) {
 	_ = repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-1", Name: "Workspace"})
 	workflow := &models.Workflow{ID: "wf-123", WorkspaceID: "ws-1", Name: "Test Workflow"}
 	_ = repo.CreateWorkflow(ctx, workflow)
+	automation := &models.Task{
+		ID: "automation-run-delete", WorkspaceID: "ws-1", WorkflowID: workflow.ID,
+		IsEphemeral: true, Origin: models.TaskOriginAutomationRun, Title: "Automation run",
+	}
+	if err := repo.CreateTask(ctx, automation); err != nil {
+		t.Fatalf("create automation task: %v", err)
+	}
 
 	err := svc.DeleteWorkflow(ctx, "wf-123")
 	if err != nil {
@@ -3056,6 +3063,14 @@ func TestService_DeleteWorkflow(t *testing.T) {
 	if err == nil {
 		t.Error("expected workflow to be deleted")
 	}
+	archived, err := repo.GetTask(ctx, automation.ID)
+	if err != nil {
+		t.Fatalf("get automation task after workflow deletion: %v", err)
+	}
+	if archived.ArchivedAt == nil {
+		t.Fatal("automation-origin task was omitted from workflow deletion cascade")
+	}
+
 }
 
 func TestService_ListWorkflows(t *testing.T) {

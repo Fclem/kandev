@@ -1602,6 +1602,24 @@ func (l leakyListTaskRepo) ListTasksByWorkspace(
 	}
 	return append(real, l.extra...), total + len(l.extra), nil
 }
+func (l leakyListTaskRepo) ListTasksForDeletion(
+	ctx context.Context,
+	workspaceID, workflowID string,
+	page, pageSize int,
+) ([]*models.Task, int, error) {
+	lister, ok := l.TaskRepository.(workflowDeleteTaskLister)
+	if !ok {
+		return l.ListTasksByWorkspace(
+			ctx, workspaceID, workflowID, "", "", page, pageSize, "",
+			true, true, false, false,
+		)
+	}
+	real, total, err := lister.ListTasksForDeletion(ctx, workspaceID, workflowID, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	return append(real, l.extra...), total + len(l.extra), nil
+}
 
 // TestService_DeleteWorkflow_SkipsConcurrentlyArchivedTask covers the
 // TOCTOU race window between Service.tasks.ListTasks and Service.ArchiveTask:

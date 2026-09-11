@@ -396,6 +396,28 @@ func (f *fakeTaskRepo) SetTaskMetadataKey(_ context.Context, taskID, key string,
 	task.Metadata[key] = value
 	return nil
 }
+func (f *fakeTaskRepo) RestoreTaskParentIfUnchanged(
+	_ context.Context,
+	taskID, expectedParentID, restoredParentID, restoredWorkspaceMode string,
+) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	task := f.tasks[taskID]
+	if task == nil {
+		return errors.New("task not found")
+	}
+	if task.ParentID != expectedParentID {
+		return errors.New("task parent changed during compensation")
+	}
+	task.ParentID = restoredParentID
+	if restoredWorkspaceMode == workspaceModeInheritParent {
+		if workspace, ok := task.Metadata["workspace"].(map[string]interface{}); ok &&
+			workspace["mode"] == workspaceModeSharedGroup {
+			workspace["mode"] = restoredWorkspaceMode
+		}
+	}
+	return nil
+}
 
 // SetTaskWorkspaceMetadataIfUnchanged is a best-effort in-memory mirror of
 // the sqlite guard: it evaluates the same clauses against fake state so

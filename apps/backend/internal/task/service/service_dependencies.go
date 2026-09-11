@@ -371,6 +371,12 @@ func (s *Service) publishDependencyChange(ctx context.Context, taskIDs ...string
 	}
 }
 
+// PublishDependencyChange refreshes surviving task projections after a
+// lifecycle deletion removes dependency edges.
+func (s *Service) PublishDependencyChange(ctx context.Context, taskIDs ...string) {
+	s.publishDependencyChange(ctx, taskIDs...)
+}
+
 // dependencyEventFields renders one task's derived projection in the wire shape
 // the client's task.updated mapper reads.
 func (s *Service) dependencyEventFields(ctx context.Context, task *models.Task) map[string]interface{} {

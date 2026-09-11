@@ -931,6 +931,29 @@ func (r *fakeDeleteRepo) UpdateTask(_ context.Context, task *models.Task) error 
 	r.base.tasks[task.ID] = task
 	return nil
 }
+func (r *fakeDeleteRepo) RestoreTaskParentIfUnchanged(
+	_ context.Context,
+	taskID, expectedParentID, restoredParentID, restoredWorkspaceMode string,
+) error {
+	r.base.mu.Lock()
+	defer r.base.mu.Unlock()
+	task := r.base.tasks[taskID]
+	if task == nil {
+		return errors.New("task not found")
+	}
+	if task.ParentID != expectedParentID {
+		return errors.New("task parent changed during compensation")
+	}
+	task.ParentID = restoredParentID
+	if restoredWorkspaceMode == workspaceModeInheritParent {
+		if workspace, ok := task.Metadata["workspace"].(map[string]interface{}); ok &&
+			workspace["mode"] == workspaceModeSharedGroup {
+			workspace["mode"] = restoredWorkspaceMode
+		}
+	}
+	return nil
+}
+
 func (r *fakeDeleteRepo) DeleteTaskWithVacatedStep(_ context.Context, id string) (string, error) {
 	r.base.mu.Lock()
 	defer r.base.mu.Unlock()
@@ -1295,10 +1318,11 @@ func TestArchiveTaskTree_SerializesCascadeIdentity(t *testing.T) {
 // task.deleted and the kanban board's All-Workflows view shows stale
 // rows after a cascade.
 type fakeEventPublisher struct {
-	mu       sync.Mutex
-	updated  []string
-	deleted  []string
-	archived []bool // archivedAt nil/non-nil per updated entry
+	mu                sync.Mutex
+	updated           []string
+	deleted           []string
+	dependencyChanges []string
+	archived          []bool // archivedAt nil/non-nil per updated entry
 }
 
 func (f *fakeEventPublisher) PublishTaskUpdated(_ context.Context, task *models.Task, _ ...string) {
@@ -1312,6 +1336,32 @@ func (f *fakeEventPublisher) PublishTaskDeleted(_ context.Context, task *models.
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deleted = append(f.deleted, task.ID)
+}
+
+func (f *fakeEventPublisher) PublishDependencyChange(_ context.Context, taskIDs ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dependencyChanges = append(f.dependencyChanges, taskIDs...)
+}
+
+func TestDeleteTaskTreePublishesSurvivingDependencyChanges(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	tasks.addTask("dependent", "", "ws-1")
+	blockers := &mockBlockerRepo{blockers: []*orchmodels.TaskBlocker{
+		{TaskID: "dependent", BlockerTaskID: "root"},
+	}}
+	repo := &fakeDeleteRepo{fakeCascadeRepo: newCascadeRepo(tasks)}
+	publisher := &fakeEventPublisher{}
+	svc := NewHandoffService(repo, nil, nil, blockers, nil, nil)
+	svc.SetTaskEventPublisher(publisher)
+
+	if _, err := svc.DeleteTaskTree(context.Background(), "root", false); err != nil {
+		t.Fatalf("DeleteTaskTree: %v", err)
+	}
+	if len(publisher.dependencyChanges) != 1 || publisher.dependencyChanges[0] != "dependent" {
+		t.Fatalf("dependency projection updates = %v, want [dependent]", publisher.dependencyChanges)
+	}
 }
 
 // TestArchiveTaskTree_PublishesTaskUpdatedPerTask pins the regression

@@ -530,7 +530,8 @@ BEGIN
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
 		json_object('type','message.added','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
-			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
+			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'requests_input',NEW.requests_input,
+			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
 			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
@@ -554,7 +555,8 @@ BEGIN
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
 		json_object('type','message.updated','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
-			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
+			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'requests_input',NEW.requests_input,
+			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
 			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
@@ -625,7 +627,15 @@ BEGIN
 			'id',NEW.id,'started_at',__SQLITE_RFC3339_MILLIS__(NEW.started_at),
 			'completed_at',__SQLITE_RFC3339_MILLIS__(NEW.completed_at),
 			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
-			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at)))
+			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at)),
+			'had_output',json(CASE WHEN EXISTS (
+				SELECT 1 FROM task_session_messages output
+				WHERE output.turn_id = NEW.id AND output.author_type = 'agent'
+				AND (
+					output.type IN ('tool_call','tool_edit','tool_read','tool_search','tool_execute',
+						'agent_plan','todo','permission_request','clarification_request')
+					OR (output.type IN ('message','content','') AND trim(output.content) <> '')
+				)) THEN 'true' ELSE 'false' END))
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
 	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'session.turn.completed', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
@@ -731,9 +741,8 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION conversation_visible_content(value TEXT) RETURNS TEXT AS $$
 BEGIN
-	-- No 'n' flag: '.' must match newlines so multi-line system blocks (the
-	-- normal shape of sysprompt.Wrap) are stripped like the Go helper does.
-	RETURN btrim(regexp_replace(value, '<kandev-system>.*?</kandev-system>[[:space:]]*', '', 'g'));
+	-- PostgreSQL's dot does not match newlines unless the embedded s flag is set.
+	RETURN btrim(regexp_replace(value, '(?s)<kandev-system>.*?</kandev-system>[[:space:]]*', '', 'g'));
 END;
 $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION conversation_message_journal() RETURNS TRIGGER AS $$
@@ -750,6 +759,7 @@ BEGIN
 		ELSE json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),
 			'message_id',source_row.id,'turn_id',NULLIF(source_row.turn_id,''),'author_type',source_row.author_type,
 			'content',conversation_visible_content(source_row.content),'message_type',source_row.type,
+			'requests_input',source_row.requests_input,
 			'created_at',to_char(source_row.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
 			'updated_at',to_char(COALESCE(source_row.updated_at,source_row.created_at),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'prompt_index',source_row.prompt_seq,
 			'sender_task_id',CASE WHEN jsonb_typeof(conversation_safe_jsonb(source_row.metadata) -> 'sender_task_id') = 'string' THEN conversation_safe_jsonb(source_row.metadata) ->> 'sender_task_id' END)::text END);
@@ -779,9 +789,17 @@ BEGIN
 		ELSE
 			json_build_object('type',event_name,'session_id',source_row.task_session_id,'task_id',NULLIF(source_row.task_id,''),
 				'id',source_row.id,'started_at',to_char(source_row.started_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-			'completed_at',CASE WHEN source_row.completed_at IS NULL THEN NULL ELSE to_char(source_row.completed_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
-			'created_at',to_char(source_row.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-			'updated_at',to_char(COALESCE(source_row.updated_at,source_row.completed_at,source_row.started_at),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))::text
+				'completed_at',CASE WHEN source_row.completed_at IS NULL THEN NULL ELSE to_char(source_row.completed_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+				'created_at',to_char(source_row.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+				'updated_at',to_char(COALESCE(source_row.updated_at,source_row.completed_at,source_row.started_at),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+				'had_output',CASE WHEN source_row.completed_at IS NULL THEN NULL ELSE EXISTS (
+					SELECT 1 FROM task_session_messages output
+					WHERE output.turn_id = source_row.id AND output.author_type = 'agent'
+					AND (
+						output.type IN ('tool_call','tool_edit','tool_read','tool_search','tool_execute',
+							'agent_plan','todo','permission_request','clarification_request')
+						OR (output.type IN ('message','content','') AND btrim(output.content) <> '')
+					)) END)::text
 		END);
 	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
 	SELECT source_row.task_session_id,seq,source_row.task_session_id || ':' || seq,event_name,NULLIF(source_row.task_id,''),payload,CURRENT_TIMESTAMP

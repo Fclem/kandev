@@ -119,7 +119,7 @@ func sanitizedOrderedSessionPayload(eventType string, source map[string]any) map
 	case orderedMessageAddedEvent, orderedMessageUpdatedEvent:
 		keys = append(keys,
 			"message_id", "turn_id", "author_type", orderedContentPayloadKey,
-			"created_at", "updated_at", "prompt_index",
+			"created_at", "updated_at", "prompt_index", "requests_input",
 		)
 		if messageType, exists := source[eventTypePayloadKey]; exists {
 			payload["message_type"] = messageType
@@ -134,7 +134,7 @@ func sanitizedOrderedSessionPayload(eventType string, source map[string]any) map
 	case orderedMessageDeletedEvent:
 		keys = append(keys, "message_id")
 	case orderedTurnStartedEvent, orderedTurnCompletedEvent:
-		keys = append(keys, "id", "started_at", "completed_at", "updated_at")
+		keys = append(keys, "id", "started_at", "completed_at", "updated_at", "had_output")
 	}
 	for _, key := range keys {
 		if value, exists := source[key]; exists {

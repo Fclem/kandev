@@ -569,3 +569,28 @@ func TestConversationJournalSanitizeMigrationSkipsMalformedRows(t *testing.T) {
 		t.Fatalf("malformed event payload was rewritten to %q", eventPayload)
 	}
 }
+
+func TestConversationJournalTurnCompletionIncludesHadOutput(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-journal-empty", "session-journal-empty", "turn-journal-empty")
+
+	if err := repo.CompleteTurn(ctx, "turn-journal-empty"); err != nil {
+		t.Fatalf("complete turn: %v", err)
+	}
+
+	var raw string
+	if err := repo.db.Get(&raw, `
+		SELECT payload FROM conversation_session_events
+		WHERE session_id = 'session-journal-empty' AND event_type = 'session.turn.completed'
+	`); err != nil {
+		t.Fatalf("read completed turn event: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("decode completed turn event: %v", err)
+	}
+	if hadOutput, ok := payload["had_output"].(bool); !ok || hadOutput {
+		t.Fatalf("had_output = %#v, want false", payload["had_output"])
+	}
+}

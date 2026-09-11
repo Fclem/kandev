@@ -740,9 +740,29 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION conversation_visible_content(value TEXT) RETURNS TEXT AS $$
+DECLARE
+	result TEXT := value;
+	open_pos INTEGER;
+	close_offset INTEGER;
+	close_pos INTEGER;
 BEGIN
-	-- Match every character explicitly because PostgreSQL's dot handling differs across regex modes.
-	RETURN btrim(regexp_replace(value, '<kandev-system>[\s\S]*?</kandev-system>[[:space:]]*', '', 'g'));
+	LOOP
+		open_pos := strpos(result, '<kandev-system>');
+		IF open_pos = 0 THEN
+			EXIT;
+		END IF;
+		close_offset := strpos(
+			substr(result, open_pos + length('<kandev-system>')),
+			'</kandev-system>',
+		);
+		IF close_offset = 0 THEN
+			EXIT;
+		END IF;
+		close_pos := open_pos + length('<kandev-system>') + close_offset - 1;
+		result := substr(result, 1, open_pos - 1)
+			|| ltrim(substr(result, close_pos + length('</kandev-system>')), E' \t\n\r');
+	END LOOP;
+	RETURN btrim(result);
 END;
 $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION conversation_message_journal() RETURNS TRIGGER AS $$

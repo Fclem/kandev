@@ -573,6 +573,7 @@ func (s *Service) createAutomation(ctx context.Context, req *CreateAutomationReq
 		RepositoryIDs:                    repositoryIDs,
 		Prompt:                           req.Prompt,
 		TaskTitleTemplate:                req.TaskTitleTemplate,
+		RetryPolicy:                      req.RetryPolicy,
 		Enabled:                          true,
 		MaxConcurrentRuns:                maxRuns,
 		ContinuationPolicy:               continuationPolicy,

@@ -68,6 +68,8 @@ const createTablesSQL = `
 		continuation_policy TEXT NOT NULL DEFAULT 'new_task',
 		continuation_task_id TEXT DEFAULT '',
 		webhook_secret TEXT DEFAULT '',
+		retry_policy TEXT NOT NULL DEFAULT '{}',
+		automation_revision BIGINT NOT NULL DEFAULT 0,
 		last_triggered_at DATETIME,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
@@ -78,6 +80,7 @@ const createTablesSQL = `
 		automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
 		type TEXT NOT NULL,
 		config TEXT NOT NULL DEFAULT '{}',
+		trigger_revision BIGINT NOT NULL DEFAULT 0,
 		enabled BOOLEAN DEFAULT 1,
 		last_evaluated_at DATETIME,
 		created_at DATETIME NOT NULL,
@@ -208,6 +211,9 @@ const (
 	migrateRunManagedInputSQL                   = `ALTER TABLE automation_runs ADD COLUMN managed_input_id TEXT NOT NULL DEFAULT ''`
 	migrateRunDeliveryStatusSQL                 = `ALTER TABLE automation_runs ADD COLUMN delivery_status TEXT NOT NULL DEFAULT ''`
 	migrateRunDeliveryAttemptsSQL               = `ALTER TABLE automation_runs ADD COLUMN managed_delivery_attempts INTEGER NOT NULL DEFAULT 0`
+	migrateRetryPolicySQL                       = `ALTER TABLE automations ADD COLUMN retry_policy TEXT NOT NULL DEFAULT '{}'`
+	migrateRetryAutomationRevisionSQL           = `ALTER TABLE automations ADD COLUMN automation_revision BIGINT NOT NULL DEFAULT 0`
+	migrateTriggerRevisionSQL                   = `ALTER TABLE automation_triggers ADD COLUMN trigger_revision BIGINT NOT NULL DEFAULT 0`
 )
 
 // migrateRunDedupUniqueIndexSQL backstops admitTriggerLocked's check-then-insert
@@ -242,8 +248,8 @@ const automationColumns = `id, workspace_id, name, description, workflow_id, wor
 	managed_destination_installation_id, managed_destination_conversation_id,
 	managed_destination_plugin_id, managed_destination_instance_key, managed_destination_revision,
 	resource_revision, repository_mode, prompt, task_title_template,
-	 enabled, max_concurrent_runs, continuation_policy, continuation_task_id, webhook_secret,
-	 last_triggered_at, created_at, updated_at,
+	enabled, max_concurrent_runs, continuation_policy, continuation_task_id, webhook_secret,
+	retry_policy, automation_revision, last_triggered_at, created_at, updated_at,
 	execution_mode = 'task' AS legacy_board_card`
 
 func (s *Store) initSchema() error {
@@ -287,6 +293,9 @@ func (s *Store) initSchema() error {
 		{"automation_runs.managed_input_id", schemaSQLForDriver(migrateRunManagedInputSQL, s.db.DriverName())},
 		{"automation_runs.delivery_status", schemaSQLForDriver(migrateRunDeliveryStatusSQL, s.db.DriverName())},
 		{"automation_runs.managed_delivery_attempts", schemaSQLForDriver(migrateRunDeliveryAttemptsSQL, s.db.DriverName())},
+		{"automations.retry_policy", schemaSQLForDriver(migrateRetryPolicySQL, s.db.DriverName())},
+		{"automations.automation_revision", schemaSQLForDriver(migrateRetryAutomationRevisionSQL, s.db.DriverName())},
+		{"automation_triggers.trigger_revision", schemaSQLForDriver(migrateTriggerRevisionSQL, s.db.DriverName())},
 	}
 	for _, migration := range migrations {
 		if err := migrate.Apply(migration.name, migration.stmt); err != nil {
@@ -457,6 +466,16 @@ func (s *Store) CreateAutomation(ctx context.Context, a *Automation) error {
 	if a.WebhookSecret == "" {
 		a.WebhookSecret = generateSecret()
 	}
+	normalizedPolicy, err := NormalizeRetryPolicy(a.RetryPolicy)
+	if err != nil {
+		return err
+	}
+	a.RetryPolicy = normalizedPolicy
+	policyJSON, err := json.Marshal(normalizedPolicy)
+	if err != nil {
+		return fmt.Errorf("encode retry policy: %w", err)
+	}
+	a.RetryPolicyJSON = string(policyJSON)
 	now := time.Now().UTC()
 	a.CreatedAt = now
 	a.UpdatedAt = now
@@ -509,8 +528,8 @@ func (s *Store) CreateAutomation(ctx context.Context, a *Automation) error {
 			managed_destination_instance_key, managed_destination_revision, resource_revision,
 			repository_mode, prompt, task_title_template, execution_mode,
 			enabled, max_concurrent_runs, continuation_policy, continuation_task_id,
-			webhook_secret, last_triggered_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`),
+			retry_policy, automation_revision, webhook_secret, last_triggered_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		a.ID, a.WorkspaceID, a.Name, a.Description, a.WorkflowID, a.WorkflowStepID,
 		a.AgentProfileID, a.ExecutorProfileID,
 		string(a.TaskMode), a.ManagedOwnerInstallationID, a.ManagedDestinationInstallationID,
@@ -518,7 +537,8 @@ func (s *Store) CreateAutomation(ctx context.Context, a *Automation) error {
 		a.ManagedDestinationInstanceKey, a.ManagedDestinationRevision, a.ResourceRevision, string(a.RepositoryMode),
 		a.Prompt, a.TaskTitleTemplate,
 		a.Enabled, a.MaxConcurrentRuns, a.ContinuationPolicy, a.ContinuationTaskID,
-		a.WebhookSecret, a.LastTriggeredAt, a.CreatedAt, a.UpdatedAt)
+		a.RetryPolicyJSON, a.AutomationRevision, a.WebhookSecret,
+		a.LastTriggeredAt, a.CreatedAt, a.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -553,6 +573,10 @@ func (s *Store) GetAutomation(ctx context.Context, id string) (*Automation, erro
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	a.RetryPolicy, err = decodeRetryPolicy(a.RetryPolicyJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -717,6 +741,10 @@ func (s *Store) hydrateAutomations(ctx context.Context, automations []*Automatio
 		return fmt.Errorf("hydrate repository_ids: %w", err)
 	}
 	for _, a := range automations {
+		a.RetryPolicy, err = decodeRetryPolicy(a.RetryPolicyJSON)
+		if err != nil {
+			return fmt.Errorf("hydrate retry policy: %w", err)
+		}
 		a.Triggers = triggersByAutomation[a.ID]
 		a.Repositories = repositoriesByAutomation[a.ID]
 		a.RepositoryIDs = repositoryIDs(a.Repositories)
@@ -761,6 +789,16 @@ func (s *Store) UpdateAutomation(ctx context.Context, id string, req *UpdateAuto
 		return fmt.Errorf("automation not found: %s", id)
 	}
 	applyAutomationUpdate(a, req)
+	normalizedPolicy, err := NormalizeRetryPolicy(a.RetryPolicy)
+	if err != nil {
+		return err
+	}
+	a.RetryPolicy = normalizedPolicy
+	policyJSON, err := json.Marshal(normalizedPolicy)
+	if err != nil {
+		return fmt.Errorf("encode retry policy: %w", err)
+	}
+	a.RetryPolicyJSON = string(policyJSON)
 	if a.ContinuationPolicy == "" {
 		a.ContinuationPolicy = ContinuationPolicyNewTask
 	}
@@ -803,7 +841,8 @@ func (s *Store) UpdateAutomation(ctx context.Context, id string, req *UpdateAuto
 			managed_destination_conversation_id = ?, managed_destination_plugin_id = ?,
 			managed_destination_instance_key = ?, managed_destination_revision = ?, resource_revision = resource_revision + 1,
 			repository_mode = ?, prompt = ?, task_title_template = ?,
-			enabled = ?, max_concurrent_runs = ?, continuation_policy = ?, updated_at = ?
+			enabled = ?, max_concurrent_runs = ?, continuation_policy = ?,
+			retry_policy = ?, automation_revision = automation_revision + 1, updated_at = ?
 		WHERE id = ?`),
 		a.Name, a.Description, a.WorkflowID, a.WorkflowStepID,
 		a.AgentProfileID, a.ExecutorProfileID,
@@ -811,7 +850,8 @@ func (s *Store) UpdateAutomation(ctx context.Context, id string, req *UpdateAuto
 		a.ManagedDestinationConversationID, a.ManagedDestinationPluginID,
 		a.ManagedDestinationInstanceKey, a.ManagedDestinationRevision, string(a.RepositoryMode),
 		a.Prompt, a.TaskTitleTemplate,
-		a.Enabled, a.MaxConcurrentRuns, a.ContinuationPolicy, a.UpdatedAt, id)
+		a.Enabled, a.MaxConcurrentRuns, a.ContinuationPolicy,
+		a.RetryPolicyJSON, a.UpdatedAt, id)
 	if err != nil {
 		return err
 	}
@@ -908,6 +948,9 @@ func applyAutomationUpdate(a *Automation, req *UpdateAutomationRequest) {
 	}
 	if req.ContinuationPolicy != nil {
 		a.ContinuationPolicy = *req.ContinuationPolicy
+	}
+	if req.RetryPolicy != nil {
+		a.RetryPolicy = *req.RetryPolicy
 	}
 }
 
@@ -1215,11 +1258,16 @@ func (s *Store) CreateTrigger(ctx context.Context, t *AutomationTrigger) error {
 	now := time.Now().UTC()
 	t.CreatedAt = now
 	t.UpdatedAt = now
+	if t.TriggerRevision == 0 {
+		t.TriggerRevision = 1
+	}
 	t.ConfigJSON = string(t.Config)
 	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
-		INSERT INTO automation_triggers (id, automation_id, type, config, enabled, last_evaluated_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
-		t.ID, t.AutomationID, t.Type, t.ConfigJSON, t.Enabled, t.LastEvaluatedAt, t.CreatedAt, t.UpdatedAt)
+		INSERT INTO automation_triggers
+			(id, automation_id, type, config, enabled, trigger_revision, last_evaluated_at, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		t.ID, t.AutomationID, t.Type, t.ConfigJSON, t.Enabled, t.TriggerRevision,
+		t.LastEvaluatedAt, t.CreatedAt, t.UpdatedAt)
 	return err
 }
 
@@ -1302,7 +1350,7 @@ func (s *Store) UpdateTrigger(ctx context.Context, id string, req *UpdateTrigger
 	}
 	t.UpdatedAt = time.Now().UTC()
 	_, err = s.db.ExecContext(ctx, s.db.Rebind(
-		`UPDATE automation_triggers SET config = ?, enabled = ?, updated_at = ? WHERE id = ?`),
+		`UPDATE automation_triggers SET config = ?, enabled = ?, trigger_revision = trigger_revision + 1, updated_at = ? WHERE id = ?`),
 		t.ConfigJSON, t.Enabled, t.UpdatedAt, id)
 	return err
 }

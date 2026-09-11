@@ -224,6 +224,35 @@ func insertJournalMessageVersion(t *testing.T, database *sqlx.DB, sequence int, 
 	)
 	require.NoError(t, err)
 }
+func TestSanitizeConversationTurnEventPreservesPublicMetadata(t *testing.T) {
+	raw := json.RawMessage(`{
+		"type": "session.turn.completed",
+		"session_id": "session-1",
+		"task_id": "task-1",
+		"id": "turn-1",
+		"started_at": "2026-09-07T12:00:00Z",
+		"completed_at": "2026-09-07T12:01:00Z",
+		"metadata": {
+			"runtime_config_snapshot": {
+				"model": "mock-fast",
+				"config_baseline": {"effort": "medium"}
+			}
+		},
+		"private": "must-not-be-copied"
+	}`)
+
+	sanitized := sanitizeConversationEventPayload(conversationTurnCompleted, raw)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(sanitized, &payload))
+	require.Equal(t, map[string]any{
+		"runtime_config_snapshot": map[string]any{
+			"model":           "mock-fast",
+			"config_baseline": map[string]any{"effort": "medium"},
+		},
+	}, payload["metadata"])
+	require.NotContains(t, payload, "private")
+}
+
 func TestSyncCommittedSessionEventsStripsSystemContent(t *testing.T) {
 	database, err := sqlx.Open("sqlite3", ":memory:")
 	require.NoError(t, err)

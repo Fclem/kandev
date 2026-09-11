@@ -628,6 +628,7 @@ BEGIN
 			'completed_at',__SQLITE_RFC3339_MILLIS__(NEW.completed_at),
 			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
 			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at)),
+			'metadata',CASE WHEN json_valid(NEW.metadata) THEN json(NEW.metadata) ELSE json('{}') END,
 			'had_output',json(CASE WHEN EXISTS (
 				SELECT 1 FROM task_session_messages output
 				WHERE output.turn_id = NEW.id AND output.author_type = 'agent'
@@ -812,6 +813,7 @@ BEGIN
 				'completed_at',CASE WHEN source_row.completed_at IS NULL THEN NULL ELSE to_char(source_row.completed_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
 				'created_at',to_char(source_row.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
 				'updated_at',to_char(COALESCE(source_row.updated_at,source_row.completed_at,source_row.started_at),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+				'metadata',CASE WHEN source_row.completed_at IS NULL THEN NULL ELSE conversation_safe_jsonb(source_row.metadata) END,
 				'had_output',CASE WHEN source_row.completed_at IS NULL THEN NULL ELSE EXISTS (
 					SELECT 1 FROM task_session_messages output
 					WHERE output.turn_id = source_row.id AND output.author_type = 'agent'

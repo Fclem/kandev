@@ -816,7 +816,7 @@ export class WebSocketClient {
       }
       stream.resumeToken = validated.resumeToken;
       stream.ready = true;
-      this.drainCoreSessionEvents(stream);
+      this.drainCoreSessionEvents(sessionId, stream);
     });
     void Promise.all([legacySubscription, orderedSubscription])
       .then(() => {
@@ -860,20 +860,24 @@ export class WebSocketClient {
     }
     if (stream.pendingEvents.length > 0) {
       stream.pendingEvents.push(event);
-      this.drainCoreSessionEvents(stream);
+      this.drainCoreSessionEvents(event.session_id, stream);
       return;
     }
     this.processCoreSessionEvent(event, stream, disposition);
-    this.drainCoreSessionEvents(stream);
+    this.drainCoreSessionEvents(event.session_id, stream);
   }
 
-  private drainCoreSessionEvents(stream: CoreSessionStream) {
+  private drainCoreSessionEvents(sessionId: string, stream: CoreSessionStream) {
     if (!stream.ready || stream.pendingEvents.length === 0) return;
     stream.pendingEvents.sort((left, right) => left.sequence - right.sequence);
     while (stream.pendingEvents.length > 0) {
       const event = stream.pendingEvents[0];
       if (!event) return;
-      if (event.sequence > stream.lastSeenSequence + 1) return;
+      if (event.sequence > stream.lastSeenSequence + 1) {
+        stream.pendingEvents.length = 0;
+        this.recoverCoreSessionPoison(sessionId, stream);
+        return;
+      }
       stream.pendingEvents.shift();
       this.processCoreSessionEvent(event, stream);
     }

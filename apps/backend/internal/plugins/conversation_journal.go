@@ -142,7 +142,7 @@ func sanitizeConversationEventPayload(eventType string, raw json.RawMessage) jso
 	case events.MessageDeleted:
 		copyConversationPayloadFields(payload, source, conversationMessageIDKey)
 	case conversationTurnStarted, conversationTurnCompleted, conversationTurnRemoved:
-		copyConversationPayloadFields(payload, source, "id", "started_at", "completed_at", "updated_at", "had_output")
+		copyConversationPayloadFields(payload, source, "id", "started_at", "completed_at", "updated_at", "had_output", "metadata")
 	case events.SessionRemoved:
 		// The common identity fields above are the complete public removal DTO.
 	}
@@ -544,12 +544,13 @@ func decodeJournalMessage(raw []byte, sessionID string) (*taskmodels.Message, er
 }
 
 type journalTurnPayload struct {
-	TurnID      string  `json:"id"`
-	TaskID      string  `json:"task_id"`
-	StartedAt   string  `json:"started_at"`
-	CompletedAt *string `json:"completed_at"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	TurnID      string         `json:"id"`
+	TaskID      string         `json:"task_id"`
+	StartedAt   string         `json:"started_at"`
+	CompletedAt *string        `json:"completed_at"`
+	CreatedAt   string         `json:"created_at"`
+	UpdatedAt   string         `json:"updated_at"`
+	Metadata    map[string]any `json:"metadata"`
 }
 
 func (s *Service) conversationTurnsAt(ctx context.Context, sessionID string, cutoff uint64, taskID *string) ([]*taskmodels.Turn, error) {
@@ -598,7 +599,10 @@ func (s *Service) conversationTurnsAt(ctx context.Context, sessionID string, cut
 		if err != nil {
 			return nil, fmt.Errorf("decode conversation turn updated_at: %w", err)
 		}
-		metadata := map[string]any{}
+		metadata := payload.Metadata
+		if metadata == nil {
+			metadata = map[string]any{}
+		}
 		turn := &taskmodels.Turn{
 			ID: payload.TurnID, TaskSessionID: sessionID, TaskID: payload.TaskID,
 			StartedAt: startedAt, Metadata: metadata, CreatedAt: createdAt, UpdatedAt: updatedAt,

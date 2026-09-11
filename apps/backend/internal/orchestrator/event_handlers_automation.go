@@ -61,6 +61,18 @@ type automationRunDispatcher interface {
 		dispatch func() (automation.RunDispatch, error),
 	) error
 }
+type automationRetryFailure interface {
+	FinalizeAutomationRetryFailure(ctx context.Context, runID string, generation int64, raw error, phase string) (*automation.AutomationRun, error)
+}
+type automationRetryBinding interface {
+	PromoteClaimedRetry(ctx context.Context, runID, token string, generation int64) error
+}
+type automationRetrySuccess interface {
+	MarkAutomationRetrySucceeded(ctx context.Context, runID string, generation int64) error
+}
+type automationRetryReceipt interface {
+	AcknowledgeRetryEvent(ctx context.Context, runID string, version int64) error
+}
 
 type automationContinuationState interface {
 	SetContinuationTaskID(ctx context.Context, automationID, taskID string) error
@@ -324,6 +336,24 @@ func (s *Service) handleAutomationTriggered(ctx context.Context, event *bus.Even
 }
 
 func (s *Service) createAutomationTask(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
+	var retryRun *automation.AutomationRun
+	//nolint:nestif // Claim promotion is a single identity-fenced boundary.
+	if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
+		retryRun, _ = binding.GetRun(ctx, evt.RunID)
+		if evt.RetryClaimToken != "" {
+			retryBinding, retryOK := s.automationService.(automationRetryBinding)
+			if !retryOK || retryRun == nil {
+				s.recordFailedRun(ctx, evt, "retry claim unavailable")
+				return
+			}
+			if err := retryBinding.PromoteClaimedRetry(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration); err != nil {
+				return
+			}
+		}
+		if retryRun != nil && evt.AutomationID == "" {
+			evt.AutomationID, evt.TriggerID, evt.TriggerType = retryRun.AutomationID, retryRun.TriggerID, retryRun.TriggerType
+		}
+	}
 	a, err := s.automationService.GetAutomation(ctx, evt.AutomationID)
 	if err != nil || a == nil {
 		s.logger.Error("failed to load automation for trigger",
@@ -331,7 +361,7 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 		s.recordFailedRun(ctx, evt, "automation not found")
 		return
 	}
-	if !a.Enabled {
+	if !a.Enabled && retryRun == nil {
 		s.logger.Debug("automation disabled, skipping",
 			zap.String("automation_id", evt.AutomationID))
 		s.recordFailedRun(ctx, evt, "automation is disabled")
@@ -343,12 +373,17 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 	// syntax; display titles (RenderRunDisplayTitle) stay on the unquoted
 	// InterpolatePrompt so a fence can't leak into a truncated title.
 	prompt := automation.InterpolateAgentPrompt(a.Prompt, evt.TriggerType, evt.TriggerData)
+	if retryRun != nil && retryRun.RetryResolvedPrompt != "" {
+		prompt = retryRun.RetryResolvedPrompt
+	}
 	if prompt == "" {
 		prompt = fmt.Sprintf("Automation '%s' triggered by %s", a.Name, evt.TriggerType)
 	}
 
 	title := s.resolveAutomationTaskTitle(a, evt)
-	if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
+	if retryRun != nil && retryRun.DisplayTitle != "" {
+		title = retryRun.DisplayTitle
+	} else if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
 		if run, runErr := binding.GetRun(ctx, evt.RunID); runErr == nil && run != nil && run.DisplayTitle != "" {
 			title = run.DisplayTitle
 		}
@@ -389,6 +424,13 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 			s.deleteAbandonedTask(ctx, a.ID, task.ID)
 		}
 		return
+	}
+	if retryRun != nil {
+		if receipt, ok := s.automationService.(automationRetryReceipt); ok {
+			if err := receipt.AcknowledgeRetryEvent(ctx, evt.RunID, evt.SnapshotVersion); err != nil {
+				s.logger.Warn("failed to acknowledge automation retry event", zap.Error(err))
+			}
+		}
 	}
 
 	// Associate PR with task for github_pr triggers (same as PR Watcher).
@@ -1245,9 +1287,17 @@ func (s *Service) associateAutomationPR(ctx context.Context, taskID, repositoryI
 	}
 }
 
+//nolint:nestif // Retry failure admission must verify both service and run identity.
 func (s *Service) recordFailedRun(ctx context.Context, evt *automation.AutomationTriggeredEvent, errMsg string) {
-	if s.automationService == nil {
-		return
+	if retryService, ok := s.automationService.(automationRetryFailure); ok && evt.RunID != "" {
+		if binding, bindOK := s.automationService.(automationRunBinding); bindOK {
+			if run, err := binding.GetRun(ctx, evt.RunID); err == nil && run != nil && run.RetryGroupID != "" {
+				if _, err := retryService.FinalizeAutomationRetryFailure(ctx, evt.RunID, run.RetryGroupGeneration, errors.New(errMsg), "launch"); err != nil {
+					s.logger.Error("failed to finalize automation retry", zap.Error(err))
+				}
+				return
+			}
+		}
 	}
 	if s.markExactAutomationRunTerminal(ctx, evt.RunID, "", "", false, errMsg) {
 		return
@@ -1336,7 +1386,6 @@ func (s *Service) recordSuccessRun(
 	}
 	return s.automationService.RecordRun(ctx, run)
 }
-
 func (s *Service) markExactAutomationRunTerminal(ctx context.Context, runID, sessionID, turnID string, success bool, errMsg string) bool {
 	if runID == "" || s.automationService == nil {
 		return false
@@ -1344,6 +1393,20 @@ func (s *Service) markExactAutomationRunTerminal(ctx context.Context, runID, ses
 	binding, ok := s.automationService.(automationRunBinding)
 	if !ok {
 		return false
+	}
+	//nolint:nestif // Exact completion must preserve the run binding fence.
+	if run, err := binding.GetRun(ctx, runID); err == nil && run != nil && run.RetryGroupID != "" {
+		if (sessionID != "" && sessionID != run.SessionID) || (turnID != "" && turnID != run.TurnID) {
+			return false
+		}
+		if success {
+			if terminal, terminalOK := s.automationService.(automationRetrySuccess); terminalOK {
+				return terminal.MarkAutomationRetrySucceeded(ctx, runID, run.RetryGroupGeneration) == nil
+			}
+		} else if failure, failureOK := s.automationService.(automationRetryFailure); failureOK {
+			_, finalizeErr := failure.FinalizeAutomationRetryFailure(ctx, runID, run.RetryGroupGeneration, errors.New(errMsg), "completion")
+			return finalizeErr == nil
+		}
 	}
 	status := automation.RunStatusFailed
 	if success {

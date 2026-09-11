@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/kandev/kandev/internal/task/models"
-	taskrepo "github.com/kandev/kandev/internal/task/repository"
 	"github.com/kandev/kandev/internal/task/service"
 	ws "github.com/kandev/kandev/pkg/websocket"
 )
@@ -131,7 +130,7 @@ type missingArchiveRepo struct {
 }
 
 func (r *missingArchiveRepo) GetTask(_ context.Context, _ string) (*models.Task, error) {
-	return nil, taskrepo.ErrTaskNotFound
+	return nil, nil
 }
 
 func TestWsArchiveTask_ReportsMissingTask(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	orchmodels "github.com/kandev/kandev/internal/office/models"
 	"github.com/kandev/kandev/internal/task/archivecascade"
 	"github.com/kandev/kandev/internal/task/models"
+	taskrepo "github.com/kandev/kandev/internal/task/repository"
 )
 
 type workspaceEnvironmentRepository interface {
@@ -253,7 +254,7 @@ func (s *HandoffService) validateArchiveRoot(ctx context.Context, rootID string)
 		return err
 	}
 	if root == nil {
-		return fmt.Errorf("task %s not found", rootID)
+		return taskrepo.ErrTaskNotFound
 	}
 	return nil
 }

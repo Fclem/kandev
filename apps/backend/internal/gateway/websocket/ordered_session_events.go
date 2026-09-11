@@ -17,6 +17,7 @@ const (
 	orderedMessageDeletedEvent = "message.deleted"
 	orderedTurnStartedEvent    = "session.turn.started"
 	orderedTurnCompletedEvent  = "session.turn.completed"
+	orderedTurnRemovedEvent    = "session.turn.removed"
 	orderedSessionRemovedEvent = "session.removed"
 )
 
@@ -26,6 +27,7 @@ var orderedEventTypeByAction = map[string]string{
 	ws.ActionSessionMessageDeleted: orderedMessageDeletedEvent,
 	ws.ActionSessionTurnStarted:    orderedTurnStartedEvent,
 	ws.ActionSessionTurnCompleted:  orderedTurnCompletedEvent,
+	ws.ActionSessionTurnRemoved:    orderedTurnRemovedEvent,
 	ws.ActionSessionRemoved:        orderedSessionRemovedEvent,
 }
 
@@ -133,7 +135,7 @@ func sanitizedOrderedSessionPayload(eventType string, source map[string]any) map
 		}
 	case orderedMessageDeletedEvent:
 		keys = append(keys, "message_id")
-	case orderedTurnStartedEvent, orderedTurnCompletedEvent:
+	case orderedTurnStartedEvent, orderedTurnCompletedEvent, orderedTurnRemovedEvent:
 		keys = append(keys, "id", "started_at", "completed_at", "updated_at", "had_output")
 	}
 	for _, key := range keys {

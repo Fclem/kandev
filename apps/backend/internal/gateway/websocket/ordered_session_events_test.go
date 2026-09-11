@@ -21,6 +21,15 @@ func TestSanitizedOrderedSessionPayloadStripsSystemContent(t *testing.T) {
 
 	require.Equal(t, "visible", payload["content"])
 }
+func TestTurnRemovedUsesOrderedSessionEventMapping(t *testing.T) {
+	require.Equal(t, "session.turn.removed", orderedEventTypeByAction[ws.ActionSessionTurnRemoved])
+	payload := sanitizedOrderedSessionPayload(orderedTurnRemovedEvent, map[string]any{
+		"id":         "turn-1",
+		"session_id": "session-1",
+		"task_id":    "task-1",
+	})
+	require.Equal(t, "turn-1", payload["id"])
+}
 
 // TestOrderedRecipientsRevocationReleasesDurableCursor pins the round-9 fix:
 // when authorization denies a previously-subscribed client at fanout time, the

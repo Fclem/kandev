@@ -137,6 +137,7 @@ const (
 const (
 	TurnStarted   = "turn.started"
 	TurnCompleted = "turn.completed"
+	TurnRemoved   = "turn.removed"
 )
 
 // Event types for repositories

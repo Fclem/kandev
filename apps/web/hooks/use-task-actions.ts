@@ -60,13 +60,14 @@ export function useTaskActions() {
 function useSwitchAfterTaskAction(
   action: "archive" | "delete",
   runAction: (taskId: string, opts?: TaskActionOptions) => Promise<unknown>,
-  opts?: { useLayoutSwitch?: boolean },
+  opts?: { useLayoutSwitch?: boolean; stayOnListing?: boolean },
 ) {
   const store = useAppStoreApi();
   const notifySuccess = useTaskRemovalSuccessNotifier();
   const { runTaskRemoval } = useTaskRemoval({
     store,
     useLayoutSwitch: opts?.useLayoutSwitch,
+    stayOnListing: opts?.stayOnListing,
     notifySuccess,
   });
 
@@ -90,7 +91,10 @@ function useSwitchAfterTaskAction(
  * Archives a task and switches to the next available task.
  * Shared between the PR merged banner and the sidebar archive action.
  */
-export function useArchiveAndSwitchTask(opts?: { useLayoutSwitch?: boolean }) {
+export function useArchiveAndSwitchTask(opts?: {
+  useLayoutSwitch?: boolean;
+  stayOnListing?: boolean;
+}) {
   const { archiveTaskById } = useTaskActions();
   return useSwitchAfterTaskAction("archive", archiveTaskById, opts);
 }
@@ -99,7 +103,10 @@ export function useArchiveAndSwitchTask(opts?: { useLayoutSwitch?: boolean }) {
  * Deletes a task and switches to the next available task, mirroring
  * `useArchiveAndSwitchTask`'s outcome for the task detail surface.
  */
-export function useDeleteAndSwitchTask(opts?: { useLayoutSwitch?: boolean }) {
+export function useDeleteAndSwitchTask(opts?: {
+  useLayoutSwitch?: boolean;
+  stayOnListing?: boolean;
+}) {
   const { deleteTaskById } = useTaskActions();
   return useSwitchAfterTaskAction("delete", deleteTaskById, opts);
 }

@@ -276,6 +276,8 @@ type HandoffService struct {
 	logger             *logger.Logger
 	parentLock         parentMutex
 	archiveCascadeLock parentMutex
+	partialArchiveMu   sync.Mutex
+	partialArchiveIDs  map[string]string
 	workspaceGroupLock parentMutex
 }
 
@@ -458,6 +460,7 @@ func NewHandoffService(
 			locks: make(map[string]*sync.Mutex),
 		},
 		archiveCascadeLock: parentMutex{locks: make(map[string]*sync.Mutex)},
+		partialArchiveIDs:  make(map[string]string),
 		workspaceGroupLock: parentMutex{locks: make(map[string]*sync.Mutex)},
 	}
 }

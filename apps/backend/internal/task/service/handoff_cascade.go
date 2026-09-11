@@ -317,6 +317,9 @@ func (s *HandoffService) archiveTaskTree(
 		return out, s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(
 			transferCompensationCtx, ownershipTransfers, err)
 	}
+	if cascade {
+		s.rememberPartialArchiveCascade(rootID, cascadeID)
+	}
 	archiveContinuationCtx, cancelArchiveContinuation := archivecascade.ContinuationContextUntil(ctx, archiveDeadline)
 	defer cancelArchiveContinuation()
 	postArchiveCtx := archiveContinuationCtx
@@ -337,6 +340,9 @@ func (s *HandoffService) archiveTaskTree(
 	)
 	if mutationErr != nil {
 		return out, mutationErr
+	}
+	if cascade {
+		s.forgetPartialArchiveCascade(rootID)
 	}
 	cleanupErrors = append(cleanupErrors, s.rollbackAutoArchiveCASLoss(
 		transferCompensationCtx, ownershipTransfers, autoArchiveCandidate, out,
@@ -1704,10 +1710,38 @@ func (s *HandoffService) resolveArchiveCascade(ctx context.Context, rootID strin
 	return cascadeID, all, nil
 }
 
+func (s *HandoffService) partialArchiveCascadeID(rootID string) string {
+	s.partialArchiveMu.Lock()
+	defer s.partialArchiveMu.Unlock()
+	return s.partialArchiveIDs[rootID]
+}
+
+func (s *HandoffService) rememberPartialArchiveCascade(rootID, cascadeID string) {
+	s.partialArchiveMu.Lock()
+	defer s.partialArchiveMu.Unlock()
+	if s.partialArchiveIDs == nil {
+		s.partialArchiveIDs = make(map[string]string)
+	}
+	s.partialArchiveIDs[rootID] = cascadeID
+}
+
+func (s *HandoffService) forgetPartialArchiveCascade(rootID string) {
+	s.partialArchiveMu.Lock()
+	defer s.partialArchiveMu.Unlock()
+	delete(s.partialArchiveIDs, rootID)
+}
+
 // findArchiveRetryCascade discovers a prior cascade after a partial archive
 // mutation. Reusing its identity keeps already-archived descendants in the
 // same resumable unarchive scope.
 func (s *HandoffService) findArchiveRetryCascade(ctx context.Context, rootID string) (string, []string, error) {
+	if cascadeID := s.partialArchiveCascadeID(rootID); cascadeID != "" {
+		all, err := s.collectArchiveRetryTree(ctx, rootID, cascadeID)
+		if err != nil {
+			return "", nil, err
+		}
+		return cascadeID, all, nil
+	}
 	root, err := s.tasks.GetTask(ctx, rootID)
 	if err != nil {
 		return "", nil, err
@@ -1717,7 +1751,7 @@ func (s *HandoffService) findArchiveRetryCascade(ctx context.Context, rootID str
 		// They may belong to independent manual or auto archives.
 		return "", nil, nil
 	}
-	all, err := s.collectArchivedTreeByCascade(ctx, rootID, root.ArchivedByCascadeID)
+	all, err := s.collectArchiveRetryTree(ctx, rootID, root.ArchivedByCascadeID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -1763,6 +1797,7 @@ const (
 	archiveCascadeMaxDepth   = 256
 	cascadeMembersDimension  = "members"
 	cascadeDepthDimension    = "depth"
+	cascadeStructureCycle    = "cycle_or_duplicate"
 )
 
 type cascadeTreeNode struct {
@@ -1803,7 +1838,7 @@ func (s *HandoffService) collectTreeBFS(
 				}
 			}
 			if _, exists := visited[c.ID]; exists {
-				return nil, &archivecascade.StructureError{Kind: "cycle_or_duplicate", TaskID: c.ID}
+				return nil, &archivecascade.StructureError{Kind: cascadeStructureCycle, TaskID: c.ID}
 			}
 			visited[c.ID] = struct{}{}
 			out = append(out, c.ID)
@@ -1820,7 +1855,63 @@ func (s *HandoffService) collectTreeBFS(
 	return out, nil
 }
 
-// collectArchivedTreeByCascade walks rootID's subtree and returns every
+// collectArchiveRetryTree returns active descendants plus descendants already
+// stamped by cascadeID. Independently archived branches are boundaries and
+// are neither included nor traversed.
+func (s *HandoffService) collectArchiveRetryTree(ctx context.Context, rootID, cascadeID string) ([]string, error) {
+	root, err := s.tasks.GetTask(ctx, rootID)
+	if err != nil {
+		return nil, err
+	}
+	if root == nil {
+		return nil, fmt.Errorf("task %s not found", rootID)
+	}
+	out := make([]string, 1, archiveCascadeMaxMembers+1)
+	out[0] = rootID
+	queue := make([]cascadeTreeNode, 1, archiveCascadeMaxMembers+1)
+	queue[0] = cascadeTreeNode{id: rootID}
+	visited := map[string]struct{}{rootID: {}}
+	for cursor := 0; cursor < len(queue); cursor++ {
+		node := queue[cursor]
+		children, err := s.listCascadeChildrenIncludingArchived(ctx, node.id)
+		if err != nil {
+			return nil, err
+		}
+		for _, child := range children {
+			if child.ArchivedAt != nil && child.ArchivedByCascadeID != cascadeID {
+				continue
+			}
+			if child.WorkspaceID != root.WorkspaceID {
+				return nil, &archivecascade.CrossWorkspaceDescendantError{
+					TaskID: child.ID, WorkspaceID: child.WorkspaceID,
+					ExpectedWorkspaceID: root.WorkspaceID,
+				}
+			}
+			if _, exists := visited[child.ID]; exists {
+				return nil, &archivecascade.StructureError{Kind: cascadeStructureCycle, TaskID: child.ID}
+			}
+			visited[child.ID] = struct{}{}
+			if node.depth >= archiveCascadeMaxDepth {
+				return nil, &archivecascade.SizeExceededError{
+					Dimension: cascadeDepthDimension,
+					Limit:     archiveCascadeMaxDepth,
+					Submitted: node.depth + 1,
+				}
+			}
+			out = append(out, child.ID)
+			if len(out) > archiveCascadeMaxMembers {
+				return nil, &archivecascade.SizeExceededError{
+					Dimension: cascadeMembersDimension,
+					Limit:     archiveCascadeMaxMembers,
+					Submitted: len(out),
+				}
+			}
+			queue = append(queue, cascadeTreeNode{id: child.ID, depth: node.depth + 1})
+		}
+	}
+	return out, nil
+}
+
 // task tagged with the named cascade ID. Visits archived rows too so the
 // full descendant set is reachable; we filter by cascade id rather than
 // archived state so manual mid-cascade archives don't leak in.
@@ -1863,7 +1954,7 @@ func (s *HandoffService) collectArchivedTreeByCascade(ctx context.Context, rootI
 				}
 			}
 			if _, exists := visited[c.ID]; exists {
-				return nil, &archivecascade.StructureError{Kind: "cycle_or_duplicate", TaskID: c.ID}
+				return nil, &archivecascade.StructureError{Kind: cascadeStructureCycle, TaskID: c.ID}
 			}
 			visited[c.ID] = struct{}{}
 			if node.depth >= archiveCascadeMaxDepth && len(children) > 0 {

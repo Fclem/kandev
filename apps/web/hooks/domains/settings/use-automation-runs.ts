@@ -7,6 +7,7 @@ import {
   listAutomationRuns,
   deleteAutomationRun,
   deleteAllAutomationRuns,
+  stopAutomationRun,
 } from "@/lib/api/domains/automation-api";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import type { AutomationRun } from "@/lib/types/automation";
@@ -266,6 +267,7 @@ function executeDeleteRun(
     });
 }
 
+// eslint-disable-next-line max-lines-per-function -- coordinates shared store state with serialized run mutations.
 export function useAutomationRuns(automationId: string | null, workspaceId: string) {
   const runs = useAppStore((state) =>
     automationId ? (state.automationRuns.byAutomationId[automationId] ?? EMPTY_RUNS) : EMPTY_RUNS,
@@ -380,6 +382,14 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
     },
     [automationId, beginDelete, endDelete, makeStore, workspaceId],
   );
+  const stopRun = useCallback(
+    async (runId: string) => {
+      if (!automationId) return;
+      await stopAutomationRun(automationId, runId);
+      refresh();
+    },
+    [automationId, refresh],
+  );
 
-  return { runs, loading, refresh, deleteRun, deleteAllRuns, deleting };
+  return { runs, loading, refresh, deleteRun, deleteAllRuns, stopRun, deleting };
 }

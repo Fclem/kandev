@@ -31,6 +31,13 @@ function baseForm(overrides: Partial<FormState> = {}): FormState {
     enabled: true,
     maxConcurrentRuns: 1,
     continuationPolicy: "new_task",
+    retryPolicy: {
+      mode: "disabled",
+      max_retries: "0",
+      delay_seconds: "0",
+      backoff: "fixed",
+      history_mode: "attempts",
+    },
     ...overrides,
   };
 }
@@ -208,5 +215,17 @@ describe("buildCreatePayload / buildUpdatePayload", () => {
 
     expect(result.ids).toEqual([]);
     expect(createRepositoryAction).not.toHaveBeenCalled();
+  });
+  it("sends decimal retry policy values unchanged", () => {
+    const policy = {
+      mode: "finite" as const,
+      max_retries: "0007",
+      delay_seconds: "3600",
+      backoff: "exponential" as const,
+      history_mode: "timeline" as const,
+    };
+    const form = baseForm({ retryPolicy: policy });
+    expect(buildCreatePayload("ws-1", form, [], []).retry_policy).toEqual(policy);
+    expect(buildUpdatePayload(form, []).retry_policy).toEqual(policy);
   });
 });

@@ -19,6 +19,7 @@ import type {
   AutomationTrigger,
   TriggerTypeInfo,
   UpdateAutomationRequest,
+  RetryPolicy,
 } from "@/lib/types/automation";
 import { RunsSection } from "./runs-section";
 import {
@@ -55,6 +56,14 @@ type AutomationEditorProps = {
 // i18n-exempt: persisted prompt, sent to the agent and compared with ===. See the comment above.
 const DEFAULT_PROMPT = "Run scheduled automation.\n\nTrigger: {{trigger.type}}";
 
+const DEFAULT_RETRY_POLICY: RetryPolicy = {
+  mode: "disabled",
+  max_retries: "0",
+  delay_seconds: "0",
+  backoff: "fixed",
+  history_mode: "attempts",
+};
+
 const defaultForm: FormState = {
   name: "",
   description: "",
@@ -70,8 +79,8 @@ const defaultForm: FormState = {
   continuationPolicy: "new_task",
   taskMode: "automation_run",
   repositoryMode: "none",
+  retryPolicy: DEFAULT_RETRY_POLICY,
 };
-
 function formFromAutomation(a: Automation): FormState {
   return {
     name: a.name,
@@ -95,6 +104,7 @@ function formFromAutomation(a: Automation): FormState {
     enabled: a.enabled,
     maxConcurrentRuns: a.max_concurrent_runs,
     continuationPolicy: a.continuation_policy ?? "new_task",
+    retryPolicy: a.retry_policy ?? DEFAULT_RETRY_POLICY,
   };
 }
 
@@ -427,6 +437,7 @@ function AutomationDeleteControls({
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- composition root wires the complete automation editor surface.
 export function AutomationEditor({ workspaceId, automationId }: AutomationEditorProps) {
   const router = useRouter();
   const { create, update, remove } = useAutomations(workspaceId);
@@ -512,7 +523,11 @@ export function AutomationEditor({ workspaceId, automationId }: AutomationEditor
       <Separator />
       <SettingsSection form={form} savedForm={dirtyBaseline} updateField={updateField} />
       <Separator />
-      <RunsSection automationId={currentId} workspaceId={workspaceId} />
+      <RunsSection
+        automationId={currentId}
+        workspaceId={workspaceId}
+        historyMode={form.retryPolicy.history_mode}
+      />
       <AutomationDeleteControls
         saving={saving}
         isNew={isNew}

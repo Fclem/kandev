@@ -18,14 +18,22 @@ import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { Label } from "@kandev/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
-import { IconChevronDown, IconChevronUp, IconRefresh, IconTrash } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconPlayerStop,
+  IconRefresh,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useAutomationRuns } from "@/hooks/domains/settings/use-automation-runs";
-import type { AutomationRun, RunStatus } from "@/lib/types/automation";
+import { projectAutomationHistory } from "./automation-history";
+import type { AutomationRun, RetryHistoryMode, RunStatus } from "@/lib/types/automation";
 import { formatRelativeTime } from "@/lib/utils";
 
 type RunsSectionProps = {
   automationId: string | null;
   workspaceId: string;
+  historyMode?: RetryHistoryMode;
 };
 
 const STATUS_BADGE: Record<
@@ -34,6 +42,11 @@ const STATUS_BADGE: Record<
 > = {
   triggered: { variant: "secondary", labelKey: "automations:runStatusTriggered" },
   task_created: { variant: "secondary", labelKey: "automations:runStatusRunning" },
+  scheduled_retry: { variant: "secondary", labelKey: "automations:runStatusScheduledRetry" },
+  retry_scheduling_failed: {
+    variant: "destructive",
+    labelKey: "automations:runStatusRetrySchedulingFailed",
+  },
   succeeded: { variant: "default", labelKey: "automations:runStatusSucceeded" },
   failed: { variant: "destructive", labelKey: "automations:runStatusFailed" },
   skipped: { variant: "outline", labelKey: "automations:runStatusSkipped" },
@@ -47,15 +60,15 @@ const STATUS_BADGE: Record<
   // See internal/automation.RunStatusCancelled.
   cancelled: { variant: "outline", labelKey: "automations:runStatusCancelled" },
 };
-
 type RunRowProps = {
   run: AutomationRun;
   deleting: boolean;
+  stopping: boolean;
   onDelete: (id: string) => void;
+  onStop: (id: string) => void;
   onNavigate: (taskId: string) => void;
 };
-
-function RunRow({ run, deleting, onDelete, onNavigate }: RunRowProps) {
+function RunRow({ run, deleting, stopping, onDelete, onStop, onNavigate }: RunRowProps) {
   const { t } = useTranslation();
   const badge = STATUS_BADGE[run.status] ?? STATUS_BADGE.triggered;
   // Any run that produced a task links to it, run-mode included. Run mode
@@ -76,7 +89,14 @@ function RunRow({ run, deleting, onDelete, onNavigate }: RunRowProps) {
       // lives here instead of being inferred from rendered copy.
       data-task-id={run.task_id || undefined}
     >
-      <TableCell className="text-sm">{run.trigger_type}</TableCell>
+      <TableCell className="text-sm">
+        <div>{run.trigger_type}</div>
+        {(run.attempt_number ?? 1) > 1 && (
+          <div className="text-xs text-muted-foreground">
+            {t("automations:retryAttempt", { attempt: run.attempt_number })}
+          </div>
+        )}
+      </TableCell>
       <TableCell>
         <Badge variant={badge.variant}>{t(badge.labelKey)}</Badge>
       </TableCell>
@@ -90,9 +110,28 @@ function RunRow({ run, deleting, onDelete, onNavigate }: RunRowProps) {
         {run.error_message || run.summary || "-"}
       </TableCell>
       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-        {formatRelativeTime(run.created_at)}
+        {run.retry_scheduled_at
+          ? t("automations:retryDue", { when: formatRelativeTime(run.retry_scheduled_at) })
+          : formatRelativeTime(run.created_at)}
       </TableCell>
       <TableCell>
+        {(run.status === "scheduled_retry" || run.retry_state === "claimed") && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="cursor-pointer text-muted-foreground hover:text-destructive [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
+            onClick={(event) => {
+              event.stopPropagation();
+              onStop(run.id);
+            }}
+            disabled={stopping}
+            title={t("automations:stopRetry")}
+            aria-label={t("automations:stopRetry")}
+            data-testid="stop-retry"
+          >
+            <IconPlayerStop className="h-3.5 w-3.5" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -122,11 +161,11 @@ function RunRow({ run, deleting, onDelete, onNavigate }: RunRowProps) {
 const STATUS_FILTERS: { value: RunStatus | "all"; labelKey: string }[] = [
   { value: "all", labelKey: "automations:runAll" },
   { value: "task_created", labelKey: "automations:runStatusRunning" },
+  { value: "scheduled_retry", labelKey: "automations:runStatusScheduledRetry" },
+  { value: "retry_scheduling_failed", labelKey: "automations:runStatusRetrySchedulingFailed" },
   { value: "succeeded", labelKey: "automations:runStatusSucceeded" },
   { value: "failed", labelKey: "automations:runStatusFailed" },
   { value: "skipped", labelKey: "automations:runStatusSkipped" },
-  // Both are read-time-derived terminal statuses the table already renders, so
-  // leaving them out here made those runs visible but unfilterable.
   { value: "archived", labelKey: "automations:runStatusArchived" },
   { value: "cancelled", labelKey: "automations:runStatusCancelled" },
 ];
@@ -233,20 +272,24 @@ function StatusFilter({
   );
 }
 
-export function RunsSection({ automationId, workspaceId }: RunsSectionProps) {
+// eslint-disable-next-line max-lines-per-function -- coordinates the responsive run history and retry actions.
+export function RunsSection({ automationId, workspaceId, historyMode }: RunsSectionProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [statusFilter, setStatusFilter] = useState<RunStatus | "all">("all");
-  const { runs, loading, refresh, deleteRun, deleteAllRuns, deleting } = useAutomationRuns(
+  const { runs, loading, refresh, deleteRun, deleteAllRuns, stopRun, deleting } = useAutomationRuns(
     automationId,
     workspaceId,
   );
   const router = useRouter();
 
-  if (!automationId) return null;
-
   const visibleRuns =
-    statusFilter === "all" ? runs : runs.filter((run) => run.status === statusFilter);
+    statusFilter === "all"
+      ? projectAutomationHistory(runs, historyMode)
+      : projectAutomationHistory(
+          runs.filter((run) => run.status === statusFilter),
+          historyMode,
+        );
   const emptyMessage = runs.length === 0 ? "No runs yet" : "No runs match this filter";
 
   return (
@@ -321,6 +364,8 @@ export function RunsSection({ automationId, workspaceId }: RunsSectionProps) {
                   <RunRow
                     key={run.id}
                     run={run}
+                    stopping={deleting}
+                    onStop={stopRun}
                     deleting={deleting}
                     onDelete={deleteRun}
                     onNavigate={(id) => router.push(`/tasks/${id}`)}

@@ -43,6 +43,7 @@ type RunsSectionHook = {
   refresh: () => void;
   deleteRun: (id: string) => void;
   deleteAllRuns: (runIds?: string[]) => void;
+  stopRun: (id: string) => Promise<void>;
 };
 
 function setup(
@@ -56,6 +57,7 @@ function setup(
     refresh: vi.fn(),
     deleteRun: vi.fn(),
     deleteAllRuns: vi.fn(),
+    stopRun: vi.fn(),
     ...overrides,
   });
   const view = render(<RunsSection automationId="auto-1" workspaceId="ws-1" />);
@@ -98,6 +100,25 @@ describe("RunsSection status badges", () => {
 
     expect(badgeOf(RUN_ARCHIVED)).toBe(ARCHIVED);
     expect(badgeOf(RUN_CANCELLED)).toBe(CANCELLED);
+  });
+  it("shows the scheduled retry badge and lets users stop it", () => {
+    const stopRun = vi.fn().mockResolvedValue(undefined);
+    setup(
+      [
+        mkRun({
+          id: "run-retry",
+          status: "scheduled_retry",
+          retry_state: "scheduled",
+          retry_scheduled_at: "2026-01-01T00:05:00Z",
+          attempt_number: 2,
+        }),
+      ],
+      { stopRun },
+    );
+
+    expect(badgeOf("run-retry")).toBe("Retry scheduled");
+    fireEvent.click(screen.getByTestId("stop-retry"));
+    expect(stopRun).toHaveBeenCalledWith("run-retry");
   });
 });
 

@@ -6,11 +6,26 @@ export type TriggerType =
   | "github_pr_merged"
   | "github_push"
   | "github_ci"
-  | "webhook";
+  | "webhook"
+  | "manual";
+
+export type RetryMode = "disabled" | "finite" | "infinite";
+export type RetryBackoff = "fixed" | "exponential";
+export type RetryHistoryMode = "attempts" | "timeline";
+
+export type RetryPolicy = {
+  mode: RetryMode;
+  max_retries: string;
+  delay_seconds: string;
+  backoff: RetryBackoff;
+  history_mode: RetryHistoryMode;
+};
 
 export type RunStatus =
   | "triggered"
   | "task_created"
+  | "scheduled_retry"
+  | "retry_scheduling_failed"
   | "succeeded"
   | "failed"
   | "skipped"
@@ -45,6 +60,7 @@ export type Automation = {
   max_concurrent_runs: number;
   /** How later firings get their task and conversation context. */
   continuation_policy?: ContinuationPolicy;
+  retry_policy?: RetryPolicy;
   last_triggered_at: string | null;
   created_at: string;
   updated_at: string;
@@ -85,19 +101,28 @@ export type AutomationRun = {
   trigger_data: Record<string, unknown>;
   error_message: string;
   created_at: string;
+  retry_group_id?: string;
+  retry_parent_run_id?: string;
+  attempt_number?: number;
+  retry_state?:
+    | "none"
+    | "scheduled"
+    | "claimed"
+    | "triggered"
+    | "superseded"
+    | "exhausted"
+    | "completed"
+    | "cancelled"
+    | "scheduling_failed";
+  retry_scheduled_at?: string | null;
+  retry_failure_phase?: string;
+  retry_failure_class?: string;
   /** Tail of the agent's last message on the generated task, truncated server-side. */
   summary?: string;
-  /**
-   * The run's conversation. Absent when the run never produced a task or the
-   * task is gone — the detail view mounts its transcript from this, so a run
-   * without one is reported rather than offered as something to open.
-   */
   session_id?: string;
-  /** Exact provider turn represented by this run when a session is shared. */
   turn_id?: string;
   thread_action?: "created" | "resumed" | "replaced";
   thread_reason?: string;
-  /** Snapshot of the rendered task title at admission time. */
   display_title?: string;
 };
 
@@ -119,11 +144,16 @@ export type WorkspaceAutomationRun = AutomationRun & {
  * row claims it has never run. The server answers per automation instead, so a
  * row's two claims do not depend on how noisy its neighbours are.
  */
+export type PendingRetrySummary = {
+  count: number;
+  items: AutomationRun[];
+  limit: number;
+};
+
 export type AutomationSummary = {
   automation_id: string;
-  /** Open under the same definition the concurrency cap uses. */
   open_runs: number;
-  /** Absent when the automation has never run, or its runs were all deleted. */
+  pending_retries?: PendingRetrySummary;
   last_run?: AutomationRun;
 };
 
@@ -196,6 +226,7 @@ export type CreateAutomationRequest = {
   continuation_policy?: ContinuationPolicy;
   task_mode?: TaskMode;
   repository_mode?: RepositoryMode;
+  retry_policy?: RetryPolicy;
   triggers?: Array<{
     type: TriggerType;
     config: Record<string, unknown>;
@@ -219,6 +250,7 @@ export type UpdateAutomationRequest = {
   continuation_policy?: ContinuationPolicy;
   task_mode?: TaskMode;
   repository_mode?: RepositoryMode;
+  retry_policy?: RetryPolicy;
 };
 
 // CreateAutomationResponse mirrors the backend's one-time webhook secret

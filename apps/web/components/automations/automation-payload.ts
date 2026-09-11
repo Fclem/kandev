@@ -4,6 +4,7 @@ import type {
   AutomationRepository,
   ContinuationPolicy,
   RepositoryMode,
+  RetryPolicy,
   TaskMode,
   TriggerType,
   UpdateAutomationRequest,
@@ -27,15 +28,13 @@ export type FormState = {
   executorProfileId: string;
   taskMode: TaskMode;
   repositoryMode: RepositoryMode;
-  // repositorySelections captures an ordered list of registered workspace
-  // repos (id), discovered local repos (path — registered at save time to
-  // obtain an id), or an empty list for repo-less automations.
   repositorySelections: RepositorySelection[];
   prompt: string;
   taskTitleTemplate: string;
   enabled: boolean;
   maxConcurrentRuns: number;
   continuationPolicy: ContinuationPolicy;
+  retryPolicy: RetryPolicy;
 };
 
 export type PendingTrigger = {
@@ -150,6 +149,7 @@ async function resolveOneRepositoryId(
   return created.id;
 }
 
+// The save boundary carries decimal strings without number coercion.
 export function buildCreatePayload(
   workspaceId: string,
   form: FormState,
@@ -159,9 +159,6 @@ export function buildCreatePayload(
   // i18n-exempt: persisted automation name. See the comment below.
   return {
     workspace_id: workspaceId,
-    // Persisted as the automation's name — user data, so it stays English
-    // rather than writing a locale-dependent value into the record. (Unreachable
-    // in practice: canSave requires a non-empty name.)
     name: form.name || "New Automation",
     description: form.description,
     workflow_id: form.workflowId,
@@ -176,6 +173,7 @@ export function buildCreatePayload(
     task_title_template: form.taskTitleTemplate,
     max_concurrent_runs: form.maxConcurrentRuns,
     continuation_policy: form.continuationPolicy,
+    retry_policy: form.retryPolicy,
     triggers: pending.map((t) => ({ type: t.type, config: t.config, enabled: t.enabled })),
   };
 }
@@ -200,6 +198,7 @@ export function buildUpdatePayload(
     enabled: form.enabled,
     max_concurrent_runs: form.maxConcurrentRuns,
     continuation_policy: form.continuationPolicy,
+    retry_policy: form.retryPolicy,
   };
 }
 

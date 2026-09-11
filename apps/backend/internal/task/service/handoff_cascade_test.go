@@ -87,9 +87,10 @@ func (r *fakeCascadeRepo) UnarchiveTask(_ context.Context, id string) (bool, err
 // release/restore/cleanup-status methods.
 type fakeWSGroupRepoCascade struct {
 	*fakeWSGroupRepo
-	releaseErr   error
-	restoreErr   error
-	releaseCalls []struct {
+	releaseErr      error
+	releaseErrAfter int
+	restoreErr      error
+	releaseCalls    []struct {
 		groupID, taskID, reason, cascadeID string
 	}
 	restoreCalls []struct {
@@ -132,7 +133,7 @@ func (f *fakeWSGroupRepoCascade) ListWorkspaceGroupMembers(ctx context.Context, 
 func (f *fakeWSGroupRepoCascade) ReleaseWorkspaceGroupMember(_ context.Context, groupID, taskID, reason, cascadeID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.releaseErr != nil {
+	if f.releaseErr != nil && (f.releaseErrAfter == 0 || len(f.releaseCalls) >= f.releaseErrAfter) {
 		return f.releaseErr
 	}
 	f.releaseCalls = append(f.releaseCalls, struct {
@@ -531,6 +532,35 @@ func TestArchiveTaskTree_ReleasesGroupMemberships(t *testing.T) {
 	}
 }
 
+func TestArchiveTaskTreeEvaluatesGroupsReleasedBeforeMembershipFailure(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	tasks.addTask("c1", "root", "ws-1")
+	groups := newCascadeWSGroupRepo()
+	groups.groups["g1"] = &orchmodels.WorkspaceGroup{
+		ID: "g1", WorkspaceID: "ws-1", OwnerTaskID: "root",
+		MaterializedKind: orchmodels.WorkspaceGroupKindSingleRepo,
+		CleanupStatus:    orchmodels.WorkspaceCleanupStatusActive,
+	}
+	groups.members["g1"] = map[string]string{
+		"root": orchmodels.WorkspaceMemberRoleOwner,
+		"c1":   orchmodels.WorkspaceMemberRoleMember,
+	}
+	groups.releaseErr = errors.New("membership release unavailable")
+	groups.releaseErrAfter = 1
+	svc := newCascadeService(t, tasks, groups)
+
+	out, err := svc.ArchiveTaskTree(context.Background(), "root", true)
+	if err == nil {
+		t.Fatal("archive succeeded, want post-commit membership error")
+	}
+	if len(out.ReleasedGroupIDs) != 1 || out.ReleasedGroupIDs[0] != "g1" {
+		t.Fatalf("ReleasedGroupIDs = %v, want [g1]", out.ReleasedGroupIDs)
+	}
+	if len(groups.releaseCalls) != 1 || groups.releaseCalls[0].taskID != "c1" {
+		t.Fatalf("release calls = %v, want successful child release", groups.releaseCalls)
+	}
+}
 func TestEvaluateWorkspaceGroupCleanup_NoOpForUserOwned(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	groups := newCascadeWSGroupRepo()
@@ -587,6 +617,16 @@ func (f *fakeRunCanceller) CancelTaskExecution(_ context.Context, taskID, _ stri
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, taskID)
 	return f.failOn[taskID]
+}
+
+type recordingArchiveCapture struct {
+	calls []string
+	err   error
+}
+
+func (r *recordingArchiveCapture) CaptureArchiveSnapshot(_ context.Context, sessionID string) error {
+	r.calls = append(r.calls, sessionID)
+	return r.err
 }
 
 type cancellableCascadeSessionReader struct {
@@ -709,6 +749,12 @@ func (r *fakeDeleteRepo) DeleteTask(ctx context.Context, id string) error {
 	return err
 }
 
+func (r *fakeDeleteRepo) UpdateTask(_ context.Context, task *models.Task) error {
+	r.base.mu.Lock()
+	defer r.base.mu.Unlock()
+	r.base.tasks[task.ID] = task
+	return nil
+}
 func (r *fakeDeleteRepo) DeleteTaskWithVacatedStep(_ context.Context, id string) (string, error) {
 	r.base.mu.Lock()
 	defer r.base.mu.Unlock()
@@ -760,6 +806,26 @@ func TestDeleteTaskTree_DoesNotFinalizeSessionWhenDeleteFails(t *testing.T) {
 	}
 	if len(sessions.cancelCalls) != 0 {
 		t.Fatalf("cancel calls = %v, want none after failed delete", sessions.cancelCalls)
+	}
+}
+
+func TestDeleteTaskTreeRestoresReparentedChildrenAfterRootDeleteFailure(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	tasks.addTask("child", "root", "ws-1")
+	deleteErr := errors.New("delete unavailable")
+	svc := NewHandoffService(&deleteErrorCascadeRepo{
+		fakeDeleteRepo: &fakeDeleteRepo{fakeCascadeRepo: newCascadeRepo(tasks)},
+		err:            deleteErr,
+	}, nil, nil, nil, nil, nil)
+
+	if _, err := svc.DeleteTaskTree(context.Background(), "root", false); !errors.Is(err, deleteErr) {
+		t.Fatalf("delete error = %v, want %v", err, deleteErr)
+	}
+	tasks.mu.Lock()
+	defer tasks.mu.Unlock()
+	if got := tasks.tasks["child"].ParentID; got != "root" {
+		t.Fatalf("child parent after failed delete = %q, want root", got)
 	}
 }
 
@@ -879,6 +945,7 @@ func TestArchiveTaskTree_CancelsRunsBeforeArchive(t *testing.T) {
 	tasks.addTask("c1", "root", "ws-1")
 	groups := newCascadeWSGroupRepo()
 	svc := newCascadeService(t, tasks, groups)
+
 	canceller := &fakeRunCanceller{}
 	svc.SetRunCanceller(canceller)
 
@@ -887,6 +954,25 @@ func TestArchiveTaskTree_CancelsRunsBeforeArchive(t *testing.T) {
 	}
 	if len(canceller.calls) != 2 {
 		t.Errorf("expected 2 cancel calls (root + c1), got %d", len(canceller.calls))
+	}
+}
+func TestArchiveTaskTreeCapturesActiveSessionBeforeArchive(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	sessions := newFakeSessionReader()
+	sessions.sessions["root"] = []*models.TaskSession{
+		{ID: "session-root", TaskID: "root", State: models.TaskSessionStateRunning},
+	}
+	svc := newCascadeService(t, tasks, newCascadeWSGroupRepo())
+	svc.SetSessionReader(sessions)
+	capture := &recordingArchiveCapture{err: errors.New("capture unavailable")}
+	svc.SetGitArchiveCapture(capture)
+
+	if _, err := svc.ArchiveTaskTree(context.Background(), "root", false); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if len(capture.calls) != 1 || capture.calls[0] != "session-root" {
+		t.Fatalf("capture calls = %v, want [session-root]", capture.calls)
 	}
 }
 

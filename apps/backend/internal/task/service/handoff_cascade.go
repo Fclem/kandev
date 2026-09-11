@@ -302,12 +302,11 @@ func (s *HandoffService) archiveTaskTree(
 	}
 	archiveContinuationCtx, cancelArchiveContinuation := archivecascade.ContinuationContextUntil(ctx, archiveDeadline)
 	defer cancelArchiveContinuation()
-
-	// Cancellation may stop the caller's own execution and cancel this request.
-	// The continuation is created only after durable cleanup preparation, so
-	// ownership and preparation remain caller-cancellable. Automatic archive
-	// candidates defer runtime cancellation until their eligibility CAS wins.
 	postArchiveCtx := archiveContinuationCtx
+
+	// Capture active session repositories before cancellation and archive
+	// mutation. Snapshot failures are best effort, matching the legacy path.
+	s.captureArchiveSnapshots(postArchiveCtx, all)
 	s.cancelArchiveRunsForCandidate(postArchiveCtx, all, autoArchiveCandidate)
 	// Archive deepest first so parent_id pointers stay valid through the walk;
 	// not strictly required by the schema, but keeps the audit log readable.
@@ -329,17 +328,13 @@ func (s *HandoffService) archiveTaskTree(
 
 	// Release group memberships for THIS cascade's tasks. Memberships
 	// owned by an earlier cascade or manual archive are left alone.
-	groupIDs, err := s.releaseMembershipsForCascade(postArchiveCtx, out.ArchivedTaskIDs, orchmodels.WorkspaceReleaseReasonArchived, cascadeID)
-	if err != nil {
-		// Archive mutations are committed; retain prepared cleanup intents and
-		// report membership release alongside any cleanup errors.
-		return out, cascadePostCommitError(out, errors.Join(err, errors.Join(cleanupErrors...)))
-	}
+	groupIDs, membershipErrors, membershipErr := s.releaseAndEvaluateMemberships(
+		postArchiveCtx, out.ArchivedTaskIDs, orchmodels.WorkspaceReleaseReasonArchived, cascadeID,
+	)
 	out.ReleasedGroupIDs = groupIDs
-	for _, gid := range groupIDs {
-		if err := s.evaluateWorkspaceGroupCleanup(postArchiveCtx, gid); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("evaluate workspace group cleanup %s: %w", gid, err))
-		}
+	cleanupErrors = append(cleanupErrors, membershipErrors...)
+	if membershipErr != nil {
+		return out, cascadePostCommitError(out, errors.Join(membershipErr, errors.Join(cleanupErrors...)))
 	}
 	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
 }
@@ -388,6 +383,57 @@ func (s *HandoffService) applyArchiveTaskMutations(
 		}
 	}
 	return cleanupErrors, nil
+}
+func (s *HandoffService) captureArchiveSnapshots(ctx context.Context, taskIDs []string) {
+	if s.gitArchiveCapture == nil || s.sessions == nil {
+		return
+	}
+	reader, ok := s.sessions.(activeTaskSessionReader)
+	if !ok {
+		return
+	}
+	for _, taskID := range taskIDs {
+		activeSessions, err := reader.ListActiveTaskSessionsByTaskID(ctx, taskID)
+		if err != nil {
+			s.logf().Warn("failed to list active sessions for archive snapshot",
+				zap.String("task_id", taskID), zap.Error(err))
+			continue
+		}
+		for _, session := range activeSessions {
+			if session == nil || session.ID == "" {
+				continue
+			}
+			snapshotCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			err := s.gitArchiveCapture.CaptureArchiveSnapshot(snapshotCtx, session.ID)
+			cancel()
+			if err != nil {
+				s.logf().Warn("failed to capture git archive snapshot",
+					zap.String("task_id", taskID),
+					zap.String("session_id", session.ID),
+					zap.Error(err))
+			}
+		}
+	}
+}
+
+func (s *HandoffService) releaseAndEvaluateMemberships(
+	ctx context.Context,
+	taskIDs []string,
+	reason, cascadeID string,
+) ([]string, []error, error) {
+	groupIDs, releaseErr := s.releaseMembershipsForCascade(ctx, taskIDs, reason, cascadeID)
+	cleanupErrors := s.evaluateWorkspaceGroups(ctx, groupIDs)
+	return groupIDs, cleanupErrors, releaseErr
+}
+
+func (s *HandoffService) evaluateWorkspaceGroups(ctx context.Context, groupIDs []string) []error {
+	var cleanupErrors []error
+	for _, gid := range groupIDs {
+		if err := s.evaluateWorkspaceGroupCleanup(ctx, gid); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("evaluate workspace group cleanup %s: %w", gid, err))
+		}
+	}
+	return cleanupErrors
 }
 
 // DeleteTaskTree is the inverse-of-archive operation: it walks rootID's
@@ -456,8 +502,10 @@ func (s *HandoffService) deleteTaskTree(
 	deleteCompensationCtx, cancelDeleteCompensation := archivecascade.ContinuationContextUntil(ctx, deleteDeadline)
 	defer cancelDeleteCompensation()
 	postDeleteCtx := deleteCompensationCtx
+	var noCascadeSnapshots []*models.Task
 	if !cascade {
-		if err := s.reparentNoCascadeChildren(postDeleteCtx, rootID); err != nil {
+		noCascadeSnapshots, err = s.reparentNoCascadeChildren(postDeleteCtx, rootID)
+		if err != nil {
 			cancelErr := s.cancelCascadeResourceCleanupRange(deleteCompensationCtx, all, cleanupOps)
 			rollbackErr := s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(
 				deleteCompensationCtx, ownershipTransfers, err)
@@ -477,7 +525,8 @@ func (s *HandoffService) deleteTaskTree(
 		rollbackErr := s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(
 			deleteCompensationCtx, ownershipTransfers, err)
 		restoreErr := s.restoreReleasedMemberships(deleteCompensationCtx, all, cascadeID, nil)
-		return out, errors.Join(err, rollbackErr, cancelErr, restoreErr)
+		childRestoreErr := s.restoreNoCascadeChildren(deleteCompensationCtx, noCascadeSnapshots)
+		return out, errors.Join(err, rollbackErr, cancelErr, restoreErr, childRestoreErr)
 	}
 	out.ReleasedGroupIDs = groupIDs
 
@@ -493,17 +542,12 @@ func (s *HandoffService) deleteTaskTree(
 		out, ownershipTransfers, vacatedStepIDs, reason,
 	)
 	if err != nil {
-		restoreErr := s.restoreReleasedMemberships(
-			deleteCompensationCtx, all, cascadeID, out.ArchivedTaskIDs,
-		)
-		return out, errors.Join(err, restoreErr)
+		return out, errors.Join(err, s.compensateDeleteFailure(
+			deleteCompensationCtx, all, cascadeID, out.ArchivedTaskIDs, noCascadeSnapshots,
+		))
 	}
 
-	for _, gid := range groupIDs {
-		if err := s.evaluateWorkspaceGroupCleanup(postDeleteCtx, gid); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("evaluate workspace group cleanup %s: %w", gid, err))
-		}
-	}
+	cleanupErrors = append(cleanupErrors, s.evaluateWorkspaceGroups(postDeleteCtx, groupIDs)...)
 	return out, cascadePostCommitError(out, errors.Join(cleanupErrors...))
 }
 func (s *HandoffService) restoreReleasedMemberships(
@@ -511,6 +555,7 @@ func (s *HandoffService) restoreReleasedMemberships(
 	taskIDs []string,
 	cascadeID string,
 	deletedTaskIDs []string,
+
 ) error {
 	if s.wsGroups == nil || cascadeID == "" {
 		return nil
@@ -529,6 +574,19 @@ func (s *HandoffService) restoreReleasedMemberships(
 		}
 	}
 	return errors.Join(errs...)
+}
+func (s *HandoffService) compensateDeleteFailure(
+	ctx context.Context,
+	taskIDs []string,
+	cascadeID string,
+	deletedTaskIDs []string,
+	noCascadeSnapshots []*models.Task,
+) error {
+	restoreErr := s.restoreReleasedMemberships(ctx, taskIDs, cascadeID, deletedTaskIDs)
+	if len(deletedTaskIDs) == 0 {
+		restoreErr = errors.Join(restoreErr, s.restoreNoCascadeChildren(ctx, noCascadeSnapshots))
+	}
+	return restoreErr
 }
 
 func (s *HandoffService) deleteTaskTreeRows(
@@ -561,6 +619,16 @@ func (s *HandoffService) deleteTaskTreeRows(
 				return nil, errors.Join(snapshotErr, cancelErr)
 			}
 		}
+		// Remove dependency edges before the task row so a transient cleanup
+		// failure cannot leave edges pointing at a deleted task.
+		if err := s.deleteTaskDependencyEdges(postDeleteCtx, all[i]); err != nil {
+			cancelErr := s.cancelCascadeResourceCleanupRange(deleteCompensationCtx, all[:i+1], cleanupOps)
+			deleteErr := fmt.Errorf("clean up task dependencies %s: %w", all[i], err)
+			if len(out.ArchivedTaskIDs) == 0 {
+				deleteErr = s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(deleteCompensationCtx, ownershipTransfers, deleteErr)
+			}
+			return nil, errors.Join(deleteErr, cancelErr)
+		}
 		// Tear down runtime resources BEFORE the DB delete so the env / worktree
 		// rows are still queryable for the gather step. The actual destroy work
 		// runs async after this returns. Delete cascade removes the env row.
@@ -576,9 +644,6 @@ func (s *HandoffService) deleteTaskTreeRows(
 		recordVacatedStep(vacatedStepIDs, vacatedStepID)
 		out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
 		s.finalizeActiveSessions(postDeleteCtx, deleteDeadline, all[i], "task tree deleted")
-		if err := s.deleteTaskDependencyEdges(postDeleteCtx, all[i]); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("clean up task dependencies %s: %w", all[i], err))
-		}
 		if operationID := cleanupOps[all[i]]; operationID != "" {
 			if err := s.startCascadeResourceCleanup(postDeleteCtx, operationID); err != nil {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("start cleanup %s: %w", operationID, err))
@@ -1204,26 +1269,59 @@ func (s *HandoffService) resolveDeleteSet(ctx context.Context, rootID string, ca
 	return []string{rootID}, nil
 }
 
-func (s *HandoffService) reparentNoCascadeChildren(ctx context.Context, rootID string) error {
+func (s *HandoffService) reparentNoCascadeChildren(ctx context.Context, rootID string) ([]*models.Task, error) {
 	root, children, err := s.loadNoCascadeChildren(ctx, rootID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := validateNoCascadeChildWorkspaces(root, children); err != nil {
-		return err
+		return nil, err
+	}
+	snapshots := snapshotNoCascadeChildren(children)
+	restore := func(operationErr error) ([]*models.Task, error) {
+		return nil, errors.Join(operationErr, s.restoreNoCascadeChildren(ctx, snapshots))
 	}
 	if err := s.normalizeNoCascadeChildren(ctx, children); err != nil {
-		return err
+		return restore(err)
 	}
 	if err := s.reparentChildrenInWorkspace(ctx, root, rootID); err != nil {
-		return err
+		return restore(err)
 	}
 	for _, child := range children {
 		if err := s.publishUpdatedTask(ctx, child.ID); err != nil {
-			return err
+			return restore(err)
 		}
 	}
-	return nil
+	return snapshots, nil
+}
+
+func snapshotNoCascadeChildren(children []*models.Task) []*models.Task {
+	snapshots := make([]*models.Task, 0, len(children))
+	for _, child := range children {
+		if child == nil {
+			continue
+		}
+		snapshot := *child
+		snapshot.Metadata = cloneTaskMetadata(child.Metadata)
+		if workspace, ok := snapshot.Metadata["workspace"].(map[string]interface{}); ok {
+			snapshot.Metadata["workspace"] = cloneTaskMetadata(workspace)
+		}
+		snapshots = append(snapshots, &snapshot)
+	}
+	return snapshots
+}
+
+func (s *HandoffService) restoreNoCascadeChildren(ctx context.Context, snapshots []*models.Task) error {
+	var errs []error
+	for _, snapshot := range snapshots {
+		if snapshot == nil {
+			continue
+		}
+		if err := s.tasks.UpdateTask(ctx, snapshot); err != nil {
+			errs = append(errs, fmt.Errorf("restore child task %s: %w", snapshot.ID, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *HandoffService) loadNoCascadeChildren(
@@ -1501,42 +1599,48 @@ func (s *HandoffService) allChildrenIncludingArchived(ctx context.Context, paren
 
 // releaseMembershipsForCascade releases group membership for each task
 // in the input slice and returns the unique set of group IDs that had
-// at least one member released. Inventory and release failures abort so the
-// caller can cancel prepared resource cleanup before task rows are mutated.
+// at least one member released. It attempts every task so cleanup
+// evaluation can run for all groups changed before an individual failure.
 func (s *HandoffService) releaseMembershipsForCascade(ctx context.Context, taskIDs []string, reason, cascadeID string) ([]string, error) {
 	if s.wsGroups == nil {
 		return nil, nil
 	}
 	seen := map[string]bool{}
 	var groups []string
+	var errs []error
 	for _, id := range taskIDs {
 		g, err := s.wsGroups.GetWorkspaceGroupForTask(ctx, id)
 		if err != nil {
-			return groups, fmt.Errorf("lookup group for task %s: %w", id, err)
+			errs = append(errs, fmt.Errorf("lookup group for task %s: %w", id, err))
+			continue
 		}
 		if g == nil {
 			continue
 		}
 		task, taskErr := s.tasks.GetTask(ctx, id)
 		if taskErr != nil {
-			return groups, fmt.Errorf("load task %s for workspace group %s: %w", id, g.ID, taskErr)
+			errs = append(errs, fmt.Errorf("load task %s for workspace group %s: %w", id, g.ID, taskErr))
+			continue
 		}
 		if task == nil {
-			return groups, fmt.Errorf("task %s for workspace group %s not found", id, g.ID)
+			errs = append(errs, fmt.Errorf("task %s for workspace group %s not found", id, g.ID))
+			continue
 		}
 		if g.WorkspaceID != "" && task.WorkspaceID != g.WorkspaceID {
-			return groups, fmt.Errorf("workspace group %s belongs to workspace %s, task %s belongs to workspace %s",
-				g.ID, g.WorkspaceID, id, task.WorkspaceID)
+			errs = append(errs, fmt.Errorf("workspace group %s belongs to workspace %s, task %s belongs to workspace %s",
+				g.ID, g.WorkspaceID, id, task.WorkspaceID))
+			continue
 		}
 		if err := s.wsGroups.ReleaseWorkspaceGroupMember(ctx, g.ID, id, reason, cascadeID); err != nil {
-			return groups, fmt.Errorf("release membership for task %s from group %s: %w", id, g.ID, err)
+			errs = append(errs, fmt.Errorf("release membership for task %s from group %s: %w", id, g.ID, err))
+			continue
 		}
 		if !seen[g.ID] {
 			seen[g.ID] = true
 			groups = append(groups, g.ID)
 		}
 	}
-	return groups, nil
+	return groups, errors.Join(errs...)
 }
 
 func (s *HandoffService) logf() *logger.Logger {

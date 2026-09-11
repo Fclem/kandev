@@ -133,6 +133,17 @@ type activeTaskSessionCanceller interface {
 	CancelActiveTaskSessionsByTaskID(ctx context.Context, taskID, reason string) ([]*models.TaskSession, error)
 }
 
+// activeTaskSessionReader lists sessions that still own live runtime state.
+// The concrete task repository implements this optional surface.
+type activeTaskSessionReader interface {
+	ListActiveTaskSessionsByTaskID(ctx context.Context, taskID string) ([]*models.TaskSession, error)
+}
+
+// SetGitArchiveCapture wires the repository snapshotter used by ArchiveTaskTree.
+func (s *HandoffService) SetGitArchiveCapture(capture GitArchiveCapture) {
+	s.gitArchiveCapture = capture
+}
+
 // SetRunCanceller wires the run-canceller used by ArchiveTaskTree /
 // DeleteTaskTree to terminate active descendants before archive.
 func (s *HandoffService) SetRunCanceller(c RunCanceller) {
@@ -256,6 +267,7 @@ type HandoffService struct {
 	sessions           SessionWorktreeReader
 	cleaner            WorkspaceCleaner
 	runCanceller       RunCanceller
+	gitArchiveCapture  GitArchiveCapture
 	eventPublisher     TaskEventPublisher
 	vacancyReconciler  VacatedStepReconciler
 	resourceCleaner    TaskResourceCleaner

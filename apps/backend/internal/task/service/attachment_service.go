@@ -261,6 +261,9 @@ func (s *AttachmentService) Delete(ctx context.Context, ownerID, id string) erro
 	if err != nil {
 		return err
 	}
+	if attachment.State != models.AttachmentStateStaged {
+		return ErrAttachmentClaimConflict
+	}
 	if err := s.removeBytes(attachment); err != nil {
 		return err
 	}

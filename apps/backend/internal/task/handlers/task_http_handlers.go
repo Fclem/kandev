@@ -1940,6 +1940,12 @@ func isCascadePostCommitError(err error) bool {
 // "Also archive/delete subtasks" checkbox.
 func (h *TaskHandlers) httpTaskSubtaskCount(c *gin.Context) {
 	taskID := c.Param("id")
+	if h.service != nil {
+		if err := h.service.AuthorizeTaskAccess(c.Request.Context(), taskID); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+	}
 	children, err := h.repo.ListChildren(c.Request.Context(), taskID)
 	if err != nil {
 		// Don't surface the raw repo error to the client — it can leak

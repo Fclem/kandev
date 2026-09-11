@@ -794,6 +794,7 @@ func registerRoutes(p routeParams) {
 		}
 	}
 	handoffSvc.SetRunCanceller(p.orchestratorSvc)
+	handoffSvc.SetGitArchiveCapture(p.orchestratorSvc)
 	// Cascade archive/delete must re-publish task.updated / task.deleted
 	// events; HandoffService walks the repo directly and bypasses the
 	// Service wrappers that normally publish these. Without this wiring

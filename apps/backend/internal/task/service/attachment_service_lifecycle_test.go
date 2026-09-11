@@ -655,6 +655,10 @@ func (f *failingAttachmentRepo) DeleteMessageAttachmentsByTask(context.Context, 
 	return nil, f.err
 }
 
+func (f *failingAttachmentRepo) ListMessageAttachmentsByTask(context.Context, string) ([]*models.TaskMessageAttachment, error) {
+	return nil, f.err
+}
+
 func TestAttachmentDescriptorExposesNoStorageKey(t *testing.T) {
 	svc, _, _, _ := newAttachmentTestService(t)
 	attachment := stageTestAttachment(t, svc, "user-a", "f.png", "payload")

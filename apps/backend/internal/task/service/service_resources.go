@@ -771,9 +771,28 @@ func (s *Service) DeleteWorkflow(ctx context.Context, id string) error {
 				zap.String("task_workspace_id", taskWorkspaceID))
 			continue
 		}
-		if err := s.ArchiveTask(ctx, task.ID); err != nil {
-			// Concurrent archive between ListTasks and here is a no-op:
-			// the task is already in the desired state, keep cascading.
+
+		var archiveErr error
+		if s.workflowTaskArchiveCoordinator != nil {
+			outcome, err := s.workflowTaskArchiveCoordinator.ArchiveTaskTree(ctx, task.ID, false)
+			if outcome != nil && len(outcome.ArchivedTaskIDs) > 0 {
+				archived += len(outcome.ArchivedTaskIDs)
+			}
+			archiveErr = err
+			var postCommitErr *CascadePostCommitError
+			if errors.As(err, &postCommitErr) {
+				s.logger.Warn("workflow task archived with post-commit lifecycle errors",
+					zap.String("workflow_id", id), zap.String("task_id", task.ID), zap.Error(err))
+				continue
+			}
+		} else {
+			archiveErr = s.ArchiveTask(ctx, task.ID)
+			if errors.Is(archiveErr, ErrTaskAlreadyArchived) {
+				continue
+			}
+		}
+		if archiveErr != nil {
+			err = archiveErr
 			if errors.Is(err, ErrTaskAlreadyArchived) {
 				continue
 			}
@@ -783,7 +802,9 @@ func (s *Service) DeleteWorkflow(ctx context.Context, id string) error {
 				zap.Error(err))
 			return err
 		}
-		archived++
+		if s.workflowTaskArchiveCoordinator == nil {
+			archived++
+		}
 	}
 
 	if err := s.workflows.DeleteWorkflow(ctx, id); err != nil {

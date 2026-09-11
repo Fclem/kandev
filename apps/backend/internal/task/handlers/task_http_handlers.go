@@ -1915,7 +1915,7 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 	}
 	if err := h.service.ArchiveTask(archiveCtx, taskID); err != nil {
 		if errors.Is(err, service.ErrTaskAlreadyArchived) {
-			c.JSON(http.StatusOK, gin.H{"success": true, "already_archived": true})
+			c.JSON(http.StatusOK, gin.H{responseKeySuccess: true, "already_archived": true})
 			return
 		}
 		if !isCascadePostCommitError(err) {
@@ -1980,13 +1980,19 @@ func (h *TaskHandlers) httpUnarchiveTask(c *gin.Context) {
 	}
 	taskID := c.Param("id")
 	outcome, err := h.handoffSvc.UnarchiveTaskTree(c.Request.Context(), taskID)
-	if err != nil && !isCascadePostCommitError(err) {
-		handleNotFound(c, h.logger, err, "task not unarchived")
-		return
-	}
 	if err != nil {
+		if !isCascadePostCommitError(err) {
+			handleNotFound(c, h.logger, err, "task not unarchived")
+			return
+		}
 		h.logger.Warn("task unarchive committed with post-commit errors",
 			zap.String("task_id", taskID), zap.Error(err))
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "task unarchive requires retry",
+			"task_id": taskID,
+		})
+		return
 	}
 	// Probe branch recoverability for every restored task: archive deleted
 	// the local branch + worktree, so report whether the branch still

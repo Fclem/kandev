@@ -402,6 +402,7 @@ type Service struct {
 	usage                           repository.UsageRepository
 	workspacePolicyAttacher         WorkspacePolicyAttacher
 	autoArchiveCoordinator          AutoArchiveCoordinator
+	workflowTaskArchiveCoordinator  WorkflowTaskArchiveCoordinator
 	taskLifecycleCoordinator        TaskLifecycleCoordinator
 	attachmentSvc                   *AttachmentService
 	statusSummaryPRs                TaskStatusSummaryPRReader
@@ -545,6 +546,12 @@ type AutoArchiveCoordinator interface {
 	ArchiveAutoTask(ctx context.Context, candidate *models.Task) (*CascadeOutcome, error)
 }
 
+// WorkflowTaskArchiveCoordinator routes workflow deletion through the same
+// lifecycle path as user archive requests.
+type WorkflowTaskArchiveCoordinator interface {
+	ArchiveTaskTree(ctx context.Context, rootID string, cascade bool) (*CascadeOutcome, error)
+}
+
 // TaskLifecycleCoordinator owns destructive task lifecycle transitions that
 // must release workspace-group state before or alongside deleting the task.
 type TaskLifecycleCoordinator interface {
@@ -642,6 +649,12 @@ func (s *Service) DeleteTaskWithLifecycleAndReason(ctx context.Context, id, reas
 // automatic archive loop.
 func (s *Service) SetAutoArchiveCoordinator(coordinator AutoArchiveCoordinator) {
 	s.autoArchiveCoordinator = coordinator
+}
+
+// SetWorkflowTaskArchiveCoordinator installs the shared archive lifecycle used
+// when deleting a workflow.
+func (s *Service) SetWorkflowTaskArchiveCoordinator(coordinator WorkflowTaskArchiveCoordinator) {
+	s.workflowTaskArchiveCoordinator = coordinator
 }
 
 // NewService creates a new task service

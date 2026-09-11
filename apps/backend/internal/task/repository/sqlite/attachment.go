@@ -97,26 +97,36 @@ func (r *Repository) ListMessageAttachments(ctx context.Context, ids []string) (
 }
 
 func (r *Repository) ListMessageAttachmentsByTask(ctx context.Context, taskID string) ([]*models.TaskMessageAttachment, error) {
-	if taskID == "" {
+	return r.listMessageAttachmentsByScope(ctx, "task_id", "task", taskID)
+}
+
+func (r *Repository) ListMessageAttachmentsByWorkspace(ctx context.Context, workspaceID string) ([]*models.TaskMessageAttachment, error) {
+	return r.listMessageAttachmentsByScope(ctx, "workspace_id", "workspace", workspaceID)
+}
+
+func (r *Repository) listMessageAttachmentsByScope(
+	ctx context.Context, column, scope, value string,
+) ([]*models.TaskMessageAttachment, error) {
+	if value == "" {
 		return nil, nil
 	}
-	rows, err := r.ro.QueryxContext(ctx, r.ro.Rebind(`
-		SELECT `+attachmentSelectColumns+` FROM task_message_attachments WHERE task_id = ?
-	`), taskID)
+	rows, err := r.ro.QueryxContext(ctx, r.ro.Rebind(
+		`SELECT `+attachmentSelectColumns+` FROM task_message_attachments WHERE `+column+` = ?`,
+	), value)
 	if err != nil {
-		return nil, fmt.Errorf("list task message attachments: %w", err)
+		return nil, fmt.Errorf("list %s message attachments: %w", scope, err)
 	}
 	defer func() { _ = rows.Close() }()
 	var out []*models.TaskMessageAttachment
 	for rows.Next() {
 		attachment := &models.TaskMessageAttachment{}
 		if err := rows.StructScan(attachment); err != nil {
-			return nil, fmt.Errorf("scan task message attachment: %w", err)
+			return nil, fmt.Errorf("scan %s message attachment: %w", scope, err)
 		}
 		out = append(out, attachment)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate task message attachments: %w", err)
+		return nil, fmt.Errorf("iterate %s message attachments: %w", scope, err)
 	}
 	return out, nil
 }

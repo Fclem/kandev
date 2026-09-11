@@ -86,6 +86,9 @@ type workspaceDeleteTaskCleanup struct {
 	cleanupJob  *models.TaskResourceCleanupJob
 }
 
+type workspaceAttachmentLister interface {
+	ListMessageAttachmentsByWorkspace(ctx context.Context, workspaceID string) ([]*models.TaskMessageAttachment, error)
+}
 type repositorySessionPruner interface {
 	DeleteRepositoryIfNoActiveTaskSessions(ctx context.Context, id string) (bool, error)
 }
@@ -241,6 +244,34 @@ func (s *Service) DeleteWorkspaceWithConfirmName(ctx context.Context, id, confir
 	}
 	return s.deleteWorkspace(ctx, workspace, &confirmName)
 }
+func (s *Service) prepareWorkspaceAttachmentCleanup(ctx context.Context, workspaceID string) (*models.TaskResourceCleanupJob, error) {
+	if s.resourceCleanups == nil {
+		return nil, nil
+	}
+	attachmentRepo := s.attachments
+	if attachmentRepo == nil && s.attachmentSvc != nil {
+		attachmentRepo = s.attachmentSvc.repo
+	}
+	lister, ok := attachmentRepo.(workspaceAttachmentLister)
+	if !ok {
+		if s.attachmentSvc != nil {
+			return nil, fmt.Errorf("workspace attachment repository cannot list attachments")
+		}
+		return nil, nil
+	}
+	attachments, err := lister.ListMessageAttachmentsByWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("list workspace attachments for cleanup: %w", err)
+	}
+	if len(attachments) == 0 {
+		return nil, nil
+	}
+	return s.persistTaskResourceCleanup(
+		ctx, "", models.TaskResourceCleanupTriggerWorkspaceDelete,
+		newTaskResourceCleanupOperationID(models.TaskResourceCleanupTriggerWorkspaceDelete, "workspace-attachments:"+workspaceID),
+		nil, nil, nil, attachments, taskEnvironmentCleanup{}, true, false,
+	)
+}
 
 // DeleteOrganizationWorkspaces removes every workspace in one organization
 // through the same lifecycle as an ordinary workspace deletion. Authorization
@@ -271,7 +302,7 @@ func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspa
 		return err
 	}
 	// Runtime cleanup needs task rows before the cascade removes them.
-	cleanups, err := s.prepareWorkspaceDeleteTaskCleanups(ctx, tasks)
+	workspaceAttachmentCleanup, err := s.prepareWorkspaceAttachmentCleanup(ctx, workspace.ID)
 	if err != nil {
 		return err
 	}
@@ -283,6 +314,16 @@ func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspa
 			return fmt.Errorf("cleanup workspace canvases before workspace delete: %w", err)
 		}
 	}
+	cleanups := make([]workspaceDeleteTaskCleanup, 0, len(tasks)+1)
+	if workspaceAttachmentCleanup != nil {
+		cleanups = append(cleanups, workspaceDeleteTaskCleanup{cleanupJob: workspaceAttachmentCleanup})
+	}
+	taskCleanups, err := s.prepareWorkspaceDeleteTaskCleanups(ctx, tasks)
+	if err != nil {
+		cancelErr := s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
+		return errors.Join(err, cancelErr)
+	}
+	cleanups = append(cleanups, taskCleanups...)
 
 	var deletedWorkspaceAttachments []*models.TaskMessageAttachment
 	var deletedTasks []*models.Task
@@ -518,6 +559,9 @@ func (s *Service) workspaceDeleteTaskCleanupJobs(
 	jobs := make([]workspaceDeleteTaskCleanup, 0, len(cleanups))
 	for _, cleanup := range cleanups {
 		if cleanup.task == nil {
+			if cleanup.cleanupJob != nil {
+				jobs = append(jobs, cleanup)
+			}
 			continue
 		}
 		if _, ok := deletedTaskIDs[cleanup.task.ID]; !ok {

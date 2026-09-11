@@ -1259,21 +1259,36 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 					fmt.Errorf("lookup workspace group for task %s: %w", id, err))
 				continue
 			}
+			restored := false
 			if g == nil {
 				if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID); err != nil {
 					restorationErrors = append(restorationErrors,
 						fmt.Errorf("restore membership for task %s: %w", id, err))
+					continue
 				}
-				continue
+				restored = true
+				g, err = s.wsGroups.GetWorkspaceGroupForTask(operationCtx, id)
+				if err != nil {
+					restorationErrors = append(restorationErrors,
+						fmt.Errorf("lookup restored workspace group for task %s: %w", id, err))
+					continue
+				}
+				if g == nil {
+					restorationErrors = append(restorationErrors,
+						fmt.Errorf("workspace group missing after restoring membership for task %s", id))
+					continue
+				}
 			}
-			mu := s.workspaceGroupLock.lockFor(g.ID)
-			mu.Lock()
-			err = s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID)
-			mu.Unlock()
-			if err != nil {
-				restorationErrors = append(restorationErrors,
-					fmt.Errorf("restore membership for task %s: %w", id, err))
-				continue
+			if !restored {
+				mu := s.workspaceGroupLock.lockFor(g.ID)
+				mu.Lock()
+				err = s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID)
+				mu.Unlock()
+				if err != nil {
+					restorationErrors = append(restorationErrors,
+						fmt.Errorf("restore membership for task %s: %w", id, err))
+					continue
+				}
 			}
 			groupIDs[g.ID] = true
 		}

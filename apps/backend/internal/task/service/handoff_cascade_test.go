@@ -507,6 +507,48 @@ func TestUnarchiveTaskTree_LeavesPriorlyArchivedDescendantsAlone(t *testing.T) {
 	}
 }
 
+type restoringCascadeWSGroupRepo struct {
+	*fakeWSGroupRepoCascade
+}
+
+func (f *restoringCascadeWSGroupRepo) RestoreWorkspaceGroupMemberByCascade(
+	ctx context.Context, taskID, cascadeID string,
+) error {
+	if err := f.fakeWSGroupRepoCascade.RestoreWorkspaceGroupMemberByCascade(ctx, taskID, cascadeID); err != nil {
+		return err
+	}
+	f.members["g1"][taskID] = orchmodels.WorkspaceMemberRoleMember
+	return nil
+}
+
+func TestUnarchiveTaskTreeRestoresCleanedWorkspaceGroupAfterMembershipRestore(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	groups := &restoringCascadeWSGroupRepo{fakeWSGroupRepoCascade: newCascadeWSGroupRepo()}
+	groups.groups["g1"] = &orchmodels.WorkspaceGroup{
+		ID: "g1", WorkspaceID: "ws-1",
+		CleanupStatus:     orchmodels.WorkspaceCleanupStatusCleaned,
+		MaterializedKind:  orchmodels.WorkspaceGroupKindSingleRepo,
+		RestoreConfigJSON: `{"kind":"single_repo","worktree_ids":{"r":"wt"}}`,
+	}
+	groups.members["g1"] = map[string]string{"root": orchmodels.WorkspaceMemberRoleMember}
+	svc := NewHandoffService(newCascadeRepo(tasks), nil, nil, nil, groups, nil)
+
+	archive, err := svc.ArchiveTaskTree(context.Background(), "root", false)
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if _, err := svc.UnarchiveTaskTree(context.Background(), "root"); err != nil {
+		t.Fatalf("unarchive: %v", err)
+	}
+	if got := groups.cleanupStatuses["g1"]; got != orchmodels.WorkspaceCleanupStatusActive {
+		t.Fatalf("group cleanup status = %q, want active", got)
+	}
+	if len(archive.ArchivedTaskIDs) != 1 {
+		t.Fatalf("archived tasks = %v, want root only", archive.ArchivedTaskIDs)
+	}
+}
+
 func TestUnarchiveTaskTree_RestoresCleanupAfterMutationFailure(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	tasks.addArchivedTask("root", "", "ws-1", "cascade-1")

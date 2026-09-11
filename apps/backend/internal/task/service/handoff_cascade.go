@@ -732,14 +732,19 @@ func (s *HandoffService) publishDeletedTaskDependencies(
 	if !ok {
 		return
 	}
-	// Deleting this predecessor changes surviving dependents' blocked
-	// projection; refresh them after releasing the mutation lock.
-	publisher.PublishDependencyChange(ctx, snapshot.incoming...)
+	affected := append([]string{}, snapshot.incoming...)
+	for _, blocker := range snapshot.outgoing {
+		if blocker != nil {
+			affected = append(affected, blocker.BlockerTaskID)
+		}
+	}
+	// Deleting this task changes both surviving dependents' blocked
+	// projections and surviving predecessors' dependent projections.
+	publisher.PublishDependencyChange(ctx, affected...)
 }
 func (s *HandoffService) archiveTaskWithVacatedStep(
 	ctx context.Context,
 	taskID string,
-
 	cascadeID string,
 	autoArchiveCandidate *models.Task,
 ) (string, bool, error) {
@@ -1269,9 +1274,10 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 			return out, errors.Join(fmt.Errorf("cancel archive cleanup %s: %w", id, err), restoreCancelledCleanup())
 		}
 	}
-	// Unarchive shallow→deep so the root's restored state is visible
-	// before children are queried by anyone watching the bus.
-	for _, id := range all {
+	// Unarchive deep→shallow so a partial failure leaves the root archived
+	// with its cascade ID, allowing a retry to discover remaining members.
+	for i := len(all) - 1; i >= 0; i-- {
+		id := all[i]
 		ok, err := s.tasks.UnarchiveTaskByCascade(operationCtx, id, cascadeID)
 		if err != nil {
 			return out, cascadePostCommitError(out, errors.Join(
@@ -1487,8 +1493,18 @@ func (s *HandoffService) restoreNoCascadeChild(ctx context.Context, snapshot *mo
 	if !ok {
 		return fmt.Errorf("task repo cannot restore child %s conditionally", snapshot.ID)
 	}
+	current, err := s.tasks.GetTask(ctx, snapshot.ID)
+	if err != nil {
+		return fmt.Errorf("load child task %s for compensation: %w", snapshot.ID, err)
+	}
+	if current == nil {
+		return fmt.Errorf("child task %s disappeared during compensation", snapshot.ID)
+	}
+	if current.ParentID != "" && current.ParentID != snapshot.ParentID {
+		return fmt.Errorf("child task %s changed parent during compensation", snapshot.ID)
+	}
 	if err := restorer.RestoreTaskParentIfUnchanged(
-		ctx, snapshot.ID, "", snapshot.ParentID,
+		ctx, snapshot.ID, current.ParentID, snapshot.ParentID,
 		taskWorkspaceMode(snapshot.Metadata),
 	); err != nil {
 		return fmt.Errorf("restore child task %s: %w", snapshot.ID, err)

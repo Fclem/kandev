@@ -41,6 +41,25 @@ func TestUnarchiveTaskTree_ManualArchiveRestoresRootOnly(t *testing.T) {
 	}
 }
 
+func TestUnarchiveTaskTree_DoesNotInferUnrelatedDescendantCascade(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addArchivedTask("root", "", "ws-1", "")
+	tasks.addArchivedTask("c1", "root", "ws-1", "unrelated-cascade")
+	svc := newCascadeService(t, tasks, newCascadeWSGroupRepo())
+
+	if _, err := svc.UnarchiveTaskTree(context.Background(), "root"); err != nil {
+		t.Fatalf("unarchive: %v", err)
+	}
+	root, _ := tasks.GetTask(context.Background(), "root")
+	if root.ArchivedAt != nil {
+		t.Fatal("root should be unarchived")
+	}
+	child, _ := tasks.GetTask(context.Background(), "c1")
+	if child.ArchivedAt == nil {
+		t.Fatal("descendant from an unrelated cascade must remain archived")
+	}
+}
+
 // A non-archived root is a caller error, not a silent no-op.
 func TestUnarchiveTaskTree_NotArchivedErrors(t *testing.T) {
 	tasks := newFakeTaskRepo()

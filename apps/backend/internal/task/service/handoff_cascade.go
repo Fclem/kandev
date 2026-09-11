@@ -1186,16 +1186,10 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	}
 	operationCtx, cancelOperation := archivecascade.ContinuationContextUntil(ctx, deadline)
 	defer cancelOperation()
-	cascadeID := root.ArchivedByCascadeID
-	if cascadeID == "" {
-		if retryID, err := s.findUnarchiveRetryCascade(operationCtx, rootID); err != nil {
-			return nil, err
-		} else if retryID == "" {
-			return s.unarchiveManualRoot(operationCtx, root)
-		} else {
-			cascadeID = retryID
-		}
+	if root.ArchivedByCascadeID == "" {
+		return s.unarchiveManualRoot(operationCtx, root)
 	}
+	cascadeID := root.ArchivedByCascadeID
 	out := &CascadeOutcome{CascadeID: cascadeID}
 	// The descendant walk filters archived rows by this cascade ID, so
 	// manually archived descendants remain untouched during restoration.
@@ -1602,30 +1596,6 @@ func (s *HandoffService) findArchiveRetryCascade(ctx context.Context, rootID str
 		return "", nil, nil
 	}
 	return cascadeID, all, nil
-}
-func (s *HandoffService) findUnarchiveRetryCascade(ctx context.Context, rootID string) (string, error) {
-	all, err := s.collectTaskTreeIncludingArchived(ctx, rootID)
-	if err != nil {
-		return "", err
-	}
-	var cascadeID string
-	for _, id := range all[1:] {
-		task, err := s.tasks.GetTask(ctx, id)
-		if err != nil {
-			return "", err
-		}
-		if task == nil || task.ArchivedAt == nil || task.ArchivedByCascadeID == "" {
-			continue
-		}
-		if cascadeID == "" {
-			cascadeID = task.ArchivedByCascadeID
-			continue
-		}
-		if cascadeID != task.ArchivedByCascadeID {
-			return "", fmt.Errorf("unarchive retry has conflicting cascade identities under %s", rootID)
-		}
-	}
-	return cascadeID, nil
 }
 
 type childLister func(ctx context.Context, parentID string) ([]*models.Task, error)

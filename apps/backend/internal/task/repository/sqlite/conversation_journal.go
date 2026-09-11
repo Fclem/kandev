@@ -753,7 +753,7 @@ BEGIN
 		END IF;
 		close_offset := strpos(
 			substr(result, open_pos + length('<kandev-system>')),
-			'</kandev-system>',
+			'</kandev-system>'
 		);
 		IF close_offset = 0 THEN
 			EXIT;

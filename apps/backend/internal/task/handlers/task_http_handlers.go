@@ -17,6 +17,7 @@ import (
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/orchestrator"
 	storageworkspaces "github.com/kandev/kandev/internal/system/storage/workspaces"
+	"github.com/kandev/kandev/internal/task/archivecascade"
 	"github.com/kandev/kandev/internal/task/dto"
 	"github.com/kandev/kandev/internal/task/models"
 	taskrepository "github.com/kandev/kandev/internal/task/repository"
@@ -1877,13 +1878,19 @@ func (h *TaskHandlers) httpDeleteTask(c *gin.Context) {
 func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 	taskID := c.Param("id")
 	cascade := cascadeQueryParam(c)
+	// WithoutCancel, not Background: archiving cancels sessions and starts
+	// cleanup, so it must survive the client navigating away — but
+	// context.Background() also drops the request identity used by auth checks.
+	archiveCtx, cancel := archivecascade.ContinuationContext(c.Request.Context())
+	defer cancel()
 	// Office task-handoffs phase 6: when a HandoffService is wired,
 	// archive the whole subtree under a single cascade ID so
 	// descendants get tagged for scoped unarchive AND workspace-group
 	// memberships are released. When HandoffService is unconfigured
 	// (legacy / tests) fall back to the single-task path.
 	if h.handoffSvc != nil {
-		if _, err := h.handoffSvc.ArchiveTaskTree(c.Request.Context(), taskID, cascade); err != nil {
+		out, err := h.handoffSvc.ArchiveTaskTree(archiveCtx, taskID, cascade)
+		if err != nil {
 			if !isCascadePostCommitError(err) {
 				handleNotFound(c, h.logger, err, "task not archived")
 				return
@@ -1891,10 +1898,14 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 			h.logger.Warn("task archived but post-commit housekeeping failed",
 				zap.String("task_id", taskID), zap.Error(err))
 		}
-		c.JSON(http.StatusOK, dto.SuccessResponse{Success: true})
+		response := gin.H{"success": true}
+		if out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0 {
+			response["already_archived"] = true
+		}
+		c.JSON(http.StatusOK, response)
 		return
 	}
-	if err := h.service.ArchiveTask(c.Request.Context(), taskID); err != nil {
+	if err := h.service.ArchiveTask(archiveCtx, taskID); err != nil {
 		handleNotFound(c, h.logger, err, "task not archived")
 		return
 	}

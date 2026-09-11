@@ -530,8 +530,8 @@ BEGIN
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
 		json_object('type','message.added','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
-			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
-			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
+			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
+			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
@@ -554,8 +554,8 @@ BEGIN
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.author_type, NEW.created_at, FALSE,
 		json_object('type','message.updated','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
-			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
-			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
+			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
+			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
@@ -597,10 +597,10 @@ BEGIN
 	INSERT INTO conversation_turn_versions(session_id, turn_id, row_sequence, task_id, started_at, tombstone, payload)
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.started_at, FALSE,
 		json_object('type','session.turn.started','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
-			'id',NEW.id,'started_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.started_at),
-			'completed_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.completed_at),
-			'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
-			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.started_at)))
+			'id',NEW.id,'started_at',__SQLITE_RFC3339_MILLIS__(NEW.started_at),
+			'completed_at',__SQLITE_RFC3339_MILLIS__(NEW.completed_at),
+			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
+			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.started_at)))
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
 	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'session.turn.started', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
@@ -622,10 +622,10 @@ BEGIN
 	INSERT INTO conversation_turn_versions(session_id, turn_id, row_sequence, task_id, started_at, tombstone, payload)
 	SELECT NEW.task_session_id, NEW.id, watermark, NULLIF(NEW.task_id, ''), NEW.started_at, FALSE,
 		json_object('type','session.turn.completed','session_id',NEW.task_session_id,'task_id',NULLIF(NEW.task_id,''),
-			'id',NEW.id,'started_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.started_at),
-			'completed_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.completed_at),
-			'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at),
-			'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at)))
+			'id',NEW.id,'started_at',__SQLITE_RFC3339_MILLIS__(NEW.started_at),
+			'completed_at',__SQLITE_RFC3339_MILLIS__(NEW.completed_at),
+			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
+			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at)))
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
 	SELECT NEW.task_session_id, watermark, NEW.task_session_id || ':' || watermark, 'session.turn.completed', NULLIF(NEW.task_id,''), payload, CURRENT_TIMESTAMP
@@ -670,6 +670,14 @@ BEGIN
 	FROM conversation_session_streams WHERE session_id = OLD.id;
 END;
 `, sqliteStripSystemToken, sqliteStripSystemContentExpr("NEW.content"))
+	triggerSQL = strings.NewReplacer(
+		"__SQLITE_RFC3339_MILLIS__(NEW.created_at)", dialect.RFC3339Millis(dialect.SQLite3, "NEW.created_at"),
+		"__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at))", dialect.RFC3339Millis(dialect.SQLite3, "COALESCE(NEW.updated_at,NEW.created_at)"),
+		"__SQLITE_RFC3339_MILLIS__(NEW.started_at)", dialect.RFC3339Millis(dialect.SQLite3, "NEW.started_at"),
+		"__SQLITE_RFC3339_MILLIS__(NEW.completed_at)", dialect.RFC3339Millis(dialect.SQLite3, "NEW.completed_at"),
+		"__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.started_at))", dialect.RFC3339Millis(dialect.SQLite3, "COALESCE(NEW.updated_at,NEW.started_at)"),
+		"__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at))", dialect.RFC3339Millis(dialect.SQLite3, "COALESCE(NEW.updated_at,NEW.completed_at,NEW.started_at)"),
+	).Replace(triggerSQL)
 	if _, err := r.db.Exec(triggerSQL); err != nil {
 		return fmt.Errorf("create SQLite conversation journal triggers: %w", err)
 	}
@@ -697,7 +705,7 @@ END;
 
 //nolint:funlen // Trigger definitions are kept together so schema initialization is atomic.
 func (r *Repository) initPostgresConversationJournalTriggers() error {
-	_, err := r.db.Exec(`
+	_, err := r.db.Exec(r.db.Rebind(`
 CREATE OR REPLACE FUNCTION conversation_next_sequence(p_session_id TEXT, p_terminal BOOLEAN DEFAULT FALSE)
 RETURNS BIGINT AS $$
 DECLARE next_value BIGINT;
@@ -800,7 +808,7 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS conversation_session_delete_trigger ON task_sessions;
 CREATE TRIGGER conversation_session_delete_trigger AFTER DELETE ON task_sessions
 FOR EACH ROW EXECUTE FUNCTION conversation_session_delete_journal();
-	`)
+	`))
 	if err != nil {
 		return fmt.Errorf("create PostgreSQL conversation journal triggers: %w", err)
 	}

@@ -10,7 +10,15 @@ export type BackendArtifact = {
   rebuildTarget: string;
 };
 
+export type GlobalSetupOptions = {
+  verifyPluginFixtureIdentity?: boolean;
+};
+
 export default function globalSetup() {
+  runGlobalSetup();
+}
+
+export function runGlobalSetup(options: GlobalSetupOptions = {}): void {
   const customKandevBin = process.env.KANDEV_E2E_BIN;
   const kandevBin = customKandevBin ?? path.join(BACKEND_DIR, "bin", "kandev");
   const artifacts: BackendArtifact[] = [
@@ -46,7 +54,9 @@ export default function globalSetup() {
   assertBackendArtifactsFresh(BACKEND_DIR, artifacts);
   const pluginIdentityPath = path.join(BACKEND_DIR, ".build", "e2e-plugin-identity.json");
   assertArtifactExists(pluginIdentityPath, "e2e-plugin-package");
-  assertPluginFixtureIdentity(pluginIdentityPath);
+  if (options.verifyPluginFixtureIdentity !== false) {
+    assertPluginFixtureIdentity(pluginIdentityPath);
+  }
 
   const spaIndex = path.join(WEB_DIR, "dist", "index.html");
   if (!fs.existsSync(spaIndex)) {

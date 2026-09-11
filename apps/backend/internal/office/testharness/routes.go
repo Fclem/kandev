@@ -844,18 +844,10 @@ func seedMessageHandler(
 			}
 		}
 
-		// Prefer routing through the task service's own publish path (rather
-		// than a hand-rolled bus.Publish) so a seeded clarification/permission
-		// message gets the same session-scoped pending_action projection a
-		// real agent turn triggers (AC-34/AC-51) — the mobile session
-		// switcher's live icon reads that projection, not the raw message.
-		// Callers with no service handle (older/lighter-weight route tests)
-		// still get the plain message.added event via the fallback so their
-		// coverage of the raw event payload (prompt_index, created_at
-		// precision) keeps working.
 		if taskSvc != nil {
 			if err := taskSvc.PublishMessageEvent(ctx, events.MessageAdded, msg); err != nil {
-				log.Warn("test harness: publish message added failed", zap.Error(err))
+				log.Warn("test harness: publish message added failed; using fallback", zap.Error(err))
+				publishMessageAddedFallback(ctx, eventBus, msg, log)
 			}
 		} else {
 			publishMessageAddedFallback(ctx, eventBus, msg, log)

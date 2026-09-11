@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/kandev/kandev/internal/db"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/sysprompt"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
@@ -57,20 +58,11 @@ func toAnySlice(values []string) []any {
 }
 
 func (s *Service) conversationTableExists(ctx context.Context, table string) (bool, error) {
-	query := `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`
-	if strings.Contains(strings.ToLower(s.conversationJournal.DriverName()), "postgres") {
-		query = `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?`
-	}
-	var present int
-	query = s.conversationJournal.Rebind(query)
-	err := s.conversationJournal.GetContext(ctx, &present, query, table)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
+	present, err := db.TableExistsContext(ctx, s.conversationJournal, table)
 	if err != nil {
 		return false, fmt.Errorf("check conversation journal schema (%s): %w", table, err)
 	}
-	return true, nil
+	return present, nil
 }
 
 // SyncCommittedSessionEvents mirrors primary-journal rows into the durable

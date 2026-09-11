@@ -164,6 +164,7 @@ function failPluginGeneration(
       pluginRegistry.markPluginReady(pluginId, generation);
     } else {
       pluginRegistry.unregisterPlugin(pluginId);
+      restorePublishedMetadata?.();
       pluginRegistry.markPluginFailed(pluginId, generation);
     }
   });
@@ -268,6 +269,9 @@ async function loadPlugin(
       resources,
     );
     const scopedRegistry = pluginRegistry.forPlugin(plugin.id, plugin.name);
+    if (isCurrentLoad(plugin.id, generation)) {
+      pluginRegistry.runAtomicMutation(() => setPluginDeclarations(plugin));
+    }
     const staged = stagedGenerationRegistry(scopedRegistry, isActiveGeneration);
     const result = await raceTimeout(
       Promise.resolve(registeredPlugin.initialize(staged.registry, host)),

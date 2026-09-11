@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -556,7 +557,7 @@ func (l *SessionEventLog) persistCursorRowLocked(encodedKey string, cursor *Sess
 	if err != nil {
 		return fmt.Errorf("encode delivery cursor: %w", err)
 	}
-	if _, err := tx.Exec(`
+	query := sqlx.Rebind(sqlx.QUESTION, `
 		INSERT INTO session_delivery_cursors(cursor_key, binding, acknowledged_sequence, owner_epoch, lease_until, retry_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(cursor_key) DO UPDATE SET
@@ -565,7 +566,8 @@ func (l *SessionEventLog) persistCursorRowLocked(encodedKey string, cursor *Sess
 			owner_epoch = excluded.owner_epoch,
 			lease_until = excluded.lease_until,
 			retry_at = excluded.retry_at,
-			updated_at = excluded.updated_at`,
+			updated_at = excluded.updated_at`)
+	if _, err := tx.Exec(query,
 		encodedKey, binding, cursor.AcknowledgedSequence, cursor.OwnerEpoch,
 		nullableTime(cursor.LeaseUntil), nullableTime(cursor.RetryAt),
 		cursor.UpdatedAt.Format(time.RFC3339Nano)); err != nil {
@@ -970,16 +972,16 @@ func (l *SessionEventLog) persistAppendLocked(event SessionEvent, poison *Sessio
 		return fmt.Errorf("begin session event append: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.Exec(`INSERT INTO session_event_partitions(session_id, watermark, terminal) VALUES (?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET watermark = excluded.watermark, terminal = excluded.terminal`,
+	if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_event_partitions(session_id, watermark, terminal) VALUES (?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET watermark = excluded.watermark, terminal = excluded.terminal`),
 		event.SessionID, event.Sequence, event.EventType == sessionRemovedEventType); err != nil {
 		return fmt.Errorf("persist session partition: %w", err)
 	}
-	if _, err := tx.Exec(`INSERT INTO session_events(session_id, sequence, event_id, protocol_version, event_type, task_id, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+	if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_events(session_id, sequence, event_id, protocol_version, event_type, task_id, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
 		event.SessionID, event.Sequence, event.ID, event.ProtocolVersion, event.EventType, nullableString(event.TaskID), []byte(event.Payload), event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
 		return fmt.Errorf("persist session event: %w", err)
 	}
 	if poison != nil {
-		if _, err := tx.Exec(`INSERT INTO session_poison(poison_key, record) VALUES (?, ?)`, poisonKey(event.SessionID, event.ID), mustJSON(poison)); err != nil {
+		if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_poison(poison_key, record) VALUES (?, ?)`), poisonKey(event.SessionID, event.ID), mustJSON(poison)); err != nil {
 			return fmt.Errorf("persist poison record: %w", err)
 		}
 	}
@@ -1027,11 +1029,11 @@ func resetSessionEventTables(tx *sql.Tx) error {
 
 func (l *SessionEventLog) persistSessions(tx *sql.Tx) error {
 	for sessionID, partition := range l.state.Sessions {
-		if _, err := tx.Exec(`INSERT INTO session_event_partitions(session_id, watermark, terminal) VALUES (?, ?, ?)`, sessionID, partition.Watermark, partition.Terminal); err != nil {
+		if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_event_partitions(session_id, watermark, terminal) VALUES (?, ?, ?)`), sessionID, partition.Watermark, partition.Terminal); err != nil {
 			return fmt.Errorf("persist session partition: %w", err)
 		}
 		for _, event := range partition.Events {
-			if _, err := tx.Exec(`INSERT INTO session_events(session_id, sequence, event_id, protocol_version, event_type, task_id, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_events(session_id, sequence, event_id, protocol_version, event_type, task_id, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
 				event.SessionID, event.Sequence, event.ID, event.ProtocolVersion, event.EventType, nullableString(event.TaskID), []byte(event.Payload), event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
 				return fmt.Errorf("persist session event: %w", err)
 			}
@@ -1046,18 +1048,18 @@ func (l *SessionEventLog) persistConsumerState(tx *sql.Tx) error {
 		if err != nil {
 			return fmt.Errorf("encode delivery cursor: %w", err)
 		}
-		if _, err := tx.Exec(`INSERT INTO session_delivery_cursors(cursor_key, binding, acknowledged_sequence, owner_epoch, lease_until, retry_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_delivery_cursors(cursor_key, binding, acknowledged_sequence, owner_epoch, lease_until, retry_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
 			encodedKey, key, cursor.AcknowledgedSequence, cursor.OwnerEpoch, nullableTime(cursor.LeaseUntil), nullableTime(cursor.RetryAt), cursor.UpdatedAt.Format(time.RFC3339Nano)); err != nil {
 			return fmt.Errorf("persist delivery cursor: %w", err)
 		}
 	}
 	for encodedKey, record := range l.state.Poison {
-		if _, err := tx.Exec(`INSERT INTO session_poison(poison_key, record) VALUES (?, ?)`, encodedKey, mustJSON(record)); err != nil {
+		if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_poison(poison_key, record) VALUES (?, ?)`), encodedKey, mustJSON(record)); err != nil {
 			return fmt.Errorf("persist poison record: %w", err)
 		}
 	}
 	for _, audit := range l.state.Audits {
-		if _, err := tx.Exec(`INSERT INTO session_poison_audits(record) VALUES (?)`, mustJSON(audit)); err != nil {
+		if _, err := tx.Exec(sqlx.Rebind(sqlx.QUESTION, `INSERT INTO session_poison_audits(record) VALUES (?)`), mustJSON(audit)); err != nil {
 			return fmt.Errorf("persist poison audit: %w", err)
 		}
 	}

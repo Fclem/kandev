@@ -135,11 +135,14 @@ export function projectCoreSessionPayload(event: RawSessionEvent): Record<string
     event.payload !== null && typeof event.payload === "object" && !Array.isArray(event.payload)
       ? { ...event.payload }
       : {};
-  if (
-    (event.event_type === "message.added" || event.event_type === "message.updated") &&
-    typeof payload.message_type === "string"
-  ) {
-    payload.type = payload.message_type;
+  if (event.event_type === "message.added" || event.event_type === "message.updated") {
+    if (typeof payload.message_type === "string") {
+      payload.type = payload.message_type;
+    } else if (payload.type === event.event_type) {
+      // Legacy test-harness publishers use the lifecycle event type in the
+      // generic `type` field and omit the message subtype.
+      payload.type = "message";
+    }
   }
   return payload;
 }

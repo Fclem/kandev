@@ -78,7 +78,7 @@ function validateOrderedSubscribeResponse(
   response: unknown,
   sessionId: string,
   wireId: string,
-): { eventWatermark: number; resumeToken: string } {
+): { eventWatermark: number; resumeToken: string; result: "fresh" | "replay" | "invalid_resume" } {
   if (!response || typeof response !== "object" || Array.isArray(response)) {
     throw invalidOrderedSessionResponse();
   }
@@ -110,7 +110,11 @@ function validateOrderedSubscribeResponse(
       throw invalidOrderedSessionResponse();
     }
   }
-  return { eventWatermark, resumeToken };
+  return {
+    eventWatermark,
+    resumeToken,
+    result: payload.result as "fresh" | "replay" | "invalid_resume",
+  };
 }
 
 function validateOrderedAckResponse(
@@ -793,24 +797,24 @@ export class WebSocketClient {
   private startSessionSubscription(sessionId: string, readiness: SessionSubscriptionReadiness) {
     if (readiness.requestStarted) return;
     readiness.requestStarted = true;
-    void this.request("session.subscribe", { session_id: sessionId })
-      .then(() => {
-        if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
-        const stream = this.getOrCreateCoreSessionStream(sessionId);
-        return this.request<unknown>("session.subscribe", {
-          session_id: sessionId,
-          consumer_kind: "core",
-          wire_id: stream.wireId,
-          ...(stream.resumeToken || stream.lastSeenSequence > 0
-            ? { last_seen_sequence: stream.lastSeenSequence }
-            : {}),
-          ...(stream.resumeToken ? { resume_token: stream.resumeToken } : {}),
-        }).then((response) => {
-          const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
-          stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
-          stream.resumeToken = validated.resumeToken;
-        });
-      })
+    const stream = this.getOrCreateCoreSessionStream(sessionId);
+    const legacySubscription = this.request("session.subscribe", { session_id: sessionId });
+    const orderedSubscription = this.request<unknown>("session.subscribe", {
+      session_id: sessionId,
+      consumer_kind: "core",
+      wire_id: stream.wireId,
+      ...(stream.resumeToken || stream.lastSeenSequence > 0
+        ? { last_seen_sequence: stream.lastSeenSequence }
+        : {}),
+      ...(stream.resumeToken ? { resume_token: stream.resumeToken } : {}),
+    }).then((response) => {
+      const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
+      if (validated.result !== "replay") {
+        stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
+      }
+      stream.resumeToken = validated.resumeToken;
+    });
+    void Promise.all([legacySubscription, orderedSubscription])
       .then(() => {
         if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
         readiness.settled = true;
@@ -850,7 +854,10 @@ export class WebSocketClient {
       ).catch(() => this.recoverCoreSessionPoison(event.session_id, stream));
       return;
     }
-    if (event.sequence !== stream.lastSeenSequence + 1) return;
+    if (event.sequence !== stream.lastSeenSequence + 1) {
+      this.recoverCoreSessionPoison(event.session_id, stream);
+      return;
+    }
     if (disposition === "poison") {
       this.recoverCoreSessionPoison(event.session_id, stream);
       return;
@@ -887,7 +894,9 @@ export class WebSocketClient {
     })
       .then((response) => {
         const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
-        stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
+        if (validated.result !== "replay") {
+          stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
+        }
         stream.resumeToken = validated.resumeToken;
       })
       .catch(() => undefined)

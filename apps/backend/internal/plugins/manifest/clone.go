@@ -27,7 +27,9 @@ func cloneStrings(values []string) []string {
 	if values == nil {
 		return nil
 	}
-	return append([]string(nil), values...)
+	clone := make([]string, len(values))
+	copy(clone, values)
+	return clone
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

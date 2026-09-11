@@ -156,7 +156,7 @@ describe("session subscription readiness", () => {
     const second = client.subscribeSessionWithReady("sess-1");
 
     expect(second.ready).toBe(first.ready);
-    expect(socket.sent.filter((message) => message.action === "session.subscribe")).toHaveLength(1);
+    expect(socket.sent.filter((message) => message.action === "session.subscribe")).toHaveLength(2);
 
     acknowledge(socket, sessionSubscribeRequest(socket));
     await Promise.resolve();
@@ -170,22 +170,25 @@ describe("session subscription readiness", () => {
   it("allows a failed registration to be retried with fresh readiness", async () => {
     const { client, socket } = connectClient();
     const subscription = client.subscribeSessionWithReady("sess-1");
+
     const firstRequest = sessionSubscribeRequest(socket);
+    const orderedFirstRequest = sessionSubscribeRequest(socket, 1);
 
     socket.receive({
       id: firstRequest.id,
       type: "error",
       payload: { message: "session is not ready" },
     });
+    acknowledge(socket, orderedFirstRequest);
     await expect(subscription.ready).rejects.toThrow("session is not ready");
 
     const retry = client.resubscribeSession("sess-1");
-    const retryRequest = sessionSubscribeRequest(socket, 1);
+    const retryRequest = sessionSubscribeRequest(socket, 2);
+    const orderedRetryRequest = sessionSubscribeRequest(socket, 3);
     expect(retry).not.toBe(subscription.ready);
 
     acknowledge(socket, retryRequest);
-    await Promise.resolve();
-    acknowledge(socket, sessionSubscribeRequest(socket, 2));
+    acknowledge(socket, orderedRetryRequest);
     await expect(retry).resolves.toBeUndefined();
     subscription.unsubscribe();
   });
@@ -248,7 +251,6 @@ describe("ordered core session compatibility", () => {
         type: "message.added",
         session_id: "sess-1",
         message_id: "message-1",
-        message_type: "message",
         task_id: "task-1",
         author_type: "user",
         content: "hello",
@@ -486,6 +488,7 @@ describe("session subscription reconnect recovery", () => {
     reconnectedSocket.open();
 
     expect(reconnectedSocket.sent.map((message) => message.action)).toEqual([
+      "session.subscribe",
       "session.subscribe",
       "message.list",
     ]);

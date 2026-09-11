@@ -4,16 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
-
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository"
@@ -54,6 +56,17 @@ type AttachmentDescriptor struct {
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
+type attachmentReleasePreparer interface {
+	PrepareClaimedMessageAttachmentsForRelease(
+		ctx context.Context, ids []string, ownerID, taskID, sessionID string,
+	) ([]*models.TaskMessageAttachment, error)
+}
+type attachmentTaskDeletePreparer interface {
+	PrepareMessageAttachmentsForTaskDelete(
+		ctx context.Context, taskID string,
+	) ([]*models.TaskMessageAttachment, error)
+}
+
 // AttachmentService owns private attachment bytes and their durable registry.
 type AttachmentService struct {
 	repo               repository.AttachmentRepository
@@ -61,6 +74,7 @@ type AttachmentService struct {
 	authorizeWorkspace func(context.Context, string) error
 	authorizeTask      func(context.Context, string) error
 	log                *logger.Logger
+	lifecycleMu        sync.Mutex
 }
 
 func NewAttachmentService(repo repository.AttachmentRepository, root string, authorizeWorkspace func(context.Context, string) error, log *logger.Logger) (*AttachmentService, error) {
@@ -271,6 +285,8 @@ func (s *AttachmentService) Delete(ctx context.Context, ownerID, id string) erro
 }
 
 func (s *AttachmentService) Claim(ctx context.Context, ownerID, workspaceID, taskID, sessionID string, ids []string) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if s.authorizeWorkspace != nil {
 		if err := s.authorizeWorkspace(ctx, workspaceID); err != nil {
 			return err
@@ -311,7 +327,16 @@ func (s *AttachmentService) RestoreQueued(
 // Release removes claimed descriptors that are no longer referenced by a
 // queued message. It is used after an atomic queue replacement succeeds.
 func (s *AttachmentService) Release(ctx context.Context, ownerID, taskID, sessionID string, ids []string) error {
-	attachments, err := s.repo.DeleteClaimedMessageAttachments(ctx, ids, ownerID, taskID, sessionID)
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	releaser, ok := s.repo.(attachmentReleasePreparer)
+	var attachments []*models.TaskMessageAttachment
+	var err error
+	if ok {
+		attachments, err = releaser.PrepareClaimedMessageAttachmentsForRelease(ctx, ids, ownerID, taskID, sessionID)
+	} else {
+		attachments, err = s.repo.DeleteClaimedMessageAttachments(ctx, ids, ownerID, taskID, sessionID)
+	}
 	if err != nil {
 		return err
 	}
@@ -319,9 +344,16 @@ func (s *AttachmentService) Release(ctx context.Context, ownerID, taskID, sessio
 	for _, attachment := range attachments {
 		if err := s.removeBytes(attachment); err != nil {
 			removeErrs = append(removeErrs, err)
+			continue
+		}
+		if ok {
+			if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, ownerID); err != nil {
+				removeErrs = append(removeErrs, err)
+			}
 		}
 	}
 	return errors.Join(removeErrs...)
+
 }
 
 type claimedAttachmentCleanupRepository interface {
@@ -353,17 +385,35 @@ func (s *AttachmentService) ReleaseForCleanup(
 // a task. Task deletion must clean claimed rows as well as staged rows because
 // only staged rows participate in expiry maintenance.
 func (s *AttachmentService) DeleteByTask(ctx context.Context, taskID string) error {
-	attachments, err := s.repo.ListMessageAttachmentsByTask(ctx, taskID)
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	preparer, prepared := s.repo.(attachmentTaskDeletePreparer)
+	var attachments []*models.TaskMessageAttachment
+	var err error
+	if prepared {
+		attachments, err = preparer.PrepareMessageAttachmentsForTaskDelete(ctx, taskID)
+	} else {
+		attachments, err = s.repo.ListMessageAttachmentsByTask(ctx, taskID)
+	}
 	if err != nil {
 		return err
 	}
-	var removeErrs []error
+	var cleanupErrs []error
 	for _, attachment := range attachments {
 		if err := s.removeBytes(attachment); err != nil {
-			removeErrs = append(removeErrs, err)
+			cleanupErrs = append(cleanupErrs, err)
+			continue
+		}
+		if prepared {
+			if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, attachment.OwnerID); err != nil {
+				cleanupErrs = append(cleanupErrs, err)
+			}
 		}
 	}
-	if err := errors.Join(removeErrs...); err != nil {
+	if prepared {
+		return errors.Join(cleanupErrs...)
+	}
+	if err := errors.Join(cleanupErrs...); err != nil {
 		return err
 	}
 	_, err = s.repo.DeleteMessageAttachmentsByTask(ctx, taskID)
@@ -428,20 +478,24 @@ func (s *AttachmentService) Descriptor(attachment *models.TaskMessageAttachment)
 		SizeBytes: attachment.SizeBytes, State: attachment.State, ExpiresAt: attachment.ExpiresAt,
 	}
 }
-
-// CleanupExpired marks staged descriptors expired and removes their bytes.
 func (s *AttachmentService) CleanupExpired(ctx context.Context) (int, error) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	expired, err := s.repo.MarkExpiredMessageAttachments(ctx, time.Now().UTC())
 	if err != nil {
 		return 0, err
 	}
-	var removeErrs []error
+	var cleanupErrs []error
 	for _, attachment := range expired {
 		if err := s.removeBytes(attachment); err != nil {
-			removeErrs = append(removeErrs, err)
+			cleanupErrs = append(cleanupErrs, err)
+			continue
+		}
+		if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, attachment.OwnerID); err != nil {
+			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
-	return len(expired), errors.Join(removeErrs...)
+	return len(expired), errors.Join(cleanupErrs...)
 }
 
 func (s *AttachmentService) removeBytes(attachment *models.TaskMessageAttachment) error {

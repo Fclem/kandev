@@ -640,6 +640,10 @@ func (h *TaskHandlers) httpApproveSession(c *gin.Context) {
 }
 
 func (h *TaskHandlers) httpGetWorkflowTaskCount(c *gin.Context) {
+	if err := h.service.AuthorizeWorkflowAccess(c.Request.Context(), c.Param("id")); err != nil {
+		handleNotFound(c, h.logger, err, "workflow not found")
+		return
+	}
 	count, err := h.service.CountTasksByWorkflow(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		h.logger.Error("failed to count tasks by workflow", zap.Error(err))
@@ -650,6 +654,10 @@ func (h *TaskHandlers) httpGetWorkflowTaskCount(c *gin.Context) {
 }
 
 func (h *TaskHandlers) httpGetStepTaskCount(c *gin.Context) {
+	if err := h.service.AuthorizeWorkflowStepAccess(c.Request.Context(), c.Param("id")); err != nil {
+		handleNotFound(c, h.logger, err, "workflow step not found")
+		return
+	}
 	count, err := h.service.CountTasksByWorkflowStep(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		h.logger.Error("failed to count tasks by step", zap.Error(err))

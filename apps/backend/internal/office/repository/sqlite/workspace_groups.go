@@ -393,11 +393,27 @@ func (r *Repository) RestoreWorkspaceGroupMemberByCascade(ctx context.Context, t
 	if taskID == "" || cascadeID == "" {
 		return errors.New("restore membership: taskID and cascadeID required")
 	}
+	var pending int
+	if err := r.ro.GetContext(ctx, &pending, r.ro.Rebind(`
+		SELECT COUNT(*) FROM task_workspace_group_members m
+		JOIN task_workspace_groups g ON g.id = m.workspace_group_id
+		WHERE m.task_id = ? AND m.released_by_cascade_id = ?
+		  AND g.cleanup_status = ?
+	`), taskID, cascadeID, models.WorkspaceCleanupStatusPending); err != nil {
+		return err
+	}
+	if pending > 0 {
+		return fmt.Errorf("workspace group cleanup is in progress for task %s", taskID)
+	}
 	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		UPDATE task_workspace_group_members
 		SET released_at = NULL, release_reason = '', released_by_cascade_id = ''
 		WHERE task_id = ? AND released_by_cascade_id = ?
-	`), taskID, cascadeID)
+		  AND NOT EXISTS (
+			SELECT 1 FROM task_workspace_groups
+			WHERE id = workspace_group_id AND cleanup_status = ?
+		  )
+	`), taskID, cascadeID, models.WorkspaceCleanupStatusPending)
 	return err
 }
 

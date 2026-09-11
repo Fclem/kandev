@@ -270,18 +270,10 @@ func (s *HandoffService) archiveTaskTree(
 	if err := s.validateArchiveRoot(archiveCtx, rootID); err != nil {
 		return nil, err
 	}
-	cascadeID := uuid.New().String()
+	cascadeID, all, err := s.resolveArchiveCascade(archiveCtx, rootID, cascade)
 	out := &CascadeOutcome{CascadeID: cascadeID}
-
-	var all []string
-	if cascade {
-		descendants, err := s.collectTaskTree(archiveCtx, rootID)
-		if err != nil {
-			return nil, err
-		}
-		all = descendants
-	} else {
-		all = []string{rootID}
+	if err != nil {
+		return nil, err
 	}
 	// Archive cleanup must not tear down a shared workspace while an active
 	// group member remains. Transfer ownership before taking the cleanup
@@ -1126,7 +1118,13 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	defer cancelOperation()
 	cascadeID := root.ArchivedByCascadeID
 	if cascadeID == "" {
-		return s.unarchiveManualRoot(operationCtx, root)
+		if retryID, err := s.findUnarchiveRetryCascade(operationCtx, rootID); err != nil {
+			return nil, err
+		} else if retryID == "" {
+			return s.unarchiveManualRoot(operationCtx, root)
+		} else {
+			cascadeID = retryID
+		}
 	}
 	out := &CascadeOutcome{CascadeID: cascadeID}
 	// The descendant walk filters archived rows by this cascade ID, so
@@ -1135,13 +1133,18 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	if err != nil {
 		return nil, err
 	}
-	// Unarchive shallow→deep so the root's restored state is visible
-	// before children are queried by anyone watching the bus.
+	// Fence every cleanup before restoring any task. A later cancellation
+	// failure must not leave a partially restored tree that cannot be retried
+	// from its archived root.
 	for _, id := range all {
 		operationID := string(models.TaskResourceCleanupTriggerCascadeArchive) + ":" + cascadeID + ":" + id
 		if err := s.cancelArchiveResourceCleanup(operationCtx, id, operationID); err != nil {
-			return out, cascadePostCommitError(out, fmt.Errorf("cancel archive cleanup %s: %w", id, err))
+			return out, fmt.Errorf("cancel archive cleanup %s: %w", id, err)
 		}
+	}
+	// Unarchive shallow→deep so the root's restored state is visible
+	// before children are queried by anyone watching the bus.
+	for _, id := range all {
 		ok, err := s.tasks.UnarchiveTaskByCascade(operationCtx, id, cascadeID)
 		if err != nil {
 			return out, cascadePostCommitError(out, fmt.Errorf("unarchive %s: %w", id, err))
@@ -1168,20 +1171,29 @@ func (s *HandoffService) UnarchiveTaskTree(ctx context.Context, rootID string) (
 	var restorationErrors []error
 	if s.wsGroups != nil {
 		for _, id := range out.ArchivedTaskIDs {
-			if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID); err != nil {
-				restorationErrors = append(restorationErrors,
-					fmt.Errorf("restore membership for task %s: %w", id, err))
-				continue
-			}
 			g, err := s.wsGroups.GetWorkspaceGroupForTask(operationCtx, id)
 			if err != nil {
 				restorationErrors = append(restorationErrors,
 					fmt.Errorf("lookup workspace group for task %s: %w", id, err))
 				continue
 			}
-			if g != nil {
-				groupIDs[g.ID] = true
+			if g == nil {
+				if err := s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID); err != nil {
+					restorationErrors = append(restorationErrors,
+						fmt.Errorf("restore membership for task %s: %w", id, err))
+				}
+				continue
 			}
+			mu := s.workspaceGroupLock.lockFor(g.ID)
+			mu.Lock()
+			err = s.wsGroups.RestoreWorkspaceGroupMemberByCascade(operationCtx, id, cascadeID)
+			mu.Unlock()
+			if err != nil {
+				restorationErrors = append(restorationErrors,
+					fmt.Errorf("restore membership for task %s: %w", id, err))
+				continue
+			}
+			groupIDs[g.ID] = true
 		}
 	}
 	if len(groupIDs) > 0 {
@@ -1427,6 +1439,80 @@ func (s *HandoffService) collectTaskTreeIncludingArchived(ctx context.Context, r
 	return s.collectTreeBFS(ctx, rootID, root.WorkspaceID, s.listCascadeChildrenIncludingArchived)
 }
 
+func (s *HandoffService) resolveArchiveCascade(ctx context.Context, rootID string, cascade bool) (string, []string, error) {
+	cascadeID := uuid.New().String()
+	if !cascade {
+		return cascadeID, []string{rootID}, nil
+	}
+	all, err := s.collectTaskTree(ctx, rootID)
+	if err != nil {
+		return "", nil, err
+	}
+	retryID, retryAll, err := s.findArchiveRetryCascade(ctx, rootID)
+	if err != nil {
+		return "", nil, err
+	}
+	if retryID != "" {
+		return retryID, retryAll, nil
+	}
+	return cascadeID, all, nil
+}
+
+// findArchiveRetryCascade discovers a prior cascade after a partial archive
+// mutation. Reusing its identity keeps already-archived descendants in the
+// same resumable unarchive scope.
+func (s *HandoffService) findArchiveRetryCascade(ctx context.Context, rootID string) (string, []string, error) {
+	all, err := s.collectTaskTreeIncludingArchived(ctx, rootID)
+	if err != nil {
+		return "", nil, err
+	}
+	var cascadeID string
+	for _, id := range all[1:] {
+		task, err := s.tasks.GetTask(ctx, id)
+		if err != nil {
+			return "", nil, err
+		}
+		if task == nil || task.ArchivedAt == nil || task.ArchivedByCascadeID == "" {
+			continue
+		}
+		if cascadeID == "" {
+			cascadeID = task.ArchivedByCascadeID
+			continue
+		}
+		if cascadeID != task.ArchivedByCascadeID {
+			return "", nil, fmt.Errorf("archive retry has conflicting cascade identities under %s", rootID)
+		}
+	}
+	if cascadeID == "" {
+		return "", nil, nil
+	}
+	return cascadeID, all, nil
+}
+func (s *HandoffService) findUnarchiveRetryCascade(ctx context.Context, rootID string) (string, error) {
+	all, err := s.collectTaskTreeIncludingArchived(ctx, rootID)
+	if err != nil {
+		return "", err
+	}
+	var cascadeID string
+	for _, id := range all[1:] {
+		task, err := s.tasks.GetTask(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		if task == nil || task.ArchivedAt == nil || task.ArchivedByCascadeID == "" {
+			continue
+		}
+		if cascadeID == "" {
+			cascadeID = task.ArchivedByCascadeID
+			continue
+		}
+		if cascadeID != task.ArchivedByCascadeID {
+			return "", fmt.Errorf("unarchive retry has conflicting cascade identities under %s", rootID)
+		}
+	}
+	return cascadeID, nil
+}
+
 type childLister func(ctx context.Context, parentID string) ([]*models.Task, error)
 
 type boundedCascadeChildRepository interface {
@@ -1632,8 +1718,12 @@ func (s *HandoffService) releaseMembershipsForCascade(ctx context.Context, taskI
 			continue
 		}
 		if err := s.wsGroups.ReleaseWorkspaceGroupMember(ctx, g.ID, id, reason, cascadeID); err != nil {
-			errs = append(errs, fmt.Errorf("release membership for task %s from group %s: %w", id, g.ID, err))
-			continue
+			// A transient repository failure must not be acknowledged as a
+			// successful archive while the membership remains active.
+			if retryErr := s.wsGroups.ReleaseWorkspaceGroupMember(ctx, g.ID, id, reason, cascadeID); retryErr != nil {
+				errs = append(errs, fmt.Errorf("release membership for task %s from group %s: %w", id, g.ID, errors.Join(err, retryErr)))
+				continue
+			}
 		}
 		if !seen[g.ID] {
 			seen[g.ID] = true

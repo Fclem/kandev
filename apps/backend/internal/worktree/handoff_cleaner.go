@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
+	storageworkspaces "github.com/kandev/kandev/internal/system/storage/workspaces"
 )
 
 // HandoffCleaner is the office task-handoffs cleanup adapter that
@@ -41,31 +42,80 @@ func NewHandoffCleaner(mgr *Manager, log *logger.Logger, extraRoots ...string) *
 	}
 }
 
-// ValidateManagedRoot exposes the same path policy used by destructive
-// cleanup so restore cannot recreate outside the managed roots.
 func (c *HandoffCleaner) ValidateManagedRoot(path string) error {
-	return c.requireManagedRoot(path)
+	if err := c.requireManagedRoot(path); err != nil {
+		return err
+	}
+	return rejectSymlinkComponents(path)
+}
+
+// CreateManagedDirectory creates a restore path through no-follow directory
+// descriptors, so a component replacement cannot redirect MkdirAll.
+func (c *HandoffCleaner) CreateManagedDirectory(path string, mode os.FileMode) error {
+	if err := c.requireManagedRoot(path); err != nil {
+		return err
+	}
+	root, err := c.managedRootFor(path)
+	if err != nil {
+		return err
+	}
+	handle, err := storageworkspaces.CreateDirectoryNoFollow(root, path, mode)
+	if err != nil {
+		return err
+	}
+	return handle.Close()
+}
+
+func (c *HandoffCleaner) removeManagedDirectory(ctx context.Context, path string) error {
+	root, err := c.managedRootFor(path)
+	if err != nil {
+		return err
+	}
+	handle, err := storageworkspaces.OpenDirectoryNoFollow(root, path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = handle.Close()
+	}()
+	return handle.RemoveDirectory(ctx)
+}
+
+func (c *HandoffCleaner) managedRootFor(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	for _, root := range c.managedRoots() {
+		rootAbs, rootErr := filepath.Abs(root)
+		if rootErr == nil && isDescendant(rootAbs, abs) {
+			return rootAbs, nil
+		}
+	}
+	return "", fmt.Errorf("managed-root guard: %s is not inside a managed root", path)
 }
 
 // CleanupPlainFolder removes a Kandev-owned plain folder. The path
 // MUST resolve to a location under one of the configured managed
 // roots; anything else is rejected up front so a corrupted
 // materialized_path can never delete arbitrary user files.
-func (c *HandoffCleaner) CleanupPlainFolder(_ context.Context, path string) error {
+func (c *HandoffCleaner) CleanupPlainFolder(ctx context.Context, path string) error {
 	if err := c.requireManagedRoot(path); err != nil {
 		return err
 	}
+	if err := rejectSymlinkComponents(path); err != nil {
+		return err
+	}
 	c.logger.Info("cleanup plain folder", zap.String("path", path))
-	if err := os.RemoveAll(path); err != nil {
+	if err := c.removeManagedDirectory(ctx, path); err != nil {
 		return fmt.Errorf("remove %s: %w", path, err)
 	}
 	return nil
 }
 
-// CleanupSingleRepoWorktree removes a single git worktree by ID via
-// the existing Manager.RemoveByID, which already runs its own
-// repository-scoped lock + git-worktree-remove + cleanup script.
-//
 // removeBranch is FALSE: handoffs cleanup releases the materialized
 // workspace; the branch the agent created is left intact so any
 // pushed PR / remote ref survives. Operators clean up branches via
@@ -89,10 +139,10 @@ func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath stri
 	if c.manager == nil {
 		return errors.New("worktree manager not configured")
 	}
-	if rootPath == "" {
-		return errors.New("multi-repo root path is required")
-	}
 	if err := c.requireManagedRoot(rootPath); err != nil {
+		return err
+	}
+	if err := rejectSymlinkComponents(rootPath); err != nil {
 		return err
 	}
 	if len(worktreeIDs) == 0 {
@@ -112,7 +162,7 @@ func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath stri
 	if err := errors.Join(removalErrors...); err != nil {
 		return err
 	}
-	if err := os.RemoveAll(rootPath); err != nil {
+	if err := c.removeManagedDirectory(ctx, rootPath); err != nil {
 		return fmt.Errorf("remove multi-repo root %s: %w", rootPath, err)
 	}
 	return nil
@@ -196,6 +246,26 @@ func resolveExistingPrefix(path string) string {
 		}
 		prefix = parent
 	}
+}
+
+// validated directory is replaced by a symlink before a destructive call.
+// Destructive operations accept only stable, non-symlink path components;
+// managed roots themselves are configured paths and are validated separately.
+func rejectSymlinkComponents(path string) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("managed-root guard: inspect path: %w", err)
+	}
+	for current := abs; ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("managed-root guard: symlink component %s is not allowed", current)
+		}
+		if current == filepath.Dir(current) {
+			break
+		}
+	}
+	return nil
 }
 
 func (c *HandoffCleaner) managedRoots() []string {

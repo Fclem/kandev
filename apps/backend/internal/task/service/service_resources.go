@@ -323,24 +323,24 @@ func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspa
 		cancelErr := s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
 		return s.mapWorkspaceDeleteError(workspace.ID, errors.Join(err, cancelErr))
 	}
+	var postCommitErr error
 	if s.attachmentSvc != nil {
 		s.attachmentSvc.RemoveBytes(deletedWorkspaceAttachments)
 	}
 	if s.workspaceSecretDeleter != nil && (!hasTransactionalCleanup || !hasTransactionalCascade) {
 		if err := s.workspaceSecretDeleter.DeleteWorkspaceSecrets(ctx, workspace.ID); err != nil {
-			// The non-transactional workspace cascade already committed, so
-			// prepared task cleanup must remain runnable despite this error.
 			s.logger.Error("failed to delete workspace secrets", zap.String("workspace_id", workspace.ID), zap.Error(err))
-			s.runWorkspaceDeleteTaskCleanups(cleanups, deletedTasks)
-			return err
+			postCommitErr = errors.Join(postCommitErr, err)
 		}
 	}
-	cleanups = s.appendWorkspaceDeleteMissingTaskCleanups(ctx, cleanups, deletedTasks)
+	var lateCleanupErr error
+	cleanups, lateCleanupErr = s.appendWorkspaceDeleteMissingTaskCleanups(ctx, cleanups, deletedTasks)
+	postCommitErr = errors.Join(postCommitErr, lateCleanupErr)
 	s.publishWorkspaceDeleteChildEvents(ctx, deletedTasks, deletedWorkflows)
 	s.runWorkspaceDeleteTaskCleanups(cleanups, deletedTasks)
 	s.publishWorkspaceEvent(ctx, events.WorkspaceDeleted, workspace)
 	s.logger.Info("workspace deleted", zap.String("workspace_id", workspace.ID))
-	return nil
+	return postCommitErr
 }
 
 func (s *Service) prepareWorkspaceDeleteTaskCleanups(ctx context.Context, tasks []*models.Task) ([]workspaceDeleteTaskCleanup, error) {
@@ -363,13 +363,14 @@ func (s *Service) appendWorkspaceDeleteMissingTaskCleanups(
 	ctx context.Context,
 	cleanups []workspaceDeleteTaskCleanup,
 	deletedTasks []*models.Task,
-) []workspaceDeleteTaskCleanup {
+) ([]workspaceDeleteTaskCleanup, error) {
 	prepared := make(map[string]struct{}, len(cleanups))
 	for _, cleanup := range cleanups {
 		if cleanup.task != nil && cleanup.task.ID != "" {
 			prepared[cleanup.task.ID] = struct{}{}
 		}
 	}
+	var errs []error
 	for _, task := range deletedTasks {
 		if task == nil || task.ID == "" {
 			continue
@@ -382,12 +383,22 @@ func (s *Service) appendWorkspaceDeleteMissingTaskCleanups(
 			s.logger.Error("failed to prepare late workspace task cleanup",
 				zap.String("task_id", task.ID),
 				zap.Error(err))
+			errs = append(errs, fmt.Errorf("prepare late workspace task cleanup %q: %w", task.ID, err))
+			if job, persistErr := s.persistTaskResourceCleanup(
+				ctx, task.ID, models.TaskResourceCleanupTriggerWorkspaceDelete,
+				newTaskResourceCleanupOperationID(models.TaskResourceCleanupTriggerWorkspaceDelete, task.ID),
+				nil, nil, nil, taskEnvironmentCleanup{}, false, false,
+			); persistErr != nil {
+				errs = append(errs, fmt.Errorf("persist late workspace task cleanup %q: %w", task.ID, persistErr))
+			} else if job != nil {
+				cleanups = append(cleanups, workspaceDeleteTaskCleanup{task: task, cleanupJob: job})
+			}
 			continue
 		}
 		cleanups = append(cleanups, cleanup)
 		prepared[task.ID] = struct{}{}
 	}
-	return cleanups
+	return cleanups, errors.Join(errs...)
 }
 
 func (s *Service) prepareWorkspaceDeleteTaskCleanup(ctx context.Context, task *models.Task) (workspaceDeleteTaskCleanup, error) {

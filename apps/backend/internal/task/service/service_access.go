@@ -281,6 +281,23 @@ func (s *Service) AuthorizeWorkflowAccess(ctx context.Context, workflowID string
 	return s.authorizeWorkflowID(ctx, workflowID)
 }
 
+// AuthorizeWorkflowStepAccess resolves a step's owning workflow before
+// authorizing the workflow, so step-count endpoints cannot disclose another
+// workspace's task count.
+func (s *Service) AuthorizeWorkflowStepAccess(ctx context.Context, stepID string) error {
+	if s.workflowStepGetter == nil {
+		return repoerrors.ErrTaskNotFound
+	}
+	step, err := s.workflowStepGetter.GetStep(ctx, stepID)
+	if err != nil {
+		return err
+	}
+	if step == nil || step.WorkflowID == "" {
+		return repoerrors.ErrTaskNotFound
+	}
+	return s.authorizeWorkflowID(ctx, step.WorkflowID)
+}
+
 // AuthorizeWorkspaceAccess is the public form of authorizeWorkspaceID,
 // consumed by the office route-scoping middleware.
 func (s *Service) AuthorizeWorkspaceAccess(ctx context.Context, workspaceID string) error {

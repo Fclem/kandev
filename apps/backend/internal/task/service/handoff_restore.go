@@ -12,6 +12,10 @@ import (
 	orchmodels "github.com/kandev/kandev/internal/office/models"
 )
 
+type managedDirectoryCreator interface {
+	CreateManagedDirectory(path string, mode os.FileMode) error
+}
+
 // restoreCleanedGroups walks the workspace groups affected by an
 // unarchive cascade and, for each one currently in cleanup_status=cleaned,
 // recreates the materialized workspace (or marks it pending recreation)
@@ -45,7 +49,10 @@ func (s *HandoffService) restoreCleanedGroups(ctx context.Context, groupIDs []st
 			errs = append(errs, fmt.Errorf("workspace group %s not found", gid))
 			continue
 		}
+		mu := s.workspaceGroupLock.lockFor(gid)
+		mu.Lock()
 		if g.CleanupStatus != orchmodels.WorkspaceCleanupStatusCleaned {
+			mu.Unlock()
 			continue
 		}
 		if err := s.restoreCleanedGroup(ctx, g); err != nil {
@@ -56,7 +63,9 @@ func (s *HandoffService) restoreCleanedGroups(ctx context.Context, groupIDs []st
 			errs = append(errs, errors.Join(
 				fmt.Errorf("restore workspace group %s: %w", gid, err), statusErr))
 		}
+		mu.Unlock()
 	}
+
 	return errors.Join(errs...)
 }
 
@@ -101,10 +110,11 @@ func (s *HandoffService) restorePlainFolder(ctx context.Context, g *orchmodels.W
 	if s.cleaner == nil {
 		return errors.New("plain folder restore: managed-root validator is not configured")
 	}
-	if err := s.cleaner.ValidateManagedRoot(g.MaterializedPath); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(g.MaterializedPath, 0o755); err != nil {
+	if creator, ok := s.cleaner.(managedDirectoryCreator); ok {
+		if err := creator.CreateManagedDirectory(g.MaterializedPath, 0o755); err != nil {
+			return err
+		}
+	} else if err := os.MkdirAll(g.MaterializedPath, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", g.MaterializedPath, err)
 	}
 	if err := s.wsGroups.UpdateWorkspaceGroupCleanupStatus(ctx, g.ID,

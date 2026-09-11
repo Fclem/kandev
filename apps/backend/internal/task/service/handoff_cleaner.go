@@ -46,47 +46,73 @@ const workspaceGroupCleanupPollInterval = 100 * time.Millisecond
 // CleanupWorkspaceGroups removes materialized Kandev-owned workspace groups
 // before workspace deletion removes the rows containing their cleanup handles.
 func (s *HandoffService) CleanupWorkspaceGroups(ctx context.Context, workspaceID string) error {
-	if s.cleaner == nil || s.wsGroups == nil {
-		return nil
+	if s.wsGroups == nil {
+		return errors.New("workspace group repository is not configured")
 	}
 	groups, err := s.wsGroups.ListWorkspaceGroupsByWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
-	statusCtx := context.WithoutCancel(ctx)
+	if s.cleaner == nil {
+		for _, g := range groups {
+			if shouldCleanupWorkspaceGroup(g) {
+				return errors.New("workspace group cleaner is not configured")
+			}
+		}
+		return nil
+	}
+	statusCtx, cancelStatus := detachedCleanupTransitionContext(ctx)
+	defer cancelStatus()
 	for _, g := range groups {
 		if !shouldCleanupWorkspaceGroup(g) {
 			continue
 		}
-		hasActive, err := s.hasActiveExecutionsForGroup(ctx, g.ID)
+		mu := s.workspaceGroupLock.lockFor(g.ID)
+		mu.Lock()
+		activeMembers, err := s.wsGroups.ListActiveWorkspaceGroupMembers(ctx, g.ID)
 		if err != nil {
-			return fmt.Errorf("check active workspace group %s: %w", g.ID, err)
+			mu.Unlock()
+			return fmt.Errorf("list active workspace group members %s: %w", g.ID, err)
+		}
+		hasActive := false
+		if len(activeMembers) > 0 {
+			hasActive, err = s.hasActiveExecutionsForGroup(ctx, g.ID)
+			if err != nil {
+				mu.Unlock()
+				return fmt.Errorf("check active workspace group %s: %w", g.ID, err)
+			}
 		}
 		if hasActive {
 			s.logf().Warn("workspace group cleanup: active executions remain",
 				zap.String("workspace_id", workspaceID),
 				zap.String("group_id", g.ID))
 			if err := s.waitForWorkspaceGroupIdle(ctx, workspaceID, g.ID); err != nil {
+				mu.Unlock()
 				return err
 			}
 		}
 		claimed, err := claimWorkspaceGroupCleanup(statusCtx, s.wsGroups, g)
 		if err != nil {
+			mu.Unlock()
 			return err
 		}
 		if !claimed {
+			mu.Unlock()
 			continue
 		}
 		if err := s.runWorkspaceGroupCleanup(ctx, g); err != nil {
 			_ = completeWorkspaceGroupCleanup(statusCtx, s.wsGroups, g,
 				orchmodels.WorkspaceCleanupStatusFailed, err.Error(), nil)
+			mu.Unlock()
 			return fmt.Errorf("clean workspace group %s: %w", g.ID, err)
 		}
 		now := time.Now().UTC()
 		if err := completeWorkspaceGroupCleanup(statusCtx, s.wsGroups, g,
 			orchmodels.WorkspaceCleanupStatusCleaned, "", &now); err != nil {
+			mu.Unlock()
 			return err
 		}
+		mu.Unlock()
 	}
 	return nil
 }

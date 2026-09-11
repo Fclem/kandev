@@ -365,7 +365,10 @@ func (s *HandoffService) applyArchiveTaskMutations(
 			if autoArchiveCandidate != nil {
 				s.cancelActiveRuns(ctx, []string{all[i]}, models.SessionArchiveTreeCancelReason)
 			}
-			s.finalizeActiveSessions(ctx, archiveDeadline, all[i], models.SessionArchiveTreeCancelReason)
+			cleanupErrors = appendTaskCleanupError(
+				cleanupErrors,
+				s.finalizeActiveSessions(ctx, archiveDeadline, all[i], models.SessionArchiveTreeCancelReason),
+			)
 			if err := s.publishUpdatedTask(ctx, all[i]); err != nil {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("publish archived task %s: %w", all[i], err))
 			}
@@ -384,7 +387,15 @@ func (s *HandoffService) applyArchiveTaskMutations(
 			out.SkippedTaskIDs = append(out.SkippedTaskIDs, all[i])
 		}
 	}
+
 	return cleanupErrors, nil
+}
+
+func appendTaskCleanupError(cleanupErrors []error, err error) []error {
+	if err == nil {
+		return cleanupErrors
+	}
+	return append(cleanupErrors, err)
 }
 func (s *HandoffService) captureArchiveSnapshots(ctx context.Context, taskIDs []string) {
 	if s.gitArchiveCapture == nil || s.sessions == nil {
@@ -516,7 +527,6 @@ func (s *HandoffService) deleteTaskTree(
 	}
 
 	s.cancelActiveRuns(postDeleteCtx, all, "task tree deleted")
-
 	// Release memberships BEFORE deleting the task rows so the
 	// membership cleanup evaluation sees the group's full audit
 	// history. Once tasks(id) cascade-deletes member rows we can no
@@ -649,7 +659,10 @@ func (s *HandoffService) deleteTaskTreeRows(
 		}
 		recordVacatedStep(vacatedStepIDs, vacatedStepID)
 		out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
-		s.finalizeActiveSessions(postDeleteCtx, deleteDeadline, all[i], "task tree deleted")
+		cleanupErrors = appendTaskCleanupError(
+			cleanupErrors,
+			s.finalizeActiveSessions(postDeleteCtx, deleteDeadline, all[i], "task tree deleted"),
+		)
 		if operationID := cleanupOps[all[i]]; operationID != "" {
 			if err := s.startCascadeResourceCleanup(postDeleteCtx, operationID); err != nil {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("start cleanup %s: %w", operationID, err))
@@ -1127,25 +1140,27 @@ func (s *HandoffService) finalizeActiveSessions(
 	ctx context.Context,
 	deadline time.Time,
 	taskID, reason string,
-) {
+) error {
 	canceller, ok := s.sessions.(activeTaskSessionCanceller)
 	if !ok {
-		return
+		return nil
 	}
 	finalizeCtx, cancel := archivecascade.ContinuationContextUntil(ctx, deadline)
 	defer cancel()
 	cancelled, err := canceller.CancelActiveTaskSessionsByTaskID(finalizeCtx, taskID, reason)
 	if err != nil {
+		wrapped := fmt.Errorf("finalize active task sessions %s: %w", taskID, err)
 		s.logf().Warn("cascade: finalize active task sessions failed",
 			zap.String("task_id", taskID), zap.Error(err))
-		return
+		return wrapped
 	}
 	if len(cancelled) == 0 {
-		return
+		return nil
 	}
 	if publisher, ok := s.eventPublisher.(taskSessionCancellationPublisher); ok {
 		publisher.PublishTaskSessionsCancelled(finalizeCtx, taskID, cancelled, reason)
 	}
+	return nil
 }
 
 // UnarchiveTaskTree restores only members archived by the root's cascade.

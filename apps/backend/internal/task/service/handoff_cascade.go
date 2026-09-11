@@ -1329,11 +1329,38 @@ func (s *HandoffService) restoreNoCascadeChildren(ctx context.Context, snapshots
 		if snapshot == nil {
 			continue
 		}
-		if err := s.tasks.UpdateTask(ctx, snapshot); err != nil {
-			errs = append(errs, fmt.Errorf("restore child task %s: %w", snapshot.ID, err))
+		if err := s.restoreNoCascadeChild(ctx, snapshot); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (s *HandoffService) restoreNoCascadeChild(ctx context.Context, snapshot *models.Task) error {
+	current, err := s.tasks.GetTask(ctx, snapshot.ID)
+	if err != nil {
+		return fmt.Errorf("load child task %s for compensation: %w", snapshot.ID, err)
+	}
+	if current == nil {
+		return fmt.Errorf("child task %s disappeared during compensation", snapshot.ID)
+	}
+	if current.ParentID != "" && current.ParentID != snapshot.ParentID {
+		return fmt.Errorf("child task %s changed parent during compensation", snapshot.ID)
+	}
+	current.ParentID = snapshot.ParentID
+	current.Metadata = cloneTaskMetadata(current.Metadata)
+	if currentWorkspace, ok := current.Metadata["workspace"].(map[string]interface{}); ok {
+		if snapshotWorkspace, snapshotOK := snapshot.Metadata["workspace"].(map[string]interface{}); snapshotOK {
+			if currentWorkspace["mode"] == workspaceModeSharedGroup &&
+				snapshotWorkspace["mode"] == workspaceModeInheritParent {
+				currentWorkspace["mode"] = workspaceModeInheritParent
+			}
+		}
+	}
+	if err := s.tasks.UpdateTask(ctx, current); err != nil {
+		return fmt.Errorf("restore child task %s: %w", snapshot.ID, err)
+	}
+	return nil
 }
 
 func (s *HandoffService) loadNoCascadeChildren(

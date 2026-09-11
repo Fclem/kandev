@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var errRetryOperationUndispatchable = errors.New("retry task operation is no longer dispatchable")
+var ErrRetryOperationUndispatchable = errors.New("retry task operation is no longer dispatchable")
 
 const retryTaskOperationKind = "create_task"
 
@@ -76,10 +76,7 @@ func (s *Store) BeginRetryTaskOperation(ctx context.Context, runID string, gener
 
 	now := time.Now().UTC()
 	if operation.State == retryOperationLeased && operation.LeaseExpiresAt != nil && operation.LeaseExpiresAt.After(now) {
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
-		return &operation, nil
+		return nil, ErrRetryOperationUndispatchable
 	}
 	token := uuid.NewString()
 	expires := now.Add(time.Minute)

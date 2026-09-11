@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type runStopperStub struct {
@@ -116,6 +118,80 @@ func TestStopRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+type recordingRunStopper struct {
+	taskID, sessionID, turnID string
+}
+
+func (s *recordingRunStopper) StopAutomationRun(_ context.Context, taskID, sessionID, turnID string) (bool, error) {
+	s.taskID, s.sessionID, s.turnID = taskID, sessionID, turnID
+	return true, nil
+}
+
+func TestDisableAutomationStopsBoundRetryRunBeforeTerminalizing(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-disable", Name: "disable", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-disable", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		TaskID: "task-disable", SessionID: "session-disable", TurnID: "turn-disable",
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	stopper := &recordingRunStopper{}
+	svc.SetRunStopper(stopper)
+
+	require.NoError(t, svc.DisableAutomation(ctx, a.ID))
+	require.Equal(t, "task-disable", stopper.taskID)
+	require.Equal(t, "session-disable", stopper.sessionID)
+	require.Equal(t, "turn-disable", stopper.turnID)
+	stored, err := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusFailed, stored.Status)
+	require.Equal(t, RetryStateCancelled, stored.RetryState)
+}
+func TestWithRetryRunLockSerializesAndSupportsNestedDispatch(t *testing.T) {
+	svc := newTestService(t)
+	svc.store.db.SetMaxOpenConns(1)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-lock", Name: "lock", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	run := &AutomationRun{AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTriggered}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- svc.WithRetryRunLock(ctx, run.ID, func(locked context.Context) error {
+			close(entered)
+			<-release
+			return svc.DispatchRun(locked, run.ID, ThreadActionCreated, "created", func() (RunDispatch, error) {
+				return RunDispatch{TaskID: "task-lock", SessionID: "session-lock", TurnID: "turn-lock"}, nil
+			})
+		})
+	}()
+	<-entered
+	secondEntered := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- svc.WithRetryRunLock(ctx, run.ID, func(context.Context) error {
+			close(secondEntered)
+			return nil
+		})
+	}()
+	select {
+	case <-secondEntered:
+		t.Fatal("second retry operation entered while first lock was held")
+	default:
+	}
+	close(release)
+	require.NoError(t, <-firstDone)
+	require.NoError(t, <-secondDone)
 }
 
 // @covers AC-OFFICE-AUTOMATION-CONTINUITY-003.4

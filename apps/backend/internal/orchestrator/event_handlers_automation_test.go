@@ -13,20 +13,20 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
-
 	"github.com/kandev/kandev/internal/automation"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/db"
+	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	taskservice "github.com/kandev/kandev/internal/task/service"
 	"github.com/kandev/kandev/internal/worktree"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // seedAutomationWorkspaceRepos creates a workspace with the given repository
@@ -507,6 +507,66 @@ func TestCreateAutomationTaskUsesStableRetryExternalID(t *testing.T) {
 	require.Equal(t, "retry-task", autoSvc.committed)
 	require.Equal(t, automation.RetryTaskExternalID("retry-run", 3), creator.got.ExternalID)
 }
+func newRetryIntegrationStore(t *testing.T) *automation.Store {
+	t.Helper()
+	db, err := sqlx.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	store, err := automation.NewStore(db, db)
+	require.NoError(t, err)
+	return store
+}
+
+func TestCreateAutomationTaskUsesRealRetryStoreLedger(t *testing.T) {
+	repo := setupTestRepo(t)
+	store := newRetryIntegrationStore(t)
+	log, err := logger.NewFromZap(zap.NewNop())
+	require.NoError(t, err)
+	autoSvc := automation.NewService(store, bus.NewMemoryEventBus(log), log)
+	a := &automation.Automation{
+		ID: "real-retry-automation", WorkspaceID: "real-retry-workspace",
+		Name: "real retry", Prompt: "retry", Enabled: true,
+	}
+	require.NoError(t, store.CreateAutomation(context.Background(), a))
+	group := &automation.RetryGroup{
+		ID: "real-retry-group", AutomationID: a.ID, Generation: 1,
+		State: automation.RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryGroup(context.Background(), group))
+	run := &automation.AutomationRun{
+		ID: "real-retry-run", AutomationID: a.ID, TriggerType: automation.TriggerTypeManual,
+		Status: automation.RunStatusTriggered, RetryGroupID: group.ID,
+		RetryGroupGeneration: 1, RetryState: automation.RetryStateTriggered,
+	}
+	require.NoError(t, store.CreateRun(context.Background(), run))
+	intent := &automation.RetryTaskIntent{
+		ID: "real-retry-intent", RunID: run.ID, GroupGeneration: 1,
+		State: "admitted",
+	}
+	require.NoError(t, store.CreateRetryIntent(context.Background(), intent))
+	require.NoError(t, store.CreateRetryOperation(context.Background(), &automation.RetryOperation{
+		ID: "real-retry-operation", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 1, Kind: "create_task", State: "requested",
+	}))
+	creator := &stubReviewTaskCreator{task: &models.Task{ID: "real-retry-task"}}
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.SetAutomationService(autoSvc)
+	svc.reviewTaskCreator = creator
+
+	svc.createAutomationTask(context.Background(), &automation.AutomationTriggeredEvent{
+		RunID: run.ID, RetryGroupGeneration: 1, TriggerType: automation.TriggerTypeManual,
+	})
+
+	require.NotNil(t, creator.got)
+	require.Equal(t, automation.RetryTaskExternalID(run.ID, 1), creator.got.ExternalID)
+	operation, err := store.GetRetryTaskOperation(context.Background(), run.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, "committed", operation.State)
+	storedRun, err := store.GetRun(context.Background(), run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "real-retry-task", storedRun.TaskID)
+}
+
 func TestCreateAutomationTaskAdoptsCommittedRetryTask(t *testing.T) {
 	repo := setupTestRepo(t)
 	creator := &stubReviewTaskCreator{adoptedTask: &models.Task{ID: "retry-task"}}

@@ -73,6 +73,9 @@ type automationRetryOperation interface {
 type automationRetryOperationFence interface {
 	VerifyRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken string) error
 }
+type automationRetryRunLock interface {
+	WithRetryRunLock(ctx context.Context, runID string, fn func(context.Context) error) error
+}
 
 const retryOperationCommittedState = "committed"
 
@@ -289,6 +292,23 @@ func (s *Service) handleAutomationTriggered(ctx context.Context, event *bus.Even
 }
 
 func (s *Service) createAutomationTask(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
+	if evt.RunID != "" {
+		if locker, ok := s.automationService.(automationRetryRunLock); ok {
+			if err := locker.WithRetryRunLock(ctx, evt.RunID, func(lockedCtx context.Context) error {
+				s.createAutomationTaskLocked(lockedCtx, evt)
+				return nil
+			}); err != nil {
+				s.logger.Debug("retry automation event was not admitted",
+					zap.String("run_id", evt.RunID), zap.Error(err))
+			}
+			return
+		}
+	}
+	s.createAutomationTaskLocked(ctx, evt)
+}
+
+//nolint:gocognit,cyclop,funlen // Retry admission, provider effects, and binding share one critical section.
+func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
 	var retryRun *automation.AutomationRun
 	//nolint:nestif // Claim promotion is a single identity-fenced boundary.
 	if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
@@ -309,7 +329,8 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 	}
 	retryOperation, operationErr := s.beginRetryTaskOperation(ctx, evt, retryRun)
 	if operationErr != nil {
-		if !errors.Is(operationErr, automation.ErrRetryGenerationMismatch) {
+		if !errors.Is(operationErr, automation.ErrRetryGenerationMismatch) &&
+			!errors.Is(operationErr, automation.ErrRetryOperationUndispatchable) {
 			s.recordFailedRun(ctx, evt, operationErr.Error())
 		}
 		return

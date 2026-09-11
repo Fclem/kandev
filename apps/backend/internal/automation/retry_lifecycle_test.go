@@ -119,6 +119,31 @@ func TestRetrySnapshotInterpolatesBeforeSafeProjection(t *testing.T) {
 	require.Equal(t, "Review Fix retry safety (#42)", run.RetryResolvedPrompt)
 	require.NotContains(t, run.RetryTriggerSnapshot, "Fix retry safety")
 }
+func TestFinalizeRetryFailureRejectsTerminalParentCAS(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-finalize-cas", WorkspaceID: "ws-finalize-cas",
+		Name: "finalize cas", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-finalize-cas", AutomationID: a.ID,
+		Generation: 1, State: RetryGroupLive}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	parent := &AutomationRun{
+		ID: "run-finalize-cas", AutomationID: a.ID, TriggerType: TriggerTypeManual,
+		Status: RunStatusFailed, RetryGroupID: group.ID, RetryGroupGeneration: 1,
+		RetryState: RetryStateCompleted, AttemptNumber: 1,
+		RetryPolicySnapshot: `{"mode":"finite","max_retries":"2","delay_seconds":"0","backoff":"fixed"}`,
+	}
+	require.NoError(t, store.CreateRun(ctx, parent))
+
+	child, err := store.FinalizeRetryFailure(ctx, parent.ID, 1, errors.New("late failure"), "launch")
+	require.Nil(t, child)
+	require.ErrorIs(t, err, ErrRetryGenerationMismatch)
+	var childCount int
+	require.NoError(t, store.db.Get(&childCount,
+		`SELECT COUNT(*) FROM automation_runs WHERE retry_parent_run_id = ?`, parent.ID))
+	require.Zero(t, childCount)
+}
 
 func TestBindRunTaskRejectsCancelledRetryGeneration(t *testing.T) {
 	store := setupTestStore(t)
@@ -376,6 +401,42 @@ func TestRetryOperationLeasesAndCommitsExternalTask(t *testing.T) {
 	require.Equal(t, retryOperationCommitted, committed.State)
 	require.Equal(t, "task-recovered", committed.ExternalTaskID)
 }
+func TestBeginRetryTaskOperationTreatsUnexpiredLeaseAsBusy(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-operation-busy", WorkspaceID: "ws-operation-busy",
+		Name: "operation busy", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-operation-busy", AutomationID: a.ID,
+		Generation: 1, State: RetryGroupLive}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{ID: "run-operation-busy", AutomationID: a.ID,
+		Status: RunStatusTriggered, RetryGroupID: group.ID,
+		RetryGroupGeneration: 1, RetryState: RetryStateTriggered}
+	require.NoError(t, store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{ID: "intent-operation-busy", RunID: run.ID,
+		GroupGeneration: 1, State: retryIntentAdmitted}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "operation-operation-busy", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationRequested,
+	}))
+
+	first, err := store.BeginRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	second, err := store.BeginRetryTaskOperation(ctx, run.ID, 1)
+	require.Nil(t, second)
+	require.ErrorIs(t, err, ErrRetryOperationUndispatchable)
+
+	expired := time.Now().UTC().Add(-time.Minute)
+	_, err = store.db.Exec(`UPDATE automation_run_operations SET lease_expires_at = ? WHERE operation_id = ?`,
+		expired, first.ID)
+	require.NoError(t, err)
+	reacquired, err := store.BeginRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	require.NotEqual(t, first.LeaseToken, reacquired.LeaseToken)
+}
+
 func TestBeginRetryTaskOperationRejectsCancelledGeneration(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()

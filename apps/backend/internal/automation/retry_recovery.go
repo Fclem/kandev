@@ -72,7 +72,7 @@ func (s *Service) prepareRetryRecoveryRun(ctx context.Context, row RetryOutbox) 
 		return nil, false, err
 	}
 	if !retryOperationIsDispatchable(operation) {
-		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errRetryOperationUndispatchable)
+		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, ErrRetryOperationUndispatchable)
 	}
 	return run, false, nil
 }

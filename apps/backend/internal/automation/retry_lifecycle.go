@@ -279,7 +279,7 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	child.RetryFailureClass = failure.FailureClass
 	child.ErrorMessage = failure.Message
 	child.TaskID, child.SessionID, child.TurnID = "", "", ""
-	child.RetryTaskIntentID = ""
+	child.RetryTaskIntentID = uuid.NewString()
 	if child.RetryBaseTitle == "" {
 		child.RetryBaseTitle = parent.DisplayTitle
 	}
@@ -319,6 +319,37 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 			return nil, errors.New("retry child consistency mismatch")
 		}
 	}
+	if child.RetryTaskIntentID == "" {
+		child.RetryTaskIntentID = uuid.NewString()
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET retry_task_intent_id = ? WHERE id = ?`), child.RetryTaskIntentID, child.ID); err != nil {
+			return nil, err
+		}
+	}
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		INSERT INTO automation_run_task_intents
+			(intent_id, run_id, task_id, state, group_generation, automation_deleted_at, created_at, updated_at)
+		VALUES (?, ?, NULL, ?, ?, NULL, ?, ?) ON CONFLICT DO NOTHING`),
+		child.RetryTaskIntentID, child.ID, retryIntentAdmitted, child.RetryGroupGeneration, now, now); err != nil {
+		return nil, err
+	}
+	var intentID string
+	if err := tx.GetContext(ctx, &intentID, tx.Rebind(
+		`SELECT intent_id FROM automation_run_task_intents WHERE run_id = ?`), child.ID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		INSERT INTO automation_run_operations
+			(operation_id, intent_id, run_id, group_generation, operation_kind, state,
+			 lease_token, lease_expires_at, external_task_id, external_session_id,
+			 external_turn_id, result_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, '', NULL, '', '', '', '{}', ?, ?)
+		ON CONFLICT DO NOTHING`),
+		retryOperationID(intentID, child.RetryGroupGeneration, retryTaskOperationKind),
+		intentID, child.ID, child.RetryGroupGeneration, retryTaskOperationKind,
+		retryOperationRequested, now, now); err != nil {
+		return nil, err
+	}
 	if delayErr != nil {
 		if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET state = ?, updated_at = ? WHERE id = ? AND generation = ?`), RetryGroupCompleted, time.Now().UTC(), group.ID, generation); err != nil {
 			return nil, err
@@ -332,7 +363,7 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	if marshalErr != nil {
 		return nil, marshalErr
 	}
-	now := time.Now().UTC()
+	now = time.Now().UTC()
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO automation_retry_outbox (event_id, run_id, snapshot_version, payload_hash, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`), fmt.Sprintf("%s:%d", child.ID, child.RetryLaunchConfigVersion), child.ID, child.RetryLaunchConfigVersion, retryPayloadHash(payload), retryOutboxPending, now, now); err != nil {
 		return nil, err
 	}
@@ -353,12 +384,50 @@ func (s *Store) ClaimDueRetry(ctx context.Context, now time.Time, lease time.Dur
 	}
 	defer func() { _ = tx.Rollback() }()
 	var run AutomationRun
+	var poisonID string
+	poisonErr := tx.GetContext(ctx, &poisonID, tx.Rebind(`
+		SELECT ar.id FROM automation_runs ar
+		JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
+			AND rg.generation = ar.retry_group_generation AND rg.state = ?
+		JOIN automations a ON a.id = ar.automation_id AND a.enabled = TRUE
+		WHERE ar.status = ? AND ar.retry_state = ? AND ar.retry_scheduled_at IS NOT NULL
+			AND ar.retry_scheduled_at <= ?
+			AND (NOT EXISTS (
+				SELECT 1 FROM automation_run_task_intents i
+				WHERE i.run_id = ar.id AND i.group_generation = ar.retry_group_generation
+					AND i.state = ?
+			) OR NOT EXISTS (
+				SELECT 1 FROM automation_run_operations o
+				WHERE o.run_id = ar.id AND o.group_generation = ar.retry_group_generation
+					AND o.operation_kind = ? AND o.state = ?
+			))
+		ORDER BY ar.retry_scheduled_at ASC, ar.id ASC LIMIT 1`),
+		RetryGroupLive, RunStatusScheduledRetry, RetryStateScheduled, now,
+		retryIntentAdmitted, retryTaskOperationKind, retryOperationRequested)
+	if poisonErr == nil {
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`
+			UPDATE automation_runs SET status = ?, retry_state = ?, error_message = ?
+			WHERE id = ? AND retry_state = ?`),
+			RunStatusRetrySchedulingFailed, RetryStateSchedulingFailed,
+			"retry task operation is missing", poisonID, RetryStateScheduled); err != nil {
+			return nil, "", err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, "", err
+		}
+		return nil, "", ErrNoDueRetry
+	}
+	if !errors.Is(poisonErr, sql.ErrNoRows) {
+		return nil, "", poisonErr
+	}
 	err = tx.GetContext(ctx, &run, tx.Rebind(`
 		SELECT ar.* FROM automation_runs ar
 		JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id AND rg.generation = ar.retry_group_generation AND rg.state = ?
 		JOIN automations a ON a.id = ar.automation_id AND a.enabled = TRUE
+		JOIN automation_run_task_intents i ON i.run_id = ar.id AND i.group_generation = ar.retry_group_generation AND i.state = ?
+		JOIN automation_run_operations o ON o.run_id = ar.id AND o.group_generation = ar.retry_group_generation AND o.operation_kind = ? AND o.state = ?
 		WHERE ar.status = ? AND ar.retry_state = ? AND ar.retry_scheduled_at IS NOT NULL AND ar.retry_scheduled_at <= ?
-		ORDER BY ar.retry_scheduled_at ASC, ar.id ASC LIMIT 1`), RetryGroupLive, RunStatusScheduledRetry, RetryStateScheduled, now)
+		ORDER BY ar.retry_scheduled_at ASC, ar.id ASC LIMIT 1`), RetryGroupLive, retryIntentAdmitted, retryTaskOperationKind, retryOperationRequested, RunStatusScheduledRetry, RetryStateScheduled, now)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", ErrNoDueRetry
 	}
@@ -408,7 +477,7 @@ func (s *Store) CancelRetryGroup(ctx context.Context, groupID string, generation
 	if n, _ := result.RowsAffected(); n != 1 {
 		return ErrRetryGenerationMismatch
 	}
-	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET retry_state = ?, retry_cancelled_at = ?, retry_claim_token = '', retry_claimed_at = NULL, retry_claim_expires_at = NULL WHERE retry_group_id = ? AND retry_group_generation = ? AND retry_state IN (?, ?)`), RetryStateCancelled, now, groupID, generation, RetryStateScheduled, RetryStateClaimed); err != nil {
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_cancelled_at = ?, retry_claim_token = '', retry_claimed_at = NULL, retry_claim_expires_at = NULL WHERE retry_group_id = ? AND retry_group_generation = ? AND retry_state NOT IN (?, ?, ?, ?, ?)`), RunStatusFailed, RetryStateCancelled, now, groupID, generation, RetryStateCompleted, RetryStateExhausted, RetryStateCancelled, RetryStateSuperseded, RetryStateSchedulingFailed); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_run_operations SET state = ?, updated_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE retry_group_id = ? AND retry_group_generation = ?) AND state NOT IN (?, ?)`), retryOperationAbandoned, now, groupID, generation, retryOperationCommitted, retryOperationAbandoned); err != nil {

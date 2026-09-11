@@ -1399,8 +1399,15 @@ func (s *HandoffService) preserveCascadeAfterMembershipFailure(
 	restoreIDs := append([]string{rootID}, restoredTaskIDs...)
 	var errs []error
 	for _, id := range restoreIDs {
-		if _, err := archiver.ArchiveTaskIfActive(preserveCtx, id, cascadeID); err != nil {
+		changed, err := archiver.ArchiveTaskIfActive(preserveCtx, id, cascadeID)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("preserve cascade restore for task %s: %w", id, err))
+			continue
+		}
+		if changed {
+			if err := s.publishUpdatedTask(preserveCtx, id); err != nil {
+				errs = append(errs, fmt.Errorf("publish preserved cascade task %s: %w", id, err))
+			}
 		}
 	}
 	errs = append(errs, restoreCleanup())
@@ -1558,6 +1565,9 @@ func (s *HandoffService) restoreNoCascadeChild(ctx context.Context, snapshot *mo
 		taskWorkspaceMode(snapshot.Metadata),
 	); err != nil {
 		return fmt.Errorf("restore child task %s: %w", snapshot.ID, err)
+	}
+	if err := s.publishUpdatedTask(ctx, snapshot.ID); err != nil {
+		return fmt.Errorf("publish restored child %s: %w", snapshot.ID, err)
 	}
 	return nil
 }

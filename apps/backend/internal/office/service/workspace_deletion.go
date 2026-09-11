@@ -69,14 +69,6 @@ func (s *Service) DeleteWorkspace(ctx context.Context, workspaceID string) error
 	s.cancelWorkspaceTasks(taskCancelCtx, tasks)
 	cancelTaskCancel()
 
-	if s.workspaceGroupCleaner != nil {
-		groupCleanupCtx, cancelGroupCleanup := workspaceDeletionPhaseContext(cleanupBaseCtx)
-		if err := s.workspaceGroupCleaner.CleanupWorkspaceGroups(groupCleanupCtx, workspaceID); err != nil {
-			cancelGroupCleanup()
-			return fmt.Errorf("clean workspace groups: %w", err)
-		}
-		cancelGroupCleanup()
-	}
 	if s.configSyncCleaner != nil {
 		configSyncCleanupCtx, cancelConfigSyncCleanup := workspaceDeletionPhaseContext(cleanupBaseCtx)
 		unlock, err := s.configSyncCleaner.PurgeForWorkspaceDeletion(configSyncCleanupCtx, workspaceID)
@@ -94,6 +86,14 @@ func (s *Service) DeleteWorkspace(ctx context.Context, workspaceID string) error
 	defer cancelDataDelete()
 	if err := s.deleteWorkspaceTasks(dataDeleteCtx, tasks); err != nil {
 		return err
+	}
+	if s.workspaceGroupCleaner != nil {
+		groupCleanupCtx, cancelGroupCleanup := workspaceDeletionPhaseContext(cleanupBaseCtx)
+		if err := s.workspaceGroupCleaner.CleanupWorkspaceGroups(groupCleanupCtx, workspaceID); err != nil {
+			cancelGroupCleanup()
+			return fmt.Errorf("clean workspace groups: %w", err)
+		}
+		cancelGroupCleanup()
 	}
 	if err := s.repo.DeleteWorkspaceData(dataDeleteCtx, workspaceID); err != nil {
 		return fmt.Errorf("delete office workspace data: %w", err)

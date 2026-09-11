@@ -1,14 +1,12 @@
 package plugins
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/kandev/kandev/internal/plugins/manifest"
 	"github.com/kandev/kandev/internal/plugins/store"
 )
 
@@ -152,13 +150,7 @@ func (r *Registry) SetRuntimeState(id string, status Status, lastError string, l
 
 func cloneRecord(rec *store.Record) *store.Record {
 	clone := *rec
-	encoded, err := json.Marshal(rec.Manifest)
-	if err == nil {
-		var manifestCopy manifest.Manifest
-		if err := json.Unmarshal(encoded, &manifestCopy); err == nil {
-			clone.Manifest = manifestCopy
-		}
-	}
+	clone.Manifest = rec.Clone()
 	if rec.AutoUpdate != nil {
 		autoUpdate := *rec.AutoUpdate
 		clone.AutoUpdate = &autoUpdate

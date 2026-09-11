@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func TestDetachedCleanupTransitionContextRetainsParentDeadline(t *testing.T) {
-	parentDeadline := time.Now().Add(time.Second)
+func TestDetachedCleanupTransitionContextUsesFreshBoundedDeadline(t *testing.T) {
+	parentDeadline := time.Now().Add(100 * time.Millisecond)
 	parent, cancelParent := context.WithDeadline(context.Background(), parentDeadline)
 	defer cancelParent()
 
@@ -17,8 +17,11 @@ func TestDetachedCleanupTransitionContextRetainsParentDeadline(t *testing.T) {
 	if !ok {
 		t.Fatal("cleanup transition context has no deadline")
 	}
-	if deadline.After(parentDeadline) {
-		t.Fatalf("cleanup deadline %s exceeds parent deadline %s", deadline, parentDeadline)
+	if !deadline.After(parentDeadline) {
+		t.Fatalf("cleanup deadline %s should outlive parent deadline %s", deadline, parentDeadline)
+	}
+	if remaining := time.Until(deadline); remaining > 5*time.Second || remaining <= 0 {
+		t.Fatalf("cleanup deadline has %s remaining, want at most 5 seconds", remaining)
 	}
 
 	cancelParent()

@@ -724,11 +724,9 @@ func taskResourceCleanupRetryDelayForAttempt(attempt int) time.Duration {
 }
 
 func detachedCleanupTransitionContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	deadline := time.Now().Add(5 * time.Second)
-	if parentDeadline, ok := ctx.Deadline(); ok && parentDeadline.Before(deadline) {
-		deadline = parentDeadline
-	}
-	return context.WithDeadline(context.WithoutCancel(ctx), deadline)
+	// Durable state transitions must still be recorded after the archive
+	// deadline expires; only cancellation is detached from the operation.
+	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }
 
 // CancelArchiveTaskResourceCleanup cancels retryable archive cleanup before an

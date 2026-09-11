@@ -87,6 +87,38 @@ func (r *fakeCascadeRepo) UnarchiveTask(_ context.Context, id string) (bool, err
 }
 
 // fakeWSGroupRepoCascade extends fakeWSGroupRepo with the phase 6
+
+type archiveSerializationProbe struct {
+	*fakeCascadeRepo
+	firstMutationStarted  chan struct{}
+	secondMutationStarted chan struct{}
+	releaseFirstMutation  chan struct{}
+	mu                    sync.Mutex
+	changedMutations      int
+}
+
+func (r *archiveSerializationProbe) ArchiveTaskIfActiveWithVacatedStep(
+	ctx context.Context,
+	id, cascadeID string,
+) (string, bool, error) {
+	stepID, changed, err := r.fakeCascadeRepo.ArchiveTaskIfActiveWithVacatedStep(ctx, id, cascadeID)
+	if err != nil || !changed {
+		return stepID, changed, err
+	}
+	r.mu.Lock()
+	r.changedMutations++
+	mutation := r.changedMutations
+	r.mu.Unlock()
+	switch mutation {
+	case 1:
+		close(r.firstMutationStarted)
+		<-r.releaseFirstMutation
+	case 2:
+		close(r.secondMutationStarted)
+	}
+	return stepID, changed, nil
+}
+
 // release/restore/cleanup-status methods.
 type fakeWSGroupRepoCascade struct {
 	*fakeWSGroupRepo
@@ -1110,14 +1142,79 @@ func TestArchiveTaskTree_RaceFree(t *testing.T) {
 	}
 	wg.Wait()
 	// Whatever order the goroutines ran in, every task should be
-	// archived exactly once (CAS guard) and the cascade IDs must be
-	// consistent within each task — though different tasks may carry
-	// different cascade IDs depending on which goroutine won the race.
+	// archived exactly once (CAS guard) under one cascade identity.
+	// A later unarchive must be able to restore the complete tree.
 	for _, id := range []string{"root", "c1", "c2"} {
 		got, _ := tasks.GetTask(context.Background(), id)
 		if got.ArchivedAt == nil {
 			t.Errorf("%s should be archived", id)
 		}
+	}
+}
+
+func TestArchiveTaskTree_SerializesCascadeIdentity(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("root", "", "ws-1")
+	tasks.addTask("c1", "root", "ws-1")
+	base := newCascadeRepo(tasks)
+	probe := &archiveSerializationProbe{
+		fakeCascadeRepo:       base,
+		firstMutationStarted:  make(chan struct{}),
+		secondMutationStarted: make(chan struct{}),
+		releaseFirstMutation:  make(chan struct{}),
+	}
+	groups := &restoringCascadeWSGroupRepo{fakeWSGroupRepoCascade: newCascadeWSGroupRepo()}
+	groups.groups["g1"] = &orchmodels.WorkspaceGroup{
+		ID: "g1", WorkspaceID: "ws-1",
+		MaterializedKind: orchmodels.WorkspaceGroupKindSingleRepo,
+	}
+	groups.members["g1"] = map[string]string{
+		"root": orchmodels.WorkspaceMemberRoleMember,
+		"c1":   orchmodels.WorkspaceMemberRoleMember,
+	}
+	svc := NewHandoffService(probe, nil, nil, nil, groups, nil)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = svc.ArchiveTaskTree(context.Background(), "root", true)
+	}()
+	go func() {
+		defer wg.Done()
+		_, _ = svc.ArchiveTaskTree(context.Background(), "root", true)
+	}()
+
+	select {
+	case <-probe.firstMutationStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first archive mutation did not start")
+	}
+	concurrentMutation := false
+	select {
+	case <-probe.secondMutationStarted:
+		concurrentMutation = true
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(probe.releaseFirstMutation)
+	wg.Wait()
+	if concurrentMutation {
+		t.Fatal("archive cascades mutated the same tree concurrently")
+	}
+
+	root, _ := tasks.GetTask(context.Background(), "root")
+	child, _ := tasks.GetTask(context.Background(), "c1")
+	if root.ArchivedByCascadeID == "" || root.ArchivedByCascadeID != child.ArchivedByCascadeID {
+		t.Fatalf("archive cascade IDs = root %q, child %q, want one identity",
+			root.ArchivedByCascadeID, child.ArchivedByCascadeID)
+	}
+	if _, err := svc.UnarchiveTaskTree(context.Background(), "root"); err != nil {
+		t.Fatalf("unarchive serialized archive: %v", err)
+	}
+	root, _ = tasks.GetTask(context.Background(), "root")
+	child, _ = tasks.GetTask(context.Background(), "c1")
+	if root.ArchivedAt != nil || child.ArchivedAt != nil {
+		t.Fatalf("unarchive left tasks archived: root=%v child=%v", root.ArchivedAt, child.ArchivedAt)
 	}
 }
 

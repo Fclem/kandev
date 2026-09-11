@@ -275,6 +275,7 @@ type HandoffService struct {
 	comments           CommentReader
 	logger             *logger.Logger
 	parentLock         parentMutex
+	archiveCascadeLock parentMutex
 	workspaceGroupLock parentMutex
 }
 
@@ -450,10 +451,10 @@ func NewHandoffService(
 		docsRepo: docsRepo,
 		blockers: blockers,
 		wsGroups: wsGroups,
-		logger:   log,
 		parentLock: parentMutex{
 			locks: make(map[string]*sync.Mutex),
 		},
+		archiveCascadeLock: parentMutex{locks: make(map[string]*sync.Mutex)},
 		workspaceGroupLock: parentMutex{locks: make(map[string]*sync.Mutex)},
 	}
 }

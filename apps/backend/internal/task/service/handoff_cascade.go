@@ -286,13 +286,13 @@ func (s *HandoffService) archiveTaskTree(
 	if err := s.validateArchiveRoot(archiveCtx, rootID); err != nil {
 		return nil, err
 	}
+	cascadeLock := s.archiveCascadeLock.lockFor(rootID)
+	cascadeLock.Lock()
+	defer cascadeLock.Unlock()
 	cascadeID, all, err := s.resolveArchiveCascade(archiveCtx, rootID, cascade)
 	if err != nil {
 		return nil, err
 	}
-	cascadeLock := s.archiveCascadeLock.lockFor(rootID)
-	cascadeLock.Lock()
-	defer cascadeLock.Unlock()
 	out := &CascadeOutcome{CascadeID: cascadeID}
 	// Archive cleanup must not tear down a shared workspace while an active
 	// group member remains. Transfer ownership before taking the cleanup

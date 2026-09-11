@@ -94,6 +94,24 @@ export function RetryPolicySection({ policy, savedPolicy, updateField }: Props) 
           </div>
         </div>
       )}
+      <div className="space-y-1.5">
+        <Label htmlFor="automation-retry-history">{t("automations:retryHistoryLabel")}</Label>
+        <select
+          id="automation-retry-history"
+          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+          value={policy.history_mode}
+          onChange={(event) =>
+            updatePolicy({ history_mode: event.target.value as RetryPolicy["history_mode"] })
+          }
+          aria-describedby="automation-retry-history-help"
+        >
+          <option value="attempts">{t("automations:retryHistoryAttempts")}</option>
+          <option value="timeline">{t("automations:retryHistoryTimeline")}</option>
+        </select>
+        <p id="automation-retry-history-help" className="text-xs text-muted-foreground">
+          {t("automations:retryHistoryDescription")}
+        </p>
+      </div>
       <p className="text-xs text-muted-foreground">{t("automations:retryHistoryHelp")}</p>
     </div>
   );

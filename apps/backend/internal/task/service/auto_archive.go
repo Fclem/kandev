@@ -47,12 +47,16 @@ func (s *Service) runAutoArchive(ctx context.Context) {
 		return
 	}
 	for _, task := range tasks {
-		_, err := s.autoArchiveCoordinator.ArchiveAutoTask(runCtx, task)
-		if err != nil {
+		out, err := s.autoArchiveCoordinator.ArchiveAutoTask(runCtx, task)
+		switch {
+		case err != nil:
 			s.logger.Warn("auto-archive: failed to archive task",
 				zap.String("task_id", task.ID),
 				zap.Error(err))
-		} else {
+		case out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0:
+			s.logger.Info("auto-archive: candidate changed before archive",
+				zap.String("task_id", task.ID))
+		default:
 			s.logger.Info("auto-archive: archived task",
 				zap.String("task_id", task.ID),
 				zap.String("title", task.Title))

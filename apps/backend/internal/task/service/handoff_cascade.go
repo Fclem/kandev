@@ -237,6 +237,17 @@ func (s *HandoffService) ArchiveAutoTask(ctx context.Context, candidate *models.
 	return s.archiveTaskTree(ctx, candidate.ID, false, candidate)
 }
 
+func (s *HandoffService) validateArchiveRoot(ctx context.Context, rootID string) error {
+	root, err := s.tasks.GetTask(ctx, rootID)
+	if err != nil {
+		return err
+	}
+	if root == nil {
+		return fmt.Errorf("task %s not found", rootID)
+	}
+	return nil
+}
+
 func (s *HandoffService) archiveTaskTree(
 	ctx context.Context,
 	rootID string,
@@ -255,13 +266,9 @@ func (s *HandoffService) archiveTaskTree(
 	if s.tasks == nil {
 		return nil, errors.New("task repo not configured")
 	}
-	// Validate the root exists up front. The CAS archive below treats a
-	// zero-row update as "skipped" (idempotent re-archive), which would
-	// silently report success for a task ID that doesn't exist at all.
-	if root, err := s.tasks.GetTask(archiveCtx, rootID); err != nil {
+	// Validate the root before CAS can turn an unknown ID into a no-op.
+	if err := s.validateArchiveRoot(archiveCtx, rootID); err != nil {
 		return nil, err
-	} else if root == nil {
-		return nil, fmt.Errorf("task %s not found", rootID)
 	}
 	cascadeID := uuid.New().String()
 	out := &CascadeOutcome{CascadeID: cascadeID}
@@ -298,13 +305,12 @@ func (s *HandoffService) archiveTaskTree(
 
 	// Cancellation may stop the caller's own execution and cancel this request.
 	// The continuation is created only after durable cleanup preparation, so
-	// ownership and preparation remain caller-cancellable.
+	// ownership and preparation remain caller-cancellable. Automatic archive
+	// candidates defer runtime cancellation until their eligibility CAS wins.
 	postArchiveCtx := archiveContinuationCtx
-	s.cancelActiveRuns(postArchiveCtx, all, models.SessionArchiveTreeCancelReason)
-
-	// Archive deepest first so parent_id pointers stay valid through
-	// the walk; not strictly required by the schema (no FK on parent_id)
-	// but keeps the audit log readable.
+	s.cancelArchiveRunsForCandidate(postArchiveCtx, all, autoArchiveCandidate)
+	// Archive deepest first so parent_id pointers stay valid through the walk;
+	// not strictly required by the schema, but keeps the audit log readable.
 	vacatedStepIDs := make(map[string]struct{})
 	defer func() {
 		s.pullTasksForVacatedSteps(postArchiveCtx, archiveDeadline, vacatedStepIDs)
@@ -316,6 +322,10 @@ func (s *HandoffService) archiveTaskTree(
 	if mutationErr != nil {
 		return out, mutationErr
 	}
+	cleanupErrors = append(cleanupErrors, s.rollbackAutoArchiveCASLoss(
+		transferCompensationCtx, ownershipTransfers, autoArchiveCandidate, out,
+		cleanupErrors,
+	))
 
 	// Release group memberships for THIS cascade's tasks. Memberships
 	// owned by an earlier cascade or manual archive are left alone.
@@ -355,6 +365,9 @@ func (s *HandoffService) applyArchiveTaskMutations(
 		if ok {
 			out.ArchivedTaskIDs = append(out.ArchivedTaskIDs, all[i])
 			recordVacatedStep(vacatedStepIDs, vacatedStepID)
+			if autoArchiveCandidate != nil {
+				s.cancelActiveRuns(ctx, []string{all[i]}, models.SessionArchiveTreeCancelReason)
+			}
 			s.finalizeActiveSessions(ctx, archiveDeadline, all[i], models.SessionArchiveTreeCancelReason)
 			if err := s.publishUpdatedTask(ctx, all[i]); err != nil {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("publish archived task %s: %w", all[i], err))
@@ -789,11 +802,26 @@ func (s *HandoffService) rollbackWorkspaceEnvironmentOwnershipAfterFailure(
 	transfers []workspaceEnvironmentOwnershipTransfer,
 	cause error,
 ) error {
+
 	rollbackErr := s.rollbackWorkspaceEnvironmentOwnershipTransfers(ctx, transfers)
 	if rollbackErr == nil {
 		return cause
 	}
 	return errors.Join(cause, fmt.Errorf("rollback shared workspace environment ownership: %w", rollbackErr))
+}
+func (s *HandoffService) rollbackAutoArchiveCASLoss(
+	ctx context.Context,
+	transfers []workspaceEnvironmentOwnershipTransfer,
+	candidate *models.Task,
+	out *CascadeOutcome,
+	cleanupErrors []error,
+) error {
+	if candidate == nil || out == nil || len(out.ArchivedTaskIDs) > 0 {
+		return nil
+	}
+	return s.rollbackWorkspaceEnvironmentOwnershipAfterFailure(
+		ctx, transfers, errors.Join(cleanupErrors...),
+	)
 }
 
 func (s *HandoffService) rollbackWorkspaceEnvironmentOwnershipTransfers(
@@ -971,6 +999,17 @@ func (s *HandoffService) cancelActiveRuns(ctx context.Context, taskIDs []string,
 			}
 		}
 	}
+}
+
+func (s *HandoffService) cancelArchiveRunsForCandidate(
+	ctx context.Context,
+	taskIDs []string,
+	candidate *models.Task,
+) {
+	if candidate != nil {
+		return
+	}
+	s.cancelActiveRuns(ctx, taskIDs, models.SessionArchiveTreeCancelReason)
 }
 
 func (s *HandoffService) finalizeActiveSessions(

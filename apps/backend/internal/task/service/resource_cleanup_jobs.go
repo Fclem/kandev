@@ -472,6 +472,30 @@ func (s *Service) finishTaskResourceCleanupRun(run *taskResourceCleanupRun) {
 	s.cleanupRunsMu.Unlock()
 }
 
+// cancelTaskResourceCleanupRuns stops in-flight cleanup workers for a
+// workspace deletion that did not commit. Durable cancellation remains
+// CAS-guarded; this only fences the worker context before it can destroy data.
+func (s *Service) cancelTaskResourceCleanupRuns(jobIDs []string) {
+	if len(jobIDs) == 0 {
+		return
+	}
+	ids := make(map[string]struct{}, len(jobIDs))
+	for _, id := range jobIDs {
+		if id != "" {
+			ids[id] = struct{}{}
+		}
+	}
+	s.cleanupRunsMu.Lock()
+	defer s.cleanupRunsMu.Unlock()
+	for run := range s.cleanupRuns {
+		if run.job != nil {
+			if _, ok := ids[run.job.ID]; ok {
+				run.cancel()
+			}
+		}
+	}
+}
+
 func (s *Service) executeTaskResourceCleanupJob(
 	ctx context.Context,
 	job *models.TaskResourceCleanupJob,

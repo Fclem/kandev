@@ -159,6 +159,34 @@ func (r *workspaceDeleteCancellationRecorder) CompleteTaskResourceCleanupJob(
 	)
 }
 
+func TestWorkspaceDeleteCancellationFencesRunningCleanupContext(t *testing.T) {
+	taskSvc, repo := setupOfficeTest(t)
+	ctx := context.Background()
+	job := &models.TaskResourceCleanupJob{
+		ID:               "workspace-running-cleanup",
+		OperationID:      "workspace-delete:running-cleanup",
+		TaskID:           "workspace-task",
+		Trigger:          models.TaskResourceCleanupTriggerWorkspaceDelete,
+		State:            models.TaskResourceCleanupStateRunning,
+		ResourceSnapshot: `{}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(ctx, job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+	runCtx, run := taskSvc.registerTaskResourceCleanupRun(ctx, job)
+	defer taskSvc.finishTaskResourceCleanupRun(run)
+
+	err := taskSvc.cancelWorkspaceDeleteTaskCleanupJobs(ctx, []workspaceDeleteTaskCleanup{{cleanupJob: job}})
+	if !errors.Is(err, ErrCleanupCancellationRace) {
+		t.Fatalf("cancelWorkspaceDeleteTaskCleanupJobs error = %v, want cleanup race", err)
+	}
+	select {
+	case <-runCtx.Done():
+	default:
+		t.Fatal("running cleanup context was not fenced after workspace deletion failed")
+	}
+}
+
 type commitThenErrorTaskRepository struct {
 	repository.TaskRepository
 	err error

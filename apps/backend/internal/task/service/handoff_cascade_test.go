@@ -17,6 +17,7 @@ import (
 // to exercise the cascade walk.
 type fakeCascadeRepo struct {
 	*phase4TaskRepo
+	autoArchiveCASLoss bool
 }
 
 func newCascadeRepo(base *fakeTaskRepo) *fakeCascadeRepo {
@@ -26,6 +27,18 @@ func newCascadeRepo(base *fakeTaskRepo) *fakeCascadeRepo {
 func (r *fakeCascadeRepo) ArchiveTaskIfActive(ctx context.Context, id, cascadeID string) (bool, error) {
 	_, changed, err := r.ArchiveTaskIfActiveWithVacatedStep(ctx, id, cascadeID)
 	return changed, err
+}
+
+func (r *fakeCascadeRepo) ArchiveTaskIfAutoArchiveEligible(
+	ctx context.Context,
+	id string,
+	_ time.Time,
+	cascadeID string,
+) (bool, error) {
+	if r.autoArchiveCASLoss {
+		return false, nil
+	}
+	return r.ArchiveTaskIfActive(ctx, id, cascadeID)
 }
 
 func (r *fakeCascadeRepo) ArchiveTaskIfActiveWithVacatedStep(
@@ -147,6 +160,14 @@ func (c *recordingCleanupCoordinator) CleanupTaskResources(_ context.Context, ta
 	c.cleaned = append(c.cleaned, taskID)
 }
 
+type recordingRunCanceller struct {
+	calls []string
+}
+
+func (r *recordingRunCanceller) CancelTaskExecution(_ context.Context, taskID, _ string, _ bool) error {
+	r.calls = append(r.calls, taskID)
+	return nil
+}
 func (c *recordingCleanupCoordinator) PrepareTaskResourceCleanup(
 	_ context.Context,
 	_ string,
@@ -159,6 +180,34 @@ func (c *recordingCleanupCoordinator) PrepareTaskResourceCleanup(
 	c.prepared = append(c.prepared, operationID)
 	c.deleteEnvironmentRows = append(c.deleteEnvironmentRows, deleteEnvironmentRow)
 	return c.prepareErr
+}
+
+func TestArchiveAutoTaskCASLossCancelsPreparedCleanupWithoutStoppingRun(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	tasks.addTask("candidate", "", "ws-1")
+	repo := newCascadeRepo(tasks)
+	repo.autoArchiveCASLoss = true
+	coordinator := &recordingCleanupCoordinator{}
+	canceller := &recordingRunCanceller{}
+	svc := NewHandoffService(repo, nil, nil, nil, nil, nil)
+	svc.SetTaskResourceCleaner(coordinator)
+	svc.SetRunCanceller(canceller)
+
+	out, err := svc.ArchiveAutoTask(context.Background(), tasks.tasks["candidate"])
+	if err != nil {
+		t.Fatalf("ArchiveAutoTask: %v", err)
+	}
+	if out == nil || len(out.ArchivedTaskIDs) != 0 || len(out.SkippedTaskIDs) != 1 {
+		t.Fatalf("outcome = %#v, want skipped candidate", out)
+	}
+	if len(canceller.calls) != 0 {
+		t.Fatalf("run cancellation calls = %v, want none after CAS loss", canceller.calls)
+	}
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if len(coordinator.prepared) != 1 || len(coordinator.cancelled) != 1 {
+		t.Fatalf("cleanup prepared=%v cancelled=%v, want one of each", coordinator.prepared, coordinator.cancelled)
+	}
 }
 
 func TestDeleteTaskTreePreparedCleanupDeletesEnvironmentRow(t *testing.T) {

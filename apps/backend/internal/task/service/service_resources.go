@@ -328,9 +328,11 @@ func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspa
 	}
 	if s.workspaceSecretDeleter != nil && (!hasTransactionalCleanup || !hasTransactionalCascade) {
 		if err := s.workspaceSecretDeleter.DeleteWorkspaceSecrets(ctx, workspace.ID); err != nil {
-			cancelErr := s.cancelWorkspaceDeleteTaskCleanupJobs(ctx, cleanups)
+			// The non-transactional workspace cascade already committed, so
+			// prepared task cleanup must remain runnable despite this error.
 			s.logger.Error("failed to delete workspace secrets", zap.String("workspace_id", workspace.ID), zap.Error(err))
-			return errors.Join(err, cancelErr)
+			s.runWorkspaceDeleteTaskCleanups(cleanups, deletedTasks)
+			return err
 		}
 	}
 	cleanups = s.appendWorkspaceDeleteMissingTaskCleanups(ctx, cleanups, deletedTasks)
@@ -421,6 +423,13 @@ func (s *Service) prepareWorkspaceDeleteTaskCleanup(ctx context.Context, task *m
 	return cleanup, err
 }
 func (s *Service) cancelWorkspaceDeleteTaskCleanupJobs(ctx context.Context, cleanups []workspaceDeleteTaskCleanup) error {
+	jobIDs := make([]string, 0, len(cleanups))
+	for _, cleanup := range cleanups {
+		if cleanup.cleanupJob != nil {
+			jobIDs = append(jobIDs, cleanup.cleanupJob.ID)
+		}
+	}
+	s.cancelTaskResourceCleanupRuns(jobIDs)
 	transitionCtx, cancel := detachedCleanupTransitionContext(ctx)
 	defer cancel()
 	var cancellationErrs []error

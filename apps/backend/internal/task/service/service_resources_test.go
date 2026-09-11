@@ -38,6 +38,14 @@ func (failingTransactionalWorkspaceSecretDeleter) DeleteWorkspaceSecretsTx(conte
 	return errors.New("injected transactional secret cleanup failure")
 }
 
+type failingWorkspaceSecretDeleter struct {
+	err error
+}
+
+func (f failingWorkspaceSecretDeleter) DeleteWorkspaceSecrets(context.Context, string) error {
+	return f.err
+}
+
 func (b *failingWorkspaceBootstrapper) CreateWorkspaceWithKanban(
 	context.Context,
 	*models.Workspace,
@@ -1076,6 +1084,39 @@ func TestService_DeleteWorkspaceRollsBackCascadeWhenSecretCleanupFails(t *testin
 	}
 	if events := eventBus.GetPublishedEvents(); len(events) != 0 {
 		t.Fatalf("events after rolled-back delete = %#v, want none", events)
+	}
+}
+
+func TestService_DeleteWorkspaceKeepsCleanupRunnableWhenSecretDeletionFails(t *testing.T) {
+	svc, _, repo := createTestService(t)
+	ctx := context.Background()
+	secretErr := errors.New("secret deletion unavailable")
+	svc.SetWorkspaceSecretDeleter(failingWorkspaceSecretDeleter{err: secretErr})
+	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-delete", Name: "Delete Me"}); err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	if err := repo.CreateTask(ctx, &models.Task{ID: "task-delete", WorkspaceID: "ws-delete", Title: "Delete task"}); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	if err := svc.DeleteWorkspace(ctx, "ws-delete"); !errors.Is(err, secretErr) {
+		t.Fatalf("DeleteWorkspace error = %v, want secret deletion error", err)
+	}
+	if _, err := repo.GetWorkspace(ctx, "ws-delete"); err == nil {
+		t.Fatal("workspace deletion did not commit")
+	}
+	if _, err := repo.GetTask(ctx, "task-delete"); err == nil {
+		t.Fatal("task deletion did not commit")
+	}
+	var state string
+	if err := repo.DB().QueryRowContext(ctx, `
+		SELECT state FROM task_resource_cleanup_jobs
+		WHERE task_id = ? AND trigger = ?
+	`, "task-delete", models.TaskResourceCleanupTriggerWorkspaceDelete).Scan(&state); err != nil {
+		t.Fatalf("load workspace cleanup job: %v", err)
+	}
+	if state == string(models.TaskResourceCleanupStateCancelled) {
+		t.Fatalf("workspace cleanup state = %q, want runnable state", state)
 	}
 }
 

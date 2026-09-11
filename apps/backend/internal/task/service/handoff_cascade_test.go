@@ -1208,6 +1208,10 @@ type fakeWorkspaceCleaner struct {
 	multiRepoRoots []string
 }
 
+func (f *fakeWorkspaceCleaner) ValidateManagedRoot(string) error {
+	return nil
+}
+
 func (f *fakeWorkspaceCleaner) CleanupPlainFolder(_ context.Context, path string) error {
 	f.plainFolders = append(f.plainFolders, path)
 	return nil

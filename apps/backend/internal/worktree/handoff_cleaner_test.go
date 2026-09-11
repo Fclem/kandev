@@ -169,6 +169,17 @@ func TestCleanupMultiRepoRoot_RequiresWorktreeInventory(t *testing.T) {
 	}
 }
 
+func TestCleanupRemoteEnvironmentRejectsUnimplementedDeletion(t *testing.T) {
+	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json"})
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	c := NewHandoffCleaner(nil, log)
+	if err := c.CleanupRemoteEnvironment(context.Background(), "sprites", "env-1"); err == nil {
+		t.Fatal("remote cleanup must not report success without provider deletion")
+	}
+}
+
 func TestIsDescendant_HappyAndUnhappyPaths(t *testing.T) {
 	cases := []struct {
 		root, path string

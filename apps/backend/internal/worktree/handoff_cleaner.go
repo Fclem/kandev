@@ -41,6 +41,12 @@ func NewHandoffCleaner(mgr *Manager, log *logger.Logger, extraRoots ...string) *
 	}
 }
 
+// ValidateManagedRoot exposes the same path policy used by destructive
+// cleanup so restore cannot recreate outside the managed roots.
+func (c *HandoffCleaner) ValidateManagedRoot(path string) error {
+	return c.requireManagedRoot(path)
+}
+
 // CleanupPlainFolder removes a Kandev-owned plain folder. The path
 // MUST resolve to a location under one of the configured managed
 // roots; anything else is rejected up front so a corrupted
@@ -92,6 +98,7 @@ func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath stri
 	if len(worktreeIDs) == 0 {
 		return errors.New("multi-repo worktree inventory is empty")
 	}
+	var removalErrors []error
 	for _, id := range worktreeIDs {
 		if strings.TrimSpace(id) == "" {
 			return errors.New("multi-repo worktree inventory contains an empty ID")
@@ -99,11 +106,11 @@ func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath stri
 		if err := c.manager.RemoveByID(ctx, id, false); err != nil {
 			c.logger.Warn("multi-repo worktree remove failed",
 				zap.String("worktree_id", id), zap.Error(err))
-			// Continue removing the rest; the root removal at the end
-			// will reclaim any straggler files. We deliberately do not
-			// abort: a partial cleanup is preferable to leaving the
-			// whole tree behind.
+			removalErrors = append(removalErrors, fmt.Errorf("remove worktree %s: %w", id, err))
 		}
+	}
+	if err := errors.Join(removalErrors...); err != nil {
+		return err
 	}
 	if err := os.RemoveAll(rootPath); err != nil {
 		return fmt.Errorf("remove multi-repo root %s: %w", rootPath, err)
@@ -111,17 +118,14 @@ func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath stri
 	return nil
 }
 
-// CleanupRemoteEnvironment is a stub: remote environments
-// (sprites etc.) are managed by per-provider services that the
-// office service does not import. The cleaner records the pending
-// state via cleanup_status; provider-specific deletion is wired in a
-// follow-up commit when the materializer flips owned_by_kandev for
-// remote envs (today the executor does not do that).
+// CleanupRemoteEnvironment cannot safely claim success without a provider
+// deletion implementation. Returning an error keeps the group in
+// cleanup_failed so the environment is visible for retry or operator action.
 func (c *HandoffCleaner) CleanupRemoteEnvironment(_ context.Context, provider, environmentID string) error {
-	c.logger.Info("cleanup remote environment (no-op)",
+	c.logger.Error("remote environment cleanup is not configured",
 		zap.String("provider", provider),
 		zap.String("environment_id", environmentID))
-	return nil
+	return fmt.Errorf("remote environment cleanup is not configured for provider %q", provider)
 }
 
 // requireManagedRoot rejects paths that do not resolve to a location

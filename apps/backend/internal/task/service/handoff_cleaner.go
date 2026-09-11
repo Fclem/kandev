@@ -23,6 +23,9 @@ import (
 // cleanup_failed with the error message attached, leaving the disk
 // state untouched so a follow-up pass can retry.
 type WorkspaceCleaner interface {
+	// ValidateManagedRoot checks that a path resolves under a configured
+	// Kandev-managed root without performing filesystem mutation.
+	ValidateManagedRoot(path string) error
 	// CleanupPlainFolder removes a Kandev-owned plain folder. The
 	// implementation must reject paths outside the configured
 	// kandev-managed roots.

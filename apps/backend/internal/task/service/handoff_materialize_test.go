@@ -64,6 +64,7 @@ func newMaterializerService(t *testing.T, tasks *fakeTaskRepo, ws *fakeWSGroupRe
 	tr := newCascadeRepo(tasks)
 	svc := NewHandoffService(tr, nil, nil, nil, ws, nil)
 	svc.SetSessionReader(sr)
+	svc.SetWorkspaceCleaner(&fakeWorkspaceCleaner{})
 	return svc
 }
 

@@ -784,7 +784,8 @@ CREATE OR REPLACE FUNCTION conversation_visible_content(value TEXT) RETURNS TEXT
 DECLARE
 	result TEXT := value;
 	open_pos INTEGER;
-BEGIN
+	close_offset INTEGER;
+	close_pos INTEGER;
 	LOOP
 		open_pos := strpos(result, '<kandev-system>');
 		IF open_pos = 0 THEN

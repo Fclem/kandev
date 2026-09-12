@@ -786,6 +786,7 @@ DECLARE
 	open_pos INTEGER;
 	close_offset INTEGER;
 	close_pos INTEGER;
+BEGIN
 	LOOP
 		open_pos := strpos(result, '<kandev-system>');
 		IF open_pos = 0 THEN

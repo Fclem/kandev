@@ -1242,6 +1242,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
         <ClarificationPanelSection
           pending={Boolean(pendingClarification)}
           messages={pendingClarificationGroup}
+          agentDisconnected={session?.pending_action === null}
           onResolved={handleClarificationResolved}
           shortcutScopeRef={panelRef}
           maxHeightVh={50}

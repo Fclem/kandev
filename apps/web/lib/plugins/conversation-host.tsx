@@ -68,6 +68,10 @@ function conversationError(error: unknown): PluginConversationError {
   };
 }
 
+function isRemovedConversationError(error: PluginConversationError): boolean {
+  return error.code === "not_found";
+}
+
 function resolveTaskId(
   scope: ConversationScope,
   taskId: string | null | undefined,
@@ -201,10 +205,21 @@ function useInitialMessagePage({
       setState({ ...EMPTY_MESSAGES, messages: [], error });
       return;
     }
-    setState({ ...EMPTY_MESSAGES, messages: [], loading: true });
     void loadPage(null, false).catch((cause: unknown) => {
       if (scope.signal.aborted || scope.isTerminal()) return;
-      setState({ ...EMPTY_MESSAGES, messages: [], error: conversationError(cause) });
+      const error = conversationError(cause);
+      if (isRemovedConversationError(error)) {
+        setState((current) => ({
+          ...current,
+          loading: false,
+          loadingMore: false,
+          error: null,
+          hasMore: false,
+          removed: true,
+        }));
+        return;
+      }
+      setState({ ...EMPTY_MESSAGES, messages: [], error });
     });
   }, [
     cursorRef,
@@ -368,11 +383,7 @@ function useMessagePageLoader({
         cursor: pageCursor,
         binding,
       });
-      if (
-        requestRevisionRef.current !== capturedRevision ||
-        scope.signal.aborted ||
-        scope.isTerminal()
-      ) {
+      if (requestRevisionRef.current !== capturedRevision || scope.signal.aborted) {
         return 0;
       }
       const { messages, additionCount } = mergeMessagePage(
@@ -641,6 +652,7 @@ function useOrderedTurnEvents({
     );
   }, [error, scope, sessionId, setState, snapshotKey, taskId]);
 }
+// eslint-disable-next-line max-lines-per-function -- keeps turn snapshot lifecycle in one hook.
 function useSessionTurns(
   sessionId: string | null,
   taskId?: string | null,
@@ -710,22 +722,32 @@ function useSessionTurns(
         return parseConversationResponse<TurnsPage>(response);
       })
       .then((page) => {
-        if (!current || scope.signal.aborted || scope.isTerminal()) return;
-        setState({
+        if (!current || scope.signal.aborted) return;
+        setState((previous) => ({
+          ...previous,
           turns: page.turns,
           loading: false,
           hydrated: true,
           error: null,
-          removed: false,
-        });
+        }));
         scope.commitSnapshot("turns", snapshotKey);
       })
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (!current || scope.signal.aborted || scope.isTerminal()) return;
+        const error = conversationError(cause);
+        if (isRemovedConversationError(error)) {
+          setState((previous) => ({
+            ...previous,
+            loading: false,
+            error: null,
+            removed: true,
+          }));
+          return;
+        }
         setState((previous) => ({
           ...(revision === 0 ? { ...EMPTY_TURNS, turns: [] } : previous),
           loading: false,
-          error: conversationError(error),
+          error,
         }));
       });
     return () => {

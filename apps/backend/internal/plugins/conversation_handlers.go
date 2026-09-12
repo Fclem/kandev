@@ -183,10 +183,11 @@ func (c *Controller) conversationMessages(ctx *gin.Context) {
 	}
 	session, err := c.conversationReader.GetTaskSession(ctx.Request.Context(), sessionID)
 	if err != nil || session == nil || session.ID != sessionID {
-		writeConversationError(ctx, http.StatusNotFound, "not_found", "task session not found", false)
-		return
-	}
-	if query.taskID != nil && *query.taskID != session.TaskID {
+		if !c.svc.HasConversationJournal() {
+			writeConversationError(ctx, http.StatusNotFound, "not_found", "task session not found", false)
+			return
+		}
+	} else if query.taskID != nil && *query.taskID != session.TaskID {
 		writeConversationError(ctx, http.StatusBadRequest, "invalid_query", "task_id does not match the task session", false)
 		return
 	}
@@ -342,24 +343,32 @@ func (c *Controller) conversationTurns(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	session, err := c.conversationReader.GetTaskSession(ctx.Request.Context(), sessionID)
-	if err != nil || session == nil || session.ID != sessionID {
-		writeConversationError(ctx, http.StatusNotFound, "not_found", "task session not found", false)
-		return
-	}
 	var taskID *string
 	if rawTaskID, exists := ctx.GetQuery("task_id"); exists && rawTaskID != nullJSONValue {
-		if rawTaskID == "" || rawTaskID != session.TaskID {
+		if rawTaskID == "" {
 			writeConversationError(ctx, http.StatusBadRequest, "invalid_query", "task_id does not match the task session", false)
 			return
 		}
 		taskID = &rawTaskID
 	}
-	var turns []*taskmodels.Turn
-	scopedTaskID := taskID
-	if scopedTaskID == nil {
+	session, err := c.conversationReader.GetTaskSession(ctx.Request.Context(), sessionID)
+	sessionFound := err == nil && session != nil && session.ID == sessionID
+	if !sessionFound {
+		if !c.svc.HasConversationJournal() {
+			writeConversationError(ctx, http.StatusNotFound, "not_found", "task session not found", false)
+			return
+		}
+	} else if taskID != nil && *taskID != session.TaskID {
+		writeConversationError(ctx, http.StatusBadRequest, "invalid_query", "task_id does not match the task session", false)
+		return
+	}
+	var scopedTaskID *string
+	if taskID != nil {
+		scopedTaskID = taskID
+	} else if sessionFound {
 		scopedTaskID = &session.TaskID
 	}
+	var turns []*taskmodels.Turn
 	if c.svc.HasConversationJournal() {
 		turns, err = c.svc.conversationTurnsAt(ctx.Request.Context(), sessionID, uint64(snapshot.Cutoff), scopedTaskID)
 	} else {

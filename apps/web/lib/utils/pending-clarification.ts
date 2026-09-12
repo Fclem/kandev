@@ -8,13 +8,19 @@ import { isInputCapableSessionState } from "./task-pending-input";
 
 export type PendingClarificationScope = {
   /**
-   * Undefined means turn history is not loaded, so pendingAction gates the fallback.
-   * Null means history is loaded but has no durable turns, so all messages are hidden
-   * except a pending request explicitly detached after agent disconnection.
-   * A string scopes detection to that exact turn. An empty object disables detection.
+   * Undefined means turn history is not loaded, so pendingAction gates the
+   * fallback. Null means history is loaded but has no durable turns, so all
+   * messages are hidden except a pending request explicitly detached after
+   * agent disconnection. A string scopes detection to that exact turn. An
+   * empty object disables detection.
    */
   currentTurnId?: string | null;
+  /**
+   * Allows detached clarification requests to remain answerable after their
+   * turn is no longer the newest durable turn.
+   */
   pendingAction?: TaskPendingAction | null;
+  allowDetached?: boolean;
 };
 
 function hasDetachedPendingClarification(messages: readonly Message[]): boolean {
@@ -108,7 +114,9 @@ function clarificationMessagesInScope(
   scope?: PendingClarificationScope,
 ): readonly Message[] {
   if (!scope) return messages;
-  const allowDetached = scope.pendingAction === null && hasDetachedPendingClarification(messages);
+  const allowDetached =
+    (scope.allowDetached === true || scope.pendingAction === null) &&
+    hasDetachedPendingClarification(messages);
   if (
     scope.pendingAction !== undefined &&
     scope.pendingAction !== "clarification" &&
@@ -148,11 +156,13 @@ export function findPendingClarification(
   if (!messages?.length) return null;
   const scoped = clarificationMessagesInScope(messages, scope);
   // Sidebar callers do not have durable turn history. Use persisted message
-  // order instead of WebSocket arrival order so a delayed predecessor event
-  // cannot hide the current request or re-arm an older one.
   const latestTurnId = newestMessageTurnId(scoped);
-  for (let i = scoped.length - 1; i >= 0; i--) {
-    if (latestTurnId && scoped[i].turn_id !== latestTurnId) continue;
+  for (let i = scoped.length - 1; i >= 0; i -= 1) {
+    const metadata = scoped[i].metadata as ClarificationRequestMetadata | undefined;
+    const isDetached = metadata?.agent_disconnected === true;
+    const detachedAllowed =
+      (scope?.allowDetached === true || scope?.pendingAction === null) && isDetached;
+    if (latestTurnId && scoped[i].turn_id !== latestTurnId && !detachedAllowed) continue;
     if (scoped[i].type !== "clarification_request") continue;
     if (isPendingClarificationMessage(scoped[i])) return scoped[i];
   }
@@ -175,7 +185,7 @@ export function findPendingClarificationGroup(
 ): Message[] {
   if (!messages) return [];
   const scoped = clarificationMessagesInScope(messages, scope);
-  const last = findPendingClarification(scoped);
+  const last = findPendingClarification(scoped, scope);
   if (!last) return [];
   const meta = last.metadata as ClarificationRequestMetadata | undefined;
   const pendingID = meta?.pending_id;

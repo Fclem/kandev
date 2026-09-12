@@ -418,6 +418,20 @@ type PendingRetrySummary struct {
 	Limit int              `json:"limit"`
 }
 
+type RetryHistoryAttempt struct {
+	RetryGroupID string           `json:"retry_group_id"`
+	TriggerIDs   []string         `json:"trigger_ids"`
+	Attempts     []*AutomationRun `json:"attempts"`
+	Completed    bool             `json:"completed"`
+}
+
+type RetryHistoryPage struct {
+	Scope         string                 `json:"scope"`
+	Items         []*RetryHistoryAttempt `json:"items"`
+	NextCursor    string                 `json:"next_cursor,omitempty"`
+	HighWaterMark string                 `json:"high_water_mark"`
+}
+
 // AutomationSummary is one automation's health, answered per automation rather
 // than inferred from a capped feed: what it last said, and whether anything of
 // its own is still running.
@@ -485,7 +499,8 @@ type WebhookTriggerConfig struct {
 	// to, by matching a payload-derived value against each configured
 	// repository's Name. Nil means no selector is declared (today's
 	// behavior: whatever resolveAutomationRepository already resolves).
-	Repository *WebhookRepositorySelector `json:"repository,omitempty"`
+	Repository       *WebhookRepositorySelector `json:"repository,omitempty"`
+	SafeJSONPointers []string                   `json:"safe_json_pointers,omitempty"`
 }
 
 // WebhookFilterOp names a supported filter predicate operator.

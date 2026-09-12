@@ -493,6 +493,8 @@ func TestCreateAutomationTaskUsesStableRetryExternalID(t *testing.T) {
 			LeaseToken: "retry-lease", State: "leased",
 		},
 	}
+	autoSvc.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(autoSvc.run, autoSvc.automation)
+	autoSvc.run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	svc.SetAutomationService(autoSvc)
 	svc.reviewTaskCreator = creator
@@ -535,9 +537,11 @@ func TestCreateAutomationTaskUsesRealRetryStoreLedger(t *testing.T) {
 	require.NoError(t, store.CreateRetryGroup(context.Background(), group))
 	run := &automation.AutomationRun{
 		ID: "real-retry-run", AutomationID: a.ID, TriggerType: automation.TriggerTypeManual,
-		Status: automation.RunStatusTriggered, RetryGroupID: group.ID,
+		TriggerID: "real-retry-trigger", Status: automation.RunStatusTriggered, RetryGroupID: group.ID,
 		RetryGroupGeneration: 1, RetryState: automation.RetryStateTriggered,
 	}
+	run.RetryLaunchConfigSnapshot = retrySnapshotForTest(run, a)
+	run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
 	require.NoError(t, store.CreateRun(context.Background(), run))
 	intent := &automation.RetryTaskIntent{
 		ID: "real-retry-intent", RunID: run.ID, GroupGeneration: 1,
@@ -585,6 +589,8 @@ func TestCreateAutomationTaskAdoptsCommittedRetryTask(t *testing.T) {
 		},
 		adopted: &models.Task{ID: "retry-task"},
 	}
+	autoSvc.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(autoSvc.run, autoSvc.automation)
+	autoSvc.run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	svc.SetAutomationService(autoSvc)
 	svc.reviewTaskCreator = creator
@@ -612,6 +618,8 @@ func TestCreateAutomationTaskAcknowledgesAlreadyBoundCommittedRetry(t *testing.T
 		operation: &automation.RetryOperation{State: "committed", ExternalTaskID: "retry-task"},
 		adopted:   &models.Task{ID: "retry-task"},
 	}
+	autoSvc.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(autoSvc.run, autoSvc.automation)
+	autoSvc.run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	svc.SetAutomationService(autoSvc)
 	svc.reviewTaskCreator = creator

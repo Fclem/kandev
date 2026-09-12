@@ -19,6 +19,8 @@ runtime, and workspace lifecycle/state ownership.
 
 ### Requirements
 
+- [Mobile task-view access](requirements/mobile-task-view-access.md)
+
 - [Control sizing](requirements/control-sizing.md)
 - [ACP model summary](requirements/acp-model-configuration-summary.md)
 - [ACP Shell Command Output](requirements/acp-shell-command-output.md)
@@ -155,6 +157,7 @@ runtime, and workspace lifecycle/state ownership.
 
 ### Design
 
+- [Mobile task-view access](system-design/mobile-task-view-access.md)
 - [Agent launch prompt composer](system-design/agent-launch-prompt-composer.md)
 - [Control sizing](system-design/control-sizing.md)
 - [Adaptive Kanban](system-design/adaptive-kanban.md)

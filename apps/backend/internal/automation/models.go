@@ -67,6 +67,7 @@ const (
 	automationHeadBranchKey    = "head_branch"
 	automationHTMLURLKey       = "html_url"
 	automationRepoKey          = "repo"
+	automationTaskIDKey        = "task_id"
 	defaultBranchMain          = "main"
 	exampleGitHubPRURL         = "https://github.com/acme/api/pull/7"
 	exampleRepositoryOwner     = "org/repo"

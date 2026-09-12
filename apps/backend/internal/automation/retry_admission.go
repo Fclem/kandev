@@ -171,10 +171,9 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 			retry_claim_token = '', retry_claimed_at = NULL, retry_claim_expires_at = NULL
 		WHERE retry_group_id IN (
 			SELECT id FROM automation_retry_groups WHERE superseded_by_run_id = ?
-		) AND retry_state NOT IN (?, ?, ?, ?, ?)`),
+		) AND retry_state IN (?, ?)`),
 		RunStatusFailed, RetryStateSuperseded, now, run.ID,
-		RetryStateCompleted, RetryStateExhausted, RetryStateCancelled,
-		RetryStateSuperseded, RetryStateSchedulingFailed); err != nil {
+		RetryStateScheduled, RetryStateClaimed); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`

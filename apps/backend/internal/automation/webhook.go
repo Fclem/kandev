@@ -180,13 +180,24 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 	dedupKey := "webhook:" + automationID + ":" + deliveryID
-	if _, fireErr := h.svc.FireTrigger(c.Request.Context(), automationID, webhookTrigger.ID, TriggerTypeWebhook, triggerData, dedupKey); fireErr != nil {
+	result, fireErr := h.svc.FireTriggerWithInitialData(
+		c.Request.Context(), automationID, webhookTrigger.ID, TriggerTypeWebhook,
+		triggerData, body, dedupKey,
+	)
+	if fireErr != nil {
 		h.logger.Error("failed to fire webhook trigger",
 			zap.String("automation_id", automationID),
 			zap.Error(fireErr))
 		c.JSON(http.StatusInternalServerError, gin.H{responseErrorKey: "trigger failed"})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "triggered"})
+	if result.Skipped && !result.Duplicate {
+		c.JSON(http.StatusConflict, gin.H{responseErrorKey: result.Reason})
+		return
+	}
+	status := "triggered"
+	if result.Duplicate {
+		status = "duplicate"
+	}
+	c.JSON(http.StatusOK, gin.H{"status": status})
 }

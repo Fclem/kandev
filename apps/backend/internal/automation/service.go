@@ -651,6 +651,20 @@ func (s *Service) UpdateAutomation(ctx context.Context, id string, req *UpdateAu
 		clone.RepositoryMode = &repositoryMode
 		storeReq = &clone
 	}
+	if req.Enabled != nil && !*req.Enabled {
+		unlock := s.automationRunLock(id)
+		defer unlock()
+		if err := s.store.UpdateAutomation(ctx, id, storeReq); err != nil {
+			return nil, err
+		}
+		if err := s.stopOpenAutomationRuns(ctx, id); err != nil {
+			return nil, err
+		}
+		if err := s.CancelAutomationRetries(ctx, id); err != nil {
+			return nil, err
+		}
+		return s.store.GetAutomation(ctx, id)
+	}
 	if err := s.store.UpdateAutomation(ctx, id, storeReq); err != nil {
 		return nil, err
 	}
@@ -1179,9 +1193,11 @@ func (s *Service) DispatchRun(
 		return ErrAutomationRunNotDispatchable
 	}
 	var unlock func()
+	lockedCtx := ctx
 	if !retryRunLockHeld(ctx, run.AutomationID) {
 		unlock = s.automationRunLock(run.AutomationID)
 		defer unlock()
+		lockedCtx = context.WithValue(ctx, retryRunLockContextKey{}, run.AutomationID)
 	}
 	run, err = s.store.GetRun(ctx, runID)
 	if err != nil {
@@ -1190,21 +1206,29 @@ func (s *Service) DispatchRun(
 	if run == nil || run.Status != RunStatusTriggered {
 		return ErrAutomationRunNotDispatchable
 	}
-
 	dispatchResult, err := dispatch()
 	if err != nil {
-		return s.markDispatchFailed(ctx, runID, err)
+		return s.markDispatchFailed(lockedCtx, runID, err)
 	}
 	if dispatchResult.TaskID == "" || dispatchResult.SessionID == "" || dispatchResult.TurnID == "" {
-		return s.markDispatchFailed(ctx, runID, errors.New("automation dispatch returned no exact identity"))
+		return s.markDispatchFailed(lockedCtx, runID, errors.New("automation dispatch returned no exact identity"))
 	}
-	if err := s.store.BindRun(ctx, runID, dispatchResult.TaskID, dispatchResult.SessionID, dispatchResult.TurnID, action, reason); err != nil {
-		return s.markDispatchFailed(ctx, runID, err)
+	if err := s.store.BindRun(lockedCtx, runID, dispatchResult.TaskID, dispatchResult.SessionID, dispatchResult.TurnID, action, reason); err != nil {
+		return s.markDispatchFailed(lockedCtx, runID, err)
 	}
 	return nil
 }
 
 func (s *Service) markDispatchFailed(ctx context.Context, runID string, dispatchErr error) error {
+	run, lookupErr := s.store.GetRun(ctx, runID)
+	if lookupErr == nil && run != nil && run.RetryGroupID != "" {
+		if _, finalizeErr := s.FinalizeAutomationRetryFailure(
+			ctx, runID, run.RetryGroupGeneration, dispatchErr, "launch",
+		); finalizeErr != nil {
+			return fmt.Errorf("%w (finalize retry: %v)", dispatchErr, finalizeErr)
+		}
+		return dispatchErr
+	}
 	if err := s.store.MarkRunTerminal(ctx, runID, "", "", RunStatusFailed, dispatchErr.Error()); err != nil {
 		return fmt.Errorf("%w (mark run failed: %v)", dispatchErr, err)
 	}
@@ -1257,6 +1281,11 @@ func (s *Service) DeleteRun(ctx context.Context, runID string) error {
 	}
 	unlock := s.automationRunLock(run.AutomationID)
 	defer unlock()
+	if run.RetryGroupID != "" && !retryRunIsTerminal(run) {
+		if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
+			return err
+		}
+	}
 	if err := s.deleteRunTaskIfUnreferenced(ctx, run); err != nil {
 		return err
 	}
@@ -1322,6 +1351,9 @@ func (s *Service) DeleteAllRuns(ctx context.Context, automationID string) error 
 	}
 	unlock := s.automationRunLock(automationID)
 	defer unlock()
+	if err := s.CancelAutomationRetries(ctx, automationID); err != nil {
+		return err
+	}
 	taskIDs, err := s.store.ListRunTaskIDs(ctx, automationID)
 	if err != nil {
 		return fmt.Errorf("list run task ids: %w", err)
@@ -1375,6 +1407,9 @@ func (s *Service) DeleteAllRuns(ctx context.Context, automationID string) error 
 // indistinguishable from a fire that happened.
 type FireResult struct {
 	Skipped bool
+	// Duplicate identifies an idempotent delivery that already has a run.
+	Duplicate bool
+
 	// RunID identifies the admitted run when the trigger was accepted.
 	RunID string
 	// Reason is human-readable and set only when Skipped.
@@ -1406,8 +1441,47 @@ func RenderRunDisplayTitleAt(a *Automation, triggerType TriggerType, triggerData
 }
 
 // FireTrigger publishes an AutomationTriggered event for the given trigger.
-// The orchestrator handles task creation in response.
 func (s *Service) FireTrigger(ctx context.Context, automationID, triggerID string, triggerType TriggerType, triggerData json.RawMessage, dedupKey string) (FireResult, error) {
+	return s.FireTriggerWithInitialData(ctx, automationID, triggerID, triggerType, triggerData, nil, dedupKey)
+}
+
+func automationTriggeredEventForAdmission(
+	run *AutomationRun,
+	automationID, triggerID string,
+	triggerType TriggerType,
+	triggerData, initialTriggerData json.RawMessage,
+	dedupKey string,
+) *AutomationTriggeredEvent {
+	if run.RetryGroupID != "" {
+		return &AutomationTriggeredEvent{
+			RunID: run.ID, TriggerData: initialTriggerData,
+			RetryExternalID: RetryTaskExternalID(run.ID, run.RetryGroupGeneration),
+			SnapshotVersion: run.RetryLaunchConfigVersion,
+		}
+	}
+	eventTriggerData := triggerData
+	if initialTriggerData != nil {
+		eventTriggerData = initialTriggerData
+	}
+	return &AutomationTriggeredEvent{
+		AutomationID: automationID,
+		RunID:        run.ID,
+		TriggerID:    triggerID,
+		TriggerType:  triggerType,
+		TriggerData:  eventTriggerData,
+		DedupKey:     dedupKey,
+	}
+}
+
+// FireTriggerWithInitialData admits the persisted projection while carrying a
+// separate ephemeral payload for the first provider execution.
+func (s *Service) FireTriggerWithInitialData(
+	ctx context.Context,
+	automationID, triggerID string,
+	triggerType TriggerType,
+	triggerData, initialTriggerData json.RawMessage,
+	dedupKey string,
+) (FireResult, error) {
 	// Admission decisions live in one place so every caller — scheduler,
 	// webhook, and the manual Run button — gets the same answer about whether a
 	// fire actually happened.
@@ -1436,7 +1510,7 @@ func (s *Service) FireTrigger(ctx context.Context, automationID, triggerID strin
 		return FireResult{}, admissionErr
 	}
 	if duplicate {
-		return FireResult{Skipped: true, Reason: "this trigger has already fired"}, nil
+		return FireResult{Skipped: true, Duplicate: true, Reason: "this trigger has already fired"}, nil
 	}
 
 	// Record that the trigger was evaluated now that the cap check itself
@@ -1458,22 +1532,9 @@ func (s *Service) FireTrigger(ctx context.Context, automationID, triggerID strin
 		return FireResult{Skipped: true, Reason: capReason}, nil
 	}
 
-	var evt *AutomationTriggeredEvent
-	if admittedRun.RetryGroupID != "" {
-		evt = &AutomationTriggeredEvent{
-			RunID: admittedRun.ID, RetryExternalID: RetryTaskExternalID(admittedRun.ID, admittedRun.RetryGroupGeneration),
-			SnapshotVersion: admittedRun.RetryLaunchConfigVersion,
-		}
-	} else {
-		evt = &AutomationTriggeredEvent{
-			AutomationID: automationID,
-			RunID:        admittedRun.ID,
-			TriggerID:    triggerID,
-			TriggerType:  triggerType,
-			TriggerData:  triggerData,
-			DedupKey:     dedupKey,
-		}
-	}
+	evt := automationTriggeredEventForAdmission(
+		admittedRun, automationID, triggerID, triggerType, triggerData, initialTriggerData, dedupKey,
+	)
 
 	event := bus.NewEvent(events.AutomationTriggered, "automation_service", evt)
 	if err := s.eventBus.Publish(ctx, events.AutomationTriggered, event); err != nil {

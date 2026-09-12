@@ -280,6 +280,7 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
   const { runs, loading, refresh, deleteRun, deleteAllRuns, stopRun, deleting } = useAutomationRuns(
     automationId,
     workspaceId,
+    historyMode,
   );
   const router = useRouter();
 

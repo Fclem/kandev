@@ -46,4 +46,27 @@ describe("projectAutomationHistory", () => {
       latest,
     ]);
   });
+
+  it("projects nested retry history pages in timeline mode", () => {
+    const latest = run({
+      id: "attempt-2",
+      retry_group_id: "group-1",
+      attempt_number: 2,
+      created_at: "2026-01-01T00:01:00Z",
+    });
+    const page = {
+      scope: "automation:automation-1",
+      high_water_mark: "",
+      items: [
+        {
+          retry_group_id: "group-1",
+          trigger_ids: ["trigger-1"],
+          attempts: [run({ id: "attempt-1", retry_group_id: "group-1" }), latest],
+          completed: true,
+        },
+      ],
+    };
+
+    expect(projectAutomationHistory(page, "timeline")).toEqual([latest]);
+  });
 });

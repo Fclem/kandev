@@ -150,6 +150,20 @@ export type PendingRetrySummary = {
   limit: number;
 };
 
+export type RetryHistoryAttempt = {
+  retry_group_id: string;
+  trigger_ids: string[];
+  attempts: AutomationRun[];
+  completed: boolean;
+};
+
+export type RetryHistoryPage = {
+  scope: string;
+  items: RetryHistoryAttempt[];
+  next_cursor?: string;
+  high_water_mark: string;
+};
+
 export type AutomationSummary = {
   automation_id: string;
   open_runs: number;

@@ -320,6 +320,7 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
 	var retryRun *automation.AutomationRun
 	var retrySnapshot *automation.RetryLaunchConfigSnapshot
+	var retryInitialTriggerData bool
 	var a *automation.Automation
 	var retryOperation *automation.RetryOperation
 	//nolint:nestif // Claim promotion is a single identity-fenced boundary.
@@ -354,10 +355,13 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 				return
 			}
 			retrySnapshot = &snapshot
+			retryInitialTriggerData = len(evt.TriggerData) > 0
 			evt.AutomationID = snapshot.AutomationID
 			evt.TriggerID = snapshot.TriggerID
 			evt.TriggerType = snapshot.TriggerType
-			evt.TriggerData = snapshot.TriggerData
+			if !retryInitialTriggerData {
+				evt.TriggerData = snapshot.TriggerData
+			}
 			evt.DedupKey = snapshot.DedupKey
 			evt.RetryGroupGeneration = retryRun.RetryGroupGeneration
 			a = automationFromRetrySnapshot(snapshot)
@@ -390,10 +394,10 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		s.recordFailedRun(ctx, evt, "retry launch configuration unavailable")
 		return
 	}
-
-	// Retry attempts consume their immutable prompt and title snapshots.
+	// Initial retry delivery keeps its raw trigger payload for provider
+	// interpolation; replayed retries use only the immutable safe snapshot.
 	prompt := automation.InterpolatePrompt(a.Prompt, evt.TriggerType, evt.TriggerData)
-	if retrySnapshot != nil {
+	if retrySnapshot != nil && !retryInitialTriggerData {
 		prompt = retrySnapshot.ResolvedPrompt
 	}
 	if prompt == "" {
@@ -401,8 +405,12 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	}
 
 	title := s.resolveAutomationTaskTitle(a, evt)
-	if retrySnapshot != nil && retrySnapshot.ResolvedTitle != "" {
-		title = retrySnapshot.ResolvedTitle
+	if retrySnapshot != nil && !retryInitialTriggerData {
+		if retryRun.DisplayTitle != "" {
+			title = retryRun.DisplayTitle
+		} else if retrySnapshot.ResolvedTitle != "" {
+			title = retrySnapshot.ResolvedTitle
+		}
 	} else if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
 		if run, runErr := binding.GetRun(ctx, evt.RunID); runErr == nil && run != nil && run.DisplayTitle != "" {
 			title = run.DisplayTitle

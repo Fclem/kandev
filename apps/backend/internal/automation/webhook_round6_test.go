@@ -25,3 +25,19 @@ func TestSafeWebhookTriggerDataRejectsUnboundedPointers(t *testing.T) {
 	_, err := safeWebhookTriggerData([]byte(`{"value":1}`), []string{"/value", "bad"}, "trigger", "delivery")
 	require.Error(t, err)
 }
+
+func TestSafeRetryTriggerProjectionKeepsRoutingMetadata(t *testing.T) {
+	data := SafeRetryTriggerProjection(
+		TriggerTypeGitHubPRMerged, "trigger", []byte(`{
+			"repo":"acme/api","head_branch":"feature","base_branch":"main",
+			"task_id":"task-1","token":"secret"
+		}`), "delivery-1",
+	)
+	var projection map[string]any
+	require.NoError(t, json.Unmarshal(data, &projection))
+	require.Equal(t, "acme/api", projection["repo"])
+	require.Equal(t, "feature", projection["head_branch"])
+	require.Equal(t, "main", projection["base_branch"])
+	require.Equal(t, "task-1", projection["task_id"])
+	require.NotContains(t, projection, "token")
+}

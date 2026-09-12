@@ -12,6 +12,7 @@ import type {
   AutomationTrigger,
   TriggerTypeInfo,
   WorkspaceAutomationRun,
+  RetryHistoryPage,
 } from "@/lib/types/automation";
 
 // i18n-exempt: precondition diagnostic for a programmer error; callers branch
@@ -88,6 +89,19 @@ export async function listAutomationRuns(
 ): Promise<AutomationRun[]> {
   return requireClient().request<AutomationRun[]>("automation.runs.list", {
     automation_id: automationId,
+    ...(limit ? { limit } : {}),
+  });
+}
+
+export async function listAutomationRetryHistory(
+  automationId: string,
+  cursor?: string,
+  limit?: number,
+): Promise<RetryHistoryPage> {
+  return requireClient().request<RetryHistoryPage>("automation.runs.list", {
+    automation_id: automationId,
+    history: true,
+    ...(cursor ? { cursor } : {}),
     ...(limit ? { limit } : {}),
   });
 }

@@ -126,11 +126,17 @@ func sanitizedOrderedSessionPayload(eventType string, source map[string]any) map
 		if messageType, exists := source[eventTypePayloadKey]; exists {
 			payload["message_type"] = messageType
 		}
+		if metadata, ok := source["metadata"].(map[string]any); ok {
+			if sanitized := plugins.SanitizeConversationMessageMetadata(metadata); len(sanitized) > 0 {
+				payload["metadata"] = sanitized
+			}
+		}
 		if senderTaskID, ok := source["sender_task_id"].(string); ok && senderTaskID != "" {
 			payload["sender_task_id"] = senderTaskID
-		} else if metadata, ok := source["metadata"].(map[string]any); ok {
-			if senderTaskID, ok := metadata["sender_task_id"].(string); ok && senderTaskID != "" {
-				payload["sender_task_id"] = senderTaskID
+			if metadata, ok := payload["metadata"].(map[string]any); !ok {
+				payload["metadata"] = map[string]any{"sender_task_id": senderTaskID}
+			} else {
+				metadata["sender_task_id"] = senderTaskID
 			}
 		}
 	case orderedMessageDeletedEvent:

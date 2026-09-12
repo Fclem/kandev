@@ -1,3 +1,4 @@
+//nolint:revive // The journal projection and sanitization contract is intentionally co-located.
 package plugins
 
 import (
@@ -34,6 +35,27 @@ const (
 	conversationTurnRemoved   = "session.turn.removed"
 	conversationTurnStarted   = "session.turn.started"
 )
+
+//nolint:goconst // These keys are an explicit privacy allowlist.
+var conversationMessageMetadataKeys = map[string]struct{}{
+	"action_visibility": {}, "actions": {}, "agent_disconnected": {},
+	"attempt": {}, "attachments": {}, "auth_methods": {}, "auto_start": {},
+	"base_branch": {}, "context": {}, "context_files": {}, "decision_id": {},
+	"effective_model": {}, "entity_references": {}, "error_output": {},
+	"failure_code": {}, "failure_details": {}, "failure_kind": {},
+	"fallback_model": {}, "has_hidden_prompts": {}, "has_resume_token": {},
+	"has_review_comments": {}, "is_auth_error": {}, "kind": {}, "max_attempts": {},
+	"message": {}, "missing_branch": {}, "model_id": {}, "new_branch": {},
+	"original_branch": {}, "pending_id": {}, "plan_mode": {}, "progress": {},
+	"provider_name": {}, "question": {}, "question_id": {}, "question_index": {},
+	"question_total": {}, "recovery_actions": {}, "remediation": {},
+	"remediation_url": {}, "requested_model": {}, "requests_input": {},
+	"response": {}, "reset_at": {}, "retry_at": {}, "retry_in_seconds": {},
+	"retrying": {}, "sender_session_id": {}, "sender_session_name": {},
+	"sender_task_id": {}, "sender_task_title": {}, "stage": {}, "status": {},
+	"task_id": {}, "text": {}, "variant": {}, "workflow_message": {},
+	"workflow_step_color": {}, "workflow_step_id": {}, "workflow_step_name": {},
+}
 
 // SetConversationJournalDB configures the primary database that owns source
 // mutations and their immutable conversation journal rows.
@@ -137,7 +159,8 @@ func sanitizeConversationEventPayload(eventType string, raw json.RawMessage) jso
 	case events.MessageAdded, events.MessageUpdated:
 		copyConversationPayloadFields(payload, source,
 			conversationMessageIDKey, "turn_id", conversationAuthorTypeKey,
-			"created_at", "updated_at", "prompt_index", "requests_input")
+			"created_at", "updated_at", "prompt_index", "requests_input",
+			"message_type")
 		sanitizeConversationMessagePayload(payload, source)
 	case events.MessageDeleted:
 		copyConversationPayloadFields(payload, source, conversationMessageIDKey)
@@ -161,16 +184,61 @@ func copyConversationPayloadFields(target, source map[string]any, keys ...string
 	}
 }
 
+// SanitizeConversationMessageMetadata returns the presentation metadata that
+// the web client needs for a conversation message. Internal agent/tool
+// metadata is deliberately excluded from ordered session events.
+func SanitizeConversationMessageMetadata(source map[string]any) map[string]any {
+	if len(source) == 0 {
+		return nil
+	}
+	target := make(map[string]any)
+	for key := range conversationMessageMetadataKeys {
+		value, exists := source[key]
+		if !exists || value == nil {
+			continue
+		}
+		target[key] = sanitizeConversationMetadataValue(value)
+	}
+	return target
+}
+
+func sanitizeConversationMetadataValue(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return sysprompt.StripSystemContent(typed)
+	case map[string]any:
+		target := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			target[key] = sanitizeConversationMetadataValue(nested)
+		}
+		return target
+	case []any:
+		target := make([]any, len(typed))
+		for index, nested := range typed {
+			target[index] = sanitizeConversationMetadataValue(nested)
+		}
+		return target
+	default:
+		return value
+	}
+}
+
 func sanitizeConversationMessagePayload(target, source map[string]any) {
 	if content, ok := source[conversationContentKey].(string); ok {
 		target[conversationContentKey] = sysprompt.StripSystemContent(content)
 	}
+	metadata, _ := source["metadata"].(map[string]any)
+	sanitizedMetadata := SanitizeConversationMessageMetadata(metadata)
 	if senderTaskID, ok := source["sender_task_id"].(string); ok && senderTaskID != "" {
 		target["sender_task_id"] = senderTaskID
-		return
+		if sanitizedMetadata == nil {
+			sanitizedMetadata = map[string]any{}
+		}
+		sanitizedMetadata["sender_task_id"] = senderTaskID
 	}
-	if metadata, ok := source["metadata"].(map[string]any); ok {
-		if senderTaskID, ok := metadata["sender_task_id"].(string); ok && senderTaskID != "" {
+	if len(sanitizedMetadata) > 0 {
+		target["metadata"] = sanitizedMetadata
+		if senderTaskID, ok := sanitizedMetadata["sender_task_id"].(string); ok && senderTaskID != "" {
 			target["sender_task_id"] = senderTaskID
 		}
 	}
@@ -384,16 +452,18 @@ func (s *Service) purgeDeadSessionPartitions(ctx context.Context, tx *sqlx.Tx, e
 }
 
 type journalMessagePayload struct {
-	MessageID    string `json:"message_id"`
-	TurnID       string `json:"turn_id"`
-	TaskID       string `json:"task_id"`
-	AuthorType   string `json:"author_type"`
-	Content      string `json:"content"`
-	MessageType  string `json:"message_type"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
-	PromptIndex  int    `json:"prompt_index"`
-	SenderTaskID string `json:"sender_task_id"`
+	MessageID     string         `json:"message_id"`
+	TurnID        string         `json:"turn_id"`
+	TaskID        string         `json:"task_id"`
+	AuthorType    string         `json:"author_type"`
+	Content       string         `json:"content"`
+	MessageType   string         `json:"message_type"`
+	CreatedAt     string         `json:"created_at"`
+	UpdatedAt     string         `json:"updated_at"`
+	PromptIndex   int            `json:"prompt_index"`
+	RequestsInput any            `json:"requests_input"`
+	SenderTaskID  string         `json:"sender_task_id"`
+	Metadata      map[string]any `json:"metadata"`
 }
 
 //nolint:goconst // SQL projection values are protocol literals.
@@ -518,6 +588,17 @@ func (s *Service) liveConversationMessageAtCutoff(ctx context.Context, sessionID
 	return live > 0, nil
 }
 
+func conversationRequestsInput(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case float64:
+		return typed != 0
+	default:
+		return false
+	}
+}
+
 func decodeJournalMessage(raw []byte, sessionID string) (*taskmodels.Message, error) {
 	var payload journalMessagePayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -531,7 +612,10 @@ func decodeJournalMessage(raw []byte, sessionID string) (*taskmodels.Message, er
 	if err != nil {
 		return nil, fmt.Errorf("decode conversation message updated_at: %w", err)
 	}
-	metadata := map[string]any{}
+	metadata := payload.Metadata
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
 	if payload.SenderTaskID != "" {
 		metadata["sender_task_id"] = payload.SenderTaskID
 	}
@@ -539,7 +623,8 @@ func decodeJournalMessage(raw []byte, sessionID string) (*taskmodels.Message, er
 		ID: payload.MessageID, TaskSessionID: sessionID, TurnID: payload.TurnID, TaskID: payload.TaskID,
 		AuthorType: taskmodels.MessageAuthorType(payload.AuthorType),
 		Content:    payload.Content, Type: taskmodels.MessageType(payload.MessageType),
-		CreatedAt: createdAt, UpdatedAt: updatedAt, PromptIndex: payload.PromptIndex, Metadata: metadata,
+		RequestsInput: conversationRequestsInput(payload.RequestsInput),
+		CreatedAt:     createdAt, UpdatedAt: updatedAt, PromptIndex: payload.PromptIndex, Metadata: metadata,
 	}, nil
 }
 

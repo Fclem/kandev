@@ -229,6 +229,43 @@ func TestConversationJournalStripFailsClosedPastDepthLimit(t *testing.T) {
 		}
 	}
 }
+func TestConversationJournalPreservesPresentationMetadata(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	seedForMsgTest(t, repo, "task-presentation-metadata", "session-presentation-metadata", "turn-presentation-metadata")
+	message := &models.Message{
+		ID: "message-presentation-metadata", TaskSessionID: "session-presentation-metadata",
+		TaskID: "task-presentation-metadata", TurnID: "turn-presentation-metadata",
+		AuthorType: models.MessageAuthorAgent, Type: models.MessageTypeClarificationRequest,
+		Content: "Question", RequestsInput: true,
+		Metadata: map[string]any{
+			"pending_id":  "pending-1",
+			"question":    map[string]any{"id": "question-1", "prompt": "Choose"},
+			"raw_content": "must-not-be-copied",
+		},
+	}
+	if err := repo.CreateMessage(context.Background(), message); err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	var payload string
+	if err := repo.db.Get(&payload, `SELECT payload FROM conversation_session_events WHERE session_id = ? AND event_type = 'message.added'`, message.TaskSessionID); err != nil {
+		t.Fatalf("read event payload: %v", err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal([]byte(payload), &event); err != nil {
+		t.Fatalf("decode event payload: %v", err)
+	}
+	if event["message_type"] != string(models.MessageTypeClarificationRequest) || event["requests_input"] != float64(1) {
+		t.Fatalf("message presentation fields = %#v", event)
+	}
+	metadata, ok := event["metadata"].(map[string]any)
+	if !ok || metadata["pending_id"] != "pending-1" {
+		t.Fatalf("message metadata = %#v", event["metadata"])
+	}
+	if _, exists := metadata["raw_content"]; exists {
+		t.Fatalf("private message metadata leaked: %#v", metadata)
+	}
+}
 
 func TestConversationJournalStripKeepsRawTextWhenNoWellFormedBlock(t *testing.T) {
 	repo := newRepoForSessionTests(t)

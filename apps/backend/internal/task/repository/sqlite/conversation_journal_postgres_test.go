@@ -31,6 +31,9 @@ func TestPostgresConversationJournalRoundTrip(t *testing.T) {
 		ID: "message-pg-journal", TaskSessionID: "session-pg-journal", TaskID: "task-pg-journal",
 		TurnID: "turn-pg-journal", AuthorType: models.MessageAuthorUser,
 		Type: models.MessageTypeMessage, Content: content,
+		Metadata: map[string]interface{}{
+			"pending_id": "pending-pg", "status": "pending", "raw_content": "secret",
+		},
 	}
 	if err := repo.CreateMessage(ctx, message); err != nil {
 		t.Fatalf("create message: %v", err)
@@ -44,6 +47,13 @@ func TestPostgresConversationJournalRoundTrip(t *testing.T) {
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(eventPayload), &payload); err != nil {
 		t.Fatalf("decode event payload: %v", err)
+	}
+	metadata, ok := payload["metadata"].(map[string]interface{})
+	if !ok || metadata["pending_id"] != "pending-pg" || metadata["status"] != "pending" {
+		t.Fatalf("postgres journal metadata = %#v, want allowlisted presentation metadata", payload["metadata"])
+	}
+	if _, ok := metadata["raw_content"]; ok {
+		t.Fatalf("postgres journal retained internal raw_content metadata: %#v", metadata)
 	}
 	got, ok := payload["content"].(string)
 	if !ok || got != want || strings.Contains(got, "hidden") {

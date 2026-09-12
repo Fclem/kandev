@@ -9,12 +9,21 @@ import { isInputCapableSessionState } from "./task-pending-input";
 export type PendingClarificationScope = {
   /**
    * Undefined means turn history is not loaded, so pendingAction gates the fallback.
-   * Null means history is loaded but has no durable turns, so all messages are hidden.
+   * Null means history is loaded but has no durable turns, so all messages are hidden
+   * except a pending request explicitly detached after agent disconnection.
    * A string scopes detection to that exact turn. An empty object disables detection.
    */
   currentTurnId?: string | null;
   pendingAction?: TaskPendingAction | null;
 };
+
+function hasDetachedPendingClarification(messages: readonly Message[]): boolean {
+  return messages.some((message) => {
+    if (!isPendingClarificationMessage(message)) return false;
+    const metadata = message.metadata as ClarificationRequestMetadata | undefined;
+    return metadata?.agent_disconnected === true;
+  });
+}
 
 export function isPendingClarificationMessage(message: Message): boolean {
   if (message.type !== "clarification_request") return false;
@@ -99,8 +108,16 @@ function clarificationMessagesInScope(
   scope?: PendingClarificationScope,
 ): readonly Message[] {
   if (!scope) return messages;
-  if (scope.pendingAction !== undefined && scope.pendingAction !== "clarification") return [];
-  if (scope.currentTurnId === null) return [];
+  const allowDetached = scope.pendingAction === null && hasDetachedPendingClarification(messages);
+  if (
+    scope.pendingAction !== undefined &&
+    scope.pendingAction !== "clarification" &&
+    !allowDetached
+  ) {
+    return [];
+  }
+  if (scope.currentTurnId === null && !allowDetached) return [];
+  if (allowDetached) return messages;
   if (scope.currentTurnId === undefined) {
     return scope.pendingAction === "clarification" ? messages : [];
   }

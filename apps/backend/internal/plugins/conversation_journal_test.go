@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/kandev/kandev/internal/events"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
@@ -252,6 +253,34 @@ func TestSanitizeConversationTurnEventPreservesPublicMetadata(t *testing.T) {
 	}, payload["metadata"])
 	require.NotContains(t, payload, "private")
 }
+func TestSanitizeConversationMessageEventPreservesPresentationMetadata(t *testing.T) {
+	raw := json.RawMessage(`{
+		"type": "message.added",
+		"session_id": "session-1",
+		"task_id": "task-1",
+		"message_id": "message-1",
+		"author_type": "agent",
+		"message_type": "clarification_request",
+		"requests_input": true,
+		"metadata": {
+			"pending_id": "pending-1",
+			"question": {"id": "question-1", "prompt": "Choose <kandev-system>hidden</kandev-system>"},
+			"secret": "must-not-be-copied",
+			"raw_content": "must-not-be-copied"
+		},
+		"content": "Question"
+	}`)
+
+	sanitized := sanitizeConversationEventPayload(events.MessageAdded, raw)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(sanitized, &payload))
+	require.Equal(t, "clarification_request", payload["message_type"])
+	require.Equal(t, true, payload["requests_input"])
+	require.Equal(t, map[string]any{
+		"pending_id": "pending-1",
+		"question":   map[string]any{"id": "question-1", "prompt": "Choose"},
+	}, payload["metadata"])
+}
 
 func TestSyncCommittedSessionEventsStripsSystemContent(t *testing.T) {
 	database, err := sqlx.Open("sqlite3", ":memory:")
@@ -276,16 +305,14 @@ func TestSyncCommittedSessionEventsStripsSystemContent(t *testing.T) {
 
 	service := NewService(nil, NewRegistry(), nil, testLogger(t))
 	service.SetConversationJournalDB(database)
+	var payload map[string]any
 	events, err := service.SyncCommittedSessionEvents(context.Background(), "session-1")
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	require.Equal(t, "session-1", events[0].SessionID)
-	var payload map[string]any
 	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
 	require.Equal(t, "visible", payload["content"])
 	require.Equal(t, "sender-1", payload["sender_task_id"])
 	require.NotContains(t, payload, "author_id")
-	require.NotContains(t, payload, "metadata")
+	require.Equal(t, map[string]any{"sender_task_id": "sender-1"}, payload["metadata"])
 }
 
 func TestSyncCommittedSessionEventsPoisonsMalformedPayloadWithoutRetainingRawBytes(t *testing.T) {

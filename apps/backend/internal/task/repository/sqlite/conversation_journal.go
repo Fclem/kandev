@@ -1,3 +1,4 @@
+//nolint:revive // This file keeps the dialect-specific journal trigger lifecycle atomic.
 package sqlite
 
 import (
@@ -68,7 +69,7 @@ CREATE TABLE IF NOT EXISTS conversation_journal_meta (
 // Boot runs the trigger (re)creation plus its one-time sanitize migration only
 // while the stored version is below this constant, then records it, so the
 // per-boot full-corpus payload rewrite never repeats.
-const journalSchemaVersion = 2
+const journalSchemaVersion = 3
 
 // journalBackfillKey records that the one-time backfill of pre-trigger source
 // rows completed, so boot does not re-scan the whole message/turn corpus.
@@ -501,6 +502,42 @@ func sqliteStripSystemContentExpr(expr string) string {
 // sqliteStripSystemToken marks where a trigger or migration must insert the
 // strip expression; the raw SQL literal keeps strftime %-formats untouched.
 const sqliteStripSystemToken = "__SQLITE_STRIP_SYSTEM__"
+const sqliteConversationMetadataToken = "__SQLITE_CONVERSATION_METADATA__"
+const postgresConversationMetadataToken = "__POSTGRES_CONVERSATION_METADATA__"
+
+//nolint:goconst // These keys are an explicit privacy allowlist.
+var conversationMessageMetadataKeys = []string{
+	"action_visibility", "actions", "agent_disconnected", "attempt", "attachments",
+	"auth_methods", "auto_start", "base_branch", "context", "context_files",
+	"decision_id", "effective_model", "entity_references", "error_output",
+	"failure_code", "failure_details", "failure_kind", "fallback_model",
+	"has_hidden_prompts", "has_resume_token", "has_review_comments", "is_auth_error",
+	"kind", "max_attempts", "message", "missing_branch", "model_id", "new_branch",
+	"original_branch", "pending_id", "plan_mode", "progress", "provider_name",
+	"question", "question_id", "question_index", "question_total", "recovery_actions",
+	"remediation", "remediation_url", "requested_model", "response", "reset_at",
+	"retry_at", "retry_in_seconds", "retrying", "sender_session_id",
+	"sender_session_name", "sender_task_id", "sender_task_title", "stage", "status",
+	"task_id", "text", "variant", "workflow_message", "workflow_step_color",
+	"workflow_step_id", "workflow_step_name",
+}
+
+func sqliteConversationMetadataExpr(metadataExpr string) string {
+	arguments := make([]string, 0, len(conversationMessageMetadataKeys)*2)
+	for _, key := range conversationMessageMetadataKeys {
+		arguments = append(arguments, "'"+key+"'", "json_extract("+metadataExpr+", '$."+key+"')")
+	}
+	return "CASE WHEN json_valid(" + metadataExpr + ") THEN json_object(" + strings.Join(arguments, ",") + ") ELSE json_object() END"
+}
+
+func postgresConversationMetadataExpr(metadataExpr string) string {
+	source := "conversation_safe_jsonb(" + metadataExpr + ")"
+	arguments := make([]string, 0, len(conversationMessageMetadataKeys)*2)
+	for _, key := range conversationMessageMetadataKeys {
+		arguments = append(arguments, "'"+key+"'", source+" -> '"+key+"'")
+	}
+	return "jsonb_strip_nulls(jsonb_build_object(" + strings.Join(arguments, ",") + "))"
+}
 
 func journalTaskID(taskID string) any {
 	if taskID == "" {
@@ -508,7 +545,6 @@ func journalTaskID(taskID string) any {
 	}
 	return taskID
 }
-
 func journalTime(value *time.Time) any {
 	if value == nil {
 		return nil
@@ -532,7 +568,8 @@ BEGIN
 			'message_id',NEW.id,'turn_id',NULLIF(NEW.turn_id,''),'author_type',NEW.author_type,
 			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'requests_input',NEW.requests_input,
 			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
-			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
+		'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
+			'metadata',__SQLITE_CONVERSATION_METADATA__(NEW.metadata),
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
@@ -558,6 +595,7 @@ BEGIN
 			'content',__SQLITE_STRIP_SYSTEM__,'message_type',NEW.type,'requests_input',NEW.requests_input,
 			'created_at',__SQLITE_RFC3339_MILLIS__(NEW.created_at),
 			'updated_at',__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at)),'prompt_index',NEW.prompt_seq,
+			'metadata',__SQLITE_CONVERSATION_METADATA__(NEW.metadata),
 			'sender_task_id',CASE WHEN json_valid(NEW.metadata) AND typeof(json_extract(NEW.metadata,'$.sender_task_id')) = 'text' THEN json_extract(NEW.metadata,'$.sender_task_id') END)
 	FROM conversation_session_streams WHERE session_id = NEW.task_session_id;
 	INSERT INTO conversation_session_events(session_id, sequence, event_id, event_type, task_id, payload, created_at)
@@ -681,6 +719,8 @@ BEGIN
 	FROM conversation_session_streams WHERE session_id = OLD.id;
 END;
 `, sqliteStripSystemToken, sqliteStripSystemContentExpr("NEW.content"))
+	triggerSQL = strings.ReplaceAll(triggerSQL,
+		sqliteConversationMetadataToken+"(NEW.metadata)", sqliteConversationMetadataExpr("NEW.metadata"))
 	triggerSQL = strings.NewReplacer(
 		"__SQLITE_RFC3339_MILLIS__(NEW.created_at)", dialect.RFC3339Millis(dialect.SQLite3, "NEW.created_at"),
 		"__SQLITE_RFC3339_MILLIS__(COALESCE(NEW.updated_at,NEW.created_at))", dialect.RFC3339Millis(dialect.SQLite3, "COALESCE(NEW.updated_at,NEW.created_at)"),
@@ -716,7 +756,7 @@ END;
 
 //nolint:funlen // Trigger definitions are kept together so schema initialization is atomic.
 func (r *Repository) initPostgresConversationJournalTriggers() error {
-	_, err := r.db.Exec(r.db.Rebind(`
+	triggerSQL := strings.ReplaceAll(`
 CREATE OR REPLACE FUNCTION conversation_next_sequence(p_session_id TEXT, p_terminal BOOLEAN DEFAULT FALSE)
 RETURNS BIGINT AS $$
 DECLARE next_value BIGINT;
@@ -744,8 +784,6 @@ CREATE OR REPLACE FUNCTION conversation_visible_content(value TEXT) RETURNS TEXT
 DECLARE
 	result TEXT := value;
 	open_pos INTEGER;
-	close_offset INTEGER;
-	close_pos INTEGER;
 BEGIN
 	LOOP
 		open_pos := strpos(result, '<kandev-system>');
@@ -783,6 +821,7 @@ BEGIN
 			'requests_input',source_row.requests_input,
 			'created_at',to_char(source_row.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
 			'updated_at',to_char(COALESCE(source_row.updated_at,source_row.created_at),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'prompt_index',source_row.prompt_seq,
+			'metadata',__POSTGRES_CONVERSATION_METADATA__(source_row.metadata),
 			'sender_task_id',CASE WHEN jsonb_typeof(conversation_safe_jsonb(source_row.metadata) -> 'sender_task_id') = 'string' THEN conversation_safe_jsonb(source_row.metadata) ->> 'sender_task_id' END)::text END);
 	INSERT INTO conversation_session_events(session_id,sequence,event_id,event_type,task_id,payload,created_at)
 	SELECT source_row.task_session_id,seq,source_row.task_session_id || ':' || seq,event_name,NULLIF(source_row.task_id,''),payload,CURRENT_TIMESTAMP
@@ -848,7 +887,8 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS conversation_session_delete_trigger ON task_sessions;
 CREATE TRIGGER conversation_session_delete_trigger AFTER DELETE ON task_sessions
 FOR EACH ROW EXECUTE FUNCTION conversation_session_delete_journal();
-	`))
+	`, postgresConversationMetadataToken+"(source_row.metadata)", postgresConversationMetadataExpr("source_row.metadata"))
+	_, err := r.db.Exec(r.db.Rebind(triggerSQL))
 	if err != nil {
 		return fmt.Errorf("create PostgreSQL conversation journal triggers: %w", err)
 	}

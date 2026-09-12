@@ -12,6 +12,10 @@ import (
 // InterpolatePrompt replaces {{placeholder}} tokens in the prompt template
 // with values from the trigger data. Supports nested access via dot notation.
 func InterpolatePrompt(prompt string, triggerType TriggerType, triggerData json.RawMessage) string {
+	return InterpolatePromptAt(prompt, triggerType, triggerData, time.Now().UTC())
+}
+
+func InterpolatePromptAt(prompt string, triggerType TriggerType, triggerData json.RawMessage, resolvedAt time.Time) string {
 	if prompt == "" || !strings.Contains(prompt, "{{") {
 		return prompt
 	}
@@ -25,7 +29,7 @@ func InterpolatePrompt(prompt string, triggerType TriggerType, triggerData json.
 	// Build replacer pairs from common placeholders.
 	pairs := []string{
 		"{{trigger.type}}", string(triggerType),
-		"{{trigger.timestamp}}", time.Now().UTC().Format(time.RFC3339),
+		"{{trigger.timestamp}}", resolvedAt.UTC().Format(time.RFC3339),
 	}
 
 	// Add trigger-type-specific placeholders.

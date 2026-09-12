@@ -90,6 +90,24 @@ The editor has two exclusive layouts:
 
 In the current backend, the schedule and GitHub PR condition are independent triggers. A non-empty schedule creates generic scheduled runs, while the PR trigger separately polls GitHub. Adding a PR condition does not constrain the scheduled run. Clear the schedule expression if the automation should run only for matching PRs.
 
+### Webhook delivery contract
+
+Send `POST /api/v1/automations/webhook/<automation-id>` with the
+`X-Webhook-Secret` and `X-Kandev-Delivery-ID` headers. Delivery IDs are required
+and deduplicate a delivery per automation, so a provider can safely retry the
+same request. The endpoint accepts bodies up to 1 MiB and never stores the raw
+body or request headers in automation history.
+
+Webhook trigger configuration may list up to 32 bounded RFC 6901 JSON pointers
+in `safe_json_pointers`. Only those selected values are retained in retry
+history. Invalid pointers, pointers deeper than eight segments, and projected
+values over the configured bounds are rejected.
+
+Automation retry history groups all attempts under the original trigger
+identity. The history view returns a bounded page, an opaque continuation
+cursor, and a high-water mark so clients can continue paging without losing
+newly-created retry groups.
+
 ### Schedule
 
 The scheduler checks every 30 seconds and computes each expression's next calendar fire time in its configured timezone. A schedule created part-way through the day first fires at its next scheduled occurrence after creation (not immediately). A schedule missed while the backend was stopped fires once on the next check rather than once per missed occurrence.

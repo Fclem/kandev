@@ -3,11 +3,13 @@ package automation
 import (
 	"crypto/subtle"
 	"encoding/json"
-	"io"
-	"net/http"
-
+	"errors"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/kandev/kandev/internal/common/logger"
 )
@@ -21,6 +23,90 @@ type WebhookHandler struct {
 }
 
 // NewWebhookHandler creates a new webhook handler.
+
+const maxWebhookBodyBytes = 1 << 20
+
+func safeWebhookTriggerData(body []byte, pointers []string, triggerID, deliveryID string) (json.RawMessage, error) {
+	projection := map[string]any{
+		retryTriggerTypeKey: TriggerTypeWebhook,
+		retryTriggerIDKey:   triggerID,
+		"delivery_id":       deliveryID,
+	}
+	if len(pointers) > 32 {
+		return nil, errors.New("too many webhook JSON pointers")
+	}
+	for _, pointer := range pointers {
+		if len(pointer) == 0 || len(pointer) > 256 || !strings.HasPrefix(pointer, "/") {
+			return nil, errors.New("invalid webhook JSON pointer")
+		}
+		if len(strings.Split(pointer[1:], "/")) > 8 {
+			return nil, errors.New("webhook JSON pointer is too deep")
+		}
+	}
+	selected, err := projectWebhookPayload(body, pointers)
+	if err != nil {
+		return nil, err
+	}
+	if selected != nil {
+		projection["payload"] = selected
+	}
+	encoded, err := json.Marshal(projection)
+	return encoded, err
+}
+
+func projectWebhookPayload(body []byte, pointers []string) (map[string]json.RawMessage, error) {
+	if len(body) == 0 {
+		return nil, nil
+	}
+	if !json.Valid(body) {
+		return nil, errors.New("invalid webhook JSON")
+	}
+	var document any
+	if err := json.Unmarshal(body, &document); err != nil {
+		return nil, errors.New("invalid webhook JSON")
+	}
+	selected := make(map[string]json.RawMessage, len(pointers))
+	total := 0
+	for _, pointer := range pointers {
+		value, ok := webhookJSONPointer(document, strings.Split(pointer[1:], "/"))
+		if !ok {
+			continue
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil || len(encoded) > 8192 {
+			return nil, errors.New("webhook JSON pointer value is too large")
+		}
+		total += len(encoded)
+		if total > 64<<10 {
+			return nil, errors.New("webhook JSON projection is too large")
+		}
+		selected[pointer] = encoded
+	}
+	return selected, nil
+}
+
+func webhookJSONPointer(value any, parts []string) (any, bool) {
+	for _, part := range parts {
+		part = strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
+		switch current := value.(type) {
+		case map[string]any:
+			var ok bool
+			value, ok = current[part]
+			if !ok {
+				return nil, false
+			}
+		case []any:
+			index, err := strconv.Atoi(part)
+			if err != nil || index < 0 || index >= len(current) {
+				return nil, false
+			}
+			value = current[index]
+		default:
+			return nil, false
+		}
+	}
+	return value, true
+}
 func NewWebhookHandler(svc *Service, log *logger.Logger) *WebhookHandler {
 	return &WebhookHandler{svc: svc, logger: log}
 }
@@ -53,34 +139,48 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	// Find the first enabled webhook trigger for this automation. Bail out if
-	// none — firing with an empty trigger ID papers over a misconfiguration.
-	triggerID := ""
-	for _, t := range a.Triggers {
-		if t.Type == TriggerTypeWebhook && t.Enabled {
-			triggerID = t.ID
-			break
+	// A webhook endpoint has one unambiguous trigger identity.
+	var webhookTrigger *AutomationTrigger
+	for i := range a.Triggers {
+		trigger := &a.Triggers[i]
+		if trigger.Type == TriggerTypeWebhook && trigger.Enabled {
+			if webhookTrigger != nil {
+				c.JSON(http.StatusConflict, gin.H{responseErrorKey: "multiple enabled webhook triggers"})
+				return
+			}
+			webhookTrigger = trigger
 		}
 	}
-	if triggerID == "" {
+	if webhookTrigger == nil {
 		c.JSON(http.StatusConflict, gin.H{responseErrorKey: "no enabled webhook trigger"})
 		return
 	}
-
-	// Read body as trigger data.
-	body, readErr := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20)) // 1MB limit
+	deliveryID := strings.TrimSpace(c.GetHeader("X-Kandev-Delivery-ID"))
+	if deliveryID == "" || len(deliveryID) > 256 {
+		c.JSON(http.StatusBadRequest, gin.H{responseErrorKey: "delivery id required"})
+		return
+	}
+	var config WebhookTriggerConfig
+	if len(webhookTrigger.Config) != 0 && json.Unmarshal(webhookTrigger.Config, &config) != nil {
+		c.JSON(http.StatusConflict, gin.H{responseErrorKey: "invalid webhook trigger configuration"})
+		return
+	}
+	body, readErr := io.ReadAll(io.LimitReader(c.Request.Body, maxWebhookBodyBytes+1))
 	if readErr != nil {
 		c.JSON(http.StatusBadRequest, gin.H{responseErrorKey: "failed to read body"})
 		return
 	}
-
-	// Ensure valid JSON; wrap raw text if needed.
-	triggerData := json.RawMessage(body)
-	if len(body) == 0 || !json.Valid(body) {
-		triggerData, _ = json.Marshal(map[string]string{"body": string(body)})
+	if len(body) > maxWebhookBodyBytes {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{responseErrorKey: "webhook body is too large"})
+		return
 	}
-
-	if _, fireErr := h.svc.FireTrigger(c.Request.Context(), automationID, triggerID, TriggerTypeWebhook, triggerData, ""); fireErr != nil {
+	triggerData, projectionErr := safeWebhookTriggerData(body, config.SafeJSONPointers, webhookTrigger.ID, deliveryID)
+	if projectionErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{responseErrorKey: projectionErr.Error()})
+		return
+	}
+	dedupKey := "webhook:" + automationID + ":" + deliveryID
+	if _, fireErr := h.svc.FireTrigger(c.Request.Context(), automationID, webhookTrigger.ID, TriggerTypeWebhook, triggerData, dedupKey); fireErr != nil {
 		h.logger.Error("failed to fire webhook trigger",
 			zap.String("automation_id", automationID),
 			zap.Error(fireErr))

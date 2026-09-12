@@ -24,8 +24,11 @@ type Components struct {
 // Start begins background processing (scheduler + durable retry scheduler +
 // GitHub polling + webhook subscriber + merged-PR subscriber).
 func (c *Components) Start(ctx context.Context) {
-	if err := c.Service.Store().RecoverRetryClaims(ctx, time.Now().UTC()); err != nil {
-		c.Service.logger.Warn("automation retry claim recovery failed", zap.Error(err))
+	if err := c.Service.Store().RecoverRetryLedger(ctx, time.Now().UTC()); err != nil {
+		c.Service.logger.Warn("automation retry ledger recovery failed", zap.Error(err))
+	}
+	if err := c.Service.ReplayPendingRetryEvents(ctx); err != nil {
+		c.Service.logger.Warn("automation retry outbox recovery failed", zap.Error(err))
 	}
 	if err := c.Service.ReconcileOpenRuns(ctx); err != nil {
 		c.Service.logger.Warn("automation open-run reconciliation failed", zap.Error(err))
@@ -37,9 +40,6 @@ func (c *Components) Start(ctx context.Context) {
 	c.Evaluator.Start(ctx)
 	c.WebhookSubscriber.Start(ctx)
 	c.PRMergedSubscriber.Start(ctx)
-	if err := c.Service.ReplayPendingRetryEvents(ctx); err != nil {
-		c.Service.logger.Warn("automation retry outbox recovery failed", zap.Error(err))
-	}
 	c.RetryScheduler.Start(ctx)
 }
 

@@ -43,6 +43,9 @@ type automationRunBinding interface {
 	MarkRunTerminal(ctx context.Context, runID, sessionID, turnID string, status automation.RunStatus, errMsg string) error
 	MarkRunTerminalByBinding(ctx context.Context, taskID, sessionID, turnID string, status automation.RunStatus, errMsg string) error
 }
+type automationOpenRunLookup interface {
+	ListOpenRunsByTaskID(ctx context.Context, taskID string) ([]*automation.AutomationRun, error)
+}
 
 type automationRunDispatcher interface {
 	DispatchRun(
@@ -58,6 +61,12 @@ type automationRetryFailure interface {
 }
 type automationRetryBinding interface {
 	PromoteClaimedRetry(ctx context.Context, runID, token string, generation int64) error
+}
+type automationRetryRelease interface {
+	ReleaseRetryClaim(ctx context.Context, runID, token string, generation int64) error
+}
+type automationRetryCapacity interface {
+	RetryClaimCapacityAvailable(ctx context.Context, runID string) (bool, error)
 }
 type automationRetrySuccess interface {
 	MarkAutomationRetrySucceeded(ctx context.Context, runID string, generation int64) error
@@ -310,21 +319,48 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 //nolint:gocognit,cyclop,funlen // Retry admission, provider effects, and binding share one critical section.
 func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
 	var retryRun *automation.AutomationRun
+	var retrySnapshot *automation.RetryLaunchConfigSnapshot
+	var a *automation.Automation
+	var retryOperation *automation.RetryOperation
 	//nolint:nestif // Claim promotion is a single identity-fenced boundary.
 	if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
-		retryRun, _ = binding.GetRun(ctx, evt.RunID)
-		if evt.RetryClaimToken != "" {
-			retryBinding, retryOK := s.automationService.(automationRetryBinding)
-			if !retryOK || retryRun == nil {
-				s.recordFailedRun(ctx, evt, "retry claim unavailable")
+		candidate, _ := binding.GetRun(ctx, evt.RunID)
+		if candidate != nil && candidate.RetryGroupID != "" {
+			retryRun = candidate
+			if evt.RetryClaimToken != "" {
+				retryBinding, retryOK := s.automationService.(automationRetryBinding)
+				if !retryOK {
+					s.recordFailedRun(ctx, evt, "retry claim unavailable")
+					return
+				}
+				if capacity, capacityOK := s.automationService.(automationRetryCapacity); capacityOK {
+					available, capacityErr := capacity.RetryClaimCapacityAvailable(ctx, evt.RunID)
+					if capacityErr != nil || !available {
+						if release, releaseOK := s.automationService.(automationRetryRelease); releaseOK {
+							_ = release.ReleaseRetryClaim(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration)
+						}
+						return
+					}
+				}
+				if err := retryBinding.PromoteClaimedRetry(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration); err != nil {
+					return
+				}
+			}
+			snapshot, snapshotErr := automation.DecodeRetryLaunchConfigSnapshot(
+				retryRun.RetryLaunchConfigSnapshot, retryRun.RetryLaunchConfigVersion,
+			)
+			if snapshotErr != nil {
+				s.recordFailedRun(ctx, evt, snapshotErr.Error())
 				return
 			}
-			if err := retryBinding.PromoteClaimedRetry(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration); err != nil {
-				return
-			}
-		}
-		if retryRun != nil && evt.AutomationID == "" {
-			evt.AutomationID, evt.TriggerID, evt.TriggerType = retryRun.AutomationID, retryRun.TriggerID, retryRun.TriggerType
+			retrySnapshot = &snapshot
+			evt.AutomationID = snapshot.AutomationID
+			evt.TriggerID = snapshot.TriggerID
+			evt.TriggerType = snapshot.TriggerType
+			evt.TriggerData = snapshot.TriggerData
+			evt.DedupKey = snapshot.DedupKey
+			evt.RetryGroupGeneration = retryRun.RetryGroupGeneration
+			a = automationFromRetrySnapshot(snapshot)
 		}
 	}
 	retryOperation, operationErr := s.beginRetryTaskOperation(ctx, evt, retryRun)
@@ -335,32 +371,38 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		}
 		return
 	}
-	a, err := s.automationService.GetAutomation(ctx, evt.AutomationID)
-	if err != nil || a == nil {
-		s.logger.Error("failed to load automation for trigger",
-			zap.String("automation_id", evt.AutomationID), zap.Error(err))
-		s.recordFailedRun(ctx, evt, "automation not found")
-		return
-	}
-	if !a.Enabled && retryRun == nil {
-		s.logger.Debug("automation disabled, skipping",
-			zap.String("automation_id", evt.AutomationID))
-		s.recordFailedRun(ctx, evt, "automation is disabled")
+	if retryRun == nil {
+		var loadErr error
+		a, loadErr = s.automationService.GetAutomation(ctx, evt.AutomationID)
+		if loadErr != nil || a == nil {
+			s.logger.Error("failed to load automation for trigger",
+				zap.String("automation_id", evt.AutomationID), zap.Error(loadErr))
+			s.recordFailedRun(ctx, evt, "automation not found")
+			return
+		}
+		if !a.Enabled {
+			s.logger.Debug("automation disabled, skipping",
+				zap.String("automation_id", evt.AutomationID))
+			s.recordFailedRun(ctx, evt, "automation is disabled")
+			return
+		}
+	} else if a == nil {
+		s.recordFailedRun(ctx, evt, "retry launch configuration unavailable")
 		return
 	}
 
 	// Retry attempts consume their immutable prompt and title snapshots.
 	prompt := automation.InterpolatePrompt(a.Prompt, evt.TriggerType, evt.TriggerData)
-	if retryRun != nil && retryRun.RetryResolvedPrompt != "" {
-		prompt = retryRun.RetryResolvedPrompt
+	if retrySnapshot != nil {
+		prompt = retrySnapshot.ResolvedPrompt
 	}
 	if prompt == "" {
 		prompt = fmt.Sprintf("Automation '%s' triggered by %s", a.Name, evt.TriggerType)
 	}
 
 	title := s.resolveAutomationTaskTitle(a, evt)
-	if retryRun != nil && retryRun.DisplayTitle != "" {
-		title = retryRun.DisplayTitle
+	if retrySnapshot != nil && retrySnapshot.ResolvedTitle != "" {
+		title = retrySnapshot.ResolvedTitle
 	} else if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
 		if run, runErr := binding.GetRun(ctx, evt.RunID); runErr == nil && run != nil && run.DisplayTitle != "" {
 			title = run.DisplayTitle
@@ -447,6 +489,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	if continuationSession != nil {
 		if s.dispatchAutomationContinuation(ctx, a, task, continuationSession, prompt, metadata, evt.RunID, action, reason, retryOperation) && retryRun != nil {
 			s.acknowledgeRetryEventAfterBinding(ctx, evt)
+
 		}
 		return
 	}
@@ -457,6 +500,32 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	// trigger is the start signal for both hidden runs and visible normal tasks.
 	if s.autoStartAutomationTaskForRun(ctx, a, task, task.WorkflowStepID, evt.RunID, action, reason) && retryRun != nil {
 		s.acknowledgeRetryEventAfterBinding(ctx, evt)
+	}
+}
+func automationFromRetrySnapshot(snapshot automation.RetryLaunchConfigSnapshot) *automation.Automation {
+	repositoryIDs := make([]string, 0, len(snapshot.Repositories))
+	for _, repository := range snapshot.Repositories {
+		repositoryIDs = append(repositoryIDs, repository.RepositoryID)
+	}
+	return &automation.Automation{
+		ID:                 snapshot.AutomationID,
+		WorkspaceID:        snapshot.WorkspaceID,
+		Name:               snapshot.Name,
+		WorkflowID:         snapshot.WorkflowID,
+		WorkflowStepID:     snapshot.WorkflowStepID,
+		AgentProfileID:     snapshot.AgentProfileID,
+		ExecutorProfileID:  snapshot.ExecutorProfileID,
+		Prompt:             snapshot.Prompt,
+		TaskTitleTemplate:  snapshot.TaskTitleTemplate,
+		TaskMode:           snapshot.TaskMode,
+		RepositoryMode:     snapshot.RepositoryMode,
+		Repositories:       append([]automation.AutomationRepository(nil), snapshot.Repositories...),
+		RepositoryIDs:      repositoryIDs,
+		ContinuationPolicy: snapshot.ContinuationPolicy,
+		MaxConcurrentRuns:  snapshot.MaxConcurrentRuns,
+		ContinuationTaskID: snapshot.ContinuationTaskID,
+		RetryPolicy:        snapshot.RetryPolicy,
+		Enabled:            true,
 	}
 }
 
@@ -897,7 +966,7 @@ func (s *Service) bindAutomationRun(
 	s.logger.Error("failed to bind automation run",
 		zap.String("operation", operation), zap.String("run_id", runID),
 		zap.String("task_id", taskID), zap.String("turn_id", turnID), zap.Error(bindErr))
-	if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, bindErr.Error()) {
+	if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, bindErr.Error()) && runID == "" {
 		s.markAutomationRunTerminal(ctx, taskID, false, bindErr.Error())
 	}
 	return false
@@ -946,7 +1015,7 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 	if err != nil {
 		s.logger.Error("failed to dispatch automation continuation",
 			zap.String("automation_id", a.ID), zap.String("task_id", task.ID), zap.String("session_id", session.ID), zap.Error(err))
-		if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) {
+		if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) && runID == "" {
 			s.markAutomationRunTerminal(ctx, task.ID, false, err.Error())
 		}
 		return false
@@ -1043,7 +1112,7 @@ func (s *Service) autoStartAutomationTaskForRun(ctx context.Context, a *automati
 	if err != nil {
 		s.logger.Error("failed to auto-start automation task",
 			zap.String("task_id", task.ID), zap.Error(err))
-		if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) {
+		if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) && runID == "" {
 			s.markAutomationRunTerminal(ctx, task.ID, false, err.Error())
 		}
 		return false
@@ -1477,41 +1546,94 @@ func (s *Service) finalizeAutomationRun(ctx context.Context, taskID string, succ
 			return
 		}
 		s.markAutomationRunTerminalForTurn(ctx, taskID, session.ID, turn.ID, success, errMsg)
+		s.pruneAutomationRunWorktrees(ctx, taskID)
 		return
 	}
 
 	s.markAutomationRunTerminal(ctx, taskID, success, errMsg)
-}
-
-func (s *Service) markAutomationRunTerminal(ctx context.Context, taskID string, success bool, errMsg string) {
-	if s.automationService != nil {
-		var markErr error
-		if success {
-			markErr = s.automationService.MarkRunSucceededByTaskID(ctx, taskID)
-		} else {
-			markErr = s.automationService.MarkRunFailedByTaskID(ctx, taskID, errMsg)
-		}
-		if markErr != nil {
-			s.logger.Warn("failed to update automation run terminal status",
-				zap.String("task_id", taskID),
-				zap.Bool("success", success),
-				zap.Error(markErr))
-		}
-	}
-	// Every terminal transition is also the moment one more run enters the
-	// retention window and pushes the oldest one out, so this is the only hook
-	// that keeps up with the firing rate on its own — no sweeper, no schedule.
 	s.pruneAutomationRunWorktrees(ctx, taskID)
 }
 
-func (s *Service) markAutomationRunTerminalForTurn(ctx context.Context, taskID, sessionID, turnID string, success bool, errMsg string) {
-	if turnID == "" {
-		s.markAutomationRunTerminal(ctx, taskID, success, errMsg)
+func (s *Service) markAutomationRunTerminal(ctx context.Context, taskID string, success bool, errMsg string) {
+	if s.automationService == nil {
 		return
 	}
+	if lookup, ok := s.automationService.(automationOpenRunLookup); ok {
+		runs, err := lookup.ListOpenRunsByTaskID(ctx, taskID)
+		if err != nil || len(runs) != 1 {
+			return
+		}
+		run := runs[0]
+		if !s.markExactAutomationRunTerminal(ctx, run.ID, run.SessionID, run.TurnID, success, errMsg) {
+			s.logger.Warn("failed to update automation run terminal status",
+				zap.String("run_id", run.ID), zap.String("task_id", taskID))
+		}
+		return
+	}
+	var markErr error
+	if success {
+		markErr = s.automationService.MarkRunSucceededByTaskID(ctx, taskID)
+	} else {
+		markErr = s.automationService.MarkRunFailedByTaskID(ctx, taskID, errMsg)
+	}
+	if markErr != nil {
+		s.logger.Warn("failed to update automation run terminal status",
+			zap.String("task_id", taskID),
+			zap.Bool("success", success),
+			zap.Error(markErr))
+	}
+}
+
+//nolint:nestif // Exact session and turn matching must remain in one fence.
+func (s *Service) markAutomationRunTerminalForTurn(ctx context.Context, taskID, sessionID, turnID string, success bool, errMsg string) {
 	binding, ok := s.automationService.(automationRunBinding)
 	if !ok {
 		s.markAutomationRunTerminal(ctx, taskID, success, errMsg)
+		return
+	}
+	if turnID == "" {
+		lookup, lookupOK := s.automationService.(automationOpenRunLookup)
+		if !lookupOK {
+			return
+		}
+		runs, err := lookup.ListOpenRunsByTaskID(ctx, taskID)
+		if err != nil {
+			return
+		}
+		var match *automation.AutomationRun
+		for _, run := range runs {
+			if run.SessionID == sessionID {
+				if match != nil {
+					return
+				}
+				match = run
+			}
+		}
+		if match == nil {
+			return
+		}
+		turnID = match.TurnID
+		if !s.markExactAutomationRunTerminal(ctx, match.ID, sessionID, turnID, success, errMsg) {
+			s.logger.Warn("failed to update automation run by exact session binding",
+				zap.String("run_id", match.ID), zap.String("task_id", taskID))
+		}
+		return
+	}
+	lookup, lookupOK := s.automationService.(automationOpenRunLookup)
+	if lookupOK {
+		runs, lookupErr := lookup.ListOpenRunsByTaskID(ctx, taskID)
+		if lookupErr != nil {
+			return
+		}
+		for _, candidate := range runs {
+			if candidate.SessionID == sessionID && candidate.TurnID == turnID {
+				if !s.markExactAutomationRunTerminal(ctx, candidate.ID, sessionID, turnID, success, errMsg) {
+					s.logger.Warn("failed to update automation run by exact turn binding",
+						zap.String("run_id", candidate.ID), zap.String("task_id", taskID))
+				}
+				return
+			}
+		}
 		return
 	}
 	status := automation.RunStatusFailed

@@ -9,11 +9,17 @@ import (
 // SafeRetryTriggerProjection retains only fields that are stable trigger
 // provenance. Provider payloads, headers, credentials, and signatures never
 // enter retry snapshots.
+
+const (
+	retryTriggerTypeKey = "trigger_type"
+	retryTriggerIDKey   = "trigger_id"
+)
+
 func SafeRetryTriggerProjection(triggerType TriggerType, triggerID string, raw json.RawMessage, dedupKey string) json.RawMessage {
 	projection := map[string]any{
 		"projection_version": int64(1),
-		"trigger_type":       triggerType,
-		"trigger_id":         triggerID,
+		retryTriggerTypeKey:  triggerType,
+		retryTriggerIDKey:    triggerID,
 	}
 	if dedupKey != "" {
 		projection["dedup_key"] = dedupKey
@@ -24,6 +30,7 @@ func SafeRetryTriggerProjection(triggerType TriggerType, triggerID string, raw j
 			"observation_id": {}, "observed_at": {}, "provider": {}, "event_type": {},
 			"delivery_id": {}, "item_id": {}, "repository_id": {}, "action": {},
 			"schedule_id": {}, "occurrence_timestamp": {}, "server_request_id": {},
+			"payload": {},
 		}
 		for key, value := range fields {
 			if _, ok := allowed[strings.ToLower(key)]; ok {

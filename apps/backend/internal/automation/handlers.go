@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/kandev/kandev/internal/common/logger"
 	ws "github.com/kandev/kandev/pkg/websocket"
@@ -193,17 +195,16 @@ func wsManualTrigger(svc *Service, log *logger.Logger) func(ctx context.Context,
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "automation not found", nil)
 		}
 		data, _ := json.Marshal(map[string]string{triggerDataSourceKey: triggerDataSourceManual})
-		triggerID := ""
-		if len(a.Triggers) > 0 {
-			triggerID = a.Triggers[0].ID
+		triggerID := "manual:" + id
+		requestID := msg.ID
+		if requestID == "" {
+			requestID = uuid.NewString()
 		}
-		result, fireErr := svc.FireTrigger(ctx, id, triggerID, "manual", data, "")
+		dedupKey := fmt.Sprintf("manual:%s:%s", id, requestID)
+		result, fireErr := svc.FireTrigger(ctx, id, triggerID, TriggerTypeManual, data, dedupKey)
 		if fireErr != nil {
 			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, fireErr.Error(), nil)
 		}
-		// A skip is not a failure, but it is not a fire either. Reporting
-		// triggered = true for one leaves the caller — and the person who
-		// clicked — unable to tell that nothing ran.
 		return ws.NewResponse(msg.ID, msg.Action, map[string]any{
 			"triggered": !result.Skipped,
 			"skipped":   result.Skipped,
@@ -222,6 +223,14 @@ func wsListRuns(svc *Service, log *logger.Logger) func(ctx context.Context, msg 
 		limit := 50
 		if l, ok := payload["limit"].(float64); ok && l > 0 {
 			limit = int(l)
+		}
+		if history, _ := payload["history"].(bool); history {
+			cursor, _ := payload["cursor"].(string)
+			page, err := svc.ListRetryHistory(ctx, automationID, cursor, limit)
+			if err != nil {
+				return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
+			}
+			return ws.NewResponse(msg.ID, msg.Action, page)
 		}
 		runs, err := svc.ListRuns(ctx, automationID, limit)
 		if err != nil {
@@ -245,6 +254,14 @@ func wsListWorkspaceRuns(svc *Service, log *logger.Logger) func(ctx context.Cont
 		limit := 50
 		if l, ok := payload["limit"].(float64); ok && l > 0 {
 			limit = int(l)
+		}
+		if history, _ := payload["history"].(bool); history {
+			cursor, _ := payload["cursor"].(string)
+			page, err := svc.ListWorkspaceRetryHistory(ctx, workspaceID, cursor, limit)
+			if err != nil {
+				return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
+			}
+			return ws.NewResponse(msg.ID, msg.Action, page)
 		}
 		runs, err := svc.ListWorkspaceRuns(ctx, workspaceID, limit)
 		if err != nil {

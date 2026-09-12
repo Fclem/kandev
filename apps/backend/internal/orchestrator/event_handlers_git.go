@@ -863,11 +863,16 @@ func (s *Service) failAutomationRunOnPermission(ctx context.Context, data watche
 			zap.Error(err))
 	}
 
-	errMsg := fmt.Sprintf("Permission required: %s — automation runs cannot answer prompts", data.Title)
-	if err := s.automationService.MarkRunFailedByTaskID(ctx, data.TaskID, errMsg); err != nil {
-		s.logger.Warn("failed to mark automation run failed after permission prompt",
-			zap.String("task_id", data.TaskID), zap.Error(err))
+	errMsg := fmt.Sprintf("permission required: %s; automation runs cannot answer prompts", data.Title)
+	turn, turnErr := s.coordinatorActiveTurn(ctx, data.TaskSessionID)
+	if turnErr != nil || turn == nil {
+		s.logger.Warn("automation permission request has no active turn",
+			zap.String("task_id", data.TaskID),
+			zap.String("session_id", data.TaskSessionID),
+			zap.Error(turnErr))
+		return
 	}
+	s.markAutomationRunTerminalForTurn(ctx, data.TaskID, data.TaskSessionID, turn.ID, false, errMsg)
 }
 
 // pickRejectOption returns the first option_id with a reject-kind, or "" if

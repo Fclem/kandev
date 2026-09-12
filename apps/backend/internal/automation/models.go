@@ -368,6 +368,20 @@ type PendingRetrySummary struct {
 	Limit int              `json:"limit"`
 }
 
+type RetryHistoryAttempt struct {
+	RetryGroupID string           `json:"retry_group_id"`
+	TriggerIDs   []string         `json:"trigger_ids"`
+	Attempts     []*AutomationRun `json:"attempts"`
+	Completed    bool             `json:"completed"`
+}
+
+type RetryHistoryPage struct {
+	Scope         string                 `json:"scope"`
+	Items         []*RetryHistoryAttempt `json:"items"`
+	NextCursor    string                 `json:"next_cursor,omitempty"`
+	HighWaterMark string                 `json:"high_water_mark"`
+}
+
 // AutomationSummary is one automation's health, answered per automation rather
 // than inferred from a capped feed: what it last said, and whether anything of
 // its own is still running.
@@ -421,7 +435,8 @@ type GitHubPRMergedTriggerConfig struct {
 
 // WebhookTriggerConfig holds configuration for webhook triggers.
 type WebhookTriggerConfig struct {
-	FilterExpression string `json:"filter_expression,omitempty"`
+	FilterExpression string   `json:"filter_expression,omitempty"`
+	SafeJSONPointers []string `json:"safe_json_pointers,omitempty"`
 }
 
 // TaskOriginLookup answers the task workspace and whether it is hidden

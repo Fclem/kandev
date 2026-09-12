@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -912,6 +913,21 @@ func (s *Store) ListOpenRuns(ctx context.Context, automationID string) ([]*Autom
 	return runs, err
 }
 
+// ListOpenRunsByTaskID returns every open run bound to one task. Callers must
+// use the returned session and turn identities for terminal writes.
+func (s *Store) ListOpenRunsByTaskID(ctx context.Context, taskID string) ([]*AutomationRun, error) {
+	var runs []*AutomationRun
+	err := s.ro.SelectContext(ctx, &runs, s.ro.Rebind(`
+		SELECT * FROM automation_runs
+		WHERE task_id = ? AND status IN (?, ?)
+		ORDER BY created_at ASC, id ASC`),
+		taskID, string(RunStatusTriggered), string(RunStatusTaskCreated))
+	for _, run := range runs {
+		run.TriggerData = json.RawMessage(run.TriggerDataJSON)
+	}
+	return runs, err
+}
+
 // ListAllOpenRuns is the startup-reconciliation view. It includes disabled
 // automations because disabling a rule must not make an already-admitted run
 // disappear from recovery.
@@ -1499,6 +1515,109 @@ func (s *Store) updateRunTerminalStatus(ctx context.Context, taskID string, stat
 		)`),
 		string(status), errMsg, taskID, string(RunStatusTaskCreated))
 	return err
+}
+
+func encodeRetryHistoryCursor(createdAt time.Time, id string) string {
+	raw := createdAt.UTC().Format(time.RFC3339Nano) + "|" + id
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeRetryHistoryCursor(cursor string) (time.Time, string, error) {
+	if cursor == "" {
+		return time.Time{}, "", nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, "", errors.New("invalid retry history cursor")
+	}
+	parts := strings.SplitN(string(raw), "|", 2)
+	if len(parts) != 2 {
+		return time.Time{}, "", errors.New("invalid retry history cursor")
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil || parts[1] == "" {
+		return time.Time{}, "", errors.New("invalid retry history cursor")
+	}
+	return createdAt, parts[1], nil
+}
+
+func (s *Store) ListRetryHistory(ctx context.Context, automationID, cursor string, limit int) (*RetryHistoryPage, error) {
+	return s.listRetryHistory(ctx, "automation:"+automationID, cursor, limit,
+		`SELECT rg.* FROM automation_retry_groups rg WHERE rg.automation_id = ?`,
+		[]any{automationID},
+		`SELECT rg.* FROM automation_retry_groups rg WHERE rg.automation_id = ?`,
+		[]any{automationID})
+}
+
+func (s *Store) ListWorkspaceRetryHistory(ctx context.Context, workspaceID, cursor string, limit int) (*RetryHistoryPage, error) {
+	return s.listRetryHistory(ctx, "workspace:"+workspaceID, cursor, limit,
+		`SELECT rg.* FROM automation_retry_groups rg JOIN automations a ON a.id = rg.automation_id WHERE a.workspace_id = ?`,
+		[]any{workspaceID},
+		`SELECT rg.* FROM automation_retry_groups rg JOIN automations a ON a.id = rg.automation_id WHERE a.workspace_id = ?`,
+		[]any{workspaceID})
+}
+
+func (s *Store) listRetryHistory(
+	ctx context.Context,
+	scope, cursor string,
+	limit int,
+	pageQuery string,
+	pageArgs []any,
+	highWaterQuery string,
+	highWaterArgs []any,
+) (*RetryHistoryPage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > maxRunsLimit {
+		limit = maxRunsLimit
+	}
+	after, afterID, err := decodeRetryHistoryCursor(cursor)
+	if err != nil {
+		return nil, err
+	}
+	if !after.IsZero() {
+		pageQuery += ` AND (rg.created_at > ? OR (rg.created_at = ? AND rg.id > ?))`
+		pageArgs = append(pageArgs, after, after, afterID)
+	}
+	pageQuery += ` ORDER BY rg.created_at ASC, rg.id ASC LIMIT ?`
+	pageArgs = append(pageArgs, limit+1)
+	var groups []RetryGroup
+	if err := s.ro.SelectContext(ctx, &groups, s.ro.Rebind(pageQuery), pageArgs...); err != nil {
+		return nil, err
+	}
+	page := &RetryHistoryPage{Scope: scope, Items: []*RetryHistoryAttempt{}}
+	if len(groups) > limit {
+		last := groups[limit-1]
+		page.NextCursor = encodeRetryHistoryCursor(last.CreatedAt, last.ID)
+		groups = groups[:limit]
+	}
+	for _, group := range groups {
+		var runs []*AutomationRun
+		if err := s.ro.SelectContext(ctx, &runs, s.ro.Rebind(`
+			SELECT * FROM automation_runs WHERE retry_group_id = ?
+			ORDER BY attempt_number ASC, id ASC`), group.ID); err != nil {
+			return nil, err
+		}
+		for _, run := range runs {
+			run.TriggerData = json.RawMessage(run.TriggerDataJSON)
+		}
+		var triggerIDs []string
+		_ = json.Unmarshal([]byte(group.TriggerIDsJSON), &triggerIDs)
+		page.Items = append(page.Items, &RetryHistoryAttempt{
+			RetryGroupID: group.ID, TriggerIDs: triggerIDs, Attempts: runs,
+			Completed: group.State == RetryGroupCompleted,
+		})
+	}
+	var highWater RetryGroup
+	if err := s.ro.GetContext(ctx, &highWater, s.ro.Rebind(highWaterQuery+" ORDER BY rg.created_at DESC, rg.id DESC LIMIT 1"), highWaterArgs...); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	} else {
+		page.HighWaterMark = encodeRetryHistoryCursor(highWater.CreatedAt, highWater.ID)
+	}
+	return page, nil
 }
 
 // ListRuns returns recent runs for an automation. A task_created run whose

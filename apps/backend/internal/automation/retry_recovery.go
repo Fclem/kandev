@@ -10,6 +10,68 @@ import (
 	"github.com/kandev/kandev/internal/events/bus"
 )
 
+// RecoverRetryLedger restores replayable durable work after an unclean stop.
+// Only expired leases are reclaimed; committed identities and group tombstones
+// remain authoritative and are never replaced by a fresh task identity.
+func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_runs
+		SET retry_state = ?, retry_claimed_at = NULL, retry_claim_expires_at = NULL, retry_claim_token = ''
+		WHERE retry_state = ? AND retry_claim_expires_at IS NOT NULL AND retry_claim_expires_at <= ?`),
+		RetryStateScheduled, RetryStateClaimed, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_run_operations
+		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		WHERE state = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`),
+		retryOperationRequested, now, retryOperationLeased, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		WHERE state = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`),
+		retryOutboxPending, now, retryOutboxLeased, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_run_task_intents
+		SET state = ?, updated_at = ?
+		WHERE state = ? AND task_id IS NULL`),
+		retryIntentAdmitted, now, retryIntentCreating); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_run_operations
+		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		WHERE state IN (?, ?, ?) AND run_id IN (
+			SELECT ar.id FROM automation_runs ar
+			LEFT JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
+			WHERE rg.id IS NULL OR rg.state != ?
+		)`),
+		retryOperationAbandoned, now, retryOperationRequested, retryOperationLeased, retryOperationAmbiguous, RetryGroupLive); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		WHERE state IN (?, ?) AND run_id IN (
+			SELECT ar.id FROM automation_runs ar
+			LEFT JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
+			WHERE rg.id IS NULL OR rg.state != ?
+		)`),
+		retryOutboxRevoked, now, retryOutboxPending, retryOutboxLeased, RetryGroupLive); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) ListPendingRetryOutbox(ctx context.Context, now time.Time) ([]RetryOutbox, error) {
 	var rows []RetryOutbox
 	err := s.ro.SelectContext(ctx, &rows, s.ro.Rebind(`
@@ -17,7 +79,7 @@ func (s *Store) ListPendingRetryOutbox(ctx context.Context, now time.Time) ([]Re
 		LEFT JOIN automation_retry_event_receipts r ON r.event_id = o.event_id
 		WHERE r.event_id IS NULL AND o.state IN (?, ?) AND
 			(o.lease_expires_at IS NULL OR o.lease_expires_at <= ?)
-		ORDER BY o.created_at ASC LIMIT 32`), retryOutboxPending, retryOutboxLeased, now)
+		ORDER BY o.created_at ASC`), retryOutboxPending, retryOutboxLeased, now)
 	return rows, err
 }
 

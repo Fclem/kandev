@@ -13,6 +13,9 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import type { AutomationRun } from "@/lib/types/automation";
 
 const EMPTY_RUNS: AutomationRun[] = [];
+const RETRY_PENDING_STATUSES: Record<string, true> = {
+  scheduled_retry: true,
+};
 
 const COULD_NOT_REFRESH_RUNS = "automations:couldNotRefreshRuns";
 
@@ -316,6 +319,27 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automationId]);
+
+  useEffect(() => {
+    if (!automationId) return;
+    const interval = window.setInterval(() => {
+      const state = storeApi.getState().automationRuns;
+      const currentRuns = state.byAutomationId[automationId] ?? EMPTY_RUNS;
+      if (
+        !currentRuns.some((run) => RETRY_PENDING_STATUSES[run.status]) ||
+        state.loading[automationId] ||
+        (state.deleting[automationId] !== false && state.deleting[automationId] !== undefined)
+      ) {
+        return;
+      }
+      fetchRuns(storeApi, automationId, {
+        getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
+        setRunsLoading,
+        setRuns,
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [automationId, setRuns, setRunsLoading, storeApi]);
 
   const refresh = useCallback(() => {
     if (!automationId) return;

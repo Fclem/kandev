@@ -34,15 +34,15 @@ func TestRetryDelayZeroBaseIsConstantTimeForHugeAttempt(t *testing.T) {
 	}
 }
 
-func TestSanitizeAutomationFailureRedactsBearerAndJSONCredentials(t *testing.T) {
+func TestSanitizeAutomationFailureUsesAllowlistedMessages(t *testing.T) {
 	failure := SanitizeAutomationFailure(errors.New(
 		`Authorization: Bearer abc.def.ghi {"access_token":"json-secret"} bearer raw-secret`,
 	), "launch", nil)
 
-	require.NotContains(t, failure.Message, "abc.def.ghi")
-	require.NotContains(t, failure.Message, "json-secret")
+	require.Equal(t, "automation launch failed", failure.Message)
+	require.Equal(t, "launch", failure.FailureClass)
 	require.NotContains(t, failure.Message, "raw-secret")
-	require.Contains(t, failure.Message, "[redacted]")
+	require.NotContains(t, failure.Message, "json-secret")
 }
 
 func TestFinalizeRetrySchedulingOverflowDoesNotEnqueueOutbox(t *testing.T) {
@@ -352,7 +352,9 @@ func TestRetryAdmissionPersistsImmutableIntentAndSafeEvent(t *testing.T) {
 	trigger := &AutomationTrigger{ID: "trigger", AutomationID: a.ID, Type: TriggerTypeManual, Enabled: true}
 	require.NoError(t, store.CreateTrigger(ctx, trigger))
 	result, err := svc.FireTrigger(ctx, a.ID, "trigger", TriggerTypeManual, []byte(`{"secret":"do-not-publish"}`), "manual-1")
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("fire trigger: %v", err)
+	}
 	require.NotEmpty(t, result.RunID)
 	evt := <-eventsSeen
 	require.Equal(t, result.RunID, evt.RunID)

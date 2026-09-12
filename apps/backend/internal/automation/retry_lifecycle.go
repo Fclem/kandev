@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -112,41 +111,28 @@ type RetryFailure struct {
 	FailurePhase string `json:"failure_phase"`
 }
 
-var (
-	secretAssignmentPattern = regexp.MustCompile(`(?i)(?:"?'?(?:authorization|token|secret|password|credential|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key)"?'?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)`)
-	bearerPattern           = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9][A-Za-z0-9._~+/=-]*`)
-	pathPattern             = regexp.MustCompile(`(?:^|\s)(?:/|[A-Za-z]:\\)[^\s]+`)
-)
-
-// SanitizeAutomationFailure removes credentials and mutable user/provider data.
-func SanitizeAutomationFailure(raw error, phase string, secrets map[string]string) RetryFailure {
-	message := "automation attempt failed"
-	if raw != nil {
-		message = strings.TrimSpace(raw.Error())
-		for _, secret := range secrets {
-			if secret = strings.TrimSpace(secret); secret != "" {
-				message = strings.ReplaceAll(message, secret, "[redacted]")
-			}
-		}
-		message = bearerPattern.ReplaceAllString(message, "Bearer [redacted]")
-		message = secretAssignmentPattern.ReplaceAllString(message, "$1[redacted]")
-		message = pathPattern.ReplaceAllString(message, " [path redacted]")
-		message = strings.Join(strings.Fields(message), " ")
-	}
-	if message == "" {
-		message = "automation attempt failed"
-	}
-	runes := []rune(message)
-	if len(runes) > 512 {
-		message = string(runes[:512])
-	}
+// SanitizeAutomationFailure stores only an allowlisted phase message.
+func SanitizeAutomationFailure(raw error, phase string, _ map[string]string) RetryFailure {
 	failureClass := "completion"
+	message := "automation attempt failed"
 	switch phase {
-	case "admission", "launch", "permission", "completion", "cancellation", "retry_schedule", "launch_snapshot_version", "trigger_projection":
-		failureClass = phase
-	}
-	if phase == "retry_schedule" && strings.Contains(strings.ToLower(message), "overflow") {
-		failureClass = "delay_overflow"
+	case "admission":
+		failureClass, message = phase, "automation admission failed"
+	case "launch":
+		failureClass, message = phase, "automation launch failed"
+	case "permission":
+		failureClass, message = phase, "automation permission was denied"
+	case "cancellation":
+		failureClass, message = phase, "automation was cancelled"
+	case "retry_schedule":
+		failureClass, message = phase, "automation retry could not be scheduled"
+		if raw != nil && strings.Contains(strings.ToLower(raw.Error()), "overflow") {
+			failureClass, message = "delay_overflow", "automation retry delay is outside the supported range"
+		}
+	case "launch_snapshot_version":
+		failureClass, message = phase, "automation launch configuration is incompatible"
+	case "trigger_projection":
+		failureClass, message = phase, "automation trigger data could not be projected safely"
 	}
 	return RetryFailure{Message: message, FailureClass: failureClass, FailurePhase: phase}
 }
@@ -408,14 +394,29 @@ func isUniqueConstraint(err error) bool {
 }
 
 func (s *Store) ClaimDueRetry(ctx context.Context, now time.Time, lease time.Duration) (*AutomationRun, string, error) {
+	return s.claimDueRetry(ctx, now, lease, "")
+}
+
+func (s *Store) ClaimDueRetryForAutomation(ctx context.Context, now time.Time, lease time.Duration, automationID string) (*AutomationRun, string, error) {
+	return s.claimDueRetry(ctx, now, lease, automationID)
+}
+
+//nolint:funlen // The claim query and its poison-row repair are one lease boundary.
+func (s *Store) claimDueRetry(ctx context.Context, now time.Time, lease time.Duration, automationID string) (*AutomationRun, string, error) {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, "", err
 	}
 	defer func() { _ = tx.Rollback() }()
+	filter := ""
+	var filterArgs []any
+	if automationID != "" {
+		filter = " AND ar.automation_id = ?"
+		filterArgs = append(filterArgs, automationID)
+	}
 	var run AutomationRun
 	var poisonID string
-	poisonErr := tx.GetContext(ctx, &poisonID, tx.Rebind(`
+	poisonQuery := `
 		SELECT ar.id FROM automation_runs ar
 		JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
 			AND rg.generation = ar.retry_group_generation AND rg.state = ?
@@ -430,10 +431,11 @@ func (s *Store) ClaimDueRetry(ctx context.Context, now time.Time, lease time.Dur
 				SELECT 1 FROM automation_run_operations o
 				WHERE o.run_id = ar.id AND o.group_generation = ar.retry_group_generation
 					AND o.operation_kind = ? AND o.state = ?
-			))
-		ORDER BY ar.retry_scheduled_at ASC, ar.id ASC LIMIT 1`),
-		RetryGroupLive, RunStatusScheduledRetry, RetryStateScheduled, now,
-		retryIntentAdmitted, retryTaskOperationKind, retryOperationRequested)
+			))` + filter + ` ORDER BY ar.retry_scheduled_at ASC, ar.id ASC LIMIT 1`
+	poisonArgs := []any{RetryGroupLive, RunStatusScheduledRetry, RetryStateScheduled, now,
+		retryIntentAdmitted, retryTaskOperationKind, retryOperationRequested}
+	poisonArgs = append(poisonArgs, filterArgs...)
+	poisonErr := tx.GetContext(ctx, &poisonID, tx.Rebind(poisonQuery), poisonArgs...)
 	if poisonErr == nil {
 		if _, err := tx.ExecContext(ctx, tx.Rebind(`
 			UPDATE automation_runs SET status = ?, retry_state = ?, error_message = ?
@@ -450,14 +452,18 @@ func (s *Store) ClaimDueRetry(ctx context.Context, now time.Time, lease time.Dur
 	if !errors.Is(poisonErr, sql.ErrNoRows) {
 		return nil, "", poisonErr
 	}
-	err = tx.GetContext(ctx, &run, tx.Rebind(`
+	runQuery := `
 		SELECT ar.* FROM automation_runs ar
 		JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id AND rg.generation = ar.retry_group_generation AND rg.state = ?
 		JOIN automations a ON a.id = ar.automation_id AND a.enabled = TRUE
 		JOIN automation_run_task_intents i ON i.run_id = ar.id AND i.group_generation = ar.retry_group_generation AND i.state = ?
 		JOIN automation_run_operations o ON o.run_id = ar.id AND o.group_generation = ar.retry_group_generation AND o.operation_kind = ? AND o.state = ?
-		WHERE ar.status = ? AND ar.retry_state = ? AND ar.retry_scheduled_at IS NOT NULL AND ar.retry_scheduled_at <= ?
-		ORDER BY ar.retry_scheduled_at ASC, ar.id ASC LIMIT 1`), RetryGroupLive, retryIntentAdmitted, retryTaskOperationKind, retryOperationRequested, RunStatusScheduledRetry, RetryStateScheduled, now)
+		WHERE ar.status = ? AND ar.retry_state = ? AND ar.retry_scheduled_at IS NOT NULL AND ar.retry_scheduled_at <= ?` + filter + `
+		ORDER BY ar.retry_scheduled_at ASC, ar.id ASC LIMIT 1`
+	runArgs := []any{RetryGroupLive, retryIntentAdmitted, retryTaskOperationKind, retryOperationRequested,
+		RunStatusScheduledRetry, RetryStateScheduled, now}
+	runArgs = append(runArgs, filterArgs...)
+	err = tx.GetContext(ctx, &run, tx.Rebind(runQuery), runArgs...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", ErrNoDueRetry
 	}
@@ -479,6 +485,21 @@ func (s *Store) ClaimDueRetry(ctx context.Context, now time.Time, lease time.Dur
 	}
 	run.RetryState, run.RetryClaimedAt, run.RetryClaimExpiresAt, run.RetryClaimToken = RetryStateClaimed, &now, &expires, token
 	return &run, token, nil
+}
+
+func (s *Store) ListDueRetryAutomationIDs(ctx context.Context, now time.Time) ([]string, error) {
+	var ids []string
+	err := s.ro.SelectContext(ctx, &ids, s.ro.Rebind(`
+		SELECT DISTINCT ar.automation_id
+		FROM automation_runs ar
+		JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
+			AND rg.generation = ar.retry_group_generation AND rg.state = ?
+		JOIN automations a ON a.id = ar.automation_id AND a.enabled = TRUE
+		WHERE ar.status = ? AND ar.retry_state = ?
+			AND ar.retry_scheduled_at IS NOT NULL AND ar.retry_scheduled_at <= ?
+		ORDER BY ar.automation_id ASC`),
+		RetryGroupLive, RunStatusScheduledRetry, RetryStateScheduled, now)
+	return ids, err
 }
 
 func (s *Store) ReleaseRetryClaim(ctx context.Context, runID, token string, generation int64) error {
@@ -610,6 +631,7 @@ func (s *Store) AcknowledgeRetryEvent(ctx context.Context, eventID, runID string
 	}
 	return tx.Commit()
 }
+
 func (s *Store) FailRetryOutbox(ctx context.Context, eventID string, raw error) error {
 	failure := SanitizeAutomationFailure(raw, "launch", nil)
 	_, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE automation_retry_outbox SET state = ?, safe_error = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ? AND state IN (?, ?)`), retryOutboxRevoked, failure.Message, eventID, retryOutboxPending, retryOutboxLeased)
@@ -623,13 +645,16 @@ func retryPayloadHash(payload []byte) string {
 
 // RetryScheduler promotes leased rows asynchronously and never runs inline.
 type RetryScheduler struct {
-	svc     *Service
-	logger  *logger.Logger
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
-	mu      sync.Mutex
-	started bool
+	svc                *Service
+	logger             *logger.Logger
+	cancel             context.CancelFunc
+	wg                 sync.WaitGroup
+	mu                 sync.Mutex
+	started            bool
+	cursorAutomationID string
 }
+
+const retrySchedulerBatchBudget = 32
 
 func NewRetryScheduler(svc *Service, log *logger.Logger) *RetryScheduler {
 	return &RetryScheduler{svc: svc, logger: log}
@@ -664,7 +689,6 @@ func (rs *RetryScheduler) Stop() {
 	rs.mu.Unlock()
 }
 
-//nolint:gocognit // The bounded claim loop owns scheduler cancellation and lease release.
 func (rs *RetryScheduler) loop(ctx context.Context) {
 	if rs.svc == nil {
 		return
@@ -677,39 +701,75 @@ func (rs *RetryScheduler) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			for range 32 {
+			now = now.UTC()
+			if err := rs.svc.Store().RecoverRetryClaims(ctx, now); err != nil {
+				rs.logClaimError("retry claim recovery failed", err)
+				continue
+			}
+			automationIDs, err := rs.svc.Store().ListDueRetryAutomationIDs(ctx, now)
+			if err != nil {
+				rs.logClaimError("retry automation selection failed", err)
+				continue
+			}
+			orderedAutomationIDs := rs.roundRobinAutomationIDs(automationIDs)
+			if len(orderedAutomationIDs) > retrySchedulerBatchBudget {
+				orderedAutomationIDs = orderedAutomationIDs[:retrySchedulerBatchBudget]
+			}
+			for _, automationID := range orderedAutomationIDs {
 				if err := ctx.Err(); err != nil {
 					return
 				}
-				run, token, err := rs.svc.Store().ClaimDueRetry(ctx, now.UTC(), time.Second)
-				if errors.Is(err, ErrNoDueRetry) {
-					break
+				run, token, claimErr := rs.svc.Store().ClaimDueRetryForAutomation(ctx, now, time.Second, automationID)
+				if errors.Is(claimErr, ErrNoDueRetry) {
+					continue
 				}
-				if err != nil {
-					if rs.logger != nil {
-						rs.logger.Warn("retry claim failed", zap.Error(err))
-					}
-					break
+				if claimErr != nil {
+					rs.logClaimError("retry claim failed", claimErr)
+					continue
 				}
-				run.RetryClaimToken = token
-				evt := &AutomationTriggeredEvent{
-					RunID:                run.ID,
-					AutomationID:         run.AutomationID,
-					TriggerID:            run.TriggerID,
-					TriggerType:          run.TriggerType,
-					RetryClaimToken:      token,
-					RetryGroupGeneration: run.RetryGroupGeneration,
-					SnapshotVersion:      run.RetryLaunchConfigVersion,
-				}
-				if rs.svc.eventBus == nil {
-					_ = rs.svc.Store().ReleaseRetryClaim(context.Background(), run.ID, token, run.RetryGroupGeneration)
-					break
-				}
-				if err := rs.svc.eventBus.Publish(ctx, events.AutomationTriggered, bus.NewEvent(events.AutomationTriggered, "automation_retry_scheduler", evt)); err != nil {
-					_ = rs.svc.Store().ReleaseRetryClaim(context.Background(), run.ID, token, run.RetryGroupGeneration)
-				}
+				rs.cursorAutomationID = automationID
+				rs.publishClaim(ctx, run, token)
 			}
 		}
+	}
+}
+
+func (rs *RetryScheduler) roundRobinAutomationIDs(ids []string) []string {
+	if len(ids) < 2 || rs.cursorAutomationID == "" {
+		return ids
+	}
+	start := 0
+	for i, id := range ids {
+		if id > rs.cursorAutomationID {
+			start = i
+			break
+		}
+		start = (i + 1) % len(ids)
+	}
+	return append(append([]string(nil), ids[start:]...), ids[:start]...)
+}
+
+func (rs *RetryScheduler) publishClaim(ctx context.Context, run *AutomationRun, token string) {
+	run.RetryClaimToken = token
+	evt := &AutomationTriggeredEvent{
+		RunID: run.ID, AutomationID: run.AutomationID, TriggerID: run.TriggerID,
+		TriggerType: run.TriggerType, RetryClaimToken: token,
+		RetryGroupGeneration: run.RetryGroupGeneration,
+		SnapshotVersion:      run.RetryLaunchConfigVersion,
+	}
+	if rs.svc.eventBus == nil {
+		_ = rs.svc.Store().ReleaseRetryClaim(context.Background(), run.ID, token, run.RetryGroupGeneration)
+		return
+	}
+	if err := rs.svc.eventBus.Publish(ctx, events.AutomationTriggered,
+		bus.NewEvent(events.AutomationTriggered, "automation_retry_scheduler", evt)); err != nil {
+		_ = rs.svc.Store().ReleaseRetryClaim(context.Background(), run.ID, token, run.RetryGroupGeneration)
+	}
+}
+
+func (rs *RetryScheduler) logClaimError(message string, err error) {
+	if rs.logger != nil {
+		rs.logger.Warn(message, zap.Error(err))
 	}
 }
 

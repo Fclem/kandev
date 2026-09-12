@@ -22,20 +22,25 @@ var placeholderRe = regexp.MustCompile(`\{\{([a-zA-Z0-9_.-]+)\}\}`)
 // an agent — quoting there would let a fence character leak into a truncated
 // title.
 func InterpolatePrompt(prompt string, triggerType TriggerType, triggerData json.RawMessage) string {
-	return interpolate(prompt, triggerType, triggerData, false)
+	return InterpolatePromptAt(prompt, triggerType, triggerData, time.Now().UTC())
+}
+
+func InterpolatePromptAt(prompt string, triggerType TriggerType, triggerData json.RawMessage, resolvedAt time.Time) string {
+	return interpolate(prompt, triggerType, triggerData, false, resolvedAt)
 }
 
 // InterpolateAgentPrompt replaces {{placeholder}} tokens for the prompt sent
-// to the agent. On the webhook trigger, every substituted payload value is
-// quoted (inline code span, or a fenced block for a value containing a
-// newline) so that no payload-derived text can be mistaken for prompt syntax.
-// Other trigger types render exactly as InterpolatePrompt — hardening their
-// payload-derived tokens is out of scope for this change.
+// to the agent. Webhook payload values are quoted so payload text cannot be
+// mistaken for prompt syntax.
 func InterpolateAgentPrompt(prompt string, triggerType TriggerType, triggerData json.RawMessage) string {
-	return interpolate(prompt, triggerType, triggerData, triggerType == TriggerTypeWebhook)
+	return InterpolateAgentPromptAt(prompt, triggerType, triggerData, time.Now().UTC())
 }
 
-func interpolate(prompt string, triggerType TriggerType, triggerData json.RawMessage, quoteValues bool) string {
+func InterpolateAgentPromptAt(prompt string, triggerType TriggerType, triggerData json.RawMessage, resolvedAt time.Time) string {
+	return interpolate(prompt, triggerType, triggerData, triggerType == TriggerTypeWebhook, resolvedAt)
+}
+
+func interpolate(prompt string, triggerType TriggerType, triggerData json.RawMessage, quoteValues bool, resolvedAt time.Time) string {
 	if prompt == "" || !strings.Contains(prompt, "{{") {
 		return prompt
 	}
@@ -45,7 +50,7 @@ func interpolate(prompt string, triggerType TriggerType, triggerData json.RawMes
 		data = make(map[string]interface{})
 	}
 	fixed := fixedTriggerPlaceholders(triggerType, data)
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := resolvedAt.UTC().Format(time.RFC3339)
 
 	result := placeholderRe.ReplaceAllStringFunc(prompt, func(match string) string {
 		token := match[2 : len(match)-2]

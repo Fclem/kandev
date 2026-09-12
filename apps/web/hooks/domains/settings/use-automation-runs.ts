@@ -5,12 +5,13 @@ import { t } from "@/lib/i18n";
 import { toast } from "@/lib/toast/sonner";
 import {
   listAutomationRuns,
+  listAutomationRetryHistory,
   deleteAutomationRun,
   deleteAllAutomationRuns,
   stopAutomationRun,
 } from "@/lib/api/domains/automation-api";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
-import type { AutomationRun } from "@/lib/types/automation";
+import type { AutomationRun, RetryHistoryMode } from "@/lib/types/automation";
 
 const EMPTY_RUNS: AutomationRun[] = [];
 const RETRY_PENDING_STATUSES: Record<string, true> = {
@@ -51,21 +52,27 @@ function clearLatestListRequest(storeApi: object, automationId: string, token: s
     byAutomation.delete(automationId);
   }
 }
-
 type FetchRunsOptions = {
   getEpoch: () => number;
   setRunsLoading: (automationId: string, loading: boolean) => void;
   setRuns: (automationId: string, runs: AutomationRun[]) => void;
+  historyMode?: RetryHistoryMode;
   onError?: () => void;
   onSettled?: () => void;
 };
 
 function fetchRuns(storeApi: object, automationId: string, options: FetchRunsOptions): void {
-  const { getEpoch, setRunsLoading, setRuns, onError, onSettled } = options;
+  const { getEpoch, setRunsLoading, setRuns, historyMode, onError, onSettled } = options;
   const captured = getEpoch();
   const token = registerListRequest(storeApi, automationId);
   setRunsLoading(automationId, true);
-  listAutomationRuns(automationId)
+  const request =
+    historyMode === "timeline"
+      ? listAutomationRetryHistory(automationId).then((page) =>
+          (page?.items ?? []).flatMap((item) => item.attempts ?? []),
+        )
+      : listAutomationRuns(automationId);
+  request
     .then((result) => {
       // A newer request superseded this one: its result owns the store.
       if (!isLatestListRequest(storeApi, automationId, token)) return;
@@ -271,7 +278,11 @@ function executeDeleteRun(
 }
 
 // eslint-disable-next-line max-lines-per-function -- coordinates shared store state with serialized run mutations.
-export function useAutomationRuns(automationId: string | null, workspaceId: string) {
+export function useAutomationRuns(
+  automationId: string | null,
+  workspaceId: string,
+  historyMode: RetryHistoryMode = "attempts",
+) {
   const runs = useAppStore((state) =>
     automationId ? (state.automationRuns.byAutomationId[automationId] ?? EMPTY_RUNS) : EMPTY_RUNS,
   );
@@ -315,9 +326,9 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
       getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
       setRunsLoading,
       setRuns,
+      historyMode,
       onError: () => setRuns(automationId, []),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automationId]);
 
   useEffect(() => {
@@ -336,22 +347,24 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
         getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
         setRunsLoading,
         setRuns,
+        historyMode,
       });
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [automationId, setRuns, setRunsLoading, storeApi]);
+  }, [automationId, historyMode, setRuns, setRunsLoading, storeApi]);
 
   const refresh = useCallback(() => {
     if (!automationId) return;
+    if ((storeApi.getState().automationRuns.deleting[automationId] ?? false) !== false) return;
     // See the mount effect: while a delete is in flight its reconciliation /
     // recovery owns the list state and must not be superseded.
-    if ((storeApi.getState().automationRuns.deleting[automationId] ?? false) !== false) return;
     fetchRuns(storeApi, automationId, {
       getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
       setRunsLoading,
       setRuns,
+      historyMode,
     });
-  }, [automationId, setRuns, setRunsLoading, storeApi]);
+  }, [automationId, historyMode, setRuns, setRunsLoading, storeApi]);
 
   const makeStore = useCallback(
     (end: () => void): DeleteStore => ({

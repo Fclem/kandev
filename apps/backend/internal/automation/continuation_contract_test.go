@@ -3,6 +3,7 @@ package automation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -350,4 +351,28 @@ func TestDispatchRunBindsExactIdentityAndRejectsStoppedAdmission(t *testing.T) {
 	})
 	require.ErrorIs(t, err, ErrAutomationRunNotDispatchable)
 	require.False(t, called)
+}
+
+func TestDispatchRunFailureSchedulesRetryChild(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{
+		WorkspaceID: "ws-dispatch-retry", Name: "dispatch retry", Enabled: true,
+		RetryPolicy: RetryPolicy{Mode: RetryModeFinite, MaxRetries: "1", DelaySeconds: "0"},
+	}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	trigger := &AutomationTrigger{ID: "dispatch-trigger", AutomationID: a.ID, Type: TriggerTypeManual, Enabled: true}
+	require.NoError(t, svc.store.CreateTrigger(ctx, trigger))
+	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{"delivery_id":"d1"}`), "dispatch-d1")
+	require.NoError(t, err)
+
+	originalErr := errors.New("provider rejected dispatch")
+	require.ErrorIs(t, svc.DispatchRun(ctx, fire.RunID, ThreadActionCreated, "created", func() (RunDispatch, error) {
+		return RunDispatch{}, originalErr
+	}), originalErr)
+	runs, err := svc.store.ListRuns(ctx, a.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	require.Equal(t, RunStatusScheduledRetry, runs[0].Status)
+	require.Equal(t, RetryStateScheduled, runs[0].RetryState)
 }

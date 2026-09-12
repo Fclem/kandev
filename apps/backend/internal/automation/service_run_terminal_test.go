@@ -191,6 +191,58 @@ func TestDisableAutomationStopsBoundRetryRunBeforeTerminalizing(t *testing.T) {
 	require.Equal(t, RunStatusFailed, stored.Status)
 	require.Equal(t, RetryStateCancelled, stored.RetryState)
 }
+
+func TestUpdateAutomationDisableCancelsRetryGroups(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-update-disable", Name: "update disable", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{
+		ID: "group-update-disable", AutomationID: a.ID, Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateScheduled,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	enabled := false
+
+	_, err := svc.UpdateAutomation(ctx, a.ID, &UpdateAutomationRequest{Enabled: &enabled})
+	require.NoError(t, err)
+
+	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupCancelled, storedGroup.State)
+	storedRun, err := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryStateCancelled, storedRun.RetryState)
+}
+
+func TestDeleteRunCancelsLiveRetryGroupBeforeDeletingRun(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-delete-retry", Name: "delete retry", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{
+		ID: "group-delete-retry", AutomationID: a.ID, Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusScheduledRetry,
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateScheduled,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+
+	require.NoError(t, svc.DeleteRun(ctx, run.ID))
+
+	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupCancelled, storedGroup.State)
+	storedRun, err := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Nil(t, storedRun)
+}
 func TestWithRetryRunLockSerializesAndSupportsNestedDispatch(t *testing.T) {
 	svc := newTestService(t)
 	svc.store.db.SetMaxOpenConns(1)

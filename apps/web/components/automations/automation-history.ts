@@ -1,9 +1,12 @@
-import type { AutomationRun, RetryHistoryMode } from "@/lib/types/automation";
+import type { AutomationRun, RetryHistoryMode, RetryHistoryPage } from "@/lib/types/automation";
 
 export function projectAutomationHistory(
-  runs: AutomationRun[],
+  history: AutomationRun[] | RetryHistoryPage,
   mode: RetryHistoryMode = "attempts",
 ): AutomationRun[] {
+  const runs = Array.isArray(history)
+    ? history
+    : (history.items ?? []).flatMap((item) => item.attempts ?? []);
   if (mode === "attempts") return runs;
   const groups = new Map<string, AutomationRun>();
   for (const run of runs) {

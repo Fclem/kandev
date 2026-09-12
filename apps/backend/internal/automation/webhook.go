@@ -203,7 +203,10 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 	if dedup.Key() == "" {
 		dedup = DedupKey("webhook:" + automationID + ":" + deliveryID)
 	}
-	if _, fireErr := h.svc.FireTrigger(c.Request.Context(), automationID, webhookTrigger.ID, TriggerTypeWebhook, triggerData, dedup); fireErr != nil {
+	if _, fireErr := h.svc.FireTriggerWithInitialData(
+		c.Request.Context(), automationID, webhookTrigger.ID, TriggerTypeWebhook,
+		triggerData, body, dedup,
+	); fireErr != nil {
 		h.logger.Error("failed to fire webhook trigger",
 			zap.String("automation_id", automationID),
 			zap.Error(fireErr))

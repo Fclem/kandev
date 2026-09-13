@@ -102,7 +102,13 @@ type automationRetryContinuationOperation interface {
 }
 
 type automationRetryAmbiguous interface {
-	MarkRetryOperationAmbiguous(ctx context.Context, runID string, generation int64, leaseToken string) error
+	MarkRetryOperationAmbiguous(
+		ctx context.Context,
+		runID string,
+		generation int64,
+		leaseToken string,
+		dispatch automation.RunDispatch,
+	) error
 }
 
 type automationRetryOperationFence interface {
@@ -1268,6 +1274,7 @@ func (s *Service) markRetryOperationAmbiguous(
 	ctx context.Context,
 	runID string,
 	operation *automation.RetryOperation,
+	dispatch automation.RunDispatch,
 ) error {
 	if operation == nil {
 		return nil
@@ -1277,11 +1284,14 @@ func (s *Service) markRetryOperationAmbiguous(
 		return errors.New("retry ambiguous operation ledger unavailable")
 	}
 	if err := operationService.MarkRetryOperationAmbiguous(
-		ctx, runID, operation.GroupGeneration, operation.LeaseToken,
+		ctx, runID, operation.GroupGeneration, operation.LeaseToken, dispatch,
 	); err != nil {
 		return err
 	}
 	operation.State = "ambiguous"
+	operation.ExternalTaskID = dispatch.TaskID
+	operation.ExternalSessionID = dispatch.SessionID
+	operation.ExternalTurnID = dispatch.TurnID
 	operation.LeaseToken = ""
 	return nil
 }
@@ -1389,12 +1399,13 @@ func (s *Service) promptAutomationContinuation(
 			if operation == nil {
 				return
 			}
-			commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptFailureCleanupTimeout)
-			acceptanceErr = s.commitRetryContinuationOperation(commitCtx, runID, operation, automation.RunDispatch{
+			acceptedDispatch := automation.RunDispatch{
 				TaskID: task.ID, SessionID: session.ID, TurnID: turnID,
-			})
+			}
+			commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptFailureCleanupTimeout)
+			acceptanceErr = s.commitRetryContinuationOperation(commitCtx, runID, operation, acceptedDispatch)
 			if acceptanceErr != nil {
-				ambiguousErr := s.markRetryOperationAmbiguous(commitCtx, runID, operation)
+				ambiguousErr := s.markRetryOperationAmbiguous(commitCtx, runID, operation, acceptedDispatch)
 				acceptanceErr = errors.Join(
 					fmt.Errorf("%w: %v", automation.ErrRetryContinuationCommitAmbiguous, acceptanceErr),
 					ambiguousErr,

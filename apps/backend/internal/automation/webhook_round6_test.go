@@ -26,6 +26,18 @@ func TestSafeWebhookTriggerDataRejectsUnboundedPointers(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestSafeWebhookTriggerDataRejectsMalformedJSONPointerSyntax(t *testing.T) {
+	for _, pointer := range []string{"/value~2", "/items/01", "/items/-"} {
+		t.Run(pointer, func(t *testing.T) {
+			_, err := safeWebhookTriggerData(
+				[]byte(`{"value":"ok","items":["first","second"]}`),
+				[]string{pointer}, "trigger", "delivery",
+			)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestSafeRetryTriggerProjectionKeepsRoutingMetadata(t *testing.T) {
 	data := SafeRetryTriggerProjection(
 		TriggerTypeGitHubPRMerged, "trigger", []byte(`{

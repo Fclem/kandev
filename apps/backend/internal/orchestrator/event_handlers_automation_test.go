@@ -44,6 +44,25 @@ func TestAutomationExecutionTriggerDataUsesSafeProjection(t *testing.T) {
 	require.NotContains(t, prompt, "private")
 }
 
+func TestRetryChildPreservesGitHubPRAssociationIdentity(t *testing.T) {
+	log, err := logger.NewFromZap(zap.NewNop())
+	require.NoError(t, err)
+	githubService := &mockGitHubService{}
+	svc := &Service{githubService: githubService, logger: log}
+	triggerData := automation.SafeRetryTriggerProjection(
+		automation.TriggerTypeGitHubPR,
+		"trigger-pr",
+		json.RawMessage(`{"repo":"acme/app","number":42,"html_url":"https://github.com/acme/app/pull/42"}`),
+		"pr-42",
+	)
+
+	svc.associateAutomationPR(context.Background(), "retry-child-task", "repo-1", triggerData)
+
+	require.Equal(t, 1, githubService.associateCalls)
+	require.Equal(t, 42, githubService.lastAssociatePRNumber)
+	require.Equal(t, "repo-1", githubService.lastAssociateRepositoryID)
+}
+
 // seedAutomationWorkspaceRepos creates a workspace with the given repository
 // IDs (each with a distinct default branch derived from its ID) for
 // exercising resolveAutomationRepository / resolveExplicitRepositories.

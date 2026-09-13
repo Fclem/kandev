@@ -26,8 +26,20 @@ func TestSafeWebhookTriggerDataRejectsUnboundedPointers(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestSafeWebhookTriggerDataRejectsMalformedJSONPointerSyntax(t *testing.T) {
-	for _, pointer := range []string{"/value~2", "/items/01", "/items/-"} {
+func TestSafeWebhookTriggerDataValidatesPointerSyntaxAndTraversal(t *testing.T) {
+	data, err := safeWebhookTriggerData(
+		[]byte(`{"object":{"01":"leading","-":"dash"},"items":["first","second"]}`),
+		[]string{"/object/01", "/object/-"}, "trigger", "delivery",
+	)
+	require.NoError(t, err)
+	var projection map[string]any
+	require.NoError(t, json.Unmarshal(data, &projection))
+	require.Equal(t, map[string]any{
+		"/object/01": "leading",
+		"/object/-":  "dash",
+	}, projection["payload"])
+
+	for _, pointer := range []string{"/value~2", "/items/01", "/items/-", "/items/+1", "/items/-0"} {
 		t.Run(pointer, func(t *testing.T) {
 			_, err := safeWebhookTriggerData(
 				[]byte(`{"value":"ok","items":["first","second"]}`),

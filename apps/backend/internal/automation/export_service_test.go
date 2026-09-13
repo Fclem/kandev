@@ -251,37 +251,6 @@ func TestExportAutomationsZip_OneEntryPerAutomation(t *testing.T) {
 	}
 }
 
-// AC-39/AC-42: a trigger with malformed config still exports the trigger
-// (empty mapping) and surfaces exactly one rendered warning line.
-
-func TestExportAutomationsDocument_TriggerBadConfig_EmitsRenderedWarning(t *testing.T) {
-	svc, wsLookup := exportServiceTestFixture(t)
-	wsLookup.exists["ws-1"] = true
-	createExportTestAutomation(t, svc, &CreateAutomationRequest{
-		WorkspaceID: "ws-1",
-		Name:        "Hook",
-		Triggers: []CreateTriggerSpec{
-			{Type: TriggerTypeWebhook, Config: []byte("not-json"), Enabled: true},
-		},
-	})
-
-	body, err := svc.ExportAutomationsDocument(context.Background(), "ws-1")
-	if err != nil {
-		t.Fatalf("ExportAutomationsDocument: %v", err)
-	}
-	var doc exportDocument
-	if err := yaml.Unmarshal(body, &doc); err != nil {
-		t.Fatalf("yaml.Unmarshal: %v", err)
-	}
-	want := "Hook: trigger webhook: config is not valid JSON"
-	if len(doc.Warnings) != 1 || doc.Warnings[0] != want {
-		t.Errorf("Warnings = %v, want [%q]", doc.Warnings, want)
-	}
-	if len(doc.Automations) != 1 || len(doc.Automations[0].Triggers) != 1 {
-		t.Fatalf("expected the trigger still exported despite bad config, got %+v", doc.Automations)
-	}
-}
-
 // AC-10: two automations whose stored trigger config JSON differs only in
 // whitespace must export identical config YAML, end to end through the real
 // service and store (not just the buildTriggerConfigNode helper in

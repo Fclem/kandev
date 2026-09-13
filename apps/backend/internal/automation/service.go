@@ -490,6 +490,11 @@ func (s *Service) CreateAutomation(ctx context.Context, req *CreateAutomationReq
 	if err := s.authorizeWorkflowStepOwnership(ctx, req.WorkspaceID, req.WorkflowID, req.WorkflowStepID); err != nil {
 		return nil, err
 	}
+	for _, ts := range req.Triggers {
+		if err := validateTriggerConfig(ts.Type, ts.Config); err != nil {
+			return nil, err
+		}
+	}
 	a := &Automation{
 		WorkspaceID:        req.WorkspaceID,
 		Name:               req.Name,
@@ -516,14 +521,8 @@ func (s *Service) CreateAutomation(ctx context.Context, req *CreateAutomationReq
 		return nil, fmt.Errorf("create automation: %w", err)
 	}
 
-	// Create initial triggers. The cron check is the same one AddTrigger and
-	// UpdateTrigger apply: without it an expression the scheduler cannot parse
-	// is accepted at creation and rejected on the first edit, and in between the
-	// automation simply never fires with nothing on screen to say why.
+	// Create initial triggers after validating their configs above.
 	for _, ts := range req.Triggers {
-		if err := validateScheduledConfig(ts.Type, ts.Config); err != nil {
-			return nil, err
-		}
 		t := &AutomationTrigger{
 			AutomationID: a.ID,
 			Type:         ts.Type,
@@ -1033,6 +1032,23 @@ func validateScheduledConfig(triggerType TriggerType, raw json.RawMessage) error
 	return nil
 }
 
+func validateTriggerConfig(triggerType TriggerType, raw json.RawMessage) error {
+	if err := validateScheduledConfig(triggerType, raw); err != nil {
+		return err
+	}
+	if triggerType != TriggerTypeWebhook || len(raw) == 0 {
+		return nil
+	}
+	var cfg WebhookTriggerConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return fmt.Errorf("invalid webhook trigger config: %w", err)
+	}
+	if _, err := safeWebhookTriggerData(nil, cfg.SafeJSONPointers, "", ""); err != nil {
+		return fmt.Errorf("invalid webhook trigger config: %w", err)
+	}
+	return nil
+}
+
 // AddTrigger adds a trigger to an automation.
 func (s *Service) AddTrigger(ctx context.Context, req *AddTriggerRequest) (*AutomationTrigger, error) {
 	if req.AutomationID == "" {
@@ -1041,7 +1057,7 @@ func (s *Service) AddTrigger(ctx context.Context, req *AddTriggerRequest) (*Auto
 	if err := s.authorizeAutomation(ctx, req.AutomationID); err != nil {
 		return nil, err
 	}
-	if err := validateScheduledConfig(req.Type, req.Config); err != nil {
+	if err := validateTriggerConfig(req.Type, req.Config); err != nil {
 		return nil, err
 	}
 	t := &AutomationTrigger{
@@ -1069,7 +1085,7 @@ func (s *Service) UpdateTrigger(ctx context.Context, id string, req *UpdateTrigg
 		return fmt.Errorf("trigger not found: %s", id)
 	}
 	if req.Config != nil {
-		if err := validateScheduledConfig(existing.Type, *req.Config); err != nil {
+		if err := validateTriggerConfig(existing.Type, *req.Config); err != nil {
 			return err
 		}
 	}

@@ -29,21 +29,20 @@ const maxWebhookBodyBytes = 1 << 20
 func validateWebhookJSONPointer(pointer string) error {
 	for _, part := range strings.Split(pointer[1:], "/") {
 		for i := range len(part) {
-			if part[i] != '~' {
-				continue
-			}
-			if i+1 >= len(part) || (part[i+1] != '0' && part[i+1] != '1') {
+			if part[i] == '~' && (i+1 >= len(part) || (part[i+1] != '0' && part[i+1] != '1')) {
 				return errors.New("invalid webhook JSON pointer")
 			}
 		}
-		if part == "-" || (len(part) > 1 && part[0] == '0' && allDigits(part)) {
-			return errors.New("invalid webhook JSON pointer")
-		}
-		if len(part) > 1 && (part[0] == '+' || part[0] == '-') && allDigits(part[1:]) {
-			return errors.New("invalid webhook JSON pointer")
-		}
 	}
 	return nil
+}
+
+func webhookArrayIndex(part string) (int, bool) {
+	if part == "-" || !allDigits(part) || (len(part) > 1 && part[0] == '0') {
+		return 0, false
+	}
+	index, err := strconv.Atoi(part)
+	return index, err == nil
 }
 
 func allDigits(value string) bool {
@@ -103,7 +102,10 @@ func projectWebhookPayload(body []byte, pointers []string) (map[string]json.RawM
 	selected := make(map[string]json.RawMessage, len(pointers))
 	total := 0
 	for _, pointer := range pointers {
-		value, ok := webhookJSONPointer(document, strings.Split(pointer[1:], "/"))
+		value, ok, pointerErr := webhookJSONPointer(document, strings.Split(pointer[1:], "/"))
+		if pointerErr != nil {
+			return nil, pointerErr
+		}
 		if !ok {
 			continue
 		}
@@ -120,7 +122,7 @@ func projectWebhookPayload(body []byte, pointers []string) (map[string]json.RawM
 	return selected, nil
 }
 
-func webhookJSONPointer(value any, parts []string) (any, bool) {
+func webhookJSONPointer(value any, parts []string) (any, bool, error) {
 	for _, part := range parts {
 		part = strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
 		switch current := value.(type) {
@@ -128,19 +130,22 @@ func webhookJSONPointer(value any, parts []string) (any, bool) {
 			var ok bool
 			value, ok = current[part]
 			if !ok {
-				return nil, false
+				return nil, false, nil
 			}
 		case []any:
-			index, err := strconv.Atoi(part)
-			if err != nil || index < 0 || index >= len(current) {
-				return nil, false
+			index, valid := webhookArrayIndex(part)
+			if !valid {
+				return nil, false, errors.New("invalid webhook JSON pointer")
+			}
+			if index >= len(current) {
+				return nil, false, nil
 			}
 			value = current[index]
 		default:
-			return nil, false
+			return nil, false, nil
 		}
 	}
-	return value, true
+	return value, true, nil
 }
 func NewWebhookHandler(svc *Service, log *logger.Logger) *WebhookHandler {
 	return &WebhookHandler{svc: svc, logger: log}

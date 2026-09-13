@@ -560,6 +560,16 @@ func (s *Store) CancelRetryGroup(ctx context.Context, groupID string, generation
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_cancelled_at = ?, retry_claim_token = '', retry_claimed_at = NULL, retry_claim_expires_at = NULL WHERE retry_group_id = ? AND retry_group_generation = ? AND retry_state NOT IN (?, ?, ?, ?, ?)`), RunStatusFailed, RetryStateCancelled, now, groupID, generation, RetryStateCompleted, RetryStateExhausted, RetryStateCancelled, RetryStateSuperseded, RetryStateSchedulingFailed); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_run_task_intents
+		SET state = ?, automation_deleted_at = ?, updated_at = ?
+		WHERE run_id IN (
+			SELECT id FROM automation_runs
+			WHERE retry_group_id = ? AND retry_group_generation = ?
+		) AND state != ?`),
+		retryIntentAbandoned, now, now, groupID, generation, retryIntentAbandoned); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_run_operations SET state = ?, updated_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE retry_group_id = ? AND retry_group_generation = ?) AND state NOT IN (?, ?)`), retryOperationAbandoned, now, groupID, generation, retryOperationCommitted, retryOperationAbandoned); err != nil {
 		return err
 	}

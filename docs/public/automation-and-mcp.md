@@ -229,16 +229,20 @@ Send:
 ```http
 POST /api/v1/automations/webhook/{automationId}
 X-Webhook-Secret: <secret>
+X-Kandev-Delivery-ID: <delivery-id>
 Content-Type: application/json
 ```
 
-Kandev silently reads only the first 1 MiB of the request body; it does not reject an oversized body. If that retained prefix is valid JSON, it becomes trigger data. Empty or invalid JSON is wrapped as `{"body":"<raw text>"}`. The endpoint always returns `200 {"status":"triggered"}` for a well-formed, authenticated request, whether the delivery went on to fire, was filtered out, or was deduplicated; it returns 401 for a wrong secret, 404 for an unknown automation, and 409 when the automation or its webhook trigger is disabled.
+Webhook requests must include `X-Kandev-Delivery-ID`, limited to 256 characters. When no deduplication key is configured, the delivery ID deduplicates the request per automation; a configured deduplication key takes precedence. Kandev accepts an empty body, rejects invalid JSON or invalid JSON-pointer projections with `400`, and rejects bodies larger than 1 MiB with `413`.
 
-A webhook trigger's configuration can optionally set a deduplication key, a list of filters, and a repository selector:
+Webhook trigger configuration can retain selected payload values with up to 32 bounded RFC 6901 pointers. Only selected values are stored in retry history; the initial execution receives the original payload. A delivery whose configured deduplication key resolves to a value seen on an earlier firing is recorded as a duplicate and creates no new task. Leave the key blank to deduplicate by delivery ID.
 
-- **Deduplication key**: a dot path into the payload, for example `issue.id`. A delivery whose resolved value repeats an earlier firing's is recorded as a duplicate and creates no new task. Leave it blank to fire on every delivery.
+A webhook trigger's configuration can optionally set a deduplication key, a list of filters, a repository selector, and safe JSON pointers:
+
+- **Deduplication key**: a dot path into the payload, for example `issue.id`. A delivery whose resolved value repeats an earlier firing's is recorded as a duplicate and creates no new task. Leave it blank to deduplicate by delivery ID.
 - **Filters**: an ordered list of `{path, op, values}` predicates, evaluated before deduplication and before the run's concurrency slot is claimed. Every filter must pass for the delivery to fire; a rejected delivery still returns the uniform 200 response, creates no task, and is recorded as skipped. Supported operators are `eq`, `ne`, `in`, `not_in`, `exists`, `not_exists`, and `contains`; the five comparison operators other than `exists`/`not_exists` trim and lowercase both sides before comparing, so filter values are case-insensitive. A path that does not resolve fails every operator except `not_exists`.
 - **Repository selector**: a dot path whose resolved value is matched, exactly and case-sensitively, against one of the automation's already-configured repositories by name. Exactly one match binds that repository to the run; no match, or more than one, binds none. This is deliberately not the same resolution GitHub pull request triggers use, because the webhook route is exempt from session authentication and authorized by its shared secret alone, so a payload must never be able to name an arbitrary repository.
+- **Safe JSON pointers**: up to 32 RFC 6901 pointers select payload fields retained in retry history. Selected values have per-value, total-size, and pointer-depth limits. Unselected fields are not persisted in retry snapshots.
 
 Make downstream actions idempotent regardless: a sender can still retry a delivery that Kandev has already deduplicated or filtered. The secret is stored with the automation rather than in Kandev's encrypted provider-secret store, and anyone with Kandev settings access can reveal it. Treat it as a credential, use TLS, keep it out of URLs/logs, and replace the automation if rotation is required.
 

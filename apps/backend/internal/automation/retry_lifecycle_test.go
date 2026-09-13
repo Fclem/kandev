@@ -567,6 +567,7 @@ func TestRetryOperationLeasesAndCommitsExternalTask(t *testing.T) {
 	require.NoError(t, store.CommitRetryTaskOperation(ctx, run.ID, 1,
 		leased.LeaseToken, "task-recovered"))
 
+	require.ErrorIs(t, store.CommitRetryTaskOperation(ctx, run.ID, 1, leased.LeaseToken, "stale-task"), ErrRetryGenerationMismatch)
 	committed, err := store.GetRetryTaskOperation(ctx, run.ID, 1)
 	require.NoError(t, err)
 	require.Equal(t, retryOperationCommitted, committed.State)

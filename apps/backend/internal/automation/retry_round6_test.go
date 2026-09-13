@@ -3,14 +3,14 @@ package automation
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
+	"errors"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"testing"
+	"time"
 )
 
 func TestRetryAdmissionPersistsCompleteLaunchSnapshot(t *testing.T) {
@@ -128,6 +128,96 @@ func TestRetryAdmissionSupersedesPendingWithoutTerminalizingActiveRun(t *testing
 	require.NoError(t, err)
 	require.Equal(t, RunStatusTaskCreated, reloaded.Status)
 	require.Equal(t, RetryStateTriggered, reloaded.RetryState)
+}
+
+func TestSupersededActiveRetryCanCompleteWithoutReplacingLiveGroup(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-active-completion", WorkspaceID: "ws-active-completion", Name: "Active completion", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	oldGroup := &RetryGroup{
+		ID: "old-completion-group", AutomationID: a.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryGroup(ctx, oldGroup))
+	activeRun := &AutomationRun{
+		ID: "active-completion-run", AutomationID: a.ID, TriggerID: "trigger-a",
+		TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		RetryGroupID: oldGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+		AttemptNumber:       1,
+		RetryPolicySnapshot: `{"mode":"finite","max_retries":"2","delay_seconds":"0","backoff":"fixed"}`,
+	}
+	require.NoError(t, store.CreateRun(ctx, activeRun))
+	replacement := &AutomationRun{
+		ID: "replacement-completion-run", AutomationID: a.ID, TriggerID: "trigger-a",
+		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
+		RetryGroupID: "replacement-completion-group", RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+		RetryLaunchConfigVersion: RetryLaunchConfigVersion, RetryLaunchConfigSnapshot: `{}`,
+		RetryPolicySnapshot: `{}`, RetryTriggerSnapshot: `{}`, RetryContinuationSnapshot: `{}`,
+	}
+	replacementGroup := &RetryGroup{
+		ID: replacement.RetryGroupID, AutomationID: a.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryAdmission(ctx, replacement, replacementGroup))
+
+	child, err := store.FinalizeRetryFailure(ctx, activeRun.ID, 1, errors.New("provider failed"), "launch")
+	require.NoError(t, err)
+	require.Nil(t, child)
+
+	reloadedRun, err := store.GetRun(ctx, activeRun.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusFailed, reloadedRun.Status)
+	require.Equal(t, RetryStateCompleted, reloadedRun.RetryState)
+	var childCount int
+	require.NoError(t, store.db.Get(&childCount,
+		`SELECT COUNT(*) FROM automation_runs WHERE retry_parent_run_id = ?`, activeRun.ID))
+	require.Zero(t, childCount)
+	reloadedReplacement, err := store.GetRetryGroup(ctx, replacementGroup.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupLive, reloadedReplacement.State)
+	require.Equal(t, int64(1), reloadedReplacement.Generation)
+}
+
+func TestSupersededActiveRetryCanSucceedWithoutReplacingLiveGroup(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-active-success", WorkspaceID: "ws-active-success", Name: "Active success", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	oldGroup := &RetryGroup{
+		ID: "old-success-group", AutomationID: a.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryGroup(ctx, oldGroup))
+	activeRun := &AutomationRun{
+		ID: "active-success-run", AutomationID: a.ID, TriggerID: "trigger-a",
+		TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		RetryGroupID: oldGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, store.CreateRun(ctx, activeRun))
+	replacement := &AutomationRun{
+		ID: "replacement-success-run", AutomationID: a.ID, TriggerID: "trigger-a",
+		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
+		RetryGroupID: "replacement-success-group", RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+		RetryLaunchConfigVersion: RetryLaunchConfigVersion, RetryLaunchConfigSnapshot: `{}`,
+		RetryPolicySnapshot: `{}`, RetryTriggerSnapshot: `{}`, RetryContinuationSnapshot: `{}`,
+	}
+	replacementGroup := &RetryGroup{
+		ID: replacement.RetryGroupID, AutomationID: a.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryAdmission(ctx, replacement, replacementGroup))
+
+	require.NoError(t, store.MarkRetrySucceeded(ctx, activeRun.ID, 1))
+
+	reloadedRun, err := store.GetRun(ctx, activeRun.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusSucceeded, reloadedRun.Status)
+	require.Equal(t, RetryStateCompleted, reloadedRun.RetryState)
+	reloadedReplacement, err := store.GetRetryGroup(ctx, replacementGroup.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupLive, reloadedReplacement.State)
+	require.Equal(t, int64(1), reloadedReplacement.Generation)
 }
 
 func TestWebhookRetryAdmissionKeepsRawPayloadEphemeral(t *testing.T) {

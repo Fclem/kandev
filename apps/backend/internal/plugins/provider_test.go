@@ -61,6 +61,27 @@ func TestProvideConstructsServiceUsingHomeDirPluginsSubdir(t *testing.T) {
 	}
 }
 
+func TestSetPluginsDirKeepsInstallRootWhenConversationStateFails(t *testing.T) {
+	dir := t.TempDir()
+	hostDir := filepath.Join(dir, ".host")
+	if err := os.MkdirAll(hostDir, 0o700); err != nil {
+		t.Fatalf("create host directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hostDir, "conversation-token.key"), []byte("corrupt"), 0o600); err != nil {
+		t.Fatalf("write corrupt signing key: %v", err)
+	}
+
+	svc := NewService(store.NewFSStore(filepath.Join(dir, "store")), NewRegistry(), nil, testLogger(t))
+	t.Cleanup(func() { _ = svc.Close() })
+
+	if err := svc.SetPluginsDir(dir); err == nil {
+		t.Fatal("SetPluginsDir() expected corrupt signing key error")
+	}
+	if svc.pluginsDir != dir {
+		t.Fatalf("pluginsDir = %q, want %q after initialization failure", svc.pluginsDir, dir)
+	}
+}
+
 func TestProvideLoadsExistingInstallationsFromDisk(t *testing.T) {
 	homeDir := t.TempDir()
 	cfg := &config.Config{HomeDir: homeDir}

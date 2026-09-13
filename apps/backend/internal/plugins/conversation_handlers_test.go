@@ -110,6 +110,29 @@ func TestConversationReadsRequireAuthenticationBeforeLookup(t *testing.T) {
 	}
 }
 
+// @covers AC-PLUGINS-PROMPT-HISTORY-HOST-002.7
+func TestConversationReadsRejectJournalFallbackForUnauthorizedLiveSession(t *testing.T) {
+	_, service := newTestRouter(t)
+	service.SetConversationJournalDB(newTestPool(t).Writer())
+	service.registry.Add(conversationPluginRecord("kandev-plugin-history", time.Now().UTC()))
+	router := registerPluginRoutesWithIdentity(
+		t,
+		service,
+		authn.Identity{UserID: "user_1", Role: authn.RoleMember},
+		&fakeConversationReader{},
+	)
+	headers := conversationReadHeaders(t, service, router, "kandev-plugin-history", "session-1")
+
+	for _, path := range []string{
+		"/api/plugins/kandev-plugin-history/conversation/task-sessions/session-1/messages",
+		"/api/plugins/kandev-plugin-history/conversation/task-sessions/session-1/turns",
+	} {
+		response := doAuthedRequest(router, http.MethodGet, path, "", headers)
+		require.Equal(t, http.StatusNotFound, response.Code, path)
+		require.JSONEq(t, `{"error":{"code":"not_found","message":"task session not found","retryable":false}}`, response.Body.String(), path)
+	}
+}
+
 type fakeConversationReader struct {
 	session  *taskmodels.TaskSession
 	messages []*taskmodels.Message

@@ -1,4 +1,5 @@
 import type { BackendMessageType } from "@/lib/types/backend";
+import { parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
 
 export interface RawSessionEvent {
   type: "session.event";
@@ -39,7 +40,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function isTimestamp(value: unknown): value is string {
-  return isNonEmptyString(value) && Number.isFinite(Date.parse(value));
+  return isNonEmptyString(value) && parseTurnTimestamp(value) !== null;
 }
 
 // eslint-disable-next-line complexity -- Each core event shape is checked against the ordered wire contract.

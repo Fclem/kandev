@@ -26,6 +26,7 @@ vi.mock("@/lib/ws/connection", () => ({
 }));
 const BINDING_PATH_SUFFIX = "/conversation/binding";
 const FAR_FUTURE = "2099-01-01T00:00:00Z";
+const SNAPSHOT_CREATED_AT = "2026-09-07T12:00:00Z";
 
 function ScopedHarness({ sessionId, testId }: { sessionId: string; testId: string }) {
   const state = pluginConversationApi.useSessionMessages({ sessionId });
@@ -114,6 +115,24 @@ function liveAgentEvent(sequence: number): RawSessionEvent {
       content: "live",
       message_type: "message",
       created_at: "2026-09-07T12:02:00Z",
+    },
+  };
+}
+
+function liveMessageDeletedEvent(sequence: number, messageId: string): RawSessionEvent {
+  return {
+    type: "session.event",
+    protocol_version: 1,
+    event_type: "message.deleted",
+    session_id: "session-1",
+    task_id: "task-1",
+    sequence,
+    event_id: `event-${sequence}`,
+    payload: {
+      type: "message.deleted",
+      session_id: "session-1",
+      task_id: "task-1",
+      message_id: messageId,
     },
   };
 }
@@ -237,7 +256,7 @@ describe("message query snapshot isolation", () => {
     await act(async () => {
       userPage.resolve(
         response({
-          messages: [message("message-user", "user snapshot", "2026-09-07T12:00:00Z", "user")],
+          messages: [message("message-user", "user snapshot", SNAPSHOT_CREATED_AT, "user")],
           hasMore: false,
           cursor: null,
         }),
@@ -323,7 +342,7 @@ describe("message continuation isolation", () => {
                   message(
                     `message-${author}`,
                     `${author} snapshot`,
-                    "2026-09-07T12:00:00Z",
+                    SNAPSHOT_CREATED_AT,
                     author === "agent" ? "agent" : "user",
                   ),
                 ],
@@ -379,7 +398,7 @@ describe("ascending message pagination", () => {
           response(
             messagePage === 1
               ? {
-                  messages: [message("message-base", "base", "2026-09-07T12:00:00Z", "agent")],
+                  messages: [message("message-base", "base", SNAPSHOT_CREATED_AT, "agent")],
                   hasMore: true,
                   cursor: "cursor-1",
                 }
@@ -413,5 +432,68 @@ describe("ascending message pagination", () => {
     });
 
     expect(screen.getByTestId("ascending-query").textContent).toBe("base|middle|live");
+  });
+});
+describe("message continuation deletion isolation", () => {
+  registerIsolationLifecycle();
+
+  it("replays deletions received during continuation before committing the page", async () => {
+    const continuationPage = deferred<Response>();
+    let messagePage = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith(BINDING_PATH_SUFFIX)) {
+          return Promise.resolve(
+            response({
+              bindingToken: "binding-1",
+              generation: 7,
+              expiresAt: FAR_FUTURE,
+            }),
+          );
+        }
+        messagePage += 1;
+        if (messagePage === 1) {
+          return Promise.resolve(
+            response({
+              messages: [message("message-base", "base", SNAPSHOT_CREATED_AT, "agent")],
+              hasMore: true,
+              cursor: "cursor-1",
+            }),
+          );
+        }
+        return continuationPage.promise;
+      }),
+    );
+    render(
+      <PluginConversationScopeProvider
+        pluginId="plugin-history"
+        taskId="task-1"
+        sessionId="session-1"
+      >
+        <AscendingHarness />
+      </PluginConversationScopeProvider>,
+    );
+    await waitFor(() => expect(ascendingState?.hasMore).toBe(true));
+
+    let loadMore!: Promise<number>;
+    await act(async () => {
+      loadMore = ascendingState!.loadMore();
+      await waitFor(() => expect(messagePage).toBe(2));
+    });
+    act(() => transport.listener?.(liveMessageDeletedEvent(1, "message-page")));
+    continuationPage.resolve(
+      response({
+        messages: [message("message-page", "deleted page row", "2026-09-07T12:01:00Z", "agent")],
+        hasMore: false,
+        cursor: null,
+      }),
+    );
+    await act(async () => {
+      await loadMore;
+    });
+
+    expect(screen.getByTestId("ascending-query").textContent).toBe("base");
   });
 });

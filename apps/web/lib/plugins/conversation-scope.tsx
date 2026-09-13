@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import { getBackendConfig } from "@/lib/config";
+import { parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
 import { generateUUID } from "@/lib/uuid";
 import { isRawSessionEvent } from "@/lib/ws/ordered-session-events";
 import { getWebSocketClient } from "@/lib/ws/connection";
@@ -119,7 +120,9 @@ function isNonEmptyPayloadString(payload: Record<string, unknown>, key: string):
 }
 
 function isValidPayloadTime(payload: Record<string, unknown>, key: string): boolean {
-  return isNonEmptyPayloadString(payload, key) && !Number.isNaN(Date.parse(payload[key] as string));
+  if (!isNonEmptyPayloadString(payload, key)) return false;
+  const value = payload[key];
+  return typeof value === "string" && parseTurnTimestamp(value) !== null;
 }
 
 function isValidMessagePayload(payload: Record<string, unknown>, updated: boolean): boolean {

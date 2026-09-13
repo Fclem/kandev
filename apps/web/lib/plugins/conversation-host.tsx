@@ -205,6 +205,7 @@ function useInitialMessagePage({
       setState({ ...EMPTY_MESSAGES, messages: [], error });
       return;
     }
+    setState({ ...EMPTY_MESSAGES, messages: [] });
     void loadPage(null, false).catch((cause: unknown) => {
       if (scope.signal.aborted || scope.isTerminal()) return;
       const error = conversationError(cause);
@@ -235,12 +236,7 @@ function useInitialMessagePage({
     snapshotKey,
   ]);
 }
-function invalidateFreshMessagesSnapshot(
-  scope: ConversationScope,
-  append: boolean,
-  snapshotKey: string,
-): void {
-  if (append) return;
+function invalidateFreshMessagesSnapshot(scope: ConversationScope, snapshotKey: string): void {
   scope.invalidateSnapshot("messages", snapshotKey);
 }
 
@@ -360,51 +356,62 @@ function useMessagePageLoader({
     async (cursor: string | null, append: boolean): Promise<number> => {
       if (!scope || !sessionId || !isScopeRequestable(scope)) return 0;
       if (error) throw error;
-      // A fresh full page (initial load, retry, or binding refresh) must not
-      // let a concurrent live update project and then be overwritten by the
-      // stale page response: buffer live events until the new snapshot
-      // commits, then drain them on top.
-      invalidateFreshMessagesSnapshot(scope, append, snapshotKey);
-      const capturedRevision = requestRevisionRef.current;
-      let binding = await scope.ready();
-      let pageCursor = cursor;
-      if (pageCursor) {
-        const renewal = await scope.renewContinuation(pageCursor, snapshotKey);
-        pageCursor = renewal.cursor;
-        binding = renewal.binding;
+      // A fresh full page or continuation must not let a concurrent live
+      // update project and then be overwritten by the stale page response.
+      // Continuations also invalidate their committed snapshot so deletions
+      // cannot be acknowledged while the page is in flight and resurrected
+      invalidateFreshMessagesSnapshot(scope, snapshotKey);
+      const continuationSnapshotInvalidated = append;
+      try {
+        const capturedRevision = requestRevisionRef.current;
+        let binding = await scope.ready();
+        let pageCursor = cursor;
+        if (pageCursor) {
+          const renewal = await scope.renewContinuation(pageCursor, snapshotKey);
+          pageCursor = renewal.cursor;
+          binding = renewal.binding;
+        }
+        const page = await fetchMessagePage({
+          scope,
+          sessionId,
+          taskId,
+          authorsKey,
+          sort,
+          limit,
+          cursor: pageCursor,
+          binding,
+        });
+        if (
+          requestRevisionRef.current !== capturedRevision ||
+          scope.signal.aborted ||
+          scope.isTerminal()
+        ) {
+          if (continuationSnapshotInvalidated) scope.commitSnapshot("messages", snapshotKey);
+          return 0;
+        }
+        const { messages, additionCount } = mergeMessagePage(
+          messagesRef.current,
+          page.messages,
+          append,
+          sort,
+        );
+        messagesRef.current = messages;
+        setState((current) => ({
+          ...current,
+          messages,
+          loading: false,
+          hydrated: true,
+          loadingMore: false,
+          error: null,
+          hasMore: page.hasMore,
+        }));
+        scope.commitSnapshot("messages", snapshotKey);
+        cursorRef.current = page.cursor;
+        return additionCount;
+      } catch (cause) {
+        if (continuationSnapshotInvalidated) scope.commitSnapshot("messages", snapshotKey);
+        throw cause;
       }
-      const page = await fetchMessagePage({
-        scope,
-        sessionId,
-        taskId,
-        authorsKey,
-        sort,
-        limit,
-        cursor: pageCursor,
-        binding,
-      });
-      if (requestRevisionRef.current !== capturedRevision || scope.signal.aborted) {
-        return 0;
-      }
-      const { messages, additionCount } = mergeMessagePage(
-        messagesRef.current,
-        page.messages,
-        append,
-        sort,
-      );
-      messagesRef.current = messages;
-      setState((current) => ({
-        ...current,
-        messages,
-        loading: false,
-        hydrated: true,
-        loadingMore: false,
-        error: null,
-        hasMore: page.hasMore,
-      }));
-      if (!append) scope.commitSnapshot("messages", snapshotKey);
-      cursorRef.current = page.cursor;
-      return additionCount;
     },
     [
       authorsKey,
@@ -722,7 +729,7 @@ function useSessionTurns(
         return parseConversationResponse<TurnsPage>(response);
       })
       .then((page) => {
-        if (!current || scope.signal.aborted) return;
+        if (!current || scope.signal.aborted || scope.isTerminal()) return;
         setState((previous) => ({
           ...previous,
           turns: page.turns,

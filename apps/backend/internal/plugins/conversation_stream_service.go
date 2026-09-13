@@ -16,6 +16,17 @@ func (s *Service) SessionEvents() *SessionEventLog {
 	return s.sessionEvents
 }
 
+// isSessionRemoved reports whether the durable stream has a terminal removal
+// marker for sessionID. It is the only journal fallback authorization after
+// the task-service session lookup no longer succeeds.
+func (s *Service) isSessionRemoved(sessionID string) bool {
+	if s.sessionEvents == nil {
+		return false
+	}
+	_, _, terminal := s.sessionEvents.ReplayState(sessionID, 0)
+	return terminal
+}
+
 // SessionDelivery returns the service-owned poison delivery dispatcher.
 func (s *Service) SessionDelivery() *SessionDeliveryDispatcher {
 	return s.sessionDelivery

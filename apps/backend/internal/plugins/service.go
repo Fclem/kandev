@@ -698,6 +698,9 @@ func (s *Service) Close() error {
 // SetPluginsDir wires the root directory pkgtar.Install/pkgtar.Remove
 // operate under and initializes mandatory durable conversation state.
 func (s *Service) SetPluginsDir(dir string) error {
+	// Keep package installation rooted correctly even when durable conversation
+	// state initialization fails and the caller continues in degraded mode.
+	s.pluginsDir = dir
 	hostDir := filepath.Join(dir, ".host")
 	conversationTokens, err := loadOrCreateConversationTokenManager(
 		filepath.Join(hostDir, "conversation-token.key"),

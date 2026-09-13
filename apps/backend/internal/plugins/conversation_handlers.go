@@ -183,7 +183,7 @@ func (c *Controller) conversationMessages(ctx *gin.Context) {
 	}
 	session, err := c.conversationReader.GetTaskSession(ctx.Request.Context(), sessionID)
 	if err != nil || session == nil || session.ID != sessionID {
-		if !c.svc.HasConversationJournal() {
+		if !c.svc.isSessionRemoved(sessionID) {
 			writeConversationError(ctx, http.StatusNotFound, "not_found", "task session not found", false)
 			return
 		}
@@ -354,7 +354,7 @@ func (c *Controller) conversationTurns(ctx *gin.Context) {
 	session, err := c.conversationReader.GetTaskSession(ctx.Request.Context(), sessionID)
 	sessionFound := err == nil && session != nil && session.ID == sessionID
 	if !sessionFound {
-		if !c.svc.HasConversationJournal() {
+		if !c.svc.isSessionRemoved(sessionID) {
 			writeConversationError(ctx, http.StatusNotFound, "not_found", "task session not found", false)
 			return
 		}

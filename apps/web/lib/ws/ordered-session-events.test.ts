@@ -34,6 +34,25 @@ describe("ordered session event envelopes", () => {
       }),
     ).toBe("poison");
   });
+  it.each([
+    ["syntactically malformed", "not-a-timestamp"],
+    ["normalized-invalid", "2026-02-30T10:00:00Z"],
+  ])("classifies %s timestamps as poison", (_name, createdAt) => {
+    expect(
+      orderedCoreDisposition({
+        ...validEvent,
+        payload: {
+          type: "message.added",
+          session_id: "session-1",
+          task_id: "task-1",
+          message_id: "message-1",
+          author_type: "agent",
+          content: "content",
+          created_at: createdAt,
+        },
+      }),
+    ).toBe("poison");
+  });
 
   it("classifies turn removal as a projectable ordered event", () => {
     expect(

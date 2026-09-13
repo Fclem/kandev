@@ -83,6 +83,25 @@ func (s *Store) ListPendingRetryOutbox(ctx context.Context, now time.Time) ([]Re
 	return rows, err
 }
 
+// RetryRunHasReplayableOutbox reports whether an unbound retry run still has
+// durable dispatch work that startup replay is responsible for delivering.
+func (s *Store) RetryRunHasReplayableOutbox(ctx context.Context, runID string, generation int64, now time.Time) (bool, error) {
+	var count int
+	err := s.ro.GetContext(ctx, &count, s.ro.Rebind(`
+		SELECT COUNT(*) FROM automation_retry_outbox o
+		LEFT JOIN automation_retry_event_receipts r ON r.event_id = o.event_id
+		JOIN automation_run_operations op ON op.run_id = o.run_id
+			AND op.group_generation = ?
+			AND op.operation_kind = ?
+		WHERE o.run_id = ? AND r.event_id IS NULL
+			AND o.state IN (?, ?)
+			AND (o.lease_expires_at IS NULL OR o.lease_expires_at <= ?)
+			AND op.state IN (?, ?, ?)`),
+		generation, retryTaskOperationKind, runID, retryOutboxPending, retryOutboxLeased, now,
+		retryOperationRequested, retryOperationLeased, retryOperationCommitted)
+	return count > 0, err
+}
+
 // ReplayPendingRetryEvents republishes only unacknowledged, immutable retry
 // events. Missing or terminal runs are revoked instead of guessed into work.
 //

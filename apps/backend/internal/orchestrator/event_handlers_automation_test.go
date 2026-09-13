@@ -713,6 +713,76 @@ func TestCreateAutomationTaskDoesNotCreateAfterRetryFenceRejects(t *testing.T) {
 	require.Nil(t, creator.got)
 }
 
+type retryContinuationRecoveryStub struct {
+	*retryAutomationServiceStub
+	boundTaskID    string
+	boundSessionID string
+	boundTurnID    string
+	boundAction    automation.ThreadAction
+	dispatchErr    error
+}
+
+func (s *retryContinuationRecoveryStub) BindRun(
+	_ context.Context,
+	_ string,
+	taskID, sessionID, turnID string,
+	action automation.ThreadAction,
+	_ string,
+) error {
+	s.boundTaskID, s.boundSessionID, s.boundTurnID = taskID, sessionID, turnID
+	s.boundAction = action
+	return nil
+}
+
+func (s *retryContinuationRecoveryStub) DispatchRun(
+	context.Context,
+	string,
+	automation.ThreadAction,
+	string,
+	func() (automation.RunDispatch, error),
+) error {
+	return s.dispatchErr
+}
+
+func TestCreateAutomationTaskAdoptsCommittedRetryContinuation(t *testing.T) {
+	repo := setupTestRepo(t)
+	base := &retryAutomationServiceStub{
+		stubAutomationService: &stubAutomationService{automation: &automation.Automation{
+			ID: "retry-automation", WorkspaceID: "retry-workspace", Name: "retry",
+			Prompt: "retry", Enabled: true, ContinuationPolicy: automation.ContinuationPolicyReuseThread,
+		}},
+		run: &automation.AutomationRun{
+			ID: "retry-run", AutomationID: "retry-automation", TriggerType: automation.TriggerTypeManual,
+			RetryGroupID: "retry-group", RetryGroupGeneration: 3,
+			RetryState: automation.RetryStateTriggered, Status: automation.RunStatusTriggered,
+		},
+		operation: &automation.RetryOperation{
+			State: "committed", ExternalTaskID: "retry-task",
+			ExternalSessionID: "retry-session", ExternalTurnID: "retry-turn",
+		},
+		adopted: &models.Task{ID: "retry-task"},
+	}
+	base.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(base.run, base.automation)
+	base.run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
+	autoSvc := &retryContinuationRecoveryStub{
+		retryAutomationServiceStub: base,
+		dispatchErr:                errors.New("recovery must not dispatch a second turn"),
+	}
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.SetAutomationService(autoSvc)
+	svc.reviewTaskCreator = &stubReviewTaskCreator{adoptedTask: base.adopted}
+
+	svc.createAutomationTask(context.Background(), &automation.AutomationTriggeredEvent{
+		RunID: "retry-run", RetryGroupGeneration: 3, TriggerType: automation.TriggerTypeManual,
+	})
+
+	require.Equal(t, "retry-task", autoSvc.boundTaskID)
+	require.Equal(t, "retry-session", autoSvc.boundSessionID)
+	require.Equal(t, "retry-turn", autoSvc.boundTurnID)
+	require.Equal(t, automation.ThreadActionResumed, autoSvc.boundAction)
+	require.True(t, autoSvc.acknowledged)
+}
+
 // TestRefreshAutomationContinuationMetadataOnResume is the regression
 // guard for the reuse_thread + github_pr_merged defect: a resumed task keeps
 // whatever automation_target_task_id its FIRST firing stamped, so every merge

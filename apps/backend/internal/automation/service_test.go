@@ -597,11 +597,11 @@ func TestWorkspaceAuthorizerGatesAccess(t *testing.T) {
 	if _, err := svc.GetWebhookSecret(ctx, a.ID); !errors.Is(err, denied) {
 		t.Fatalf("GetWebhookSecret: %v", err)
 	}
-	if _, err := svc.ListRuns(ctx, a.ID, 10); !errors.Is(err, denied) {
-		t.Fatalf("ListRuns: %v", err)
+	if _, err := svc.ListRetryHistory(ctx, a.ID, "", 10); !errors.Is(err, denied) {
+		t.Fatalf("ListRetryHistory: %v", err)
 	}
-	if _, err := svc.ListWorkspaceRuns(ctx, "ws-a", 10); !errors.Is(err, denied) {
-		t.Fatalf("ListWorkspaceRuns: %v", err)
+	if _, err := svc.ListWorkspaceRetryHistory(ctx, "ws-a", "", 10); !errors.Is(err, denied) {
+		t.Fatalf("ListWorkspaceRetryHistory: %v", err)
 	}
 	if _, err := svc.ListAutomationSummaries(ctx, "ws-a"); !errors.Is(err, denied) {
 		t.Fatalf("ListAutomationSummaries: %v", err)

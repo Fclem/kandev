@@ -213,6 +213,13 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	if err := tx.GetContext(ctx, &group, tx.Rebind(`SELECT * FROM automation_retry_groups WHERE id = ?`), parent.RetryGroupID); err != nil {
 		return nil, err
 	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		WHERE run_id = ? AND state IN (?, ?)`),
+		retryOutboxRevoked, time.Now().UTC(), runID, retryOutboxPending, retryOutboxLeased); err != nil {
+		return nil, err
+	}
 	if group.State == RetryGroupSuperseded && group.Generation != generation {
 		failure := SanitizeAutomationFailure(raw, phase, nil)
 		result, execErr := tx.ExecContext(ctx, tx.Rebind(`

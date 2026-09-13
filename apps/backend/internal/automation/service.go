@@ -947,14 +947,8 @@ func (s *Service) stopBoundRetryRun(ctx context.Context, run *AutomationRun) err
 	if s.runStopper == nil {
 		return errors.New("automation run stopper is not configured")
 	}
-	stopped, err := s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
-	if err != nil {
-		return err
-	}
-	if !stopped {
-		return errors.New("automation retry run stop was not confirmed")
-	}
-	return nil
+	_, err := s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+	return err
 }
 
 func (s *Service) cancelRetryRunForStop(ctx context.Context, run *AutomationRun) error {

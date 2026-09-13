@@ -497,7 +497,15 @@ func TestRecoverRetryLedgerReclaimsLiveLeaseAfterCrashBeforeProviderCreate(t *te
 	require.NoError(t, err)
 	require.Equal(t, retryOperationCommitted, committed.State)
 	require.Equal(t, "stable-task", committed.ExternalTaskID)
-
+	require.NoError(t, store.CommitRetryContinuationOperation(ctx, run.ID, 1, "", RunDispatch{
+		TaskID: "stable-task", SessionID: "stable-session", TurnID: "stable-turn",
+	}))
+	upgraded, err := store.GetRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, retryOperationCommitted, upgraded.State)
+	require.Equal(t, "stable-task", upgraded.ExternalTaskID)
+	require.Equal(t, "stable-session", upgraded.ExternalSessionID)
+	require.Equal(t, "stable-turn", upgraded.ExternalTurnID)
 }
 func TestRetryAdmissionPersistsImmutableIntentAndSafeEvent(t *testing.T) {
 	ctx := context.Background()

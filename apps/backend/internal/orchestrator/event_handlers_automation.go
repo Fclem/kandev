@@ -98,6 +98,16 @@ type automationRetryRunLock interface {
 
 const retryOperationCommittedState = "committed"
 
+var errDeterministicCommittedRetryTask = errors.New("deterministic committed retry task failure")
+
+func committedRetryTaskDeterministicError(message string) error {
+	return fmt.Errorf("%w: %s", errDeterministicCommittedRetryTask, message)
+}
+
+func isDeterministicCommittedRetryTaskError(err error) bool {
+	return errors.Is(err, errDeterministicCommittedRetryTask)
+}
+
 const retryAutomationRunIDMetadataKey = "automation_run_id"
 
 type automationContinuationState interface {
@@ -465,6 +475,10 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	}
 	if taskErr != nil {
 		if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
+			if isDeterministicCommittedRetryTaskError(taskErr) {
+				s.recordFailedRun(ctx, evt, taskErr.Error())
+				return
+			}
 			s.logger.Error("failed to adopt committed retry task",
 				zap.String("automation_id", a.ID),
 				zap.String("run_id", evt.RunID),
@@ -572,6 +586,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	if s.autoStartAutomationTaskForRun(
 		ctx, a, task, task.WorkflowStepID, evt.RunID, action, reason,
 		retryOperation != nil && retryOperation.State == retryOperationCommittedState,
+		retryOperation,
 	) && retryRun != nil {
 		s.acknowledgeRetryEventAfterBinding(ctx, evt)
 	}
@@ -602,7 +617,6 @@ func automationFromRetrySnapshot(snapshot automation.RetryLaunchConfigSnapshot) 
 		Enabled:            true,
 	}
 }
-
 func (s *Service) adoptCommittedRetryTask(
 	ctx context.Context,
 	a *automation.Automation,
@@ -610,24 +624,27 @@ func (s *Service) adoptCommittedRetryTask(
 	operation *automation.RetryOperation,
 ) (*models.Task, error) {
 	if operation == nil || operation.ExternalTaskID == "" {
-		return nil, errors.New("committed retry task identity is missing")
+		return nil, committedRetryTaskDeterministicError("committed retry task identity is missing")
 	}
 	if s.repo == nil {
 		return nil, errors.New("committed retry task lookup unavailable")
 	}
 	task, err := s.repo.GetTask(ctx, operation.ExternalTaskID)
 	if err != nil {
+		if automationRunExecutionGone(err) {
+			return nil, committedRetryTaskDeterministicError("committed retry task is missing")
+		}
 		return nil, err
 	}
 	if task == nil {
-		return nil, errors.New("committed retry task is missing")
+		return nil, committedRetryTaskDeterministicError("committed retry task is missing")
 	}
 	if task.WorkspaceID != a.WorkspaceID {
-		return nil, errors.New("committed retry task belongs to a different workspace")
+		return nil, committedRetryTaskDeterministicError("committed retry task belongs to a different workspace")
 	}
 	allowSharedContinuation := operation.ExternalSessionID != "" && operation.ExternalTurnID != ""
 	if err := validateRetryTaskOwnership(task, a, evt, automationTaskOrigin(a), allowSharedContinuation); err != nil {
-		return nil, err
+		return nil, committedRetryTaskDeterministicError(err.Error())
 	}
 	return task, nil
 }
@@ -1308,12 +1325,30 @@ func (s *Service) acknowledgeRetryEventAfterBinding(ctx context.Context, evt *au
 	}
 }
 func (s *Service) autoStartAutomationTask(ctx context.Context, a *automation.Automation, task *models.Task, workflowStepID string) {
-	s.autoStartAutomationTaskForRun(ctx, a, task, workflowStepID, "", automation.ThreadActionCreated, "", false)
+	s.autoStartAutomationTaskForRun(ctx, a, task, workflowStepID, "", automation.ThreadActionCreated, "", false, nil)
 }
 
-func (s *Service) autoStartAutomationTaskForRun(ctx context.Context, a *automation.Automation, task *models.Task, workflowStepID, runID string, action automation.ThreadAction, reason string, preserveTaskOnFailure bool) bool {
+func (s *Service) autoStartAutomationTaskForRun(
+	ctx context.Context,
+	a *automation.Automation,
+	task *models.Task,
+	workflowStepID, runID string,
+	action automation.ThreadAction,
+	reason string,
+	preserveTaskOnFailure bool,
+	operation *automation.RetryOperation,
+) bool {
 	if s.dispatchAutomationRun(ctx, a.ID, task.ID, "", runID, action, reason, "auto-start", func() (automation.RunDispatch, error) {
-		return s.startAutomationTask(ctx, a, task, workflowStepID)
+		dispatch, err := s.startAutomationTask(ctx, a, task, workflowStepID)
+		if err != nil {
+			return automation.RunDispatch{}, err
+		}
+		if operation != nil && operation.State == retryOperationCommittedState {
+			if err := s.commitRetryContinuationOperation(ctx, runID, operation, dispatch); err != nil {
+				return automation.RunDispatch{}, fmt.Errorf("commit exact retry launch identity: %w", err)
+			}
+		}
+		return dispatch, nil
 	}, nil, preserveTaskOnFailure) {
 		return s.retryRunHasExactBinding(ctx, runID)
 	}

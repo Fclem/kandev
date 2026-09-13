@@ -298,6 +298,53 @@ func TestService_DeleteAllRuns_DeletesCommittedRetryTaskBeforeBind(t *testing.T)
 	require.Equal(t, []string{"committed-task-all"}, deleter.deleted)
 }
 
+func TestService_DeleteRunAfterPreBindFailureDoesNotBreakRetryRecovery(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	automation := &Automation{
+		ID:          "automation-delete-prebind",
+		WorkspaceID: "workspace-delete-prebind",
+		Name:        "delete prebind",
+		Enabled:     true,
+	}
+	require.NoError(t, svc.store.CreateAutomation(ctx, automation))
+	group := &RetryGroup{
+		ID:           "group-delete-prebind",
+		AutomationID: automation.ID,
+		Generation:   1,
+		State:        RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	parent := &AutomationRun{
+		ID:                   "run-delete-prebind",
+		AutomationID:         automation.ID,
+		TriggerType:          TriggerTypeManual,
+		Status:               RunStatusTriggered,
+		RetryGroupID:         group.ID,
+		RetryGroupGeneration: 1,
+		AttemptNumber:        1,
+		RetryState:           RetryStateTriggered,
+		RetryPolicySnapshot:  `{"mode":"finite","max_retries":"1","delay_seconds":"1","backoff":"fixed"}`,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, parent))
+	require.NoError(t, svc.store.CreateRetryOutbox(ctx, &RetryOutbox{
+		EventID: "run-delete-prebind:initial",
+		RunID:   parent.ID,
+		State:   retryOutboxPending,
+	}))
+
+	_, err := svc.FinalizeAutomationRetryFailure(ctx, parent.ID, 1, errors.New("provider failed before bind"), "launch")
+	require.NoError(t, err)
+	require.NoError(t, svc.DeleteRun(ctx, parent.ID))
+
+	rows, err := svc.store.ListPendingRetryOutbox(ctx, time.Now().UTC())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotEmpty(t, rows[0].RunID)
+	require.NotEqual(t, "run-delete-prebind:initial", rows[0].EventID)
+	require.NoError(t, svc.ReplayPendingRetryEvents(ctx))
+}
+
 func TestService_DeleteRun_PreservesVisibleAutomationTask(t *testing.T) {
 	svc := newTestService(t)
 	deleter := &fakeTaskDeleter{}

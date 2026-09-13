@@ -553,6 +553,42 @@ func TestStopRunCancelsSupersededRetryWithoutTouchingReplacement(t *testing.T) {
 	require.Equal(t, int64(1), reloadedReplacement.Generation)
 }
 
+func TestDeleteRunRemovesSupersededRetryRuns(t *testing.T) {
+	for _, status := range []RunStatus{RunStatusTriggered, RunStatusTaskCreated} {
+		t.Run(string(status), func(t *testing.T) {
+			svc := newTestService(t)
+			ctx := context.Background()
+			a := &Automation{
+				WorkspaceID: "workspace-delete-superseded",
+				Name:        "delete superseded",
+				Enabled:     true,
+			}
+			require.NoError(t, svc.store.CreateAutomation(ctx, a))
+			group := &RetryGroup{
+				ID: "group-delete-superseded", AutomationID: a.ID,
+				Generation: 2, State: RetryGroupSuperseded,
+				SupersededByRunID: "replacement-run",
+			}
+			require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+			run := &AutomationRun{
+				ID: "run-delete-superseded-" + string(status), AutomationID: a.ID,
+				Status: status, RetryGroupID: group.ID, RetryGroupGeneration: 1,
+				RetryState: RetryStateTriggered,
+			}
+			require.NoError(t, svc.store.CreateRun(ctx, run))
+
+			require.NoError(t, svc.DeleteRun(ctx, run.ID))
+			deleted, err := svc.store.GetRun(ctx, run.ID)
+			require.NoError(t, err)
+			require.Nil(t, deleted)
+			remaining, err := svc.store.GetRetryGroup(ctx, group.ID)
+			require.NoError(t, err)
+			require.Equal(t, RetryGroupSuperseded, remaining.State)
+			require.Equal(t, int64(2), remaining.Generation)
+		})
+	}
+}
+
 func TestStopRunRetryStopperErrorLeavesRetryLive(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

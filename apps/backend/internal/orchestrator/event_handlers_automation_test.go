@@ -919,10 +919,10 @@ func (s *retryContinuationRecoveryStub) DispatchRun(
 	return s.dispatchErr
 }
 
-func TestCreateAutomationTaskAdoptsCommittedRetryContinuation(t *testing.T) {
+func TestCreateAutomationTaskAdoptsCommittedRetryContinuationWithOlderTaskExternalID(t *testing.T) {
 	repo := setupTestRepo(t)
 	require.NoError(t, repo.CreateTask(context.Background(),
-		retryOwnedTask("retry-task", "retry-workspace", "retry-automation", "retry-run", 3)))
+		retryOwnedTask("retry-task", "retry-workspace", "retry-automation", "retry-run", 2)))
 	base := &retryAutomationServiceStub{
 		stubAutomationService: &stubAutomationService{automation: &automation.Automation{
 			ID: "retry-automation", WorkspaceID: "retry-workspace", Name: "retry",

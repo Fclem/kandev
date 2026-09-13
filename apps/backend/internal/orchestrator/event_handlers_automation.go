@@ -1173,16 +1173,14 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		if err := s.verifyRetryContinuationAdmission(ctx, runID, operations...); err != nil {
 			return automation.RunDispatch{}, err
 		}
-		result, err := s.promptAutomationContinuation(ctx, task, session, prompt)
+		var operation *automation.RetryOperation
+		if len(operations) > 0 {
+			operation = operations[0]
+		}
+		result, err := s.promptAutomationContinuation(ctx, task, session, prompt, runID, operation)
 		if err != nil {
 			restore()
 			return automation.RunDispatch{}, err
-		}
-		if len(operations) > 0 && operations[0] != nil {
-			if err := s.commitRetryContinuationOperation(ctx, runID, operations[0], result); err != nil {
-				restore()
-				return automation.RunDispatch{}, err
-			}
 		}
 		return result, nil
 	}
@@ -1220,8 +1218,28 @@ func (s *Service) promptAutomationContinuation(
 	task *models.Task,
 	session *models.TaskSession,
 	prompt string,
+	runID string,
+	operation *automation.RetryOperation,
 ) (automation.RunDispatch, error) {
-	result, err := s.PromptTask(ctx, task.ID, session.ID, prompt, "", false, nil, true)
+	var acceptanceErr error
+	result, err := s.promptTask(ctx, task.ID, session.ID, prompt, "", false, nil, true, promptTaskOptions{
+		onAccepted: func(turnID string) {
+			if operation == nil {
+				return
+			}
+			commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptFailureCleanupTimeout)
+			acceptanceErr = s.commitRetryContinuationOperation(commitCtx, runID, operation, automation.RunDispatch{
+				TaskID: task.ID, SessionID: session.ID, TurnID: turnID,
+			})
+			cancel()
+		},
+	})
+	if acceptanceErr != nil {
+		if err != nil {
+			return automation.RunDispatch{}, errors.Join(err, acceptanceErr)
+		}
+		return automation.RunDispatch{}, acceptanceErr
+	}
 	if err != nil {
 		return automation.RunDispatch{}, err
 	}

@@ -1601,17 +1601,9 @@ func (s *Store) listRetryHistory(
 		groups = groups[:limit]
 	}
 	for _, group := range groups {
-		var runs []*AutomationRun
-		if err := s.ro.SelectContext(ctx, &runs, s.ro.Rebind(`
-			SELECT * FROM automation_runs WHERE retry_group_id = ?
-			ORDER BY attempt_number ASC, id ASC`), group.ID); err != nil {
+		runs, err := s.listRetryGroupRuns(ctx, group.ID)
+		if err != nil {
 			return nil, err
-		}
-		for _, run := range runs {
-			if run.RetryState == RetryStateCancelled {
-				run.Status = RunStatusCancelled
-			}
-			run.TriggerData = json.RawMessage(run.TriggerDataJSON)
 		}
 		var triggerIDs []string
 		_ = json.Unmarshal([]byte(group.TriggerIDsJSON), &triggerIDs)
@@ -1844,6 +1836,36 @@ func (s *Store) listRunsRaw(ctx context.Context, automationID string, limit int)
 		`SELECT * FROM automation_runs WHERE automation_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`),
 		automationID, limit)
 	return runs, err
+}
+
+func (s *Store) listRetryGroupRuns(ctx context.Context, groupID string) ([]*AutomationRun, error) {
+	var runs []*AutomationRun
+	err := s.ro.SelectContext(ctx, &runs, s.ro.Rebind(`
+		SELECT`+runTaskStateColumnsSQL+`
+		FROM automation_runs ar
+		LEFT JOIN tasks t ON t.id = ar.task_id
+		WHERE ar.retry_group_id = ?
+		ORDER BY ar.attempt_number ASC, ar.id ASC`),
+		append(runTaskStateArgs(), groupID)...)
+	if db.IsMissingTableError(err) {
+		err = s.ro.SelectContext(ctx, &runs, s.ro.Rebind(`
+			SELECT * FROM automation_runs
+			WHERE retry_group_id = ?
+			ORDER BY attempt_number ASC, id ASC`), groupID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, run := range runs {
+		if run.RetryState == RetryStateCancelled {
+			run.Status = RunStatusCancelled
+		}
+		run.TriggerData = json.RawMessage(run.TriggerDataJSON)
+	}
+	if err := s.hydrateRunSummaries(ctx, runs); err != nil {
+		return nil, err
+	}
+	return runs, nil
 }
 
 // maxWorkspaceRunsLimit caps the workspace-wide feed. Unlike ListRuns, which

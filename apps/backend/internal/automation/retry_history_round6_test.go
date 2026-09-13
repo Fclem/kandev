@@ -100,6 +100,46 @@ func TestCancelledRetryStateProjectsCancelledStatus(t *testing.T) {
 	require.Equal(t, RunStatusCancelled, history.Items[0].Attempts[0].Status)
 }
 
+func TestListRetryHistoryProjectsTaskStateAndRunSummary(t *testing.T) {
+	store := setupTestStore(t)
+	createTasksTable(t, store)
+	ctx := context.Background()
+	automation := &Automation{
+		ID: "history-projection-automation", WorkspaceID: "history-projection-workspace",
+		Name: "history projection", Enabled: true,
+	}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	group := &RetryGroup{
+		ID: "history-projection-group", AutomationID: automation.ID,
+		Generation: 1, State: RetryGroupCompleted,
+	}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	insertTask(t, store, "history-projection-task", true)
+	_, err := store.db.ExecContext(ctx, `
+		INSERT INTO task_session_messages
+			(id, task_id, turn_id, author_type, content, type)
+		VALUES (?, ?, ?, 'agent', ?, 'message')`,
+		"history-projection-message", "history-projection-task", "history-projection-turn",
+		"archived retry summary")
+	require.NoError(t, err)
+	require.NoError(t, store.CreateRun(ctx, &AutomationRun{
+		ID: "history-projection-run", AutomationID: automation.ID,
+		TriggerID: "history-projection-trigger", TriggerType: TriggerTypeManual,
+		TaskID: "history-projection-task", TurnID: "history-projection-turn",
+		Status: RunStatusTaskCreated, RetryGroupID: group.ID,
+		RetryGroupGeneration: 1, AttemptNumber: 1, RetryState: RetryStateCompleted,
+	}))
+
+	page, err := store.ListRetryHistory(ctx, automation.ID, "", 10)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Len(t, page.Items[0].Attempts, 1)
+	attempt := page.Items[0].Attempts[0]
+	require.Equal(t, RunStatusArchived, attempt.Status)
+	require.Equal(t, "history-projection-task", attempt.TaskID)
+	require.Equal(t, "archived retry summary", attempt.Summary)
+}
+
 func TestDeleteAllRunsRemovesRetryHistoryLedger(t *testing.T) {
 	svc := newTestService(t)
 	store := svc.store

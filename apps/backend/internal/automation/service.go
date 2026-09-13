@@ -1307,6 +1307,12 @@ func (s *Service) DispatchRun(
 func (s *Service) markDispatchFailed(ctx context.Context, runID string, dispatchErr error) error {
 	run, lookupErr := s.store.GetRun(ctx, runID)
 	if lookupErr == nil && run != nil && run.RetryGroupID != "" {
+		operation, operationErr := s.store.GetRetryTaskOperation(ctx, runID, run.RetryGroupGeneration)
+		if operationErr == nil && operation.State == retryOperationCommitted {
+			// The provider accepted the identity; keep the run open for exact
+			// binding recovery instead of creating a duplicate retry child.
+			return dispatchErr
+		}
 		if _, finalizeErr := s.FinalizeAutomationRetryFailure(
 			ctx, runID, run.RetryGroupGeneration, dispatchErr, "launch",
 		); finalizeErr != nil {

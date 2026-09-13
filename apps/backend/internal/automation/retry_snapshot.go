@@ -102,7 +102,7 @@ func DecodeRetryLaunchConfigSnapshot(raw string, version int64) (RetryLaunchConf
 	if snapshot.Version != RetryLaunchConfigVersion || snapshot.AutomationID == "" || snapshot.WorkspaceID == "" || snapshot.TriggerID == "" || snapshot.TriggerType == "" || snapshot.ResolvedTriggerAt.IsZero() {
 		return RetryLaunchConfigSnapshot{}, errors.New("retry launch snapshot is incomplete")
 	}
-	if len(snapshot.TriggerData) == 0 || snapshot.ResolvedPrompt == "" && snapshot.Prompt != "" {
+	if len(snapshot.TriggerData) == 0 {
 		return RetryLaunchConfigSnapshot{}, errors.New("retry launch snapshot content is incomplete")
 	}
 	if snapshot.MaxConcurrentRuns < 0 {

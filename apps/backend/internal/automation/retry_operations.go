@@ -136,9 +136,9 @@ func (s *Store) CommitRetryTaskOperation(ctx context.Context, runID string, gene
 		UPDATE automation_run_operations
 		SET state = ?, external_task_id = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
 		WHERE run_id = ? AND group_generation = ? AND operation_kind = ?
-			AND ((state = ? AND lease_token = ?) OR state = ?)`),
+			AND state = ? AND lease_token = ?`),
 		retryOperationCommitted, taskID, now, runID, generation, retryTaskOperationKind,
-		retryOperationLeased, leaseToken, retryOperationCommitted)
+		retryOperationLeased, leaseToken)
 	if err != nil {
 		return err
 	}

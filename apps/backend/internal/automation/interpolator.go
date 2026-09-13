@@ -72,6 +72,9 @@ func resolvePathPlaceholders(s string, data map[string]interface{}) string {
 			return match
 		}
 		val, ok := lookupPath(data, parts[2])
+		if !ok && parts[1] == "webhook" {
+			val, ok = lookupWebhookProjectionPath(data, parts[2])
+		}
 		if !ok {
 			return match
 		}
@@ -113,6 +116,21 @@ func lookupPath(data map[string]interface{}, path string) (string, bool) {
 		return "", false
 	}
 	return toString(cur), true
+}
+
+func lookupWebhookProjectionPath(data map[string]interface{}, path string) (string, bool) {
+	payload, ok := data["payload"].(map[string]interface{})
+	if !ok {
+		return "", false
+	}
+	parts := strings.Split(path, ".")
+	pointer := "/" + strings.Join(parts, "/")
+	value, ok := payload[pointer]
+	if !ok || value == nil {
+		return "", false
+	}
+	return toString(value), true
+
 }
 
 // unresolvedRe matches leftover {{placeholder}} tokens that weren't replaced.

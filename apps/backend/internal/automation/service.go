@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -821,15 +822,24 @@ func (s *Service) DeleteAutomationsByWorkspace(ctx context.Context, workspaceID 
 	return deleted, nil
 }
 func (s *Service) stopAutomationRun(ctx context.Context, run *AutomationRun) error {
-	if run == nil || run.TaskID == "" || run.SessionID == "" || run.TurnID == "" || s.runStopper == nil {
+	originallyUnbound := run != nil && (run.TaskID == "" || run.SessionID == "" || run.TurnID == "")
+	boundRun, err := s.retryRunWithOperationBinding(ctx, run)
+	if err != nil {
+		return err
+	}
+	if boundRun == nil || boundRun.TaskID == "" || boundRun.SessionID == "" || boundRun.TurnID == "" || s.runStopper == nil {
 		return nil
 	}
-	stopped, stopErr := s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+	stopped, stopErr := s.runStopper.StopAutomationRun(ctx, boundRun.TaskID, boundRun.SessionID, boundRun.TurnID)
 	if stopErr != nil {
 		return fmt.Errorf("stop automation run %s: %w", run.ID, stopErr)
 	}
 	if stopped {
-		if markErr := s.store.MarkRunTerminal(ctx, run.ID, run.SessionID, run.TurnID, RunStatusFailed, "automation deleted"); markErr != nil {
+		markErr := s.store.MarkRunTerminal(ctx, run.ID, boundRun.SessionID, boundRun.TurnID, RunStatusFailed, "automation deleted")
+		if markErr != nil && originallyUnbound {
+			markErr = s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "automation deleted")
+		}
+		if markErr != nil {
 			return fmt.Errorf("mark automation run %s failed: %w", run.ID, markErr)
 		}
 	}
@@ -940,6 +950,28 @@ func (s *Service) ReconcileCleanupJobs(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) retryRunWithOperationBinding(ctx context.Context, run *AutomationRun) (*AutomationRun, error) {
+	if run == nil || run.RetryGroupID == "" ||
+		(run.TaskID != "" && run.SessionID != "" && run.TurnID != "") {
+		return run, nil
+	}
+	operation, err := s.store.GetRetryTaskOperation(ctx, run.ID, run.RetryGroupGeneration)
+	if errors.Is(err, sql.ErrNoRows) {
+		return run, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if operation.ExternalTaskID == "" || operation.ExternalSessionID == "" || operation.ExternalTurnID == "" {
+		return run, nil
+	}
+	bound := *run
+	bound.TaskID = operation.ExternalTaskID
+	bound.SessionID = operation.ExternalSessionID
+	bound.TurnID = operation.ExternalTurnID
+	return &bound, nil
+}
+
 func (s *Service) stopBoundRetryRun(ctx context.Context, run *AutomationRun) error {
 	if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
 		return nil
@@ -956,7 +988,11 @@ func (s *Service) cancelRetryRunForStop(ctx context.Context, run *AutomationRun)
 	if err != nil {
 		return err
 	}
-	if err := s.stopBoundRetryRun(ctx, run); err != nil {
+	boundRun, err := s.retryRunWithOperationBinding(ctx, run)
+	if err != nil {
+		return err
+	}
+	if err := s.stopBoundRetryRun(ctx, boundRun); err != nil {
 		return err
 	}
 	superseded := group != nil && group.State == RetryGroupSuperseded &&
@@ -987,6 +1023,11 @@ func (s *Service) StopRun(ctx context.Context, automationID, runID string) (*Aut
 	if run == nil || run.AutomationID != automationID {
 		return nil, ErrAutomationNotFound
 	}
+	boundRun, bindErr := s.retryRunWithOperationBinding(ctx, run)
+	if bindErr != nil {
+		return nil, bindErr
+	}
+	run = boundRun
 	if run.RetryGroupID != "" && !retryRunIsTerminal(run) {
 		if err := s.cancelRetryRunForStop(ctx, run); err != nil {
 			return nil, err
@@ -1382,9 +1423,14 @@ func (s *Service) DeleteRun(ctx context.Context, runID string) error {
 	}
 	unlock := s.automationRunLock(run.AutomationID)
 	defer unlock()
+	boundRun, bindErr := s.retryRunWithOperationBinding(ctx, run)
+	if bindErr != nil {
+		return bindErr
+	}
 	if err := s.stopAutomationRun(ctx, run); err != nil {
 		return err
 	}
+	run = boundRun
 	if run.RetryGroupID != "" && !retryRunIsTerminal(run) {
 		if err := s.cancelRetryGroupForDelete(ctx, run); err != nil {
 			return err
@@ -1410,7 +1456,7 @@ func (s *Service) deleteRunTaskIfUnreferenced(ctx context.Context, run *Automati
 	}
 	if s.taskOriginLookup != nil {
 		_, isAutomationRun, ok := s.taskOriginLookup.TaskWorkspaceAndAutomationOrigin(ctx, taskID)
-		if ok && !isAutomationRun {
+		if !ok || !isAutomationRun {
 			return nil
 		}
 	}
@@ -1492,7 +1538,7 @@ func (s *Service) DeleteAllRuns(ctx context.Context, automationID string) error 
 		seen[taskID] = struct{}{}
 		if s.taskOriginLookup != nil {
 			_, isAutomationRun, ok := s.taskOriginLookup.TaskWorkspaceAndAutomationOrigin(ctx, taskID)
-			if ok && !isAutomationRun {
+			if !ok || !isAutomationRun {
 				continue
 			}
 		}

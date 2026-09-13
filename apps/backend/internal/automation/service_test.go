@@ -366,6 +366,26 @@ func TestService_DeleteRun_PreservesVisibleAutomationTask(t *testing.T) {
 	require.Empty(t, deleter.deleted)
 }
 
+func TestService_DeleteRun_SkipsTaskWhenOriginLookupIsUnavailable(t *testing.T) {
+	svc := newTestService(t)
+	deleter := &fakeTaskDeleter{}
+	svc.SetTaskDeleter(deleter)
+	svc.SetTaskOriginLookup(&fakeTaskOriginLookup{results: map[string]fakeOriginResult{
+		"lookup-unavailable-task": {isAutomationRun: true, ok: false},
+	}})
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "ws-lookup-unavailable", Name: "lookup unavailable", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeScheduled, Status: RunStatusTaskCreated,
+		TaskID: "lookup-unavailable-task",
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+
+	require.NoError(t, svc.DeleteRun(ctx, run.ID))
+	require.Empty(t, deleter.deleted)
+}
+
 func TestService_DeleteAutomation_PreservesVisibleAutomationTasks(t *testing.T) {
 	svc := newTestService(t)
 	deleter := &fakeTaskDeleter{}
@@ -460,6 +480,25 @@ func TestService_DeleteAllRuns_PreservesVisibleAutomationTasks(t *testing.T) {
 
 	require.NoError(t, svc.DeleteAllRuns(ctx, a.ID))
 	require.Equal(t, []string{"hidden-task"}, deleter.deleted)
+}
+
+func TestService_DeleteAllRuns_SkipsTasksWhenOriginLookupIsUnavailable(t *testing.T) {
+	svc := newTestService(t)
+	deleter := &fakeTaskDeleter{}
+	svc.SetTaskDeleter(deleter)
+	svc.SetTaskOriginLookup(&fakeTaskOriginLookup{results: map[string]fakeOriginResult{
+		"bulk-lookup-unavailable-task": {isAutomationRun: true, ok: false},
+	}})
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "ws-bulk-lookup-unavailable", Name: "bulk lookup unavailable", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	require.NoError(t, svc.store.CreateRun(ctx, &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeScheduled, Status: RunStatusSucceeded,
+		TaskID: "bulk-lookup-unavailable-task",
+	}))
+
+	require.NoError(t, svc.DeleteAllRuns(ctx, a.ID))
+	require.Empty(t, deleter.deleted)
 }
 
 func TestService_DeleteAllRuns_TaskNotFound_StillClearsRuns(t *testing.T) {

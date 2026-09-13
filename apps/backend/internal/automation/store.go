@@ -2199,8 +2199,8 @@ func (s *Store) GetCommittedRetryTaskID(ctx context.Context, runID string) (stri
 }
 
 // ListRunTaskIDs returns all task identities owned by an automation's runs,
-// including provider identities committed before retry binding completed.
-// Used by DeleteAllRuns so the service can clean up tasks before purging rows.
+// including provider identities committed or ambiguously accepted before retry
+// binding completed. Used by DeleteAllRuns before purging run rows.
 func (s *Store) ListRunTaskIDs(ctx context.Context, automationID string) ([]string, error) {
 	var ids []string
 	err := s.ro.SelectContext(ctx, &ids, s.ro.Rebind(`
@@ -2211,8 +2211,9 @@ func (s *Store) ListRunTaskIDs(ctx context.Context, automationID string) ([]stri
 		FROM automation_run_operations o
 		JOIN automation_runs ar ON ar.id = o.run_id
 		WHERE ar.automation_id = ? AND o.operation_kind = ?
-			AND o.state = ? AND o.external_task_id != ''`),
-		automationID, automationID, retryTaskOperationKind, retryOperationCommitted)
+			AND o.state IN (?, ?) AND o.external_task_id != ''`),
+		automationID, automationID, retryTaskOperationKind,
+		retryOperationCommitted, retryOperationAmbiguous)
 	return ids, err
 }
 

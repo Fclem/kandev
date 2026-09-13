@@ -218,14 +218,21 @@ func (s *Store) MarkRetryOperationAmbiguous(
 	runID string,
 	generation int64,
 	leaseToken string,
+	dispatch RunDispatch,
 ) error {
+	if dispatch.TaskID == "" || dispatch.SessionID == "" || dispatch.TurnID == "" {
+		return errors.New("retry ambiguous identity is required")
+	}
 	now := time.Now().UTC()
 	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE automation_run_operations
-		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		SET state = ?, external_task_id = ?, external_session_id = ?,
+			external_turn_id = ?, lease_token = '', lease_expires_at = NULL,
+			updated_at = ?
 		WHERE run_id = ? AND group_generation = ? AND operation_kind = ?
 			AND state = ? AND lease_token = ?`),
-		retryOperationAmbiguous, now, runID, generation, retryTaskOperationKind,
+		retryOperationAmbiguous, dispatch.TaskID, dispatch.SessionID,
+		dispatch.TurnID, now, runID, generation, retryTaskOperationKind,
 		retryOperationLeased, leaseToken)
 	if err != nil {
 		return err
@@ -234,7 +241,10 @@ func (s *Store) MarkRetryOperationAmbiguous(
 		return nil
 	}
 	operation, getErr := s.GetRetryTaskOperation(ctx, runID, generation)
-	if getErr == nil && operation.State == retryOperationAmbiguous {
+	if getErr == nil && operation.State == retryOperationAmbiguous &&
+		operation.ExternalTaskID == dispatch.TaskID &&
+		operation.ExternalSessionID == dispatch.SessionID &&
+		operation.ExternalTurnID == dispatch.TurnID {
 		return nil
 	}
 	if errors.Is(getErr, sql.ErrNoRows) {
@@ -274,6 +284,7 @@ func (s *Service) MarkRetryOperationAmbiguous(
 	runID string,
 	generation int64,
 	leaseToken string,
+	dispatch RunDispatch,
 ) error {
-	return s.store.MarkRetryOperationAmbiguous(ctx, runID, generation, leaseToken)
+	return s.store.MarkRetryOperationAmbiguous(ctx, runID, generation, leaseToken, dispatch)
 }

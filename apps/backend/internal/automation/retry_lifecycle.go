@@ -692,6 +692,8 @@ type RetryScheduler struct {
 
 const retrySchedulerBatchBudget = 32
 
+const retryOutboxReplayInterval = time.Second
+
 func NewRetryScheduler(svc *Service, log *logger.Logger) *RetryScheduler {
 	return &RetryScheduler{svc: svc, logger: log}
 }
@@ -732,12 +734,14 @@ func (rs *RetryScheduler) loop(ctx context.Context) {
 	defer rs.wg.Done()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
+	var lastOutboxReplay time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
 			now = now.UTC()
+			rs.replayPendingOutbox(ctx, now, &lastOutboxReplay)
 			if err := rs.svc.Store().RecoverRetryClaims(ctx, now); err != nil {
 				rs.logClaimError("retry claim recovery failed", err)
 				continue
@@ -767,6 +771,16 @@ func (rs *RetryScheduler) loop(ctx context.Context) {
 				rs.publishClaim(ctx, run, token)
 			}
 		}
+	}
+}
+
+func (rs *RetryScheduler) replayPendingOutbox(ctx context.Context, now time.Time, lastReplay *time.Time) {
+	if !lastReplay.IsZero() && now.Sub(*lastReplay) < retryOutboxReplayInterval {
+		return
+	}
+	*lastReplay = now
+	if err := rs.svc.ReplayPendingRetryEvents(ctx); err != nil {
+		rs.logClaimError("retry outbox replay failed", err)
 	}
 }
 

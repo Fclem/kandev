@@ -622,7 +622,8 @@ func (s *Service) adoptCommittedRetryTask(
 	if task.WorkspaceID != a.WorkspaceID {
 		return nil, errors.New("committed retry task belongs to a different workspace")
 	}
-	if err := validateRetryTaskOwnership(task, a, evt, automationTaskOrigin(a)); err != nil {
+	allowSharedContinuation := operation.ExternalSessionID != "" && operation.ExternalTurnID != ""
+	if err := validateRetryTaskOwnership(task, a, evt, automationTaskOrigin(a), allowSharedContinuation); err != nil {
 		return nil, err
 	}
 	return task, nil
@@ -633,6 +634,7 @@ func validateRetryTaskOwnership(
 	a *automation.Automation,
 	evt *automation.AutomationTriggeredEvent,
 	expectedOrigin string,
+	allowSharedContinuation bool,
 ) error {
 	if task == nil || a == nil || evt == nil {
 		return errors.New("retry task ownership context is incomplete")
@@ -643,7 +645,7 @@ func validateRetryTaskOwnership(
 	if task.Origin != expectedOrigin {
 		return errors.New("retry task has an incompatible origin")
 	}
-	if task.ExternalID != evt.RetryExternalID {
+	if !allowSharedContinuation && task.ExternalID != evt.RetryExternalID {
 		return errors.New("retry task has an incompatible external identity")
 	}
 	if metadataString(task.Metadata, "automation_id") != a.ID ||
@@ -766,7 +768,7 @@ func (s *Service) prepareAutomationTask(
 		return nil, nil, action, reason, fmt.Errorf("create automation task: %w", err)
 	}
 	if evt.RunID != "" {
-		if err := validateRetryTaskOwnership(task, a, evt, taskOrigin); err != nil {
+		if err := validateRetryTaskOwnership(task, a, evt, taskOrigin, false); err != nil {
 			return nil, nil, action, reason, err
 		}
 	}

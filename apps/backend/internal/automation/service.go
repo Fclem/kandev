@@ -1754,9 +1754,19 @@ func (s *Service) admitTriggerLocked(
 		run.RetryContinuationSnapshot = snapshotJSON
 	}
 	if run.RetryGroupID != "" {
+		enabledTriggerIDs := make([]string, 0, len(a.Triggers))
+		for _, trigger := range a.Triggers {
+			if trigger.Enabled && trigger.ID != "" {
+				enabledTriggerIDs = append(enabledTriggerIDs, trigger.ID)
+			}
+		}
+		encodedTriggerIDs, _ := json.Marshal(enabledTriggerIDs)
+		canonicalTriggerIDs := canonicalRetryTriggerIDs(string(encodedTriggerIDs), triggerID)
+		encodedTriggerIDs, _ = json.Marshal(canonicalTriggerIDs)
 		group := &RetryGroup{
 			ID: run.RetryGroupID, AutomationID: a.ID, TriggerID: triggerID,
-			Generation: 1, State: RetryGroupLive,
+			TriggerIDsJSON: string(encodedTriggerIDs),
+			Generation:     1, State: RetryGroupLive,
 		}
 		if err := s.store.CreateRetryAdmission(ctx, run, group); err != nil {
 			return nil, "", false, fmt.Errorf("record retry admission: %w", err)

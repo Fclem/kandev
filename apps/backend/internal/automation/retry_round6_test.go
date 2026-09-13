@@ -57,6 +57,43 @@ func TestRetryAdmissionPersistsCompleteLaunchSnapshot(t *testing.T) {
 	}, snapshot["repositories"])
 }
 
+func TestServiceRetryAdmissionSupersedesAcrossEnabledTriggers(t *testing.T) {
+	store := setupTestStore(t)
+	log, err := logger.NewFromZap(zap.NewNop())
+	require.NoError(t, err)
+	svc := NewService(store, bus.NewMemoryEventBus(log), log)
+	ctx := context.Background()
+	automation := &Automation{
+		ID: "service-trigger-set-automation", WorkspaceID: "service-trigger-set-workspace",
+		Name: "service trigger set", Enabled: true,
+		RetryPolicy: RetryPolicy{Mode: RetryModeFinite, MaxRetries: "1", DelaySeconds: "30"},
+	}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	triggerA := &AutomationTrigger{
+		ID: "service-trigger-a", AutomationID: automation.ID,
+		Type: TriggerTypeManual, Enabled: true,
+	}
+	triggerB := &AutomationTrigger{
+		ID: "service-trigger-b", AutomationID: automation.ID,
+		Type: TriggerTypeManual, Enabled: true,
+	}
+	require.NoError(t, store.CreateTrigger(ctx, triggerA))
+	require.NoError(t, store.CreateTrigger(ctx, triggerB))
+
+	first, err := svc.FireTrigger(ctx, automation.ID, triggerA.ID, triggerA.Type, nil, "service-trigger-a")
+	require.NoError(t, err)
+	second, err := svc.FireTrigger(ctx, automation.ID, triggerB.ID, triggerB.Type, nil, "service-trigger-b")
+	require.NoError(t, err)
+	require.NotEqual(t, first.RunID, second.RunID)
+
+	firstRun, err := store.GetRun(ctx, first.RunID)
+	require.NoError(t, err)
+	require.Equal(t, RetryStateSuperseded, firstRun.RetryState)
+	firstGroup, err := store.GetRetryGroup(ctx, firstRun.RetryGroupID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupSuperseded, firstGroup.State)
+}
+
 func TestRetryAdmissionSupersedesEquivalentTriggerSets(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()

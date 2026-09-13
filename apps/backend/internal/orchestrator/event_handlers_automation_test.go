@@ -983,6 +983,51 @@ func TestCreateAutomationTaskAdoptsCommittedRetryContinuationWithOlderTaskExtern
 	require.True(t, autoSvc.acknowledged)
 }
 
+func TestCreateAutomationTaskPreservesCommittedRetryTaskAfterDispatchFailure(t *testing.T) {
+	repo := setupTestRepo(t)
+	ctx := context.Background()
+	task := retryOwnedTask("retry-task", "retry-workspace", "retry-automation", "retry-run", 1)
+	require.NoError(t, repo.CreateTask(ctx, task))
+	base := &retryAutomationServiceStub{
+		stubAutomationService: &stubAutomationService{automation: &automation.Automation{
+			ID: "retry-automation", WorkspaceID: "retry-workspace", Name: "retry",
+			Prompt: "retry", Enabled: true,
+		}},
+		run: &automation.AutomationRun{
+			ID: "retry-run", AutomationID: "retry-automation", TriggerType: automation.TriggerTypeManual,
+			RetryGroupID: "retry-group", RetryGroupGeneration: 1,
+			RetryState: automation.RetryStateTriggered, Status: automation.RunStatusTriggered,
+		},
+		operation: &automation.RetryOperation{State: "leased", LeaseToken: "retry-lease"},
+	}
+	base.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(base.run, base.automation)
+	base.run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
+	autoSvc := &retryContinuationRecoveryStub{
+		retryAutomationServiceStub: base,
+		dispatchErr:                errors.New("provider dispatch failed"),
+	}
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.SetAutomationService(autoSvc)
+	svc.reviewTaskCreator = &stubReviewTaskCreator{task: task}
+
+	evt := &automation.AutomationTriggeredEvent{
+		RunID: "retry-run", RetryGroupGeneration: 1,
+		RetryExternalID: automation.RetryTaskExternalID("retry-run", 1),
+		TriggerType:     automation.TriggerTypeManual,
+	}
+	svc.createAutomationTask(ctx, evt)
+
+	persisted, err := repo.GetTask(ctx, task.ID)
+	require.NoError(t, err)
+	require.NotNil(t, persisted, "committed retry task must survive dispatch failure")
+	require.Equal(t, task.ID, base.operation.ExternalTaskID)
+	require.Equal(t, retryOperationCommittedState, base.operation.State)
+
+	adopted, err := svc.adoptCommittedRetryTask(ctx, base.automation, evt, base.operation)
+	require.NoError(t, err)
+	require.Equal(t, task.ID, adopted.ID)
+}
+
 type retryCommittedContinuationRecoveryStub struct {
 	*retryContinuationRecoveryStub
 	bindErr   error

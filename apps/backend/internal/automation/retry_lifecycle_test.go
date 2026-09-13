@@ -506,6 +506,15 @@ func TestRecoverRetryLedgerReclaimsLiveLeaseAfterCrashBeforeProviderCreate(t *te
 	require.Equal(t, "stable-task", upgraded.ExternalTaskID)
 	require.Equal(t, "stable-session", upgraded.ExternalSessionID)
 	require.Equal(t, "stable-turn", upgraded.ExternalTurnID)
+
+	err = store.CommitRetryContinuationOperation(ctx, run.ID, 1, "", RunDispatch{
+		TaskID: "stable-task", SessionID: "different-session", TurnID: "different-turn",
+	})
+	require.ErrorIs(t, err, ErrRetryGenerationMismatch)
+	unchanged, err := store.GetRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, "stable-session", unchanged.ExternalSessionID)
+	require.Equal(t, "stable-turn", unchanged.ExternalTurnID)
 }
 func TestRetryAdmissionPersistsImmutableIntentAndSafeEvent(t *testing.T) {
 	ctx := context.Background()
@@ -689,6 +698,11 @@ func TestBeginRetryTaskOperationRejectsCancelledGeneration(t *testing.T) {
 		"run-cancelled-operation:1"))
 	require.Equal(t, retryOperationAbandoned, operationState)
 	require.Equal(t, "revoked", outboxState)
+	var intentState string
+	require.NoError(t, store.db.Get(&intentState,
+		`SELECT state FROM automation_run_task_intents WHERE intent_id = ?`,
+		"intent-cancelled-operation"))
+	require.Equal(t, retryIntentAbandoned, intentState)
 
 	_, err := store.BeginRetryTaskOperation(ctx, run.ID, 1)
 	require.ErrorIs(t, err, ErrRetryGenerationMismatch)

@@ -326,6 +326,8 @@ type retryAutomationServiceStub struct {
 	boundTurnID           string
 	continuationCommitted bool
 	continuationDispatch  automation.RunDispatch
+	continuationCommitErr error
+	ambiguous             bool
 }
 
 func (s *retryAutomationServiceStub) GetRun(context.Context, string) (*automation.AutomationRun, error) {
@@ -371,8 +373,16 @@ func (s *retryAutomationServiceStub) CommitRetryContinuationOperation(
 	_ string,
 	dispatch automation.RunDispatch,
 ) error {
+	if s.continuationCommitErr != nil {
+		return s.continuationCommitErr
+	}
 	s.continuationCommitted = true
 	s.continuationDispatch = dispatch
+	return nil
+}
+
+func (s *retryAutomationServiceStub) MarkRetryOperationAmbiguous(context.Context, string, int64, string) error {
+	s.ambiguous = true
 	return nil
 }
 
@@ -1261,6 +1271,57 @@ func TestDispatchAutomationContinuationCommitsAtAcceptanceBeforeCompletionError(
 	require.Equal(t, "retry-session", base.boundSessionID)
 	require.Equal(t, base.operation.ExternalTurnID, base.boundTurnID)
 	require.True(t, base.acknowledged)
+}
+
+func TestDispatchAutomationContinuationMarksAmbiguousOnAcceptanceCommitFailure(t *testing.T) {
+	repo := setupTestRepo(t)
+	ctx := context.Background()
+	seedTaskAndSession(t, repo, "retry-task", "retry-session", models.TaskSessionStateWaitingForInput)
+	seedExecutorRunning(t, repo, "retry-session", "retry-task", "retry-execution")
+	agentMgr := &mockAgentManager{
+		isAgentRunning:         true,
+		repoForExecutionLookup: repo,
+		promptErr:              errors.New("completion failed after acceptance"),
+		promptAcceptedOnError:  true,
+	}
+	svc := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), agentMgr)
+	svc.executor = executor.NewExecutor(agentMgr, repo, testLogger(), executor.ExecutorConfig{})
+	svc.turnService = &repoTurnService{repo: repo}
+	base := &retryAutomationServiceStub{
+		stubAutomationService: &stubAutomationService{automation: &automation.Automation{
+			ID: "retry-automation", WorkspaceID: "ws1", Name: "retry",
+			Prompt: "retry", Enabled: true, ContinuationPolicy: automation.ContinuationPolicyReuseThread,
+		}},
+		run: &automation.AutomationRun{
+			ID: "retry-run", AutomationID: "retry-automation",
+			RetryGroupID: "retry-group", RetryGroupGeneration: 1,
+			RetryState: automation.RetryStateTriggered, Status: automation.RunStatusTriggered,
+		},
+		operation: &automation.RetryOperation{
+			State: "leased", GroupGeneration: 1, LeaseToken: "retry-lease",
+		},
+		continuationCommitErr: errors.New("identity commit unavailable"),
+	}
+	base.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(base.run, base.automation)
+	base.run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
+	svc.SetAutomationService(base)
+	task, err := repo.GetTask(ctx, "retry-task")
+	require.NoError(t, err)
+	task.Origin = models.TaskOriginAutomationRun
+	task.WorkspaceID = "ws1"
+	require.NoError(t, repo.UpdateTask(ctx, task))
+	session, err := repo.GetTaskSession(ctx, "retry-session")
+	require.NoError(t, err)
+
+	svc.dispatchAutomationContinuation(
+		ctx, base.automation, task, session, "retry prompt", map[string]interface{}{
+			"automation_id": "retry-automation", "automation_run_id": "retry-run",
+		}, "retry-run", automation.ThreadActionResumed, "recovery", base.operation,
+	)
+
+	require.False(t, base.continuationCommitted)
+	require.True(t, base.ambiguous)
+	require.Equal(t, "ambiguous", base.operation.State)
 }
 
 // TestRefreshAutomationContinuationMetadataOnResume is the regression

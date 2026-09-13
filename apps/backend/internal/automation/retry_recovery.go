@@ -40,6 +40,8 @@ func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
 		retryOutboxPending, now, retryOutboxLeased, now); err != nil {
 		return err
 	}
+	// Admitted intents are already scheduler-visible. Only an unstarted
+	// creation intent can be safely returned to the admitted claim state.
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_run_task_intents
 		SET state = ?, updated_at = ?

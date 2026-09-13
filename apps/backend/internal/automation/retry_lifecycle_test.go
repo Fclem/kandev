@@ -349,6 +349,64 @@ func TestRetryClaimLeaseIsSingleUseAndGenerationFenced(t *testing.T) {
 	require.NoError(t, store.db.Get(&state, `SELECT retry_state FROM automation_runs WHERE id = ?`, run.ID))
 	require.Equal(t, string(RetryStateCancelled), state)
 }
+func TestRecoverRetryLedgerKeepsAdmittedRetryClaimableAfterDue(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	automation := &Automation{
+		ID:          "automation-recovery-admitted",
+		WorkspaceID: "workspace-recovery-admitted",
+		Name:        "recovery admitted",
+		Enabled:     true,
+	}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	group := &RetryGroup{
+		ID:           "group-recovery-admitted",
+		AutomationID: automation.ID,
+		Generation:   1,
+		State:        RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	due := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	run := &AutomationRun{
+		ID:                   "run-recovery-admitted",
+		AutomationID:         automation.ID,
+		Status:               RunStatusScheduledRetry,
+		RetryGroupID:         group.ID,
+		RetryGroupGeneration: 1,
+		RetryState:           RetryStateScheduled,
+		RetryScheduledAt:     &due,
+	}
+	require.NoError(t, store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{
+		ID:              "intent-recovery-admitted",
+		RunID:           run.ID,
+		GroupGeneration: 1,
+		State:           retryIntentAdmitted,
+	}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID:              "operation-recovery-admitted",
+		IntentID:        intent.ID,
+		RunID:           run.ID,
+		GroupGeneration: 1,
+		Kind:            retryTaskOperationKind,
+		State:           retryOperationRequested,
+	}))
+
+	restartedAt := due.Add(-time.Minute)
+	require.NoError(t, store.RecoverRetryLedger(ctx, restartedAt))
+	var state string
+	require.NoError(t, store.db.Get(&state,
+		`SELECT state FROM automation_run_task_intents WHERE intent_id = ?`, intent.ID))
+	require.Equal(t, retryIntentAdmitted, state)
+	_, _, err := store.ClaimDueRetry(ctx, restartedAt, time.Minute)
+	require.ErrorIs(t, err, ErrNoDueRetry)
+
+	claimed, _, err := store.ClaimDueRetry(ctx, due.Add(time.Second), time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, run.ID, claimed.ID)
+}
+
 func TestRetryAdmissionPersistsImmutableIntentAndSafeEvent(t *testing.T) {
 	ctx := context.Background()
 	store := setupTestStore(t)

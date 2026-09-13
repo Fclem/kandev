@@ -51,7 +51,7 @@ func TestRetryAdmissionPersistsCompleteLaunchSnapshot(t *testing.T) {
 		require.Contains(t, snapshot, key, "missing launch snapshot field %s", key)
 	}
 	require.Equal(t, "github_pr", snapshot["trigger_data"].(map[string]any)["trigger_type"])
-	require.NotContains(t, snapshot["trigger_data"], "title")
+	require.Equal(t, "Snapshot PR", snapshot["trigger_data"].(map[string]any)["title"])
 }
 
 func TestRetryAdmissionSupersedesEquivalentTriggerSets(t *testing.T) {

@@ -246,6 +246,58 @@ func TestService_DeleteRun_TaskNotFound_StillDeletesRun(t *testing.T) {
 	}
 }
 
+func TestService_DeleteRun_DeletesCommittedRetryTaskBeforeBind(t *testing.T) {
+	svc := newTestService(t)
+	deleter := &fakeTaskDeleter{}
+	svc.SetTaskDeleter(deleter)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "ws-delete-committed", Name: "delete committed", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "delete-committed-group", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		ID: "delete-committed-run", AutomationID: a.ID, Status: RunStatusTriggered,
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{ID: "delete-committed-intent", RunID: run.ID, GroupGeneration: 1, State: retryIntentCreated}
+	require.NoError(t, svc.store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, svc.store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "delete-committed-operation", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationCommitted,
+		ExternalTaskID: "committed-task",
+	}))
+
+	require.NoError(t, svc.DeleteRun(ctx, run.ID))
+	require.Equal(t, []string{"committed-task"}, deleter.deleted)
+}
+
+func TestService_DeleteAllRuns_DeletesCommittedRetryTaskBeforeBind(t *testing.T) {
+	svc := newTestService(t)
+	deleter := &fakeTaskDeleter{}
+	svc.SetTaskDeleter(deleter)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "ws-delete-all-committed", Name: "delete all committed", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "delete-all-committed-group", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		ID: "delete-all-committed-run", AutomationID: a.ID, Status: RunStatusTriggered,
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{ID: "delete-all-committed-intent", RunID: run.ID, GroupGeneration: 1, State: retryIntentCreated}
+	require.NoError(t, svc.store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, svc.store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "delete-all-committed-operation", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationCommitted,
+		ExternalTaskID: "committed-task-all",
+	}))
+
+	require.NoError(t, svc.DeleteAllRuns(ctx, a.ID))
+	require.Equal(t, []string{"committed-task-all"}, deleter.deleted)
+}
+
 func TestService_DeleteRun_PreservesVisibleAutomationTask(t *testing.T) {
 	svc := newTestService(t)
 	deleter := &fakeTaskDeleter{}

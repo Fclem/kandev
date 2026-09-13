@@ -35,6 +35,10 @@ retains ownership of its values, validation, authority, and persistence.
 
 ### Requirements
 
+- [CI performance](requirements/ci-performance.md)
+
+- [Startup lifecycle](requirements/startup-lifecycle.md)
+
 - [Agent-accessible Kandev settings](requirements/agent-settings-parity.md)
 
 
@@ -80,6 +84,10 @@ retains ownership of its values, validation, authority, and persistence.
 
 ### System design
 
+- [CI performance](system-design/ci-performance.md)
+
+- [Startup lifecycle](system-design/startup-lifecycle.md)
+
 - [Agent-accessible Kandev settings](system-design/agent-settings-parity.md)
 - [Core settings domain adoption](system-design/agent-settings-domains.md)
 
@@ -112,7 +120,8 @@ retains ownership of its values, validation, authority, and persistence.
 ## Migration record
 
 Migration remains in progress while legacy source detail is extracted from the
-canonical requirement and system-design documents above.
+canonical requirement and system-design documents. Use the catalog command to
+find current sources.
 
 ## Related systems
 

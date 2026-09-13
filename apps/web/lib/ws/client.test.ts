@@ -1,7 +1,7 @@
 /* eslint-disable sonarjs/no-duplicate-string -- Transport fixtures repeat wire literals by contract. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WebSocketClient, WebSocketRequestError } from "./client";
+import { WebSocketClient, WebSocketRequestError, WebSocketRequestTimeoutError } from "./client";
 
 type SentRequest = {
   id: string;
@@ -98,6 +98,10 @@ function acknowledge(socket: FakeWebSocket, request: SentRequest) {
   }
   socket.receive({ id: request.id, type: "response", payload });
 }
+function acknowledgeSessionRegistration(socket: FakeWebSocket, startIndex = 0) {
+  acknowledge(socket, sessionSubscribeRequest(socket, startIndex));
+  acknowledge(socket, sessionSubscribeRequest(socket, startIndex + 1));
+}
 
 function acknowledgeWithResumeToken(socket: FakeWebSocket, request: SentRequest, token: string) {
   const payload: Record<string, unknown> = { success: true, resume_token: token };
@@ -128,7 +132,56 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// eslint-disable-next-line max-lines-per-function -- readiness tests cover registration and retry lifecycle.
 describe("session subscription readiness", () => {
+  it("accepts a registration acknowledgement that arrives after seven seconds", async () => {
+    vi.useFakeTimers();
+    const { client, socket } = connectClient();
+    const subscription = client.subscribeSessionWithReady("sess-1");
+
+    await vi.advanceTimersByTimeAsync(7000);
+    acknowledgeSessionRegistration(socket);
+
+    await expect(subscription.ready).resolves.toBeUndefined();
+    subscription.unsubscribe();
+  });
+
+  it("recovers timed out registration without a visibility change", async () => {
+    vi.useFakeTimers();
+    const { client, socket } = connectClient();
+    const subscription = client.subscribeSessionWithReady("sess-1");
+
+    await vi.advanceTimersByTimeAsync(11000);
+    acknowledgeSessionRegistration(socket, 2);
+
+    await expect(subscription.ready).resolves.toBeUndefined();
+    subscription.unsubscribe();
+  });
+
+  it("stops after the bounded registration retry budget", async () => {
+    vi.useFakeTimers();
+    const { client, socket } = connectClient();
+    const subscription = client.subscribeSessionWithReady("sess-1");
+
+    await vi.advanceTimersByTimeAsync(21000);
+
+    await expect(subscription.ready).rejects.toBeInstanceOf(WebSocketRequestTimeoutError);
+    expect(socket.sent.filter((message) => message.action === "session.subscribe")).toHaveLength(4);
+    subscription.unsubscribe();
+  });
+
+  it("cancels a scheduled registration retry when the last consumer unsubscribes", async () => {
+    vi.useFakeTimers();
+    const { client, socket } = connectClient();
+    const subscription = client.subscribeSessionWithReady("sess-1");
+
+    await vi.advanceTimersByTimeAsync(10000);
+    subscription.unsubscribe();
+    await expect(subscription.ready).rejects.toThrow("Session subscription released");
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(socket.sent.filter((message) => message.action === "session.subscribe")).toHaveLength(2);
+  });
   it("resolves only after the server acknowledges the registration", async () => {
     const { client, socket } = connectClient();
     const subscription = client.subscribeSessionWithReady("sess-1");

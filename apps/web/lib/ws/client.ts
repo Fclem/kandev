@@ -5,7 +5,11 @@ import type { ConnectionStatus } from "@/lib/types/connection";
 import { generateUUID } from "@/lib/utils";
 import { createDebugLogger, isDebug } from "@/lib/debug/log";
 import { dispatchToPluginWsHandlers } from "@/lib/ws/plugin-bridge";
-import { toWebSocketRequestError } from "./request-error";
+import {
+  isWebSocketRequestTimeoutError,
+  toWebSocketRequestError,
+  WebSocketRequestTimeoutError,
+} from "./request-error";
 import {
   isRawSessionEvent,
   orderedCoreDisposition,
@@ -15,7 +19,12 @@ import {
   type RawSessionEvent,
 } from "./ordered-session-events";
 export type { RawSessionEvent } from "./ordered-session-events";
-export { WebSocketRequestError, type WebSocketRequestErrorDetails } from "./request-error";
+export {
+  isWebSocketRequestTimeoutError,
+  WebSocketRequestError,
+  WebSocketRequestTimeoutError,
+  type WebSocketRequestErrorDetails,
+} from "./request-error";
 
 const debugDispatch = createDebugLogger("ws:dispatch");
 
@@ -54,7 +63,14 @@ type SessionSubscriptionReadiness = {
   reject: (reason: unknown) => void;
   requestStarted: boolean;
   settled: boolean;
+  attempt: number;
+  retryTimer: ReturnType<typeof setTimeout> | null;
 };
+export const SESSION_ENTRY_REQUEST_TIMEOUT_MS = 10000;
+export const SESSION_ENTRY_RETRY_DELAY_MS = 1000;
+const MAX_SESSION_SUBSCRIPTION_ATTEMPTS = 2;
+// i18n-exempt: transport/API diagnostic, never rendered as user-facing copy.
+const SESSION_SUBSCRIPTION_RELEASED_ERROR = "Session subscription released";
 
 type OrderedSessionResponse = Record<string, unknown>;
 
@@ -279,7 +295,7 @@ export class WebSocketClient {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
-        reject(new Error(`WebSocket request timed out: ${action}`));
+        reject(new WebSocketRequestTimeoutError(action));
       }, timeoutMs);
       this.pendingRequests.set(id, {
         resolve: resolve as (payload: unknown) => void,
@@ -786,6 +802,8 @@ export class WebSocketClient {
       reject,
       requestStarted: false,
       settled: false,
+      attempt: 0,
+      retryTimer: null,
     };
     // subscribeSession() consumers do not await readiness, so handle failures
     // while returning the original promise to readiness-aware consumers.
@@ -795,21 +813,31 @@ export class WebSocketClient {
   }
 
   private startSessionSubscription(sessionId: string, readiness: SessionSubscriptionReadiness) {
+    if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
     if (readiness.requestStarted) return;
     readiness.requestStarted = true;
+    readiness.attempt += 1;
     const stream = this.getOrCreateCoreSessionStream(sessionId);
     stream.ready = false;
     stream.pendingEvents.length = 0;
-    const legacySubscription = this.request("session.subscribe", { session_id: sessionId });
-    const orderedSubscription = this.request<unknown>("session.subscribe", {
-      session_id: sessionId,
-      consumer_kind: "core",
-      wire_id: stream.wireId,
-      ...(stream.resumeToken || stream.lastSeenSequence > 0
-        ? { last_seen_sequence: stream.lastSeenSequence }
-        : {}),
-      ...(stream.resumeToken ? { resume_token: stream.resumeToken } : {}),
-    }).then((response) => {
+    const legacySubscription = this.request(
+      "session.subscribe",
+      { session_id: sessionId },
+      SESSION_ENTRY_REQUEST_TIMEOUT_MS,
+    );
+    const orderedSubscription = this.request<unknown>(
+      "session.subscribe",
+      {
+        session_id: sessionId,
+        consumer_kind: "core",
+        wire_id: stream.wireId,
+        ...(stream.resumeToken || stream.lastSeenSequence > 0
+          ? { last_seen_sequence: stream.lastSeenSequence }
+          : {}),
+        ...(stream.resumeToken ? { resume_token: stream.resumeToken } : {}),
+      },
+      SESSION_ENTRY_REQUEST_TIMEOUT_MS,
+    ).then((response) => {
       const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
       if (validated.result !== "replay") {
         stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
@@ -821,15 +849,28 @@ export class WebSocketClient {
     void Promise.all([legacySubscription, orderedSubscription])
       .then(() => {
         if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
+        readiness.retryTimer = null;
         readiness.settled = true;
         readiness.resolve();
       })
       .catch((error: unknown) => {
         stream.ready = false;
         stream.pendingEvents.length = 0;
-        if (this.sessionSubscriptionReadiness.get(sessionId) === readiness) {
-          this.sessionSubscriptionReadiness.delete(sessionId);
+        if (this.sessionSubscriptionReadiness.get(sessionId) !== readiness) return;
+        readiness.requestStarted = false;
+        if (
+          isWebSocketRequestTimeoutError(error) &&
+          readiness.attempt < MAX_SESSION_SUBSCRIPTION_ATTEMPTS &&
+          this.status === "connected" &&
+          this.socket
+        ) {
+          readiness.retryTimer = setTimeout(() => {
+            readiness.retryTimer = null;
+            this.startSessionSubscription(sessionId, readiness);
+          }, SESSION_ENTRY_RETRY_DELAY_MS);
+          return;
         }
+        this.sessionSubscriptionReadiness.delete(sessionId);
         readiness.settled = true;
         readiness.reject(error);
       });
@@ -965,9 +1006,13 @@ export class WebSocketClient {
     const readiness = this.sessionSubscriptionReadiness.get(sessionId);
     if (!readiness) return;
     this.sessionSubscriptionReadiness.delete(sessionId);
+    if (readiness.retryTimer) {
+      clearTimeout(readiness.retryTimer);
+      readiness.retryTimer = null;
+    }
     if (!readiness.settled) {
       readiness.settled = true;
-      readiness.reject(new Error("Session subscription released"));
+      readiness.reject(new Error(SESSION_SUBSCRIPTION_RELEASED_ERROR));
     }
   }
 
@@ -975,6 +1020,10 @@ export class WebSocketClient {
     const readinessEntries = [...this.sessionSubscriptionReadiness.entries()];
     this.sessionSubscriptionReadiness.clear();
     for (const [, readiness] of readinessEntries) {
+      if (readiness.retryTimer) {
+        clearTimeout(readiness.retryTimer);
+        readiness.retryTimer = null;
+      }
       if (readiness.settled) continue;
       readiness.settled = true;
       readiness.reject(error);

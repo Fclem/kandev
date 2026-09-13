@@ -36,7 +36,9 @@ signals, and task-scoped scheduling contracts.
 
 ### Requirements
 
-- [Task completion and conversation follow-ups](requirements/task-completion.md)
+- [Initial task brief](requirements/initial-task-brief.md)
+
+- [Task completion, conversation follow-ups, and workspace access](requirements/task-completion.md)
 
 - [Agent-Generated Task Titles](requirements/agent-generated-titles.md)
 - [Additional Session Workspace Reuse](requirements/additional-session-workspace-reuse.md)
@@ -140,7 +142,9 @@ signals, and task-scoped scheduling contracts.
 
 ### System design
 
-- [Task completion and conversation follow-ups](system-design/task-completion.md)
+- [Initial task brief](system-design/initial-task-brief.md)
+
+- [Task completion, conversation follow-ups, and workspace access](system-design/task-completion.md)
 
 - [Additional Session Workspace Reuse](system-design/additional-session-workspace-reuse.md)
 - [Environment-Owned Git Status](system-design/environment-owned-git-status.md)
@@ -206,5 +210,5 @@ extraction before this system can return to a complete migration state.
 
 - [Agents](../agents): supplies agent identity and execution profiles.
 - [Office](../office): builds autonomous workflows on task primitives.
-- [UI](../ui): owns presentation-specific task surfaces.
+- [UI](../ui): owns presentation-only task surfaces.
 - [Workspaces](../workspaces): owns repositories and task worktrees.

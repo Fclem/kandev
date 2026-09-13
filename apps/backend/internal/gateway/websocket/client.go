@@ -845,6 +845,8 @@ type sessionPoisonRequeueRequest struct {
 	ExpectedOwnerEpoch uint64 `json:"expected_owner_epoch"`
 }
 
+const sessionPoisonStateKey = "state"
+
 func (c *Client) handleSessionPoisonRequeue(msg *ws.Message) {
 	var req sessionPoisonRequeueRequest
 	if err := msg.ParsePayload(&req); err != nil ||
@@ -871,7 +873,7 @@ func (c *Client) handleSessionPoisonRequeue(msg *ws.Message) {
 	}
 	response, _ := ws.NewResponse(msg.ID, msg.Action, map[string]any{
 		"success": true, "session_id": req.SessionID, "event_id": req.EventID,
-		"state": plugins.SessionPoisonPending,
+		sessionPoisonStateKey: plugins.SessionPoisonPending,
 	})
 	c.sendMessage(response)
 }

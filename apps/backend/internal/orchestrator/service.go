@@ -299,6 +299,7 @@ type DirectPromptStarter interface {
 		attachments []v1.MessageAttachment,
 		references []v1.EntityReference,
 		promptReferenceContext string,
+		promptReferencesPrepared bool,
 	) (*executor.TaskExecution, error)
 }
 
@@ -315,6 +316,23 @@ type DirectPromptStarterWithCanvasGuidance interface {
 		attachments []v1.MessageAttachment,
 		references []v1.EntityReference,
 		promptReferenceContext string,
+		promptReferencesPrepared bool,
+		canvasGuidanceResolved, includeCanvasGuidance bool,
+	) (*executor.TaskExecution, error)
+}
+
+// DirectPromptStarterWithCanvasGuidanceAndPreservedPrompt starts a prepared
+// direct-message session without reapplying workflow replacement semantics to
+// a prompt that already contains the task brief and user instruction.
+type DirectPromptStarterWithCanvasGuidanceAndPreservedPrompt interface {
+	StartCreatedSessionWithPromptContextAndCanvasGuidancePreservingDirectPrompt(
+		ctx context.Context,
+		taskID, sessionID, agentProfileID, prompt string,
+		skipMessageRecord, planMode, autoStart bool,
+		attachments []v1.MessageAttachment,
+		references []v1.EntityReference,
+		promptReferenceContext string,
+		promptReferencesPrepared bool,
 		canvasGuidanceResolved, includeCanvasGuidance bool,
 	) (*executor.TaskExecution, error)
 }
@@ -769,6 +787,13 @@ type Service struct {
 	// dependencies so nothing is gated.
 	dependencyReader TaskDependencyReader
 
+	// Routes an Office task's terminal-step completion through Office's own
+	// status pipeline (approval gate included) instead of the orchestrator's
+	// raw state write. Nil-safe: when unset, terminal completion for an
+	// Office task is skipped rather than falling back to the raw write,
+	// which would bypass the gate.
+	officeTaskStatusUpdater OfficeTaskStatusUpdater
+
 	// Resolves the agent family names written in configure_session rules onto
 	// canonical agent IDs. Nil-safe: when unset, rule matching falls back to an
 	// exact string comparison.
@@ -797,6 +822,17 @@ type Service struct {
 	// childCompletionLocks serializes duplicate on_children_completed deliveries.
 	childCompletionLocksMu sync.Mutex
 	childCompletionLocks   map[string]*childCompletionOperationLock
+	// officeTerminalCompletionLocks serializes concurrent
+	// markOfficeTaskCompletedForTerminalStep deliveries for the same task, so
+	// two deliveries racing past the taskRuntimeStateMu check above cannot
+	// both call the Office status seam and both fire completion side
+	// effects. Keyed per task rather than using taskRuntimeStateMu itself,
+	// because the seam runs Office's reactivity pipeline and publishes
+	// events — holding the global lock across that call risks lock
+	// inversion.
+	officeTerminalCompletionLocksMu sync.Mutex
+	officeTerminalCompletionLocks   map[string]*childCompletionOperationLock
+
 	// agentErrorOperationLocks serializes concurrent on_agent_error dispatches
 	// that carry the same operation id — the load -> evaluate -> commit ->
 	// mark window, held from before the task/session/MachineState load so a
@@ -1299,6 +1335,13 @@ type Service struct {
 	// from a predecessor. Automatic recovery requires an explicit no-output,
 	// no-effect result from this map.
 	dynamicAttemptEvidence sync.Map
+
+	// resumeAttempts owns process-local startup identity. It is separate from
+	// dynamicAttemptEvidence because a provider execution may be reused by
+	// several prompt attempts, while a cancelled startup must fence every late
+	// continuation from that startup.
+	resumeAttemptsMu sync.Mutex
+	resumeAttempts   *resumeAttemptRegistry
 
 	// Service state
 	mu        sync.RWMutex
@@ -2227,7 +2270,17 @@ func (s *Service) initWorkflowEngine() {
 	// s.engineOptions via a Set* method) because s.logger is a stable
 	// constructor-time field already in scope, unlike the optional
 	// dependencies those methods wire in after Service creation.
-	options := append([]engine.Option{engine.WithLogger(s.logger)}, s.engineOptions...)
+	//
+	// WithMarkerBearingStepEntryExecutor(s) is wired unconditionally for the
+	// same reason: *Service satisfies the interface directly
+	// (ExecuteMarkerBearingStepEntryAction in event_handlers_workflow.go),
+	// so there is no separate adapter or Set* call whose absence would need
+	// guarding — a kanban-only deployment simply never dispatches a
+	// marker-bearing kind, so the hook never fires.
+	options := append(
+		[]engine.Option{engine.WithLogger(s.logger), engine.WithMarkerBearingStepEntryExecutor(s)},
+		s.engineOptions...,
+	)
 	s.workflowEngine = engine.New(store, callbacks, options...)
 	s.agentErrorDeps.Store(&agentErrorDispatchDeps{
 		engine:   s.workflowEngine,
@@ -3087,6 +3140,9 @@ func (s *Service) Stop() error {
 	s.mu.Unlock()
 
 	s.logger.Info("stopping orchestrator service")
+	// Stop owns every in-flight resume attempt. Its detached request context
+	// must not let startup callbacks outlive the service generation.
+	s.cancelResumeAttempts()
 	// Stop detached dynamic successors before the scheduler and watcher. Their
 	// workers can otherwise observe the shutdown only after those components
 	// have already stopped, and may launch or recover a session during teardown.
@@ -3792,6 +3848,12 @@ func (s *Service) QueueUserPrompt(
 		return err
 	}
 	s.publishQueueStatusEvent(ctx, sessionID)
+	if deferFastPath, _ := queueMetadata[MetaKeyInitialTaskBriefDispatchPending].(bool); deferFastPath {
+		// A later first-message contender is already durably queued. Let the
+		// admitted candidate launch first; the normal agent-ready/boot-ready
+		// drains will deliver this entry in FIFO order.
+		return nil
+	}
 
 	// T2: enqueue-side fast-path drain. The user's WIP wait is a
 	// first-class contract (the dispatcher gates on

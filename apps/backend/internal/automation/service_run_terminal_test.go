@@ -459,8 +459,50 @@ func TestReconcileOpenRetryRunsChecksExactTurnLiveness(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tt.wantStatus, stored.Status)
 			if !tt.live {
-				require.Equal(t, "automation turn was stale after backend recovery", stored.ErrorMessage)
+				require.Equal(t, "automation attempt failed", stored.ErrorMessage)
 			}
+		})
+	}
+}
+
+func TestReconcileStaleRetryRunSchedulesConfiguredRecovery(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		policy string
+	}{
+		{name: "finite", policy: `{"mode":"finite","max_retries":"1","delay_seconds":"0","backoff":"fixed"}`},
+		{name: "infinite", policy: `{"mode":"infinite","delay_seconds":"0","backoff":"fixed"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newTestService(t)
+			ctx := context.Background()
+			automation := &Automation{ID: "recovery-" + tc.name, WorkspaceID: "workspace-recovery-" + tc.name,
+				Name: "recovery " + tc.name, Enabled: true}
+			require.NoError(t, svc.store.CreateAutomation(ctx, automation))
+			group := &RetryGroup{ID: "recovery-group-" + tc.name, AutomationID: automation.ID,
+				Generation: 1, State: RetryGroupLive}
+			require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+			run := &AutomationRun{
+				ID: "recovery-run-" + tc.name, AutomationID: automation.ID,
+				Status: RunStatusTaskCreated, TaskID: "stale-task-" + tc.name,
+				SessionID: "stale-session-" + tc.name, TurnID: "stale-turn-" + tc.name,
+				RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+				RetryPolicySnapshot: tc.policy,
+			}
+			require.NoError(t, svc.store.CreateRun(ctx, run))
+			svc.SetRunLivenessChecker(runLivenessStub{})
+
+			require.NoError(t, svc.ReconcileOpenRuns(ctx))
+
+			stored, err := svc.store.GetRun(ctx, run.ID)
+			require.NoError(t, err)
+			require.Equal(t, RunStatusFailed, stored.Status)
+			require.Equal(t, RetryStateCompleted, stored.RetryState)
+			runs, err := svc.store.ListRuns(ctx, automation.ID, 10)
+			require.NoError(t, err)
+			require.Len(t, runs, 2)
+			require.Equal(t, RunStatusScheduledRetry, runs[0].Status)
+			require.Equal(t, RetryStateScheduled, runs[0].RetryState)
 		})
 	}
 }

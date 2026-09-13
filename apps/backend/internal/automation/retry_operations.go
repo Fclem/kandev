@@ -10,7 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrRetryOperationUndispatchable = errors.New("retry task operation is no longer dispatchable")
+var (
+	ErrRetryOperationUndispatchable     = errors.New("retry task operation is no longer dispatchable")
+	ErrRetryContinuationCommitAmbiguous = errors.New("retry continuation identity commit is ambiguous")
+)
 
 const retryTaskOperationKind = "create_task"
 
@@ -177,11 +180,18 @@ func (s *Store) CommitRetryContinuationOperation(
 		WHERE run_id = ? AND group_generation = ? AND operation_kind = ?
 			AND (
 				(state = ? AND lease_token = ?)
-				OR (state = ? AND external_task_id = ?)
+				OR (
+					state = ? AND external_task_id = ? AND
+					(
+						(external_session_id = '' AND external_turn_id = '')
+						OR (external_session_id = ? AND external_turn_id = ?)
+					)
+				)
 			)`),
 		retryOperationCommitted, dispatch.TaskID, dispatch.SessionID,
 		dispatch.TurnID, now, runID, generation, retryTaskOperationKind,
-		retryOperationLeased, leaseToken, retryOperationCommitted, dispatch.TaskID)
+		retryOperationLeased, leaseToken, retryOperationCommitted, dispatch.TaskID,
+		dispatch.SessionID, dispatch.TurnID)
 	if err != nil {
 		return err
 	}
@@ -193,6 +203,38 @@ func (s *Store) CommitRetryContinuationOperation(
 		operation.ExternalTaskID == dispatch.TaskID &&
 		operation.ExternalSessionID == dispatch.SessionID &&
 		operation.ExternalTurnID == dispatch.TurnID {
+		return nil
+	}
+	if errors.Is(getErr, sql.ErrNoRows) {
+		return getErr
+	}
+	return ErrRetryGenerationMismatch
+}
+
+// MarkRetryOperationAmbiguous preserves an accepted provider turn when the
+// exact identity commit could not be confirmed.
+func (s *Store) MarkRetryOperationAmbiguous(
+	ctx context.Context,
+	runID string,
+	generation int64,
+	leaseToken string,
+) error {
+	now := time.Now().UTC()
+	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE automation_run_operations
+		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		WHERE run_id = ? AND group_generation = ? AND operation_kind = ?
+			AND state = ? AND lease_token = ?`),
+		retryOperationAmbiguous, now, runID, generation, retryTaskOperationKind,
+		retryOperationLeased, leaseToken)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 1 {
+		return nil
+	}
+	operation, getErr := s.GetRetryTaskOperation(ctx, runID, generation)
+	if getErr == nil && operation.State == retryOperationAmbiguous {
 		return nil
 	}
 	if errors.Is(getErr, sql.ErrNoRows) {
@@ -225,4 +267,13 @@ func (s *Service) CommitRetryContinuationOperation(
 	dispatch RunDispatch,
 ) error {
 	return s.store.CommitRetryContinuationOperation(ctx, runID, generation, leaseToken, dispatch)
+}
+
+func (s *Service) MarkRetryOperationAmbiguous(
+	ctx context.Context,
+	runID string,
+	generation int64,
+	leaseToken string,
+) error {
+	return s.store.MarkRetryOperationAmbiguous(ctx, runID, generation, leaseToken)
 }

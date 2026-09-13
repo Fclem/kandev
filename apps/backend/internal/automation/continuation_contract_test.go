@@ -377,6 +377,40 @@ func TestDispatchRunFailureSchedulesRetryChild(t *testing.T) {
 	require.Equal(t, RetryStateScheduled, runs[0].RetryState)
 }
 
+func TestDispatchRunKeepsAmbiguousAcceptedContinuationOpen(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{
+		WorkspaceID: "ws-ambiguous-continuation", Name: "ambiguous continuation", Enabled: true,
+		RetryPolicy: RetryPolicy{Mode: RetryModeFinite, MaxRetries: "1", DelaySeconds: "0"},
+	}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	trigger := &AutomationTrigger{
+		ID: "ambiguous-continuation-trigger", AutomationID: a.ID,
+		Type: TriggerTypeManual, Enabled: true,
+	}
+	require.NoError(t, svc.store.CreateTrigger(ctx, trigger))
+	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{}`), "ambiguous-continuation")
+	require.NoError(t, err)
+	run, err := svc.store.GetRun(ctx, fire.RunID)
+	require.NoError(t, err)
+	leased, err := svc.store.BeginRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	require.NoError(t, svc.store.MarkRetryOperationAmbiguous(ctx, run.ID, 1, leased.LeaseToken))
+
+	dispatchErr := errors.New("accepted turn identity commit failed")
+	require.ErrorIs(t, svc.DispatchRun(ctx, run.ID, ThreadActionResumed, "continuation", func() (RunDispatch, error) {
+		return RunDispatch{}, dispatchErr
+	}), dispatchErr)
+
+	operation, err := svc.store.GetRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, retryOperationAmbiguous, operation.State)
+	runs, err := svc.store.ListRuns(ctx, a.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+}
+
 func TestDispatchRunKeepsCommittedContinuationOpenWhenBindingFails(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

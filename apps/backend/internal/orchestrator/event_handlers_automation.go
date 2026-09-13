@@ -89,6 +89,10 @@ type automationRetryContinuationOperation interface {
 	) error
 }
 
+type automationRetryAmbiguous interface {
+	MarkRetryOperationAmbiguous(ctx context.Context, runID string, generation int64, leaseToken string) error
+}
+
 type automationRetryOperationFence interface {
 	VerifyRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken string) error
 }
@@ -1160,6 +1164,28 @@ func (s *Service) commitRetryContinuationOperation(
 	return nil
 }
 
+func (s *Service) markRetryOperationAmbiguous(
+	ctx context.Context,
+	runID string,
+	operation *automation.RetryOperation,
+) error {
+	if operation == nil {
+		return nil
+	}
+	operationService, ok := s.automationService.(automationRetryAmbiguous)
+	if !ok {
+		return errors.New("retry ambiguous operation ledger unavailable")
+	}
+	if err := operationService.MarkRetryOperationAmbiguous(
+		ctx, runID, operation.GroupGeneration, operation.LeaseToken,
+	); err != nil {
+		return err
+	}
+	operation.State = "ambiguous"
+	operation.LeaseToken = ""
+	return nil
+}
+
 func (s *Service) verifyRetryContinuationAdmission(
 	ctx context.Context,
 	runID string,
@@ -1261,6 +1287,13 @@ func (s *Service) promptAutomationContinuation(
 			acceptanceErr = s.commitRetryContinuationOperation(commitCtx, runID, operation, automation.RunDispatch{
 				TaskID: task.ID, SessionID: session.ID, TurnID: turnID,
 			})
+			if acceptanceErr != nil {
+				ambiguousErr := s.markRetryOperationAmbiguous(commitCtx, runID, operation)
+				acceptanceErr = errors.Join(
+					fmt.Errorf("%w: %v", automation.ErrRetryContinuationCommitAmbiguous, acceptanceErr),
+					ambiguousErr,
+				)
+			}
 			cancel()
 		},
 	})

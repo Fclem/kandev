@@ -177,12 +177,13 @@ Send:
 ```http
 POST /api/v1/automations/webhook/{automationId}
 X-Webhook-Secret: <secret>
+X-Kandev-Delivery-ID: <delivery-id>
 Content-Type: application/json
 ```
 
-Kandev silently reads only the first 1 MiB of the request body; it does not reject an oversized body. If that retained prefix is valid JSON, it becomes trigger data. Empty or invalid JSON is wrapped as `{"body":"<raw text>"}`. The endpoint returns 401 for a wrong secret, 404 for an unknown automation, and 409 when the automation or its webhook trigger is disabled.
+The delivery ID is required, limited to 256 characters, and deduplicates a delivery per automation. Replaying the same delivery returns `{"status":"duplicate"}` without creating another run. Kandev accepts an empty body, rejects invalid JSON or invalid JSON-pointer projections with `400`, and rejects bodies larger than 1 MiB with `413`.
 
-Webhook delivery has no event deduplication or filter-expression evaluator. Make downstream actions idempotent when the sender retries. The secret is stored with the automation rather than in Kandev's encrypted provider-secret store, and anyone with Kandev settings access can reveal it. Treat it as a credential, use TLS, keep it out of URLs/logs, and replace the automation if rotation is required.
+Webhook trigger configuration can retain selected payload values with up to 32 bounded RFC 6901 pointers. Only selected values are stored in retry history. The secret is stored with the automation rather than in Kandev's encrypted provider-secret store, and anyone with Kandev settings access can reveal it. Treat it as a credential, use TLS, keep it out of URLs and logs, and replace the automation if rotation is required.
 
 ### Manual trigger
 

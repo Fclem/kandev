@@ -492,6 +492,7 @@ func NewService(opts ServiceOptions) *Service {
 		gitManager:              opts.GitManager,
 		eb:                      opts.EventBus,
 		taskStarter:             opts.TaskStarter,
+		taskCanceller:           opts.TaskCanceller,
 		taskWorkspace:           opts.TaskWorkspace,
 		taskTreeDeleter:         opts.TaskTreeDeleter,
 		workspaceGroupCleaner:   opts.WorkspaceGroupCleaner,

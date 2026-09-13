@@ -563,6 +563,11 @@ func TestAttachmentDeleteByTaskRetainsRowsWhenBytesCannotBeRemoved(t *testing.T)
 	svc, repo, root, _ := newAttachmentTestService(t)
 	const taskID = "task-attachment-delete"
 	attachment := stageTestAttachment(t, svc, "user-a", "blocked.png", "payload")
+	if err := repo.CreateTask(context.Background(), &models.Task{
+		ID: taskID, WorkspaceID: "ws-att", Title: "attachment delete",
+	}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
 	if err := svc.Claim(context.Background(), "user-a", "ws-att", taskID, "sess-1", []string{attachment.ID}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
@@ -648,6 +653,12 @@ func (f *failingAttachmentRepo) MarkExpiredMessageAttachments(context.Context, t
 }
 
 func (f *failingAttachmentRepo) DeleteClaimedMessageAttachments(context.Context, []string, string, string, string) ([]*models.TaskMessageAttachment, error) {
+	return nil, f.err
+}
+
+func (f *failingAttachmentRepo) PrepareClaimedMessageAttachmentsForRelease(
+	context.Context, []string, string, string, string,
+) ([]*models.TaskMessageAttachment, error) {
 	return nil, f.err
 }
 

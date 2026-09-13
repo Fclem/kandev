@@ -210,33 +210,37 @@ func TestWSTaskReadsDenyForeignTask(t *testing.T) {
 // separately rather than endorsed here.
 func TestWSTaskMutationsDenyForeignTask(t *testing.T) {
 	for name, tc := range map[string]struct {
-		call    func(*TaskHandlers, context.Context) (*ws.Message, error)
-		writes  func(*wsTaskRepo) int
-		wantMsg string
+		call     func(*TaskHandlers, context.Context) (*ws.Message, error)
+		writes   func(*wsTaskRepo) int
+		wantMsg  string
+		wantCode string
 	}{
 		"update": {
 			call: func(h *TaskHandlers, ctx context.Context) (*ws.Message, error) {
 				return h.wsUpdateTask(ctx, wsWorkflowRequest(t, ws.ActionTaskUpdate,
 					map[string]any{"id": "task-b", "title": "Hijacked"}))
 			},
-			writes:  func(r *wsTaskRepo) int { return len(r.updated) },
-			wantMsg: "Failed to update task",
+			writes:   func(r *wsTaskRepo) int { return len(r.updated) },
+			wantMsg:  "Failed to update task",
+			wantCode: string(ws.ErrorCodeInternalError),
 		},
 		"delete": {
 			call: func(h *TaskHandlers, ctx context.Context) (*ws.Message, error) {
 				return h.wsDeleteTask(ctx, wsWorkflowRequest(t, ws.ActionTaskDelete,
 					map[string]any{"id": "task-b"}))
 			},
-			writes:  func(r *wsTaskRepo) int { return len(r.deleted) },
-			wantMsg: "failed to delete task",
+			writes:   func(r *wsTaskRepo) int { return len(r.deleted) },
+			wantMsg:  "Task not found",
+			wantCode: string(ws.ErrorCodeNotFound),
 		},
 		"archive": {
 			call: func(h *TaskHandlers, ctx context.Context) (*ws.Message, error) {
 				return h.wsArchiveTask(ctx, wsWorkflowRequest(t, ws.ActionTaskArchive,
 					map[string]any{"id": "task-b"}))
 			},
-			writes:  func(r *wsTaskRepo) int { return len(r.archived) },
-			wantMsg: "failed to archive task",
+			writes:   func(r *wsTaskRepo) int { return len(r.archived) },
+			wantMsg:  "Task not found",
+			wantCode: string(ws.ErrorCodeNotFound),
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -247,7 +251,7 @@ func TestWSTaskMutationsDenyForeignTask(t *testing.T) {
 
 			require.NoError(t, err)
 			payload := wsWorkflowError(t, resp)
-			require.Equal(t, string(ws.ErrorCodeInternalError), payload.Code)
+			require.Equal(t, tc.wantCode, payload.Code)
 			require.Equal(t, tc.wantMsg, payload.Message)
 			require.Zero(t, tc.writes(repo), "a denied mutation must not reach the repository")
 		})

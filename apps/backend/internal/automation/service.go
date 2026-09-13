@@ -940,24 +940,38 @@ func (s *Service) ReconcileCleanupJobs(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) stopBoundRetryRun(ctx context.Context, run *AutomationRun) error {
+	if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
+		return nil
+	}
+	if s.runStopper == nil {
+		return errors.New("automation run stopper is not configured")
+	}
+	stopped, err := s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+	if err != nil {
+		return err
+	}
+	if !stopped {
+		return errors.New("automation retry run stop was not confirmed")
+	}
+	return nil
+}
+
 func (s *Service) cancelRetryRunForStop(ctx context.Context, run *AutomationRun) error {
 	group, err := s.store.GetRetryGroup(ctx, run.RetryGroupID)
 	if err != nil {
 		return err
 	}
+	if err := s.stopBoundRetryRun(ctx, run); err != nil {
+		return err
+	}
 	superseded := group != nil && group.State == RetryGroupSuperseded &&
 		group.Generation != run.RetryGroupGeneration
 	if superseded {
-		if run.TaskID != "" && run.SessionID != "" && run.TurnID != "" && s.runStopper != nil {
-			_, _ = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
-		}
 		return s.store.CancelRetryRun(ctx, run.ID, run.RetryGroupGeneration)
 	}
 	if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
 		return err
-	}
-	if run.TaskID != "" && run.SessionID != "" && run.TurnID != "" && s.runStopper != nil {
-		_, _ = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
 	}
 	return nil
 }

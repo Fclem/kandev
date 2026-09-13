@@ -552,3 +552,47 @@ func TestStopRunCancelsSupersededRetryWithoutTouchingReplacement(t *testing.T) {
 	require.Equal(t, RetryGroupLive, reloadedReplacement.State)
 	require.Equal(t, int64(1), reloadedReplacement.Generation)
 }
+
+func TestStopRunRetryStopperErrorLeavesRetryLive(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	automation := &Automation{
+		WorkspaceID: "workspace-stop-retry-error",
+		Name:        "stop retry error",
+		Enabled:     true,
+	}
+	require.NoError(t, svc.store.CreateAutomation(ctx, automation))
+	group := &RetryGroup{
+		ID:           "group-stop-retry-error",
+		AutomationID: automation.ID,
+		Generation:   1,
+		State:        RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		ID:                   "run-stop-retry-error",
+		AutomationID:         automation.ID,
+		TriggerType:          TriggerTypeManual,
+		Status:               RunStatusTaskCreated,
+		TaskID:               "stop-retry-task",
+		SessionID:            "stop-retry-session",
+		TurnID:               "stop-retry-turn",
+		RetryGroupID:         group.ID,
+		RetryGroupGeneration: 1,
+		RetryState:           RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	stopErr := errors.New("retry stop failed")
+	svc.SetRunStopper(runStopperStub{err: stopErr})
+
+	_, err := svc.StopRun(ctx, automation.ID, run.ID)
+	require.ErrorIs(t, err, stopErr)
+
+	storedRun, err := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusTaskCreated, storedRun.Status)
+	require.Equal(t, RetryStateTriggered, storedRun.RetryState)
+	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupLive, storedGroup.State)
+}

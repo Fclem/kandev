@@ -150,7 +150,7 @@ func (e *GitHubEvaluator) checkPRTrigger(ctx context.Context, t *AutomationTrigg
 
 func (e *GitHubEvaluator) firePRTrigger(ctx context.Context, t *AutomationTrigger, pr *github.PR, dedupKey string) {
 	data, _ := json.Marshal(map[string]interface{}{
-		"number":                 pr.Number,
+		automationPRNumberKey:    pr.Number,
 		"title":                  pr.Title,
 		automationHTMLURLKey:     pr.HTMLURL,
 		automationAuthorLoginKey: pr.AuthorLogin,

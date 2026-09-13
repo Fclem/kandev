@@ -71,21 +71,23 @@ type ManagedConversationDestination struct {
 }
 
 const (
-	automationAuthorLoginKey   = "author_login"
-	automationBaseBranchKey    = "base_branch"
-	automationBodyKey          = "body"
-	automationHeadBranchKey    = "head_branch"
-	automationHTMLURLKey       = "html_url"
-	automationRepoKey          = "repo"
-	automationTaskIDKey        = "task_id"
-	defaultBranchMain          = "main"
-	exampleGitHubPRURL         = "https://github.com/acme/api/pull/7"
-	exampleRepositoryOwner     = "org/repo"
-	placeholderRepositoryOwner = "Repository (owner/name)"
-	triggerCategoryGitHub      = "github"
-	triggerDataSourceKey       = "source"
-	triggerDataSourceManual    = "manual"
-	webhookBodyPlaceholderKey  = "webhook.body"
+	automationAuthorLoginKey    = "author_login"
+	automationBaseBranchKey     = "base_branch"
+	automationBodyKey           = "body"
+	automationHeadBranchKey     = "head_branch"
+	automationHTMLURLKey        = "html_url"
+	automationPRNumberKey       = "number"
+	automationMergedPRNumberKey = "pr_number"
+	automationRepoKey           = "repo"
+	automationTaskIDKey         = "task_id"
+	defaultBranchMain           = "main"
+	exampleGitHubPRURL          = "https://github.com/acme/api/pull/7"
+	exampleRepositoryOwner      = "org/repo"
+	placeholderRepositoryOwner  = "Repository (owner/name)"
+	triggerCategoryGitHub       = "github"
+	triggerDataSourceKey        = "source"
+	triggerDataSourceManual     = "manual"
+	webhookBodyPlaceholderKey   = "webhook.body"
 )
 
 // RunStatus tracks the outcome of a trigger firing.

@@ -195,7 +195,7 @@ func ResolvePayloadPath(triggerData json.RawMessage, path string) (value string,
 
 func fixedTriggerPlaceholders(triggerType TriggerType, data map[string]interface{}) map[string]string {
 	switch triggerType {
-	case TriggerTypeGitHubPR:
+	case TriggerTypeGitHubPR, TriggerTypeGitHubPRMerged:
 		return prPlaceholders(data)
 	case TriggerTypeGitHubPush:
 		return pushPlaceholders(data)
@@ -207,10 +207,18 @@ func fixedTriggerPlaceholders(triggerType TriggerType, data map[string]interface
 }
 
 func prPlaceholders(data map[string]interface{}) map[string]string {
+	number := data[automationPRNumberKey]
+	if number == nil {
+		number = data[automationMergedPRNumberKey]
+	}
+	url := data[automationHTMLURLKey]
+	if url == nil {
+		url = data["pr_url"]
+	}
 	return map[string]string{
-		"pr.number":      toString(data["number"]),
+		"pr.number":      toString(number),
 		"pr.title":       toString(data["title"]),
-		"pr.url":         toString(data[automationHTMLURLKey]),
+		"pr.url":         toString(url),
 		"pr.author":      toString(data[automationAuthorLoginKey]),
 		"pr.repo":        toString(data[automationRepoKey]),
 		"pr.branch":      toString(data[automationHeadBranchKey]),

@@ -130,6 +130,60 @@ func TestRetryAdmissionSupersedesPendingWithoutTerminalizingActiveRun(t *testing
 	require.Equal(t, RetryStateTriggered, reloaded.RetryState)
 }
 
+func TestRetryAdmissionSupersedesCommittedUnboundRunBeforeRecovery(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-committed-supersession", WorkspaceID: "ws-committed-supersession",
+		Name: "committed supersession", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	oldGroup := &RetryGroup{
+		ID: "old-committed-group", AutomationID: a.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryGroup(ctx, oldGroup))
+	oldRun := &AutomationRun{
+		ID: "old-committed-run", AutomationID: a.ID, TriggerID: "trigger-a",
+		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
+		RetryGroupID: oldGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, store.CreateRun(ctx, oldRun))
+	intent := &RetryTaskIntent{ID: "old-committed-intent", RunID: oldRun.ID,
+		GroupGeneration: 1, State: retryIntentCreated, TaskID: "committed-task"}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "old-committed-operation", IntentID: intent.ID, RunID: oldRun.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationCommitted,
+		ExternalTaskID: "committed-task",
+	}))
+	require.NoError(t, store.CreateRetryOutbox(ctx, &RetryOutbox{
+		EventID: "old-committed-event", RunID: oldRun.ID, SnapshotVersion: 1,
+		State: retryOutboxPending,
+	}))
+
+	newRun := &AutomationRun{
+		ID: "new-committed-run", AutomationID: a.ID, TriggerID: "trigger-a",
+		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
+		RetryGroupID: "new-committed-group", RetryGroupGeneration: 1,
+		RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, store.CreateRetryAdmission(ctx, newRun, &RetryGroup{
+		ID: newRun.RetryGroupID, AutomationID: a.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}))
+
+	reloaded, err := store.GetRun(ctx, oldRun.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusFailed, reloaded.Status)
+	require.Equal(t, RetryStateSuperseded, reloaded.RetryState)
+	operation, err := store.GetRetryTaskOperation(ctx, oldRun.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, retryOperationCommitted, operation.State)
+	require.ErrorIs(t, store.BindRunTask(ctx, oldRun.ID, "committed-task"), ErrRetryGenerationMismatch)
+	reloaded, err = store.GetRun(ctx, oldRun.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusFailed, reloaded.Status)
+}
+
 func TestSupersededActiveRetryCanCompleteWithoutReplacingLiveGroup(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()

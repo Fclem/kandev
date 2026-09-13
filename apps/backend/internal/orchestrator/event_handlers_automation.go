@@ -339,7 +339,7 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 	s.createAutomationTaskLocked(ctx, evt)
 }
 
-//nolint:gocognit,cyclop,funlen // Retry admission, provider effects, and binding share one critical section.
+//nolint:gocognit,cyclop,funlen,maintidx // Retry admission, provider effects, and binding share one critical section.
 func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
 	var retryRun *automation.AutomationRun
 	var retrySnapshot *automation.RetryLaunchConfigSnapshot
@@ -497,21 +497,39 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 			s.recordFailedRun(ctx, evt, err.Error())
 			return
 		}
+		retryOperation.State = retryOperationCommittedState
+		retryOperation.ExternalTaskID = task.ID
 	}
 
-	// The run row is the record that this firing happened and carries its exact
-	// concurrency accounting. Hidden tasks are reachable only through that row;
-	// visible normal tasks also remain available through ordinary task lists.
+	// A committed provider task is durable ownership. If the first binding
+	// attempt fails, retry that exact binding and leave the operation intact
+	// when reconciliation cannot complete; creating a successor would risk
+	// launching a duplicate provider task.
 	if err := s.recordSuccessRun(ctx, evt, task.ID); err != nil {
-		s.logger.Error("failed to record automation run; abandoning the firing",
-			zap.String("automation_id", a.ID),
-			zap.String("task_id", task.ID),
-			zap.Error(err))
-		if action != automation.ThreadActionResumed {
-			s.deleteAbandonedTask(ctx, a.ID, task.ID)
+		if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
+			committedTaskID := retryOperation.ExternalTaskID
+			if committedTaskID == "" {
+				committedTaskID = task.ID
+			}
+			if bindErr := s.recordSuccessRun(ctx, evt, committedTaskID); bindErr != nil {
+				s.logger.Error("failed to reconcile committed retry task binding",
+					zap.String("automation_id", a.ID),
+					zap.String("task_id", committedTaskID),
+					zap.Error(bindErr))
+				return
+			}
+			task.ID = committedTaskID
+		} else {
+			s.logger.Error("failed to record automation run; abandoning the firing",
+				zap.String("automation_id", a.ID),
+				zap.String("task_id", task.ID),
+				zap.Error(err))
+			if action != automation.ThreadActionResumed {
+				s.deleteAbandonedTask(ctx, a.ID, task.ID)
+			}
+			s.recordFailedRun(ctx, evt, err.Error())
+			return
 		}
-		s.recordFailedRun(ctx, evt, err.Error())
-		return
 	}
 
 	// Associate PR with task for github_pr triggers (same as PR Watcher).

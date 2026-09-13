@@ -1585,10 +1585,10 @@ func (s *Store) listRetryHistory(
 		return nil, err
 	}
 	if !after.IsZero() {
-		pageQuery += ` AND (rg.created_at > ? OR (rg.created_at = ? AND rg.id > ?))`
+		pageQuery += ` AND (rg.created_at < ? OR (rg.created_at = ? AND rg.id < ?))`
 		pageArgs = append(pageArgs, after, after, afterID)
 	}
-	pageQuery += ` ORDER BY rg.created_at ASC, rg.id ASC LIMIT ?`
+	pageQuery += ` ORDER BY rg.created_at DESC, rg.id DESC LIMIT ?`
 	pageArgs = append(pageArgs, limit+1)
 	var groups []RetryGroup
 	if err := s.ro.SelectContext(ctx, &groups, s.ro.Rebind(pageQuery), pageArgs...); err != nil {

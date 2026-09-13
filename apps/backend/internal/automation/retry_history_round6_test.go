@@ -30,6 +30,41 @@ func TestListRetryHistoryReturnsCompleteAttemptTimelineAndCursor(t *testing.T) {
 	require.Len(t, page.Items[0].Attempts, 2)
 	require.NotEmpty(t, page.HighWaterMark)
 }
+func TestListRetryHistoryReturnsNewestGroupsFirst(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	automation := &Automation{
+		ID: "history-order-automation", WorkspaceID: "history-order-workspace",
+		Name: "history order", Enabled: true,
+	}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	for _, group := range []*RetryGroup{
+		{ID: "history-order-old", AutomationID: automation.ID, TriggerID: "trigger-old", Generation: 1, State: RetryGroupCompleted},
+		{ID: "history-order-new", AutomationID: automation.ID, TriggerID: "trigger-new", Generation: 1, State: RetryGroupCompleted},
+	} {
+		require.NoError(t, store.CreateRetryGroup(ctx, group))
+	}
+	_, err := store.db.ExecContext(ctx,
+		`UPDATE automation_retry_groups SET created_at = ? WHERE id = ?`,
+		"2024-01-01T00:00:00Z", "history-order-old")
+	require.NoError(t, err)
+	_, err = store.db.ExecContext(ctx,
+		`UPDATE automation_retry_groups SET created_at = ? WHERE id = ?`,
+		"2024-01-02T00:00:00Z", "history-order-new")
+	require.NoError(t, err)
+
+	first, err := store.ListRetryHistory(ctx, automation.ID, "", 1)
+	require.NoError(t, err)
+	require.Len(t, first.Items, 1)
+	require.Equal(t, "history-order-new", first.Items[0].RetryGroupID)
+	require.NotEmpty(t, first.NextCursor)
+
+	second, err := store.ListRetryHistory(ctx, automation.ID, first.NextCursor, 1)
+	require.NoError(t, err)
+	require.Len(t, second.Items, 1)
+	require.Equal(t, "history-order-old", second.Items[0].RetryGroupID)
+	require.Empty(t, second.NextCursor)
+}
 
 func TestCancelledRetryStateProjectsCancelledStatus(t *testing.T) {
 	store := setupTestStore(t)

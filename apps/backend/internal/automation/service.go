@@ -1542,7 +1542,7 @@ func RenderRunDisplayTitleAt(a *Automation, triggerType TriggerType, triggerData
 
 // FireTrigger publishes an AutomationTriggered event for the given trigger.
 func (s *Service) FireTrigger(ctx context.Context, automationID, triggerID string, triggerType TriggerType, triggerData json.RawMessage, dedupKey string) (FireResult, error) {
-	return s.FireTriggerWithInitialData(ctx, automationID, triggerID, triggerType, triggerData, nil, dedupKey)
+	return s.fireTriggerWithMatchedTriggers(ctx, automationID, triggerID, triggerType, triggerData, nil, dedupKey, []string{triggerID})
 }
 
 func automationTriggeredEventForAdmission(
@@ -1583,6 +1583,19 @@ func (s *Service) FireTriggerWithInitialData(
 	triggerData, initialTriggerData json.RawMessage,
 	dedupKey string,
 ) (FireResult, error) {
+	return s.fireTriggerWithMatchedTriggers(
+		ctx, automationID, triggerID, triggerType, triggerData, initialTriggerData, dedupKey, []string{triggerID},
+	)
+}
+
+func (s *Service) fireTriggerWithMatchedTriggers(
+	ctx context.Context,
+	automationID, triggerID string,
+	triggerType TriggerType,
+	triggerData, initialTriggerData json.RawMessage,
+	dedupKey string,
+	matchedTriggerIDs []string,
+) (FireResult, error) {
 	// Admission decisions live in one place so every caller — scheduler,
 	// webhook, and the manual Run button — gets the same answer about whether a
 	// fire actually happened.
@@ -1605,7 +1618,7 @@ func (s *Service) FireTriggerWithInitialData(
 	// slot and publish two fires, or DeleteAllRuns can remove a row after its
 	// task snapshot but before the row is inserted.
 	admittedRun, capReason, duplicate, admissionErr := s.admitTrigger(
-		ctx, a, triggerID, triggerType, triggerData, dedupKey, now,
+		ctx, a, triggerID, triggerType, triggerData, dedupKey, now, matchedTriggerIDs,
 	)
 	if admissionErr != nil {
 		return FireResult{}, admissionErr
@@ -1673,10 +1686,11 @@ func (s *Service) admitTrigger(
 	triggerData json.RawMessage,
 	dedupKey string,
 	resolvedAt time.Time,
+	matchedTriggerIDs []string,
 ) (*AutomationRun, string, bool, error) {
 	unlock := s.automationRunLock(a.ID)
 	defer unlock()
-	return s.admitTriggerLocked(ctx, a, triggerID, triggerType, triggerData, dedupKey, resolvedAt)
+	return s.admitTriggerLocked(ctx, a, triggerID, triggerType, triggerData, dedupKey, resolvedAt, matchedTriggerIDs)
 }
 
 func (s *Service) admitTriggerLocked(
@@ -1687,6 +1701,7 @@ func (s *Service) admitTriggerLocked(
 	triggerData json.RawMessage,
 	dedupKey string,
 	resolvedAt time.Time,
+	matchedTriggerIDs []string,
 ) (*AutomationRun, string, bool, error) {
 	if dedupKey != "" {
 		exists, err := s.store.HasRunWithDedupKey(ctx, a.ID, dedupKey)
@@ -1754,13 +1769,7 @@ func (s *Service) admitTriggerLocked(
 		run.RetryContinuationSnapshot = snapshotJSON
 	}
 	if run.RetryGroupID != "" {
-		enabledTriggerIDs := make([]string, 0, len(a.Triggers))
-		for _, trigger := range a.Triggers {
-			if trigger.Enabled && trigger.ID != "" {
-				enabledTriggerIDs = append(enabledTriggerIDs, trigger.ID)
-			}
-		}
-		encodedTriggerIDs, _ := json.Marshal(enabledTriggerIDs)
+		encodedTriggerIDs, _ := json.Marshal(matchedTriggerIDs)
 		canonicalTriggerIDs := canonicalRetryTriggerIDs(string(encodedTriggerIDs), triggerID)
 		encodedTriggerIDs, _ = json.Marshal(canonicalTriggerIDs)
 		group := &RetryGroup{

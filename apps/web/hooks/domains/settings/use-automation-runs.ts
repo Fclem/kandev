@@ -361,7 +361,7 @@ export function useAutomationRuns(
       historyMode,
       onError: () => setRuns(automationId, []),
     });
-  }, [automationId]);
+  }, [automationId, historyMode]);
 
   useEffect(() => {
     if (!automationId) return;

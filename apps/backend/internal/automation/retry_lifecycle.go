@@ -323,24 +323,6 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	}
 	child.DisplayTitle = FormatRetryTitle(child.RetryBaseTitle, nextNumber)
 	child.CreatedAt = time.Now().UTC()
-	if child.RetryLaunchConfigSnapshot != "" && child.RetryLaunchConfigSnapshot != "{}" {
-		var snapshot RetryLaunchConfigSnapshot
-		if err := json.Unmarshal([]byte(child.RetryLaunchConfigSnapshot), &snapshot); err != nil {
-			return nil, fmt.Errorf("decode retry launch snapshot for child: %w", err)
-		}
-		var continuationTaskID string
-		if err := tx.GetContext(ctx, &continuationTaskID, tx.Rebind(
-			`SELECT continuation_task_id FROM automations WHERE id = ?`), parent.AutomationID); err != nil {
-			return nil, err
-		}
-		snapshot.ContinuationTaskID = continuationTaskID
-		encodedSnapshot, err := encodeRetryLaunchConfigSnapshot(snapshot)
-		if err != nil {
-			return nil, err
-		}
-		child.RetryLaunchConfigSnapshot = encodedSnapshot
-		child.RetryContinuationSnapshot = encodedSnapshot
-	}
 	parentResult, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_failure_phase = ?, retry_failure_class = ?, error_message = ? WHERE id = ? AND retry_state IN (?, ?)`),
 		RunStatusFailed, RetryStateCompleted, failure.FailurePhase, failure.FailureClass, failure.Message, runID, RetryStateTriggered, RetryStateNone)
 	if err != nil {

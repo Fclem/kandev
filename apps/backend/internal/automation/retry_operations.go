@@ -155,8 +155,9 @@ func (s *Store) CommitRetryTaskOperation(ctx context.Context, runID string, gene
 	return ErrRetryGenerationMismatch
 }
 
-// CommitRetryContinuationOperation records the exact accepted continuation
-// turn before the run binding and receipt acknowledgement complete.
+// CommitRetryContinuationOperation records an exact accepted continuation turn
+// or upgrades a previously committed task identity with its exact launch
+// session and turn before run binding completes.
 func (s *Store) CommitRetryContinuationOperation(
 	ctx context.Context,
 	runID string,
@@ -174,9 +175,13 @@ func (s *Store) CommitRetryContinuationOperation(
 			external_turn_id = ?, lease_token = '', lease_expires_at = NULL,
 			updated_at = ?
 		WHERE run_id = ? AND group_generation = ? AND operation_kind = ?
-			AND state = ? AND lease_token = ?`),
-		retryOperationCommitted, dispatch.TaskID, dispatch.SessionID, dispatch.TurnID,
-		now, runID, generation, retryTaskOperationKind, retryOperationLeased, leaseToken)
+			AND (
+				(state = ? AND lease_token = ?)
+				OR (state = ? AND external_task_id = ?)
+			)`),
+		retryOperationCommitted, dispatch.TaskID, dispatch.SessionID,
+		dispatch.TurnID, now, runID, generation, retryTaskOperationKind,
+		retryOperationLeased, leaseToken, retryOperationCommitted, dispatch.TaskID)
 	if err != nil {
 		return err
 	}

@@ -110,10 +110,6 @@ type automationRetryRunLock interface {
 
 const retryOperationCommittedState = "committed"
 
-type reviewTaskAdopter interface {
-	GetReviewTaskByExternalID(ctx context.Context, workspaceID, externalID string) (*models.Task, error)
-}
-
 type automationContinuationState interface {
 	SetContinuationTaskID(ctx context.Context, automationID, taskID string) error
 }
@@ -524,7 +520,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	var reasons automationRunReasons
 	var taskErr error
 	if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
-		task, taskErr = s.adoptCommittedRetryTask(ctx, a, evt)
+		task, taskErr = s.adoptCommittedRetryTask(ctx, a, retryOperation)
 		reasons.Thread = retryRun.ThreadReason
 		reasons.Repository = retryRun.RepositoryReason
 	} else {
@@ -533,13 +529,25 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		)
 	}
 	if taskErr != nil {
+		if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
+			s.logger.Error("failed to adopt committed retry task",
+				zap.String("automation_id", a.ID),
+				zap.String("run_id", evt.RunID),
+				zap.String("task_id", retryOperation.ExternalTaskID),
+				zap.Error(taskErr))
+			return
+		}
 		s.recordFailedRun(ctx, evt, taskErr.Error())
 		return
 	}
 	if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
 		adopted, adoptErr := s.adoptCommittedRetryContinuation(ctx, evt.RunID, task.ID, retryOperation)
 		if adoptErr != nil {
-			s.recordFailedRun(ctx, evt, adoptErr.Error())
+			s.logger.Warn("failed to bind committed retry continuation; leaving receipt pending",
+				zap.String("automation_id", a.ID),
+				zap.String("run_id", evt.RunID),
+				zap.String("task_id", task.ID),
+				zap.Error(adoptErr))
 			return
 		}
 		if adopted {
@@ -667,17 +675,26 @@ type automationRunReasons struct {
 	Repository string
 }
 
-func (s *Service) adoptCommittedRetryTask(ctx context.Context, a *automation.Automation, evt *automation.AutomationTriggeredEvent) (*models.Task, error) {
-	adopter, ok := s.reviewTaskCreator.(reviewTaskAdopter)
-	if !ok {
-		return nil, errors.New("retry task adoption unavailable")
+func (s *Service) adoptCommittedRetryTask(
+	ctx context.Context,
+	a *automation.Automation,
+	operation *automation.RetryOperation,
+) (*models.Task, error) {
+	if operation == nil || operation.ExternalTaskID == "" {
+		return nil, errors.New("committed retry task identity is missing")
 	}
-	task, err := adopter.GetReviewTaskByExternalID(ctx, a.WorkspaceID, evt.RetryExternalID)
+	if s.repo == nil {
+		return nil, errors.New("committed retry task lookup unavailable")
+	}
+	task, err := s.repo.GetTask(ctx, operation.ExternalTaskID)
 	if err != nil {
 		return nil, err
 	}
 	if task == nil {
-		return nil, errors.New("retry task identity is committed but task is missing")
+		return nil, errors.New("committed retry task is missing")
+	}
+	if task.WorkspaceID != a.WorkspaceID {
+		return nil, errors.New("committed retry task belongs to a different workspace")
 	}
 	return task, nil
 }

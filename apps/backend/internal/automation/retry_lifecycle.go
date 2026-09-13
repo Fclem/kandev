@@ -192,7 +192,7 @@ func (s *Store) GetRetryGroup(ctx context.Context, id string) (*RetryGroup, erro
 
 // FinalizeRetryFailure settles an attempt and inserts its unique child.
 //
-//nolint:gocognit,cyclop,funlen,nestif // One transaction owns all parent, child, and outbox CAS.
+//nolint:gocognit,cyclop,funlen,nestif,maintidx // One transaction owns all parent, child, and outbox CAS.
 func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generation int64, raw error, phase string) (*AutomationRun, error) {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -212,6 +212,28 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	var group RetryGroup
 	if err := tx.GetContext(ctx, &group, tx.Rebind(`SELECT * FROM automation_retry_groups WHERE id = ?`), parent.RetryGroupID); err != nil {
 		return nil, err
+	}
+	if group.State == RetryGroupSuperseded && group.Generation != generation {
+		failure := SanitizeAutomationFailure(raw, phase, nil)
+		result, execErr := tx.ExecContext(ctx, tx.Rebind(`
+			UPDATE automation_runs
+			SET status = ?, retry_state = ?, retry_failure_phase = ?,
+				retry_failure_class = ?, error_message = ?
+			WHERE id = ? AND retry_group_generation = ?
+				AND status IN (?, ?) AND retry_state IN (?, ?)`),
+			RunStatusFailed, RetryStateCompleted, failure.FailurePhase,
+			failure.FailureClass, failure.Message, runID, generation,
+			RunStatusTriggered, RunStatusTaskCreated, RetryStateTriggered, RetryStateNone)
+		if execErr != nil {
+			return nil, execErr
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return nil, ErrRetryGenerationMismatch
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 	if group.State != RetryGroupLive || group.Generation != generation {
 		return nil, ErrRetryGenerationMismatch
@@ -556,6 +578,13 @@ func (s *Store) MarkRetrySucceeded(ctx context.Context, runID string, generation
 	var groupID string
 	if err := tx.GetContext(ctx, &groupID, tx.Rebind(`SELECT retry_group_id FROM automation_runs WHERE id = ?`), runID); err != nil {
 		return err
+	}
+	var group RetryGroup
+	if err := tx.GetContext(ctx, &group, tx.Rebind(`SELECT * FROM automation_retry_groups WHERE id = ?`), groupID); err != nil {
+		return err
+	}
+	if group.State == RetryGroupSuperseded && group.Generation != generation {
+		return tx.Commit()
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_groups SET state = ?, updated_at = ? WHERE id = ? AND generation = ?`), RetryGroupCompleted, time.Now().UTC(), groupID, generation); err != nil {
 		return err

@@ -725,3 +725,43 @@ func TestDeleteAllRuns_RefusesAForeignWorkspace(t *testing.T) {
 		t.Fatalf("expected the workspace check to refuse, got %v", err)
 	}
 }
+
+func TestWebhookTriggerConfigValidatedAtMutationAndImport(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "ws-webhook-config", Name: "webhook config", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+
+	tooDeep := "/a/b/c/d/e/f/g/h/i"
+	tooMany := make([]string, 33)
+	for i := range tooMany {
+		tooMany[i] = "/value"
+	}
+	tooManyConfig, err := json.Marshal(WebhookTriggerConfig{SafeJSONPointers: tooMany})
+	require.NoError(t, err)
+	invalidConfigs := []json.RawMessage{
+		json.RawMessage(`{"safe_json_pointers":["/value~2"]}`),
+		json.RawMessage(`{"safe_json_pointers":["` + tooDeep + `"]}`),
+		tooManyConfig,
+	}
+	for i, config := range invalidConfigs {
+		_, err := svc.AddTrigger(ctx, &AddTriggerRequest{
+			AutomationID: a.ID, Type: TriggerTypeWebhook, Config: config,
+		})
+		require.Error(t, err, "invalid config %d must be rejected", i)
+	}
+
+	validConfig := json.RawMessage(`{"safe_json_pointers":["/object/01"]}`)
+	trigger, err := svc.AddTrigger(ctx, &AddTriggerRequest{
+		AutomationID: a.ID, Type: TriggerTypeWebhook, Config: validConfig,
+	})
+	require.NoError(t, err)
+	invalidUpdate := json.RawMessage(`{"safe_json_pointers":["/value~2"]}`)
+	require.Error(t, svc.UpdateTrigger(ctx, trigger.ID, &UpdateTriggerRequest{Config: &invalidUpdate}))
+
+	_, err = svc.CreateAutomation(ctx, &CreateAutomationRequest{
+		WorkspaceID: "ws-webhook-import", Name: "webhook import",
+		Triggers: []CreateTriggerSpec{{Type: TriggerTypeWebhook, Config: invalidUpdate}},
+	})
+	require.Error(t, err)
+}

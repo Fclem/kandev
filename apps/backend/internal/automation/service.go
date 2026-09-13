@@ -573,6 +573,11 @@ func (s *Service) createAutomation(ctx context.Context, req *CreateAutomationReq
 			return nil, err
 		}
 	}
+	for _, ts := range req.Triggers {
+		if err := validateTriggerConfig(ts.Type, ts.Config); err != nil {
+			return nil, err
+		}
+	}
 	a := &Automation{
 		ID:                               req.ID,
 		WorkspaceID:                      req.WorkspaceID,
@@ -626,10 +631,7 @@ func (s *Service) createAutomation(ctx context.Context, req *CreateAutomationReq
 	// below) means a bad trigger config never leaves behind an orphaned
 	// automation row or a partially-created trigger set.
 	for _, ts := range req.Triggers {
-		if err := validateScheduledConfig(ts.Type, ts.Config); err != nil {
-			return nil, err
-		}
-		if err := validateWebhookConfig(ts.Type, ts.Config); err != nil {
+		if err := validateTriggerConfig(ts.Type, ts.Config); err != nil {
 			return nil, err
 		}
 	}
@@ -1218,13 +1220,12 @@ func validateScheduledConfig(triggerType TriggerType, raw json.RawMessage) error
 	return nil
 }
 
-// validateWebhookConfig rejects a filter the webhook admission path could
-// never evaluate. Without it, a filter with an empty path or an
-// operator/values cardinality mismatch (see EvaluateFilters) saves
-// successfully and then fails every subsequent delivery closed forever: the
-// webhook route always returns 200 regardless of outcome (S7), so nothing on
-// the sender's side ever reveals the misconfiguration.
-func validateWebhookConfig(triggerType TriggerType, raw json.RawMessage) error {
+// validateTriggerConfig validates trigger-specific constraints before config
+// is persisted.
+func validateTriggerConfig(triggerType TriggerType, raw json.RawMessage) error {
+	if err := validateScheduledConfig(triggerType, raw); err != nil {
+		return err
+	}
 	if triggerType != TriggerTypeWebhook || len(raw) == 0 {
 		return nil
 	}
@@ -1251,6 +1252,9 @@ func validateWebhookConfig(triggerType TriggerType, raw json.RawMessage) error {
 			return fmt.Errorf("webhook filter %d: unknown op %q", i, f.Op)
 		}
 	}
+	if _, err := safeWebhookTriggerData(nil, cfg.SafeJSONPointers, "", ""); err != nil {
+		return fmt.Errorf("invalid webhook trigger config: %w", err)
+	}
 	return nil
 }
 
@@ -1262,10 +1266,7 @@ func (s *Service) AddTrigger(ctx context.Context, req *AddTriggerRequest) (*Auto
 	if err := s.authorizeAutomation(ctx, req.AutomationID); err != nil {
 		return nil, err
 	}
-	if err := validateScheduledConfig(req.Type, req.Config); err != nil {
-		return nil, err
-	}
-	if err := validateWebhookConfig(req.Type, req.Config); err != nil {
+	if err := validateTriggerConfig(req.Type, req.Config); err != nil {
 		return nil, err
 	}
 	a, err := s.store.GetAutomation(ctx, req.AutomationID)
@@ -1320,10 +1321,7 @@ func (s *Service) UpdateTrigger(ctx context.Context, id string, req *UpdateTrigg
 		return fmt.Errorf("trigger not found: %s", id)
 	}
 	if req.Config != nil {
-		if err := validateScheduledConfig(existing.Type, *req.Config); err != nil {
-			return err
-		}
-		if err := validateWebhookConfig(existing.Type, *req.Config); err != nil {
+		if err := validateTriggerConfig(existing.Type, *req.Config); err != nil {
 			return err
 		}
 	}

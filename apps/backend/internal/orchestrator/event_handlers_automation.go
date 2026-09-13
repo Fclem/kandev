@@ -1164,6 +1164,13 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		}
 		snapshot = nil
 	}
+	restoreIfUncommitted := func() {
+		if len(operations) > 0 && operations[0] != nil &&
+			operations[0].State == retryOperationCommittedState {
+			return
+		}
+		restore()
+	}
 	dispatch := func() (automation.RunDispatch, error) {
 		var err error
 		snapshot, err = s.refreshAutomationContinuationMetadataWithSnapshot(ctx, task, metadata)
@@ -1179,12 +1186,12 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		}
 		result, err := s.promptAutomationContinuation(ctx, task, session, prompt, runID, operation)
 		if err != nil {
-			restore()
+			restoreIfUncommitted()
 			return automation.RunDispatch{}, err
 		}
 		return result, nil
 	}
-	if s.dispatchAutomationRun(ctx, a.ID, task.ID, session.ID, runID, action, reason, "continuation", dispatch, restore) {
+	if s.dispatchAutomationRun(ctx, a.ID, task.ID, session.ID, runID, action, reason, "continuation", dispatch, restoreIfUncommitted) {
 		return s.retryRunHasExactBinding(ctx, runID)
 	}
 
@@ -1198,7 +1205,7 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		return false
 	}
 	if !s.bindAutomationRun(ctx, runID, dispatchResult.TaskID, dispatchResult.SessionID, dispatchResult.TurnID, action, reason, "continuation") {
-		restore()
+		restoreIfUncommitted()
 		return false
 	}
 	return s.retryRunHasExactBinding(ctx, runID)

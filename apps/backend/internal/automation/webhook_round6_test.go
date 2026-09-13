@@ -52,16 +52,21 @@ func TestSafeWebhookTriggerDataValidatesPointerSyntaxAndTraversal(t *testing.T) 
 
 func TestSafeRetryTriggerProjectionKeepsRoutingMetadata(t *testing.T) {
 	data := SafeRetryTriggerProjection(
-		TriggerTypeGitHubPRMerged, "trigger", []byte(`{
-			"repo":"acme/api","head_branch":"feature","base_branch":"main",
-			"task_id":"task-1","token":"secret"
-		}`), "delivery-1",
-	)
+		TriggerTypeGitHubPR, "trigger", []byte(`{
+			"repo":"acme/api","number":42,"title":"Fix retry safety",
+			"html_url":"https://github.com/acme/api/pull/42","author_login":"alice",
+			"body":"review me","head_branch":"feature","base_branch":"main",
+			"token":"secret"
+		}`), "delivery-1")
 	var projection map[string]any
 	require.NoError(t, json.Unmarshal(data, &projection))
 	require.Equal(t, "acme/api", projection["repo"])
+	require.Equal(t, float64(42), projection["number"])
+	require.Equal(t, "Fix retry safety", projection["title"])
+	require.Equal(t, "https://github.com/acme/api/pull/42", projection["html_url"])
+	require.Equal(t, "alice", projection["author_login"])
+	require.Equal(t, "review me", projection["body"])
 	require.Equal(t, "feature", projection["head_branch"])
 	require.Equal(t, "main", projection["base_branch"])
-	require.Equal(t, "task-1", projection["task_id"])
 	require.NotContains(t, projection, "token")
 }

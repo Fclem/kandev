@@ -217,7 +217,7 @@ func prPlaceholders(data map[string]interface{}) map[string]string {
 	}
 	return map[string]string{
 		"pr.number":      toString(number),
-		"pr.title":       toString(data["title"]),
+		"pr.title":       toString(data[automationTitleKey]),
 		"pr.url":         toString(url),
 		"pr.author":      toString(data[automationAuthorLoginKey]),
 		"pr.repo":        toString(data[automationRepoKey]),
@@ -229,17 +229,17 @@ func prPlaceholders(data map[string]interface{}) map[string]string {
 
 func pushPlaceholders(data map[string]interface{}) map[string]string {
 	return map[string]string{
-		"push.branch":  toString(data["branch"]),
+		"push.branch":  toString(data[automationBranchKey]),
 		"push.repo":    toString(data[automationRepoKey]),
-		"push.sha":     toString(data["sha"]),
-		"push.message": toString(data["message"]),
+		"push.sha":     toString(data[automationSHAKey]),
+		"push.message": toString(data[automationMessageKey]),
 	}
 }
 
 func ciPlaceholders(data map[string]interface{}) map[string]string {
 	return map[string]string{
-		"ci.check_name": toString(data["check_name"]),
-		"ci.conclusion": toString(data["conclusion"]),
+		"ci.check_name": toString(data[automationCheckNameKey]),
+		"ci.conclusion": toString(data[automationConclusionKey]),
 		"ci.repo":       toString(data[automationRepoKey]),
 		"ci.url":        toString(data[automationHTMLURLKey]),
 	}

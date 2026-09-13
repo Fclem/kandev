@@ -424,3 +424,89 @@ func TestReconcileOpenRuns(t *testing.T) {
 		})
 	}
 }
+
+func TestReconcileOpenRetryRunsChecksExactTurnLiveness(t *testing.T) {
+	tests := []struct {
+		name       string
+		live       bool
+		wantStatus RunStatus
+	}{
+		{name: "stale acknowledged turn settles", live: false, wantStatus: RunStatusFailed},
+		{name: "live acknowledged turn stays open", live: true, wantStatus: RunStatusTaskCreated},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newTestService(t)
+			ctx := context.Background()
+			automation := &Automation{WorkspaceID: "workspace-retry-reconcile", Name: "retry reconcile", Enabled: true}
+			require.NoError(t, svc.store.CreateAutomation(ctx, automation))
+			group := &RetryGroup{
+				ID: "retry-reconcile-group", AutomationID: automation.ID,
+				Generation: 1, State: RetryGroupLive,
+			}
+			require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+			run := &AutomationRun{
+				AutomationID: automation.ID, Status: RunStatusTaskCreated,
+				TaskID: "retry-task", SessionID: "retry-session", TurnID: "retry-turn",
+				RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+			}
+			require.NoError(t, svc.store.CreateRun(ctx, run))
+			svc.SetRunLivenessChecker(runLivenessStub{live: tt.live})
+
+			require.NoError(t, svc.ReconcileOpenRuns(ctx))
+
+			stored, err := svc.store.GetRun(ctx, run.ID)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantStatus, stored.Status)
+			if !tt.live {
+				require.Equal(t, "automation turn was stale after backend recovery", stored.ErrorMessage)
+			}
+		})
+	}
+}
+
+func TestStopRunCancelsSupersededRetryWithoutTouchingReplacement(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	automation := &Automation{WorkspaceID: "workspace-stop-superseded", Name: "stop superseded", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, automation))
+	oldGroup := &RetryGroup{
+		ID: "old-stop-group", AutomationID: automation.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, oldGroup))
+	run := &AutomationRun{
+		ID: "superseded-stop-run", AutomationID: automation.ID, TriggerID: "trigger-a",
+		Status: RunStatusTaskCreated, TaskID: "stop-task", SessionID: "stop-session", TurnID: "stop-turn",
+		RetryGroupID: oldGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	replacement := &AutomationRun{
+		ID: "replacement-stop-run", AutomationID: automation.ID, TriggerID: "trigger-a",
+		Status: RunStatusTriggered, RetryGroupID: "replacement-stop-group",
+		RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	replacementGroup := &RetryGroup{
+		ID: replacement.RetryGroupID, AutomationID: automation.ID, TriggerID: "trigger-a",
+		Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryAdmission(ctx, replacement, replacementGroup))
+	stopper := &recordingRunStopper{}
+	svc.SetRunStopper(stopper)
+
+	stopped, err := svc.StopRun(ctx, automation.ID, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusCancelled, stopped.Status)
+	require.Equal(t, "stop-task", stopper.taskID)
+	require.Equal(t, "stop-session", stopper.sessionID)
+	require.Equal(t, "stop-turn", stopper.turnID)
+
+	stored, err := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusFailed, stored.Status)
+	require.Equal(t, RetryStateCancelled, stored.RetryState)
+	reloadedReplacement, err := svc.store.GetRetryGroup(ctx, replacementGroup.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupLive, reloadedReplacement.State)
+	require.Equal(t, int64(1), reloadedReplacement.Generation)
+}

@@ -57,6 +57,25 @@ func TestRetryAdmissionPersistsCompleteLaunchSnapshot(t *testing.T) {
 	}, snapshot["repositories"])
 }
 
+func TestDecodeRetryLaunchSnapshotAllowsEmptyResolvedPrompt(t *testing.T) {
+	snapshot, err := buildRetryLaunchConfigSnapshot(
+		&Automation{
+			ID: "empty-prompt-automation", WorkspaceID: "empty-prompt-workspace",
+			Name: "empty prompt", Prompt: "{{data.missing}}", Enabled: true,
+			RetryPolicy: RetryPolicy{Mode: RetryModeFinite, MaxRetries: "1", DelaySeconds: "0"},
+		},
+		"empty-prompt-trigger", TriggerTypeManual, json.RawMessage(`{}`), "empty-prompt",
+		time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC),
+	)
+	require.NoError(t, err)
+	require.Empty(t, snapshot.ResolvedPrompt)
+	encoded, err := encodeRetryLaunchConfigSnapshot(snapshot)
+	require.NoError(t, err)
+	decoded, err := DecodeRetryLaunchConfigSnapshot(encoded, RetryLaunchConfigVersion)
+	require.NoError(t, err)
+	require.Empty(t, decoded.ResolvedPrompt)
+}
+
 func TestServiceRetryAdmissionDoesNotSupersedeDifferentManualTriggers(t *testing.T) {
 	store := setupTestStore(t)
 	log, err := logger.NewFromZap(zap.NewNop())
@@ -83,6 +102,38 @@ func TestServiceRetryAdmissionDoesNotSupersedeDifferentManualTriggers(t *testing
 	first, err := svc.FireTrigger(ctx, automation.ID, triggerA.ID, triggerA.Type, nil, "service-trigger-a")
 	require.NoError(t, err)
 	second, err := svc.FireTrigger(ctx, automation.ID, triggerB.ID, triggerB.Type, nil, "service-trigger-b")
+	require.NoError(t, err)
+	require.NotEqual(t, first.RunID, second.RunID)
+
+	firstRun, err := store.GetRun(ctx, first.RunID)
+	require.NoError(t, err)
+	require.Equal(t, RetryStateTriggered, firstRun.RetryState)
+	firstGroup, err := store.GetRetryGroup(ctx, firstRun.RetryGroupID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupLive, firstGroup.State)
+}
+
+func TestRetryAdmissionDoesNotSupersedeDistinctDeliveries(t *testing.T) {
+	store := setupTestStore(t)
+	log, err := logger.NewFromZap(zap.NewNop())
+	require.NoError(t, err)
+	svc := NewService(store, bus.NewMemoryEventBus(log), log)
+	ctx := context.Background()
+	automation := &Automation{
+		ID: "distinct-delivery-automation", WorkspaceID: "distinct-delivery-workspace",
+		Name: "distinct delivery", Enabled: true, MaxConcurrentRuns: 2,
+		RetryPolicy: RetryPolicy{Mode: RetryModeFinite, MaxRetries: "1", DelaySeconds: "30"},
+	}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	trigger := &AutomationTrigger{
+		ID: "distinct-delivery-trigger", AutomationID: automation.ID,
+		Type: TriggerTypeManual, Enabled: true,
+	}
+	require.NoError(t, store.CreateTrigger(ctx, trigger))
+
+	first, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, "delivery-a")
+	require.NoError(t, err)
+	second, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, "delivery-b")
 	require.NoError(t, err)
 	require.NotEqual(t, first.RunID, second.RunID)
 

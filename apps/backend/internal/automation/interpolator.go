@@ -108,7 +108,7 @@ func interpolate(prompt string, triggerType TriggerType, triggerData json.RawMes
 // dataPathTokenRe matches the "data.<path>" or "webhook.<path>" shape of a
 // captured placeholder token (braces already stripped), requiring at least
 // one further segment after the prefix.
-var dataPathTokenRe = regexp.MustCompile(`^(?:data|webhook)\.(.+)$`)
+var dataPathTokenRe = regexp.MustCompile(`^(data|webhook)\.(.+)$`)
 
 // resolveDataOrWebhookToken resolves a "data.<path>" or "webhook.<path>"
 // token against the parsed payload via lookupPath. Available for any trigger
@@ -118,7 +118,11 @@ func resolveDataOrWebhookToken(token string, data map[string]interface{}) (strin
 	if m == nil {
 		return "", false
 	}
-	return lookupPath(data, m[1])
+	value, ok := lookupPath(data, m[2])
+	if !ok && m[1] == "webhook" {
+		value, ok = lookupWebhookProjectionPath(data, m[2])
+	}
+	return value, ok
 }
 
 // pluginEventTokenRe matches "data.<path>" or "webhook.<path>", capturing the
@@ -127,7 +131,7 @@ func resolveDataOrWebhookToken(token string, data map[string]interface{}) (strin
 var pluginEventTokenRe = regexp.MustCompile(`^(data|webhook)\.(.+)$`)
 
 // resolvePluginEventToken resolves a "data.<path>" or "webhook.<path>" token
-// against a plugin event's envelope payload — data["data"] or
+// against a plugin event's envelope payload: data["data"] or
 // data["webhook"] respectively, not the top-level payload itself.
 func resolvePluginEventToken(token string, data map[string]interface{}) (string, bool) {
 	m := pluginEventTokenRe.FindStringSubmatch(token)
@@ -171,6 +175,20 @@ func lookupPath(data map[string]interface{}, path string) (string, bool) {
 		return "", false
 	}
 	return toString(cur), true
+}
+
+func lookupWebhookProjectionPath(data map[string]interface{}, path string) (string, bool) {
+	payload, ok := data["payload"].(map[string]interface{})
+	if !ok {
+		return "", false
+	}
+	parts := strings.Split(path, ".")
+	pointer := "/" + strings.Join(parts, "/")
+	value, ok := payload[pointer]
+	if !ok || value == nil {
+		return "", false
+	}
+	return toString(value), true
 }
 
 // ResolvePayloadPath resolves a dot path against a raw JSON payload,

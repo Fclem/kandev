@@ -21,6 +21,17 @@ func TestSafeWebhookTriggerDataUsesBoundedJSONPointers(t *testing.T) {
 	require.Equal(t, map[string]any{"/pull_request/number": float64(7)}, projection["payload"])
 }
 
+func TestSafeWebhookProjectionInterpolatesNestedPath(t *testing.T) {
+	data, err := safeWebhookTriggerData(
+		[]byte(`{"pull_request":{"number":7},"token":"secret"}`),
+		[]string{"/pull_request/number"}, "webhook-trigger", "delivery-7",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "PR #7", InterpolatePrompt(
+		"PR #{{webhook.pull_request.number}}", TriggerTypeWebhook, data,
+	))
+}
+
 func TestSafeWebhookTriggerDataRejectsUnboundedPointers(t *testing.T) {
 	_, err := safeWebhookTriggerData([]byte(`{"value":1}`), []string{"/value", "bad"}, "trigger", "delivery")
 	require.Error(t, err)

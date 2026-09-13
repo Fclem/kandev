@@ -14,6 +14,7 @@ type retryGroupTriggerIdentity struct {
 	ID             string `db:"id"`
 	TriggerID      string `db:"trigger_id"`
 	TriggerIDsJSON string `db:"trigger_ids"`
+	DedupKey       string `db:"dedup_key"`
 }
 
 func canonicalRetryTriggerIDs(raw, fallback string) []string {
@@ -148,13 +149,20 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 	}
 	var existingGroups []retryGroupTriggerIdentity
 	if err := tx.SelectContext(ctx, &existingGroups, tx.Rebind(`
-		SELECT id, trigger_id, trigger_ids FROM automation_retry_groups
-		WHERE automation_id = ? AND state = ? AND id != ?`),
+		SELECT rg.id, rg.trigger_id, rg.trigger_ids,
+			COALESCE((
+				SELECT ar.dedup_key FROM automation_runs ar
+				WHERE ar.retry_group_id = rg.id AND ar.attempt_number = 1
+				LIMIT 1
+			), '') AS dedup_key
+		FROM automation_retry_groups rg
+		WHERE rg.automation_id = ? AND rg.state = ? AND rg.id != ?`),
 		group.AutomationID, RetryGroupLive, group.ID); err != nil {
 		return err
 	}
 	for _, existing := range existingGroups {
-		if !sameRetryTriggerSet(existing.TriggerIDsJSON, existing.TriggerID, group.TriggerIDsJSON, group.TriggerID) {
+		if existing.DedupKey != run.DedupKey ||
+			!sameRetryTriggerSet(existing.TriggerIDsJSON, existing.TriggerID, group.TriggerIDsJSON, group.TriggerID) {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, tx.Rebind(`

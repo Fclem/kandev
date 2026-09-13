@@ -324,6 +324,7 @@ type retryAutomationServiceStub struct {
 	boundTaskID           string
 	boundSessionID        string
 	boundTurnID           string
+	terminalized          bool
 	continuationCommitted bool
 	continuationDispatch  automation.RunDispatch
 	continuationCommitErr error
@@ -359,13 +360,14 @@ func (s *retryAutomationServiceStub) GetRetryTaskOperation(context.Context, stri
 }
 
 func (s *retryAutomationServiceStub) MarkRunTerminal(context.Context, string, string, string, automation.RunStatus, string) error {
+	s.terminalized = true
 	return nil
 }
 
 func (s *retryAutomationServiceStub) MarkRunTerminalByBinding(context.Context, string, string, string, automation.RunStatus, string) error {
+	s.terminalized = true
 	return nil
 }
-
 func (s *retryAutomationServiceStub) CommitRetryTaskOperation(_ context.Context, _ string, _ int64, _, taskID string) error {
 	s.committed = taskID
 	return nil

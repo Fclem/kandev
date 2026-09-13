@@ -26,6 +26,38 @@ type WebhookHandler struct {
 
 const maxWebhookBodyBytes = 1 << 20
 
+func validateWebhookJSONPointer(pointer string) error {
+	for _, part := range strings.Split(pointer[1:], "/") {
+		for i := range len(part) {
+			if part[i] != '~' {
+				continue
+			}
+			if i+1 >= len(part) || (part[i+1] != '0' && part[i+1] != '1') {
+				return errors.New("invalid webhook JSON pointer")
+			}
+		}
+		if part == "-" || (len(part) > 1 && part[0] == '0' && allDigits(part)) {
+			return errors.New("invalid webhook JSON pointer")
+		}
+		if len(part) > 1 && (part[0] == '+' || part[0] == '-') && allDigits(part[1:]) {
+			return errors.New("invalid webhook JSON pointer")
+		}
+	}
+	return nil
+}
+
+func allDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func safeWebhookTriggerData(body []byte, pointers []string, triggerID, deliveryID string) (json.RawMessage, error) {
 	projection := map[string]any{
 		retryTriggerTypeKey: TriggerTypeWebhook,
@@ -41,6 +73,9 @@ func safeWebhookTriggerData(body []byte, pointers []string, triggerID, deliveryI
 		}
 		if len(strings.Split(pointer[1:], "/")) > 8 {
 			return nil, errors.New("webhook JSON pointer is too deep")
+		}
+		if err := validateWebhookJSONPointer(pointer); err != nil {
+			return nil, err
 		}
 	}
 	selected, err := projectWebhookPayload(body, pointers)

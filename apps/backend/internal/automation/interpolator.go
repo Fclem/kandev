@@ -128,7 +128,7 @@ func stripUnresolved(s string) string {
 
 func prPlaceholders(data map[string]interface{}) []string {
 	return []string{
-		"{{pr.number}}", toString(data["number"]),
+		"{{pr.number}}", toString(data[automationPRNumberKey]),
 		"{{pr.title}}", toString(data["title"]),
 		"{{pr.url}}", toString(data[automationHTMLURLKey]),
 		"{{pr.author}}", toString(data[automationAuthorLoginKey]),

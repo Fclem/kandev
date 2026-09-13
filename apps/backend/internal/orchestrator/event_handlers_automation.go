@@ -106,6 +106,8 @@ type automationRetryRunLock interface {
 
 const retryOperationCommittedState = "committed"
 
+const retryAutomationRunIDMetadataKey = "automation_run_id"
+
 type automationContinuationState interface {
 	SetContinuationTaskID(ctx context.Context, automationID, taskID string) error
 }
@@ -502,6 +504,9 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		models.MetaKeyAgentProfileID:    a.AgentProfileID,
 		models.MetaKeyExecutorProfileID: a.ExecutorProfileID,
 	}
+	if evt.RunID != "" {
+		metadata[retryAutomationRunIDMetadataKey] = evt.RunID
+	}
 	if evt.TriggerType == automation.TriggerTypeGitHubPRMerged {
 		var triggerData struct {
 			TaskID string `json:"task_id"`
@@ -516,7 +521,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	var reasons automationRunReasons
 	var taskErr error
 	if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
-		task, taskErr = s.adoptCommittedRetryTask(ctx, a, retryOperation)
+		task, taskErr = s.adoptCommittedRetryTask(ctx, a, evt, retryOperation)
 		reasons.Thread = retryRun.ThreadReason
 		reasons.Repository = retryRun.RepositoryReason
 	} else {
@@ -674,6 +679,7 @@ type automationRunReasons struct {
 func (s *Service) adoptCommittedRetryTask(
 	ctx context.Context,
 	a *automation.Automation,
+	evt *automation.AutomationTriggeredEvent,
 	operation *automation.RetryOperation,
 ) (*models.Task, error) {
 	if operation == nil || operation.ExternalTaskID == "" {
@@ -692,7 +698,35 @@ func (s *Service) adoptCommittedRetryTask(
 	if task.WorkspaceID != a.WorkspaceID {
 		return nil, errors.New("committed retry task belongs to a different workspace")
 	}
+	if err := validateRetryTaskOwnership(task, a, evt, automationTaskOrigin(a)); err != nil {
+		return nil, err
+	}
 	return task, nil
+}
+
+func validateRetryTaskOwnership(
+	task *models.Task,
+	a *automation.Automation,
+	evt *automation.AutomationTriggeredEvent,
+	expectedOrigin string,
+) error {
+	if task == nil || a == nil || evt == nil {
+		return errors.New("retry task ownership context is incomplete")
+	}
+	if task.WorkspaceID != a.WorkspaceID {
+		return errors.New("retry task belongs to a different workspace")
+	}
+	if task.Origin != expectedOrigin {
+		return errors.New("retry task has an incompatible origin")
+	}
+	if task.ExternalID != evt.RetryExternalID {
+		return errors.New("retry task has an incompatible external identity")
+	}
+	if metadataString(task.Metadata, "automation_id") != a.ID ||
+		metadataString(task.Metadata, retryAutomationRunIDMetadataKey) != evt.RunID {
+		return errors.New("retry task has an incompatible automation identity")
+	}
+	return nil
 }
 
 func (s *Service) adoptCommittedRetryContinuation(
@@ -812,6 +846,11 @@ func (s *Service) prepareAutomationTask(
 	})
 	if err != nil {
 		return nil, nil, action, reasons, fmt.Errorf("create automation task: %w", err)
+	}
+	if evt.RunID != "" {
+		if err := validateRetryTaskOwnership(task, a, evt, taskOrigin); err != nil {
+			return nil, nil, action, reasons, err
+		}
 	}
 	if a.ContinuationPolicy != automation.ContinuationPolicyReuseThread {
 		return task, nil, action, reasons, nil

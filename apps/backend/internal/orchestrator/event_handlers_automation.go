@@ -510,6 +510,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		if action != automation.ThreadActionResumed {
 			s.deleteAbandonedTask(ctx, a.ID, task.ID)
 		}
+		s.recordFailedRun(ctx, evt, err.Error())
 		return
 	}
 

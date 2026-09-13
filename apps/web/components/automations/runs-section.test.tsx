@@ -185,6 +185,29 @@ describe("RunsSection run log", () => {
     expect(screen.queryByTestId("run-filter-failed")).toBeNull();
     expect(screen.getByTestId("run-filter-succeeded")).toBeTruthy();
   });
+  it("treats triggered and task-created runs as Running", () => {
+    const deleteAllRuns = vi.fn();
+    setup(
+      [
+        mkRun({ id: "run-triggered", status: "triggered" }),
+        mkRun({ id: "run-task-created", status: "task_created" }),
+        mkRun({ id: "run-succeeded", status: "succeeded" }),
+      ],
+      { deleteAllRuns },
+    );
+
+    const runningFilter = screen.getByTestId("run-filter-task_created");
+    expect(runningFilter.textContent).toContain("2");
+    fireEvent.click(runningFilter);
+
+    expect(screen.getByTestId("run-row-run-triggered")).toBeTruthy();
+    expect(screen.getByTestId("run-row-run-task-created")).toBeTruthy();
+    expect(screen.queryByTestId("run-row-run-succeeded")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("delete-all-runs"));
+    fireEvent.click(screen.getByTestId("delete-all-runs-confirm"));
+    expect(deleteAllRuns).toHaveBeenCalledWith(["run-triggered", "run-task-created"]);
+  });
 });
 
 const DELETE_ALL_BTN = "delete-all-runs";

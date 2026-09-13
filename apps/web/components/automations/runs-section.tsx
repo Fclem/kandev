@@ -169,6 +169,13 @@ const STATUS_FILTERS: { value: RunStatus | "all"; labelKey: string }[] = [
   { value: "archived", labelKey: "automations:runStatusArchived" },
   { value: "cancelled", labelKey: "automations:runStatusCancelled" },
 ];
+function matchesStatusFilter(run: AutomationRun, filter: RunStatus | "all"): boolean {
+  if (filter === "all") return true;
+  if (filter === "task_created") {
+    return run.status === "triggered" || run.status === "task_created";
+  }
+  return run.status === filter;
+}
 
 type DeleteAllButtonProps = {
   disabled: boolean;
@@ -250,7 +257,7 @@ function StatusFilter({
         const count =
           filter.value === "all"
             ? runs.length
-            : runs.filter((run) => run.status === filter.value).length;
+            : runs.filter((run) => matchesStatusFilter(run, filter.value)).length;
         // Only offer a filter that would show something, so the row of chips
         // reflects what this automation has actually done.
         if (count === 0 && filter.value !== "all" && value !== filter.value) return null;
@@ -283,14 +290,10 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
     historyMode,
   );
   const router = useRouter();
+  const filteredRuns =
+    statusFilter === "all" ? runs : runs.filter((run) => matchesStatusFilter(run, statusFilter));
+  const visibleRuns = projectAutomationHistory(filteredRuns, historyMode);
 
-  const visibleRuns =
-    statusFilter === "all"
-      ? projectAutomationHistory(runs, historyMode)
-      : projectAutomationHistory(
-          runs.filter((run) => run.status === statusFilter),
-          historyMode,
-        );
   const emptyMessage = runs.length === 0 ? "No runs yet" : "No runs match this filter";
 
   return (

@@ -313,3 +313,63 @@ func TestWebhookRetryAdmissionKeepsRawPayloadEphemeral(t *testing.T) {
 	require.NotContains(t, run.TriggerData, "never-persist")
 	require.NotContains(t, run.RetryTriggerSnapshot, "never-persist")
 }
+
+func TestRetryAdmissionSupersedesUnstartedTriggeredRetry(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	automation := &Automation{
+		ID:          "automation-unstarted-supersession",
+		WorkspaceID: "workspace-unstarted-supersession",
+		Name:        "unstarted supersession",
+		Enabled:     true,
+	}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	oldGroup := &RetryGroup{
+		ID: "old-unstarted-group", AutomationID: automation.ID,
+		TriggerID: "trigger-a", Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, store.CreateRetryGroup(ctx, oldGroup))
+	oldRun := &AutomationRun{
+		ID: "old-unstarted-run", AutomationID: automation.ID,
+		TriggerID: "trigger-a", TriggerType: TriggerTypeManual,
+		Status: RunStatusTriggered, RetryGroupID: oldGroup.ID,
+		RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, store.CreateRun(ctx, oldRun))
+	intent := &RetryTaskIntent{
+		ID: "old-unstarted-intent", RunID: oldRun.ID,
+		GroupGeneration: 1, State: retryIntentAdmitted,
+	}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "old-unstarted-operation", IntentID: intent.ID, RunID: oldRun.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationRequested,
+	}))
+	require.NoError(t, store.CreateRetryOutbox(ctx, &RetryOutbox{
+		EventID: "old-unstarted-event", RunID: oldRun.ID,
+		SnapshotVersion: 1, State: retryOutboxPending,
+	}))
+
+	newRun := &AutomationRun{
+		ID: "new-unstarted-run", AutomationID: automation.ID,
+		TriggerID: "trigger-a", TriggerType: TriggerTypeManual,
+		Status: RunStatusTriggered, RetryGroupID: "new-unstarted-group",
+		RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, store.CreateRetryAdmission(ctx, newRun, &RetryGroup{
+		ID: newRun.RetryGroupID, AutomationID: automation.ID,
+		TriggerID: "trigger-a", Generation: 1, State: RetryGroupLive,
+	}))
+
+	reloaded, err := store.GetRun(ctx, oldRun.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusFailed, reloaded.Status)
+	require.Equal(t, RetryStateSuperseded, reloaded.RetryState)
+	operation, err := store.GetRetryTaskOperation(ctx, oldRun.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, retryOperationAbandoned, operation.State)
+	var outboxState string
+	require.NoError(t, store.db.Get(&outboxState,
+		`SELECT state FROM automation_retry_outbox WHERE event_id = ?`, "old-unstarted-event"))
+	require.Equal(t, retryOutboxRevoked, outboxState)
+}

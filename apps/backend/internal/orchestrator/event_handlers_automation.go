@@ -79,6 +79,16 @@ type automationRetryOperation interface {
 	CommitRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken, taskID string) error
 }
 
+type automationRetryContinuationOperation interface {
+	CommitRetryContinuationOperation(
+		ctx context.Context,
+		runID string,
+		generation int64,
+		leaseToken string,
+		dispatch automation.RunDispatch,
+	) error
+}
+
 type automationRetryOperationFence interface {
 	VerifyRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken string) error
 }
@@ -456,13 +466,25 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		s.recordFailedRun(ctx, evt, taskErr.Error())
 		return
 	}
+	if retryOperation != nil && retryOperation.State == retryOperationCommittedState {
+		adopted, adoptErr := s.adoptCommittedRetryContinuation(ctx, evt.RunID, task.ID, retryOperation)
+		if adoptErr != nil {
+			s.recordFailedRun(ctx, evt, adoptErr.Error())
+			return
+		}
+		if adopted {
+			s.acknowledgeRetryEventAfterBinding(ctx, evt)
+			return
+		}
+	}
 	if retryRun != nil && retryOperation != nil &&
 		retryOperation.State == retryOperationCommittedState &&
 		s.retryRunHasExactBinding(ctx, evt.RunID) {
 		s.acknowledgeRetryEventAfterBinding(ctx, evt)
 		return
 	}
-	if retryOperation != nil && retryOperation.State != retryOperationCommittedState {
+	if retryOperation != nil && retryOperation.State != retryOperationCommittedState &&
+		continuationSession == nil {
 		operationService, operationOK := s.automationService.(automationRetryOperation)
 		if !operationOK {
 			s.deleteAbandonedTask(ctx, a.ID, task.ID)
@@ -559,6 +581,30 @@ func (s *Service) adoptCommittedRetryTask(ctx context.Context, a *automation.Aut
 		return nil, errors.New("retry task identity is committed but task is missing")
 	}
 	return task, nil
+}
+
+func (s *Service) adoptCommittedRetryContinuation(
+	ctx context.Context,
+	runID string,
+	taskID string,
+	operation *automation.RetryOperation,
+) (bool, error) {
+	if operation == nil || (operation.ExternalSessionID == "" && operation.ExternalTurnID == "") {
+		return false, nil
+	}
+	if operation.ExternalSessionID == "" || operation.ExternalTurnID == "" {
+		return false, errors.New("committed retry continuation identity is incomplete")
+	}
+	binding, ok := s.automationService.(automationRunBinding)
+	if !ok {
+		return false, errors.New("automation run binding unavailable")
+	}
+	if err := binding.BindRun(ctx, runID, taskID, operation.ExternalSessionID,
+		operation.ExternalTurnID, automation.ThreadActionResumed,
+		"recovered accepted continuation"); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Service) beginRetryTaskOperation(ctx context.Context, evt *automation.AutomationTriggeredEvent, retryRun *automation.AutomationRun) (*automation.RetryOperation, error) {
@@ -989,6 +1035,45 @@ func (s *Service) bindAutomationRun(
 	return false
 }
 
+func (s *Service) commitRetryContinuationOperation(
+	ctx context.Context,
+	runID string,
+	operation *automation.RetryOperation,
+	dispatch automation.RunDispatch,
+) error {
+	if operation == nil {
+		return nil
+	}
+	operationService, ok := s.automationService.(automationRetryContinuationOperation)
+	if !ok {
+		return errors.New("retry continuation operation ledger unavailable")
+	}
+	if err := operationService.CommitRetryContinuationOperation(
+		ctx, runID, operation.GroupGeneration, operation.LeaseToken, dispatch); err != nil {
+		return err
+	}
+	operation.State = retryOperationCommittedState
+	operation.ExternalTaskID = dispatch.TaskID
+	operation.ExternalSessionID = dispatch.SessionID
+	operation.ExternalTurnID = dispatch.TurnID
+	operation.LeaseToken = ""
+	return nil
+}
+
+func (s *Service) verifyRetryContinuationAdmission(
+	ctx context.Context,
+	runID string,
+	operations ...*automation.RetryOperation,
+) error {
+	if len(operations) == 0 || operations[0] == nil {
+		return nil
+	}
+	operation := operations[0]
+	return s.verifyRetryTaskOperation(ctx, &automation.AutomationTriggeredEvent{
+		RunID: runID, RetryGroupGeneration: operation.GroupGeneration,
+	}, operation)
+}
+
 func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automation.Automation, task *models.Task, session *models.TaskSession, prompt string, metadata map[string]interface{}, runID string, action automation.ThreadAction, reason string, operations ...*automation.RetryOperation) bool {
 	var snapshot *automationContinuationMetadataSnapshot
 	restore := func() {
@@ -1008,19 +1093,19 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		if err != nil {
 			return automation.RunDispatch{}, err
 		}
-		if len(operations) > 0 && operations[0] != nil {
-			operation := operations[0]
-			event := &automation.AutomationTriggeredEvent{
-				RunID: runID, RetryGroupGeneration: operation.GroupGeneration,
-			}
-			if err := s.verifyRetryTaskOperation(ctx, event, operation); err != nil {
-				return automation.RunDispatch{}, err
-			}
+		if err := s.verifyRetryContinuationAdmission(ctx, runID, operations...); err != nil {
+			return automation.RunDispatch{}, err
 		}
 		result, err := s.promptAutomationContinuation(ctx, task, session, prompt)
 		if err != nil {
 			restore()
 			return automation.RunDispatch{}, err
+		}
+		if len(operations) > 0 && operations[0] != nil {
+			if err := s.commitRetryContinuationOperation(ctx, runID, operations[0], result); err != nil {
+				restore()
+				return automation.RunDispatch{}, err
+			}
 		}
 		return result, nil
 	}

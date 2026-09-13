@@ -853,9 +853,10 @@ func (s *Service) stopOpenAutomationRuns(ctx context.Context, automationID strin
 }
 
 // ReconcileOpenRuns settles rows left open by a process stop. Admission rows
-// without a binding are never guessed into a task and fail immediately. Bound
-// rows are settled only when the orchestrator confirms that their exact turn
-// is no longer live or blocked.
+// without a binding are never guessed into a task and fail immediately unless
+// their durable retry outbox still makes them eligible for startup replay.
+// Bound rows are settled only when the orchestrator confirms that their exact
+// turn is no longer live or blocked.
 func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 	runs, err := s.store.ListAllOpenRuns(ctx)
 	if err != nil {
@@ -866,6 +867,18 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 			continue
 		}
 		if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
+			if run.RetryGroupID != "" {
+				replayable, replayErr := s.store.RetryRunHasReplayableOutbox(
+					ctx, run.ID, run.RetryGroupGeneration, time.Now().UTC())
+				if replayErr != nil {
+					s.logger.Warn("failed to inspect unbound retry recovery",
+						zap.String("run_id", run.ID), zap.Error(replayErr))
+					continue
+				}
+				if replayable {
+					continue
+				}
+			}
 			if err := s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "backend stopped before the automation turn was bound"); err != nil {
 				s.logger.Warn("failed to reconcile unbound automation run", zap.String("run_id", run.ID), zap.Error(err))
 			}

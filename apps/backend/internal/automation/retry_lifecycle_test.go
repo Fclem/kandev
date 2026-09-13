@@ -422,6 +422,43 @@ func TestRetryOperationLeasesAndCommitsExternalTask(t *testing.T) {
 	require.Equal(t, retryOperationCommitted, committed.State)
 	require.Equal(t, "task-recovered", committed.ExternalTaskID)
 }
+
+func TestRetryContinuationOperationPersistsAcceptedTurnIdentity(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-continuation-operation", WorkspaceID: "ws-continuation-operation",
+		Name: "continuation operation", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	require.NoError(t, store.CreateRetryGroup(ctx, &RetryGroup{
+		ID: "group-continuation-operation", AutomationID: a.ID,
+		Generation: 1, State: RetryGroupLive,
+	}))
+	run := &AutomationRun{ID: "run-continuation-operation", AutomationID: a.ID,
+		Status: RunStatusTriggered, RetryGroupID: "group-continuation-operation",
+		RetryGroupGeneration: 1, RetryState: RetryStateTriggered}
+	require.NoError(t, store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{ID: "intent-continuation-operation", RunID: run.ID,
+		GroupGeneration: 1, State: retryIntentAdmitted}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "operation-continuation-operation", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationRequested,
+	}))
+
+	leased, err := store.BeginRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	require.NoError(t, store.CommitRetryContinuationOperation(ctx, run.ID, 1,
+		leased.LeaseToken, RunDispatch{
+			TaskID: "continuation-task", SessionID: "continuation-session", TurnID: "continuation-turn",
+		}))
+
+	committed, err := store.GetRetryTaskOperation(ctx, run.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, retryOperationCommitted, committed.State)
+	require.Equal(t, "continuation-task", committed.ExternalTaskID)
+	require.Equal(t, "continuation-session", committed.ExternalSessionID)
+	require.Equal(t, "continuation-turn", committed.ExternalTurnID)
+}
 func TestBeginRetryTaskOperationTreatsUnexpiredLeaseAsBusy(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
@@ -594,4 +631,54 @@ func TestCancelRetryGroupsByAutomationPreservesOrdinaryRunHistory(t *testing.T) 
 	require.Equal(t, retryIntentAdmitted, intentState)
 	require.Equal(t, retryOperationRequested, operationState)
 	require.Equal(t, retryOutboxPending, outboxState)
+}
+func TestReplayThenReconcilePreservesReplayableUnboundRetry(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	log, err := logger.NewFromZap(zap.NewNop())
+	require.NoError(t, err)
+	eventBus := bus.NewMemoryEventBus(log)
+	eventsSeen := make(chan *AutomationTriggeredEvent, 1)
+	_, err = eventBus.Subscribe(events.AutomationTriggered, func(_ context.Context, event *bus.Event) error {
+		if evt, ok := event.Data.(*AutomationTriggeredEvent); ok {
+			eventsSeen <- evt
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	svc := NewService(store, eventBus, log)
+	automation := &Automation{ID: "replay-order-automation", WorkspaceID: "replay-order-workspace",
+		Name: "replay order", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	group := &RetryGroup{ID: "replay-order-group", AutomationID: automation.ID,
+		Generation: 1, State: RetryGroupLive}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{ID: "replay-order-run", AutomationID: automation.ID,
+		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered}
+	require.NoError(t, store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{ID: "replay-order-intent", RunID: run.ID,
+		GroupGeneration: 1, State: retryIntentAdmitted}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "replay-order-operation", IntentID: intent.ID, RunID: run.ID,
+		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationRequested,
+	}))
+	require.NoError(t, store.CreateRetryOutbox(ctx, &RetryOutbox{
+		EventID: "replay-order-event", RunID: run.ID, SnapshotVersion: 1,
+		State: retryOutboxPending,
+	}))
+
+	require.NoError(t, svc.ReplayPendingRetryEvents(ctx))
+	select {
+	case event := <-eventsSeen:
+		require.Equal(t, run.ID, event.RunID)
+	default:
+		t.Fatal("expected replayable retry event")
+	}
+	require.NoError(t, svc.ReconcileOpenRuns(ctx))
+
+	stored, err := store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusTriggered, stored.Status)
 }

@@ -155,6 +155,47 @@ func (s *Store) CommitRetryTaskOperation(ctx context.Context, runID string, gene
 	return ErrRetryGenerationMismatch
 }
 
+// CommitRetryContinuationOperation records the exact accepted continuation
+// turn before the run binding and receipt acknowledgement complete.
+func (s *Store) CommitRetryContinuationOperation(
+	ctx context.Context,
+	runID string,
+	generation int64,
+	leaseToken string,
+	dispatch RunDispatch,
+) error {
+	if dispatch.TaskID == "" || dispatch.SessionID == "" || dispatch.TurnID == "" {
+		return errors.New("retry continuation identity is required")
+	}
+	now := time.Now().UTC()
+	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE automation_run_operations
+		SET state = ?, external_task_id = ?, external_session_id = ?,
+			external_turn_id = ?, lease_token = '', lease_expires_at = NULL,
+			updated_at = ?
+		WHERE run_id = ? AND group_generation = ? AND operation_kind = ?
+			AND state = ? AND lease_token = ?`),
+		retryOperationCommitted, dispatch.TaskID, dispatch.SessionID, dispatch.TurnID,
+		now, runID, generation, retryTaskOperationKind, retryOperationLeased, leaseToken)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 1 {
+		return nil
+	}
+	operation, getErr := s.GetRetryTaskOperation(ctx, runID, generation)
+	if getErr == nil && operation.State == retryOperationCommitted &&
+		operation.ExternalTaskID == dispatch.TaskID &&
+		operation.ExternalSessionID == dispatch.SessionID &&
+		operation.ExternalTurnID == dispatch.TurnID {
+		return nil
+	}
+	if errors.Is(getErr, sql.ErrNoRows) {
+		return getErr
+	}
+	return ErrRetryGenerationMismatch
+}
+
 func (s *Service) GetRetryTaskOperation(ctx context.Context, runID string, generation int64) (*RetryOperation, error) {
 	return s.store.GetRetryTaskOperation(ctx, runID, generation)
 }
@@ -169,4 +210,14 @@ func (s *Service) VerifyRetryTaskOperation(ctx context.Context, runID string, ge
 
 func (s *Service) CommitRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken, taskID string) error {
 	return s.store.CommitRetryTaskOperation(ctx, runID, generation, leaseToken, taskID)
+}
+
+func (s *Service) CommitRetryContinuationOperation(
+	ctx context.Context,
+	runID string,
+	generation int64,
+	leaseToken string,
+	dispatch RunDispatch,
+) error {
+	return s.store.CommitRetryContinuationOperation(ctx, runID, generation, leaseToken, dispatch)
 }

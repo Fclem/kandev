@@ -375,6 +375,10 @@ type BudgetPolicy struct {
 	ActionOnExceed    BudgetActionOnExceed `json:"action_on_exceed" db:"action_on_exceed"`
 	CreatedAt         time.Time            `json:"created_at" db:"created_at"`
 	UpdatedAt         time.Time            `json:"updated_at" db:"updated_at"`
+	// Revision identifies which immutable set of the fields above a budget
+	// claim was evaluated against (REQ-OFFICE-COSTS-003). Server-assigned:
+	// starts at 1 and increases by exactly 1 on each successful update.
+	Revision int64 `json:"revision" db:"revision"`
 }
 
 // SpendWindow reports one scope's priced spend and degradation state for a
@@ -435,10 +439,18 @@ type Run struct {
 	// after claim but a re-derivation against the freshly re-fetched
 	// row would disagree with the derivation the claiming scheduler is
 	// still holding in memory.
-	ContinuationScope string     `json:"continuation_scope,omitempty" db:"continuation_scope"`
-	RequestedAt       time.Time  `json:"requested_at" db:"requested_at"`
-	ClaimedAt         *time.Time `json:"claimed_at" db:"claimed_at"`
-	FinishedAt        *time.Time `json:"finished_at" db:"finished_at"`
+	ContinuationScope string `json:"continuation_scope,omitempty" db:"continuation_scope"`
+	// WakeWaveKey and WakeWaveString are the completion-wave identity
+	// (parent-wake-wave-identity): both set together, only for
+	// task_children_completed runs, from one derivation per queued run.
+	// WakeWaveKey is the digest idx_run_wake_wave indexes; WakeWaveString
+	// is the plain string the backstop's candidate query compares. Empty
+	// for every other run reason and for every pre-upgrade row.
+	WakeWaveKey    string     `json:"wake_wave_key,omitempty" db:"wake_wave_key"`
+	WakeWaveString string     `json:"wake_wave_string,omitempty" db:"wake_wave_string"`
+	RequestedAt    time.Time  `json:"requested_at" db:"requested_at"`
+	ClaimedAt      *time.Time `json:"claimed_at" db:"claimed_at"`
+	FinishedAt     *time.Time `json:"finished_at" db:"finished_at"`
 
 	// Outcome records why a finished run ended (docs/specs/
 	// task-delivery-ledger/spec.md, "Office run outcome"): one of eight

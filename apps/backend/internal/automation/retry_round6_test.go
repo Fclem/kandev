@@ -163,6 +163,7 @@ func TestWebhookRetryAdmissionKeepsRawPayloadEphemeral(t *testing.T) {
 	require.NoError(t, err)
 	evt := <-eventsSeen
 	require.Equal(t, raw, evt.TriggerData)
+	require.Equal(t, safe, evt.SafeTriggerData)
 	run, err := store.GetRun(ctx, result.RunID)
 	require.NoError(t, err)
 	require.NotContains(t, run.TriggerData, "never-persist")

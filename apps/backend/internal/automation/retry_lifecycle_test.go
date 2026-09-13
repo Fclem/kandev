@@ -161,6 +161,20 @@ func TestBindRunTaskRejectsCancelledRetryGeneration(t *testing.T) {
 	require.ErrorIs(t, store.BindRunTask(ctx, run.ID, "task-created"), ErrRetryGenerationMismatch)
 }
 
+func TestBindRunTaskIsIdempotentForAlreadyBoundRun(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "bind-idempotent-automation", WorkspaceID: "bind-idempotent-workspace", Name: "bind idempotent", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	run := &AutomationRun{
+		ID: "bind-idempotent-run", AutomationID: a.ID, Status: RunStatusTaskCreated,
+		TaskID: "task-already-bound", SessionID: "session-1", TurnID: "turn-1",
+	}
+	require.NoError(t, store.CreateRun(ctx, run))
+
+	require.NoError(t, store.BindRunTask(ctx, run.ID, run.TaskID))
+}
+
 func TestReplayPendingRetryEventsRevokesSchedulingFailedRows(t *testing.T) {
 	store := setupTestStore(t)
 	log, err := logger.NewFromZap(zap.NewNop())

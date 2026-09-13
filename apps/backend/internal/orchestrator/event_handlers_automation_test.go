@@ -18,6 +18,7 @@ import (
 	"github.com/kandev/kandev/internal/db"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/task/models"
+
 	"github.com/kandev/kandev/internal/task/repository"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	taskservice "github.com/kandev/kandev/internal/task/service"
@@ -28,6 +29,20 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestAutomationExecutionTriggerDataUsesSafeProjection(t *testing.T) {
+	raw := json.RawMessage(`{"secret":"private"}`)
+	safe := json.RawMessage(`{"delivery_id":"delivery-1"}`)
+	evt := &automation.AutomationTriggeredEvent{
+		TriggerData:     raw,
+		SafeTriggerData: safe,
+	}
+
+	executionData := automationExecutionTriggerData(evt, nil)
+	require.Equal(t, safe, executionData)
+	prompt := automation.InterpolatePrompt("Review {{secret}}", automation.TriggerTypeWebhook, executionData)
+	require.NotContains(t, prompt, "private")
+}
 
 // seedAutomationWorkspaceRepos creates a workspace with the given repository
 // IDs (each with a distinct default branch derived from its ID) for

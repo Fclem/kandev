@@ -119,6 +119,50 @@ func TestStopRun(t *testing.T) {
 		})
 	}
 }
+
+func TestAmbiguousRetryIdentityStopsProviderForStopAndDelete(t *testing.T) {
+	for _, action := range []string{"stop", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			svc := newTestService(t)
+			ctx := context.Background()
+			a := &Automation{WorkspaceID: "workspace-ambiguous-stop", Name: action, Enabled: true}
+			require.NoError(t, svc.store.CreateAutomation(ctx, a))
+			group := &RetryGroup{
+				ID: "group-ambiguous-" + action, AutomationID: a.ID, Generation: 1, State: RetryGroupLive,
+			}
+			require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+			run := &AutomationRun{
+				ID: "run-ambiguous-" + action, AutomationID: a.ID, TriggerType: TriggerTypeManual,
+				Status: RunStatusTriggered, RetryGroupID: group.ID, RetryGroupGeneration: 1,
+				RetryState: RetryStateTriggered,
+			}
+			require.NoError(t, svc.store.CreateRun(ctx, run))
+			intent := &RetryTaskIntent{
+				ID: "intent-ambiguous-" + action, RunID: run.ID, GroupGeneration: 1,
+				State: retryIntentCreated,
+			}
+			require.NoError(t, svc.store.CreateRetryIntent(ctx, intent))
+			require.NoError(t, svc.store.CreateRetryOperation(ctx, &RetryOperation{
+				ID: "operation-ambiguous-" + action, IntentID: intent.ID, RunID: run.ID,
+				GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationAmbiguous,
+				ExternalTaskID: "accepted-task", ExternalSessionID: "accepted-session",
+				ExternalTurnID: "accepted-turn",
+			}))
+			stopper := &recordingRunStopper{}
+			svc.SetRunStopper(stopper)
+
+			if action == "stop" {
+				_, err := svc.StopRun(ctx, a.ID, run.ID)
+				require.NoError(t, err)
+			} else {
+				require.NoError(t, svc.DeleteRun(ctx, run.ID))
+			}
+			require.Equal(t, "accepted-task", stopper.taskID)
+			require.Equal(t, "accepted-session", stopper.sessionID)
+			require.Equal(t, "accepted-turn", stopper.turnID)
+		})
+	}
+}
 func TestBindRunTaskMissingRunIsNotDispatchable(t *testing.T) {
 	svc := newTestService(t)
 	require.ErrorIs(t, svc.BindRunTask(context.Background(), "missing-run", "task"), ErrAutomationRunNotDispatchable)

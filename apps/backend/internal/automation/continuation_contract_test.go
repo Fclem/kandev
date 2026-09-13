@@ -396,7 +396,9 @@ func TestDispatchRunKeepsAmbiguousAcceptedContinuationOpen(t *testing.T) {
 	require.NoError(t, err)
 	leased, err := svc.store.BeginRetryTaskOperation(ctx, run.ID, 1)
 	require.NoError(t, err)
-	require.NoError(t, svc.store.MarkRetryOperationAmbiguous(ctx, run.ID, 1, leased.LeaseToken))
+	require.NoError(t, svc.store.MarkRetryOperationAmbiguous(ctx, run.ID, 1, leased.LeaseToken, RunDispatch{
+		TaskID: "accepted-task", SessionID: "accepted-session", TurnID: "accepted-turn",
+	}))
 
 	dispatchErr := errors.New("accepted turn identity commit failed")
 	require.ErrorIs(t, svc.DispatchRun(ctx, run.ID, ThreadActionResumed, "continuation", func() (RunDispatch, error) {
@@ -406,6 +408,9 @@ func TestDispatchRunKeepsAmbiguousAcceptedContinuationOpen(t *testing.T) {
 	operation, err := svc.store.GetRetryTaskOperation(ctx, run.ID, 1)
 	require.NoError(t, err)
 	require.Equal(t, retryOperationAmbiguous, operation.State)
+	require.Equal(t, "accepted-task", operation.ExternalTaskID)
+	require.Equal(t, "accepted-session", operation.ExternalSessionID)
+	require.Equal(t, "accepted-turn", operation.ExternalTurnID)
 	runs, err := svc.store.ListRuns(ctx, a.ID, 10)
 	require.NoError(t, err)
 	require.Len(t, runs, 1)

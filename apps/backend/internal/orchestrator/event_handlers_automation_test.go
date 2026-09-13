@@ -381,8 +381,19 @@ func (s *retryAutomationServiceStub) CommitRetryContinuationOperation(
 	return nil
 }
 
-func (s *retryAutomationServiceStub) MarkRetryOperationAmbiguous(context.Context, string, int64, string) error {
+func (s *retryAutomationServiceStub) MarkRetryOperationAmbiguous(
+	_ context.Context,
+	_ string,
+	_ int64,
+	_ string,
+	dispatch automation.RunDispatch,
+) error {
 	s.ambiguous = true
+	if s.operation != nil {
+		s.operation.ExternalTaskID = dispatch.TaskID
+		s.operation.ExternalSessionID = dispatch.SessionID
+		s.operation.ExternalTurnID = dispatch.TurnID
+	}
 	return nil
 }
 
@@ -1318,6 +1329,9 @@ func TestDispatchAutomationContinuationMarksAmbiguousOnAcceptanceCommitFailure(t
 			"automation_id": "retry-automation", "automation_run_id": "retry-run",
 		}, "retry-run", automation.ThreadActionResumed, "recovery", base.operation,
 	)
+	require.Equal(t, "retry-task", base.operation.ExternalTaskID)
+	require.Equal(t, "retry-session", base.operation.ExternalSessionID)
+	require.NotEmpty(t, base.operation.ExternalTurnID)
 
 	require.False(t, base.continuationCommitted)
 	require.True(t, base.ambiguous)

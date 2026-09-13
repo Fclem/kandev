@@ -1351,6 +1351,18 @@ func (s *Service) createRunLocked(ctx context.Context, run *AutomationRun) error
 	return s.store.CreateRun(ctx, run)
 }
 
+func (s *Service) cancelRetryGroupForDelete(ctx context.Context, run *AutomationRun) error {
+	group, err := s.store.GetRetryGroup(ctx, run.RetryGroupID)
+	if err != nil {
+		return err
+	}
+	if group != nil && group.State == RetryGroupSuperseded &&
+		group.Generation != run.RetryGroupGeneration {
+		return s.store.CancelRetryRun(ctx, run.ID, run.RetryGroupGeneration)
+	}
+	return s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration)
+}
+
 // DeleteRun removes a single run and its associated task (if any).
 // Task deletion is best-effort: a not-found error is silently ignored so
 // stale/orphaned run rows are always removable by the user.
@@ -1374,7 +1386,7 @@ func (s *Service) DeleteRun(ctx context.Context, runID string) error {
 		return err
 	}
 	if run.RetryGroupID != "" && !retryRunIsTerminal(run) {
-		if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
+		if err := s.cancelRetryGroupForDelete(ctx, run); err != nil {
 			return err
 		}
 	}

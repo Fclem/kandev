@@ -108,6 +108,55 @@ func TestCancelTaskResourceCleanupJobIfPendingDoesNotOverwriteRunningClaims(t *t
 	}
 }
 
+func TestRestoreCancelledTaskResourceCleanupJobIfUnchangedFencesNewerClaim(t *testing.T) {
+	ctx := context.Background()
+	repo := newRepoForHealTests(t)
+	job := &models.TaskResourceCleanupJob{
+		ID: "job-restore", OperationID: "archive:restore", TaskID: "task-restore",
+		Trigger: models.TaskResourceCleanupTriggerCascadeArchive,
+		State:   models.TaskResourceCleanupStateCancelled, Attempts: 3, ResourceSnapshot: `{}`,
+	}
+	if err := repo.CreateTaskResourceCleanupJob(ctx, job); err != nil {
+		t.Fatalf("CreateTaskResourceCleanupJob: %v", err)
+	}
+
+	restored, err := repo.RestoreCancelledTaskResourceCleanupJobIfUnchanged(ctx, job.ID, 3, "unknown")
+	if err != nil || !restored {
+		t.Fatalf("first restore = %v, %v; want true", restored, err)
+	}
+	got, err := repo.GetTaskResourceCleanupJob(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJob after restore: %v", err)
+	}
+	if got.State != models.TaskResourceCleanupStatePrepared || got.LastError != "unknown" || got.CompletedAt != nil {
+		t.Fatalf("restored job = %+v, want prepared with open completion", got)
+	}
+
+	started, err := repo.StartPreparedTaskResourceCleanupJob(ctx, job.ID)
+	if err != nil || !started {
+		t.Fatalf("start restored job = %v, %v; want true", started, err)
+	}
+	claimed, err := repo.MarkTaskResourceCleanupJobRunning(ctx, job.ID)
+	if err != nil || !claimed {
+		t.Fatalf("claim restored job = %v, %v; want true", claimed, err)
+	}
+
+	restored, err = repo.RestoreCancelledTaskResourceCleanupJobIfUnchanged(ctx, job.ID, 3, "stale")
+	if err != nil {
+		t.Fatalf("stale restore: %v", err)
+	}
+	if restored {
+		t.Fatal("stale restore succeeded after a newer claim")
+	}
+	got, err = repo.GetTaskResourceCleanupJob(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("GetTaskResourceCleanupJob after stale restore: %v", err)
+	}
+	if got.State != models.TaskResourceCleanupStateRunning || got.Attempts != 4 || got.LastError == "stale" {
+		t.Fatalf("newer claim was overwritten: %+v", got)
+	}
+}
+
 func TestCancelArchiveTaskResourceCleanupJobsLeavesRunningClaims(t *testing.T) {
 	ctx := context.Background()
 	repo := newRepoForHealTests(t)

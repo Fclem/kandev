@@ -1007,8 +1007,14 @@ func (s *Service) RestoreCancelledTaskResourceCleanup(ctx context.Context, opera
 	if job == nil || job.State != models.TaskResourceCleanupStateCancelled {
 		return nil
 	}
-	return s.resourceCleanups.CompleteTaskResourceCleanupJob(
-		transitionCtx, job.ID, models.TaskResourceCleanupStatePrepared,
-		taskResourceCleanupMutationOutcomeUnknown, nil,
+	_, err = s.resourceCleanups.RestoreCancelledTaskResourceCleanupJobIfUnchanged(
+		transitionCtx, job.ID, job.Attempts, taskResourceCleanupMutationOutcomeUnknown,
 	)
+	if err != nil {
+		return err
+	}
+	// Losing the compare-and-set means another lifecycle transition already
+	// advanced this generation. Preserve that newer state and let the caller
+	// reload it when it needs to continue.
+	return nil
 }

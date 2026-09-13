@@ -255,6 +255,30 @@ func (r *Repository) CompleteTaskResourceCleanupJob(
 	return err
 }
 
+// RestoreCancelledTaskResourceCleanupJobIfUnchanged re-prepares only the
+// cancelled cleanup generation that the caller inspected. The state and
+// attempt predicates prevent a delayed restore from overwriting a newer
+// prepared, pending, or running generation.
+func (r *Repository) RestoreCancelledTaskResourceCleanupJobIfUnchanged(
+	ctx context.Context,
+	id string,
+	attempts int,
+	lastError string,
+) (bool, error) {
+	now := time.Now().UTC()
+	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE task_resource_cleanup_jobs
+		SET state = ?, last_error = ?, next_attempt_at = NULL, completed_at = NULL, updated_at = ?
+		WHERE id = ? AND state = ? AND attempts = ?
+	`), models.TaskResourceCleanupStatePrepared, lastError, now,
+		id, models.TaskResourceCleanupStateCancelled, attempts)
+	if err != nil {
+		return false, err
+	}
+	count, _ := result.RowsAffected()
+	return count == 1, nil
+}
+
 // CancelTaskResourceCleanupJobIfPending cancels only an eligible cleanup
 // generation. Running claims are left untouched for physical reconciliation.
 func (r *Repository) CancelTaskResourceCleanupJobIfPending(ctx context.Context, id string) (bool, error) {

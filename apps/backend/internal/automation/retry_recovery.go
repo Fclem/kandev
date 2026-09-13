@@ -156,6 +156,12 @@ func (s *Service) prepareRetryRecoveryRun(ctx context.Context, row RetryOutbox) 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry task operation is no longer dispatchable"))
 	}
+	if err != nil {
+		return nil, false, err
+	}
+	if operation == nil {
+		return nil, false, errors.New("retry task operation lookup returned no operation")
+	}
 	if operation.State == retryOperationAmbiguous {
 		if operation.ExternalTaskID == "" || operation.ExternalSessionID == "" || operation.ExternalTurnID == "" {
 			return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry continuation identity is incomplete"))

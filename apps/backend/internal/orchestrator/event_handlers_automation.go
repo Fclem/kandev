@@ -445,22 +445,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		return
 	}
 	if evt.RetryAmbiguousRecovery {
-		if retryOperation == nil || retryOperation.State != retryOperationAmbiguousState {
-			s.recordFailedRun(ctx, evt, "ambiguous retry operation is unavailable")
-			return
-		}
-		task, taskErr := s.adoptCommittedRetryTask(ctx, a, evt, retryOperation)
-		if taskErr != nil {
-			s.recordFailedRun(ctx, evt, taskErr.Error())
-			return
-		}
-		adopted, adoptErr := s.adoptCommittedRetryContinuation(ctx, evt.RunID, task.ID, retryOperation)
-		if adoptErr != nil || !adopted {
-			s.logger.Warn("failed to bind ambiguous retry continuation",
-				zap.String("run_id", evt.RunID), zap.String("task_id", task.ID), zap.Error(adoptErr))
-			return
-		}
-		s.acknowledgeRetryEventAfterBinding(ctx, evt)
+		s.recoverAmbiguousRetry(ctx, a, evt, retryOperation)
 		return
 	}
 	// Trigger data is always the bounded projection before it reaches prompt,
@@ -659,6 +644,35 @@ func automationFromRetrySnapshot(snapshot automation.RetryLaunchConfigSnapshot) 
 		Enabled:            true,
 	}
 }
+func (s *Service) recoverAmbiguousRetry(
+	ctx context.Context,
+	a *automation.Automation,
+	evt *automation.AutomationTriggeredEvent,
+	retryOperation *automation.RetryOperation,
+) {
+	if retryOperation == nil || retryOperation.State != retryOperationAmbiguousState {
+		s.recordFailedRun(ctx, evt, "ambiguous retry operation is unavailable")
+		return
+	}
+	task, taskErr := s.adoptCommittedRetryTask(ctx, a, evt, retryOperation)
+	if taskErr != nil {
+		if isDeterministicCommittedRetryTaskError(taskErr) {
+			s.recordFailedRun(ctx, evt, taskErr.Error())
+		} else {
+			s.logger.Warn("failed to resolve ambiguous retry task",
+				zap.String("run_id", evt.RunID), zap.Error(taskErr))
+		}
+		return
+	}
+	adopted, adoptErr := s.adoptCommittedRetryContinuation(ctx, evt.RunID, task.ID, retryOperation)
+	if adoptErr != nil || !adopted {
+		s.logger.Warn("failed to bind ambiguous retry continuation",
+			zap.String("run_id", evt.RunID), zap.String("task_id", task.ID), zap.Error(adoptErr))
+		return
+	}
+	s.acknowledgeRetryEventAfterBinding(ctx, evt)
+}
+
 func (s *Service) adoptCommittedRetryTask(
 	ctx context.Context,
 	a *automation.Automation,
@@ -1227,7 +1241,7 @@ func (s *Service) markRetryOperationAmbiguous(
 	); err != nil {
 		return err
 	}
-	operation.State = "ambiguous"
+	operation.State = retryOperationAmbiguousState
 	operation.ExternalTaskID = dispatch.TaskID
 	operation.ExternalSessionID = dispatch.SessionID
 	operation.ExternalTurnID = dispatch.TurnID

@@ -288,6 +288,19 @@ func (s *Service) subscribeAutomationEvents() {
 	}
 }
 
+func automationExecutionTriggerData(
+	evt *automation.AutomationTriggeredEvent,
+	snapshot *automation.RetryLaunchConfigSnapshot,
+) json.RawMessage {
+	if snapshot != nil && len(snapshot.TriggerData) > 0 {
+		return snapshot.TriggerData
+	}
+	if len(evt.SafeTriggerData) > 0 {
+		return evt.SafeTriggerData
+	}
+	return evt.TriggerData
+}
+
 // handleAutomationTriggered creates a task when an automation trigger fires.
 //
 //nolint:nestif // The event path preserves run admission and managed-delivery reconciliation order.
@@ -381,7 +394,6 @@ func (s *Service) createAutomationTask(ctx context.Context, evt *automation.Auto
 func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
 	var retryRun *automation.AutomationRun
 	var retrySnapshot *automation.RetryLaunchConfigSnapshot
-	var retryInitialTriggerData bool
 	var a *automation.Automation
 	var retryOperation *automation.RetryOperation
 	//nolint:nestif // Claim promotion is a single identity-fenced boundary.
@@ -416,18 +428,15 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 				return
 			}
 			retrySnapshot = &snapshot
-			retryInitialTriggerData = len(evt.TriggerData) > 0
 			evt.AutomationID = snapshot.AutomationID
 			evt.TriggerID = snapshot.TriggerID
 			evt.TriggerType = snapshot.TriggerType
-			if !retryInitialTriggerData {
-				evt.TriggerData = snapshot.TriggerData
-			}
 			evt.DedupKey = snapshot.DedupKey
 			evt.RetryGroupGeneration = retryRun.RetryGroupGeneration
 			a = automationFromRetrySnapshot(snapshot)
 		}
 	}
+	evt.TriggerData = automationExecutionTriggerData(evt, retrySnapshot)
 	retryOperation, operationErr := s.beginRetryTaskOperation(ctx, evt, retryRun)
 	if operationErr != nil {
 		if !errors.Is(operationErr, automation.ErrRetryGenerationMismatch) &&
@@ -455,11 +464,10 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		s.recordFailedRun(ctx, evt, "retry launch configuration unavailable")
 		return
 	}
-	// Initial retry delivery keeps the raw trigger payload for interpolation;
-	// webhook values remain quoted before entering the agent prompt. Replayed
-	// retries use only the immutable safe snapshot.
+	// Initial deliveries use the quoted agent interpolation path. Retry
+	// attempts use the immutable bounded prompt snapshot.
 	prompt := automation.InterpolateAgentPrompt(a.Prompt, evt.TriggerType, evt.TriggerData)
-	if retrySnapshot != nil && !retryInitialTriggerData {
+	if retrySnapshot != nil {
 		prompt = retrySnapshot.ResolvedPrompt
 	} else if retryRun != nil && !retryInitialTriggerData && retryRun.RetryResolvedPrompt != "" {
 		prompt = retryRun.RetryResolvedPrompt
@@ -469,7 +477,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	}
 
 	title := s.resolveAutomationTaskTitle(a, evt)
-	if retrySnapshot != nil && !retryInitialTriggerData {
+	if retrySnapshot != nil {
 		if retryRun.DisplayTitle != "" {
 			title = retryRun.DisplayTitle
 		} else if retrySnapshot.ResolvedTitle != "" {

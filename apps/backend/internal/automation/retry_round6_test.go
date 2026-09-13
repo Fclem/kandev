@@ -57,7 +57,7 @@ func TestRetryAdmissionPersistsCompleteLaunchSnapshot(t *testing.T) {
 	}, snapshot["repositories"])
 }
 
-func TestServiceRetryAdmissionSupersedesAcrossEnabledTriggers(t *testing.T) {
+func TestServiceRetryAdmissionDoesNotSupersedeDifferentManualTriggers(t *testing.T) {
 	store := setupTestStore(t)
 	log, err := logger.NewFromZap(zap.NewNop())
 	require.NoError(t, err)
@@ -88,10 +88,10 @@ func TestServiceRetryAdmissionSupersedesAcrossEnabledTriggers(t *testing.T) {
 
 	firstRun, err := store.GetRun(ctx, first.RunID)
 	require.NoError(t, err)
-	require.Equal(t, RetryStateSuperseded, firstRun.RetryState)
+	require.Equal(t, RetryStateTriggered, firstRun.RetryState)
 	firstGroup, err := store.GetRetryGroup(ctx, firstRun.RetryGroupID)
 	require.NoError(t, err)
-	require.Equal(t, RetryGroupSuperseded, firstGroup.State)
+	require.Equal(t, RetryGroupLive, firstGroup.State)
 }
 
 func TestRetryAdmissionSupersedesEquivalentTriggerSets(t *testing.T) {

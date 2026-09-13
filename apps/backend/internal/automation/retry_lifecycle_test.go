@@ -145,16 +145,20 @@ func TestFinalizeRetryFailureRefreshesContinuationSnapshot(t *testing.T) {
 	require.NoError(t, store.CreateTrigger(ctx, trigger))
 	result, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, "continuation-retry")
 	require.NoError(t, err)
+	parent, err := store.GetRun(ctx, result.RunID)
+	require.NoError(t, err)
 	require.NoError(t, store.SetContinuationTaskID(ctx, automation.ID, "original-task"))
 
 	child, err := store.FinalizeRetryFailure(ctx, result.RunID, 1, errors.New("provider failed"), "launch")
 	require.NoError(t, err)
 	require.NotNil(t, child)
+	require.Equal(t, parent.RetryLaunchConfigSnapshot, child.RetryLaunchConfigSnapshot)
+	require.Equal(t, parent.RetryContinuationSnapshot, child.RetryContinuationSnapshot)
 	snapshot, err := DecodeRetryLaunchConfigSnapshot(
 		child.RetryLaunchConfigSnapshot, child.RetryLaunchConfigVersion,
 	)
 	require.NoError(t, err)
-	require.Equal(t, "original-task", snapshot.ContinuationTaskID)
+	require.Empty(t, snapshot.ContinuationTaskID)
 }
 
 func TestFinalizeRetryFailureRejectsTerminalParentCAS(t *testing.T) {

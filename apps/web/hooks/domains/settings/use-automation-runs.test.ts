@@ -179,6 +179,27 @@ describe("timeline mode", () => {
     expect(listAutomationRetryHistory).toHaveBeenNthCalledWith(2, AUTOMATION_ID, "cursor-1", 50);
     expect(result.current.runs.map((run) => run.id)).toEqual(["singleton", "attempt"]);
   });
+  it("reloads retry history when the selected history mode changes", async () => {
+    vi.mocked(listAutomationRuns).mockResolvedValue([]);
+    vi.mocked(listAutomationRetryHistory).mockResolvedValue({
+      scope: AUTOMATION_ID,
+      items: [],
+      high_water_mark: "watermark",
+    });
+
+    const { rerender } = renderHook(
+      ({ mode }: { mode: "attempts" | "timeline" }) =>
+        useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID, mode),
+      { initialProps: { mode: "attempts" } },
+    );
+    await act(async () => {});
+    expect(listAutomationRetryHistory).not.toHaveBeenCalled();
+
+    rerender({ mode: "timeline" });
+    await act(async () => {});
+
+    expect(listAutomationRetryHistory).toHaveBeenCalledWith(AUTOMATION_ID, undefined, 50);
+  });
 });
 
 describe("useAutomationRuns - double-failure recovery", () => {

@@ -124,6 +124,39 @@ func TestRetrySnapshotInterpolatesBeforeSafeProjection(t *testing.T) {
 	require.Equal(t, run.RetryResolvedPrompt, child.RetryResolvedPrompt)
 	require.Equal(t, run.RetryResolvedTitle, child.RetryResolvedTitle)
 }
+
+func TestFinalizeRetryFailureRefreshesContinuationSnapshot(t *testing.T) {
+	store := setupTestStore(t)
+	log, err := logger.NewFromZap(zap.NewNop())
+	require.NoError(t, err)
+	svc := NewService(store, bus.NewMemoryEventBus(log), log)
+	ctx := context.Background()
+	automation := &Automation{
+		ID: "automation-continuation-retry", WorkspaceID: "workspace-continuation-retry",
+		Name: "continuation retry", Enabled: true, MaxConcurrentRuns: 1,
+		ContinuationPolicy: ContinuationPolicyReuseThread,
+		RetryPolicy:        RetryPolicy{Mode: RetryModeFinite, MaxRetries: "1", DelaySeconds: "0"},
+	}
+	require.NoError(t, store.CreateAutomation(ctx, automation))
+	trigger := &AutomationTrigger{
+		ID: "trigger-continuation-retry", AutomationID: automation.ID,
+		Type: TriggerTypeManual, Enabled: true,
+	}
+	require.NoError(t, store.CreateTrigger(ctx, trigger))
+	result, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, "continuation-retry")
+	require.NoError(t, err)
+	require.NoError(t, store.SetContinuationTaskID(ctx, automation.ID, "original-task"))
+
+	child, err := store.FinalizeRetryFailure(ctx, result.RunID, 1, errors.New("provider failed"), "launch")
+	require.NoError(t, err)
+	require.NotNil(t, child)
+	snapshot, err := DecodeRetryLaunchConfigSnapshot(
+		child.RetryLaunchConfigSnapshot, child.RetryLaunchConfigVersion,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "original-task", snapshot.ContinuationTaskID)
+}
+
 func TestFinalizeRetryFailureRejectsTerminalParentCAS(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()

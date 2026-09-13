@@ -902,6 +902,10 @@ func (s *Service) DeleteAutomation(ctx context.Context, id string) error {
 	}
 	unlock := s.automationRunLock(id)
 	defer unlock()
+	cleanupTaskIDs, err := s.hiddenAutomationTaskIDs(ctx, id)
+	if err != nil {
+		return err
+	}
 	stopErr := s.stopOpenAutomationRuns(ctx, id)
 	cancelErr := s.CancelAutomationRetries(ctx, id)
 	if stopErr != nil {
@@ -909,10 +913,6 @@ func (s *Service) DeleteAutomation(ctx context.Context, id string) error {
 	}
 	if cancelErr != nil {
 		return cancelErr
-	}
-	cleanupTaskIDs, err := s.hiddenAutomationTaskIDs(ctx, id)
-	if err != nil {
-		return err
 	}
 	if err := s.store.enqueueWebhookSecrets(ctx, "automation_id", id); err != nil {
 		return err
@@ -1761,14 +1761,6 @@ func (s *Service) DeleteAllRuns(ctx context.Context, automationID string) error 
 	}
 	unlock := s.automationRunLock(automationID)
 	defer unlock()
-	stopErr := s.stopOpenAutomationRuns(ctx, automationID)
-	cancelErr := s.CancelAutomationRetries(ctx, automationID)
-	if stopErr != nil {
-		return stopErr
-	}
-	if cancelErr != nil {
-		return cancelErr
-	}
 	taskIDs, err := s.store.ListRunTaskIDs(ctx, automationID)
 	if err != nil {
 		return fmt.Errorf("list run task ids: %w", err)
@@ -1779,6 +1771,14 @@ func (s *Service) DeleteAllRuns(ctx context.Context, automationID string) error 
 	}
 	if a != nil && a.ContinuationTaskID != "" {
 		taskIDs = append(taskIDs, a.ContinuationTaskID)
+	}
+	stopErr := s.stopOpenAutomationRuns(ctx, automationID)
+	cancelErr := s.CancelAutomationRetries(ctx, automationID)
+	if stopErr != nil {
+		return stopErr
+	}
+	if cancelErr != nil {
+		return cancelErr
 	}
 	seen := make(map[string]struct{}, len(taskIDs))
 	for _, taskID := range taskIDs {
@@ -2262,6 +2262,10 @@ func (s *Service) ListOpenRunsByTaskID(ctx context.Context, taskID string) ([]*A
 }
 func (s *Service) ReleaseRetryClaim(ctx context.Context, runID, token string, generation int64) error {
 	return s.store.ReleaseRetryClaim(ctx, runID, token, generation)
+}
+
+func (s *Service) DeferRetryClaimForCapacity(ctx context.Context, runID, token string, generation int64) error {
+	return s.store.DeferRetryClaimForCapacity(ctx, runID, token, generation)
 }
 
 func (s *Service) RetryClaimCapacityAvailable(ctx context.Context, runID string) (bool, error) {

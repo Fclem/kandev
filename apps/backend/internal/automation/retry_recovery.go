@@ -99,9 +99,9 @@ func (s *Store) RetryRunHasReplayableOutbox(ctx context.Context, runID string, g
 		WHERE o.run_id = ? AND r.event_id IS NULL
 			AND o.state IN (?, ?)
 			AND (o.lease_expires_at IS NULL OR o.lease_expires_at <= ?)
-			AND op.state IN (?, ?, ?)`),
+			AND op.state IN (?, ?, ?, ?)`),
 		generation, retryTaskOperationKind, runID, retryOutboxPending, retryOutboxLeased, now,
-		retryOperationRequested, retryOperationLeased, retryOperationCommitted)
+		retryOperationRequested, retryOperationLeased, retryOperationCommitted, retryOperationAmbiguous)
 	return count > 0, err
 }
 
@@ -125,7 +125,11 @@ func (s *Service) ReplayPendingRetryEvents(ctx context.Context) error {
 		if skip {
 			continue
 		}
-		event := retryRecoveryEvent(run, row.SnapshotVersion)
+		operation, operationErr := s.store.GetRetryTaskOperation(ctx, run.ID, run.RetryGroupGeneration)
+		if operationErr != nil {
+			return operationErr
+		}
+		event := retryRecoveryEvent(run, row.SnapshotVersion, operation.State == retryOperationAmbiguous)
 		if err := s.eventBus.Publish(ctx, events.AutomationTriggered,
 			bus.NewEvent(events.AutomationTriggered, "automation_retry_recovery", event)); err != nil {
 			return err
@@ -152,8 +156,11 @@ func (s *Service) prepareRetryRecoveryRun(ctx context.Context, row RetryOutbox) 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry task operation is no longer dispatchable"))
 	}
-	if err != nil {
-		return nil, false, err
+	if operation.State == retryOperationAmbiguous {
+		if operation.ExternalTaskID == "" || operation.ExternalSessionID == "" || operation.ExternalTurnID == "" {
+			return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry continuation identity is incomplete"))
+		}
+		return run, false, nil
 	}
 	if !retryOperationIsDispatchable(operation) {
 		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, ErrRetryOperationUndispatchable)
@@ -179,10 +186,10 @@ func retryOperationIsDispatchable(operation *RetryOperation) bool {
 		operation.State == retryOperationLeased || operation.State == retryOperationCommitted)
 }
 
-func retryRecoveryEvent(run *AutomationRun, snapshotVersion int64) *AutomationTriggeredEvent {
+func retryRecoveryEvent(run *AutomationRun, snapshotVersion int64, ambiguous bool) *AutomationTriggeredEvent {
 	event := &AutomationTriggeredEvent{
 		RunID: run.ID, RetryExternalID: RetryTaskExternalID(run.ID, run.RetryGroupGeneration),
-		SnapshotVersion: snapshotVersion,
+		SnapshotVersion: snapshotVersion, RetryAmbiguousRecovery: ambiguous,
 	}
 	if run.RetryState == RetryStateClaimed {
 		event.AutomationID = run.AutomationID

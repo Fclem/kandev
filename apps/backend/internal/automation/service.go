@@ -893,6 +893,16 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 			continue
 		}
 		if !live {
+			if run.RetryGroupID != "" {
+				if _, finalizeErr := s.FinalizeAutomationRetryFailure(
+					ctx, run.ID, run.RetryGroupGeneration,
+					errors.New("automation turn was stale after backend recovery"), "completion",
+				); finalizeErr != nil {
+					s.logger.Warn("failed to finalize stale automation retry",
+						zap.String("run_id", run.ID), zap.Error(finalizeErr))
+				}
+				continue
+			}
 			if err := s.store.MarkRunTerminal(ctx, run.ID, run.SessionID, run.TurnID, RunStatusFailed, "automation turn was stale after backend recovery"); err != nil {
 				s.logger.Warn("failed to reconcile stale automation run", zap.String("run_id", run.ID), zap.Error(err))
 			}

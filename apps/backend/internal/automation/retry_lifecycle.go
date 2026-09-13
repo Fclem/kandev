@@ -61,23 +61,12 @@ func RetryDelay(policy RetryPolicy, retryNumber int64) (time.Duration, error) {
 		return time.Duration(seconds) * time.Second, nil
 	}
 
-	power := retryNumber - 1
 	result := seconds
-	factor := int64(2)
-	for power > 0 {
-		if power&1 == 1 {
-			if result > math.MaxInt64/factor {
-				return 0, ErrRetryDelayOverflow
-			}
-			result *= factor
+	for power := retryNumber - 1; power > 0; power-- {
+		if result > math.MaxInt64/2 {
+			return 0, ErrRetryDelayOverflow
 		}
-		power >>= 1
-		if power > 0 {
-			if factor > math.MaxInt64/2 {
-				return 0, ErrRetryDelayOverflow
-			}
-			factor *= 2
-		}
+		result *= 2
 	}
 	if result > math.MaxInt64/int64(time.Second) {
 		return 0, ErrRetryDelayOverflow

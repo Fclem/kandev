@@ -865,9 +865,6 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 		if run == nil {
 			continue
 		}
-		if run.RetryGroupID != "" {
-			continue
-		}
 		if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
 			if err := s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "backend stopped before the automation turn was bound"); err != nil {
 				s.logger.Warn("failed to reconcile unbound automation run", zap.String("run_id", run.ID), zap.Error(err))
@@ -920,8 +917,31 @@ func (s *Service) ReconcileCleanupJobs(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) cancelRetryRunForStop(ctx context.Context, run *AutomationRun) error {
+	group, err := s.store.GetRetryGroup(ctx, run.RetryGroupID)
+	if err != nil {
+		return err
+	}
+	superseded := group != nil && group.State == RetryGroupSuperseded &&
+		group.Generation != run.RetryGroupGeneration
+	if superseded {
+		if run.TaskID != "" && run.SessionID != "" && run.TurnID != "" && s.runStopper != nil {
+			_, _ = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+		}
+		return s.store.CancelRetryRun(ctx, run.ID, run.RetryGroupGeneration)
+	}
+	if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
+		return err
+	}
+	if run.TaskID != "" && run.SessionID != "" && run.TurnID != "" && s.runStopper != nil {
+		_, _ = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+	}
+	return nil
+}
+
 // StopRun cancels one open automation run. The stored binding is authoritative;
 // callers never provide task, session, or turn identities themselves.
+
 func (s *Service) StopRun(ctx context.Context, automationID, runID string) (*AutomationRun, error) {
 	if err := s.authorizeAutomation(ctx, automationID); err != nil {
 		return nil, err
@@ -937,11 +957,8 @@ func (s *Service) StopRun(ctx context.Context, automationID, runID string) (*Aut
 		return nil, ErrAutomationNotFound
 	}
 	if run.RetryGroupID != "" && !retryRunIsTerminal(run) {
-		if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
+		if err := s.cancelRetryRunForStop(ctx, run); err != nil {
 			return nil, err
-		}
-		if run.TaskID != "" && run.SessionID != "" && run.TurnID != "" && s.runStopper != nil {
-			_, _ = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
 		}
 		run.Status = RunStatusCancelled
 		run.RetryState = RetryStateCancelled
@@ -1327,48 +1344,55 @@ func (s *Service) DeleteRun(ctx context.Context, runID string) error {
 }
 
 func (s *Service) deleteRunTaskIfUnreferenced(ctx context.Context, run *AutomationRun) error {
-	if run.TaskID == "" || s.taskDeleter == nil {
+	taskID := run.TaskID
+	if taskID == "" && run.RetryGroupID != "" {
+		var err error
+		taskID, err = s.store.GetCommittedRetryTaskID(ctx, run.ID)
+		if err != nil {
+			return fmt.Errorf("get committed retry task: %w", err)
+		}
+	}
+	if taskID == "" || s.taskDeleter == nil {
 		return nil
 	}
 	if s.taskOriginLookup != nil {
-		_, isAutomationRun, ok := s.taskOriginLookup.TaskWorkspaceAndAutomationOrigin(ctx, run.TaskID)
+		_, isAutomationRun, ok := s.taskOriginLookup.TaskWorkspaceAndAutomationOrigin(ctx, taskID)
 		if ok && !isAutomationRun {
 			return nil
 		}
 	}
-	referenced, err := s.runTaskHasReferences(ctx, run)
+	referenced, err := s.runTaskHasReferences(ctx, run, taskID)
 	if err != nil {
 		return err
 	}
 	if referenced {
 		return nil
 	}
-	if err := s.taskDeleter.DeleteTask(ctx, run.TaskID); err != nil {
+	if err := s.taskDeleter.DeleteTask(ctx, taskID); err != nil {
 		if !errors.Is(err, ErrTaskNotFound) {
 			return fmt.Errorf("delete task: %w", err)
 		}
 		s.logger.Debug("run task already gone, continuing delete",
-			zap.String("run_id", run.ID), zap.String("task_id", run.TaskID))
+			zap.String("run_id", run.ID), zap.String("task_id", taskID))
 	}
 	return nil
 }
-
-func (s *Service) runTaskHasReferences(ctx context.Context, run *AutomationRun) (bool, error) {
-	otherRun, err := s.store.IsTaskReferencedByRun(ctx, run.AutomationID, run.ID, run.TaskID)
+func (s *Service) runTaskHasReferences(ctx context.Context, run *AutomationRun, taskID string) (bool, error) {
+	otherRun, err := s.store.IsTaskReferencedByRun(ctx, run.AutomationID, run.ID, taskID)
 	if err != nil {
 		return false, fmt.Errorf("check run task references: %w", err)
 	}
 	if otherRun {
 		return true, nil
 	}
-	continuation, err := s.store.IsContinuationTask(ctx, run.AutomationID, run.TaskID)
+	continuation, err := s.store.IsContinuationTask(ctx, run.AutomationID, taskID)
 	if err != nil {
 		return false, fmt.Errorf("check continuation task reference: %w", err)
 	}
 	if continuation {
 		return true, nil
 	}
-	foreign, err := s.store.IsTaskReferencedByOtherAutomation(ctx, run.AutomationID, run.TaskID)
+	foreign, err := s.store.IsTaskReferencedByOtherAutomation(ctx, run.AutomationID, taskID)
 	if err != nil {
 		return false, fmt.Errorf("check foreign task references: %w", err)
 	}

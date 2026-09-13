@@ -31,7 +31,11 @@ func SafeRetryTriggerProjection(triggerType TriggerType, triggerID string, raw j
 			"delivery_id": {}, "item_id": {}, "repository_id": {}, "action": {},
 			"schedule_id": {}, "occurrence_timestamp": {}, "server_request_id": {},
 			"payload": {}, automationRepoKey: {}, automationHeadBranchKey: {},
-			automationBaseBranchKey: {}, automationTaskIDKey: {}, automationPRNumberKey: {}, automationMergedPRNumberKey: {},
+			automationBaseBranchKey: {}, automationTaskIDKey: {}, automationPRNumberKey: {},
+			automationMergedPRNumberKey: {}, automationTitleKey: {}, automationHTMLURLKey: {},
+			automationAuthorLoginKey: {}, automationBodyKey: {}, automationBranchKey: {},
+			automationSHAKey: {}, automationMessageKey: {}, automationCheckNameKey: {},
+			automationConclusionKey: {},
 		}
 		for key, value := range fields {
 			if _, ok := allowed[strings.ToLower(key)]; ok {

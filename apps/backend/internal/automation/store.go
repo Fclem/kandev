@@ -2150,13 +2150,36 @@ func (s *Store) DeleteRun(ctx context.Context, id string) error {
 	return err
 }
 
-// ListRunTaskIDs returns all non-empty task_id values for an automation's runs.
+// GetCommittedRetryTaskID returns the provider task identity committed for one
+// retry run before the run row could be bound to it.
+func (s *Store) GetCommittedRetryTaskID(ctx context.Context, runID string) (string, error) {
+	var taskID string
+	err := s.ro.GetContext(ctx, &taskID, s.ro.Rebind(`
+		SELECT external_task_id FROM automation_run_operations
+		WHERE run_id = ? AND operation_kind = ? AND state = ? AND external_task_id != ''
+		ORDER BY updated_at DESC LIMIT 1`),
+		runID, retryTaskOperationKind, retryOperationCommitted)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return taskID, err
+}
+
+// ListRunTaskIDs returns all task identities owned by an automation's runs,
+// including provider identities committed before retry binding completed.
 // Used by DeleteAllRuns so the service can clean up tasks before purging rows.
 func (s *Store) ListRunTaskIDs(ctx context.Context, automationID string) ([]string, error) {
 	var ids []string
-	err := s.ro.SelectContext(ctx, &ids, s.ro.Rebind(
-		`SELECT DISTINCT task_id FROM automation_runs WHERE automation_id = ? AND task_id != ''`),
-		automationID)
+	err := s.ro.SelectContext(ctx, &ids, s.ro.Rebind(`
+		SELECT DISTINCT task_id FROM automation_runs
+		WHERE automation_id = ? AND task_id != ''
+		UNION
+		SELECT DISTINCT o.external_task_id
+		FROM automation_run_operations o
+		JOIN automation_runs ar ON ar.id = o.run_id
+		WHERE ar.automation_id = ? AND o.operation_kind = ?
+			AND o.state = ? AND o.external_task_id != ''`),
+		automationID, automationID, retryTaskOperationKind, retryOperationCommitted)
 	return ids, err
 }
 

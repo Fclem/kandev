@@ -129,7 +129,7 @@ func stripUnresolved(s string) string {
 func prPlaceholders(data map[string]interface{}) []string {
 	return []string{
 		"{{pr.number}}", toString(data[automationPRNumberKey]),
-		"{{pr.title}}", toString(data["title"]),
+		"{{pr.title}}", toString(data[automationTitleKey]),
 		"{{pr.url}}", toString(data[automationHTMLURLKey]),
 		"{{pr.author}}", toString(data[automationAuthorLoginKey]),
 		"{{pr.repo}}", toString(data[automationRepoKey]),
@@ -141,17 +141,17 @@ func prPlaceholders(data map[string]interface{}) []string {
 
 func pushPlaceholders(data map[string]interface{}) []string {
 	return []string{
-		"{{push.branch}}", toString(data["branch"]),
+		"{{push.branch}}", toString(data[automationBranchKey]),
 		"{{push.repo}}", toString(data[automationRepoKey]),
-		"{{push.sha}}", toString(data["sha"]),
-		"{{push.message}}", toString(data["message"]),
+		"{{push.sha}}", toString(data[automationSHAKey]),
+		"{{push.message}}", toString(data[automationMessageKey]),
 	}
 }
 
 func ciPlaceholders(data map[string]interface{}) []string {
 	return []string{
-		"{{ci.check_name}}", toString(data["check_name"]),
-		"{{ci.conclusion}}", toString(data["conclusion"]),
+		"{{ci.check_name}}", toString(data[automationCheckNameKey]),
+		"{{ci.conclusion}}", toString(data[automationConclusionKey]),
 		"{{ci.repo}}", toString(data[automationRepoKey]),
 		"{{ci.url}}", toString(data[automationHTMLURLKey]),
 	}

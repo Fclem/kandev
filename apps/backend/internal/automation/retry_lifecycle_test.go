@@ -104,7 +104,7 @@ func TestRetrySnapshotInterpolatesBeforeSafeProjection(t *testing.T) {
 	require.NoError(t, err)
 	svc := NewService(store, bus.NewMemoryEventBus(log), log)
 	a := &Automation{WorkspaceID: "ws-snapshot", Name: "snapshot", Enabled: true,
-		Prompt:      "Review {{pr.title}} (#{{pr.number}})",
+		Prompt: "Review {{pr.title}} (#{{pr.number}})", TaskTitleTemplate: "Retry {{pr.title}}",
 		RetryPolicy: RetryPolicy{Mode: RetryModeFinite, MaxRetries: "1", DelaySeconds: "0"}}
 	require.NoError(t, store.CreateAutomation(context.Background(), a))
 	trigger := &AutomationTrigger{ID: "trigger-snapshot", AutomationID: a.ID,
@@ -117,7 +117,12 @@ func TestRetrySnapshotInterpolatesBeforeSafeProjection(t *testing.T) {
 	run, err := store.GetRun(context.Background(), result.RunID)
 	require.NoError(t, err)
 	require.Equal(t, "Review Fix retry safety (#42)", run.RetryResolvedPrompt)
-	require.NotContains(t, run.RetryTriggerSnapshot, "Fix retry safety")
+	require.Equal(t, "Retry Fix retry safety", run.RetryResolvedTitle)
+	require.Contains(t, run.RetryTriggerSnapshot, "Fix retry safety")
+	child, err := store.FinalizeRetryFailure(context.Background(), run.ID, 1, errors.New("provider failed"), "launch")
+	require.NoError(t, err)
+	require.Equal(t, run.RetryResolvedPrompt, child.RetryResolvedPrompt)
+	require.Equal(t, run.RetryResolvedTitle, child.RetryResolvedTitle)
 }
 func TestFinalizeRetryFailureRejectsTerminalParentCAS(t *testing.T) {
 	store := setupTestStore(t)
@@ -548,4 +553,45 @@ func TestRetryTaskExternalIDIsStableAcrossRecovery(t *testing.T) {
 		RetryTaskExternalID("run-stable", 7))
 	require.NotEqual(t, RetryTaskExternalID("run-stable", 7),
 		RetryTaskExternalID("run-stable", 8))
+}
+
+func TestCancelRetryGroupsByAutomationPreservesOrdinaryRunHistory(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+	a := &Automation{ID: "automation-cancel-ordinary", WorkspaceID: "ws-cancel-ordinary", Name: "ordinary", Enabled: true}
+	require.NoError(t, store.CreateAutomation(ctx, a))
+	run := &AutomationRun{
+		ID: "ordinary-run", AutomationID: a.ID, Status: RunStatusTaskCreated,
+		RetryState: RetryStateNone,
+	}
+	require.NoError(t, store.CreateRun(ctx, run))
+	intent := &RetryTaskIntent{
+		ID: "ordinary-intent", RunID: run.ID, State: retryIntentAdmitted,
+	}
+	require.NoError(t, store.CreateRetryIntent(ctx, intent))
+	require.NoError(t, store.CreateRetryOperation(ctx, &RetryOperation{
+		ID: "ordinary-operation", IntentID: intent.ID, RunID: run.ID,
+		Kind: retryTaskOperationKind, State: retryOperationRequested,
+	}))
+	require.NoError(t, store.CreateRetryOutbox(ctx, &RetryOutbox{
+		EventID: "ordinary-outbox", RunID: run.ID, SnapshotVersion: 1,
+		State: retryOutboxPending,
+	}))
+
+	require.NoError(t, store.CancelRetryGroupsByAutomation(ctx, a.ID))
+
+	reloadedRun, err := store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RunStatusTaskCreated, reloadedRun.Status)
+	require.Equal(t, RetryStateNone, reloadedRun.RetryState)
+	var intentState, operationState, outboxState string
+	require.NoError(t, store.db.Get(&intentState,
+		`SELECT state FROM automation_run_task_intents WHERE intent_id = ?`, intent.ID))
+	require.NoError(t, store.db.Get(&operationState,
+		`SELECT state FROM automation_run_operations WHERE operation_id = ?`, "ordinary-operation"))
+	require.NoError(t, store.db.Get(&outboxState,
+		`SELECT state FROM automation_retry_outbox WHERE event_id = ?`, "ordinary-outbox"))
+	require.Equal(t, retryIntentAdmitted, intentState)
+	require.Equal(t, retryOperationRequested, operationState)
+	require.Equal(t, retryOutboxPending, outboxState)
 }

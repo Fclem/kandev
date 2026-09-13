@@ -640,10 +640,12 @@ func TestCreateAutomationTaskAdoptsCommittedRetryTask(t *testing.T) {
 type retryBindFailureServiceStub struct {
 	*retryAutomationServiceStub
 	bindErr   error
+	bindCalls int
 	finalized bool
 }
 
 func (s *retryBindFailureServiceStub) BindRunTask(context.Context, string, string) error {
+	s.bindCalls++
 	return s.bindErr
 }
 
@@ -654,7 +656,7 @@ func (s *retryBindFailureServiceStub) FinalizeAutomationRetryFailure(
 	return nil, nil
 }
 
-func TestCreateAutomationTaskFinalizesRetryWhenBindingFails(t *testing.T) {
+func TestCreateAutomationTaskReconcilesCommittedRetryAfterBindingFailure(t *testing.T) {
 	repo := setupTestRepo(t)
 	bindErr := errors.New("retry binding temporarily unavailable")
 	base := &retryAutomationServiceStub{
@@ -669,7 +671,7 @@ func TestCreateAutomationTaskFinalizesRetryWhenBindingFails(t *testing.T) {
 			Status: automation.RunStatusTriggered,
 		},
 		operation: &automation.RetryOperation{
-			State: "committed", ExternalTaskID: "retry-binding-failure-task",
+			State: "leased", LeaseToken: "retry-lease-token",
 		},
 	}
 	base.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(base.run, base.automation)
@@ -678,7 +680,7 @@ func TestCreateAutomationTaskFinalizesRetryWhenBindingFails(t *testing.T) {
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	svc.SetAutomationService(autoSvc)
 	svc.reviewTaskCreator = &stubReviewTaskCreator{
-		adoptedTask: &models.Task{ID: "retry-binding-failure-task"},
+		task: &models.Task{ID: "retry-binding-failure-task"},
 	}
 
 	svc.createAutomationTask(context.Background(), &automation.AutomationTriggeredEvent{
@@ -687,7 +689,9 @@ func TestCreateAutomationTaskFinalizesRetryWhenBindingFails(t *testing.T) {
 		TriggerType:     automation.TriggerTypeManual,
 	})
 
-	require.True(t, autoSvc.finalized)
+	require.Equal(t, "retry-binding-failure-task", autoSvc.committed)
+	require.Equal(t, 2, autoSvc.bindCalls)
+	require.False(t, autoSvc.finalized)
 }
 func TestCreateAutomationTaskAcknowledgesAlreadyBoundCommittedRetry(t *testing.T) {
 	repo := setupTestRepo(t)

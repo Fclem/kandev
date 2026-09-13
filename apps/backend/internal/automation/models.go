@@ -541,6 +541,7 @@ type AutomationTriggeredEvent struct {
 	TriggerID            string          `json:"trigger_id,omitempty"`
 	TriggerType          TriggerType     `json:"trigger_type,omitempty"`
 	TriggerData          json.RawMessage `json:"trigger_data,omitempty"`
+	SafeTriggerData      json.RawMessage `json:"safe_trigger_data,omitempty"`
 	DedupKey             string          `json:"dedup_key,omitempty"`
 	RetryClaimToken      string          `json:"retry_claim_token,omitempty"`
 	RetryGroupGeneration int64           `json:"retry_group_generation,omitempty"`

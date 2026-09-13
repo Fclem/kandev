@@ -657,11 +657,13 @@ func (s *Service) UpdateAutomation(ctx context.Context, id string, req *UpdateAu
 		if err := s.store.UpdateAutomation(ctx, id, storeReq); err != nil {
 			return nil, err
 		}
-		if err := s.stopOpenAutomationRuns(ctx, id); err != nil {
-			return nil, err
+		stopErr := s.stopOpenAutomationRuns(ctx, id)
+		cancelErr := s.CancelAutomationRetries(ctx, id)
+		if stopErr != nil {
+			return nil, stopErr
 		}
-		if err := s.CancelAutomationRetries(ctx, id); err != nil {
-			return nil, err
+		if cancelErr != nil {
+			return nil, cancelErr
 		}
 		return s.store.GetAutomation(ctx, id)
 	}
@@ -754,11 +756,13 @@ func (s *Service) DeleteAutomation(ctx context.Context, id string) error {
 	}
 	unlock := s.automationRunLock(id)
 	defer unlock()
-	if err := s.CancelAutomationRetries(ctx, id); err != nil {
-		return err
+	stopErr := s.stopOpenAutomationRuns(ctx, id)
+	cancelErr := s.CancelAutomationRetries(ctx, id)
+	if stopErr != nil {
+		return stopErr
 	}
-	if err := s.stopOpenAutomationRuns(ctx, id); err != nil {
-		return err
+	if cancelErr != nil {
+		return cancelErr
 	}
 	cleanupTaskIDs, err := s.hiddenAutomationTaskIDs(ctx, id)
 	if err != nil {
@@ -817,6 +821,21 @@ func (s *Service) DeleteAutomationsByWorkspace(ctx context.Context, workspaceID 
 	}
 	return deleted, nil
 }
+func (s *Service) stopAutomationRun(ctx context.Context, run *AutomationRun) error {
+	if run == nil || run.TaskID == "" || run.SessionID == "" || run.TurnID == "" || s.runStopper == nil {
+		return nil
+	}
+	stopped, stopErr := s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+	if stopErr != nil {
+		return fmt.Errorf("stop automation run %s: %w", run.ID, stopErr)
+	}
+	if stopped {
+		if markErr := s.store.MarkRunTerminal(ctx, run.ID, run.SessionID, run.TurnID, RunStatusFailed, "automation deleted"); markErr != nil {
+			return fmt.Errorf("mark automation run %s failed: %w", run.ID, markErr)
+		}
+	}
+	return nil
+}
 
 // stopOpenAutomationRuns quiesces live bound turns before their automation
 // references are removed. An admitted row without a binding has no runtime
@@ -827,17 +846,8 @@ func (s *Service) stopOpenAutomationRuns(ctx context.Context, automationID strin
 		return fmt.Errorf("list open automation runs: %w", err)
 	}
 	for _, run := range runs {
-		if run == nil || run.TaskID == "" || run.SessionID == "" || run.TurnID == "" || s.runStopper == nil {
-			continue
-		}
-		stopped, stopErr := s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
-		if stopErr != nil {
-			return fmt.Errorf("stop automation run %s: %w", run.ID, stopErr)
-		}
-		if stopped {
-			if markErr := s.store.MarkRunTerminal(ctx, run.ID, run.SessionID, run.TurnID, RunStatusFailed, "automation deleted"); markErr != nil {
-				return fmt.Errorf("mark automation run %s failed: %w", run.ID, markErr)
-			}
+		if err := s.stopAutomationRun(ctx, run); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -987,10 +997,15 @@ func (s *Service) DisableAutomation(ctx context.Context, id string) error {
 	if err := s.store.UpdateAutomation(ctx, id, &UpdateAutomationRequest{Enabled: &enabled}); err != nil {
 		return err
 	}
-	if err := s.stopOpenAutomationRuns(ctx, id); err != nil {
-		return err
+	stopErr := s.stopOpenAutomationRuns(ctx, id)
+	cancelErr := s.CancelAutomationRetries(ctx, id)
+	if stopErr != nil {
+		return stopErr
 	}
-	return s.CancelAutomationRetries(ctx, id)
+	if cancelErr != nil {
+		return cancelErr
+	}
+	return nil
 }
 
 // run. Without it the editor's regex is the only gate, and it is both too
@@ -1281,6 +1296,9 @@ func (s *Service) DeleteRun(ctx context.Context, runID string) error {
 	}
 	unlock := s.automationRunLock(run.AutomationID)
 	defer unlock()
+	if err := s.stopAutomationRun(ctx, run); err != nil {
+		return err
+	}
 	if run.RetryGroupID != "" && !retryRunIsTerminal(run) {
 		if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
 			return err
@@ -1351,8 +1369,13 @@ func (s *Service) DeleteAllRuns(ctx context.Context, automationID string) error 
 	}
 	unlock := s.automationRunLock(automationID)
 	defer unlock()
-	if err := s.CancelAutomationRetries(ctx, automationID); err != nil {
-		return err
+	stopErr := s.stopOpenAutomationRuns(ctx, automationID)
+	cancelErr := s.CancelAutomationRetries(ctx, automationID)
+	if stopErr != nil {
+		return stopErr
+	}
+	if cancelErr != nil {
+		return cancelErr
 	}
 	taskIDs, err := s.store.ListRunTaskIDs(ctx, automationID)
 	if err != nil {
@@ -1454,7 +1477,7 @@ func automationTriggeredEventForAdmission(
 ) *AutomationTriggeredEvent {
 	if run.RetryGroupID != "" {
 		return &AutomationTriggeredEvent{
-			RunID: run.ID, TriggerData: initialTriggerData,
+			RunID: run.ID, TriggerData: initialTriggerData, SafeTriggerData: triggerData,
 			RetryExternalID: RetryTaskExternalID(run.ID, run.RetryGroupGeneration),
 			SnapshotVersion: run.RetryLaunchConfigVersion,
 		}
@@ -1464,12 +1487,13 @@ func automationTriggeredEventForAdmission(
 		eventTriggerData = initialTriggerData
 	}
 	return &AutomationTriggeredEvent{
-		AutomationID: automationID,
-		RunID:        run.ID,
-		TriggerID:    triggerID,
-		TriggerType:  triggerType,
-		TriggerData:  eventTriggerData,
-		DedupKey:     dedupKey,
+		AutomationID:    automationID,
+		RunID:           run.ID,
+		TriggerID:       triggerID,
+		TriggerType:     triggerType,
+		TriggerData:     eventTriggerData,
+		SafeTriggerData: triggerData,
+		DedupKey:        dedupKey,
 	}
 }
 

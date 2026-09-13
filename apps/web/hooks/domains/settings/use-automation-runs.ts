@@ -11,12 +11,41 @@ import {
   stopAutomationRun,
 } from "@/lib/api/domains/automation-api";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
-import type { AutomationRun, RetryHistoryMode } from "@/lib/types/automation";
+import type { AutomationRun, RetryHistoryMode, RetryHistoryPage } from "@/lib/types/automation";
 
 const EMPTY_RUNS: AutomationRun[] = [];
+const RETRY_HISTORY_PAGE_SIZE = 50;
 const RETRY_PENDING_STATUSES: Record<string, true> = {
   scheduled_retry: true,
 };
+
+async function listAllAutomationRetryHistory(automationId: string): Promise<AutomationRun[]> {
+  const runs: AutomationRun[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page: RetryHistoryPage = await listAutomationRetryHistory(
+      automationId,
+      cursor,
+      RETRY_HISTORY_PAGE_SIZE,
+    );
+    for (const item of page.items ?? []) {
+      runs.push(...(item.attempts ?? []));
+    }
+    if (!page.next_cursor || page.next_cursor === cursor) return runs;
+    cursor = page.next_cursor;
+  }
+}
+
+function mergeAutomationRuns(
+  regularRuns: AutomationRun[],
+  retryHistoryRuns: AutomationRun[],
+): AutomationRun[] {
+  const byID = new Map<string, AutomationRun>();
+  for (const run of [...regularRuns, ...retryHistoryRuns]) {
+    if (!byID.has(run.id)) byID.set(run.id, run);
+  }
+  return [...byID.values()];
+}
 
 const COULD_NOT_REFRESH_RUNS = "automations:couldNotRefreshRuns";
 
@@ -68,8 +97,11 @@ function fetchRuns(storeApi: object, automationId: string, options: FetchRunsOpt
   setRunsLoading(automationId, true);
   const request =
     historyMode === "timeline"
-      ? listAutomationRetryHistory(automationId).then((page) =>
-          (page?.items ?? []).flatMap((item) => item.attempts ?? []),
+      ? Promise.all([
+          listAutomationRuns(automationId),
+          listAllAutomationRetryHistory(automationId),
+        ]).then(([regularRuns, retryHistoryRuns]) =>
+          mergeAutomationRuns(regularRuns ?? [], retryHistoryRuns),
         )
       : listAutomationRuns(automationId);
   request

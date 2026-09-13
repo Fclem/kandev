@@ -1393,6 +1393,14 @@ func (s *Store) BindRunTask(ctx context.Context, runID, taskID string) error {
 		return err
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
+		var existing struct {
+			Status RunStatus `db:"status"`
+			TaskID string    `db:"task_id"`
+		}
+		if lookupErr := s.db.Get(&existing, `SELECT status, task_id FROM automation_runs WHERE id = ?`, runID); lookupErr == nil &&
+			existing.Status == RunStatusTaskCreated && existing.TaskID == taskID {
+			return nil
+		}
 		var groupID string
 		if lookupErr := s.db.Get(&groupID, `SELECT retry_group_id FROM automation_runs WHERE id = ?`, runID); lookupErr == nil && groupID != "" {
 			return ErrRetryGenerationMismatch

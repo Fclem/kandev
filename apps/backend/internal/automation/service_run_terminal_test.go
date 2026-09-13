@@ -219,6 +219,52 @@ func TestUpdateAutomationDisableCancelsRetryGroups(t *testing.T) {
 	require.Equal(t, RetryStateCancelled, storedRun.RetryState)
 }
 
+func TestDisableAutomationCancelsRetriesWhenStoppingRunFails(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-disable-error", Name: "disable error", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-disable-error", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		TaskID: "task-disable-error", SessionID: "session-disable-error", TurnID: "turn-disable-error",
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	stopErr := errors.New("stop failed")
+	svc.SetRunStopper(runStopperStub{err: stopErr})
+
+	require.ErrorIs(t, svc.DisableAutomation(ctx, a.ID), stopErr)
+	stored, err := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryStateCancelled, stored.RetryState)
+}
+
+func TestUpdateAutomationDisableCancelsRetriesWhenStoppingRunFails(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-update-disable-error", Name: "update disable error", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{ID: "group-update-disable-error", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		TaskID: "task-update-disable-error", SessionID: "session-update-disable-error", TurnID: "turn-update-disable-error",
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	stopErr := errors.New("stop failed")
+	svc.SetRunStopper(runStopperStub{err: stopErr})
+	enabled := false
+
+	_, err := svc.UpdateAutomation(ctx, a.ID, &UpdateAutomationRequest{Enabled: &enabled})
+	require.ErrorIs(t, err, stopErr)
+	stored, getErr := svc.store.GetRun(ctx, run.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, RetryStateCancelled, stored.RetryState)
+}
+
 func TestDeleteRunCancelsLiveRetryGroupBeforeDeletingRun(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
@@ -229,12 +275,23 @@ func TestDeleteRunCancelsLiveRetryGroupBeforeDeletingRun(t *testing.T) {
 	}
 	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
 	run := &AutomationRun{
-		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusScheduledRetry,
-		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateScheduled,
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		TaskID: "task-delete-retry", SessionID: "session-delete-retry", TurnID: "turn-delete-retry",
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
 	}
 	require.NoError(t, svc.store.CreateRun(ctx, run))
+	var observedState RetryState
+	svc.SetRunStopper(runStopperStub{
+		stopped: true,
+		onStop: func() {
+			stored, err := svc.store.GetRun(ctx, run.ID)
+			require.NoError(t, err)
+			observedState = stored.RetryState
+		},
+	})
 
 	require.NoError(t, svc.DeleteRun(ctx, run.ID))
+	require.Equal(t, RetryStateTriggered, observedState)
 
 	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
 	require.NoError(t, err)
@@ -242,6 +299,35 @@ func TestDeleteRunCancelsLiveRetryGroupBeforeDeletingRun(t *testing.T) {
 	storedRun, err := svc.store.GetRun(ctx, run.ID)
 	require.NoError(t, err)
 	require.Nil(t, storedRun)
+}
+
+func TestDeleteAutomationStopsRetryRunBeforeCancellingGroup(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	a := &Automation{WorkspaceID: "workspace-delete-automation", Name: "delete automation", Enabled: true}
+	require.NoError(t, svc.store.CreateAutomation(ctx, a))
+	group := &RetryGroup{
+		ID: "group-delete-automation", AutomationID: a.ID, Generation: 1, State: RetryGroupLive,
+	}
+	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
+	run := &AutomationRun{
+		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
+		TaskID: "task-delete-automation", SessionID: "session-delete-automation", TurnID: "turn-delete-automation",
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
+	}
+	require.NoError(t, svc.store.CreateRun(ctx, run))
+	var observedState RetryState
+	svc.SetRunStopper(runStopperStub{
+		stopped: true,
+		onStop: func() {
+			stored, err := svc.store.GetRun(ctx, run.ID)
+			require.NoError(t, err)
+			observedState = stored.RetryState
+		},
+	})
+
+	require.NoError(t, svc.DeleteAutomation(ctx, a.ID))
+	require.Equal(t, RetryStateTriggered, observedState)
 }
 func TestWithRetryRunLockSerializesAndSupportsNestedDispatch(t *testing.T) {
 	svc := newTestService(t)

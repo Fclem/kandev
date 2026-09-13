@@ -11,8 +11,9 @@ import (
 )
 
 // RecoverRetryLedger restores replayable durable work after an unclean stop.
-// Only expired leases are reclaimed; committed identities and group tombstones
-// remain authoritative and are never replaced by a fresh task identity.
+// Noncommitted operation leases are reclaimed because they belong to the
+// stopped process; committed identities and group tombstones remain
+// authoritative and are never replaced by a fresh task identity.
 func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -29,8 +30,8 @@ func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_run_operations
 		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
-		WHERE state = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`),
-		retryOperationRequested, now, retryOperationLeased, now); err != nil {
+		WHERE state = ?`),
+		retryOperationRequested, now, retryOperationLeased); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`

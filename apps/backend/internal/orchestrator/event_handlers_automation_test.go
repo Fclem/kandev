@@ -636,6 +636,59 @@ func TestCreateAutomationTaskAdoptsCommittedRetryTask(t *testing.T) {
 	require.True(t, autoSvc.begun)
 	require.Nil(t, creator.got)
 }
+
+type retryBindFailureServiceStub struct {
+	*retryAutomationServiceStub
+	bindErr   error
+	finalized bool
+}
+
+func (s *retryBindFailureServiceStub) BindRunTask(context.Context, string, string) error {
+	return s.bindErr
+}
+
+func (s *retryBindFailureServiceStub) FinalizeAutomationRetryFailure(
+	context.Context, string, int64, error, string,
+) (*automation.AutomationRun, error) {
+	s.finalized = true
+	return nil, nil
+}
+
+func TestCreateAutomationTaskFinalizesRetryWhenBindingFails(t *testing.T) {
+	repo := setupTestRepo(t)
+	bindErr := errors.New("retry binding temporarily unavailable")
+	base := &retryAutomationServiceStub{
+		stubAutomationService: &stubAutomationService{automation: &automation.Automation{
+			ID: "retry-binding-failure-automation", WorkspaceID: "retry-binding-failure-workspace",
+			Name: "retry binding failure", Prompt: "retry", Enabled: true,
+		}},
+		run: &automation.AutomationRun{
+			ID: "retry-binding-failure-run", AutomationID: "retry-binding-failure-automation",
+			TriggerType: automation.TriggerTypeManual, RetryGroupID: "retry-binding-failure-group",
+			RetryGroupGeneration: 1, RetryState: automation.RetryStateTriggered,
+			Status: automation.RunStatusTriggered,
+		},
+		operation: &automation.RetryOperation{
+			State: "committed", ExternalTaskID: "retry-binding-failure-task",
+		},
+	}
+	base.run.RetryLaunchConfigSnapshot = retrySnapshotForTest(base.run, base.automation)
+	base.run.RetryLaunchConfigVersion = automation.RetryLaunchConfigVersion
+	autoSvc := &retryBindFailureServiceStub{retryAutomationServiceStub: base, bindErr: bindErr}
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.SetAutomationService(autoSvc)
+	svc.reviewTaskCreator = &stubReviewTaskCreator{
+		adoptedTask: &models.Task{ID: "retry-binding-failure-task"},
+	}
+
+	svc.createAutomationTask(context.Background(), &automation.AutomationTriggeredEvent{
+		RunID: "retry-binding-failure-run", RetryGroupGeneration: 1,
+		RetryExternalID: automation.RetryTaskExternalID("retry-binding-failure-run", 1),
+		TriggerType:     automation.TriggerTypeManual,
+	})
+
+	require.True(t, autoSvc.finalized)
+}
 func TestCreateAutomationTaskAcknowledgesAlreadyBoundCommittedRetry(t *testing.T) {
 	repo := setupTestRepo(t)
 	creator := &stubReviewTaskCreator{adoptedTask: &models.Task{ID: "retry-task"}}

@@ -194,6 +194,22 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_runs
+		SET status = ?, retry_state = ?, retry_cancelled_at = ?
+		WHERE retry_group_id IN (
+			SELECT id FROM automation_retry_groups WHERE superseded_by_run_id = ?
+		) AND status = ? AND retry_state = ? AND task_id = ''
+		AND EXISTS (
+			SELECT 1 FROM automation_run_operations o
+			WHERE o.run_id = automation_runs.id
+				AND o.group_generation = automation_runs.retry_group_generation
+				AND o.operation_kind = ? AND o.state = ?
+		)`),
+		RunStatusFailed, RetryStateSuperseded, now, run.ID,
+		RunStatusTriggered, RetryStateTriggered, retryTaskOperationKind, retryOperationRequested); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_run_operations
 		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
 		WHERE run_id IN (

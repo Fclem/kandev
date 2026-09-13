@@ -1813,10 +1813,16 @@ func (s *Service) RetryClaimCapacityAvailable(ctx context.Context, runID string)
 }
 
 func (s *Service) ListRetryHistory(ctx context.Context, automationID, cursor string, limit int) (*RetryHistoryPage, error) {
+	if err := s.authorizeAutomation(ctx, automationID); err != nil {
+		return nil, err
+	}
 	return s.store.ListRetryHistory(ctx, automationID, cursor, limit)
 }
 
 func (s *Service) ListWorkspaceRetryHistory(ctx context.Context, workspaceID, cursor string, limit int) (*RetryHistoryPage, error) {
+	if err := s.authorizeWs(ctx, workspaceID); err != nil {
+		return nil, err
+	}
 	return s.store.ListWorkspaceRetryHistory(ctx, workspaceID, cursor, limit)
 }
 

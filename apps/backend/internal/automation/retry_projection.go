@@ -11,8 +11,9 @@ import (
 // enter retry snapshots.
 
 const (
-	retryTriggerTypeKey = "trigger_type"
-	retryTriggerIDKey   = "trigger_id"
+	retryTriggerTypeKey            = "trigger_type"
+	retryTriggerIDKey              = "trigger_id"
+	retryRepositoryIDProjectionKey = "repository_id"
 )
 
 func SafeRetryTriggerProjection(triggerType TriggerType, triggerID string, raw json.RawMessage, dedupKey string) json.RawMessage {
@@ -28,7 +29,7 @@ func SafeRetryTriggerProjection(triggerType TriggerType, triggerID string, raw j
 	if json.Unmarshal(raw, &fields) == nil {
 		allowed := map[string]struct{}{
 			"observation_id": {}, "observed_at": {}, "provider": {}, "event_type": {},
-			"delivery_id": {}, "item_id": {}, "repository_id": {}, "action": {},
+			"delivery_id": {}, "item_id": {}, retryRepositoryIDProjectionKey: {}, "action": {},
 			"schedule_id": {}, "occurrence_timestamp": {}, "server_request_id": {},
 			"payload": {}, automationRepoKey: {}, automationHeadBranchKey: {},
 			automationBaseBranchKey: {}, automationTaskIDKey: {}, automationPRNumberKey: {},

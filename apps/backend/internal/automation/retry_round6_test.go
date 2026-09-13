@@ -52,6 +52,9 @@ func TestRetryAdmissionPersistsCompleteLaunchSnapshot(t *testing.T) {
 	}
 	require.Equal(t, "github_pr", snapshot["trigger_data"].(map[string]any)["trigger_type"])
 	require.Equal(t, "Snapshot PR", snapshot["trigger_data"].(map[string]any)["title"])
+	require.Equal(t, []any{
+		map[string]any{retryRepositoryIDProjectionKey: "repo-1", "base_branch": "release"},
+	}, snapshot["repositories"])
 }
 
 func TestRetryAdmissionSupersedesEquivalentTriggerSets(t *testing.T) {

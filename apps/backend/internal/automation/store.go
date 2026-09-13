@@ -1608,6 +1608,9 @@ func (s *Store) listRetryHistory(
 			return nil, err
 		}
 		for _, run := range runs {
+			if run.RetryState == RetryStateCancelled {
+				run.Status = RunStatusCancelled
+			}
 			run.TriggerData = json.RawMessage(run.TriggerDataJSON)
 		}
 		var triggerIDs []string
@@ -1651,6 +1654,9 @@ func (s *Store) ListRuns(ctx context.Context, automationID string, limit int) ([
 		return nil, err
 	}
 	for _, r := range runs {
+		if r.RetryState == RetryStateCancelled {
+			r.Status = RunStatusCancelled
+		}
 		r.TriggerData = json.RawMessage(r.TriggerDataJSON)
 	}
 	if err := s.hydrateRunSummaries(ctx, runs); err != nil {
@@ -1773,6 +1779,7 @@ const runTaskStateColumnsSQL = `
 		-- that dead-ends; the derived cancelled status below already says why.
 		CASE WHEN t.id IS NULL THEN '' ELSE ar.task_id END AS task_id,
 		CASE
+			WHEN ar.retry_state = ? THEN ?
 			WHEN ar.status = ? AND t.id IS NULL THEN ?
 			WHEN ar.status = ? AND t.archived_at IS NOT NULL THEN ?
 			WHEN ar.status = ? AND EXISTS (
@@ -1812,6 +1819,7 @@ const runTaskStateColumnsSQL = `
 // matching argument being obvious.
 func runTaskStateArgs() []any {
 	return []any{
+		string(RetryStateCancelled), string(RunStatusCancelled),
 		string(RunStatusTaskCreated), string(RunStatusCancelled),
 		string(RunStatusTaskCreated), string(RunStatusArchived),
 		string(RunStatusTaskCreated), string(taskmodels.TaskSessionStateCancelled), string(RunStatusCancelled),
@@ -1866,6 +1874,9 @@ func (s *Store) ListWorkspaceRuns(ctx context.Context, workspaceID string, limit
 		return nil, err
 	}
 	for _, r := range runs {
+		if r.RetryState == RetryStateCancelled {
+			r.Status = RunStatusCancelled
+		}
 		r.TriggerData = json.RawMessage(r.TriggerDataJSON)
 	}
 	if err := s.hydrateWorkspaceRunSummaries(ctx, runs); err != nil {
@@ -2183,15 +2194,15 @@ func (s *Store) ListRunTaskIDs(ctx context.Context, automationID string) ([]stri
 	return ids, err
 }
 
-// DeleteAllRuns removes every run row for an automation.
+// DeleteAllRuns removes every run row and retry ledger entry for an automation.
 func (s *Store) DeleteAllRuns(ctx context.Context, automationID string) error {
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM automation_runs WHERE automation_id = ?`), automationID)
-	return err
+	return s.ClearContinuationAndDeleteAllRuns(ctx, automationID)
 }
 
 // ClearContinuationAndDeleteAllRuns atomically releases the reusable task
-// pointer with the run rows it protects. The service performs task cleanup
-// before calling this method, while holding the automation admission lock.
+// pointer with the run rows and retry ledger entries it protects. The service
+// performs task cleanup before calling this method, while holding the
+// automation admission lock.
 func (s *Store) ClearContinuationAndDeleteAllRuns(ctx context.Context, automationID string) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -2202,8 +2213,32 @@ func (s *Store) ClearContinuationAndDeleteAllRuns(ctx context.Context, automatio
 		`UPDATE automations SET continuation_task_id = '', updated_at = ? WHERE id = ?`), time.Now().UTC(), automationID); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		DELETE FROM automation_retry_event_receipts
+		WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id = ?)`), automationID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		DELETE FROM automation_retry_outbox
+		WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id = ?)`), automationID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		DELETE FROM automation_run_operations
+		WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id = ?)`), automationID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		DELETE FROM automation_run_task_intents
+		WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id = ?)`), automationID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(
 		`DELETE FROM automation_runs WHERE automation_id = ?`), automationID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(
+		`DELETE FROM automation_retry_groups WHERE automation_id = ?`), automationID); err != nil {
 		return err
 	}
 	return tx.Commit()

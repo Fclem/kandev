@@ -65,6 +65,7 @@ func buildRetryLaunchConfigSnapshot(a *Automation, triggerID string, triggerType
 		TaskTitleTemplate:  a.TaskTitleTemplate,
 		TaskMode:           a.TaskMode,
 		RepositoryMode:     a.RepositoryMode,
+		Repositories:       append([]AutomationRepository(nil), a.Repositories...),
 		ContinuationPolicy: a.ContinuationPolicy,
 		MaxConcurrentRuns:  a.MaxConcurrentRuns,
 		ContinuationTaskID: a.ContinuationTaskID,

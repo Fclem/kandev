@@ -473,6 +473,19 @@ func (s *Store) claimDueRetry(ctx context.Context, now time.Time, lease time.Dur
 			"retry task operation is missing", poisonID, RetryStateScheduled); err != nil {
 			return nil, "", err
 		}
+		groupResult, groupErr := tx.ExecContext(ctx, tx.Rebind(`
+			UPDATE automation_retry_groups
+			SET state = ?, updated_at = ?
+			WHERE id = (SELECT retry_group_id FROM automation_runs WHERE id = ?)
+				AND generation = (SELECT retry_group_generation FROM automation_runs WHERE id = ?)
+				AND state = ?`),
+			RetryGroupCompleted, now, poisonID, poisonID, RetryGroupLive)
+		if groupErr != nil {
+			return nil, "", groupErr
+		}
+		if affected, _ := groupResult.RowsAffected(); affected != 1 {
+			return nil, "", ErrRetryGenerationMismatch
+		}
 		if err := tx.Commit(); err != nil {
 			return nil, "", err
 		}

@@ -65,6 +65,10 @@ type automationRetryBinding interface {
 type automationRetryRelease interface {
 	ReleaseRetryClaim(ctx context.Context, runID, token string, generation int64) error
 }
+
+type automationRetryCapacityDefer interface {
+	DeferRetryClaimForCapacity(ctx context.Context, runID, token string, generation int64) error
+}
 type automationRetryCapacity interface {
 	RetryClaimCapacityAvailable(ctx context.Context, runID string) (bool, error)
 }
@@ -77,6 +81,10 @@ type automationRetryReceipt interface {
 type automationRetryOperation interface {
 	BeginRetryTaskOperation(ctx context.Context, runID string, generation int64) (*automation.RetryOperation, error)
 	CommitRetryTaskOperation(ctx context.Context, runID string, generation int64, leaseToken, taskID string) error
+}
+
+type automationRetryRecoveryOperation interface {
+	GetRetryTaskOperation(ctx context.Context, runID string, generation int64) (*automation.RetryOperation, error)
 }
 
 type automationRetryContinuationOperation interface {
@@ -106,7 +114,10 @@ type automationRetryRunLock interface {
 	WithRetryRunLock(ctx context.Context, runID string, fn func(context.Context) error) error
 }
 
-const retryOperationCommittedState = "committed"
+const (
+	retryOperationCommittedState = "committed"
+	retryOperationAmbiguousState = "ambiguous"
+)
 
 var errDeterministicCommittedRetryTask = errors.New("deterministic committed retry task failure")
 
@@ -377,7 +388,9 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 				if capacity, capacityOK := s.automationService.(automationRetryCapacity); capacityOK {
 					available, capacityErr := capacity.RetryClaimCapacityAvailable(ctx, evt.RunID)
 					if capacityErr != nil || !available {
-						if release, releaseOK := s.automationService.(automationRetryRelease); releaseOK {
+						if deferer, deferOK := s.automationService.(automationRetryCapacityDefer); deferOK {
+							_ = deferer.DeferRetryClaimForCapacity(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration)
+						} else if release, releaseOK := s.automationService.(automationRetryRelease); releaseOK {
 							_ = release.ReleaseRetryClaim(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration)
 						}
 						return
@@ -429,6 +442,25 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		}
 	} else if a == nil {
 		s.recordFailedRun(ctx, evt, "retry launch configuration unavailable")
+		return
+	}
+	if evt.RetryAmbiguousRecovery {
+		if retryOperation == nil || retryOperation.State != retryOperationAmbiguousState {
+			s.recordFailedRun(ctx, evt, "ambiguous retry operation is unavailable")
+			return
+		}
+		task, taskErr := s.adoptCommittedRetryTask(ctx, a, evt, retryOperation)
+		if taskErr != nil {
+			s.recordFailedRun(ctx, evt, taskErr.Error())
+			return
+		}
+		adopted, adoptErr := s.adoptCommittedRetryContinuation(ctx, evt.RunID, task.ID, retryOperation)
+		if adoptErr != nil || !adopted {
+			s.logger.Warn("failed to bind ambiguous retry continuation",
+				zap.String("run_id", evt.RunID), zap.String("task_id", task.ID), zap.Error(adoptErr))
+			return
+		}
+		s.acknowledgeRetryEventAfterBinding(ctx, evt)
 		return
 	}
 	// Trigger data is always the bounded projection before it reaches prompt,
@@ -722,6 +754,13 @@ func (s *Service) beginRetryTaskOperation(ctx context.Context, evt *automation.A
 	operationService, ok := s.automationService.(automationRetryOperation)
 	if !ok {
 		return nil, errors.New("retry operation ledger unavailable")
+	}
+	if evt.RetryAmbiguousRecovery {
+		recoveryOperation, recoveryOK := s.automationService.(automationRetryRecoveryOperation)
+		if !recoveryOK {
+			return nil, errors.New("retry recovery operation ledger unavailable")
+		}
+		return recoveryOperation.GetRetryTaskOperation(ctx, evt.RunID, evt.RetryGroupGeneration)
 	}
 	return operationService.BeginRetryTaskOperation(ctx, evt.RunID, evt.RetryGroupGeneration)
 }

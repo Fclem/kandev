@@ -354,6 +354,10 @@ func (s *retryAutomationServiceStub) BeginRetryTaskOperation(context.Context, st
 	return s.operation, nil
 }
 
+func (s *retryAutomationServiceStub) GetRetryTaskOperation(context.Context, string, int64) (*automation.RetryOperation, error) {
+	return s.operation, nil
+}
+
 func (s *retryAutomationServiceStub) MarkRunTerminal(context.Context, string, string, string, automation.RunStatus, string) error {
 	return nil
 }

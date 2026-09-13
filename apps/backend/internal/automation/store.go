@@ -1000,7 +1000,9 @@ func (s *Store) ListAutomationTaskIDs(ctx context.Context, id string) ([]string,
 		 SELECT DISTINCT o.external_task_id
 		 FROM automation_run_operations o
 		 JOIN automation_runs ar ON ar.id = o.run_id
-		 WHERE ar.automation_id = ? AND o.state = ? AND o.external_task_id != ''`), id, id, retryOperationCommitted); err != nil {
+		 WHERE ar.automation_id = ? AND o.operation_kind = ?
+			AND o.state IN (?, ?) AND o.external_task_id != ''`), id, id,
+		retryTaskOperationKind, retryOperationCommitted, retryOperationAmbiguous); err != nil {
 		return nil, err
 	}
 	var continuationTaskID string
@@ -1030,7 +1032,9 @@ func listAutomationCleanupTaskIDs(ctx context.Context, tx *sqlx.Tx, id, continua
 		 SELECT DISTINCT o.external_task_id
 		 FROM automation_run_operations o
 		 JOIN automation_runs ar ON ar.id = o.run_id
-		 WHERE ar.automation_id = ? AND o.state = ? AND o.external_task_id != ''`), id, id, retryOperationCommitted); err != nil {
+		 WHERE ar.automation_id = ? AND o.operation_kind = ?
+			AND o.state IN (?, ?) AND o.external_task_id != ''`), id, id,
+		retryTaskOperationKind, retryOperationCommitted, retryOperationAmbiguous); err != nil {
 		return nil, err
 	}
 	if continuationTaskID != "" {

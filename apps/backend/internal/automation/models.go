@@ -544,17 +544,18 @@ type RevealWebhookSecretResponse struct {
 
 // AutomationTriggeredEvent is published when a trigger fires.
 type AutomationTriggeredEvent struct {
-	RunID                string          `json:"run_id"`
-	AutomationID         string          `json:"automation_id,omitempty"`
-	TriggerID            string          `json:"trigger_id,omitempty"`
-	TriggerType          TriggerType     `json:"trigger_type,omitempty"`
-	TriggerData          json.RawMessage `json:"trigger_data,omitempty"`
-	SafeTriggerData      json.RawMessage `json:"safe_trigger_data,omitempty"`
-	DedupKey             string          `json:"dedup_key,omitempty"`
-	RetryClaimToken      string          `json:"retry_claim_token,omitempty"`
-	RetryGroupGeneration int64           `json:"retry_group_generation,omitempty"`
-	RetryExternalID      string          `json:"retry_external_id,omitempty"`
-	SnapshotVersion      int64           `json:"snapshot_version,omitempty"`
+	RunID                  string          `json:"run_id"`
+	AutomationID           string          `json:"automation_id,omitempty"`
+	TriggerID              string          `json:"trigger_id,omitempty"`
+	TriggerType            TriggerType     `json:"trigger_type,omitempty"`
+	TriggerData            json.RawMessage `json:"trigger_data,omitempty"`
+	SafeTriggerData        json.RawMessage `json:"safe_trigger_data,omitempty"`
+	DedupKey               string          `json:"dedup_key,omitempty"`
+	RetryClaimToken        string          `json:"retry_claim_token,omitempty"`
+	RetryGroupGeneration   int64           `json:"retry_group_generation,omitempty"`
+	RetryExternalID        string          `json:"retry_external_id,omitempty"`
+	SnapshotVersion        int64           `json:"snapshot_version,omitempty"`
+	RetryAmbiguousRecovery bool            `json:"retry_ambiguous_recovery,omitempty"`
 }
 
 // RepositoryLookup resolves a repository's workspace ownership for

@@ -2943,6 +2943,8 @@ const (
 	keyCheckoutBranch   = "checkout_branch"
 	keyPosition         = "position"
 	keyAutoMergeEnabled = "auto_merge_enabled"
+	keySuccess          = "success"
+	keyPending          = "pending"
 )
 
 // taskMessageStatusSent is the taskMessageDispatchResult.status value used

@@ -4,7 +4,7 @@ system: tasks
 requirements:
   - REQ-TASKS-RUNTIME-CLEANUP-001
 created: 2026-06-22
-updated: 2026-09-05
+updated: 2026-09-09
 owners:
   - cfl
 ---
@@ -12,7 +12,7 @@ owners:
 
 ## Purpose and boundaries
 
-This design record preserves the technical source for the capability mapped to REQ-TASKS-RUNTIME-CLEANUP-001 while the task system completes its migration.
+This design defines task runtime cleanup for REQ-TASKS-RUNTIME-CLEANUP-001.
 
 The active implementation authority is split into
 [Archive Cleanup Evidence](archive-cleanup-evidence.md),
@@ -134,6 +134,9 @@ capturing the cleanup snapshot.
 
 ## Data Model
 
+Preparation with absent resources follows
+[Cleanup preparation](runtime-cleanup-preparation.md).
+
 ### `executors_running`
 
 `executors_running` remains the durable runtime ownership table and the source of
@@ -203,9 +206,8 @@ transaction holds no filesystem, target-path, or Git lock.
 
 ## API Surface
 
-Existing archive HTTP, WebSocket, and MCP actions keep their request contracts.
-The service establishes replay identity through its durable root reservation;
-clients do not supply idempotency metadata.
+No new action is required for the base contract. Dirty deletion admission is in
+[Dirty Worktree Task Deletion](dirty-worktree-deletion.md).
 
 `session.delete` keeps its existing request and response contract. Success means
 the session row is gone. It does not mean the task workspace was cleaned, and it

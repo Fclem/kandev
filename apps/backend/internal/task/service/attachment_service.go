@@ -13,9 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"go.uber.org/zap"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository"
@@ -56,11 +54,6 @@ type AttachmentDescriptor struct {
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
-type attachmentReleasePreparer interface {
-	PrepareClaimedMessageAttachmentsForRelease(
-		ctx context.Context, ids []string, ownerID, taskID, sessionID string,
-	) ([]*models.TaskMessageAttachment, error)
-}
 type attachmentTaskDeletePreparer interface {
 	PrepareMessageAttachmentsForTaskDelete(
 		ctx context.Context, taskID string,
@@ -75,6 +68,7 @@ type AttachmentService struct {
 	authorizeTask      func(context.Context, string) error
 	log                *logger.Logger
 	lifecycleMu        sync.Mutex
+	closingWorkspaces  map[string]int
 }
 
 func NewAttachmentService(repo repository.AttachmentRepository, root string, authorizeWorkspace func(context.Context, string) error, log *logger.Logger) (*AttachmentService, error) {
@@ -100,14 +94,29 @@ func (s *AttachmentService) ensureRoot() error {
 func (s *AttachmentService) SetTaskAuthorizer(authorizer func(context.Context, string) error) {
 	s.authorizeTask = authorizer
 }
+func (s *AttachmentService) beginWorkspaceDeletion(workspaceID string) func() {
+	s.lifecycleMu.Lock()
+	if s.closingWorkspaces == nil {
+		s.closingWorkspaces = make(map[string]int)
+	}
+	s.closingWorkspaces[workspaceID]++
+	s.lifecycleMu.Unlock()
+	return func() {
+		s.lifecycleMu.Lock()
+		if count := s.closingWorkspaces[workspaceID]; count <= 1 {
+			delete(s.closingWorkspaces, workspaceID)
+		} else {
+			s.closingWorkspaces[workspaceID] = count - 1
+		}
+		s.lifecycleMu.Unlock()
+	}
+}
 
 // Stage writes one raw file to a temporary file, validates its exact byte
 // count, atomically renames it, then commits the descriptor row. Any failure
 // removes both the temporary and committed file so callers never observe a
 // usable row without bytes.
 func (s *AttachmentService) Stage(ctx context.Context, ownerID, workspaceID, name, mimeType, kind, deliveryMode string, src io.Reader) (*models.TaskMessageAttachment, error) {
-	s.lifecycleMu.Lock()
-	defer s.lifecycleMu.Unlock()
 	if workspaceID == "" || ownerID == "" || src == nil {
 		return nil, ErrAttachmentInvalid
 	}
@@ -138,7 +147,16 @@ func (s *AttachmentService) Stage(ctx context.Context, ownerID, workspaceID, nam
 		StorageKey: storageKey, State: models.AttachmentStateStaged,
 		ExpiresAt: now.Add(AttachmentStagedTTL), CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.repo.CreateMessageAttachment(ctx, attachment); err != nil {
+	s.lifecycleMu.Lock()
+	_, closing := s.closingWorkspaces[workspaceID]
+	if closing {
+		s.lifecycleMu.Unlock()
+		_ = os.Remove(dest)
+		return nil, ErrAttachmentInvalid
+	}
+	err = s.repo.CreateMessageAttachment(ctx, attachment)
+	s.lifecycleMu.Unlock()
+	if err != nil {
 		_ = os.Remove(dest)
 		return nil, err
 	}
@@ -338,14 +356,9 @@ func (s *AttachmentService) RestoreQueued(
 func (s *AttachmentService) Release(ctx context.Context, ownerID, taskID, sessionID string, ids []string) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
-	releaser, ok := s.repo.(attachmentReleasePreparer)
-	var attachments []*models.TaskMessageAttachment
-	var err error
-	if ok {
-		attachments, err = releaser.PrepareClaimedMessageAttachmentsForRelease(ctx, ids, ownerID, taskID, sessionID)
-	} else {
-		attachments, err = s.repo.DeleteClaimedMessageAttachments(ctx, ids, ownerID, taskID, sessionID)
-	}
+	attachments, err := s.repo.PrepareClaimedMessageAttachmentsForRelease(
+		ctx, ids, ownerID, taskID, sessionID,
+	)
 	if err != nil {
 		return err
 	}
@@ -355,10 +368,8 @@ func (s *AttachmentService) Release(ctx context.Context, ownerID, taskID, sessio
 			removeErrs = append(removeErrs, err)
 			continue
 		}
-		if ok {
-			if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, ownerID); err != nil {
-				removeErrs = append(removeErrs, err)
-			}
+		if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, ownerID); err != nil {
+			removeErrs = append(removeErrs, err)
 		}
 	}
 	return errors.Join(removeErrs...)
@@ -433,6 +444,33 @@ func (s *AttachmentService) deleteByTask(ctx context.Context, taskID string) err
 	return err
 }
 
+// DeleteDescriptors removes the private bytes represented by a previously
+// captured attachment snapshot. The registry row may already be gone after a
+// workspace cascade, so byte cleanup does not depend on a live task row.
+func (s *AttachmentService) DeleteDescriptors(ctx context.Context, attachments []*models.TaskMessageAttachment) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	return s.deleteDescriptors(ctx, attachments)
+}
+
+func (s *AttachmentService) deleteDescriptors(ctx context.Context, attachments []*models.TaskMessageAttachment) error {
+	var errs []error
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		if err := s.removeBytes(attachment); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, attachment.OwnerID); err != nil &&
+			!errors.Is(err, ErrAttachmentNotFound) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // DeleteBySession removes all claimed attachment descriptors and private bytes
 // owned by a deleted task session. Staged uploads are intentionally excluded
 // because they are not bound to a session and expire independently.
@@ -482,33 +520,6 @@ func (s *AttachmentService) RemoveBytes(attachments []*models.TaskMessageAttachm
 	for _, attachment := range attachments {
 		s.removeBytes(attachment)
 	}
-}
-
-// DeleteDescriptors removes the private bytes represented by a previously
-// captured attachment snapshot. The registry row may already be gone after a
-// workspace cascade, so byte cleanup does not depend on a live task row.
-func (s *AttachmentService) DeleteDescriptors(ctx context.Context, attachments []*models.TaskMessageAttachment) error {
-	s.lifecycleMu.Lock()
-	defer s.lifecycleMu.Unlock()
-	return s.deleteDescriptors(ctx, attachments)
-}
-
-func (s *AttachmentService) deleteDescriptors(ctx context.Context, attachments []*models.TaskMessageAttachment) error {
-	var errs []error
-	for _, attachment := range attachments {
-		if attachment == nil {
-			continue
-		}
-		if err := s.removeBytes(attachment); err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if err := s.repo.DeleteMessageAttachment(ctx, attachment.ID, attachment.OwnerID); err != nil &&
-			!errors.Is(err, ErrAttachmentNotFound) {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
 }
 func (s *AttachmentService) Descriptor(attachment *models.TaskMessageAttachment) AttachmentDescriptor {
 	return AttachmentDescriptor{

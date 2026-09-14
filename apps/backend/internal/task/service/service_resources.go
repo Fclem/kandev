@@ -249,15 +249,6 @@ func (s *Service) DeleteWorkspaceWithConfirmName(ctx context.Context, id, confir
 	return s.deleteWorkspace(ctx, workspace, &confirmName)
 }
 func (s *Service) prepareWorkspaceAttachmentCleanup(ctx context.Context, workspaceID string) (*models.TaskResourceCleanupJob, error) {
-	if s.attachmentSvc == nil && s.attachments != nil {
-		return nil, fmt.Errorf("workspace attachment cleanup executor is unavailable")
-	}
-	if s.resourceCleanups == nil {
-		if s.attachmentSvc != nil {
-			return nil, fmt.Errorf("workspace attachment cleanup persistence is unavailable")
-		}
-		return nil, nil
-	}
 	attachmentRepo := s.attachments
 	if attachmentRepo == nil && s.attachmentSvc != nil {
 		attachmentRepo = s.attachmentSvc.repo
@@ -267,6 +258,9 @@ func (s *Service) prepareWorkspaceAttachmentCleanup(ctx context.Context, workspa
 		if attachmentRepo != nil {
 			return nil, fmt.Errorf("workspace attachment repository cannot list attachments")
 		}
+		if s.resourceCleanups == nil && s.attachmentSvc != nil {
+			return nil, fmt.Errorf("workspace attachment cleanup persistence is unavailable")
+		}
 		return nil, nil
 	}
 	attachments, err := lister.ListMessageAttachmentsByWorkspace(ctx, workspaceID)
@@ -274,7 +268,19 @@ func (s *Service) prepareWorkspaceAttachmentCleanup(ctx context.Context, workspa
 		return nil, fmt.Errorf("list workspace attachments for cleanup: %w", err)
 	}
 	if len(attachments) == 0 {
+		if s.resourceCleanups == nil && s.attachmentSvc == nil {
+			return nil, fmt.Errorf("workspace attachment cleanup executor is unavailable")
+		}
 		return nil, nil
+	}
+	if s.resourceCleanups == nil {
+		if s.attachmentSvc != nil {
+			return nil, fmt.Errorf("workspace attachment cleanup persistence is unavailable")
+		}
+		return nil, fmt.Errorf("workspace attachment cleanup executor is unavailable")
+	}
+	if s.attachmentSvc == nil {
+		return nil, fmt.Errorf("workspace attachment cleanup executor is unavailable")
 	}
 	return s.persistTaskResourceCleanup(
 		ctx, "", models.TaskResourceCleanupTriggerWorkspaceDelete,
@@ -307,11 +313,10 @@ func (s *Service) DeleteOrganizationWorkspaces(ctx context.Context, orgID string
 }
 
 func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspace, confirmedName *string) error {
+	var releaseAttachmentAdmission func()
 	if s.attachmentSvc != nil {
-		// Stage takes the same lock so no upload can commit after this snapshot
-		// and before the workspace cascade removes its descriptor row.
-		s.attachmentSvc.lifecycleMu.Lock()
-		defer s.attachmentSvc.lifecycleMu.Unlock()
+		releaseAttachmentAdmission = s.attachmentSvc.beginWorkspaceDeletion(workspace.ID)
+		defer releaseAttachmentAdmission()
 	}
 	tasks, err := s.listAllTasksForWorkspaceDelete(ctx, workspace.ID)
 	if err != nil {
@@ -398,9 +403,12 @@ func (s *Service) deleteWorkspace(ctx context.Context, workspace *models.Workspa
 	s.runWorkspaceDeleteTaskCleanups(cleanups, deletedTasks)
 	s.publishWorkspaceEvent(ctx, events.WorkspaceDeleted, workspace)
 	s.logger.Info("workspace deleted", zap.String("workspace_id", workspace.ID))
-	return postCommitErr
-}
+	if postCommitErr != nil {
+		return &CascadePostCommitError{Err: postCommitErr}
+	}
+	return nil
 
+}
 func (s *Service) prepareWorkspaceDeleteTaskCleanups(ctx context.Context, tasks []*models.Task) ([]workspaceDeleteTaskCleanup, error) {
 	cleanups := make([]workspaceDeleteTaskCleanup, 0, len(tasks))
 	for _, task := range tasks {
@@ -853,6 +861,7 @@ func (s *Service) DeleteWorkflow(ctx context.Context, id string) error {
 		return err
 	}
 	archived := 0
+	var postCommitErr error
 	for _, task := range tasks {
 		if task == nil || task.WorkspaceID != workflow.WorkspaceID {
 			taskID, taskWorkspaceID := "", ""
@@ -874,11 +883,11 @@ func (s *Service) DeleteWorkflow(ctx context.Context, id string) error {
 			if outcome != nil && len(outcome.ArchivedTaskIDs) > 0 {
 				archived += len(outcome.ArchivedTaskIDs)
 			}
-			archiveErr = err
-			var postCommitErr *CascadePostCommitError
-			if errors.As(err, &postCommitErr) {
+			var cascadePostCommitErr *CascadePostCommitError
+			if errors.As(err, &cascadePostCommitErr) {
 				s.logger.Warn("workflow task archived with post-commit lifecycle errors",
 					zap.String("workflow_id", id), zap.String("task_id", task.ID), zap.Error(err))
+				postCommitErr = errors.Join(postCommitErr, err)
 				continue
 			}
 		} else {
@@ -912,6 +921,9 @@ func (s *Service) DeleteWorkflow(ctx context.Context, id string) error {
 	s.logger.Info("workflow deleted",
 		zap.String("workflow_id", id),
 		zap.Int("archived_tasks", archived))
+	if postCommitErr != nil {
+		return &CascadePostCommitError{Err: postCommitErr}
+	}
 	return nil
 }
 

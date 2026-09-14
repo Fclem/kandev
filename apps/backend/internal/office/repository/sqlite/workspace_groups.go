@@ -431,8 +431,8 @@ func (r *Repository) RestoreWorkspaceGroupMemberByCascade(ctx context.Context, t
 	if err != nil {
 		return err
 	}
-	if rows == 0 {
-		return fmt.Errorf("workspace group cleanup changed during restore for task %s", taskID)
+	if rows != int64(released) {
+		return fmt.Errorf("workspace group membership restore incomplete for task %s: restored %d of %d", taskID, rows, released)
 	}
 	return nil
 }

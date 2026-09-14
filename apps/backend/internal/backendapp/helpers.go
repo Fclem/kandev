@@ -779,11 +779,11 @@ func registerRoutes(p routeParams) {
 	handoffDocSvc := taskservice.NewDocumentService(p.taskRepo, p.log)
 	handoffSvc := taskservice.NewHandoffService(p.taskRepo, p.taskRepo, handoffDocSvc,
 		p.officeRepo, p.officeRepo, p.log)
-	p.taskSvc.SetWorkspacePolicyAttacher(handoffSvc)
-	p.taskSvc.SetWorkspaceGroupMembershipReader(p.officeRepo)
 	p.taskSvc.SetAutoArchiveCoordinator(handoffSvc)
 	p.taskSvc.SetWorkflowTaskArchiveCoordinator(handoffSvc)
 	p.taskSvc.SetTaskLifecycleCoordinator(handoffSvc)
+	p.taskSvc.SetWorkspacePolicyAttacher(handoffSvc)
+	p.taskSvc.SetWorkspaceGroupMembershipReader(p.officeRepo)
 	handoffSvc.SetCommentReader(&officeCommentReaderAdapter{reader: p.officeRepo})
 	// Phase 6 wirings — materializer hook + disk cleaner. The
 	// SessionWorktreeReader and WorkspaceCleaner interfaces are both

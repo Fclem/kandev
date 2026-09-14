@@ -7,7 +7,7 @@ created: 2026-08-09
 owners:
   - kandev
 ---
-# Task Dependencies and Auto-Start Chains System Design
+# Task Dependencies System Design
 
 ## Purpose and boundaries
 

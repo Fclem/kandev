@@ -741,9 +741,12 @@ type Service struct {
 
 	// taskAccessCheck is the task-keyed sibling of sessionAccessCheck, for
 	// entry points that name a task rather than a session (session.launch,
-	// session.ensure). Nil = unscoped. See SetTaskAccessChecker.
+	// session.ensure). Nil = unscoped.
 	taskAccessCheck func(ctx context.Context, taskID string) error
 
+	// taskLifecycleDeleter owns cleanup of automation tasks abandoned before
+	// their run was durably recorded.
+	taskLifecycleDeleter taskLifecycleDeleter
 	// retrackedSessionCheck reports whether the lifecycle manager
 	// successfully re-tracked a session during this backend's own startup
 	// recovery pass (AC-EXECUTORS-SURVIVAL-003.1). Consulted by startup
@@ -754,9 +757,6 @@ type Service struct {
 	// SetRetrackedSessionChecker.
 	retrackedSessionCheck func(sessionID string) bool
 
-	// taskLifecycleDeleter owns cleanup of automation tasks abandoned before
-	// their run was durably recorded.
-	taskLifecycleDeleter taskLifecycleDeleter
 	// routeActionHandler is owned by the dynamic conductor composition. The
 	// orchestrator only validates/authorizes the request and returns the
 	// authoritative route snapshot; concrete and dynamic callers share this
@@ -2030,6 +2030,11 @@ func (s *Service) SetTaskAccessChecker(check func(ctx context.Context, taskID st
 	s.taskAccessCheck = check
 }
 
+// SetTaskLifecycleDeleter wires durable task cleanup for automation rollback.
+func (s *Service) SetTaskLifecycleDeleter(deleter taskLifecycleDeleter) {
+	s.taskLifecycleDeleter = deleter
+}
+
 // SetRetrackedSessionChecker installs the lifecycle manager's query for
 // AC-EXECUTORS-SURVIVAL-003.1: whether a session was successfully
 // re-tracked during this backend's own startup recovery pass. Wired from
@@ -2051,10 +2056,6 @@ func (s *Service) wasSessionRetracked(sessionID string) bool {
 	return s.retrackedSessionCheck(sessionID)
 }
 
-// SetTaskLifecycleDeleter wires durable task cleanup for automation rollback.
-func (s *Service) SetTaskLifecycleDeleter(deleter taskLifecycleDeleter) {
-	s.taskLifecycleDeleter = deleter
-}
 // authorizeSession applies the configured per-user session check. No-op when
 // unwired.
 func (s *Service) authorizeSession(ctx context.Context, sessionID string) error {

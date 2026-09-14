@@ -38,6 +38,8 @@ type WorkspaceGroupRepo interface {
 	AddWorkspaceGroupMember(ctx context.Context, groupID, taskID, role string) error
 	// Phase 6 surface — cascade release / restore + cleanup status updates.
 	ReleaseWorkspaceGroupMember(ctx context.Context, groupID, taskID, reason, cascadeID string) error
+	// Restore is idempotent and CAS-guarded by cascadeID; repeated restores
+	// for the same task and cascade must not create duplicate active members.
 	RestoreWorkspaceGroupMemberByCascade(ctx context.Context, taskID, cascadeID string) error
 	ListActiveWorkspaceGroupMembers(ctx context.Context, groupID string) ([]orchmodels.WorkspaceGroupMember, error)
 	// ListWorkspaceGroupMembers returns ALL members (including
@@ -102,11 +104,9 @@ type SessionWorktreeReader interface {
 	ListTaskSessionWorktrees(ctx context.Context, sessionID string) ([]*models.TaskEnvironmentRepo, error)
 	GetTask(ctx context.Context, id string) (*models.Task, error)
 	// HasExecutorRunningRow tells cleanup whether a session still has
-	// an executors_running row — i.e. an agent is (or recently was)
-	// bound to the workspace. Cleanup MUST refuse to delete a
-	// materialized workspace while any of the group's member sessions
-	// is still active, otherwise the agent's writes get destroyed
-	// out from under it (post-review #5).
+	// an executors_running row. Cleanup must refuse to delete a
+	// materialized workspace while any member session remains active,
+	// otherwise the agent's writes could be destroyed.
 	HasExecutorRunningRow(ctx context.Context, sessionID string) (bool, error)
 }
 
@@ -382,7 +382,10 @@ type taskResourceCleanupCoordinator interface {
 	CancelPreparedTaskResourceCleanup(ctx context.Context, operationID string) error
 }
 
-<<<<<<< ours
+type taskResourceCleanupRestorer interface {
+	RestoreCancelledTaskResourceCleanup(ctx context.Context, operationID string) error
+}
+
 type taskResourceCleanupCoordinatorWithOptions interface {
 	PrepareTaskResourceCleanupWithOptions(
 		ctx context.Context,
@@ -398,9 +401,6 @@ type taskDeleteWorktreeAdmissionChecker interface {
 	ValidateTaskDeleteWorktrees(ctx context.Context, taskIDs []string, discardWorktreeChanges bool) error
 }
 
-type taskResourceCleanupRestorer interface {
-	RestoreCancelledTaskResourceCleanup(ctx context.Context, operationID string) error
-}
 // SetTaskResourceCleaner wires the resource teardown surface invoked by
 // cascade archive/delete to release containers / sandboxes / worktrees.
 // Optional — when nil the cascade does not tear down runtime resources.

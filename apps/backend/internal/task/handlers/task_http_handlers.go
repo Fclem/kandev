@@ -1962,14 +1962,16 @@ func (h *TaskHandlers) httpArchiveTask(c *gin.Context) {
 func cascadeQueryParam(c *gin.Context) bool {
 	return strings.EqualFold(c.Query("cascade"), "true")
 }
-func discardWorktreeChangesQueryParam(c *gin.Context) bool {
-	return strings.EqualFold(c.Query("discard_worktree_changes"), "true")
-}
 
 func isCascadePostCommitError(err error) bool {
 	var postCommitErr *service.CascadePostCommitError
 	return errors.As(err, &postCommitErr)
 }
+
+func discardWorktreeChangesQueryParam(c *gin.Context) bool {
+	return strings.EqualFold(c.Query("discard_worktree_changes"), "true")
+}
+
 // httpTaskSubtaskCount returns the count of direct, non-archived,
 // non-ephemeral subtasks for a task. Used by the frontend's archive /
 // delete confirmation dialogs to decide whether to render the
@@ -2044,7 +2046,7 @@ func (h *TaskHandlers) httpUnarchiveTask(c *gin.Context) {
 	}
 	if postCommitError {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"success":            false,
+			responseKeySuccess:   false,
 			"error":              "task unarchive requires retry",
 			"task_id":            taskID,
 			"cascade_id":         outcome.CascadeID,

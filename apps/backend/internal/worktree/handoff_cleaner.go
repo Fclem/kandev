@@ -46,7 +46,11 @@ func (c *HandoffCleaner) ValidateManagedRoot(path string) error {
 	if err := c.requireManagedRoot(path); err != nil {
 		return err
 	}
-	return rejectSymlinkComponents(path)
+	root, err := c.managedRootFor(path)
+	if err != nil {
+		return err
+	}
+	return rejectSymlinkComponents(root, path)
 }
 
 // CreateManagedDirectory creates a restore path through no-follow directory
@@ -106,7 +110,11 @@ func (c *HandoffCleaner) CleanupPlainFolder(ctx context.Context, path string) er
 	if err := c.requireManagedRoot(path); err != nil {
 		return err
 	}
-	if err := rejectSymlinkComponents(path); err != nil {
+	root, err := c.managedRootFor(path)
+	if err != nil {
+		return err
+	}
+	if err := rejectSymlinkComponents(root, path); err != nil {
 		return err
 	}
 	c.logger.Info("cleanup plain folder", zap.String("path", path))
@@ -142,7 +150,11 @@ func (c *HandoffCleaner) CleanupMultiRepoRoot(ctx context.Context, rootPath stri
 	if err := c.requireManagedRoot(rootPath); err != nil {
 		return err
 	}
-	if err := rejectSymlinkComponents(rootPath); err != nil {
+	root, err := c.managedRootFor(rootPath)
+	if err != nil {
+		return err
+	}
+	if err := rejectSymlinkComponents(root, rootPath); err != nil {
 		return err
 	}
 	if len(worktreeIDs) == 0 {
@@ -251,18 +263,19 @@ func resolveExistingPrefix(path string) string {
 // validated directory is replaced by a symlink before a destructive call.
 // Destructive operations accept only stable, non-symlink path components;
 // managed roots themselves are configured paths and are validated separately.
-func rejectSymlinkComponents(path string) error {
+func rejectSymlinkComponents(root, path string) error {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("managed-root guard: inspect path: %w", err)
 	}
-	for current := abs; ; current = filepath.Dir(current) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("managed-root guard: inspect root: %w", err)
+	}
+	for current := abs; isDescendant(rootAbs, current) && current != rootAbs; current = filepath.Dir(current) {
 		info, err := os.Lstat(current)
 		if err == nil && info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("managed-root guard: symlink component %s is not allowed", current)
-		}
-		if current == filepath.Dir(current) {
-			break
 		}
 	}
 	return nil

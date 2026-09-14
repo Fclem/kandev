@@ -388,6 +388,11 @@ func (h *TaskHandlers) wsDeleteTask(ctx context.Context, msg *ws.Message) (*ws.M
 					}
 					h.logger.Warn("task deleted but post-commit housekeeping failed",
 						zap.String("task_id", id), zap.Error(err))
+					return map[string]interface{}{
+						responseKeySuccess:  false,
+						responseKeyPending:  true,
+						dependencyKeyTaskID: id,
+					}, nil
 				}
 				return dto.SuccessResponse{Success: true}, nil
 			}
@@ -414,6 +419,11 @@ func (h *TaskHandlers) wsArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 					}
 					h.logger.Warn("task archived but post-commit housekeeping failed",
 						zap.String("task_id", id), zap.Error(err))
+					return map[string]interface{}{
+						responseKeySuccess:  false,
+						responseKeyPending:  true,
+						dependencyKeyTaskID: id,
+					}, nil
 				}
 				response := map[string]interface{}{responseKeySuccess: true}
 				if out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0 {
@@ -428,7 +438,11 @@ func (h *TaskHandlers) wsArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 				if isCascadePostCommitError(err) {
 					h.logger.Warn("task archived but post-commit task projection failed",
 						zap.String("task_id", id), zap.Error(err))
-					return dto.SuccessResponse{Success: true}, nil
+					return map[string]interface{}{
+						responseKeySuccess:  false,
+						responseKeyPending:  true,
+						dependencyKeyTaskID: id,
+					}, nil
 				}
 				return nil, err
 			}

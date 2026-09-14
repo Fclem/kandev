@@ -433,14 +433,19 @@ func (h *Handlers) handleDeleteTask(ctx context.Context, msg *ws.Message) (*ws.M
 			}
 			h.logger.Warn("task deleted but post-commit housekeeping failed",
 				zap.String("task_id", taskID), zap.Error(err))
+			return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{
+				keySuccess: false,
+				keyPending: true,
+				keyTaskID:  taskID,
+			})
 		}
-		return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})
+		return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{keySuccess: true})
 	}
 	if err := h.taskSvc.DeleteTaskWithLifecycle(ctx, taskID); err != nil {
 		h.logger.Error("failed to delete task", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to delete task", nil)
 	}
-	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})
+	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{keySuccess: true})
 }
 
 func (h *Handlers) handleArchiveTask(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
@@ -470,8 +475,13 @@ func (h *Handlers) handleArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 			}
 			h.logger.Warn("task archived but post-commit housekeeping failed",
 				zap.String("task_id", taskID), zap.Error(err))
+			return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{
+				keySuccess: false,
+				keyPending: true,
+				keyTaskID:  taskID,
+			})
 		}
-		response := map[string]interface{}{"success": true}
+		response := map[string]interface{}{keySuccess: true}
 		if out != nil && len(out.ArchivedTaskIDs) == 0 && len(out.SkippedTaskIDs) > 0 {
 			response["already_archived"] = true
 		}
@@ -484,7 +494,7 @@ func (h *Handlers) handleArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 		// state change.
 		if errors.Is(err, service.ErrTaskAlreadyArchived) {
 			return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{
-				"success":          true,
+				keySuccess:         true,
 				"already_archived": true,
 			})
 		}
@@ -492,12 +502,16 @@ func (h *Handlers) handleArchiveTask(ctx context.Context, msg *ws.Message) (*ws.
 		if errors.As(err, &postCommitErr) {
 			h.logger.Warn("task archived but post-commit task projection failed",
 				zap.String("task_id", taskID), zap.Error(err))
-			return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})
+			return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{
+				keySuccess: false,
+				keyPending: true,
+				keyTaskID:  taskID,
+			})
 		}
 		h.logger.Error("failed to archive task", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to archive task", nil)
 	}
-	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})
+	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{keySuccess: true})
 }
 
 func (h *Handlers) validateAutomationArchiveTarget(ctx context.Context, callerTaskID, targetTaskID string) error {

@@ -37,6 +37,11 @@ const forUpdateClause = " FOR UPDATE"
 // the `tasks` table directly rather than through a join alias.
 const defaultTaskAlias = "tasks"
 
+const (
+	taskWorkspaceModeInheritParent = "inherit_parent"
+	taskWorkspaceModeSharedGroup   = "shared_group"
+)
+
 type taskScanColumn struct {
 	name       string
 	selectExpr func(alias string) string
@@ -3108,8 +3113,11 @@ func (r *Repository) ReparentDirectChildren(ctx context.Context, oldParentID, ne
 func (r *Repository) ReparentDirectChildrenInWorkspace(
 	ctx context.Context, oldParentID, newParentID, workspaceID string,
 ) error {
-	if oldParentID == "" || workspaceID == "" {
+	if oldParentID == "" {
 		return nil
+	}
+	if workspaceID == "" {
+		return errors.New("workspace id is required")
 	}
 	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		UPDATE tasks SET parent_id = ?, updated_at = ?
@@ -3341,9 +3349,9 @@ func (r *Repository) RestoreTaskParentIfUnchanged(
 			return fmt.Errorf("decode task %s metadata during compensation: %w", taskID, err)
 		}
 	}
-	if restoredWorkspaceMode == "inherit_parent" {
+	if restoredWorkspaceMode == taskWorkspaceModeInheritParent {
 		if workspace, ok := metadata["workspace"].(map[string]interface{}); ok &&
-			workspace["mode"] == "shared_group" {
+			workspace["mode"] == taskWorkspaceModeSharedGroup {
 			workspace["mode"] = restoredWorkspaceMode
 		}
 	}
@@ -3741,7 +3749,7 @@ func (r *Repository) ArchiveTaskIfAutoArchiveEligible(
 	if err != nil {
 		return false, err
 	}
-	if err := r.purgeTaskQueueInTx(ctx, tx, id, sessions); err != nil {
+	if err := r.purgeTaskQueueInTx(ctx, tx, id, sessions, false); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {

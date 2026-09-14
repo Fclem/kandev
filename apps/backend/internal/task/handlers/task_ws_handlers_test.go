@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -106,6 +107,10 @@ func (r *wsTaskRepo) ReparentDirectChildrenInWorkspace(_ context.Context, _, _, 
 func (r *wsTaskRepo) ArchiveTask(_ context.Context, id string) error {
 	r.archived = append(r.archived, id)
 	return nil
+}
+func (r *wsTaskRepo) ArchiveTaskIfActiveWithVacatedStep(_ context.Context, id, _ string) (string, bool, error) {
+	r.archived = append(r.archived, id)
+	return "", true, nil
 }
 
 func (r *wsTaskRepo) UpdateTaskState(_ context.Context, id string, _ v1.TaskState) error {
@@ -270,6 +275,34 @@ func TestWSDeleteTaskUsesHandoffCascadeWhenWired(t *testing.T) {
 	require.Equal(t, ws.MessageTypeResponse, resp.Type)
 	require.Equal(t, []string{"task-b"}, repo.cascadeDeleted)
 	require.Empty(t, repo.deleted, "wired handoff deletion must not use the legacy service path")
+}
+
+func TestWSLifecycleReturnsPendingAfterPostCommitHousekeepingFailure(t *testing.T) {
+	for name, tc := range map[string]struct {
+		action string
+		call   func(*TaskHandlers, context.Context, *ws.Message) (*ws.Message, error)
+	}{
+		"delete":  {action: ws.ActionTaskDelete, call: (*TaskHandlers).wsDeleteTask},
+		"archive": {action: ws.ActionTaskArchive, call: (*TaskHandlers).wsArchiveTask},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &wsTaskRepo{}
+			h := newWSTaskHandlers(t, repo)
+			handoff := service.NewHandoffService(repo, nil, nil, nil, nil, h.logger)
+			handoff.SetTaskResourceCleaner(&postCommitCleanupFailure{err: fmt.Errorf("cleanup unavailable")})
+			h.SetHandoffService(handoff)
+
+			resp, err := tc.call(h, asUser("user-b"), wsWorkflowRequest(t, tc.action,
+				map[string]any{"id": "task-b"}))
+			require.NoError(t, err)
+			require.Equal(t, ws.MessageTypeResponse, resp.Type)
+			var payload map[string]any
+			require.NoError(t, json.Unmarshal(resp.Payload, &payload))
+			require.Equal(t, false, payload["success"])
+			require.Equal(t, true, payload["pending"])
+			require.Equal(t, "task-b", payload["task_id"])
+		})
+	}
 }
 
 // TestWSCreateTaskDeniesForeignWorkspace stops a caller from planting a task in

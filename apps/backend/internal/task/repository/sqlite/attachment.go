@@ -630,11 +630,19 @@ func (r *Repository) PrepareClaimedMessageAttachmentsForRelease(
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	args := []interface{}{ownerID, taskID, sessionID, models.AttachmentStateClaimed}
 	args = append(args, idsToInterfaces(ids)...)
+	queueTablePresent, err := r.tableExistsContext(ctx, "queued_messages")
+	if err != nil {
+		return nil, fmt.Errorf("probe queue attachment references: %w", err)
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin claimed attachment release preparation: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	referenced, err := referencedAttachmentIDsTx(ctx, r, tx, taskID, sessionID, queueTablePresent)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := tx.QueryxContext(ctx, tx.Rebind(`
 		SELECT `+attachmentSelectColumns+` FROM task_message_attachments
 		WHERE owner_id = ? AND task_id = ? AND session_id = ? AND state = ?
@@ -649,6 +657,9 @@ func (r *Repository) PrepareClaimedMessageAttachmentsForRelease(
 		if err := rows.StructScan(attachment); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("scan claimed attachment for release preparation: %w", err)
+		}
+		if _, keep := referenced[attachment.ID]; keep {
+			continue
 		}
 		released = append(released, attachment)
 	}

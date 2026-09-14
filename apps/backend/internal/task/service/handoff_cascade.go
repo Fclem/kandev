@@ -168,15 +168,18 @@ func (s *HandoffService) evaluateWorkspaceGroupCleanup(ctx context.Context, grou
 // cleanup state machine can short-circuit. Missing session evidence is an
 // error, never proof of inactivity.
 func (s *HandoffService) hasActiveExecutionsForGroup(ctx context.Context, groupID string) (bool, error) {
-	if s.sessions == nil {
-		return false, errors.New("session reader unavailable for workspace cleanup")
-	}
 	if s.wsGroups == nil {
 		return false, errors.New("workspace group repository unavailable for workspace cleanup")
 	}
 	all, err := s.wsGroups.ListWorkspaceGroupMembers(ctx, groupID)
 	if err != nil {
 		return false, err
+	}
+	if len(all) == 0 {
+		return false, nil
+	}
+	if s.sessions == nil {
+		return false, errors.New("session reader unavailable for workspace cleanup")
 	}
 	for _, m := range all {
 		sessions, err := s.sessions.ListTaskSessions(ctx, m.TaskID)

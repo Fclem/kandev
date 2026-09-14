@@ -3426,6 +3426,9 @@ func (s *Service) performTaskCleanup(
 			return append(errs, cause)
 		}
 		if err := s.executors.DeleteExecutorRunningBySessionID(ctx, sessionID); err != nil {
+			if errors.Is(err, models.ErrExecutorRunningNotFound) {
+				continue
+			}
 			s.logger.Warn("failed to delete executor runtime for session",
 				zap.String("task_id", taskID),
 				zap.String("session_id", sessionID),

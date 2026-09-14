@@ -5,9 +5,11 @@ import { IconChevronDown, IconChevronUp, IconMessageQuestion } from "@tabler/ico
 import { Button } from "@kandev/ui/button";
 import { useTranslation } from "react-i18next";
 import { ClarificationInputOverlay } from "./clarification-input-overlay";
+import { useComposerDisclosureContext } from "./composer-disclosure";
 import { ResizeHandle } from "./resize-handle";
 import { useResizableClarificationOverlay } from "@/hooks/use-resizable-clarification-overlay";
 import type { ClarificationRequestMetadata, Message } from "@/lib/types/http";
+import type { ClarificationOutcome } from "@/hooks/domains/session/use-clarification-group";
 
 type ClarificationPanelSectionProps = {
   pending: boolean;
@@ -26,6 +28,9 @@ type ClarificationPanelSectionProps = {
    * its own visible ceiling.
    */
   maxHeightVh: number;
+  // Additive: forwarded straight through to ClarificationInputOverlay.
+  // Existing hosts (task chat, Quick Chat) leave this unset.
+  onOutcome?: (outcome: ClarificationOutcome) => void;
 };
 function pendingIdFromMessages(messages: readonly Message[] | null | undefined): string | null {
   const first = messages?.[0];
@@ -62,8 +67,10 @@ export function ClarificationPanelSection({
   shortcutScopeRef,
   agentDisconnected = false,
   maxHeightVh,
+  onOutcome,
 }: ClarificationPanelSectionProps) {
   const { t } = useTranslation();
+  const disclosure = useComposerDisclosureContext();
   const pendingId = pendingIdFromMessages(messages);
   const [collapsed, setCollapsed] = useCollapsedForBundle(pendingId);
   const contentId = useId();
@@ -87,6 +94,67 @@ export function ClarificationPanelSection({
 
   const questionCount = messages?.length ?? 0;
   const actionLabel = collapsed ? t("chat:expandClarification") : t("chat:collapseClarification");
+
+  return (
+    <ClarificationPanelContent
+      actionLabel={actionLabel}
+      agentDisconnected={agentDisconnected}
+      collapsed={collapsed}
+      containerRef={containerRef}
+      contentId={contentId}
+      disclosure={disclosure}
+      height={height}
+      maxHeightVh={maxHeightVh}
+      messages={messages}
+      onCollapse={() => setCollapsed(true)}
+      onOutcome={onOutcome}
+      onResolved={onResolved}
+      onToggleCollapse={() => setCollapsed((current) => !current)}
+      questionCount={questionCount}
+      resizeHandleProps={resizeHandleProps}
+      shortcutScopeRef={shortcutScopeRef}
+    />
+  );
+}
+
+type ClarificationPanelContentProps = {
+  actionLabel: string;
+  agentDisconnected: boolean;
+  collapsed: boolean;
+  containerRef: RefObject<HTMLDivElement | null>;
+  contentId: string;
+  disclosure: boolean;
+  height: number | null;
+  maxHeightVh: number;
+  messages: readonly Message[] | null | undefined;
+  onCollapse: () => void;
+  onOutcome?: (outcome: ClarificationOutcome) => void;
+  onResolved: () => void;
+  onToggleCollapse: () => void;
+  questionCount: number;
+  resizeHandleProps: Parameters<typeof ResizeHandle>[0];
+  shortcutScopeRef: RefObject<HTMLElement | null>;
+};
+
+function ClarificationPanelContent({
+  actionLabel,
+  agentDisconnected,
+  collapsed,
+  containerRef,
+  contentId,
+  disclosure,
+  height,
+  maxHeightVh,
+  messages,
+  onCollapse,
+  onOutcome,
+  onResolved,
+  onToggleCollapse,
+  questionCount,
+  resizeHandleProps,
+  shortcutScopeRef,
+}: ClarificationPanelContentProps) {
+  const { t } = useTranslation();
   const compact = collapsed || questionCount === 0;
 
   return (
@@ -101,7 +169,12 @@ export function ClarificationPanelSection({
         style={
           compact
             ? undefined
-            : { maxHeight: `${maxHeightVh}vh`, ...(height !== null ? { height } : {}) }
+            : {
+                maxHeight: `${maxHeightVh}vh`,
+                // Threads owns the outer vertical scroll boundary in its bounded footer.
+                overscrollBehaviorY: disclosure ? "auto" : undefined,
+                ...(height !== null ? { height } : {}),
+              }
         }
       >
         {compact && (
@@ -128,7 +201,7 @@ export function ClarificationPanelSection({
               aria-controls={contentId}
               title={actionLabel}
               data-testid="clarification-collapse-toggle"
-              onClick={() => setCollapsed((current) => !current)}
+              onClick={onToggleCollapse}
             >
               {collapsed ? (
                 <IconChevronUp className="h-4 w-4" />
@@ -146,11 +219,12 @@ export function ClarificationPanelSection({
           <ClarificationInputOverlay
             messages={messages}
             onResolved={onResolved}
+            onOutcome={onOutcome}
             shortcutScopeRef={shortcutScopeRef}
             keyboardShortcutsEnabled={!collapsed}
             agentDisconnected={agentDisconnected}
-            onDismiss={() => setCollapsed(true)}
-            onCollapse={() => setCollapsed(true)}
+            onDismiss={onCollapse}
+            onCollapse={onCollapse}
             collapseContentId={contentId}
           />
         </div>

@@ -59,7 +59,7 @@ func (r *authzDeleteRepo) archivedTaskIDs() []string {
 	return ids
 }
 
-func TestHTTPTaskLifecycleReturnsSuccessAfterPostCommitHousekeepingFailure(t *testing.T) {
+func TestHTTPTaskLifecycleReturnsPendingAfterPostCommitHousekeepingFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		call func(*TaskHandlers, *gin.Context)
@@ -78,8 +78,8 @@ func TestHTTPTaskLifecycleReturnsSuccessAfterPostCommitHousekeepingFailure(t *te
 			c, rec := authzDeleteRequest(t, "user-b", "task-b")
 			tc.call(h, c)
 
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			require.JSONEq(t, `{"success":true}`, rec.Body.String())
+			require.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+			require.JSONEq(t, `{"success":false,"pending":true,"task_id":"task-b"}`, rec.Body.String())
 			if tc.name == "delete" {
 				require.Equal(t, tc.want, repo.deletes())
 			} else {

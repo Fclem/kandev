@@ -1145,7 +1145,7 @@ func TestTaskResourceCleanupRetriesCompletionPersistenceFailure(t *testing.T) {
 		t.Fatal("retry_wait cleanup has no next attempt time")
 	}
 }
-func TestCancelPreparedTaskResourceCleanupRetainsExpiredDeadline(t *testing.T) {
+func TestCancelPreparedTaskResourceCleanupIgnoresExpiredDeadline(t *testing.T) {
 	taskSvc, repo := setupOfficeTest(t)
 	operationID := "cascade_cancel:expired-deadline"
 	if err := taskSvc.PrepareTaskResourceCleanup(context.Background(), "task-expired-deadline",
@@ -1156,15 +1156,15 @@ func TestCancelPreparedTaskResourceCleanupRetainsExpiredDeadline(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Millisecond))
 	defer cancel()
 	err := taskSvc.CancelPreparedTaskResourceCleanup(ctx, operationID)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("CancelPreparedTaskResourceCleanup error = %v, want deadline exceeded", err)
+	if err != nil {
+		t.Fatalf("CancelPreparedTaskResourceCleanup error = %v, want nil", err)
 	}
 	job, err := repo.GetTaskResourceCleanupJobByOperationID(context.Background(), operationID)
 	if err != nil {
 		t.Fatalf("GetTaskResourceCleanupJobByOperationID: %v", err)
 	}
-	if job.State != models.TaskResourceCleanupStatePrepared {
-		t.Fatalf("cleanup state = %q, want prepared after expired transition", job.State)
+	if job.State != models.TaskResourceCleanupStateCancelled {
+		t.Fatalf("cleanup state = %q, want cancelled after expired transition", job.State)
 	}
 }
 func TestPreparedCascadeCleanupSnapshotPersistsWorktreeTaskDirNames(t *testing.T) {

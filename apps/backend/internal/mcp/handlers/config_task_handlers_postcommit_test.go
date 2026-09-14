@@ -33,7 +33,7 @@ func (c *mcpPostCommitCleanupFailure) CancelPreparedTaskResourceCleanup(context.
 	return nil
 }
 
-func TestMCPTaskLifecycleReturnsSuccessAfterPostCommitHousekeepingFailure(t *testing.T) {
+func TestMCPTaskLifecycleReturnsPendingAfterPostCommitHousekeepingFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		call func(*Handlers, context.Context, *ws.Message) (*ws.Message, error)
@@ -66,7 +66,7 @@ func TestMCPTaskLifecycleReturnsSuccessAfterPostCommitHousekeepingFailure(t *tes
 			resp, err := tc.call(h, ctx, msg)
 			require.NoError(t, err)
 			require.Equal(t, ws.MessageTypeResponse, resp.Type)
-			require.JSONEq(t, `{"success":true}`, string(resp.Payload))
+			require.JSONEq(t, `{"success":false,"pending":true,"task_id":"`+taskID+`"}`, string(resp.Payload))
 		})
 	}
 }

@@ -47,8 +47,6 @@ acceptance_criteria:
   - AC-TASKS-RUNTIME-CLEANUP-001.47
   - AC-TASKS-RUNTIME-CLEANUP-001.49
   - AC-TASKS-RUNTIME-CLEANUP-001.52
-verification_coverage:
-  - "Verification commands may cover criteria owned by other work orders; they do not transfer ownership."
 system_design:
   - ../../specs/tasks/system-design/runtime-cleanup.md
   - ../../specs/tasks/system-design/durable-archive-cascades.md

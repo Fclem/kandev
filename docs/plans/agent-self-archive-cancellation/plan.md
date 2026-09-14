@@ -70,8 +70,8 @@ intentionally absent from this package's authoritative requirements,
 source inventory, and traceability. This package owns only incremental
 detached-cascade integration, shared-ledger replay, lock-order, dialect, and
 route/provenance verification; it does not supersede or re-implement completed
-plans. `verification_coverage` and command blocks record cross-wave checks
-without transferring acceptance ownership.
+plans. Command blocks record cross-wave checks without transferring acceptance
+ownership.
 
 ## Detachment traceability
 

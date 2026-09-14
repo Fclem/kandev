@@ -200,6 +200,11 @@ Each work order uses RED-GREEN-REFACTOR. Backend tests cover auth, capability, a
 
 ## Related decisions
 
+Recovery details are in [Conversation recovery](conversation-recovery.md).
+The [PR #3588 repair package](../../../plans/pr-3588-conversation-recovery/plan.md)
+tracks replay grants, core snapshot recovery, and continuation expiry.
+This supplement does not approve the broader durable transport decision.
+
 - [ADR 0047: Plugins read conversation content via a capability-gated Host RPC](../../../decisions/0047-plugin-host-conversation-reads.md)
 - [ADR: Browser plugin conversation facade](../../../decisions/2026-09-06-browser-plugin-conversation-facade.md)
 - [ADR: Plugin task panel contributions](../../../decisions/2026-08-01-plugin-task-panel-contributions.md)

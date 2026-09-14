@@ -61,6 +61,10 @@ Add a test-only external-style fixture plugin that implements prompt history thr
 
 ## Verification
 
+The [recovery E2E matrix](../pr-3588-conversation-recovery/plan.md#e2e-tests)
+adds replay, connected core recovery, and expired continuation cases.
+Those cases remain pending and supplement the original parity evidence here.
+
 ```bash
 make -C apps/backend build
 cd apps/web && pnpm run build:e2e

@@ -18,7 +18,12 @@ export type CoreSessionStream = {
   ready: boolean;
   pendingEvents: RawSessionEvent[];
   resumeToken?: string;
-  poisonRecovery?: Promise<void>;
+  poisonRecovery?: Promise<boolean | undefined>;
+  projectionPaused: boolean;
+  needsHydration: boolean;
+  recoveryGeneration: number;
+  recoveryWatermark?: number;
+  recoveryHydration?: Promise<boolean>;
 };
 
 const ORDERED_EVENT_ACTIONS: Readonly<Record<string, BackendMessageType>> = {

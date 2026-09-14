@@ -329,9 +329,99 @@ describe("plugin conversation Host facade", () => {
       transport.listener?.(event(2, "message.deleted", { message_id: "message-1" }));
       transport.listener?.(event(3, SESSION_REMOVED_EVENT, {}, null));
     });
-    expect(screen.getByTestId("messages").textContent).toBe("");
+    expect(screen.getByTestId("messages").textContent).toBe("updated");
     expect(screen.getByTestId("removed").textContent).toBe("true");
     expect(currentState?.hasMore).toBe(false);
+  });
+
+  it("recovers an expired continuation without remount and continues the load", async () => {
+    let subscribeCount = 0;
+    transport.request.mockImplementation((action: string) => {
+      if (action === SESSION_SUBSCRIBE_ACTION) {
+        subscribeCount += 1;
+        return Promise.resolve({
+          success: true,
+          snapshot_token: `snapshot-${subscribeCount}`,
+          resume_token: `resume-${subscribeCount}`,
+          consumer_id: `consumer-${subscribeCount}`,
+          event_watermark: 0,
+          expires_at: subscribeCount === 1 ? "2020-01-01T00:00:00Z" : FAR_FUTURE_EXPIRY,
+          result: "fresh",
+        });
+      }
+      if (action === SESSION_ACK_ACTION) {
+        return Promise.resolve({ success: true, resume_token: "resume-next" });
+      }
+      return Promise.resolve({ success: true });
+    });
+
+    let messagePages = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(BINDING_PATH_SUFFIX)) {
+        return Promise.resolve(
+          response({ bindingToken: "binding-1", generation: 7, expiresAt: FAR_FUTURE_EXPIRY }),
+        );
+      }
+      if (url.endsWith("/conversation/continuation/renew")) {
+        return Promise.resolve(
+          response({ error: { code: "invalid_query", message: "expired", retryable: false } }, 400),
+        );
+      }
+      messagePages += 1;
+      const cursor = new URL(url).searchParams.get("cursor");
+      if (!cursor) {
+        return Promise.resolve(
+          response({
+            messages: [
+              {
+                id: "message-newest",
+                taskId: "task-1",
+                sessionId: "session-1",
+                authorType: "user",
+                type: "message",
+                content: `newest-page-${messagePages}`,
+                createdAt: MESSAGE_CREATED_AT,
+                updatedAt: MESSAGE_CREATED_AT,
+              },
+            ],
+            hasMore: true,
+            cursor: messagePages === 1 ? "cursor-expired" : "cursor-fresh",
+          }),
+        );
+      }
+      expect(cursor).toBe("cursor-fresh");
+      return Promise.resolve(
+        response({
+          messages: [
+            {
+              id: "message-older",
+              taskId: "task-1",
+              sessionId: "session-1",
+              authorType: "user",
+              type: "message",
+              content: "older-page",
+              createdAt: "2026-09-07T11:59:00Z",
+              updatedAt: "2026-09-07T11:59:00Z",
+            },
+          ],
+          hasMore: false,
+          cursor: null,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.hasMore).toBe(true));
+    await expect(currentState?.loadMore()).resolves.toBe(1);
+
+    expect(subscribeCount).toBe(2);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/conversation/continuation/renew"),
+      expect.anything(),
+    );
+    await waitFor(() => expect(screen.getByTestId("messages").textContent).toContain("older-page"));
   });
 });
 
@@ -555,6 +645,32 @@ describe("strict ordered event validation poisons instead of projecting", () => 
     });
     expect(screen.getByTestId("removed").textContent).toBe("true");
     expect(screen.getByTestId("messages").textContent).toBe("");
+  });
+
+  it("retains projected messages when session removal follows message deletions", async () => {
+    stubEmptySnapshot();
+    renderHarness("session-1");
+    await waitFor(() => expect(currentState?.hydrated).toBe(true));
+
+    act(() => {
+      transport.listener?.(
+        event(1, MESSAGE_ADDED_EVENT, {
+          message_id: "message-terminal",
+          content: "retained after removal",
+        }),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("messages").textContent).toBe("retained after removal"),
+    );
+
+    act(() => {
+      transport.listener?.(event(2, "message.deleted", { message_id: "message-terminal" }));
+      transport.listener?.(event(3, SESSION_REMOVED_EVENT, {}, null));
+    });
+
+    expect(screen.getByTestId("messages").textContent).toBe("retained after removal");
+    expect(screen.getByTestId("removed").textContent).toBe("true");
   });
 
   it("recovers through a durable rebind after a message with a missing required id", async () => {
@@ -1026,6 +1142,39 @@ describe("ordered turns convergence", () => {
     expect(currentTurnsState?.turns).toHaveLength(0);
     expect(currentTurnsState?.hydrated).toBe(true);
     expect(screen.getByTestId("turns-removed").textContent).toBe("false");
+  });
+
+  it("retains projected turns when session removal follows turn deletions", async () => {
+    stubTurnsFetch();
+    renderTurnsHarness("session-1");
+    await waitFor(() => expect(currentTurnsState?.hydrated).toBe(true));
+
+    act(() => {
+      transport.listener?.(
+        event(1, "session.turn.started", {
+          id: "turn-terminal",
+          started_at: MESSAGE_CREATED_AT,
+          updated_at: MESSAGE_CREATED_AT,
+        }),
+      );
+      transport.listener?.(
+        event(2, "session.turn.completed", {
+          id: "turn-terminal",
+          started_at: MESSAGE_CREATED_AT,
+          completed_at: MESSAGE_CREATED_AT,
+          updated_at: MESSAGE_CREATED_AT,
+        }),
+      );
+    });
+    await waitFor(() => expect(currentTurnsState?.turns).toHaveLength(1));
+
+    act(() => {
+      transport.listener?.(event(3, "session.turn.removed", { id: "turn-terminal" }));
+      transport.listener?.(event(4, SESSION_REMOVED_EVENT, {}, null));
+    });
+
+    expect(currentTurnsState?.turns.map((turn) => turn.id)).toEqual(["turn-terminal"]);
+    expect(screen.getByTestId("turns-removed").textContent).toBe("true");
   });
 
   it.each([

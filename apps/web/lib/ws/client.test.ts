@@ -1,4 +1,4 @@
-/* eslint-disable sonarjs/no-duplicate-string -- Transport fixtures repeat wire literals by contract. */
+/* eslint-disable max-lines, max-lines-per-function, sonarjs/no-duplicate-string -- Ordered transport fixtures keep the full recovery handshake together. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WebSocketClient, WebSocketRequestError, WebSocketRequestTimeoutError } from "./client";
@@ -660,6 +660,244 @@ describe("ordered core session validation", () => {
     expect(socket.sent.slice(sentBefore).some((frame) => frame.action === "session.ack")).toBe(
       false,
     );
+    subscription.unsubscribe();
+  });
+
+  it("keeps core projection paused until recovery hydration completes", async () => {
+    const { client, socket } = connectClient();
+    const handler = vi.fn();
+    client.on("session.message.added", handler);
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledgeWithResumeToken(socket, sessionSubscribeRequest(socket, 1), "resume-core");
+    await subscription.ready;
+
+    let resolveRecovery!: (repaired: boolean) => void;
+    let recoveryCompleted = false;
+    const recovery = new Promise<boolean>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    const registerRecovery = (
+      client as unknown as {
+        registerCoreSessionRecovery: (
+          sessionId: string,
+          handler: () => Promise<boolean>,
+        ) => () => void;
+      }
+    ).registerCoreSessionRecovery;
+    const unregisterRecovery = registerRecovery.call(client, "sess-1", () =>
+      recovery.then((repaired) => {
+        recoveryCompleted = true;
+        return repaired;
+      }),
+    );
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 2,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "poison-1",
+      payload: { type: "message.added", session_id: "sess-1", message_id: "poison" },
+    });
+    const recoveryRequest = sessionSubscribeRequest(socket, 2);
+    socket.receive({
+      id: recoveryRequest.id,
+      type: "response",
+      payload: {
+        success: true,
+        session_id: "sess-1",
+        wire_id: coreRequestPayload(recoveryRequest)?.wire_id,
+        result: "invalid_resume",
+        event_watermark: 3,
+        snapshot_cutoff: 3,
+        snapshot_token: "snapshot-recovery",
+        resume_token: "resume-recovery",
+        expires_at: "2099-01-01T00:00:00Z",
+      },
+    });
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 3,
+      event_id: "event-3",
+      payload: {
+        type: "message.added",
+        session_id: "sess-1",
+        task_id: "task-1",
+        message_id: "message-3",
+        author_type: "user",
+        content: "after snapshot cutoff",
+        created_at: "2026-09-07T12:00:00Z",
+      },
+    });
+    expect(handler).not.toHaveBeenCalled();
+
+    resolveRecovery(true);
+    await vi.waitFor(() => expect(recoveryCompleted).toBe(true));
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 4,
+      event_id: "event-4",
+      payload: {
+        type: "message.added",
+        session_id: "sess-1",
+        task_id: "task-1",
+        message_id: "message-4",
+        author_type: "user",
+        content: "after recovery",
+        created_at: "2026-09-07T12:01:00Z",
+      },
+    });
+    expect(handler).toHaveBeenCalledTimes(1);
+    unregisterRecovery();
+    subscription.unsubscribe();
+  });
+
+  it("keeps failed core recovery paused until an explicit retry succeeds", async () => {
+    const { client, socket } = connectClient();
+    const projected = vi.fn();
+    client.on("session.message.added", projected);
+    const recovery = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const unregister = client.registerCoreSessionRecovery("sess-1", recovery);
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledgeWithResumeToken(socket, sessionSubscribeRequest(socket, 1), "resume-core");
+    await subscription.ready;
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 2,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "poison-1",
+      payload: { type: "message.added", session_id: "sess-1", message_id: "poison" },
+    });
+    const recoveryRequest = sessionSubscribeRequest(socket, 2);
+    socket.receive({
+      id: recoveryRequest.id,
+      type: "response",
+      payload: {
+        success: true,
+        session_id: "sess-1",
+        wire_id: coreRequestPayload(recoveryRequest)?.wire_id,
+        result: "invalid_resume",
+        event_watermark: 1,
+        snapshot_cutoff: 1,
+        snapshot_token: "snapshot-recovery",
+        resume_token: "resume-recovery",
+        expires_at: "2099-01-01T00:00:00Z",
+      },
+    });
+    await vi.waitFor(() => expect(recovery).toHaveBeenCalledTimes(1));
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 2,
+      event_id: "event-2",
+      payload: {
+        type: "message.added",
+        session_id: "sess-1",
+        task_id: "task-1",
+        message_id: "message-2",
+        author_type: "user",
+        content: "held until repair",
+        created_at: "2026-09-07T12:00:00Z",
+      },
+    });
+    expect(projected).not.toHaveBeenCalled();
+
+    const retry = client.retryCoreSessionRecovery("sess-1");
+    expect(retry).toBeDefined();
+    await expect(retry).resolves.toBe(true);
+    expect(projected).toHaveBeenCalledTimes(1);
+    unregister();
+    subscription.unsubscribe();
+  });
+
+  it("keeps a recovery generation dirty until a later core owner hydrates it", async () => {
+    const { client, socket } = connectClient();
+    const projected = vi.fn();
+    client.on("session.message.added", projected);
+    const subscription = client.subscribeSessionWithReady("sess-1");
+    acknowledge(socket, sessionSubscribeRequest(socket));
+    await Promise.resolve();
+    acknowledgeWithResumeToken(socket, sessionSubscribeRequest(socket, 1), "resume-core");
+    await subscription.ready;
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 2,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 1,
+      event_id: "poison-1",
+      payload: { type: "message.added", session_id: "sess-1", message_id: "poison" },
+    });
+    const recoveryRequest = sessionSubscribeRequest(socket, 2);
+    socket.receive({
+      id: recoveryRequest.id,
+      type: "response",
+      payload: {
+        success: true,
+        session_id: "sess-1",
+        wire_id: coreRequestPayload(recoveryRequest)?.wire_id,
+        result: "invalid_resume",
+        event_watermark: 1,
+        snapshot_cutoff: 1,
+        snapshot_token: "snapshot-recovery",
+        resume_token: "resume-recovery",
+        expires_at: "2099-01-01T00:00:00Z",
+      },
+    });
+    await Promise.resolve();
+
+    socket.receive({
+      type: "session.event",
+      protocol_version: 1,
+      event_type: "message.added",
+      session_id: "sess-1",
+      task_id: "task-1",
+      sequence: 2,
+      event_id: "event-2",
+      payload: {
+        type: "message.added",
+        session_id: "sess-1",
+        task_id: "task-1",
+        message_id: "message-2",
+        author_type: "user",
+        content: "wait for owner",
+        created_at: "2026-09-07T12:00:00Z",
+      },
+    });
+    expect(projected).not.toHaveBeenCalled();
+
+    const unregister = client.registerCoreSessionRecovery("sess-1", async () => true);
+    await vi.waitFor(() => expect(projected).toHaveBeenCalledTimes(1));
+    unregister();
     subscription.unsubscribe();
   });
 });

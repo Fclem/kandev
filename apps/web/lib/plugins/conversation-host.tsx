@@ -93,6 +93,25 @@ function resolveTaskId(
 
 type MessagesState = Omit<PluginSessionMessagesState, "loadMore" | "retry">;
 type MessagesSetter = React.Dispatch<React.SetStateAction<MessagesState>>;
+
+// Session deletion emits child tombstones before its terminal marker. Keep
+// rows removed by that ordered teardown so the terminal view can retain the
+// committed conversation state.
+function restoreDeletedMessages(
+  current: readonly PluginConversationMessage[],
+  deleted: ReadonlyMap<string, PluginConversationMessage>,
+  sort: "asc" | "desc",
+): PluginConversationMessage[] {
+  const messages = [...current];
+  const currentIds = new Set(messages.map((message) => message.id));
+  for (const message of deleted.values()) {
+    if (currentIds.has(message.id)) continue;
+    messages.push(message);
+  }
+  messages.sort((left, right) => compareConversationMessages(left, right, sort));
+  return messages;
+}
+
 function useOrderedMessageEvents({
   scope,
   sessionId,
@@ -104,6 +123,7 @@ function useOrderedMessageEvents({
   setState,
   cursorRef,
   messagesRef,
+  deletedMessagesRef,
 }: {
   scope: ConversationScope | null;
   sessionId: string | null;
@@ -115,13 +135,22 @@ function useOrderedMessageEvents({
   setState: MessagesSetter;
   cursorRef: React.MutableRefObject<string | null>;
   messagesRef: React.MutableRefObject<readonly PluginConversationMessage[]>;
+  deletedMessagesRef: React.MutableRefObject<Map<string, PluginConversationMessage>>;
 }) {
   React.useEffect(() => {
     if (!scope || !sessionId) return;
     return scope.subscribe(
       (event) => {
         if (event.event_type === "session.removed") {
-          setState((current) => ({ ...current, removed: true, hasMore: false, loading: false }));
+          setState((current) => {
+            const messages = restoreDeletedMessages(
+              current.messages,
+              deletedMessagesRef.current,
+              sort,
+            );
+            messagesRef.current = messages;
+            return { ...current, messages, removed: true, hasMore: false, loading: false };
+          });
           cursorRef.current = null;
           return true;
         }
@@ -132,6 +161,8 @@ function useOrderedMessageEvents({
         if (!messageId) return false;
         if (event.event_type === "message.deleted") {
           setState((current) => {
+            const deleted = current.messages.find((message) => message.id === messageId);
+            if (deleted) deletedMessagesRef.current.set(messageId, deleted);
             const messages = current.messages.filter((message) => message.id !== messageId);
             messagesRef.current = messages;
             return { ...current, messages };
@@ -141,6 +172,7 @@ function useOrderedMessageEvents({
         const message = messageFromEvent(event);
         if (!message) return false;
         if (authorTypes && !authorTypes.includes(message.authorType)) return true;
+        deletedMessagesRef.current.delete(message.id);
         setState((current) => {
           const messages = current.messages.filter((item) => item.id !== message.id);
           messages.push(message);
@@ -157,6 +189,7 @@ function useOrderedMessageEvents({
     authorTypes,
     authorsKey,
     cursorRef,
+    deletedMessagesRef,
     messagesRef,
     scope,
     sessionId,
@@ -177,6 +210,7 @@ function useInitialMessagePage({
   cursorRef,
   loadMoreRef,
   messagesRef,
+  deletedMessagesRef,
   requestRevisionRef,
   snapshotKey,
 }: {
@@ -189,6 +223,7 @@ function useInitialMessagePage({
   cursorRef: React.MutableRefObject<string | null>;
   loadMoreRef: React.MutableRefObject<Promise<number> | null>;
   messagesRef: React.MutableRefObject<readonly PluginConversationMessage[]>;
+  deletedMessagesRef: React.MutableRefObject<Map<string, PluginConversationMessage>>;
   requestRevisionRef: React.MutableRefObject<number>;
   snapshotKey: string;
 }) {
@@ -197,6 +232,7 @@ function useInitialMessagePage({
     cursorRef.current = null;
     loadMoreRef.current = null;
     messagesRef.current = [];
+    deletedMessagesRef.current.clear();
     if (!scope || !sessionId) {
       setState({ ...EMPTY_MESSAGES, messages: [] });
       return;
@@ -224,6 +260,7 @@ function useInitialMessagePage({
     });
   }, [
     cursorRef,
+    deletedMessagesRef,
     error,
     loadMoreRef,
     loadPage,
@@ -363,12 +400,18 @@ function useMessagePageLoader({
       invalidateFreshMessagesSnapshot(scope, snapshotKey);
       const continuationSnapshotInvalidated = append;
       try {
-        const capturedRevision = requestRevisionRef.current;
+        let capturedRevision = requestRevisionRef.current;
         let binding = await scope.ready();
         let pageCursor = cursor;
         if (pageCursor) {
           const renewal = await scope.renewContinuation(pageCursor, snapshotKey);
-          pageCursor = renewal.cursor;
+          if (renewal.recovered) {
+            capturedRevision = requestRevisionRef.current;
+            pageCursor = cursorRef.current;
+            if (!pageCursor) return 0;
+          } else {
+            pageCursor = renewal.cursor;
+          }
           binding = renewal.binding;
         }
         const page = await fetchMessagePage({
@@ -436,7 +479,7 @@ function useMessageRebind({
   loadPage,
   setState,
   cursorRef,
-  loadMoreRef,
+  deletedMessagesRef,
   requestRevisionRef,
 }: {
   scope: ConversationScope | null;
@@ -445,26 +488,38 @@ function useMessageRebind({
   loadPage: (cursor: string | null, append: boolean) => Promise<number>;
   setState: MessagesSetter;
   cursorRef: React.MutableRefObject<string | null>;
-  loadMoreRef: React.MutableRefObject<Promise<number> | null>;
+  deletedMessagesRef: React.MutableRefObject<Map<string, PluginConversationMessage>>;
   requestRevisionRef: React.MutableRefObject<number>;
 }) {
   React.useEffect(() => {
     if (!scope || !sessionId || error) return;
-    return scope.subscribeRebind(() => {
+    return scope.subscribeRebind(async () => {
       requestRevisionRef.current += 1;
       cursorRef.current = null;
-      loadMoreRef.current = null;
+      deletedMessagesRef.current.clear();
       setState((current) => ({ ...current, loading: true, loadingMore: false, error: null }));
-      void loadPage(null, false).catch((cause: unknown) => {
+      try {
+        await loadPage(null, false);
+      } catch (cause) {
         if (scope.signal.aborted || scope.isTerminal()) return;
         setState((current) => ({
           ...current,
           loading: false,
           error: conversationError(cause),
         }));
-      });
+        throw cause;
+      }
     });
-  }, [error, loadMoreRef, loadPage, requestRevisionRef, scope, sessionId, setState, cursorRef]);
+  }, [
+    cursorRef,
+    deletedMessagesRef,
+    error,
+    loadPage,
+    requestRevisionRef,
+    scope,
+    sessionId,
+    setState,
+  ]);
 }
 
 function useMessageControls({
@@ -524,6 +579,7 @@ function useSessionMessages(query: PluginSessionMessagesQuery): PluginSessionMes
   const cursorRef = React.useRef<string | null>(null);
   const loadMoreRef = React.useRef<Promise<number> | null>(null);
   const messagesRef = React.useRef<readonly PluginConversationMessage[]>([]);
+  const deletedMessagesRef = React.useRef(new Map<string, PluginConversationMessage>());
   const requestRevisionRef = React.useRef(0);
   const resolved = React.useMemo(
     () => (scope ? resolveTaskId(scope, query.taskId) : { taskId: null, error: null }),
@@ -559,6 +615,7 @@ function useSessionMessages(query: PluginSessionMessagesQuery): PluginSessionMes
     setState,
     cursorRef,
     messagesRef,
+    deletedMessagesRef,
   });
 
   useInitialMessagePage({
@@ -571,6 +628,7 @@ function useSessionMessages(query: PluginSessionMessagesQuery): PluginSessionMes
     cursorRef,
     loadMoreRef,
     messagesRef,
+    deletedMessagesRef,
     requestRevisionRef,
     snapshotKey,
   });
@@ -582,7 +640,7 @@ function useSessionMessages(query: PluginSessionMessagesQuery): PluginSessionMes
     loadPage,
     setState,
     cursorRef,
-    loadMoreRef,
+    deletedMessagesRef,
     requestRevisionRef,
   });
   return useMessageControls({
@@ -600,6 +658,28 @@ function useSessionMessages(query: PluginSessionMessagesQuery): PluginSessionMes
 type TurnsState = Omit<PluginSessionTurnsState, "retry">;
 type TurnsSetter = React.Dispatch<React.SetStateAction<TurnsState>>;
 
+function compareConversationTurns(
+  left: PluginConversationTurn,
+  right: PluginConversationTurn,
+): number {
+  const started = left.startedAt.localeCompare(right.startedAt);
+  return started === 0 ? left.id.localeCompare(right.id) : started;
+}
+
+function restoreDeletedTurns(
+  current: readonly PluginConversationTurn[],
+  deleted: ReadonlyMap<string, PluginConversationTurn>,
+): PluginConversationTurn[] {
+  const turns = [...current];
+  const currentIds = new Set(turns.map((turn) => turn.id));
+  for (const turn of deleted.values()) {
+    if (currentIds.has(turn.id)) continue;
+    turns.push(turn);
+  }
+  turns.sort(compareConversationTurns);
+  return turns;
+}
+
 function useOrderedTurnEvents({
   scope,
   sessionId,
@@ -607,6 +687,7 @@ function useOrderedTurnEvents({
   error,
   snapshotKey,
   setState,
+  deletedTurnsRef,
 }: {
   scope: ConversationScope | null;
   sessionId: string | null;
@@ -614,13 +695,19 @@ function useOrderedTurnEvents({
   error: PluginConversationError | null;
   snapshotKey: string;
   setState: TurnsSetter;
+  deletedTurnsRef: React.MutableRefObject<Map<string, PluginConversationTurn>>;
 }) {
   React.useEffect(() => {
     if (!scope || !sessionId || error) return;
     return scope.subscribe(
       (event) => {
         if (event.event_type === "session.removed") {
-          setState((current) => ({ ...current, removed: true, loading: false }));
+          setState((current) => ({
+            ...current,
+            turns: restoreDeletedTurns(current.turns, deletedTurnsRef.current),
+            removed: true,
+            loading: false,
+          }));
           return true;
         }
         if (!eventMatchesTask(event, taskId)) return true;
@@ -634,22 +721,24 @@ function useOrderedTurnEvents({
               ? payload.id
               : undefined;
           if (!turnId) return false;
-          setState((current) => ({
-            ...current,
-            turns: current.turns.filter((item) => item.id !== turnId),
-          }));
+          setState((current) => {
+            const deleted = current.turns.find((turn) => turn.id === turnId);
+            if (deleted) deletedTurnsRef.current.set(turnId, deleted);
+            return {
+              ...current,
+              turns: current.turns.filter((item) => item.id !== turnId),
+            };
+          });
           return true;
         }
         if (!event.event_type.startsWith("session.turn.")) return true;
         const turn = turnFromEvent(event);
         if (!turn) return false;
+        deletedTurnsRef.current.delete(turn.id);
         setState((current) => {
           const turns = current.turns.filter((item) => item.id !== turn.id);
           turns.push(turn);
-          turns.sort((left, right) => {
-            const started = left.startedAt.localeCompare(right.startedAt);
-            return started === 0 ? left.id.localeCompare(right.id) : started;
-          });
+          turns.sort(compareConversationTurns);
           return { ...current, turns, hydrated: true };
         });
         return true;
@@ -657,7 +746,7 @@ function useOrderedTurnEvents({
       "turns",
       snapshotKey,
     );
-  }, [error, scope, sessionId, setState, snapshotKey, taskId]);
+  }, [deletedTurnsRef, error, scope, sessionId, setState, snapshotKey, taskId]);
 }
 // eslint-disable-next-line max-lines-per-function -- keeps turn snapshot lifecycle in one hook.
 function useSessionTurns(
@@ -675,6 +764,8 @@ function useSessionTurns(
     [scope, taskId],
   );
   const snapshotKey = JSON.stringify([sessionId, resolved.taskId]);
+  const turnsRequestRef = React.useRef(0);
+  const deletedTurnsRef = React.useRef(new Map<string, PluginConversationTurn>());
 
   useOrderedTurnEvents({
     scope,
@@ -683,9 +774,11 @@ function useSessionTurns(
     error: resolved.error,
     snapshotKey,
     setState,
+    deletedTurnsRef,
   });
 
-  React.useEffect(() => {
+  const loadTurns = React.useCallback(async (): Promise<void> => {
+    deletedTurnsRef.current.clear();
     if (!scope || !sessionId) {
       setState({ ...EMPTY_TURNS, turns: [] });
       return;
@@ -694,7 +787,7 @@ function useSessionTurns(
       setState({ ...EMPTY_TURNS, turns: [], error: resolved.error });
       return;
     }
-    let current = true;
+    const requestId = ++turnsRequestRef.current;
     // A fresh turns page (initial load, retry, or binding refresh) must not
     // let a concurrent live turn event project and then be overwritten by the
     // stale page response: buffer live events until the new snapshot commits,
@@ -705,67 +798,81 @@ function useSessionTurns(
         ? { ...EMPTY_TURNS, turns: [], loading: true }
         : { ...previous, loading: true, error: null },
     );
-    void scope
-      .ready()
-      .then(async (binding) => {
-        const params = new URLSearchParams();
-        if (resolved.taskId !== null) params.set("task_id", resolved.taskId);
-        const queryString = params.size ? `?${params}` : "";
-        const response = await fetch(
-          pluginConversationUrl(
-            scope.pluginId,
-            `/conversation/task-sessions/${encodeURIComponent(sessionId)}/turns${queryString}`,
-          ),
-          {
-            credentials: "include",
-            cache: "no-store",
-            headers: {
-              "X-Kandev-Plugin-Binding": binding.bindingToken,
-              "X-Kandev-Snapshot-Token": binding.snapshotToken,
-            },
-            signal: scope.signal,
+    try {
+      const binding = await scope.ready();
+      const params = new URLSearchParams();
+      if (resolved.taskId !== null) params.set("task_id", resolved.taskId);
+      const queryString = params.size ? `?${params}` : "";
+      const response = await fetch(
+        pluginConversationUrl(
+          scope.pluginId,
+          `/conversation/task-sessions/${encodeURIComponent(sessionId)}/turns${queryString}`,
+        ),
+        {
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "X-Kandev-Plugin-Binding": binding.bindingToken,
+            "X-Kandev-Snapshot-Token": binding.snapshotToken,
           },
-        );
-        return parseConversationResponse<TurnsPage>(response);
-      })
-      .then((page) => {
-        if (!current || scope.signal.aborted || scope.isTerminal()) return;
+          signal: scope.signal,
+        },
+      );
+      const page = await parseConversationResponse<TurnsPage>(response);
+      if (turnsRequestRef.current !== requestId || scope.signal.aborted || scope.isTerminal()) {
+        return;
+      }
+      setState((previous) => ({
+        ...previous,
+        turns: page.turns,
+        loading: false,
+        hydrated: true,
+        error: null,
+      }));
+      scope.commitSnapshot("turns", snapshotKey);
+    } catch (cause) {
+      if (turnsRequestRef.current !== requestId || scope.signal.aborted || scope.isTerminal()) {
+        return;
+      }
+      const error = conversationError(cause);
+      if (isRemovedConversationError(error)) {
         setState((previous) => ({
           ...previous,
-          turns: page.turns,
           loading: false,
-          hydrated: true,
           error: null,
+          removed: true,
         }));
-        scope.commitSnapshot("turns", snapshotKey);
-      })
-      .catch((cause: unknown) => {
-        if (!current || scope.signal.aborted || scope.isTerminal()) return;
-        const error = conversationError(cause);
-        if (isRemovedConversationError(error)) {
-          setState((previous) => ({
-            ...previous,
-            loading: false,
-            error: null,
-            removed: true,
-          }));
-          return;
-        }
-        setState((previous) => ({
-          ...(revision === 0 ? { ...EMPTY_TURNS, turns: [] } : previous),
-          loading: false,
-          error,
-        }));
-      });
+        return;
+      }
+      setState((previous) => ({
+        ...(revision === 0 ? { ...EMPTY_TURNS, turns: [] } : previous),
+        loading: false,
+        error,
+      }));
+      throw cause;
+    }
+  }, [
+    deletedTurnsRef,
+    resolved.error,
+    resolved.taskId,
+    revision,
+    scope,
+    sessionId,
+    setState,
+    snapshotKey,
+  ]);
+
+  React.useEffect(() => {
+    void loadTurns().catch(() => {});
     return () => {
-      current = false;
+      turnsRequestRef.current += 1;
     };
-  }, [resolved.error, resolved.taskId, revision, scope, sessionId, snapshotKey]);
+  }, [loadTurns]);
 
   React.useEffect(() => {
     if (!scope || !sessionId || resolved.error) return;
-    return scope.subscribeRebind(() => setRevision((value) => value + 1));
-  }, [resolved.error, scope, sessionId]);
+    return scope.subscribeRebind(() => loadTurns());
+  }, [loadTurns, resolved.error, scope, sessionId]);
 
   const retry = React.useCallback(() => {
     if (!state.error?.retryable || state.removed || !scope || !sessionId) return;

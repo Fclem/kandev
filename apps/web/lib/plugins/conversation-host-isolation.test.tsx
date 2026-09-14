@@ -285,9 +285,11 @@ describe("message query snapshot isolation", () => {
   });
 });
 
+// eslint-disable-next-line max-lines-per-function -- This describe block keeps concurrent query recovery fixtures together.
 describe("message continuation isolation", () => {
   registerIsolationLifecycle();
 
+  // eslint-disable-next-line max-lines-per-function -- This scenario covers concurrent queries across the complete expiry rebind.
   it("renews concurrent continuations independently for distinct message queries", async () => {
     transport.request.mockImplementation((action: string) =>
       Promise.resolve(
@@ -372,6 +374,97 @@ describe("message continuation isolation", () => {
 
     expect(renewalCursors.sort()).toEqual(["cursor-agent", "cursor-user"]);
     expect(requestedPageCursors.sort()).toEqual(["renewed-cursor-agent", "renewed-cursor-user"]);
+  });
+
+  it("joins expiry recovery while preserving each query's continuation", async () => {
+    let subscribeCount = 0;
+    transport.request.mockImplementation((action: string) => {
+      if (action === "session.subscribe") {
+        subscribeCount += 1;
+        return Promise.resolve({
+          success: true,
+          snapshot_token: `snapshot-${subscribeCount}`,
+          resume_token: `resume-${subscribeCount}`,
+          consumer_id: `consumer-${subscribeCount}`,
+          event_watermark: 0,
+          expires_at: subscribeCount === 1 ? "2020-01-01T00:00:00Z" : FAR_FUTURE,
+          result: "fresh",
+        });
+      }
+      return Promise.resolve({ success: true });
+    });
+    const pageCount = new Map<string, number>();
+    const continuationCursors: string[] = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(BINDING_PATH_SUFFIX)) {
+        return Promise.resolve(
+          response({ bindingToken: "binding-1", generation: 7, expiresAt: FAR_FUTURE }),
+        );
+      }
+      const parsed = new URL(url);
+      const author = parsed.searchParams.get("author_type") ?? "none";
+      const cursor = parsed.searchParams.get("cursor");
+      if (cursor) continuationCursors.push(cursor);
+      const count = (pageCount.get(author) ?? 0) + 1;
+      pageCount.set(author, count);
+      if (cursor) {
+        return Promise.resolve(
+          response({
+            messages: [
+              message(
+                `older-${author}`,
+                `${author} older`,
+                SNAPSHOT_CREATED_AT,
+                author === "agent" ? "agent" : "user",
+              ),
+            ],
+            hasMore: false,
+            cursor: null,
+          }),
+        );
+      }
+      return Promise.resolve(
+        response({
+          messages: [
+            message(
+              `current-${author}`,
+              `${author} current ${count}`,
+              SNAPSHOT_CREATED_AT,
+              author === "agent" ? "agent" : "user",
+            ),
+          ],
+          hasMore: true,
+          cursor: `${author}-cursor-${count === 1 ? "expired" : "fresh"}`,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <PluginConversationScopeProvider
+        pluginId="plugin-history"
+        taskId="task-1"
+        sessionId="session-1"
+      >
+        <TwoQueryHarness />
+      </PluginConversationScopeProvider>,
+    );
+    await waitFor(() => {
+      expect(userQueryState?.hasMore).toBe(true);
+      expect(agentQueryState?.hasMore).toBe(true);
+    });
+
+    await act(async () => {
+      await Promise.all([userQueryState!.loadMore(), agentQueryState!.loadMore()]);
+    });
+
+    expect(subscribeCount).toBe(2);
+    expect(continuationCursors.sort()).toEqual(["agent-cursor-fresh", "user-cursor-fresh"]);
+    expect(screen.getByTestId("user-query").textContent).toContain("user older");
+    expect(screen.getByTestId("agent-query").textContent).toContain("agent older");
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("continuation/renew")),
+    ).toBe(false);
   });
 });
 

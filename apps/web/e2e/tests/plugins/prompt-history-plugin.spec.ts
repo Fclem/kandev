@@ -126,15 +126,10 @@ test.describe("Packaged prompt-history fixture", () => {
     await session.waitForLoad();
     await session.addPanelButton().click();
     await session.addPanelPluginItem(PLUGIN_ID, PANEL_KEY).click();
+    const finalPanel = testPage.getByTestId("fixture-prompt-history-panel");
+    await expect(finalPanel).toBeVisible({ timeout: 10_000 });
     await apiClient.deleteSession(sessionId);
-    await expect(testPage.getByTestId("fixture-prompt-history-panel")).toHaveAttribute(
-      "data-removed",
-      "true",
-    );
-    await expect(
-      testPage
-        .getByTestId("fixture-prompt-history-panel")
-        .locator(`[data-message-id="${live.messageId}"]`),
-    ).toBeVisible();
+    await expect(finalPanel).toHaveAttribute("data-removed", "true");
+    await expect(finalPanel.locator(`[data-message-id="${live.messageId}"]`)).toBeVisible();
   });
 });

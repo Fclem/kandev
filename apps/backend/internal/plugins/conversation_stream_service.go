@@ -65,7 +65,8 @@ func (s *Service) MintSessionStreamGrant(
 	sessionID string,
 	consumerID string,
 	wireID string,
-	cutoff uint64,
+	snapshotCutoff uint64,
+	resumeCursor uint64,
 ) (snapshotToken string, resumeToken string, expiresAt time.Time, err error) {
 	fingerprint := consumerID
 	if fingerprint == "" {
@@ -79,7 +80,7 @@ func (s *Service) MintSessionStreamGrant(
 		nil,
 		"",
 		nil,
-		int64(cutoff),
+		int64(snapshotCutoff),
 		fingerprint,
 	)
 	if err != nil {
@@ -92,7 +93,7 @@ func (s *Service) MintSessionStreamGrant(
 		sessionID,
 		consumerID,
 		wireID,
-		cutoff,
+		resumeCursor,
 	)
 	if err != nil {
 		return "", "", time.Time{}, err

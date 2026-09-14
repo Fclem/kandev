@@ -48,6 +48,8 @@ type ContinuationRenewal = {
   expires_at: string;
 };
 type ErrorEnvelope = { error?: PluginConversationError };
+type RebindListener = () => void | Promise<void>;
+type ContinuationResult = { cursor: string; binding: OrderedReady; recovered?: boolean };
 
 export type ConversationScope = {
   pluginId: string;
@@ -55,16 +57,13 @@ export type ConversationScope = {
   sessionId: string | null;
   signal: AbortSignal;
   ready(): Promise<OrderedReady>;
-  renewContinuation(
-    cursor: string,
-    queryIdentity?: string,
-  ): Promise<{ cursor: string; binding: OrderedReady }>;
+  renewContinuation(cursor: string, queryIdentity?: string): Promise<ContinuationResult>;
   subscribe(
     listener: ConversationEventListener,
     kind: SnapshotKind,
     snapshotKey: SnapshotKey,
   ): () => void;
-  subscribeRebind(listener: () => void): () => void;
+  subscribeRebind(listener: RebindListener): () => void;
   isTerminal(): boolean;
   commitSnapshot(kind: SnapshotKind, snapshotKey?: SnapshotKey): void;
   invalidateSnapshot(kind: SnapshotKind, snapshotKey?: SnapshotKey): void;
@@ -185,11 +184,10 @@ class OrderedConversationScope implements ConversationScope {
   readonly signal: AbortSignal;
   private bindingPromise: Promise<Binding> | null = null;
   private readyPromise: Promise<OrderedReady> | null = null;
-  private readonly renewalPromises = new Map<
-    string,
-    Promise<{ cursor: string; binding: OrderedReady }>
-  >();
+  private readonly renewalPromises = new Map<string, Promise<ContinuationResult>>();
   private bindingRefreshPromise: Promise<OrderedReady> | null = null;
+  private continuationRecoveryPromise: Promise<OrderedReady> | null = null;
+  private stateGeneration = 0;
   private currentResumeToken = "";
   private readonly committedSnapshots = new Set<string>();
   private acknowledgedSequence = 0;
@@ -226,14 +224,20 @@ class OrderedConversationScope implements ConversationScope {
       });
   }
 
-  async renewContinuation(cursor: string, queryIdentity = "") {
+  async renewContinuation(cursor: string, queryIdentity = ""): Promise<ContinuationResult> {
     const current = await this.ready();
-    if (new Date(current.snapshotExpiresAt).getTime() - Date.now() > 2 * 60 * 1000) {
+    const snapshotExpiresAt = new Date(current.snapshotExpiresAt).getTime();
+    if (snapshotExpiresAt - Date.now() > 2 * 60 * 1000) {
       return { cursor, binding: current };
+    }
+    if (snapshotExpiresAt <= Date.now()) {
+      const binding = await this.recoverExpiredContinuation(current);
+      return { cursor, binding, recovered: true };
     }
     const renewalKey = JSON.stringify([queryIdentity, cursor]);
     const existing = this.renewalPromises.get(renewalKey);
     if (existing) return existing;
+    const capturedGeneration = this.stateGeneration;
     const pending = fetch(
       pluginConversationUrl(this.pluginId, "/conversation/continuation/renew"),
       {
@@ -250,6 +254,9 @@ class OrderedConversationScope implements ConversationScope {
     )
       .then((response) => parseConversationResponse<ContinuationRenewal>(response))
       .then((renewed) => {
+        if (this.stateGeneration !== capturedGeneration) {
+          return this.ready().then((binding) => ({ cursor, binding, recovered: true }));
+        }
         const next = {
           ...current,
           snapshotToken: renewed.snapshot_token,
@@ -257,6 +264,16 @@ class OrderedConversationScope implements ConversationScope {
         };
         this.readyPromise = Promise.resolve(next);
         return { cursor: renewed.cursor, binding: next };
+      })
+      .catch((cause: unknown) => {
+        if (snapshotExpiresAt <= Date.now()) {
+          return this.recoverExpiredContinuation(current).then((binding) => ({
+            cursor,
+            binding,
+            recovered: true,
+          }));
+        }
+        throw cause;
       })
       .finally(() => {
         if (this.renewalPromises.get(renewalKey) === pending) {
@@ -279,7 +296,7 @@ class OrderedConversationScope implements ConversationScope {
     };
   }
 
-  subscribeRebind(listener: () => void) {
+  subscribeRebind(listener: RebindListener) {
     this.rebindListeners.add(listener);
     return () => this.rebindListeners.delete(listener);
   }
@@ -324,6 +341,10 @@ class OrderedConversationScope implements ConversationScope {
       return;
     }
     if (!this.acceptsScope(event, sessionId) || event.sequence < this.nextSequence) return;
+    if (this.sequenceBlocked && event.event_type === SESSION_REMOVED_EVENT) {
+      if (isCompatibleConversationEvent(event, sessionId)) this.project(event, false);
+      return;
+    }
     const existing = this.pendingBySequence.get(event.sequence);
     if (existing) {
       if (existing.event_id !== event.event_id || existing.event_type !== event.event_type) {
@@ -332,10 +353,6 @@ class OrderedConversationScope implements ConversationScope {
       return;
     }
     this.pendingBySequence.set(event.sequence, event);
-    if (this.sequenceBlocked && event.event_type === SESSION_REMOVED_EVENT) {
-      if (isCompatibleConversationEvent(event, sessionId)) this.project(event, false);
-      return;
-    }
     this.drainPending(sessionId);
   }
 
@@ -527,6 +544,21 @@ class OrderedConversationScope implements ConversationScope {
   }
 
   private async rebindGeneration(current: OrderedReady, binding: Binding): Promise<OrderedReady> {
+    return this.rebindSubscription(current, binding);
+  }
+
+  private recoverExpiredContinuation(current: OrderedReady): Promise<OrderedReady> {
+    if (this.continuationRecoveryPromise) return this.continuationRecoveryPromise;
+    const pending = this.rebindSubscription(current, current).finally(() => {
+      if (this.continuationRecoveryPromise === pending) {
+        this.continuationRecoveryPromise = null;
+      }
+    });
+    this.continuationRecoveryPromise = pending;
+    return pending;
+  }
+
+  private async rebindSubscription(current: OrderedReady, binding: Binding): Promise<OrderedReady> {
     const client = getWebSocketClient();
     if (!client || this.closed || this.terminal || !this.sessionId) {
       const next = { ...current, ...binding };
@@ -566,12 +598,22 @@ class OrderedConversationScope implements ConversationScope {
     this.currentResumeToken = ack.resume_token;
     this.acknowledgedSequence = ack.event_watermark;
     this.nextSequence = ack.event_watermark + 1;
-    this.pendingBySequence.clear();
+    this.stateGeneration += 1;
+    for (const sequence of this.pendingBySequence.keys()) {
+      if (sequence <= ack.event_watermark) this.pendingBySequence.delete(sequence);
+    }
     this.buffered.length = 0;
     this.committedSnapshots.clear();
     this.readyPromise = Promise.resolve(next);
-    this.rebindListeners.forEach((listener) => listener());
+    await this.notifyRebindListeners();
+    this.drainPending(this.sessionId);
     return next;
+  }
+
+  private async notifyRebindListeners(): Promise<void> {
+    await Promise.all(
+      [...this.rebindListeners].map((listener) => Promise.resolve().then(() => listener())),
+    );
   }
 
   private blockForPoison() {
@@ -606,10 +648,13 @@ class OrderedConversationScope implements ConversationScope {
     this.currentResumeToken = ack.resume_token;
     this.acknowledgedSequence = ack.event_watermark;
     this.nextSequence = ack.event_watermark + 1;
-    this.pendingBySequence.clear();
+    for (const sequence of this.pendingBySequence.keys()) {
+      if (sequence <= ack.event_watermark) this.pendingBySequence.delete(sequence);
+    }
     this.buffered.length = 0;
     this.committedSnapshots.clear();
-    this.sequenceBlocked = false;
+    this.stateGeneration += 1;
+    this.sequenceBlocked = true;
     this.readyPromise = Promise.resolve({
       ...ready,
       snapshotToken: ack.snapshot_token,
@@ -617,7 +662,9 @@ class OrderedConversationScope implements ConversationScope {
       resumeToken: ack.resume_token,
       watermark: ack.event_watermark,
     });
-    this.rebindListeners.forEach((listener) => listener());
+    await this.notifyRebindListeners();
+    this.sequenceBlocked = false;
+    this.drainPending(this.sessionId);
   }
 
   private projectTerminalRemoval() {
@@ -654,14 +701,18 @@ class OrderedConversationScope implements ConversationScope {
       this.currentResumeToken = ack.resume_token;
       const invalidResume = ack.result === "invalid_resume";
       if (invalidResume) {
+        this.sequenceBlocked = true;
         this.acknowledgedSequence = 0;
         this.committedSnapshots.clear();
         this.buffered.length = 0;
       }
       this.nextSequence =
         ack.replay_from ?? Math.max(ack.event_watermark + 1, this.acknowledgedSequence + 1);
-      this.pendingBySequence.clear();
-      this.sequenceBlocked = false;
+      for (const sequence of this.pendingBySequence.keys()) {
+        if (sequence <= ack.event_watermark) this.pendingBySequence.delete(sequence);
+      }
+      if (!invalidResume) this.sequenceBlocked = false;
+      if (invalidResume) this.stateGeneration += 1;
       this.readyPromise = Promise.resolve({
         ...ready,
         snapshotToken: ack.snapshot_token,
@@ -669,7 +720,11 @@ class OrderedConversationScope implements ConversationScope {
         resumeToken: ack.resume_token,
         watermark: ack.event_watermark,
       });
-      if (invalidResume) this.rebindListeners.forEach((listener) => listener());
+      if (invalidResume) {
+        await this.notifyRebindListeners();
+        this.sequenceBlocked = false;
+        this.drainPending(this.sessionId);
+      }
       return;
     }
     if (ack.error.code === "session_removed") this.projectTerminalRemoval();

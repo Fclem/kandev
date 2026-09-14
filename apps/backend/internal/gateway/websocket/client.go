@@ -526,19 +526,6 @@ func (c *Client) acceptOrderedSessionSubscription(
 	replay orderedSessionReplay,
 ) bool {
 	service := c.hub.pluginConversationService
-	snapshotToken, resumeToken, expiresAt, err := service.MintSessionStreamGrant(
-		req.PluginID,
-		userID,
-		req.Generation,
-		req.SessionID,
-		req.ConsumerID,
-		req.WireID,
-		replay.watermark,
-	)
-	if err != nil {
-		c.sendSessionStreamFailure(msg, req.SessionID, "invalid_binding", "cannot mint session stream grant", true)
-		return false
-	}
 	replay, claims, err := prepareOrderedReplayDelivery(service, replay, time.Now().UTC())
 	if err != nil {
 		c.sendSessionStreamFailure(msg, req.SessionID, "upstream_failure", "cannot claim session event delivery", true)
@@ -548,6 +535,21 @@ func (c *Client) acceptOrderedSessionSubscription(
 	if req.ReplaceCursor || replay.result == "invalid_resume" {
 		cursorSequence = replay.watermark
 	}
+	snapshotToken, resumeToken, expiresAt, err := service.MintSessionStreamGrant(
+		req.PluginID,
+		userID,
+		req.Generation,
+		req.SessionID,
+		req.ConsumerID,
+		req.WireID,
+		replay.watermark,
+		cursorSequence,
+	)
+	if err != nil {
+		c.releaseOrderedReplayClaims(service, claims)
+		c.sendSessionStreamFailure(msg, req.SessionID, "invalid_binding", "cannot mint session stream grant", true)
+		return false
+	}
 	var cursorErr error
 	if req.ReplaceCursor || replay.result == "invalid_resume" {
 		cursorErr = service.SessionEvents().ReplaceCursor(key, cursorSequence)
@@ -555,9 +557,7 @@ func (c *Client) acceptOrderedSessionSubscription(
 		cursorErr = service.SessionEvents().RegisterCursor(key, cursorSequence)
 	}
 	if cursorErr != nil {
-		if releaseErr := releaseOrderedReplayClaims(service, claims); releaseErr != nil && c.logger != nil {
-			c.logger.Error("release ordered replay claims", zap.Error(releaseErr))
-		}
+		c.releaseOrderedReplayClaims(service, claims)
 		c.sendSessionStreamFailure(msg, req.SessionID, "upstream_failure", "cannot register session cursor", true)
 		return false
 	}
@@ -574,6 +574,15 @@ func (c *Client) acceptOrderedSessionSubscription(
 		}
 	}
 	return true
+}
+
+func (c *Client) releaseOrderedReplayClaims(
+	service *plugins.Service,
+	claims map[string]plugins.SessionDeliveryClaim,
+) {
+	if err := releaseOrderedReplayClaims(service, claims); err != nil && c.logger != nil {
+		c.logger.Error("release ordered replay claims", zap.Error(err))
+	}
 }
 
 func prepareOrderedReplayDelivery(
@@ -793,6 +802,7 @@ func (c *Client) handleSessionAck(msg *ws.Message) {
 		key.SessionID,
 		key.ConsumerID,
 		key.WireID,
+		req.Sequence,
 		req.Sequence,
 	)
 	if err != nil {

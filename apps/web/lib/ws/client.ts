@@ -57,6 +57,8 @@ export interface SessionSubscriptionHandle {
   unsubscribe: () => void;
 }
 
+export type CoreSessionRecoveryHandler = () => Promise<boolean>;
+
 type SessionSubscriptionReadiness = {
   promise: Promise<void>;
   resolve: () => void;
@@ -194,6 +196,7 @@ export class WebSocketClient {
   private sessionSubscriptions = new Map<string, number>();
   private sessionSubscriptionReadiness = new Map<string, SessionSubscriptionReadiness>();
   private coreSessionStreams = new Map<string, CoreSessionStream>();
+  private coreSessionRecoveryHandlers = new Map<string, Set<CoreSessionRecoveryHandler>>();
   // Ref-counted focus signals: a session can be focused by both the task panel
   // and the task details page if both are mounted. Backend wakes its workspace
   // tracker into fast-poll mode while any client has focus, falling back to
@@ -469,6 +472,7 @@ export class WebSocketClient {
         });
       }
       this.coreSessionStreams.delete(sessionId);
+      this.coreSessionRecoveryHandlers.delete(sessionId);
       if (this.status === "connected") {
         this.send({
           id: generateUUID(),
@@ -586,6 +590,28 @@ export class WebSocketClient {
     return () => {
       this.rawSessionEventHandlers.delete(handler);
     };
+  }
+
+  registerCoreSessionRecovery(sessionId: string, handler: CoreSessionRecoveryHandler) {
+    const handlers = this.coreSessionRecoveryHandlers.get(sessionId) ?? new Set();
+    handlers.add(handler);
+    this.coreSessionRecoveryHandlers.set(sessionId, handlers);
+    const stream = this.coreSessionStreams.get(sessionId);
+    if (stream?.needsHydration) {
+      void this.continueCoreSessionRecovery(sessionId, stream);
+    }
+    return () => {
+      const current = this.coreSessionRecoveryHandlers.get(sessionId);
+      if (!current) return;
+      current.delete(handler);
+      if (current.size === 0) this.coreSessionRecoveryHandlers.delete(sessionId);
+    };
+  }
+
+  retryCoreSessionRecovery(sessionId: string): Promise<boolean> | undefined {
+    const stream = this.coreSessionStreams.get(sessionId);
+    if (!stream?.needsHydration) return undefined;
+    return this.continueCoreSessionRecovery(sessionId, stream);
   }
 
   private debugNotification(action: BackendMessageType, payload: unknown, handlerCount: number) {
@@ -839,7 +865,13 @@ export class WebSocketClient {
       SESSION_ENTRY_REQUEST_TIMEOUT_MS,
     ).then((response) => {
       const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
-      if (validated.result !== "replay") {
+      const recoveryRequired = validated.result === "invalid_resume" || stream.needsHydration;
+      if (recoveryRequired) {
+        stream.projectionPaused = true;
+        stream.needsHydration = true;
+        stream.recoveryGeneration += 1;
+        stream.recoveryWatermark = validated.eventWatermark;
+      } else if (validated.result !== "replay") {
         stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
       }
       stream.resumeToken = validated.resumeToken;
@@ -852,6 +884,10 @@ export class WebSocketClient {
         readiness.retryTimer = null;
         readiness.settled = true;
         readiness.resolve();
+        const stream = this.coreSessionStreams.get(sessionId);
+        if (stream?.needsHydration) {
+          void this.continueCoreSessionRecovery(sessionId, stream);
+        }
       })
       .catch((error: unknown) => {
         stream.ready = false;
@@ -884,6 +920,9 @@ export class WebSocketClient {
       lastSeenSequence: 0,
       ready: false,
       pendingEvents: [],
+      projectionPaused: false,
+      needsHydration: false,
+      recoveryGeneration: 0,
     };
     this.coreSessionStreams.set(sessionId, stream);
     return stream;
@@ -895,6 +934,10 @@ export class WebSocketClient {
   ) {
     const stream = this.coreSessionStreams.get(event.session_id);
     if (!stream) return;
+    if (stream.projectionPaused || stream.needsHydration) {
+      stream.pendingEvents.push(event);
+      return;
+    }
     if (!stream.ready) {
       stream.pendingEvents.push(event);
       return;
@@ -909,7 +952,13 @@ export class WebSocketClient {
   }
 
   private drainCoreSessionEvents(sessionId: string, stream: CoreSessionStream) {
-    if (!stream.ready || stream.pendingEvents.length === 0) return;
+    if (
+      !stream.ready ||
+      stream.projectionPaused ||
+      stream.needsHydration ||
+      stream.pendingEvents.length === 0
+    )
+      return;
     stream.pendingEvents.sort((left, right) => left.sequence - right.sequence);
     while (stream.pendingEvents.length > 0) {
       const event = stream.pendingEvents[0];
@@ -967,6 +1016,9 @@ export class WebSocketClient {
 
   private recoverCoreSessionPoison(sessionId: string, stream: CoreSessionStream) {
     if (stream.poisonRecovery) return;
+    stream.projectionPaused = true;
+    stream.recoveryGeneration += 1;
+    stream.recoveryWatermark = undefined;
     stream.poisonRecovery = this.request("session.subscribe", {
       session_id: sessionId,
       consumer_kind: "core",
@@ -977,15 +1029,61 @@ export class WebSocketClient {
     })
       .then((response) => {
         const validated = validateOrderedSubscribeResponse(response, sessionId, stream.wireId);
-        if (validated.result !== "replay") {
-          stream.lastSeenSequence = Math.max(stream.lastSeenSequence, validated.eventWatermark);
-        }
+        if (this.coreSessionStreams.get(sessionId) !== stream) return;
         stream.resumeToken = validated.resumeToken;
+        stream.needsHydration = true;
+        stream.recoveryWatermark = validated.eventWatermark;
+        return this.continueCoreSessionRecovery(sessionId, stream);
       })
       .catch(() => undefined)
       .finally(() => {
         stream.poisonRecovery = undefined;
       });
+  }
+
+  private continueCoreSessionRecovery(
+    sessionId: string,
+    stream: CoreSessionStream,
+  ): Promise<boolean> {
+    if (!stream.needsHydration || stream.recoveryWatermark === undefined) {
+      return Promise.resolve(false);
+    }
+    const existing = stream.recoveryHydration;
+    if (existing) return existing;
+    const handlers = [...(this.coreSessionRecoveryHandlers.get(sessionId) ?? [])];
+    if (handlers.length === 0) return Promise.resolve(false);
+    const generation = stream.recoveryGeneration;
+    const pending = Promise.all(handlers.map((handler) => Promise.resolve().then(() => handler())))
+      .then((results) => {
+        if (
+          this.coreSessionStreams.get(sessionId) !== stream ||
+          stream.recoveryGeneration !== generation ||
+          !results.every(Boolean)
+        ) {
+          return false;
+        }
+        const watermark = stream.recoveryWatermark;
+        if (watermark === undefined) return false;
+        stream.lastSeenSequence = Math.max(stream.lastSeenSequence, watermark);
+        stream.pendingEvents = stream.pendingEvents.filter(
+          (event) => event.sequence > stream.lastSeenSequence,
+        );
+        stream.needsHydration = false;
+        stream.projectionPaused = false;
+        stream.recoveryWatermark = undefined;
+        this.drainCoreSessionEvents(sessionId, stream);
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        if (stream.recoveryHydration !== pending) return;
+        stream.recoveryHydration = undefined;
+        if (stream.needsHydration && stream.recoveryGeneration !== generation) {
+          void this.continueCoreSessionRecovery(sessionId, stream);
+        }
+      });
+    stream.recoveryHydration = pending;
+    return pending;
   }
 
   private async acknowledgeCoreSessionEvent(

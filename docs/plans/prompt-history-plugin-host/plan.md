@@ -113,6 +113,18 @@ This package is complete when all six work orders are done and a fixture plugin 
 
 ## Current result
 
+### Recovery follow-up, 2026-09-14
+
+The [PR #3588 recovery package](../pr-3588-conversation-recovery/plan.md)
+tracks three newly identified defects: replay grants, core snapshot repair,
+and expired continuations. Its work orders remain pending.
+The completion statements and results below describe the original delivery;
+they do not prove these recovery cases. Tasks 02, 04, and 05 link to the
+new repair work and its exact verification matrix. The full PR review and
+durable transport scope decision remain separate.
+
+### Original delivery record
+
 Delivered the additive SDK, authenticated browser reads, task-panel context and
 navigation, browser facade, host-owned display adapters, ordered transport,
 durable primary-database journal/versioning, atomic poison rebind, lifecycle

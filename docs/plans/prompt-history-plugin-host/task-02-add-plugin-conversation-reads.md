@@ -125,6 +125,10 @@ external prompt-history plugin.
 
 ## Verification
 
+Recovery follow-up: [Task 01](../pr-3588-conversation-recovery/task-01-correct-replay-grants.md)
+owns replay grant repair. [Task 03](../pr-3588-conversation-recovery/task-03-recover-expired-continuations.md)
+owns expiry rejection coverage. Original results do not cover those pending regressions.
+
 ```bash
 cd apps/backend && go test ./internal/plugins/... ./internal/office/...
 cd apps/backend && go test ./...

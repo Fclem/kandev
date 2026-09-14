@@ -323,6 +323,7 @@ func TestConversationStreamGrantFirstPageRenewsQueryBoundCursor(t *testing.T) {
 		"consumer-1",
 		"",
 		0,
+		0,
 	)
 	require.NoError(t, err)
 	headers := map[string]string{
@@ -469,6 +470,70 @@ func TestConversationContinuationRenewPreservesSnapshot(t *testing.T) {
 	require.WithinDuration(t, time.Now().UTC().Add(10*time.Minute), renewed.ExpiresAt, time.Second)
 }
 
+// @covers AC-PLUGINS-PROMPT-HISTORY-HOST-002.7
+func TestConversationContinuationRenewRejectsExpiredTokens(t *testing.T) {
+	current := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	_, service := newTestRouter(t)
+	service.conversationTokens.now = func() time.Time { return current }
+	installedAt := current
+	service.registry.Add(conversationPluginRecord("kandev-plugin-history", installedAt))
+	generation := conversationGeneration(installedAt)
+
+	cursor, err := service.conversationTokens.mintCursor(
+		"kandev-plugin-history",
+		"user_1",
+		generation,
+		"session-1",
+		stringPtr("task-1"),
+		"desc",
+		[]string{"user"},
+		"message-1",
+		47,
+		"fingerprint-1",
+	)
+	require.NoError(t, err)
+	snapshot, err := service.conversationTokens.mintSnapshot(
+		"kandev-plugin-history",
+		"user_1",
+		generation,
+		"session-1",
+		stringPtr("task-1"),
+		"desc",
+		[]string{"user"},
+		47,
+		"fingerprint-1",
+	)
+	require.NoError(t, err)
+	current = current.Add(9 * time.Minute)
+	binding, _, err := service.conversationTokens.mintBinding(
+		"kandev-plugin-history",
+		"user_1",
+		generation,
+	)
+	require.NoError(t, err)
+	current = current.Add(2 * time.Minute)
+
+	router := registerPluginRoutesWithIdentity(
+		t,
+		service,
+		authn.Identity{UserID: "user_1", Role: authn.RoleMember},
+		&fakeConversationReader{},
+	)
+	response := doAuthedRequest(
+		router,
+		http.MethodPost,
+		"/api/plugins/kandev-plugin-history/conversation/continuation/renew",
+		`{"cursor":"`+cursor+`","snapshot_token":"`+snapshot+`"}`,
+		map[string]string{
+			"Content-Type":            "application/json",
+			"X-Kandev-Plugin-Binding": binding,
+		},
+	)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.JSONEq(t, `{"error":{"code":"invalid_query","message":"invalid continuation","retryable":false}}`, response.Body.String())
+}
+
 func conversationPluginRecord(id string, installedAt time.Time) *store.Record {
 	return &store.Record{
 		Manifest: manifest.Manifest{
@@ -515,6 +580,7 @@ func conversationReadHeaders(
 		sessionID,
 		"test-consumer",
 		"",
+		service.SessionEvents().Watermark(sessionID),
 		service.SessionEvents().Watermark(sessionID),
 	)
 	require.NoError(t, err)

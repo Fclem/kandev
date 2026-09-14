@@ -83,6 +83,11 @@ Do not copy the core prompt-history component into Kandev or expose `host.store`
 
 ## Current result
 
+Recovery follow-up: [Task 02](../pr-3588-conversation-recovery/task-02-restore-core-snapshots.md)
+and [Task 03](../pr-3588-conversation-recovery/task-03-recover-expired-continuations.md)
+own the pending core and plugin recovery repairs. The results below remain
+the original delivery record, not evidence for the new regressions.
+
 Implemented the panel-scoped browser facade with subscription-before-snapshot
 readiness, hydration, joined continuation paging, renewal, ordered
 reconciliation, reconnect, poison fencing, atomic replacement-cursor rebind,

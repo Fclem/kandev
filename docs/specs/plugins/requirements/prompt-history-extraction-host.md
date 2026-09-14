@@ -110,3 +110,7 @@ lifecycle, and transport invariants above.
 
 See [the system design](../system-design/prompt-history-extraction-host.md) and
 [the implementation plan](../../../plans/prompt-history-plugin-host/plan.md).
+
+The [PR #3588 recovery package](../../../plans/pr-3588-conversation-recovery/plan.md)
+repairs conformance with existing criteria 002.2, 002.5-7, 002.9-10,
+002.13, 002.15, and 005.3. It adds no requirement IDs.

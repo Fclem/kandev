@@ -16,6 +16,12 @@ type MessageAddResponseDropController = {
   droppedCount: () => number;
 };
 
+type ExpiredPluginSnapshotController = {
+  expireNextPluginSnapshot: () => void;
+  modifiedCount: () => number;
+  pluginSubscribeCount: () => number;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
 }
@@ -257,5 +263,87 @@ export async function routeMainWebSocketWithMessageAddResponseDrop(
       dropped.value = 0;
     },
     droppedCount: () => dropped.value,
+  };
+}
+
+/**
+ * Rewrites one plugin subscription expiry in the browser transport. The
+ * signed token remains server-valid, so the panel must exercise its normal
+ * fresh rebind path instead of relying on a relaxed backend validation rule.
+ */
+export async function routeMainWebSocketWithExpiredPluginSnapshot(
+  page: Page,
+): Promise<ExpiredPluginSnapshotController> {
+  const requestIDs = new Set<string>();
+  let armed = false;
+  let modified = 0;
+  let pluginSubscribeRequests = 0;
+
+  await page.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      for (const frame of parseJSONFrames(message)) {
+        const payload = asRecord(frame.payload);
+        if (
+          frame.type === "request" &&
+          frame.action === "session.subscribe" &&
+          typeof frame.id === "string" &&
+          payload?.consumer_kind === "plugin"
+        ) {
+          pluginSubscribeRequests += 1;
+          if (armed) requestIDs.add(frame.id);
+        }
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      if (typeof message !== "string") {
+        ws.send(message);
+        return;
+      }
+      const rewritten: string[] = [];
+      let didRewrite = false;
+      for (const part of message.split("\n")) {
+        const trimmed = part.trim();
+        if (!trimmed) {
+          rewritten.push(part);
+          continue;
+        }
+        let frame: Record<string, unknown> | null = null;
+        try {
+          frame = asRecord(JSON.parse(trimmed));
+        } catch {
+          // Preserve non-JSON frames.
+        }
+        if (
+          armed &&
+          frame?.type === "response" &&
+          frame.action === "session.subscribe" &&
+          typeof frame.id === "string" &&
+          requestIDs.delete(frame.id)
+        ) {
+          const payload = asRecord(frame.payload);
+          if (payload?.success === true) {
+            frame.payload = { ...payload, expires_at: "2000-01-01T00:00:00Z" };
+            rewritten.push(JSON.stringify(frame));
+            armed = false;
+            modified += 1;
+            didRewrite = true;
+            continue;
+          }
+        }
+        rewritten.push(part);
+      }
+      ws.send(didRewrite ? rewritten.join("\n") : message);
+    });
+  });
+
+  return {
+    expireNextPluginSnapshot: () => {
+      requestIDs.clear();
+      armed = true;
+    },
+    modifiedCount: () => modified,
+    pluginSubscribeCount: () => pluginSubscribeRequests,
   };
 }

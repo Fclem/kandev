@@ -393,6 +393,7 @@ function useTerminalStateFetch(
       active = false;
     };
     if (!taskSessionId || connectionStatus !== "connected") return deactivate;
+    if (!taskSessionState) return deactivate;
     if (!TERMINAL_SESSION_STATES[taskSessionState]) return deactivate;
     const key = `${taskSessionId}:${taskSessionState}`;
     if (lastFetchStateKeyRef.current === key) return deactivate;

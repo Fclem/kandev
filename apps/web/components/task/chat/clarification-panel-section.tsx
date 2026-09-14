@@ -123,7 +123,7 @@ type ClarificationPanelContentProps = {
   collapsed: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
   contentId: string;
-  disclosure: boolean;
+  disclosure: ReturnType<typeof useComposerDisclosureContext>;
   height: number | null;
   maxHeightVh: number;
   messages: readonly Message[] | null | undefined;

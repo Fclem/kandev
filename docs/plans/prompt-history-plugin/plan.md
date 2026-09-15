@@ -52,100 +52,207 @@ parallel execution is not appropriate.
 ### Checkout layout
 
 The plugin repository is checked out as a sibling of the monorepo worktree
-(e.g. `../kandev-plugin-prompt-history`). Its `go.mod` `replace`, its
-`KANDEV_SDK` Makefile variable, and its CI checkout point at the worktree's
-`apps/backend` and `apps/packages/plugin-sdk` (the template assumes a sibling
-directory literally named `kandev`, so the references are updated to the
-worktree's directory name). All verification commands below assume this
-layout.
-
-### Task 01: Repository bootstrap and installable skeleton
+(e.g. `../kandev-plugin-prompt-history`). The template assumes a sibling
+directory literally named `kandev` in four places - the `go.mod` `replace`
+(`../kandev/apps/backend`), the `KANDEV_SDK` Makefile variable, the root
+`package.json` `@kandev/plugin-sdk` `file:` devDependency (the
+`ui/package.json` created in Task 02 re-adds it at the renamed path), and
+the CI checkout `path: kandev` (four checkout blocks: `ci.yml` verify,
+`ci.yml` `base-floor`, `release.yml`, and `build.yml`) - so all are updated
+to the worktree's directory name (`kdlbs-kandev`); the CI `ref:` values are
+bumped separately (see Task 01). All verification commands below assume
+this layout.
 
 Create the public repository from the template, keeping its packaging,
 test, and release safeguards. Rename the identity in all four places
 (manifest `id`, `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`,
 `window.registerKandevPlugin` id) to `kandev-plugin-prompt-history`;
 `display_name: "Prompt History"`, `author: "kandev"`, `repo_url` to the new
-repository. Replace the template demo behavior:
+repository. The template's own package-name references are renamed with
+the identity: the `release.yml` README sed pattern, the `release.yml`
+Extract checksums `tar -xzf` glob, the `release.yml` release-asset glob,
+and the `Makefile` `clean` archive glob. Replace the template demo
+behavior:
 
 - Manifest: `api_version: 2`, `min_kandev_version: "0.95.0"` (the first
   release carrying the #3588 browser conversation facade; confirm at release
   cut), `capabilities: { api_read: ["messages"] }`, `ui.bundle: "/ui/bundle.js"`,
-  all five platform executables. Remove webhooks, actions, `config_schema`,
-  events, `state`, `secrets`, `agent_invoke`, providers, and agent tools.
+  `ui.styles: ["/ui/plugin.css"]`, a one-line `description`,
+  `categories: ["tools"]`, all five platform executables. Remove webhooks,
+  actions, `config_schema`, events, `state`, `secrets`, `agent_invoke`,
+  providers, and agent tools.
 - `server/`: no-op `pluginsdk.UnimplementedPlugin` (the browser facade needs
   no backend logic; AC-PLUGINS-PROMPT-HISTORY-HOST-002.8).
 - `ui/bundle.js`: minimal registration of a placeholder task panel
-  (`registerTaskPanel`, `mobileEnabled: true`) plus the translation-catalog
-  skeleton (en, pt-pt, zh-cn, zh-hk, zh-tw, pseudo).
-- Pinned SDK reference: bump the template's pinned kandev ref (CI checkout
-  `ref:`, currently `f218880e`, which predates the facade) and the local
-  sibling checkout to the PR #3588 merge commit (`2b1d0cf7d`) or later, so
-  the pinned `@kandev/plugin-sdk` carries the conversation types.
+  (`registerTaskPanel` with `title`, `titleKey`, `mobileEnabled: true`, a
+  bundled icon component, and no `visible` predicate) plus the
+  translation-catalog skeleton (en, pt-pt, zh-cn, zh-hk, zh-tw, pseudo) and
+  a placeholder `ui/plugin.css` (the real stylesheet lands in Task 02).
+- Pinned SDK reference: the template's `go.mod` `replace` and
+  `KANDEV_SDK` are plain paths with no ref (the template's root
+  `package.json` `file:` devDependency goes away with the recipe slice;
+  the SDK `file:` dependency exists only in the `ui/package.json` Task 02
+  creates); only the CI checkout `ref:` values pin `f218880e`, which
+  predates the facade. Bump every CI `ref:` to the PR #3588 merge commit
+  (`2b1d0cf7d`) or later, rename every CI checkout `path: kandev` to
+  `kdlbs-kandev` (the `ci.yml` verify job, the `ci.yml` `base-floor` job,
+  `release.yml`, and `build.yml`), add `apps/packages/plugin-sdk` to
+  `build.yml`'s sparse checkout (Task 02's `make ui-install` resolves the
+  `file:` dependency against it), and point the `go.mod` `replace` and
+  `KANDEV_SDK` at the worktree, so the pinned `@kandev/plugin-sdk` carries
+  the conversation types.
+- Strip the template's recipe slice (the `recipes/` directory,
+  `tsconfig.recipes.json`, the Makefile
+  `test-recipes`/`typecheck-recipes`/`audit-recipes` targets and the
+  `./recipes/...` paths in `go test` and `go vet`, the root
+  `package.json`/`package-lock.json`, and the `make audit-recipes` steps in
+  both `ci.yml` and `release.yml`): this is a panel-only plugin with no
+  recipes. Also remove the template's root `npm ci --ignore-scripts` and
+  `Set up Node` (cache `plugin/package-lock.json`) steps from `ci.yml` and
+  `release.yml` (the Go-only skeleton needs no Node; Task 02 re-adds pnpm
+  setup plus the `kandev-plugin-voice` UI CI steps to all three
+  workflows). After the strip, `make test` is `test-backend` (Go-only);
+  Task 02 changes it to `test-backend test-ui`. Keep the `base-floor` CI
+  job (it builds the backend against the declared minimum SDK) but point
+  its `ref:` at the PR #3588 merge commit (`2b1d0cf7d`) as a stand-in for
+  the floor until the floor release is cut, then update it to the floor
+  tag; rename the job to match its new ref (the template names it after
+  the pinned ref, "Default template on Kandev v0.86.0"), and rewrite the
+  sibling-path checkout comment (it cites
+  `plugin/../kandev/apps/backend`) to `kdlbs-kandev` in all three
+  workflows.
+- README: replace the template's demo-surface documentation (the
+  `/template` nav route, host-component page, webhook and `config_schema`
+  surfaces) with plugin-specific content - identity, `api_read:
+  ["messages"]`, install via Settings > Plugins, the sibling-worktree dev
+  layout, and the `make ui-install`/`typecheck`/`test-ui`/`ui`/`package`
+  targets - keeping the `kandev-plugin-prompt-history-0.1.0.tar.gz`
+  archive name mentioned once so the `release.yml` README sed keeps
+  applying.
 
 ### Task 02: Parity panel implementation
 
 Adopt the official-plugin toolchain from `kdlbs/kandev-plugin-voice`:
 TypeScript sources under `ui/src/` built by `ui/build.mjs` (esbuild, no
 bundled React, host-delegating JSX shim) into `ui/bundle.js`, with collocated
-vitest tests against a `test-host` mock.
+vitest tests against a `test-host` mock. The Makefile `test` target
+becomes `test-backend test-ui`, and all three workflows' CI gains the
+`kandev-plugin-voice` UI steps (pnpm setup plus `make ui-install`,
+`make typecheck`, `make test-ui`, and `make ui`) before `make build` and
+`make verify-package`; `build.yml` has no Node steps today, so it gains
+the `Set up Node` and `Set up pnpm` (v10) steps ahead of its
+`make build` and `make verify-package`.
 
 - `ui/src/derive.ts`: pure row derivation mirroring
-  `apps/web/lib/prompt-history.ts` — newest-first, `#N` from `promptIndex`,
-  agent-sent flag from `senderTaskId`, duration = floor of the earlier of
-  turn `completedAt` and the next prompt's `createdAt`, clamped at zero,
-  seconds; durations suppressed until turns hydrate (the core
-  `turnsHydrated` gate); plus the plugin-local `formatPromptDuration` mirror
-  (`h m s` unit labels from the translation catalog).
+  `apps/web/lib/prompt-history.ts` - `#N` from `promptIndex`, agent-sent
+  flag from `senderTaskId`, duration = floor of the earlier of turn
+  `completedAt` and the chronologically next (newer) prompt's `createdAt`
+  - the preceding element of the facade's newest-first array, not
+  `index + 1` - clamped at zero, whole seconds; durations suppressed until
+  turns hydrate (the core
+  `turnsHydrated` gate); plus the plugin-local `formatPromptDuration`
+  mirror (`h m s` unit labels from the translation catalog). Ordering is
+  the facade's page order (older pages append; live updates arrive already
+  ordered by the host); derive does not re-sort. The vitest suite includes a
+  case with two identical `createdAt` values to pin that derive preserves
+  page order rather than sorting by timestamp.
 - `ui/src/panel.tsx`: consumes
   `conversation.history.useSessionMessages({ sessionId, taskId,
-  authorTypes: ["user"], sort: "desc" })` (pageSize omitted, host default 20)
-  and `conversation.history.useSessionTurns(sessionId, taskId)`; per-row
+  authorTypes: ["user"], sort: "desc", pageSize: 20 })` (passing
+  `pageSize: 20` explicitly; the host facade's `query.pageSize ?? 20`
+  default is a cross-check) and
+  `conversation.history.useSessionTurns(sessionId, taskId)`; per-row
   `useMessageFavorite`, `host.ui.PromptMentionText` alias rendering,
   `host.utils.formatRelativeTime` send time (documented parity delta: full
   Intl phrase instead of the core compact ladder), the agent-sent indicator
   (inline SVG glyph, since `host.ui` exposes no icon primitive), truncation
-  with overflow detection and a distinct expand control, expanded box capped
-  at 40% of the panel height with its own scroll, expansion state keyed by
-  message id. States: initial loading, empty, error with retry only when no
-  rows are committed (the core `fetchFailed && entries.length === 0`
-  condition), `loadingMore` indicator while `hasMore`, `removed` terminal
-  state, passthrough degraded state (`sessionKind === "passthrough"`).
-  Pagination mirrors the core: paging stops when the first prompt (`#1`) is
-  rendered, a minimum 400 ms loading-indicator window, floating vs in-flow
-  indicator by measured scrollability, stick-to-bottom while loading, and the
-  sentinel with `rootMargin: "0px 0px 200px 0px"` rejoining in-flight
-  requests. Row selection calls `conversation.openMessage(messageId)`;
-  `unavailable` outcomes are consumed without error surfacing. The panel is
-  registered with panel key `prompt-history` and uses `ph-plugin-` test ids
-  distinct from the core panel's.
+  with overflow detection and a distinct expand control, expanded box
+  capped at 40% of the panel height with its own scroll, expansion state
+  keyed by message id. States: initial loading, empty, error with retry
+  only when no rows are committed (the core
+  `fetchFailed && entries.length === 0` condition), `loadingMore` indicator
+  while `hasMore`, `removed` (the Host facade's terminal state, not a
+  parity-reference state; the core unmounts with the task), passthrough
+  degraded state (`sessionKind === "passthrough"`). Pagination mirrors the
+  core: paging stops when the first prompt (`#1`) is rendered, a minimum
+  400 ms loading-indicator window, floating vs in-flow indicator by
+  measured scrollability, stick-to-bottom while loading, and the sentinel
+  with `rootMargin: "0px 0px 200px 0px"` (the Host facade joins concurrent
+  older-page loads; the sentinel must not re-issue a load already in
+  flight). Row selection calls `conversation.openMessage(messageId)`;
+  `unavailable` outcomes are consumed without error surfacing. The panel
+  registers with panel key `prompt-history`, a `titleKey`,
+  `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
+  it), a bundled icon component, and no `visible` predicate (the host's
+  `registrationIsVisible` gates both the menu entry and the panel body;
+  omitting it keeps the passthrough state reachable at the accepted cost of
+  offering the panel on passthrough sessions - deviating from the menu half
+  of AC-UI-PROMPT-HISTORY-PANEL-001.2, see the system design) and uses
+  `ph-plugin-` test ids distinct from the core panel's. Accessibility
+  mirrors the parity reference where it exists:
+  `role="status" aria-live="polite"` on the loading indicator (the core
+  renders it on every loading render), a focusable full-row navigate
+  `<button>` with `min-h-11` (44 px), the row-label `aria-label`, and
+  `aria-describedby` pointing at the sr-only label, an `sr-only` row label
+  with `aria-describedby`, and a real `<button>` expand control with
+  `aria-expanded` and catalog `aria-label`; deliberate delta: the plugin
+  also puts `role="status"` on the empty state (the core's empty and
+  passthrough states are plain divs with no role).
+- `ui/plugin.css`: the plugin-owned stylesheet (declared as
+  `ui.styles: ["/ui/plugin.css"]` in the Task 01 manifest; the Task 01
+  placeholder is replaced here). The bundle is built in a separate
+  repository and imported at runtime from `/api/plugins/{id}/ui/bundle.js`,
+  so the host's build never sees it and the stylesheet owns every class it
+  renders (the host's `@source` globs in `apps/web/app/globals.css` cover
+  only `apps/web/components/**` and `apps/packages/ui/src/**`); namespaced
+  class names and kandev CSS custom properties for theme fidelity,
+  mirroring `kandev-plugin-voice` (`ui/plugin.css` + `ui.styles`).
+- `ui/src/host.ts`: re-exports the `@kandev/plugin-sdk` types (the
+  `file:../../kdlbs-kandev/apps/packages/plugin-sdk` dependency in
+  `ui/package.json`) instead of restating the contract, so
+  `tsc --noEmit` typechecks the panel against the pinned SDK.
 - `ui/src/strings.ts`: translation catalogs for en plus every supported
-  locale and pseudo; `registerTranslations` in `initialize`.
+  locale and pseudo (`en` required; `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`,
+  `pseudo`), flat keys matching `^[a-z][a-zA-Z0-9_-]*$` (no dots or
+  nesting), at most 1000 messages per locale and 4096 characters per
+  message (a violation throws at `initialize` and aborts every
+  registration); `registerTranslations` in `initialize`.
 
 ### Task 03: Package and parity proof
 
 `make package` + `make verify-package` in the plugin repo (the Makefile
-stages only the built `ui/bundle.js`, mirroring `kdlbs/kandev-plugin-voice`'s
-`stage_common`; `verify-package` additionally asserts `ui/src`,
-`ui/node_modules`, and `ui/package.json` are absent from the archive), then
-the one-shot parity proof against a disposable development instance:
+stages only the built `ui/bundle.js` and `ui/plugin.css`, mirroring
+`kdlbs/kandev-plugin-voice`'s `stage_common`; `verify-package` asserts
+`ui/plugin.css` is present and `ui/src`, `ui/node_modules`, and
+`ui/package.json` are absent from the archive), then the one-shot parity
+proof against a disposable development instance:
 
 1. Build the e2e test-base backend and web assets
    (`make -C apps/backend e2e-plugin-package`; `pnpm e2e:run` build step).
 2. A throwaway spec (created for the run under
    `apps/web/e2e/tests/plugins/`, deleted after) installs the production
    `kandev-plugin-prompt-history-0.1.0.tar.gz` through the existing upload
-   flow, inlined with its own plugin id and package path (the shared
-   `installFixturePlugin` helper hardcodes the fixture's `kandev-plugin-e2e`
-   id and package), and drives the parity checks, targeting the production
+   flow, reusing the path-parameterized `openInstallDialog`/`uploadPackage`
+   exports in `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim
+   and inlining only the plugin id, the tarball path, and the readiness
+   assertion (the shared `installFixturePlugin`/`uninstallFixturePlugin`
+   helpers hardcode the fixture's `kandev-plugin-e2e` id and package), and
+   drives the parity checks, targeting the production
    panel's `ph-plugin-` test ids: prompt ordering, `#N` ordinals, alias
    rendering, durations, favorite distinction, agent-sent indicator,
-   older-page auto-loading, live transitions, navigation, empty and error
-   states, and desktop plus mobile placement (mirroring
-   `prompt-history-plugin.spec.ts` and
-   `mobile-prompt-history-plugin.spec.ts`).
-3. Re-run the core prompt-history E2E specs to confirm the core panel and
-   fixture remain behaviorally unchanged.
+   older-page auto-loading, live transitions, navigation, empty, error, and
+   passthrough states, desktop plus mobile placement, and computed-style
+   parity of the favorite highlight and the 40% expanded-box cap. The
+   fixture specs (`prompt-history-plugin.spec.ts` and
+   `mobile-prompt-history-plugin.spec.ts`) are the source for the ordering,
+   live, and navigation assertions; the older-page auto-load check takes its
+   oracle from `e2e/tests/task/prompt-history-auto-load.spec.ts` with the
+   `e2e/helpers/prompt-history-long-seed.ts` 121-prompt seed -
+   scroll-to-sentinel, no load-more assertion (the production panel has no
+   load-more control).
+3. Re-run the core prompt-history E2E specs (including
+   `e2e/tests/task/prompt-history-auto-load.spec.ts`) to confirm the core
+   panel and fixture remain behaviorally unchanged.
 
 ## ASCII UI preview
 
@@ -201,8 +308,15 @@ the one-shot parity proof against a disposable development instance:
 - Error: retry control only when no rows are committed; committed rows
   render without a retry affordance (AC-002.9).
 - Passthrough: the same localized empty copy as the empty state (the core
-  renders the same string with no controls), no rows and no controls.
-- Removed: committed rows remain, no pagination, no live updates.
+  renders the same string with no controls), no rows and no controls. The
+  panel is still offered in both menus for passthrough sessions (accepted
+  delta: the core hides it there; the host's `visible` predicate gates both
+  the menu entry and the panel body, so the registration declares none -
+  deviating from the menu half of AC-UI-PROMPT-HISTORY-PANEL-001.2, opening
+  an empty panel).
+- Removed: the Host facade's terminal state (not a parity-reference state;
+  the core unmounts with the task). Committed rows remain, no pagination,
+  no live updates.
 
 Fixed regions: panel header, panel chrome. Scrolling region: the prompt rows.
 The preview is structural; spacing is not a pixel specification. Copy is
@@ -212,9 +326,12 @@ plugin-localized (AC-002.10).
 
 | Criterion | Evidence |
 | --- | --- |
-| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.tsx` in the plugin repo (vitest against `test-host`): ordering, ordinals, duration bounds, states |
-| AC-001.2, .3 | Manifest assertions in `server/` or `ui/` tests plus `make verify-package` |
-| AC-002.1, .5, .6, .7, .8, .10 and AC-003.1, .2, .3 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile) |
+| AC-001.1 | Identity assertions: manifest `id`, `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`, and UI registration id all read `kandev-plugin-prompt-history`; staged executables keep the platform names |
+| AC-001.2, .3, AC-003.3 | Manifest assertions in `server/` or `ui/` tests plus `make verify-package` (archive contents, checksums, staging leak check) |
+| AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
+| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.tsx` in the plugin repo (vitest against `test-host`): ordering, ordinals, duration bounds, states, page-order preservation with identical `createdAt` values |
+| AC-002.1, .5, .6, .7, .8 and AC-003.1, .2 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
+| AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus the catalog-shape unit test in the plugin repo |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |
 
 ## E2E tests
@@ -222,10 +339,15 @@ plugin-localized (AC-002.10).
 One-shot, throwaway (not committed): `prompt-history-parity-check.spec.ts`
 (desktop, chromium project) and the mobile equivalent (mobile-chrome /
 Pixel 5), both driving the production tarball and mapping to
-AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1, AC-003.2, and the AC-002.1, .2, .5,
-.6, .7, .8 behaviors listed in the Task 03 work order. Core preservation is
-confirmed by re-running the existing `e2e/tests/task/prompt-history-panel.spec.ts`
-and `mobile-prompt-history-panel.spec.ts`.
+AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1, AC-003.2, and the Task 03 in-scope
+behavior list (ordering, `#N` ordinals, alias rendering, durations,
+favorite distinction, agent-sent indicator, older-page auto-loading, live
+transitions, navigation, empty, error, and passthrough states, desktop plus
+mobile placement, and the computed-style parity checks). Core preservation
+is confirmed by re-running the existing
+`e2e/tests/task/prompt-history-panel.spec.ts`,
+`mobile-prompt-history-panel.spec.ts`, and
+`e2e/tests/task/prompt-history-auto-load.spec.ts`.
 
 ## Work orders
 
@@ -242,8 +364,10 @@ Pending.
 - Host contract drift: the plugin pins `min_kandev_version` to the first
   release carrying the facade (0.95.0 at writing time); a later host release
   changing the `host.conversation` DTO shapes would break the bundle. The
-  SDK typecheck against the pinned `@kandev/plugin-sdk` catches most drift at
-  build time, which is why the pinned ref must include PR #3588.
+  drift mitigation is the pinned `@kandev/plugin-sdk`: `ui/package.json`
+  depends on it via `file:../../kdlbs-kandev/apps/packages/plugin-sdk` and
+  `ui/src/host.ts` re-exports its types, so `tsc --noEmit` catches DTO drift
+  at build time, which is why the pinned ref must include PR #3588.
 - One-shot proof only: per the settled scope, no permanent monorepo
   regression covers the production package; the follow-up migration package
   must add one when it removes the core panel.
@@ -256,6 +380,18 @@ Pending.
 - Repository creation is an external GitHub action; the repository must be
   created before Task 01 proceeds, and the template must be the source of
   the initial tree.
+- Styling: the bundle is built in a separate repository and imported at
+  runtime from `/api/plugins/{id}/ui/bundle.js`, so the host's build never
+  sees it and every utility is plugin-owned in `ui/plugin.css`; a utility
+  the panel relies on but the css misses renders unstyled, which the
+  computed-style parity assertion catches.
+- Passthrough and removed deltas: the plugin panel is offered for
+  passthrough sessions where the core hides it (the host's `visible`
+  predicate gates both the menu entry and the panel body, so the
+  registration declares none - deviating from the menu half of
+  AC-UI-PROMPT-HISTORY-PANEL-001.2, opening an empty panel), and the
+  `removed` state leaves rows visible where the core unmounts; both are
+  recorded in the system design.
 
 ## Open questions
 

@@ -36,47 +36,101 @@ contracts.
 ## In scope
 
 - `ui/src/derive.ts`: pure row derivation mirroring
-  `apps/web/lib/prompt-history.ts` — newest-first ordering, `#N` ordinal from
-  `promptIndex` (absent/0 renders no ordinal), agent-sent flag from
-  `senderTaskId`, and duration = floor of the earlier of turn `completedAt`
-  and the next prompt's `createdAt`, clamped at zero, whole seconds; missing
-  bounds yield no duration; durations are suppressed until turns hydrate
-  (the core `turnsHydrated` gate); plus the plugin-local
-  `formatPromptDuration` mirror (`h m s` unit labels from the translation
-  catalog) matching `apps/web/lib/prompt-history.ts` `formatPromptDuration`.
+  `apps/web/lib/prompt-history.ts` — `#N` ordinal from `promptIndex`
+  (absent/0 renders no ordinal), agent-sent flag from `senderTaskId`, and
+  duration = floor of the earlier of turn `completedAt` and the
+  chronologically next (newer) prompt's `createdAt` — the preceding
+  element of the facade's newest-first array, not `index + 1` — clamped at
+  zero, whole seconds; missing bounds yield no duration; durations are
+  suppressed until turns hydrate (the core `turnsHydrated` gate); plus the
+  plugin-local `formatPromptDuration` mirror (`h m s` unit labels from the
+  translation catalog) matching `apps/web/lib/prompt-history.ts`
+  `formatPromptDuration`. Ordering is the facade's page order (older pages
+  append; live updates arrive already ordered by the host); derive does not
+  re-sort. The vitest suite includes a case with two identical
+  `createdAt` values to pin that derive preserves page order rather than
+  sorting by timestamp.
 - `ui/src/panel.tsx`: consumes
   `conversation.history.useSessionMessages({ sessionId, taskId,
-  authorTypes: ["user"], sort: "desc" })` (pageSize omitted, host default 20)
-  and `conversation.history.useSessionTurns(sessionId, taskId)`; per-row
-  `useMessageFavorite` with the favorite highlight; `host.ui.PromptMentionText`
-  alias rendering in both the truncated and expanded views; `host.utils
-  .formatRelativeTime` for the send time; the agent-sent indicator (inline
-  SVG glyph, since `host.ui` exposes no icon primitive); truncation with
-  overflow detection and a distinct expand control; expanded box capped at
-  40% of the panel height with its own scroll; expansion state keyed by
-  message id so live reordering keeps the right row expanded.
+  authorTypes: ["user"], sort: "desc", pageSize: 20 })` (passing
+  `pageSize: 20` explicitly; the host facade's `query.pageSize ?? 20`
+  default is a cross-check) and
+  `conversation.history.useSessionTurns(sessionId, taskId)`; per-row
+  `useMessageFavorite` with the favorite highlight; `host.ui
+  .PromptMentionText` alias rendering in both the truncated and expanded
+  views; `host.utils.formatRelativeTime` for the send time; the agent-sent
+  indicator (inline SVG glyph, since `host.ui` exposes no icon primitive);
+  truncation with overflow detection and a distinct expand control;
+  expanded box capped at 40% of the panel height with its own scroll;
+  expansion state keyed by message id so live reordering keeps the right
+  row expanded.
 - States: initial loading, empty, error with the retry surface only when no
   rows are committed (the core `fetchFailed && entries.length === 0`
   condition; with committed rows the rows render without a retry affordance),
-  `loadingMore` indicator while `hasMore`, `removed` terminal state (no
-  pagination, no live updates), and the passthrough degraded state for
+  `loadingMore` indicator while `hasMore`, `removed` (the Host facade's
+  terminal state, not a parity-reference state; the core unmounts with the
+  task, so no pagination and no live updates while committed rows remain),
+  and the passthrough degraded state for
   `sessionKind === "passthrough"` (the same localized empty copy as the
   empty state, no controls).
 - Pagination mirrors the core: paging stops when the first prompt (`#1`) is
   rendered, a minimum 400 ms loading-indicator display window, floating vs
   in-flow indicator by measured scrollability, stick-to-bottom while loading,
-  and the sentinel with `rootMargin: "0px 0px 200px 0px"` rejoining
-  in-flight older-page requests.
+  and the sentinel with `rootMargin: "0px 0px 200px 0px"` (the Host facade
+  joins concurrent older-page loads; the sentinel must not re-issue a load
+  already in flight).
 - Row selection calls `conversation.openMessage(messageId)`; an
   `unavailable` outcome is consumed without error surfacing.
 - The panel registers with panel key `prompt-history` (layout id
-  `plugin:kandev-plugin-prompt-history:prompt-history`) and uses `ph-plugin-`
-  test ids distinct from the core panel's ids.
+  `plugin:kandev-plugin-prompt-history:prompt-history`), a `titleKey`,
+  `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
+  it), a bundled icon component, and no `visible` predicate (the host's
+  `registrationIsVisible` gates both the menu entry and the panel body, so
+  omitting it keeps the passthrough state reachable), and uses `ph-plugin-`
+  test ids distinct from the core panel's ids. Accessibility mirrors the
+  parity reference where it exists: `role="status" aria-live="polite"` on
+  the loading indicator (the core renders it on every loading render), a
+  focusable full-row navigate `<button>` with `min-h-11` (44 px), the
+  row-label `aria-label`, and `aria-describedby` pointing at the sr-only
+  label, an `sr-only` row label with `aria-describedby`, and a real
+  `<button>` expand control with `aria-expanded` and catalog `aria-label`
+  (the parity spec's role-based queries and 44 px tap-target assertions
+  depend on these); deliberate delta: the plugin also puts
+  `role="status"` on the empty state (the core's empty and passthrough
+  states are plain divs with no role).
 - `ui/src/strings.ts`: translation catalogs for en plus every supported
-  locale and the pseudo locale; registered through
+  locale and the pseudo locale (`en` required; `pt-pt`, `zh-cn`, `zh-tw`,
+  `zh-hk`, `pseudo`), flat keys matching `^[a-z][a-zA-Z0-9_-]*$` (no dots or
+  nesting), at most 1000 messages per locale and 4096 characters per
+  message (a violation throws at `initialize` and aborts every
+  registration); registered through
   `registry.registerTranslations` in a repeatable `initialize`.
+- `ui/plugin.css`: the plugin-owned stylesheet (declared as
+  `ui.styles: ["/ui/plugin.css"]` in the manifest; the Task 01 placeholder
+  is replaced here). The bundle is built in a separate repository and
+  imported at runtime from `/api/plugins/{id}/ui/bundle.js`, so the host's
+  build never sees it and the stylesheet owns every class it renders (the
+  host's `@source` globs in `apps/web/app/globals.css` cover only
+  `apps/web/components/**` and `apps/packages/ui/src/**`); namespaced class
+  names and kandev CSS custom properties for theme fidelity, mirroring
+  `kandev-plugin-voice` (`ui/plugin.css` + `ui.styles`).
 - `ui/build.mjs` (esbuild, no bundled React, host-delegating JSX shim) and
   `ui/src/test-host.ts` (Host mock for the vitest suite).
+- `ui/src/host.ts`: re-exports the `@kandev/plugin-sdk` types (the
+  `file:../../kdlbs-kandev/apps/packages/plugin-sdk` dependency in
+  `ui/package.json`) instead of restating the contract, so
+  `tsc --noEmit` typechecks the panel against the pinned SDK.
+- CI: all three workflows gain the `kandev-plugin-voice` UI steps (pnpm
+  setup plus `make ui-install`, `make typecheck`, `make test-ui`, and
+  `make ui`) before `make build` and `make verify-package`; `build.yml`
+  has no Node steps today, so it gains the `Set up Node` and `Set up pnpm`
+  (v10) steps ahead of its `make build` and `make verify-package`. The
+  Makefile `test` target becomes `test-backend test-ui` (it is
+  `test-backend` after Task 01's recipe strip).
+- `.gitignore`: add `/ui/bundle.js` and `/ui/node_modules/` (mirroring
+  `kandev-plugin-voice`'s generated-output entries), and run
+  `git rm --cached ui/bundle.js` when the esbuild output replaces the
+  hand-written placeholder from Task 01.
 
 ## Out of scope
 
@@ -88,12 +142,13 @@ contracts.
 
 - `make test` passes in the plugin repo, including vitest coverage of
   ordering, ordinals, duration bounds, the turns-hydration gate, favorite
-  distinction, the agent-sent indicator, states, and `openMessage` outcome
-  handling.
-- `make package-host` produces a bundle whose panel registration matches the
-  parity reference's feature set (user-prompt rows, `#N`, alias rendering,
-  duration, send time, favorite highlight, agent-sent indicator, expand with
-  the 40% cap, older-page auto-load, navigation).
+  distinction, the agent-sent indicator, states, `openMessage` outcome
+  handling, and page-order preservation with identical `createdAt` values.
+- `make package-host` produces a bundle whose panel registration matches
+  the parity reference's feature set (user-prompt rows, `#N`, alias
+  rendering, duration, send time, favorite highlight, agent-sent
+  indicator, expand with the 40% cap, older-page auto-load, navigation),
+  declares `mobileEnabled: true`, and declares no `visible` predicate.
 - No copy is hardcoded: every user-facing string resolves through the plugin
   translation catalog with the English fallback.
 
@@ -118,9 +173,15 @@ cd .. && make package-host
 - `kdlbs/kandev-plugin-prompt-history/ui/src/panel.tsx`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/derive.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/strings.ts`
+- `kdlbs/kandev-plugin-prompt-history/ui/src/host.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/test-host.ts`
+- `kdlbs/kandev-plugin-prompt-history/ui/plugin.css`
 - `kdlbs/kandev-plugin-prompt-history/ui/build.mjs`
 - `kdlbs/kandev-plugin-prompt-history/ui/package.json`
+- `kdlbs/kandev-plugin-prompt-history/ui/tsconfig.json`
+- `kdlbs/kandev-plugin-prompt-history/ui/vitest.config.ts`
+- `kdlbs/kandev-plugin-prompt-history/ui/pnpm-lock.yaml`
+- `kdlbs/kandev-plugin-prompt-history/.gitignore`
 - `kdlbs/kandev-plugin-prompt-history/Makefile` (test/build targets for the
   UI toolchain)
 
@@ -130,9 +191,12 @@ cd .. && make package-host
 
 ## Risks
 
-- The Host `host.conversation` DTO shapes are pinned by the installed host;
-  the vitest `test-host` mock must track the SDK types in
-  `apps/packages/plugin-sdk/src/index.ts`, not an older snapshot.
+- The Host `host.conversation` DTO shapes are pinned by the installed
+  host; `ui/src/host.ts` re-exports the SDK types from the pinned
+  `@kandev/plugin-sdk` (`file:../../kdlbs-kandev/apps/packages/plugin-sdk` in
+  `ui/package.json`), so `tsc --noEmit` catches DTO drift at build time,
+  and the vitest `test-host` mock must track the same SDK types, not an
+  older snapshot.
 - The 40% cap, the auto-load sentinel, the 400 ms indicator window, and the
   floating vs in-flow indicator have no Host primitive; the implementation
   must re-derive them from the panel element (ResizeObserver and

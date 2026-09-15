@@ -29,22 +29,36 @@ confirm the core panel and fixture remain behaviorally unchanged.
 ## In scope
 
 - Cross-platform packaging of `kandev-plugin-prompt-history-0.1.0.tar.gz`
-  and the `verify-package` archive checks (contents, checksums, staging leak
-  check, and absence of `ui/src`, `ui/node_modules`, `ui/package.json`); the
-  Makefile stages only the built `ui/bundle.js` (mirroring
+  and the `verify-package` archive checks (contents, checksums, staging
+  leak check, presence of `ui/plugin.css`, and absence of `ui/src`,
+  `ui/node_modules`, `ui/package.json`); the Makefile stages only the built
+  `ui/bundle.js` and `ui/plugin.css` (mirroring
   `kdlbs/kandev-plugin-voice`'s `stage_common`), not the `ui/` source tree.
 - The throwaway parity spec(s) under `apps/web/e2e/tests/plugins/`
-  (created for the run, deleted after): inline the upload flow with its own
-  plugin id and package path (the shared `installFixturePlugin` helper
-  hardcodes the fixture's `kandev-plugin-e2e` id and package path) to
-  install the production tarball, and drive the parity checks — prompt
-  ordering, `#N` ordinals, alias rendering, durations, favorite distinction,
-  agent-sent indicator, older-page auto-loading, live transitions,
-  navigation, empty and error states, and desktop plus mobile placement —
-  targeting the production panel's `ph-plugin-` test ids.
+  (created for the run, deleted after): reuse the path-parameterized
+  `openInstallDialog`/`uploadPackage` exports in
+  `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim, inlining
+  only the plugin id, the tarball path, and the readiness assertion (the
+  shared `installFixturePlugin`/`uninstallFixturePlugin` helpers hardcode
+  the fixture's `kandev-plugin-e2e` id and package path) to install the
+  production tarball, and drive the parity checks - prompt
+  ordering, `#N` ordinals, alias rendering, durations, favorite
+  distinction, agent-sent indicator, older-page auto-loading, live
+  transitions, navigation, empty, error, and passthrough states, desktop
+  plus mobile placement, and computed-style parity of the favorite
+  highlight and the 40% expanded-box cap - targeting the production
+  panel's `ph-plugin-` test ids. The fixture specs
+  (`apps/web/e2e/tests/plugins/prompt-history-plugin.spec.ts` and
+  `mobile-prompt-history-plugin.spec.ts`) are the source for the ordering,
+  live, and navigation assertions; the older-page auto-load check takes its
+  oracle from `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts`
+  with the `apps/web/e2e/helpers/prompt-history-long-seed.ts` 121-prompt
+  seed (scroll-to-sentinel, no load-more assertion - the production panel
+  has no load-more control).
 - Core preservation: re-run the existing core prompt-history E2E specs
-  (`e2e/tests/task/prompt-history-panel.spec.ts` and
-  `e2e/tests/task/mobile-prompt-history-panel.spec.ts`) and the fixture spec
+  (`e2e/tests/task/prompt-history-panel.spec.ts`,
+  `e2e/tests/task/mobile-prompt-history-panel.spec.ts`, and
+  `e2e/tests/task/prompt-history-auto-load.spec.ts`) and the fixture spec
   (`e2e/tests/plugins/prompt-history-plugin.spec.ts`).
 
 ## Out of scope
@@ -57,9 +71,9 @@ confirm the core panel and fixture remain behaviorally unchanged.
 ## Acceptance
 
 - `make verify-package` passes in the plugin repo and the archive contains
-  `manifest.yaml`, the UI bundle, all five platform executables, and the
-  generated checksum file, with no `ui/src`, `ui/node_modules`, or
-  `ui/package.json` entries.
+  `manifest.yaml`, the UI bundle, `ui/plugin.css`, all five platform
+  executables, and the generated checksum file, with no `ui/src`,
+  `ui/node_modules`, or `ui/package.json` entries.
 - The throwaway parity runs pass on the disposable instance: desktop
   (chromium project) and mobile (mobile-chrome / Pixel 5), covering the
   behaviors listed in the plan's Technical approach.
@@ -81,7 +95,7 @@ for the run and deleted after):
 (cd apps && pnpm install --frozen-lockfile)
 (cd apps && pnpm --filter @kandev/web e2e:run -- e2e/tests/plugins/prompt-history-parity-check.spec.ts)
 (cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/plugins/mobile-prompt-history-parity-check.spec.ts)
-(cd apps && pnpm --filter @kandev/web e2e:run -- --no-build -- e2e/tests/task/prompt-history-panel.spec.ts e2e/tests/plugins/prompt-history-plugin.spec.ts)
+(cd apps && pnpm --filter @kandev/web e2e:run -- --no-build -- e2e/tests/task/prompt-history-panel.spec.ts e2e/tests/task/prompt-history-auto-load.spec.ts e2e/tests/plugins/prompt-history-plugin.spec.ts)
 (cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/task/mobile-prompt-history-panel.spec.ts)
 ```
 
@@ -107,6 +121,10 @@ for the run and deleted after):
   and its `plugin:kandev-plugin-prompt-history:prompt-history` layout
   identity; if the implementation's ids differ from the pinned scheme,
   update the throwaway spec (not the committed core specs) before the run.
+- The throwaway spec's role-based queries (`getByRole("button")`,
+  `role="status"`) and 44 px tap-target assertions depend on the
+  accessibility attributes pinned in Task 02; if the implementation omits
+  them, the spec fails before any parity judgment.
 
 ## Parallelism
 
@@ -114,6 +132,9 @@ for the run and deleted after):
 
 ## Inputs
 
+- `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts` and
+  `apps/web/e2e/helpers/prompt-history-long-seed.ts` (the older-page
+  auto-load oracle: scroll-to-sentinel, no load-more assertion).
 - [Requirements](../../specs/plugins/requirements/prompt-history-plugin.md)
   REQ-PLUGINS-PROMPT-HISTORY-PLUGIN-003.
 - [System design](../../specs/plugins/system-design/prompt-history-plugin.md),
@@ -121,8 +142,13 @@ for the run and deleted after):
 - `apps/web/e2e/tests/plugins/prompt-history-plugin.spec.ts` and
   `apps/web/e2e/tests/plugins/mobile-prompt-history-plugin.spec.ts`
   (fixture parity checks to mirror behaviorally).
-- `apps/web/e2e/helpers/plugin-fixture.ts` (the upload flow to inline; the
-  helper hardcodes the fixture's `kandev-plugin-e2e` id and package path).
+- `apps/web/e2e/helpers/plugin-fixture.ts` (the
+  `installFixturePlugin`/`uninstallFixturePlugin` helpers that hardcode
+  the fixture's `kandev-plugin-e2e` id and package path).
+- `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` (the
+  path-parameterized `openInstallDialog`/`uploadPackage` exports, reused
+  verbatim; only the plugin id, the tarball path, and the readiness
+  assertion are inlined).
 - Parity reference: `apps/web/components/task/prompt-history-panel-content.tsx`.
 
 ## Results

@@ -78,9 +78,14 @@ contracts.
 
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.1:** When the plugin is enabled, the
   host shall offer the panel from the desktop add-panel menu and the mobile
-  Panels picker with a localized title, and render it as a task panel on both
-  presentations. The panel shall be available for managed and passthrough
-  sessions, matching the parity reference.
+  Panels picker with a localized title, and render it as a task panel on
+  both sessions. The panel shall be available for managed and passthrough
+  sessions, with the panel body matching the parity reference in both; the
+  menu-offering delta for passthrough sessions is recorded in the system
+  design (it deviates from the menu half of AC-UI-PROMPT-HISTORY-PANEL-001.2
+  in docs/specs/ui/requirements/prompt-history-panel.md: the desktop "+"
+  menu and the mobile Panels picker offer the panel on passthrough sessions,
+  opening an empty panel).
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.2:** The panel shall list
   user-authored prompts of the panel's session newest-first, 20 prompts per
   page (matching the parity reference and the host facade default), and
@@ -105,9 +110,11 @@ contracts.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.6:** When the user scrolls the panel
   to the oldest rendered prompt, the panel shall load the
   next older page automatically with a visible loading indicator, without an
-  explicit load-more button. In-flight older-page requests from the chat
-  surface shall be joined rather than duplicated, and exhausted history shall
-  stop rendering the loading state.
+  explicit load-more button. In-flight older-page requests for the same
+  continuation shall be joined rather than duplicated (the Host facade's
+  join; the core's cross-surface chat join is a store-level guarantee a
+  plugin cannot observe), and exhausted history shall stop rendering the
+  loading state.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.7:** Live additions, updates, and
   deletions of prompts and turn completions shall be reflected in the panel
   without reload; a completed turn shall update the affected row's duration.
@@ -115,10 +122,13 @@ contracts.
   to it in the transcript through the scoped navigation capability. When the
   capability reports an unavailable target, the panel shall not enter an error
   state.
-- **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.9:** The panel shall render the
-  parity reference's initial loading, empty, fetch-failure with retry,
-  passthrough degraded, and session-removed states with equivalent observable
-  behavior.
+ - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.9:** The panel shall render the
+   parity reference's initial loading, empty, fetch-failure with retry, and
+   passthrough degraded states with equivalent observable behavior. The
+   `removed` state is the Host facade's terminal state, not a
+   parity-reference state (the core panel unmounts with the task): when the
+   task is removed, committed rows shall remain visible and pagination shall
+   stop.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.10:** All plugin user-facing copy
   shall resolve through the plugin translation catalog with an English
   fallback, and shall include catalogs for every supported locale plus the
@@ -131,12 +141,13 @@ before the package is considered complete, without changing core ownership.
 
 #### Acceptance criteria
 
-- **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1:** When the packaged production
-  artifact is installed on a disposable Kandev development instance, the
-  plugin panel shall pass parity checks against the parity reference covering
-  prompt ordering, ordinals, alias rendering, durations, favorite
-  distinction, agent-sent indicator, older-page auto-loading, live
-  and error states, and desktop and mobile placement.
+ - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1:** When the packaged production
+   artifact is installed on a disposable Kandev development instance, the
+   plugin panel shall pass parity checks against the parity reference
+   covering prompt ordering, ordinals, alias rendering, durations, favorite
+   distinction, agent-sent indicator, older-page auto-loading, live, error,
+   and passthrough states, desktop and mobile placement, and the computed
+   styles of the favorite highlight and the 40% expanded-box cap.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.2:** The package shall leave the core
   Prompt History panel registered and behaviorally unchanged, and shall leave
   the test-only fixture plugin and its E2E specs unchanged.

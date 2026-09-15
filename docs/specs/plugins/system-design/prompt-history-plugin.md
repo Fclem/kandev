@@ -110,13 +110,16 @@ Module layout:
   offer the panel on passthrough sessions, opening an empty panel. Renders
   rows (including the agent-sent indicator as an inline SVG glyph, since
   `host.ui` exposes no icon primitive), loading, empty, error, passthrough,
-  and removed states; owns expansion state keyed by message id. Test ids use
+  and removed states; owns expansion state keyed by message id. State
+  determination and `openMessage` outcome handling delegate to the
+  pure `ui/src/panel-state.ts` seam. Test ids use
   a `ph-plugin-` prefix distinct from the core panel's ids. Accessibility
   mirrors the parity reference where it exists:
   `role="status" aria-live="polite"` on the loading indicator (the core
-  renders it on every loading render), a focusable full-row navigate
-  `<button>` with a 44 px minimum target supplied by `ui/plugin.css`
-  (the core's `min-h-11`) and `aria-describedby` pointing at an
+  renders it on every loading render), the row bubble's 44 px mobile
+  minimum with its desktop release (the core's `min-h-11 md:min-h-0`)
+  and a focusable full-row navigate `<button>` (the core's `min-h-11`),
+  both supplied by `ui/plugin.css`, and `aria-describedby` pointing at an
   `sr-only` row label whose text is the row `aria-label`, and a real
   `<button>` expand control with `aria-expanded` and a catalog
   `aria-label` (the parity spec's role-based
@@ -148,6 +151,16 @@ Module layout:
   `apps/web/lib/prompt-history.ts` `formatPromptDuration`. The vitest suite
   includes a case with two identical `createdAt` values to pin that derive
   preserves page order rather than sorting by timestamp.
+- `ui/src/panel-state.ts` — pure panel state determination and
+  `openMessage` outcome handling, consumed by `panel.tsx` and tested
+  against `test-host`: the states rendered above (initial loading,
+  empty, error with retry only when no rows are committed,
+  `loadingMore` while `hasMore`, passthrough) and the `unavailable`
+  outcome consumed without error surfacing. The vitest suite stays
+  logic-only (mirroring `kdlbs/kandev-plugin-voice`, whose
+  `ui/package.json` has no react runtime or renderer dependency and
+  whose tests never import a react-importing module): `panel.tsx`
+  itself is rendered only by the throwaway parity spec.
 - `ui/src/strings.ts` — translation catalogs (en plus every supported locale
   and the pseudo locale), registered through
   `registry.registerTranslations`. Catalog shape is pinned: flat keys

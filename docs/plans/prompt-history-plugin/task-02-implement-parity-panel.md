@@ -81,6 +81,13 @@ contracts.
   already in flight).
 - Row selection calls `conversation.openMessage(messageId)`; an
   `unavailable` outcome is consumed without error surfacing.
+- `ui/src/panel-state.ts`: the pure seam for the state determination
+  and `openMessage` outcome handling above, consumed by `panel.tsx`
+  and tested against `test-host` (the vitest suite stays logic-only,
+  mirroring `kdlbs/kandev-plugin-voice`, whose `ui/package.json` has
+  no react runtime or renderer dependency and whose tests never import
+  a react-importing module - `panel.tsx` is rendered only by the
+  throwaway parity spec).
 - The panel registers with panel key `prompt-history` (layout id
   `plugin:kandev-plugin-prompt-history:prompt-history`), a `titleKey`,
   `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
@@ -89,9 +96,11 @@ contracts.
   omitting it keeps the passthrough state reachable), and uses `ph-plugin-`
   test ids distinct from the core panel's ids. Accessibility mirrors the
   parity reference where it exists: `role="status" aria-live="polite"` on
-  the loading indicator (the core renders it on every loading render), a
-  focusable full-row navigate `<button>` with a 44 px minimum target
-  supplied by `ui/plugin.css` (the core's `min-h-11`) and
+  the loading indicator (the core renders it on every loading render),
+  the row bubble's 44 px mobile minimum with its desktop release (the
+  core's `min-h-11 md:min-h-0`) and a focusable full-row navigate
+  `<button>` (the core's `min-h-11`), both supplied by `ui/plugin.css`,
+  and
   `aria-describedby` pointing at an `sr-only` row label whose text is the
   row `aria-label`, and a real `<button>` expand control with
   `aria-expanded` and a catalog `aria-label` (the parity spec's role-based
@@ -128,23 +137,28 @@ contracts.
   `tsc --noEmit` typechecks the panel against the pinned SDK.
 - Makefile: `ui-install`, `ui` (the esbuild build), `typecheck` (tsc
   --noEmit), and `test-ui` (vitest) targets mirroring
-  `kdlbs/kandev-plugin-voice`, and the `package`/`package-host` staging
-  switches from the template's `cp -r ui` to the voice `stage_common`
+  `kdlbs/kandev-plugin-voice`, the `package`/`package-host` staging
+  switch from the template's `cp -r ui` to the voice `stage_common`
   (staging only `manifest.yaml`, the built `ui/bundle.js`, and
-  `ui/plugin.css`), so the `make package-host` smoke stages a clean tree
-  once `ui/src` and `ui/node_modules` exist; `verify-package` gains the
-  `ui/src`, `ui/node_modules`, and `ui/package.json` absence assertions
-  in Task 03.
-- CI: `ci.yml` gains `Set up pnpm` (v10) and `make ui-install`
-  immediately before its `make test` step, then `make typecheck`,
-  `make test-ui`, and `make ui`; `build.yml` gains `Set up Node` +
-  `Set up pnpm` (v10) and `make ui-install` before its `make build` step
-  (it has no Node steps today); `release.yml` gains `Set up pnpm` (v10)
-  and `make ui-install` before its `Verify` step, which runs `make test`
-  - not merely before `make verify-package` - since the `test` target
-  includes `test-ui` and the Makefile `package` target depends on `ui`.
-  The Makefile `test` target becomes `test-backend test-ui` (it is
-  `test-backend` after Task 01's recipe strip).
+  `ui/plugin.css`), so the `make package-host` smoke stages a clean
+  tree once `ui/src` and `ui/node_modules` exist, and the
+  `verify-package` assertions: `ui/plugin.css` present, and `ui/src`,
+  `ui/node_modules`, and `ui/package.json` absent from the archive.
+- CI: each workflow gains the `kandev-plugin-voice` UI steps -
+  `Set up Node` (node 24), `Set up pnpm` (v10), and `make ui-install` -
+  anchored to its verification step, not to packaging (all three have
+  no Node steps after Task 01's strip): `ci.yml` gains them immediately
+  before its `Test` step, then `make typecheck`, `make test-ui`, and
+  `make ui`; `build.yml` gains them before its `make build` step;
+  `release.yml` gains them before its `Verify` step, which runs
+  `make test` - not merely before `make verify-package` - since the
+  `test` target includes `test-ui` and the Makefile `package` target
+  depends on `ui`.
+- `ci.yml`'s `Test` step runs `make test-backend` (mirroring
+  `kandev-plugin-voice`'s `make test-go`; the Makefile `test` target
+  becomes `test-backend test-ui` for local runs - it is `test-backend`
+  after Task 01's recipe strip - so the UI suite runs once, ahead of
+  typechecking).
 - `.gitignore`: add `/ui/bundle.js` and `/ui/node_modules/` (mirroring
   `kandev-plugin-voice`'s generated-output entries), and run
   `git rm --cached ui/bundle.js` when the esbuild output replaces the
@@ -159,9 +173,11 @@ contracts.
 ## Acceptance
 
 - `make test` passes in the plugin repo, including vitest coverage of
-  ordering, ordinals, duration bounds, the turns-hydration gate, favorite
-  distinction, the agent-sent indicator, states, `openMessage` outcome
-  handling, and page-order preservation with identical `createdAt` values.
+  ordering, ordinals, duration bounds, the turns-hydration gate, the
+  agent-sent indicator, state determination, `openMessage` outcome
+  handling, and page-order preservation with identical `createdAt`
+  values (the rendered favorite distinction and states are proven by
+  the throwaway parity spec - the pinned harness is logic-only).
 - `make package-host` produces a bundle whose panel registration matches
   the parity reference's feature set (user-prompt rows, `#N`, alias
   rendering, duration, send time, favorite highlight, agent-sent
@@ -189,12 +205,14 @@ cd .. && make package-host
 
 - `kdlbs/kandev-plugin-prompt-history/ui/src/index.tsx`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/panel.tsx`
+- `kdlbs/kandev-plugin-prompt-history/ui/src/panel-state.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/derive.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/strings.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/host.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/test-host.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/derive.test.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/panel.test.ts`
+- `kdlbs/kandev-plugin-prompt-history/ui/src/strings.test.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/plugin.css`
 - `kdlbs/kandev-plugin-prompt-history/ui/build.mjs`
 - `kdlbs/kandev-plugin-prompt-history/ui/package.json`

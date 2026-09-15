@@ -142,16 +142,19 @@ TypeScript sources under `ui/src/` built by `ui/build.mjs` (esbuild, no
 bundled React, host-delegating JSX shim) into `ui/bundle.js`, with
 collocated
 vitest tests against a `test-host` mock. The Makefile `test` target
-becomes `test-backend test-ui`, and CI gains the `kandev-plugin-voice`
-UI steps anchored to each workflow's verification step, not to
-packaging: `ci.yml` gains `Set up pnpm` (v10) and `make ui-install`
-immediately before its `make test` step, then `make typecheck`,
-`make test-ui`, and `make ui`; `build.yml` gains `Set up Node` +
-`Set up pnpm` (v10) and `make ui-install` before its `make build` step
-(it has no Node steps today); `release.yml` gains `Set up pnpm` (v10)
-and `make ui-install` before its `Verify` step, which runs `make test`
-- not merely before `make verify-package` - since the `test` target
-includes `test-ui` and the Makefile `package` target depends on `ui`.
+becomes `test-backend test-ui` (for local runs; `ci.yml`'s `Test` step
+runs `make test-backend` instead, mirroring `kandev-plugin-voice`'s
+`make test-go`, so the UI suite runs once, ahead of typechecking). CI
+gains the `kandev-plugin-voice` UI steps - `Set up Node` (node 24),
+`Set up pnpm` (v10), and `make ui-install` - anchored to each
+workflow's verification step, not to packaging (all three workflows
+have no Node steps after Task 01's strip): `ci.yml` gains them
+immediately before its `Test` step, then `make typecheck`,
+`make test-ui`, and `make ui`; `build.yml` gains them before its
+`make build` step; `release.yml` gains them before its `Verify` step,
+which runs `make test` - not merely before `make verify-package` -
+since the `test` target includes `test-ui` and the Makefile `package`
+target depends on `ui`.
 
 - `ui/src/derive.ts`: pure row derivation mirroring
   `apps/web/lib/prompt-history.ts` - `#N` from `promptIndex`, agent-sent
@@ -190,7 +193,10 @@ includes `test-ui` and the Makefile `package` target depends on `ui`.
   with `rootMargin: "0px 0px 200px 0px"` (the Host facade joins concurrent
   older-page loads; the sentinel must not re-issue a load already in
   flight). Row selection calls `conversation.openMessage(messageId)`;
-  `unavailable` outcomes are consumed without error surfacing. The panel
+  `unavailable` outcomes are consumed without error surfacing - both
+  delegate to the pure `ui/src/panel-state.ts` seam (the vitest suite
+  stays logic-only, mirroring `kandev-plugin-voice`; `panel.tsx` is
+  rendered only by the throwaway parity spec). The panel
   registers with panel key `prompt-history`, a `titleKey`,
   `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
   it), a bundled icon component, and no `visible` predicate (the host's
@@ -201,9 +207,10 @@ includes `test-ui` and the Makefile `package` target depends on `ui`.
   `ph-plugin-` test ids distinct from the core panel's. Accessibility
   mirrors the parity reference where it exists:
   `role="status" aria-live="polite"` on the loading indicator (the core
-  renders it on every loading render), a focusable full-row navigate
-  `<button>` with a 44 px minimum target supplied by `ui/plugin.css`
-  (the core's `min-h-11`) and `aria-describedby` pointing at an
+  renders it on every loading render), the row bubble's 44 px mobile
+  minimum with its desktop release (the core's `min-h-11 md:min-h-0`)
+  and a focusable full-row navigate `<button>` (the core's `min-h-11`),
+  both supplied by `ui/plugin.css`, and `aria-describedby` pointing at an
   `sr-only` row label whose text is the row `aria-label`, and a real
   `<button>` expand control with `aria-expanded` and a catalog
   `aria-label`; deliberate delta: the plugin
@@ -342,9 +349,9 @@ plugin-localized (AC-002.10).
 | AC-001.1 | Identity assertions: manifest `id`, `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`, and UI registration id all read `kandev-plugin-prompt-history`; staged executables keep the platform names |
 | AC-001.2, .3, AC-003.3 | Manifest assertions in `server/` or `ui/` tests plus `make verify-package` (archive contents, checksums, staging leak check) |
 | AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
-| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`): ordering, ordinals, duration bounds, states, page-order preservation with identical `createdAt` values |
+| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam - the rendered favorite distinction and states are proven by the throwaway parity spec): ordering, ordinals, duration bounds, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values |
 | AC-002.1, .5, .6, .7, .8 and AC-003.1, .2 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
-| AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus the catalog-shape unit test in the plugin repo |
+| AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` (the catalog-shape unit test) in the plugin repo |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |
 
 ## E2E tests

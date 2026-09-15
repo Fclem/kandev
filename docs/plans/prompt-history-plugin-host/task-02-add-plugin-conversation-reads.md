@@ -6,7 +6,6 @@ wave: 2
 depends_on:
   - "01-publish-browser-conversation-contract"
 plan: "plan.md"
-spec: "../../specs/plugins/requirements/prompt-history-extraction-host.md"
 requirements:
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-002
 acceptance_criteria:

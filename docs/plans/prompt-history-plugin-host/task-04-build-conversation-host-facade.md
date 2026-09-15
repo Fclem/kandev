@@ -8,7 +8,6 @@ depends_on:
   - "02-add-plugin-conversation-reads"
   - "03-extend-task-panel-capabilities"
 plan: "plan.md"
-spec: "../../specs/plugins/requirements/prompt-history-extraction-host.md"
 requirements:
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-002
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-003

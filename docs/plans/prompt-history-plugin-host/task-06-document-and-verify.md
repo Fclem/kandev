@@ -9,7 +9,6 @@ depends_on:
   - "04-build-conversation-host-facade"
   - "05-prove-plugin-parity"
 plan: "plan.md"
-spec: "../../specs/plugins/requirements/prompt-history-extraction-host.md"
 requirements:
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-005
 acceptance_criteria:

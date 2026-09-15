@@ -5,7 +5,6 @@ status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
-spec: "../../specs/plugins/requirements/prompt-history-extraction-host.md"
 requirements:
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-001
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-002

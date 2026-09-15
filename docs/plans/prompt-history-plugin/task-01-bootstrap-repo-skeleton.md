@@ -52,12 +52,23 @@ instance.
   rewriting the "Developing against the SDK" frontend paragraph that
   names the recipe and the removed root `package.json` (after this task
   the `@kandev/plugin-sdk` `file:` dependency lives in `ui/package.json`
-  and `ui/bundle.js` is Task 02's esbuild build output), dropping the
-  "reproducible provider contracts" phrasing in the workflow pin
-  sentence, and leaving the "Both stage `manifest.yaml` + `ui/`"
-  packaging sentence to Task 02's `stage_common` staging switch, and
-  keeping the "Developing against the SDK" heading that `go.mod`'s
-  comment cites.
+  and `ui/bundle.js` is Task 02's esbuild build output), restating the
+  "Minimum host version" section as the first release carrying the
+  browser conversation facade (0.95.0 at writing time) and dropping its
+  source-control-recipe floor paragraph, updating the `manifest.yaml`
+  and `bundle.js` Layout comments (the former cites `config_schema`,
+  removed from the manifest; the latter says "hand-written, no-build ES
+  module", which Task 02's esbuild output replaces), dropping the
+  recharts "needs no bundler" clause (Task 02's esbuild build is the
+  bundler), rewriting the workflow pin sentence that names the recipe
+  ("reproducible provider contracts" and the "rerun both contract
+  suites" tail - both recipe suites are gone with the recipe strip; the
+  pin sentence ends "rerun the backend and UI suites when adopting a
+  newer SDK"), and leaving the "Both stage `manifest.yaml` + `ui/`"
+  packaging sentence and the "make package" inline comment ("packs
+  manifest + ui/ + binaries") to Task 02's `stage_common` staging
+  switch, and keeping the "Developing against the SDK" heading that
+  `go.mod`'s comment cites.
 - The manifest: `api_version: 2`, `min_kandev_version: "0.95.0"` (the first
   release carrying the #3588 browser conversation facade; confirm at release
   cut), `capabilities: { api_read: ["messages"] }`, `ui.bundle: "/ui/bundle.js"`,

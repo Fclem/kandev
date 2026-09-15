@@ -124,14 +124,14 @@ contracts.
   capability reports an unavailable target, the panel shall not enter an error
   state.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.9:** The panel shall render the
-   parity reference's initial loading, empty, fetch-failure with retry, and
-   passthrough degraded states with equivalent observable behavior. The
-   `removed` state is the Host facade's terminal state, not a
-   parity-reference state (the core panel unmounts with the task): when the
-   task is removed, committed rows shall remain visible and pagination shall
-   stop. The plugin additionally marks the empty state with `role="status"`
-   (an accessibility-only addition; the core's empty and passthrough
-   states are plain divs).
+  parity reference's initial loading, empty, fetch-failure with retry, and
+  passthrough degraded states with equivalent observable behavior. The
+  `removed` state is the Host facade's terminal state, not a
+  parity-reference state (the core panel unmounts with the task): when the
+  task is removed, committed rows shall remain visible and pagination shall
+  stop. The plugin additionally marks the empty state with `role="status"`
+  (an accessibility-only addition; the core's empty and passthrough
+  states are plain divs).
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.10:** All plugin user-facing copy
   shall resolve through the plugin translation catalog with an English
   fallback, and shall include catalogs for every supported locale plus the
@@ -145,12 +145,12 @@ before the package is considered complete, without changing core ownership.
 #### Acceptance criteria
 
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1:** When the packaged production
-   artifact is installed on a disposable Kandev development instance, the
-   plugin panel shall pass parity checks against the parity reference
-   covering prompt ordering, ordinals, alias rendering, durations, favorite
-   distinction, agent-sent indicator, older-page auto-loading, live, error,
-   and passthrough states, desktop and mobile placement, and the computed
-   styles of the favorite highlight and the 40% expanded-box cap.
+  artifact is installed on a disposable Kandev development instance, the
+  plugin panel shall pass parity checks against the parity reference
+  covering prompt ordering, ordinals, alias rendering, durations, favorite
+  distinction, agent-sent indicator, older-page auto-loading, live, error,
+  and passthrough states, desktop and mobile placement, and the computed
+  styles of the favorite highlight and the 40% expanded-box cap.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.2:** The package shall leave the core
   Prompt History panel registered and behaviorally unchanged, and shall leave
   the test-only fixture plugin and its E2E specs unchanged.

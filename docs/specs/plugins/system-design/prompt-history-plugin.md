@@ -330,11 +330,13 @@ runs against a disposable development instance:
 
 ## Verification
 
-- Plugin repo: `make test` (Go tests + vitest suite), `make vet`,
+- Plugin repo: `make ui-install` (installs `ui/node_modules` once, as
+  voice's CI does), `make test` (Go tests + vitest suite), `make vet`,
   `test -z "$(gofmt -l .)"` (the template's `make fmt` lists unformatted
-  files but exits 0, so it is advisory), `make package` (cross-platform),
-  `make verify-package` (archive contents, checksums, staging leak check,
-  absence of `ui/src`, `ui/node_modules`, `ui/package.json`), CI equivalent.
+  files but exits 0, so it is advisory), `make typecheck`, `make ui`,
+  `make package` (cross-platform), `make verify-package` (archive
+  contents, checksums, staging leak check, absence of `ui/src`,
+  `ui/node_modules`, `ui/package.json`), CI equivalent.
 - Parity: the throwaway desktop and mobile Playwright runs from the parity
   proof section, plus `make -C apps/backend e2e-plugin-package` and the
   existing core prompt-history E2E specs to confirm core preservation.

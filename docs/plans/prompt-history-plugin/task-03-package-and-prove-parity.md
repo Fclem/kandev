@@ -85,6 +85,7 @@ confirm the core panel and fixture remain behaviorally unchanged.
 
 ```bash
 cd ../kandev-plugin-prompt-history   # sibling of the monorepo worktree
+make ui-install
 make package
 make verify-package
 ```

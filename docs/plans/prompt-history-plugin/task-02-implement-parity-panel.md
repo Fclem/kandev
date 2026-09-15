@@ -146,7 +146,8 @@ contracts.
   tree once `ui/src` and `ui/node_modules` exist, and the
   `verify-package` and `verify-package-host` assertions: `ui/plugin.css`
   present, and `ui/src`, `ui/node_modules`, and `ui/package.json` absent
-  from the archive, and updating the README's "Both stage
+  from the archive, adding `ui/bundle.js` to the `clean` target (Task 01
+  renames its archive glob), and updating the README's "Both stage
   `manifest.yaml` + `ui/`" sentence to the `stage_common` file set.
 - CI: each workflow gains the `kandev-plugin-voice` UI steps -
   `Set up Node` (node 24), `Set up pnpm` (v10), and `make ui-install` -
@@ -200,10 +201,12 @@ row, phone composition, and shared states).
 
 ```bash
 cd ../kandev-plugin-prompt-history   # sibling of the monorepo worktree
+make ui-install
 make vet test
 test -z "$(gofmt -l .)"              # make fmt is advisory (lists, exits 0)
-cd ui && pnpm install --frozen-lockfile && npx tsc --noEmit && node build.mjs
-cd .. && make package-host
+make typecheck
+make ui
+make package-host
 ```
 
 ## Files likely touched

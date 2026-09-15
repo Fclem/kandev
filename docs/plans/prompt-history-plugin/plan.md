@@ -63,6 +63,8 @@ to the worktree's directory name (`kdlbs-kandev`); the CI `ref:` values are
 bumped separately (see Task 01). All verification commands below assume
 this layout.
 
+### Task 01: Bootstrap repo and installable skeleton
+
 Create the public repository from the template, keeping its packaging,
 test, and release safeguards. Rename the identity in all four places
 (manifest `id`, `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`,
@@ -136,10 +138,21 @@ behavior:
   the SDK" frontend paragraph that names the recipe and the removed
   root `package.json` (after this task the `file:` dependency lives in
   `ui/package.json` and `ui/bundle.js` is Task 02's esbuild build
-  output), drop the "reproducible provider contracts" phrasing in the
-  workflow pin sentence, and leave the "Both stage `manifest.yaml` +
-  `ui/`" packaging sentence to Task 02's `stage_common` staging switch
-  - and keep the "Developing against
+  output), restate the "Minimum host version" section as the first
+  release carrying the browser conversation facade (0.95.0 at writing
+  time) and drop its source-control-recipe floor paragraph, update the
+  `manifest.yaml` and `bundle.js` Layout comments (the former cites
+  `config_schema`, removed from the manifest; the latter says
+  "hand-written, no-build ES module", which Task 02's esbuild output
+  replaces), drop the recharts "needs no bundler" clause (Task 02's
+  esbuild build is the bundler), rewrite the workflow pin sentence that
+  names the recipe ("reproducible provider contracts" and the "rerun
+  both contract suites" tail - both recipe suites are gone with the
+  recipe strip; the pin sentence ends "rerun the backend and UI suites
+  when adopting a newer SDK"), and leave the "Both stage `manifest.yaml`
+  + `ui/`" packaging sentence and the "make package" inline comment
+  ("packs manifest + ui/ + binaries") to Task 02's `stage_common`
+  staging switch - and keep the "Developing against
   the SDK" heading that `go.mod`'s comment cites.
 
 ### Task 02: Parity panel implementation
@@ -254,8 +267,8 @@ stages only the built `ui/bundle.js` and `ui/plugin.css`, mirroring
 then the one-shot parity
 proof against a disposable development instance:
 
-1. Build the e2e test-base backend and web assets
-   (`make -C apps/backend e2e-plugin-package`; `pnpm e2e:run` build step).
+1. The `pnpm e2e:run` build step (backend + web assets, which also
+   packages the plugin-fixture; `--no-build` reuses those artifacts).
 2. A throwaway spec (created for the run under
    `apps/web/e2e/tests/plugins/`, deleted after) installs the production
    `kandev-plugin-prompt-history-0.1.0.tar.gz` through the existing upload

@@ -298,6 +298,46 @@ func TestSanitizeConversationMessageEventPreservesPresentationMetadata(t *testin
 	}, payload["metadata"])
 }
 
+func TestSanitizeConversationMessageEventPreservesAgentBootMetadata(t *testing.T) {
+	raw := json.RawMessage(`{
+		"type": "message.updated",
+		"session_id": "session-1",
+		"task_id": "task-1",
+		"message_id": "message-1",
+		"author_type": "agent",
+		"message_type": "script_execution",
+		"metadata": {
+			"script_type": "agent_boot",
+			"agent_name": "Mock",
+			"command": "/usr/local/bin/mock-agent",
+			"status": "exited",
+			"exit_code": 0,
+			"is_resuming": true,
+			"started_at": "2026-09-15T09:45:58.245720115Z",
+			"completed_at": "2026-09-15T09:45:59.774503743Z",
+			"error": "must-not-be-dropped",
+			"private": "must-not-be-copied"
+		},
+		"content": "boot output"
+	}`)
+
+	sanitized := sanitizeConversationEventPayload(events.MessageUpdated, raw)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(sanitized, &payload))
+	require.Equal(t, map[string]any{
+		"agent_name":   "Mock",
+		"command":      "/usr/local/bin/mock-agent",
+		"completed_at": "2026-09-15T09:45:59.774503743Z",
+		"error":        "must-not-be-dropped",
+		"exit_code":    float64(0),
+		"is_resuming":  true,
+		"script_type":  "agent_boot",
+		"started_at":   "2026-09-15T09:45:58.245720115Z",
+		"status":       "exited",
+	}, payload["metadata"])
+	require.NotContains(t, payload["metadata"], "private")
+}
+
 func TestSyncCommittedSessionEventsStripsSystemContent(t *testing.T) {
 	database, err := sqlx.Open("sqlite3", ":memory:")
 	require.NoError(t, err)

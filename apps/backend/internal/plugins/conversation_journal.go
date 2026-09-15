@@ -55,6 +55,8 @@ var conversationMessageMetadataKeys = map[string]struct{}{
 	"retry_in_seconds": {},
 	"retrying":         {}, "sender_session_id": {}, "sender_session_name": {},
 	"sender_task_id": {}, "sender_task_title": {}, "stage": {}, "status": {},
+	"script_type": {}, "agent_name": {}, "command": {}, "exit_code": {},
+	"is_resuming": {}, "started_at": {}, "completed_at": {}, "error": {},
 	"task_id": {}, "text": {}, "tool_call_id": {}, "variant": {}, "workflow_message": {},
 	"workflow_step_color": {}, "workflow_step_id": {}, "workflow_step_name": {},
 }

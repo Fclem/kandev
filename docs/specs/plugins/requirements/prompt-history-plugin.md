@@ -128,7 +128,9 @@ contracts.
    `removed` state is the Host facade's terminal state, not a
    parity-reference state (the core panel unmounts with the task): when the
    task is removed, committed rows shall remain visible and pagination shall
-   stop.
+   stop. The plugin additionally marks the empty state with `role="status"`
+   (an accessibility-only addition; the core's empty and passthrough
+   states are plain divs).
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.10:** All plugin user-facing copy
   shall resolve through the plugin translation catalog with an English
   fallback, and shall include catalogs for every supported locale plus the

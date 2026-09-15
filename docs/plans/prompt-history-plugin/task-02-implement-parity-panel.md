@@ -142,8 +142,9 @@ contracts.
   (staging only `manifest.yaml`, the built `ui/bundle.js`, and
   `ui/plugin.css`), so the `make package-host` smoke stages a clean
   tree once `ui/src` and `ui/node_modules` exist, and the
-  `verify-package` assertions: `ui/plugin.css` present, and `ui/src`,
-  `ui/node_modules`, and `ui/package.json` absent from the archive.
+  `verify-package` and `verify-package-host` assertions: `ui/plugin.css`
+  present, and `ui/src`, `ui/node_modules`, and `ui/package.json` absent
+  from the archive.
 - CI: each workflow gains the `kandev-plugin-voice` UI steps -
   `Set up Node` (node 24), `Set up pnpm` (v10), and `make ui-install` -
   anchored to its verification step, not to packaging (all three have
@@ -157,8 +158,8 @@ contracts.
 - `ci.yml`'s `Test` step runs `make test-backend` (mirroring
   `kandev-plugin-voice`'s `make test-go`; the Makefile `test` target
   becomes `test-backend test-ui` for local runs - it is `test-backend`
-  after Task 01's recipe strip - so the UI suite runs once, ahead of
-  typechecking).
+  after Task 01's recipe strip - so the UI suite runs exactly once, in
+  its own step after typechecking).
 - `.gitignore`: add `/ui/bundle.js` and `/ui/node_modules/` (mirroring
   `kandev-plugin-voice`'s generated-output entries), and run
   `git rm --cached ui/bundle.js` when the esbuild output replaces the
@@ -174,10 +175,11 @@ contracts.
 
 - `make test` passes in the plugin repo, including vitest coverage of
   ordering, ordinals, duration bounds, the turns-hydration gate, the
-  agent-sent indicator, state determination, `openMessage` outcome
+  agent-sent flag (derive.ts), state determination, `openMessage` outcome
   handling, and page-order preservation with identical `createdAt`
-  values (the rendered favorite distinction and states are proven by
-  the throwaway parity spec - the pinned harness is logic-only).
+  values (the rendered favorite distinction, the agent-sent indicator,
+  and the states are proven by the throwaway parity spec - the pinned
+  harness is logic-only).
 - `make package-host` produces a bundle whose panel registration matches
   the parity reference's feature set (user-prompt rows, `#N`, alias
   rendering, duration, send time, favorite highlight, agent-sent

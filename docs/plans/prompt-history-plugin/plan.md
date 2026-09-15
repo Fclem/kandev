@@ -144,7 +144,7 @@ collocated
 vitest tests against a `test-host` mock. The Makefile `test` target
 becomes `test-backend test-ui` (for local runs; `ci.yml`'s `Test` step
 runs `make test-backend` instead, mirroring `kandev-plugin-voice`'s
-`make test-go`, so the UI suite runs once, ahead of typechecking). CI
+`make test-go`, so the UI suite runs exactly once, in its own step after typechecking). CI
 gains the `kandev-plugin-voice` UI steps - `Set up Node` (node 24),
 `Set up pnpm` (v10), and `make ui-install` - anchored to each
 workflow's verification step, not to packaging (all three workflows
@@ -240,9 +240,10 @@ target depends on `ui`.
 
 `make package` + `make verify-package` in the plugin repo (the Makefile
 stages only the built `ui/bundle.js` and `ui/plugin.css`, mirroring
-`kdlbs/kandev-plugin-voice`'s `stage_common`; `verify-package` asserts
-`ui/plugin.css` is present and `ui/src`, `ui/node_modules`, and
-`ui/package.json` are absent from the archive), then the one-shot parity
+`kdlbs/kandev-plugin-voice`'s `stage_common`; `verify-package` and
+`verify-package-host` assert `ui/plugin.css` is present and `ui/src`,
+`ui/node_modules`, and `ui/package.json` are absent from the archive),
+then the one-shot parity
 proof against a disposable development instance:
 
 1. Build the e2e test-base backend and web assets
@@ -349,7 +350,7 @@ plugin-localized (AC-002.10).
 | AC-001.1 | Identity assertions: manifest `id`, `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`, and UI registration id all read `kandev-plugin-prompt-history`; staged executables keep the platform names |
 | AC-001.2, .3, AC-003.3 | Manifest assertions in `server/` or `ui/` tests plus `make verify-package` (archive contents, checksums, staging leak check) |
 | AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
-| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam - the rendered favorite distinction and states are proven by the throwaway parity spec): ordering, ordinals, duration bounds, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values |
+| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam - the rendered favorite distinction, the agent-sent indicator, and the states are proven by the throwaway parity spec): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values |
 | AC-002.1, .5, .6, .7, .8 and AC-003.1, .2 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
 | AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` (the catalog-shape unit test) in the plugin repo |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |

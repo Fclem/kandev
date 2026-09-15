@@ -155,7 +155,8 @@ Module layout:
   `openMessage` outcome handling, consumed by `panel.tsx` and tested
   against `test-host`: the states rendered above (initial loading,
   empty, error with retry only when no rows are committed,
-  `loadingMore` while `hasMore`, passthrough) and the `unavailable`
+  `loadingMore` while `hasMore`, passthrough, and `removed` - rows stay,
+  pagination and live updates stopped -) and the `unavailable`
   outcome consumed without error surfacing. The vitest suite stays
   logic-only (mirroring `kdlbs/kandev-plugin-voice`, whose
   `ui/package.json` has no react runtime or renderer dependency and

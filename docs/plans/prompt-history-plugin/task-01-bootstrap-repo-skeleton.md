@@ -86,7 +86,9 @@ instance.
   `tsconfig.recipes.json`, the Makefile
   `test-recipes`/`typecheck-recipes`/`audit-recipes` targets and the
   `./recipes/...` paths in `go test` and `go vet`, the root
-  `package.json`/`package-lock.json`, and the `make audit-recipes` steps in
+  `package.json`/`package-lock.json`, the `test ! -e $$tmp/recipes` and
+  `test ! -e $$tmp/package.json` assertions in `verify-package` and
+  `verify-package-host`, and the `make audit-recipes` steps in
   both `ci.yml` and `release.yml`): this is a panel-only plugin with no
   recipes. Also remove the template's root `npm ci --ignore-scripts` and
   `Set up Node` (cache `plugin/package-lock.json`) steps from `ci.yml` and

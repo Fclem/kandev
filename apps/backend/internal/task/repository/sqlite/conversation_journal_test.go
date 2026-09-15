@@ -239,10 +239,18 @@ func TestConversationJournalPreservesPresentationMetadata(t *testing.T) {
 		Content: "Question", RequestsInput: true,
 		Metadata: map[string]any{
 			"agent_disconnected": true,
+			"agent_name":         "Mock",
+			"command":            "/usr/local/bin/mock-agent",
+			"completed_at":       "2026-09-15T09:45:59.774503743Z",
+			"error":              "must-not-be-dropped",
+			"exit_code":          0,
 			"has_hidden_prompts": false,
+			"is_resuming":        true,
 			"pending_id":         "pending-1",
 			"question":           map[string]any{"id": "question-1", "prompt": "Choose"},
 			"raw_content":        "must-not-be-copied",
+			"script_type":        "agent_boot",
+			"started_at":         "2026-09-15T09:45:58.245720115Z",
 		},
 	}
 	if err := repo.CreateMessage(context.Background(), message); err != nil {
@@ -263,6 +271,15 @@ func TestConversationJournalPreservesPresentationMetadata(t *testing.T) {
 	metadata, ok := event["metadata"].(map[string]any)
 	if !ok || metadata["pending_id"] != "pending-1" || metadata["agent_disconnected"] != true || metadata["has_hidden_prompts"] != false {
 		t.Fatalf("message metadata = %#v", event["metadata"])
+	}
+	for key, want := range map[string]any{
+		"agent_name": "Mock", "command": "/usr/local/bin/mock-agent", "completed_at": "2026-09-15T09:45:59.774503743Z",
+		"error": "must-not-be-dropped", "exit_code": float64(0), "is_resuming": true, "script_type": "agent_boot",
+		"started_at": "2026-09-15T09:45:58.245720115Z",
+	} {
+		if metadata[key] != want {
+			t.Fatalf("message metadata[%q] = %#v, want %#v", key, metadata[key], want)
+		}
 	}
 	if _, exists := metadata["raw_content"]; exists {
 		t.Fatalf("private message metadata leaked: %#v", metadata)

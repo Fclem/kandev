@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS conversation_journal_meta (
 // Boot runs the trigger (re)creation plus its one-time sanitize migration only
 // while the stored version is below this constant, then records it, so the
 // per-boot full-corpus payload rewrite never repeats.
-const journalSchemaVersion = 3
+const journalSchemaVersion = 4
 
 // journalBackfillKey records that the one-time backfill of pre-trigger source
 // rows completed, so boot does not re-scan the whole message/turn corpus.
@@ -518,6 +518,8 @@ var conversationMessageMetadataKeys = []string{
 	"remediation", "remediation_url", "requested_model", "request_id", "response", "reset_at",
 	"retry_at", "retry_in_seconds", "retrying", "sender_session_id",
 	"sender_session_name", "sender_task_id", "sender_task_title", "stage", "status",
+	"script_type", "agent_name", "command", "exit_code", "is_resuming", "started_at",
+	"completed_at", "error",
 	"task_id", "text", "tool_call_id", "variant", "workflow_message", "workflow_step_color",
 	"workflow_step_id", "workflow_step_name",
 }
@@ -599,6 +601,19 @@ END;
 DROP TRIGGER IF EXISTS conversation_message_update;
 CREATE TRIGGER IF NOT EXISTS conversation_message_update
 AFTER UPDATE ON task_session_messages
+WHEN OLD.id IS NOT NEW.id
+	OR OLD.task_session_id IS NOT NEW.task_session_id
+	OR OLD.task_id IS NOT NEW.task_id
+	OR OLD.turn_id IS NOT NEW.turn_id
+	OR OLD.author_type IS NOT NEW.author_type
+	OR OLD.author_id IS NOT NEW.author_id
+	OR OLD.content IS NOT NEW.content
+	OR OLD.requests_input IS NOT NEW.requests_input
+	OR OLD.type IS NOT NEW.type
+	OR OLD.metadata IS NOT NEW.metadata
+	OR OLD.created_at IS NOT NEW.created_at
+	OR OLD.updated_at IS NOT NEW.updated_at
+	OR OLD.prompt_seq IS NOT NEW.prompt_seq
 BEGIN
 	INSERT INTO conversation_session_streams(session_id, watermark, terminal, updated_at)
 	VALUES (NEW.task_session_id, 1, FALSE, CURRENT_TIMESTAMP)
@@ -824,6 +839,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION conversation_message_journal() RETURNS TRIGGER AS $$
 DECLARE seq BIGINT; event_name TEXT; source_row task_session_messages%ROWTYPE; deleted BOOLEAN;
 BEGIN
+	IF TG_OP = 'UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN RETURN NEW; END IF;
 	deleted := TG_OP = 'DELETE';
 	IF deleted THEN source_row := OLD; event_name := 'message.deleted';
 	ELSIF TG_OP = 'INSERT' THEN source_row := NEW; event_name := 'message.added';

@@ -118,9 +118,9 @@ behavior:
   the floor until the floor release is cut, then update it to the floor
   tag; rename the job to match its new ref (the template names it after
   the pinned ref, "Default template on Kandev v0.86.0"), and rewrite the
-  sibling-path checkout comment (it cites
-  `plugin/../kandev/apps/backend`) to `kdlbs-kandev` in all three
-  workflows.
+  sibling-path checkout comment in `ci.yml` (it cites
+  `plugin/../kandev/apps/backend`) to `kdlbs-kandev` (`build.yml` and
+  `release.yml` carry no such comment).
 - README: replace the template's demo-surface documentation (the
   `/template` nav route, host-component page, webhook and `config_schema`
   surfaces) with plugin-specific content - identity, `api_read:
@@ -128,20 +128,27 @@ behavior:
   layout, and the `make ui-install`/`typecheck`/`test-ui`/`ui`/`package`
   targets - keeping the `kandev-plugin-prompt-history-0.1.0.tar.gz`
   archive name mentioned once so the `release.yml` README sed keeps
-  applying.
+  applying. Also remove the source-control recipe pitch, the
+  `recipes/`+`package.json`+`tsconfig.recipes.json` Layout entries, the
+  "hand-written, no build step" `ui/bundle.js` paragraph (Task 02's
+  esbuild toolchain replaces it), and the recipe-only `npm
+  ci --ignore-scripts` install line - and keep the "Developing against
+  the SDK" heading that `go.mod`'s comment cites.
 
 ### Task 02: Parity panel implementation
 
 Adopt the official-plugin toolchain from `kdlbs/kandev-plugin-voice`:
 TypeScript sources under `ui/src/` built by `ui/build.mjs` (esbuild, no
-bundled React, host-delegating JSX shim) into `ui/bundle.js`, with collocated
+bundled React, host-delegating JSX shim) into `ui/bundle.js`, with
+collocated
 vitest tests against a `test-host` mock. The Makefile `test` target
-becomes `test-backend test-ui`, and all three workflows' CI gains the
-`kandev-plugin-voice` UI steps (pnpm setup plus `make ui-install`,
-`make typecheck`, `make test-ui`, and `make ui`) before `make build` and
-`make verify-package`; `build.yml` has no Node steps today, so it gains
-the `Set up Node` and `Set up pnpm` (v10) steps ahead of its
-`make build` and `make verify-package`.
+becomes `test-backend test-ui`, and CI gains the `kandev-plugin-voice`
+UI steps: `ci.yml` gains `Set up Node`, `Set up pnpm` (v10), and `make
+ui-install`, `make typecheck`, `make test-ui`, and `make ui` (ahead of
+its `make verify-package`); `build.yml` and `release.yml` gain `Set up
+Node` + `Set up pnpm` (v10) and `make ui-install` ahead of their `make
+build`/`make verify-package`/`make package` (`build.yml` has no Node
+steps today), since the Makefile `package` target depends on `ui`.
 
 - `ui/src/derive.ts`: pure row derivation mirroring
   `apps/web/lib/prompt-history.ts` - `#N` from `promptIndex`, agent-sent
@@ -192,16 +199,16 @@ the `Set up Node` and `Set up pnpm` (v10) steps ahead of its
   mirrors the parity reference where it exists:
   `role="status" aria-live="polite"` on the loading indicator (the core
   renders it on every loading render), a focusable full-row navigate
-  `<button>` with `min-h-11` (44 px), the row-label `aria-label`, and
-  `aria-describedby` pointing at the sr-only label, an `sr-only` row label
-  with `aria-describedby`, and a real `<button>` expand control with
-  `aria-expanded` and catalog `aria-label`; deliberate delta: the plugin
+  `<button>` with `min-h-11` (44 px) and `aria-describedby` pointing at
+  an `sr-only` row label whose text is the row `aria-label`, and a real
+  `<button>` expand control with `aria-expanded` and a catalog
+  `aria-label`; deliberate delta: the plugin
   also puts `role="status"` on the empty state (the core's empty and
   passthrough states are plain divs with no role).
 - `ui/plugin.css`: the plugin-owned stylesheet (declared as
   `ui.styles: ["/ui/plugin.css"]` in the Task 01 manifest; the Task 01
   placeholder is replaced here). The bundle is built in a separate
-  repository and imported at runtime from `/api/plugins/{id}/ui/bundle.js`,
+  repository and imported at runtime from `/api/plugins/{id}/bundle`,
   so the host's build never sees it and the stylesheet owns every class it
   renders (the host's `@source` globs in `apps/web/app/globals.css` cover
   only `apps/web/components/**` and `apps/packages/ui/src/**`); namespaced
@@ -232,11 +239,13 @@ proof against a disposable development instance:
 2. A throwaway spec (created for the run under
    `apps/web/e2e/tests/plugins/`, deleted after) installs the production
    `kandev-plugin-prompt-history-0.1.0.tar.gz` through the existing upload
-   flow, reusing the path-parameterized `openInstallDialog`/`uploadPackage`
-   exports in `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim
-   and inlining only the plugin id, the tarball path, and the readiness
-   assertion (the shared `installFixturePlugin`/`uninstallFixturePlugin`
-   helpers hardcode the fixture's `kandev-plugin-e2e` id and package), and
+   flow, reusing the `openInstallDialog(page)` and
+   `uploadPackage(page, filePath)` exports in
+   `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim (only
+   `uploadPackage` is path-parameterized) and inlining only the plugin id,
+   the tarball path, and the readiness assertion (the shared
+   `installFixturePlugin`/`uninstallFixturePlugin` helpers hardcode the
+   fixture's `kandev-plugin-e2e` id and package), and
    drives the parity checks, targeting the production
    panel's `ph-plugin-` test ids: prompt ordering, `#N` ordinals, alias
    rendering, durations, favorite distinction, agent-sent indicator,
@@ -381,7 +390,7 @@ Pending.
   created before Task 01 proceeds, and the template must be the source of
   the initial tree.
 - Styling: the bundle is built in a separate repository and imported at
-  runtime from `/api/plugins/{id}/ui/bundle.js`, so the host's build never
+  runtime from `/api/plugins/{id}/bundle`, so the host's build never
   sees it and every utility is plugin-owned in `ui/plugin.css`; a utility
   the panel relies on but the css misses renders unstyled, which the
   computed-style parity assertion catches.

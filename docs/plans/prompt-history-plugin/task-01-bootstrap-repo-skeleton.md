@@ -44,7 +44,13 @@ instance.
   ["messages"]`, install via Settings > Plugins, the sibling-worktree dev
   layout, and the make targets - keeping the
   `kandev-plugin-prompt-history-0.1.0.tar.gz` archive name mentioned once
-  so the `release.yml` README sed keeps applying.
+  so the `release.yml` README sed keeps applying. Also removing the
+  source-control recipe pitch, the `recipes/`+`package.json`+
+  `tsconfig.recipes.json` Layout entries, the "hand-written, no build
+  step" `ui/bundle.js` paragraph (Task 02's esbuild toolchain replaces
+  it), and the recipe-only `npm ci --ignore-scripts` install line, and
+  keeping the "Developing against the SDK" heading that `go.mod`'s
+  comment cites.
 - The manifest: `api_version: 2`, `min_kandev_version: "0.95.0"` (the first
   release carrying the #3588 browser conversation facade; confirm at release
   cut), `capabilities: { api_read: ["messages"] }`, `ui.bundle: "/ui/bundle.js"`,
@@ -90,9 +96,9 @@ instance.
   the floor until the floor release is cut, then update it to the floor
   tag; rename the job to match its new ref (the template names it after
   the pinned ref, "Default template on Kandev v0.86.0"), and rewrite the
-  sibling-path checkout comment (it cites
-  `plugin/../kandev/apps/backend`) to `kdlbs-kandev` in all three
-  workflows.
+  sibling-path checkout comment in `ci.yml` (it cites
+  `plugin/../kandev/apps/backend`) to `kdlbs-kandev` (`build.yml` and
+  `release.yml` carry no such comment).
 
 ## Out of scope
 

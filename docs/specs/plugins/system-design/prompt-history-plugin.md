@@ -115,17 +115,17 @@ Module layout:
   mirrors the parity reference where it exists:
   `role="status" aria-live="polite"` on the loading indicator (the core
   renders it on every loading render), a focusable full-row navigate
-  `<button>` with `min-h-11` (44 px), the row-label `aria-label`, and
-  `aria-describedby` pointing at the sr-only label, an `sr-only` row label
-  with `aria-describedby`, and a real `<button>` expand control with
-  `aria-expanded` and catalog `aria-label` (the parity spec's role-based
+  `<button>` with `min-h-11` (44 px) and `aria-describedby` pointing at
+  an `sr-only` row label whose text is the row `aria-label`, and a real
+  `<button>` expand control with `aria-expanded` and a catalog
+  `aria-label` (the parity spec's role-based
   queries and 44 px tap-target assertions depend on these). Deliberate
   delta: the plugin also puts `role="status"` on the empty state; the
   core's empty and passthrough states are plain divs with no role.
 - `ui/plugin.css` — the plugin-owned stylesheet, declared as
   `ui.styles: ["/ui/plugin.css"]` in the manifest. The bundle is built in a
   separate repository and imported at runtime from
-  `/api/plugins/{id}/ui/bundle.js`, so the host's build never sees it and
+  `/api/plugins/{id}/bundle`, so the host's build never sees it and
   no utility in the host's Tailwind sources applies to it; the stylesheet
   therefore owns every class it renders (the host's `@source` globs in
   `apps/web/app/globals.css` cover only `apps/web/components/**` and
@@ -284,10 +284,11 @@ runs against a disposable development instance:
    filename, so it must not replace the verified archive).
 2. The monorepo e2e test-base backend and Playwright harness are used as
    the disposable instance and driver. A throwaway spec (not committed to
-   the monorepo) reuses the path-parameterized
-   `openInstallDialog`/`uploadPackage` exports in
-   `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim, inlining
-   only the plugin id, the tarball path, and the readiness assertion (the
+   the monorepo) reuses the `openInstallDialog(page)` and
+   `uploadPackage(page, filePath)` exports in
+   `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim (only
+   `uploadPackage` is path-parameterized), inlining only the plugin id,
+   the tarball path, and the readiness assertion (the
    shared `installFixturePlugin`/`uninstallFixturePlugin` helpers hardcode
    the fixture's `kandev-plugin-e2e` id and package), and drives the same
    behavioral

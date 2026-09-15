@@ -35,12 +35,13 @@ confirm the core panel and fixture remain behaviorally unchanged.
   `ui/bundle.js` and `ui/plugin.css` (mirroring
   `kdlbs/kandev-plugin-voice`'s `stage_common`), not the `ui/` source tree.
 - The throwaway parity spec(s) under `apps/web/e2e/tests/plugins/`
-  (created for the run, deleted after): reuse the path-parameterized
-  `openInstallDialog`/`uploadPackage` exports in
-  `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim, inlining
-  only the plugin id, the tarball path, and the readiness assertion (the
-  shared `installFixturePlugin`/`uninstallFixturePlugin` helpers hardcode
-  the fixture's `kandev-plugin-e2e` id and package path) to install the
+  (created for the run, deleted after): reuse the `openInstallDialog(page)`
+  and `uploadPackage(page, filePath)` exports in
+  `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` verbatim (only
+  `uploadPackage` is path-parameterized), inlining only the plugin id,
+  the tarball path, and the readiness assertion (the shared
+  `installFixturePlugin`/`uninstallFixturePlugin` helpers hardcode the
+  fixture's `kandev-plugin-e2e` id and package path) to install the
   production tarball, and drive the parity checks - prompt
   ordering, `#N` ordinals, alias rendering, durations, favorite
   distinction, agent-sent indicator, older-page auto-loading, live
@@ -146,9 +147,10 @@ for the run and deleted after):
   `installFixturePlugin`/`uninstallFixturePlugin` helpers that hardcode
   the fixture's `kandev-plugin-e2e` id and package path).
 - `apps/web/e2e/tests/plugins/plugin-test-helpers.ts` (the
-  path-parameterized `openInstallDialog`/`uploadPackage` exports, reused
-  verbatim; only the plugin id, the tarball path, and the readiness
-  assertion are inlined).
+  `openInstallDialog(page)` and `uploadPackage(page, filePath)` exports,
+  reused verbatim; only `uploadPackage` is path-parameterized, and only
+  the plugin id, the tarball path, and the readiness assertion are
+  inlined).
 - Parity reference: `apps/web/components/task/prompt-history-panel-content.tsx`.
 
 ## Results

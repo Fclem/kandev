@@ -90,11 +90,11 @@ contracts.
   test ids distinct from the core panel's ids. Accessibility mirrors the
   parity reference where it exists: `role="status" aria-live="polite"` on
   the loading indicator (the core renders it on every loading render), a
-  focusable full-row navigate `<button>` with `min-h-11` (44 px), the
-  row-label `aria-label`, and `aria-describedby` pointing at the sr-only
-  label, an `sr-only` row label with `aria-describedby`, and a real
-  `<button>` expand control with `aria-expanded` and catalog `aria-label`
-  (the parity spec's role-based queries and 44 px tap-target assertions
+  focusable full-row navigate `<button>` with `min-h-11` (44 px) and
+  `aria-describedby` pointing at an `sr-only` row label whose text is the
+  row `aria-label`, and a real `<button>` expand control with
+  `aria-expanded` and a catalog `aria-label` (the parity spec's role-based
+  queries and 44 px tap-target assertions
   depend on these); deliberate delta: the plugin also puts
   `role="status"` on the empty state (the core's empty and passthrough
   states are plain divs with no role).
@@ -108,7 +108,7 @@ contracts.
 - `ui/plugin.css`: the plugin-owned stylesheet (declared as
   `ui.styles: ["/ui/plugin.css"]` in the manifest; the Task 01 placeholder
   is replaced here). The bundle is built in a separate repository and
-  imported at runtime from `/api/plugins/{id}/ui/bundle.js`, so the host's
+  imported at runtime from `/api/plugins/{id}/bundle`, so the host's
   build never sees it and the stylesheet owns every class it renders (the
   host's `@source` globs in `apps/web/app/globals.css` cover only
   `apps/web/components/**` and `apps/packages/ui/src/**`); namespaced class
@@ -116,15 +116,21 @@ contracts.
   `kandev-plugin-voice` (`ui/plugin.css` + `ui.styles`).
 - `ui/build.mjs` (esbuild, no bundled React, host-delegating JSX shim) and
   `ui/src/test-host.ts` (Host mock for the vitest suite).
+- `ui/pnpm-workspace.yaml`: allowlists esbuild's build script
+  (`onlyBuiltDependencies: [esbuild]`, mirroring `kandev-plugin-voice`;
+  pnpm 10 does not run dependency lifecycle scripts unless allowlisted,
+  and the monorepo pins pnpm 9.15.9, so nothing else in this package
+  models the pnpm 10 default).
 - `ui/src/host.ts`: re-exports the `@kandev/plugin-sdk` types (the
   `file:../../kdlbs-kandev/apps/packages/plugin-sdk` dependency in
   `ui/package.json`) instead of restating the contract, so
   `tsc --noEmit` typechecks the panel against the pinned SDK.
-- CI: all three workflows gain the `kandev-plugin-voice` UI steps (pnpm
-  setup plus `make ui-install`, `make typecheck`, `make test-ui`, and
-  `make ui`) before `make build` and `make verify-package`; `build.yml`
-  has no Node steps today, so it gains the `Set up Node` and `Set up pnpm`
-  (v10) steps ahead of its `make build` and `make verify-package`. The
+- CI: `ci.yml` gains `Set up Node`, `Set up pnpm` (v10), and `make
+  ui-install`, `make typecheck`, `make test-ui`, and `make ui` ahead of
+  its `make verify-package`; `build.yml` and `release.yml` gain `Set up
+  Node` + `Set up pnpm` (v10) and `make ui-install` ahead of their `make
+  build`/`make verify-package`/`make package` (`build.yml` has no Node
+  steps today), since the Makefile `package` target depends on `ui`. The
   Makefile `test` target becomes `test-backend test-ui` (it is
   `test-backend` after Task 01's recipe strip).
 - `.gitignore`: add `/ui/bundle.js` and `/ui/node_modules/` (mirroring
@@ -181,6 +187,7 @@ cd .. && make package-host
 - `kdlbs/kandev-plugin-prompt-history/ui/tsconfig.json`
 - `kdlbs/kandev-plugin-prompt-history/ui/vitest.config.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/pnpm-lock.yaml`
+- `kdlbs/kandev-plugin-prompt-history/ui/pnpm-workspace.yaml`
 - `kdlbs/kandev-plugin-prompt-history/.gitignore`
 - `kdlbs/kandev-plugin-prompt-history/Makefile` (test/build targets for the
   UI toolchain)

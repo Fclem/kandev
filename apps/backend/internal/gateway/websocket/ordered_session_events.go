@@ -176,20 +176,24 @@ func (h *Hub) orderedSessionRecipients(sessionID string) []*Client {
 	service := h.pluginConversationService
 	for _, client := range denied {
 		client.mu.Lock()
-		byConsumer := client.orderedSessionSubscriptions[sessionID]
-		if service != nil {
-			for _, key := range byConsumer {
-				if err := service.SessionEvents().ReleaseCursor(key); err != nil && h.logger != nil {
-					h.logger.Warn(
-						"release revoked ordered session cursor",
-						zap.String("session_id", sessionID),
-						zap.Error(err),
-					)
-				}
-			}
+		revoked := make([]plugins.SessionDeliveryCursorKey, 0, len(client.orderedSessionSubscriptions[sessionID]))
+		for _, key := range client.orderedSessionSubscriptions[sessionID] {
+			revoked = append(revoked, key)
 		}
 		delete(client.orderedSessionSubscriptions, sessionID)
 		client.mu.Unlock()
+		if service == nil {
+			continue
+		}
+		for _, key := range revoked {
+			if err := service.SessionEvents().ReleaseCursor(key); err != nil && h.logger != nil {
+				h.logger.Warn(
+					"release revoked ordered session cursor",
+					zap.String("session_id", sessionID),
+					zap.Error(err),
+				)
+			}
+		}
 	}
 	return allowed
 }

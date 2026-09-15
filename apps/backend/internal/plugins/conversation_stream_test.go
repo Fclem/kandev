@@ -415,3 +415,25 @@ func TestSessionEventAcknowledgePersistsOnlyTheCursorRow(t *testing.T) {
 	require.Len(t, events, 2)
 	require.Equal(t, uint64(2), reopened.Watermark("session-1"))
 }
+
+func TestSessionEventAcknowledgeRestoresTimestampOnPersistFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session-events.db")
+	log, err := NewSessionEventLog(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, log.Close()) })
+	base := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	log.now = func() time.Time { return base }
+	event, err := log.Append("session-1", stringPtr("task-1"), "message.added", validMessageAddedPayload("m1"))
+	require.NoError(t, err)
+	key := testCursor()
+	require.NoError(t, log.RegisterCursor(key, 0))
+	previous := log.state.Cursors[deliveryCursorKey(key)].UpdatedAt
+	log.now = func() time.Time { return base.Add(time.Minute) }
+
+	require.NoError(t, log.Close())
+	require.Error(t, log.Acknowledge(key, event.Sequence))
+
+	restored := log.state.Cursors[deliveryCursorKey(key)]
+	require.Equal(t, uint64(0), restored.AcknowledgedSequence)
+	require.Equal(t, previous, restored.UpdatedAt)
+}

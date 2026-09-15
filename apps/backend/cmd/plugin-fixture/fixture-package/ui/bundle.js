@@ -370,10 +370,10 @@
       }
 
       function promptDuration(startedAt, completedAt, translated) {
-        var seconds = Math.max(
-          0,
-          Math.floor((Date.parse(completedAt) - Date.parse(startedAt)) / 1000),
-        );
+        var started = Date.parse(startedAt);
+        var completed = Date.parse(completedAt);
+        if (Number.isNaN(started) || Number.isNaN(completed)) return "";
+        var seconds = Math.max(0, Math.floor((completed - started) / 1000));
         var hours = Math.floor(seconds / 3600);
         var minutes = Math.floor((seconds % 3600) / 60);
         var remaining = seconds % 60;

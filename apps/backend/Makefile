@@ -317,7 +317,7 @@ HOST_GOARCH := $(shell $(GO) env GOARCH)
 
 .PHONY: e2e-plugin-ui
 e2e-plugin-ui:
-	cd ../web && pnpm run build:e2e-plugin -- --outDir ../../apps/backend/cmd/plugin-fixture/fixture-package/ui
+	cd ../web && pnpm run build:e2e-plugin -- --outDir ../../apps/backend/$(FIXTURE_PACKAGE_DIR)/ui
 
 .PHONY: e2e-plugin-package
 e2e-plugin-package: e2e-plugin-ui

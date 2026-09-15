@@ -825,7 +825,8 @@ func (s *Service) ListMessagesPaginated(ctx context.Context, req ListMessagesReq
 		return nil, false, err
 	}
 	limit := req.Limit
-	if limit <= 0 && (req.Before != "" || req.After != "" || req.Around != "" || req.AuthorType != "") {
+	if limit <= 0 && (req.Before != "" || req.After != "" || req.Around != "" ||
+		req.AuthorType != "" || len(req.AuthorTypes) > 0 || req.TaskID != "") {
 		limit = DefaultMessagesPageSize
 	}
 	if limit > MaxMessagesPageSize {

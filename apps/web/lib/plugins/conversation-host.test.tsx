@@ -162,6 +162,7 @@ function event(
 
 beforeEach(() => {
   currentState = null;
+  currentTurnsState = null;
   transport.listener = null;
   transport.statusListener = null;
   transport.request.mockReset();

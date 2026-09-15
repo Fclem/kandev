@@ -1,14 +1,12 @@
 // Routing: /t/{taskId}. The mobile- prefix selects the mobile-chrome project.
 import { expect, test } from "../../fixtures/test-base";
-import { installFixturePlugin, PLUGIN_ID } from "../../helpers/plugin-fixture";
+import { installFixturePlugin, uninstallFixturePlugin } from "../../helpers/plugin-fixture";
 import { SessionPage } from "../../pages/session-page";
 
 const PANEL_OPTION = "mobile-plugin-panel-option-kandev-plugin-e2e-prompt-history-plugin";
 
 test.describe("Mobile prompt-history fixture", () => {
-  test.afterEach(async ({ apiClient }) => {
-    await apiClient.rawRequest("DELETE", `/api/plugins/${PLUGIN_ID}`).catch(() => undefined);
-  });
+  test.afterEach(async ({ apiClient }) => uninstallFixturePlugin(apiClient));
 
   test("pages, previews aliases, and navigates through the Host facade", async ({
     testPage,
@@ -78,8 +76,10 @@ test.describe("Mobile prompt-history fixture", () => {
     await alias.tap();
     await expect(testPage.getByText("Mobile saved prompt preview")).toBeVisible();
     await testPage.keyboard.press("Escape");
+    await expect(testPage.getByText("Mobile saved prompt preview")).toBeHidden();
 
     const openPrompt = panel.getByRole("button", { name: "Open prompt" });
+    await expect(openPrompt).toBeVisible();
     expect((await openPrompt.boundingBox())?.height).toBeGreaterThanOrEqual(44);
     await openPrompt.tap();
     await expect(session.activeChat().getByText("mobile latest", { exact: false })).toBeVisible();

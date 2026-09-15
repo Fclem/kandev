@@ -525,6 +525,7 @@ func (l *SessionEventLog) Acknowledge(key SessionDeliveryCursorKey, sequence uin
 		}
 	}
 	previous := cursor.AcknowledgedSequence
+	previousUpdatedAt := cursor.UpdatedAt
 	cursor.AcknowledgedSequence = sequence
 	cursor.UpdatedAt = l.now().UTC()
 	// ACKs are per contiguous event, so persist only the advanced cursor row
@@ -532,6 +533,7 @@ func (l *SessionEventLog) Acknowledge(key SessionDeliveryCursorKey, sequence uin
 	// cursor, poison record, and audit with the full-state transaction.
 	if err := l.persistCursorRowLocked(encodedKey, cursor); err != nil {
 		cursor.AcknowledgedSequence = previous
+		cursor.UpdatedAt = previousUpdatedAt
 		return err
 	}
 	return nil

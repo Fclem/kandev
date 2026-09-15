@@ -116,7 +116,6 @@ function useOrderedMessageEvents({
   scope,
   sessionId,
   taskId,
-  authorTypes,
   authorsKey,
   sort,
   snapshotKey,
@@ -128,7 +127,6 @@ function useOrderedMessageEvents({
   scope: ConversationScope | null;
   sessionId: string | null;
   taskId: string | null;
-  authorTypes?: readonly ("user" | "agent")[];
   authorsKey: string;
   sort: "asc" | "desc";
   snapshotKey: string;
@@ -139,6 +137,7 @@ function useOrderedMessageEvents({
 }) {
   React.useEffect(() => {
     if (!scope || !sessionId) return;
+    const allowedAuthorTypes = authorsKey ? new Set(authorsKey.split(",")) : null;
     return scope.subscribe(
       (event) => {
         if (event.event_type === "session.removed") {
@@ -171,7 +170,7 @@ function useOrderedMessageEvents({
         }
         const message = messageFromEvent(event);
         if (!message) return false;
-        if (authorTypes && !authorTypes.includes(message.authorType)) return true;
+        if (allowedAuthorTypes && !allowedAuthorTypes.has(message.authorType)) return true;
         deletedMessagesRef.current.delete(message.id);
         setState((current) => {
           const messages = current.messages.filter((item) => item.id !== message.id);
@@ -186,7 +185,6 @@ function useOrderedMessageEvents({
       snapshotKey,
     );
   }, [
-    authorTypes,
     authorsKey,
     cursorRef,
     deletedMessagesRef,
@@ -608,7 +606,6 @@ function useSessionMessages(query: PluginSessionMessagesQuery): PluginSessionMes
     scope: resolved.error ? null : scope,
     sessionId: query.sessionId,
     taskId: resolved.taskId,
-    authorTypes: query.authorTypes,
     authorsKey,
     sort,
     snapshotKey,

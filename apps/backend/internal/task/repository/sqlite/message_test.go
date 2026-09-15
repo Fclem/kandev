@@ -670,10 +670,11 @@ func TestListMessagesPaginatedAuthorTypesAndTaskFilter(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
 	seedForMsgTest(t, repo, "task-page-filters", "session-page-filters", "turn-page-filters")
+	now := time.Now().UTC()
 	seeds := []*models.Message{
-		{ID: "page-user-1", TaskID: "task-page-filters", TaskSessionID: "session-page-filters", TurnID: "turn-page-filters", AuthorType: models.MessageAuthorUser, Type: models.MessageTypeMessage, Content: "u1"},
-		{ID: "page-agent-1", TaskID: "task-page-filters", TaskSessionID: "session-page-filters", TurnID: "turn-page-filters", AuthorType: models.MessageAuthorAgent, Type: models.MessageTypeMessage, Content: "a1"},
-		{ID: "page-user-2", TaskID: "task-page-filters", TaskSessionID: "session-page-filters", TurnID: "turn-page-filters", AuthorType: models.MessageAuthorUser, Type: models.MessageTypeMessage, Content: "u2"},
+		{ID: "page-user-1", TaskID: "task-page-filters", TaskSessionID: "session-page-filters", TurnID: "turn-page-filters", AuthorType: models.MessageAuthorUser, Type: models.MessageTypeMessage, Content: "u1", CreatedAt: now},
+		{ID: "page-agent-1", TaskID: "task-page-filters", TaskSessionID: "session-page-filters", TurnID: "turn-page-filters", AuthorType: models.MessageAuthorAgent, Type: models.MessageTypeMessage, Content: "a1", CreatedAt: now.Add(time.Second)},
+		{ID: "page-user-2", TaskID: "task-page-filters", TaskSessionID: "session-page-filters", TurnID: "turn-page-filters", AuthorType: models.MessageAuthorUser, Type: models.MessageTypeMessage, Content: "u2", CreatedAt: now.Add(2 * time.Second)},
 	}
 	for _, message := range seeds {
 		if err := repo.CreateMessage(ctx, message); err != nil {

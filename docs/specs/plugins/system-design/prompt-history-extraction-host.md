@@ -24,8 +24,8 @@ The existing core feature remains the reference implementation. This package doe
 
 |Requirement|Design sections|
 |-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|`REQ-PLUGINS-PROMPT-HISTORY-HOST-001`|[Task-panel contract](#task-panel-contract), [Mobile design contract](#mobile-design-contract)|
-|`REQ-PLUGINS-PROMPT-HISTORY-HOST-002`|[Browser conversation facade](#browser-conversation-facade), [Backend read routes](#backend-read-routes), [Snapshot and event reconciliation](#snapshot-and-event-reconciliation)|
+|`REQ-PLUGINS-PROMPT-HISTORY-HOST-001`|[Task-panel contract](#task-panel-contract), [Scoped transcript navigation](#scoped-transcript-navigation)|
+|`REQ-PLUGINS-PROMPT-HISTORY-HOST-002`|[Browser conversation facade](#browser-conversation-facade), [Backend read routes](#backend-read-routes)|
 |`REQ-PLUGINS-PROMPT-HISTORY-HOST-003`|[Scoped transcript navigation](#scoped-transcript-navigation)|
 |`REQ-PLUGINS-PROMPT-HISTORY-HOST-004`|[Host-owned display dependencies](#host-owned-display-dependencies)|
 |`REQ-PLUGINS-PROMPT-HISTORY-HOST-005`|[Compatibility and extraction sequence](#compatibility-and-extraction-sequence), [Verification architecture](#verification-architecture)|

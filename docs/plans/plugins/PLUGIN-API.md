@@ -1009,7 +1009,7 @@ Only `message.added`, `message.updated`, `message.deleted`,
 this migrated contract.
 The raw envelope is decoded with `protocol_version: number` and arbitrary
 `event_type`/`payload`; `SessionEvent` is the validated projected union.
-Validation requires `payload.event_type === event_type`; a mismatch is durable
+Validation requires `payload.type === event_type`; a mismatch is durable
 poison, is not projected, and cannot advance ACK. Strict subscribe ACKs require
 `session_id`, `result`, `event_watermark`, `snapshot_cutoff`, `snapshot_token`,
 and `resume_token`. `fresh` forbids replay and oldest-sequence fields;

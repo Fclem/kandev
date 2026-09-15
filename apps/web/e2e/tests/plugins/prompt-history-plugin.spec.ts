@@ -1,16 +1,15 @@
 import { expect, test } from "../../fixtures/test-base";
-import type { ApiClient } from "../../helpers/api-client";
-import { installFixturePlugin, PLUGIN_ID } from "../../helpers/plugin-fixture";
+import {
+  installFixturePlugin,
+  PLUGIN_ID,
+  uninstallFixturePlugin,
+} from "../../helpers/plugin-fixture";
 import { SessionPage } from "../../pages/session-page";
 
 const PANEL_KEY = "prompt-history-plugin";
 
-async function uninstall(apiClient: ApiClient) {
-  await apiClient.rawRequest("DELETE", `/api/plugins/${PLUGIN_ID}`).catch(() => undefined);
-}
-
 test.describe("Packaged prompt-history fixture", () => {
-  test.afterEach(async ({ apiClient }) => uninstall(apiClient));
+  test.afterEach(async ({ apiClient }) => uninstallFixturePlugin(apiClient));
 
   test("uses only Host conversation capabilities for paging, live transitions, and navigation", async ({
     testPage,
@@ -68,7 +67,8 @@ test.describe("Packaged prompt-history fixture", () => {
     await expect(panel).toBeVisible({ timeout: 10_000 });
     await expect(panel.getByTestId("fixture-prompt-history-row").first()).toContainText("Prompt");
     const loadOlder = panel.getByTestId("fixture-prompt-history-load-more");
-    if (await loadOlder.isVisible()) await loadOlder.click();
+    await expect(loadOlder).toBeVisible();
+    await loadOlder.click();
     await expect(panel.locator(`[data-message-id="${live.messageId}"]`)).toContainText(
       "Sent by agent",
     );
@@ -94,7 +94,8 @@ test.describe("Packaged prompt-history fixture", () => {
     await expect(alias).toHaveAttribute("data-prompt-name", "daily");
     await alias.click();
     await expect(testPage.getByText("Saved daily prompt preview")).toBeVisible();
-    await alias.click();
+    await testPage.keyboard.press("Escape");
+    await expect(testPage.getByText("Saved daily prompt preview")).toBeHidden();
 
     await panel.getByRole("button", { name: "Open prompt" }).click();
     await expect(session.activeChat().locator(`#msg-${live.messageId}`)).toBeAttached();

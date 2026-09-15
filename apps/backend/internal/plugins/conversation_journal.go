@@ -38,7 +38,8 @@ const (
 
 //nolint:goconst // These keys are an explicit privacy allowlist.
 var conversationMessageMetadataKeys = map[string]struct{}{
-	"action_visibility": {}, "actions": {}, "agent_disconnected": {},
+	"action_details": {}, "action_type": {}, "action_visibility": {},
+	"actions": {}, "agent_disconnected": {},
 	"attempt": {}, "attachments": {}, "auth_methods": {}, "auto_start": {},
 	"base_branch": {}, "context": {}, "context_files": {}, "decision_id": {},
 	"effective_model": {}, "entity_references": {}, "error_output": {},
@@ -46,14 +47,15 @@ var conversationMessageMetadataKeys = map[string]struct{}{
 	"fallback_model": {}, "has_hidden_prompts": {}, "has_resume_token": {},
 	"has_review_comments": {}, "is_auth_error": {}, "kind": {}, "max_attempts": {},
 	"message": {}, "missing_branch": {}, "model_id": {}, "new_branch": {},
-	"original_branch": {}, "pending_id": {}, "plan_mode": {}, "progress": {},
+	"original_branch": {}, "options": {}, "pending_id": {}, "plan_mode": {}, "progress": {},
 	"provider_name": {}, "question": {}, "question_id": {}, "question_index": {},
 	"question_total": {}, "recovery_actions": {}, "remediation": {},
-	"remediation_url": {}, "requested_model": {}, "requests_input": {},
-	"response": {}, "reset_at": {}, "retry_at": {}, "retry_in_seconds": {},
-	"retrying": {}, "sender_session_id": {}, "sender_session_name": {},
+	"remediation_url": {}, "requested_model": {}, "request_id": {},
+	"requests_input": {}, "response": {}, "reset_at": {}, "retry_at": {},
+	"retry_in_seconds": {},
+	"retrying":         {}, "sender_session_id": {}, "sender_session_name": {},
 	"sender_task_id": {}, "sender_task_title": {}, "stage": {}, "status": {},
-	"task_id": {}, "text": {}, "variant": {}, "workflow_message": {},
+	"task_id": {}, "text": {}, "tool_call_id": {}, "variant": {}, "workflow_message": {},
 	"workflow_step_color": {}, "workflow_step_id": {}, "workflow_step_name": {},
 }
 

@@ -263,6 +263,14 @@ func TestSanitizeConversationMessageEventPreservesPresentationMetadata(t *testin
 		"message_type": "clarification_request",
 		"requests_input": true,
 		"metadata": {
+			"request_id": "request-1",
+			"tool_call_id": "tool-1",
+			"action_type": "execute",
+			"action_details": {"command": "ls"},
+			"options": [
+				{"option_id": "allow", "name": "Allow", "kind": "allow_once"},
+				{"option_id": "reject", "name": "Reject", "kind": "reject_once"}
+			],
 			"pending_id": "pending-1",
 			"question": {"id": "question-1", "prompt": "Choose <kandev-system>hidden</kandev-system>"},
 			"secret": "must-not-be-copied",
@@ -277,8 +285,16 @@ func TestSanitizeConversationMessageEventPreservesPresentationMetadata(t *testin
 	require.Equal(t, "clarification_request", payload["message_type"])
 	require.Equal(t, true, payload["requests_input"])
 	require.Equal(t, map[string]any{
-		"pending_id": "pending-1",
-		"question":   map[string]any{"id": "question-1", "prompt": "Choose"},
+		"action_details": map[string]any{"command": "ls"},
+		"action_type":    "execute",
+		"options": []any{
+			map[string]any{"option_id": "allow", "name": "Allow", "kind": "allow_once"},
+			map[string]any{"option_id": "reject", "name": "Reject", "kind": "reject_once"},
+		},
+		"pending_id":   "pending-1",
+		"question":     map[string]any{"id": "question-1", "prompt": "Choose"},
+		"request_id":   "request-1",
+		"tool_call_id": "tool-1",
 	}, payload["metadata"])
 }
 

@@ -15,6 +15,8 @@ export type PendingClarificationScope = {
    * empty object disables detection.
    */
   currentTurnId?: string | null;
+  /** True when currentTurnId identifies a completed turn. */
+  currentTurnCompleted?: boolean;
   /**
    * Allows detached clarification requests to remain answerable after their
    * turn is no longer the newest durable turn.
@@ -116,6 +118,7 @@ function clarificationMessagesInScope(
   if (!scope) return messages;
   const allowDetached =
     (scope.allowDetached === true || scope.pendingAction === null) &&
+    scope.currentTurnCompleted !== true &&
     hasDetachedPendingClarification(messages);
   if (
     scope.pendingAction !== undefined &&

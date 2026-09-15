@@ -238,9 +238,11 @@ func TestConversationJournalPreservesPresentationMetadata(t *testing.T) {
 		AuthorType: models.MessageAuthorAgent, Type: models.MessageTypeClarificationRequest,
 		Content: "Question", RequestsInput: true,
 		Metadata: map[string]any{
-			"pending_id":  "pending-1",
-			"question":    map[string]any{"id": "question-1", "prompt": "Choose"},
-			"raw_content": "must-not-be-copied",
+			"agent_disconnected": true,
+			"has_hidden_prompts": false,
+			"pending_id":         "pending-1",
+			"question":           map[string]any{"id": "question-1", "prompt": "Choose"},
+			"raw_content":        "must-not-be-copied",
 		},
 	}
 	if err := repo.CreateMessage(context.Background(), message); err != nil {
@@ -259,7 +261,7 @@ func TestConversationJournalPreservesPresentationMetadata(t *testing.T) {
 		t.Fatalf("message presentation fields = %#v", event)
 	}
 	metadata, ok := event["metadata"].(map[string]any)
-	if !ok || metadata["pending_id"] != "pending-1" {
+	if !ok || metadata["pending_id"] != "pending-1" || metadata["agent_disconnected"] != true || metadata["has_hidden_prompts"] != false {
 		t.Fatalf("message metadata = %#v", event["metadata"])
 	}
 	if _, exists := metadata["raw_content"]; exists {

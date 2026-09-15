@@ -532,11 +532,17 @@ func sqliteConversationMetadataExpr(metadataExpr string) string {
 
 func postgresConversationMetadataExpr(metadataExpr string) string {
 	source := "conversation_safe_jsonb(" + metadataExpr + ")"
-	arguments := make([]string, 0, len(conversationMessageMetadataKeys)*2)
-	for _, key := range conversationMessageMetadataKeys {
-		arguments = append(arguments, "'"+key+"'", source+" -> '"+key+"'")
+	const maxKeysPerJSONBObject = 40 // PostgreSQL limits function calls to 100 arguments.
+	objects := make([]string, 0, (len(conversationMessageMetadataKeys)+maxKeysPerJSONBObject-1)/maxKeysPerJSONBObject)
+	for start := 0; start < len(conversationMessageMetadataKeys); start += maxKeysPerJSONBObject {
+		end := min(start+maxKeysPerJSONBObject, len(conversationMessageMetadataKeys))
+		arguments := make([]string, 0, (end-start)*2)
+		for _, key := range conversationMessageMetadataKeys[start:end] {
+			arguments = append(arguments, "'"+key+"'", source+" -> '"+key+"'")
+		}
+		objects = append(objects, "jsonb_build_object("+strings.Join(arguments, ",")+")")
 	}
-	return "jsonb_strip_nulls(jsonb_build_object(" + strings.Join(arguments, ",") + "))"
+	return "jsonb_strip_nulls(" + strings.Join(objects, " || ") + ")"
 }
 
 func journalTaskID(taskID string) any {

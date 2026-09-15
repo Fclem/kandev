@@ -97,7 +97,7 @@ for the run and deleted after):
 (cd apps && pnpm --filter @kandev/web e2e:run -- e2e/tests/plugins/prompt-history-parity-check.spec.ts)
 (cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/plugins/mobile-prompt-history-parity-check.spec.ts)
 (cd apps && pnpm --filter @kandev/web e2e:run -- --no-build -- e2e/tests/task/prompt-history-panel.spec.ts e2e/tests/task/prompt-history-auto-load.spec.ts e2e/tests/plugins/prompt-history-plugin.spec.ts)
-(cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/task/mobile-prompt-history-panel.spec.ts)
+(cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/task/mobile-prompt-history-panel.spec.ts e2e/tests/plugins/mobile-prompt-history-plugin.spec.ts)
 ```
 
 ## Files likely touched

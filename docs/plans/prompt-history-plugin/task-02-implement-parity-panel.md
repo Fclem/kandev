@@ -90,7 +90,8 @@ contracts.
   test ids distinct from the core panel's ids. Accessibility mirrors the
   parity reference where it exists: `role="status" aria-live="polite"` on
   the loading indicator (the core renders it on every loading render), a
-  focusable full-row navigate `<button>` with `min-h-11` (44 px) and
+  focusable full-row navigate `<button>` with a 44 px minimum target
+  supplied by `ui/plugin.css` (the core's `min-h-11`) and
   `aria-describedby` pointing at an `sr-only` row label whose text is the
   row `aria-label`, and a real `<button>` expand control with
   `aria-expanded` and a catalog `aria-label` (the parity spec's role-based
@@ -125,13 +126,24 @@ contracts.
   `file:../../kdlbs-kandev/apps/packages/plugin-sdk` dependency in
   `ui/package.json`) instead of restating the contract, so
   `tsc --noEmit` typechecks the panel against the pinned SDK.
-- CI: `ci.yml` gains `Set up Node`, `Set up pnpm` (v10), and `make
-  ui-install`, `make typecheck`, `make test-ui`, and `make ui` ahead of
-  its `make verify-package`; `build.yml` and `release.yml` gain `Set up
-  Node` + `Set up pnpm` (v10) and `make ui-install` ahead of their `make
-  build`/`make verify-package`/`make package` (`build.yml` has no Node
-  steps today), since the Makefile `package` target depends on `ui`. The
-  Makefile `test` target becomes `test-backend test-ui` (it is
+- Makefile: `ui-install`, `ui` (the esbuild build), `typecheck` (tsc
+  --noEmit), and `test-ui` (vitest) targets mirroring
+  `kdlbs/kandev-plugin-voice`, and the `package`/`package-host` staging
+  switches from the template's `cp -r ui` to the voice `stage_common`
+  (staging only `manifest.yaml`, the built `ui/bundle.js`, and
+  `ui/plugin.css`), so the `make package-host` smoke stages a clean tree
+  once `ui/src` and `ui/node_modules` exist; `verify-package` gains the
+  `ui/src`, `ui/node_modules`, and `ui/package.json` absence assertions
+  in Task 03.
+- CI: `ci.yml` gains `Set up pnpm` (v10) and `make ui-install`
+  immediately before its `make test` step, then `make typecheck`,
+  `make test-ui`, and `make ui`; `build.yml` gains `Set up Node` +
+  `Set up pnpm` (v10) and `make ui-install` before its `make build` step
+  (it has no Node steps today); `release.yml` gains `Set up pnpm` (v10)
+  and `make ui-install` before its `Verify` step, which runs `make test`
+  - not merely before `make verify-package` - since the `test` target
+  includes `test-ui` and the Makefile `package` target depends on `ui`.
+  The Makefile `test` target becomes `test-backend test-ui` (it is
   `test-backend` after Task 01's recipe strip).
 - `.gitignore`: add `/ui/bundle.js` and `/ui/node_modules/` (mirroring
   `kandev-plugin-voice`'s generated-output entries), and run
@@ -181,6 +193,8 @@ cd .. && make package-host
 - `kdlbs/kandev-plugin-prompt-history/ui/src/strings.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/host.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/test-host.ts`
+- `kdlbs/kandev-plugin-prompt-history/ui/src/derive.test.ts`
+- `kdlbs/kandev-plugin-prompt-history/ui/src/panel.test.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/plugin.css`
 - `kdlbs/kandev-plugin-prompt-history/ui/build.mjs`
 - `kdlbs/kandev-plugin-prompt-history/ui/package.json`
@@ -189,8 +203,8 @@ cd .. && make package-host
 - `kdlbs/kandev-plugin-prompt-history/ui/pnpm-lock.yaml`
 - `kdlbs/kandev-plugin-prompt-history/ui/pnpm-workspace.yaml`
 - `kdlbs/kandev-plugin-prompt-history/.gitignore`
-- `kdlbs/kandev-plugin-prompt-history/Makefile` (test/build targets for the
-  UI toolchain)
+- `kdlbs/kandev-plugin-prompt-history/Makefile` (UI toolchain targets and
+  the `stage_common` staging switch)
 
 ## Dependencies
 

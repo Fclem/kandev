@@ -115,8 +115,9 @@ Module layout:
   mirrors the parity reference where it exists:
   `role="status" aria-live="polite"` on the loading indicator (the core
   renders it on every loading render), a focusable full-row navigate
-  `<button>` with `min-h-11` (44 px) and `aria-describedby` pointing at
-  an `sr-only` row label whose text is the row `aria-label`, and a real
+  `<button>` with a 44 px minimum target supplied by `ui/plugin.css`
+  (the core's `min-h-11`) and `aria-describedby` pointing at an
+  `sr-only` row label whose text is the row `aria-label`, and a real
   `<button>` expand control with `aria-expanded` and a catalog
   `aria-label` (the parity spec's role-based
   queries and 44 px tap-target assertions depend on these). Deliberate

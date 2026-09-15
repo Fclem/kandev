@@ -58,7 +58,10 @@ instance.
   `categories: ["tools"]`, all five platform executables; webhooks, actions,
   `config_schema`, events, `state`, `secrets`, `agent_invoke`, providers,
   and agent tools removed.
-- `server/`: no-op `pluginsdk.UnimplementedPlugin`.
+- `server/`: no-op `pluginsdk.UnimplementedPlugin`, with
+  `server/plugin_test.go` rewritten to the no-op contract (the
+  template's `OnEvent`/`HandleWebhook` tests drive the demo backend,
+  which is removed).
 - `ui/bundle.js`: placeholder task panel registration
   (`registerTaskPanel` with `title`, `titleKey`, `mobileEnabled: true`, a
   bundled icon component, and no `visible` predicate) and the
@@ -133,11 +136,11 @@ Disposable-instance smoke (from the monorepo worktree):
 
 ```bash
 (cd apps && pnpm install --frozen-lockfile)
-cd apps/web && pnpm e2e:raw -- e2e/tests/plugins/prompt-history-plugin.spec.ts
+(cd apps && pnpm --filter @kandev/web e2e:run -- e2e/tests/plugins/prompt-history-plugin.spec.ts)
 ```
 
-The last command is the existing fixture spec run only to boot the e2e
-test-base backend and web assets; the placeholder install smoke is a manual
+The last command is the existing fixture spec, run through the managed
+`e2e:run`, which builds the e2e test-base backend and web assets; the placeholder install smoke is a manual
 or scripted check against the same disposable instance (install the
 `kandev-plugin-prompt-history-0.1.0.tar.gz` built by `make package-host`, open
 a task, confirm the placeholder panel in the "+" menu, disable and re-enable
@@ -149,6 +152,7 @@ the plugin in Settings > Plugins).
 - `kdlbs/kandev-plugin-prompt-history/go.mod`
 - `kdlbs/kandev-plugin-prompt-history/Makefile`
 - `kdlbs/kandev-plugin-prompt-history/server/plugin.go`
+- `kdlbs/kandev-plugin-prompt-history/server/plugin_test.go`
 - `kdlbs/kandev-plugin-prompt-history/ui/bundle.js`
 - `kdlbs/kandev-plugin-prompt-history/README.md`
 - `kdlbs/kandev-plugin-prompt-history/.github/workflows/*`

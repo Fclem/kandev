@@ -174,6 +174,11 @@ Module layout:
   `file:../../kdlbs-kandev/apps/packages/plugin-sdk` dependency in
   `ui/package.json`) instead of restating the contract, so
   `tsc --noEmit` typechecks the panel against the pinned SDK.
+- `ui/src/react-shim.ts` — the host-delegating shim that `ui/build.mjs`
+  aliases `react` and `react/jsx-runtime` to (mirroring
+  `kdlbs/kandev-plugin-voice`): every `react` import in the bundle
+  resolves through a lazy `hostReact()` lookup, so kandev owns the
+  single React instance and the bundle carries no React of its own.
 - `ui/src/test-host.ts` — Host mock for the vitest suite: fake
   `useSessionMessages`/`useSessionTurns` state machines, `openMessage`
   outcomes, `host.ui.PromptMentionText`, and `host.utils.formatRelativeTime`.

@@ -132,14 +132,22 @@ behavior:
   `recipes/`+`package.json`+`tsconfig.recipes.json` Layout entries, the
   "hand-written, no build step" `ui/bundle.js` paragraph (Task 02's
   esbuild toolchain replaces it), and the recipe-only `npm
-  ci --ignore-scripts` install line - and keep the "Developing against
+  ci --ignore-scripts` install line; rewrite the "Developing against
+  the SDK" frontend paragraph that names the recipe and the removed
+  root `package.json` (after this task the `file:` dependency lives in
+  `ui/package.json` and `ui/bundle.js` is Task 02's esbuild build
+  output), drop the "reproducible provider contracts" phrasing in the
+  workflow pin sentence, and leave the "Both stage `manifest.yaml` +
+  `ui/`" packaging sentence to Task 02's `stage_common` staging switch
+  - and keep the "Developing against
   the SDK" heading that `go.mod`'s comment cites.
 
 ### Task 02: Parity panel implementation
 
 Adopt the official-plugin toolchain from `kdlbs/kandev-plugin-voice`:
 TypeScript sources under `ui/src/` built by `ui/build.mjs` (esbuild, no
-bundled React, host-delegating JSX shim) into `ui/bundle.js`, with
+bundled React, `react` and `react/jsx-runtime` aliased to the
+host-delegating `ui/src/react-shim.ts`) into `ui/bundle.js`, with
 collocated
 vitest tests against a `test-host` mock. The Makefile `test` target
 becomes `test-backend test-ui` (for local runs; `ci.yml`'s `Test` step

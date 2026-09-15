@@ -124,8 +124,10 @@ contracts.
   `apps/web/components/**` and `apps/packages/ui/src/**`); namespaced class
   names and kandev CSS custom properties for theme fidelity, mirroring
   `kandev-plugin-voice` (`ui/plugin.css` + `ui.styles`).
-- `ui/build.mjs` (esbuild, no bundled React, host-delegating JSX shim) and
-  `ui/src/test-host.ts` (Host mock for the vitest suite).
+- `ui/build.mjs` (esbuild, no bundled React, `react` and
+  `react/jsx-runtime` aliased to `ui/src/react-shim.ts`, the
+  host-delegating shim) and `ui/src/test-host.ts` (Host mock for the
+  vitest suite).
 - `ui/pnpm-workspace.yaml`: allowlists esbuild's build script
   (`onlyBuiltDependencies: [esbuild]`, mirroring `kandev-plugin-voice`;
   pnpm 10 does not run dependency lifecycle scripts unless allowlisted,
@@ -144,7 +146,8 @@ contracts.
   tree once `ui/src` and `ui/node_modules` exist, and the
   `verify-package` and `verify-package-host` assertions: `ui/plugin.css`
   present, and `ui/src`, `ui/node_modules`, and `ui/package.json` absent
-  from the archive.
+  from the archive, and updating the README's "Both stage
+  `manifest.yaml` + `ui/`" sentence to the `stage_common` file set.
 - CI: each workflow gains the `kandev-plugin-voice` UI steps -
   `Set up Node` (node 24), `Set up pnpm` (v10), and `make ui-install` -
   anchored to its verification step, not to packaging (all three have
@@ -211,6 +214,7 @@ cd .. && make package-host
 - `kdlbs/kandev-plugin-prompt-history/ui/src/derive.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/strings.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/host.ts`
+- `kdlbs/kandev-plugin-prompt-history/ui/src/react-shim.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/test-host.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/derive.test.ts`
 - `kdlbs/kandev-plugin-prompt-history/ui/src/panel.test.ts`

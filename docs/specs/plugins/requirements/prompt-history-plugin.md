@@ -79,7 +79,8 @@ contracts.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.1:** When the plugin is enabled, the
   host shall offer the panel from the desktop add-panel menu and the mobile
   Panels picker with a localized title, and render it as a task panel on
-  both sessions. The panel shall be available for managed and passthrough
+  both presentations (desktop and mobile) and for both session kinds. The
+  panel shall be available for managed and passthrough
   sessions, with the panel body matching the parity reference in both; the
   menu-offering delta for passthrough sessions is recorded in the system
   design (it deviates from the menu half of AC-UI-PROMPT-HISTORY-PANEL-001.2
@@ -122,7 +123,7 @@ contracts.
   to it in the transcript through the scoped navigation capability. When the
   capability reports an unavailable target, the panel shall not enter an error
   state.
- - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.9:** The panel shall render the
+- **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-002.9:** The panel shall render the
    parity reference's initial loading, empty, fetch-failure with retry, and
    passthrough degraded states with equivalent observable behavior. The
    `removed` state is the Host facade's terminal state, not a
@@ -143,7 +144,7 @@ before the package is considered complete, without changing core ownership.
 
 #### Acceptance criteria
 
- - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1:** When the packaged production
+- **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1:** When the packaged production
    artifact is installed on a disposable Kandev development instance, the
    plugin panel shall pass parity checks against the parity reference
    covering prompt ordering, ordinals, alias rendering, durations, favorite

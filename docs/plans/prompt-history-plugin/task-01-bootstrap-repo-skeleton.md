@@ -48,7 +48,14 @@ instance.
   source-control recipe pitch, the `recipes/`+`package.json`+
   `tsconfig.recipes.json` Layout entries, the "hand-written, no build
   step" `ui/bundle.js` paragraph (Task 02's esbuild toolchain replaces
-  it), and the recipe-only `npm ci --ignore-scripts` install line, and
+  it), and the recipe-only `npm ci --ignore-scripts` install line,
+  rewriting the "Developing against the SDK" frontend paragraph that
+  names the recipe and the removed root `package.json` (after this task
+  the `@kandev/plugin-sdk` `file:` dependency lives in `ui/package.json`
+  and `ui/bundle.js` is Task 02's esbuild build output), dropping the
+  "reproducible provider contracts" phrasing in the workflow pin
+  sentence, and leaving the "Both stage `manifest.yaml` + `ui/`"
+  packaging sentence to Task 02's `stage_common` staging switch, and
   keeping the "Developing against the SDK" heading that `go.mod`'s
   comment cites.
 - The manifest: `api_version: 2`, `min_kandev_version: "0.95.0"` (the first

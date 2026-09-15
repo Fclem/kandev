@@ -1,7 +1,6 @@
 ---
 created: 2026-09-06
 status: done
-spec: "../../specs/plugins/requirements/prompt-history-extraction-host.md"
 requirements:
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-001
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-002

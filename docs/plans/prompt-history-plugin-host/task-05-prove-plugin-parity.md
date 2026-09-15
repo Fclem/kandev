@@ -7,6 +7,7 @@ depends_on:
   - "04-build-conversation-host-facade"
 plan: "plan.md"
 requirements:
+  - REQ-PLUGINS-PROMPT-HISTORY-HOST-002
   - REQ-PLUGINS-PROMPT-HISTORY-HOST-005
 acceptance_criteria:
   - AC-PLUGINS-PROMPT-HISTORY-HOST-005.3

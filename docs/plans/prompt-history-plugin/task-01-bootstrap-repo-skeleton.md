@@ -74,20 +74,29 @@ instance.
   newer SDK"), and leaving the "Both stage `manifest.yaml` + `ui/`"
   packaging sentence and the "make package" inline comment ("packs
   manifest + ui/ + binaries") to Task 02's `stage_common` staging
-  switch, and keeping the "Developing against the SDK" heading that
-  `go.mod`'s comment cites.
+  switch, and fixing the "Build and test" fenced-block comments (after the
+  recipe strip `make test` is `test-backend` and `make vet` is
+  `go vet ./server/...`, so `# base + recipe Go/TypeScript tests` and
+  `# base + recipe Go vet` become false), and keeping the "Developing
+  against the SDK" heading that `go.mod`'s comment cites.
 - The manifest: `api_version: 2`, `min_kandev_version: "0.95.0"` (the first
   release carrying the #3588 browser conversation facade; confirm at release
   cut), `capabilities: { api_read: ["messages"] }`, `ui.bundle: "/ui/bundle.js"`,
   `ui.styles: ["/ui/plugin.css"]`, a one-line `description`,
   `categories: ["tools"]`, all five platform executables; webhooks, actions,
   `config_schema`, events, `state`, `secrets`, `agent_invoke`, providers,
-  and agent tools removed, and the `min_kandev_version` comment block
-  rewritten for the facade floor (0.95.0).
+  and agent tools, and strip the template onboarding comments that name
+  removed surfaces (the "Start by renaming the plugin" header line, the
+  capabilities `events`/`state` comment, and the Git-provider
+  `recipes/source-control/` opt-in comment), rewriting only the
+  `min_kandev_version` comment block for the facade floor (0.95.0).
 - `server/`: no-op `pluginsdk.UnimplementedPlugin`, with
-  `server/plugin_test.go` rewritten to the no-op contract (the
-  template's `OnEvent`/`HandleWebhook` tests drive the demo backend,
-  which is removed).
+  `server/main.go`'s package doc comment renamed to
+  `kandev-plugin-prompt-history` (its no-op job, mirroring
+  `kdlbs/kandev-plugin-voice`'s `server/main.go`), the `templatePlugin`
+  type renamed to `promptHistoryPlugin`, and `server/plugin_test.go`
+  rewritten to the no-op contract (the template's `OnEvent`/`HandleWebhook`
+  tests drive the demo backend, which is removed).
 - `ui/bundle.js`: placeholder task panel registration
   (`registerTaskPanel` with `title`, `titleKey`, `mobileEnabled: true`, a
   bundled icon component, and no `visible` predicate) and the
@@ -179,6 +188,7 @@ the plugin in Settings > Plugins).
 - `kdlbs/kandev-plugin-prompt-history/manifest.yaml`
 - `kdlbs/kandev-plugin-prompt-history/go.mod`
 - `kdlbs/kandev-plugin-prompt-history/Makefile`
+- `kdlbs/kandev-plugin-prompt-history/server/main.go`
 - `kdlbs/kandev-plugin-prompt-history/server/plugin.go`
 - `kdlbs/kandev-plugin-prompt-history/server/plugin_test.go`
 - `kdlbs/kandev-plugin-prompt-history/ui/bundle.js`

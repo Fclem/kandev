@@ -150,17 +150,24 @@ contracts.
   `initialize` and `destroy`.
 - Makefile: `ui-install`, `ui` (the esbuild build), `typecheck` (tsc
   --noEmit), and `test-ui` (vitest) targets mirroring
-  `kdlbs/kandev-plugin-voice`, the `package`/`package-host` staging
-  switch from the template's `cp -r ui` to the voice `stage_common`
-  (staging only `manifest.yaml`, the built `ui/bundle.js`, and
-  `ui/plugin.css`), so the `make package-host` smoke stages a clean
+  `kdlbs/kandev-plugin-voice`, the `package`/`package-host` staging switch
+  from the template's `cp -r ui` to the voice `stage_common` (staging only
+  `manifest.yaml`, the built `ui/bundle.js`, and `ui/plugin.css`), keeping
+  the template's `cd $(KANDEV_SDK) && go run ./cmd/plugin-pack` invocation
+  at the renamed worktree path (only the staged file set changes; the
+  module-path `go run github.com/kandev/kandev/cmd/plugin-pack` form needs
+  voice's `tool` directive and go.sum entries), so the `make package-host`
+  smoke stages a clean
   tree once `ui/src` and `ui/node_modules` exist, and the
   `verify-package` and `verify-package-host` assertions: `ui/plugin.css`
   present, and `ui/src`, `ui/node_modules`, and `ui/package.json` absent
   from the archive, adding `ui/bundle.js` to the `clean` target (Task 01
   renames its archive glob), and updating the README's "Both stage
-  `manifest.yaml` + `ui/`" sentence and its "make package" inline comment
-  ("packs manifest + ui/ + binaries") to the `stage_common` file set, and
+  `manifest.yaml` + `ui/`" sentence, its "make package" inline comment
+  ("packs manifest + ui/ + binaries"), the Makefile's `package` "stage
+  manifest.yaml + ui/ alongside" comment to the `stage_common` file set,
+  and its `verify-package` "recipe/development files did not leak"
+  comment to the new leak set, and
   updating the `ui.bundle` comment in `manifest.yaml` (esbuild output, no
   longer hand-written).
 - CI: each workflow gains the `kandev-plugin-voice` UI steps -

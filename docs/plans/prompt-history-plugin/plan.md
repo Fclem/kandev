@@ -66,9 +66,10 @@ this layout.
 ### Task 01: Bootstrap repo and installable skeleton
 
 Create the public repository from the template, keeping its packaging,
-test, and release safeguards. Rename the identity in all four places
-(manifest `id`, `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`,
-`window.registerKandevPlugin` id) to `kandev-plugin-prompt-history`;
+test, and release safeguards. Rename the identity in the manifest `id`,
+the `go.mod` module, the Makefile `BIN` and its derived `PKG_OUT`, and the
+`window.registerKandevPlugin` id to `kandev-plugin-prompt-history` (the
+Makefile `VERSION` matches the manifest `version`);
 `display_name: "Prompt History"`, `author: "kandev"`, `repo_url` to the new
 repository. The template's own package-name references are renamed with
 the identity: the `release.yml` README sed pattern, the `release.yml`

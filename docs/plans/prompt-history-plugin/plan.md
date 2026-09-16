@@ -233,8 +233,13 @@ target depends on `ui`.
   flight). Row selection calls `conversation.openMessage(messageId)`;
   `unavailable` outcomes are consumed without error surfacing - both
   delegate to the pure `ui/src/panel-state.ts` seam (the vitest suite
-  stays logic-only, mirroring `kandev-plugin-voice`; `panel.tsx` is
-  rendered only by the throwaway parity spec). The panel
+  now includes permanent rendered component tests - host React supplied
+  through the shim, plus controlled ResizeObserver/IntersectionObserver
+  and fake timers - for initial load, retry/recovery, in-flight
+  pagination suppression, loading grace, expansion/40% cap, favorites/live
+  updates, and terminal removal; `panel.tsx` is also rendered by the
+  throwaway parity spec for cross-repository production-artifact parity).
+  The panel
   registers with panel key `prompt-history`, a `titleKey`,
   `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
   it), a bundled icon component, and no `visible` predicate (the host's
@@ -302,8 +307,9 @@ proof against a disposable development instance:
    older-page auto-loading, live transitions, navigation, initial loading
    (hold the first read to assert the loading state), fetch-failure with
    retry (fail then recover the first read through Retry), empty, error,
-   passthrough, and removed (after rows commit, remove the session/task and
-   assert committed rows remain while pagination and live updates stop)
+   passthrough, and removed (after rows commit, delete the active session
+   and assert committed rows remain while both further pagination and
+   further live reconciliation stop)
    states, desktop plus mobile placement, and computed-style
    parity of the favorite highlight and the 40% expanded-box cap. The
    fixture specs (`prompt-history-plugin.spec.ts` and
@@ -313,10 +319,12 @@ proof against a disposable development instance:
    `e2e/helpers/prompt-history-long-seed.ts` 121-prompt seed -
    scroll-to-sentinel, no load-more assertion (the production panel has no
    load-more control).
-   Before the runs, copy the already-verified tarball to a temporary
-   ignored path under REPO_ROOT (the Docker runner mounts only REPO_ROOT at
-   /work), and point the spec at that path; remove the copy after the run,
-   and do not rebuild or replace it with `package-host`.
+   Before the runs, copy the already-verified tarball to
+   `.tmp/prompt-history-plugin/kandev-plugin-prompt-history-0.1.0.tar.gz`
+   (an ignored path under REPO_ROOT; the Docker runner mounts only REPO_ROOT
+   at /work, so the sibling path is absent in the container), and point
+   both throwaway specs at that path; remove the copy after the run, and do
+   not rebuild or replace it with `package-host`.
 3. Re-run the core prompt-history E2E specs (including
    `e2e/tests/task/prompt-history-auto-load.spec.ts`) to confirm the core
    panel and fixture remain behaviorally unchanged.
@@ -396,7 +404,7 @@ plugin-localized (AC-002.10).
 | AC-001.1 | Identity assertions: manifest `id`, `go.mod` module, Makefile `BIN` and its derived `PKG_OUT`, and UI registration id all read `kandev-plugin-prompt-history`, and the Makefile `VERSION` matches the manifest `version`; staged executables keep the platform names |
 | AC-001.2, .3, AC-003.3 | Manifest assertions in `server/` or `ui/` tests plus `make verify-package` (archive contents, checksums, staging leak check) |
 | AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
-| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam - the rendered favorite distinction, the agent-sent indicator, and the states are proven by the throwaway parity spec): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values (ids seeded to contradict page order) |
+| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam and the permanent rendered component tests - the rendered favorite distinction, the agent-sent indicator, and the states are proven by the rendered component tests): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values (ids seeded to contradict page order) |
 | AC-002.1, .5, .6, .7, .8 and AC-003.1, .2 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
 | AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` in the plugin repo (the catalog-shape unit test: asserts every catalog - `en`, `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`, `pseudo` - carries exactly the same key set) |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |
@@ -409,7 +417,8 @@ Pixel 5), both driving the production tarball and mapping to
 AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1, AC-003.2, and the Task 03 in-scope
 behavior list (ordering, `#N` ordinals, alias rendering, durations,
 favorite distinction, agent-sent indicator, older-page auto-loading, live
-transitions, navigation, empty, error, and passthrough states, desktop plus
+transitions, navigation, initial loading, fetch-failure with retry,
+empty, error, passthrough, and terminal removed states, desktop plus
 mobile placement, and the computed-style parity checks). Core preservation
 is confirmed by re-running the existing
 `e2e/tests/task/prompt-history-panel.spec.ts`,

@@ -48,8 +48,9 @@ confirm the core panel and fixture remain behaviorally unchanged.
   transitions, navigation, initial loading (hold the first read to assert
   the loading state), fetch-failure with retry (fail then recover the first
   read through Retry), empty, error, passthrough, and removed (after rows
-  commit, remove the session/task and assert committed rows remain while
-  pagination and live updates stop) states, desktop plus mobile placement,
+  commit, delete the active session and assert committed rows remain while
+  both further pagination and further live reconciliation stop) states,
+  desktop plus mobile placement,
   and computed-style parity of the favorite highlight and the 40%
   expanded-box cap - targeting the production
   panel's `ph-plugin-` test ids. The fixture specs
@@ -61,11 +62,13 @@ confirm the core panel and fixture remain behaviorally unchanged.
   seed (scroll-to-sentinel, no load-more assertion - the production panel
   has no load-more control).
 - Tarball access: before the parity runs, copy the already-verified
-  `kandev-plugin-prompt-history-0.1.0.tar.gz` to a temporary ignored path
-  under REPO_ROOT (the Docker runner mounts only REPO_ROOT at /work, so the
-  sibling path is absent in the container when `run-e2e.sh` auto-selects
-  Docker), and point both throwaway specs at that path; remove the copy
-  after the run, and do not rebuild or replace it with `package-host`.
+  `kandev-plugin-prompt-history-0.1.0.tar.gz` to
+  `.tmp/prompt-history-plugin/kandev-plugin-prompt-history-0.1.0.tar.gz`
+  (an ignored path under REPO_ROOT; the Docker runner mounts only REPO_ROOT
+  at /work, so the sibling path is absent in the container when
+  `run-e2e.sh` auto-selects Docker), and point both throwaway specs at that
+  path; remove the copy after the run, and do not rebuild or replace it with
+  `package-host`.
 - Core preservation: re-run the existing core prompt-history E2E specs
   (`e2e/tests/task/prompt-history-panel.spec.ts`,
   `e2e/tests/task/mobile-prompt-history-panel.spec.ts`, and
@@ -107,6 +110,15 @@ Parity runs (from the monorepo worktree; the throwaway spec file is created
 for the run and deleted after):
 
 ```bash
+# Stage the already-verified production tarball under REPO_ROOT (the Docker
+# runner mounts only REPO_ROOT at /work, so the sibling path is absent in
+# the container); both throwaway specs install it from this path, and
+# package-host must not rebuild or replace it.
+mkdir -p .tmp/prompt-history-plugin
+cp ../kandev-plugin-prompt-history/kandev-plugin-prompt-history-0.1.0.tar.gz \
+   .tmp/prompt-history-plugin/kandev-plugin-prompt-history-0.1.0.tar.gz
+trap 'rm -rf .tmp/prompt-history-plugin' EXIT
+
 (cd apps && pnpm install --frozen-lockfile)
 (cd apps && pnpm --filter @kandev/web e2e:run -- e2e/tests/plugins/prompt-history-parity-check.spec.ts)
 (cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/plugins/mobile-prompt-history-parity-check.spec.ts)

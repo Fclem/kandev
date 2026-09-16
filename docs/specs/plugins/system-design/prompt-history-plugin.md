@@ -165,11 +165,13 @@ Module layout:
   empty, error with retry only when no rows are committed,
   `loadingMore` while `hasMore`, passthrough, and `removed` - rows stay,
   pagination and live updates stopped -) and the `unavailable`
-  outcome consumed without error surfacing. The vitest suite stays
-  logic-only (mirroring `kdlbs/kandev-plugin-voice`, whose
-  `ui/package.json` has no react runtime or renderer dependency and
-  whose tests never import a react-importing module): `panel.tsx`
-  itself is rendered only by the throwaway parity spec.
+  outcome consumed without error surfacing. The vitest suite now includes
+  permanent rendered component tests (host React supplied through the
+  shim, plus controlled ResizeObserver/IntersectionObserver and fake
+  timers) for initial load, retry/recovery, in-flight pagination
+  suppression, loading grace, expansion/40% cap, favorites/live updates,
+  and terminal removal; `panel.tsx` is also rendered by the throwaway
+  parity spec for cross-repository production-artifact parity.
 - `ui/src/strings.ts` — translation catalogs (en plus every supported locale
   and the pseudo locale), registered through
   `registry.registerTranslations`. Catalog shape is pinned: flat keys
@@ -335,7 +337,8 @@ runs against a disposable development instance:
    navigation assertions, plus the passthrough degraded state (reachable in
    the plugin only because the registration declares no `visible`
    predicate), the initial loading and fetch-failure-with-retry states,
-   the terminal removed state (committed rows remain, pagination stops),
+   the terminal removed state (committed rows remain, both further
+   pagination and further live reconciliation stop),
    and the computed-style parity checks (favorite highlight background,
    expanded-box cap). The older-page auto-load check takes its
    oracle from `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts`
@@ -344,10 +347,12 @@ runs against a disposable development instance:
    has no load-more control). The spec addresses the production panel by
    its `ph-plugin-` test ids and layout identity, distinct from the core
    panel's ids.
-   Before the runs, copy the already-verified tarball to a temporary
-   ignored path under REPO_ROOT (the Docker runner mounts only REPO_ROOT at
-   /work), and point the spec at that path; remove the copy after the run,
-   and do not rebuild or replace it with `package-host`.
+   Before the runs, copy the already-verified tarball to
+   `.tmp/prompt-history-plugin/kandev-plugin-prompt-history-0.1.0.tar.gz`
+   (an ignored path under REPO_ROOT; the Docker runner mounts only REPO_ROOT
+   at /work, so the sibling path is absent in the container), and point
+   both throwaway specs at that path; remove the copy after the run, and do
+   not rebuild or replace it with `package-host`.
 3. The core panel (including
    `e2e/tests/task/prompt-history-auto-load.spec.ts`) and the fixture plugin
    are exercised alongside to confirm they remain behaviorally unchanged.

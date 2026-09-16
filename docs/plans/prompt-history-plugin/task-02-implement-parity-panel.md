@@ -89,11 +89,13 @@ contracts.
   `unavailable` outcome is consumed without error surfacing.
 - `ui/src/panel-state.ts`: the pure seam for the state determination
   and `openMessage` outcome handling above, consumed by `panel.tsx`
-  and tested against `test-host` (the vitest suite stays logic-only,
-  mirroring `kdlbs/kandev-plugin-voice`, whose `ui/package.json` has
-  no react runtime or renderer dependency and whose tests never import
-  a react-importing module - `panel.tsx` is rendered only by the
-  throwaway parity spec).
+  and tested against `test-host`. The vitest suite now includes
+  permanent rendered component tests (host React supplied through the
+  shim, plus controlled ResizeObserver/IntersectionObserver and fake
+  timers) for initial load, retry/recovery, in-flight pagination
+  suppression, loading grace, expansion/40% cap, favorites/live updates,
+  and terminal removal; `panel.tsx` is also rendered by the throwaway
+  parity spec for cross-repository production-artifact parity.
 - The panel registers with panel key `prompt-history` (layout id
   `plugin:kandev-plugin-prompt-history:prompt-history`), a `titleKey`,
   `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
@@ -206,8 +208,8 @@ contracts.
   agent-sent flag (derive.ts), state determination, `openMessage` outcome
   handling, and page-order preservation with identical `createdAt`
   values (ids seeded to contradict page order; the rendered favorite
-  distinction, the agent-sent indicator, and the states are proven by the
-  throwaway parity spec - the pinned harness is logic-only).
+  distinction, the agent-sent indicator, and the states are proven by
+  the permanent rendered component tests in the plugin repo).
 - `make package-host` produces a bundle whose panel registration matches
   the parity reference's feature set (user-prompt rows, `#N`, alias
   rendering, duration, send time, favorite highlight, agent-sent
@@ -272,8 +274,8 @@ make package-host
 - The 40% cap, the auto-load sentinel, the 400 ms indicator window, and the
   floating vs in-flow indicator have no Host primitive; the implementation
   must re-derive them from the panel element (ResizeObserver and
-  IntersectionObserver) while keeping the behavior observable in the vitest
-  suite and the later parity proof.
+  IntersectionObserver) while keeping the behavior observable in the
+  permanent rendered component tests and the later parity proof.
 - Duration arithmetic must match the core `buildPromptHistoryEntries`
   semantics (earlier-of bounds, floor, clamp); a divergence would show up in
   the parity proof, not in unit tests, so the vitest cases must seed

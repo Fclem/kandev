@@ -80,8 +80,9 @@ confirm the core panel and fixture remain behaviorally unchanged.
   `e2e/tests/task/mobile-prompt-history-panel.spec.ts`, and
   `e2e/tests/task/prompt-history-auto-load.spec.ts`), both fixture specs
   (`e2e/tests/plugins/prompt-history-plugin.spec.ts` and
-  `mobile-prompt-history-plugin.spec.ts`), and a scoped post-cleanup
-  source-diff check for the fixture paths.
+  `mobile-prompt-history-plugin.spec.ts`), and a scoped
+  post-cleanup worktree-cleanliness assertion using `git status
+  --porcelain` for the fixture paths.
 
 ## Out of scope
 

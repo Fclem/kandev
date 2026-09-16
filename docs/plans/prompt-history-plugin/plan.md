@@ -234,8 +234,9 @@ target depends on `ui`.
   `unavailable` outcomes are consumed without error surfacing - both
   delegate to the pure `ui/src/panel-state.ts` seam (the vitest suite
   now includes permanent rendered component tests that import `panel.tsx`
-  directly from source (not the built bundle), with `react`, `react-dom`,
-  and `@testing-library/react` as dev dependencies and `test-host`
+  directly from source (not the built bundle), with `react`,
+  `react-dom`, `@types/react`, `@types/react-dom`, and
+  `@testing-library/react` as dev dependencies and `test-host`
   installed with the same real React instance (Vitest does not apply the
   production `react` alias; `panel.tsx` and the renderer resolve the
   installed `react` package, and `test-host` passes that same module to
@@ -425,7 +426,7 @@ plugin-localized (AC-002.10).
 | AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
 | AC-002.2, .3, .4, .6, .7, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam and the permanent rendered component tests - the rendered favorite distinction, the agent-sent indicator, the states, and controlled ResizeObserver/IntersectionObserver + fake-timer coverage for non-scrollable in-flow indicator placement, scrollable floating indicator placement, older-page append while the sentinel is active preserving bottom anchoring, and the expand control's size across the three-context matrix (desktop/tablet+fine pointer 24x24 px, desktop/tablet+coarse pointer and phone-width+fine pointer each at least 44x44 px)): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values (ids seeded to contradict page order) |
 | AC-002.1, .5, .6, .7, .8 and AC-003.1 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
-| AC-003.2 | Both fixture E2E specs (`e2e/tests/plugins/prompt-history-plugin.spec.ts` and `e2e/tests/plugins/mobile-prompt-history-plugin.spec.ts`) plus a scoped post-cleanup source-diff check for the fixture paths |
+| AC-003.2 | Both fixture E2E specs (`e2e/tests/plugins/prompt-history-plugin.spec.ts` and `e2e/tests/plugins/mobile-prompt-history-plugin.spec.ts`) plus a scoped post-cleanup worktree-cleanliness assertion using `git status --porcelain` for the fixture paths |
 | AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` in the plugin repo (the catalog-shape unit test: asserts every catalog - `en`, `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`, `pseudo` - carries exactly the same key set) |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |
 
@@ -452,8 +453,9 @@ is confirmed by re-running the existing core specs
 `mobile-prompt-history-panel.spec.ts`, and
 `e2e/tests/task/prompt-history-auto-load.spec.ts`),
 both fixture specs (`e2e/tests/plugins/prompt-history-plugin.spec.ts`
-and `mobile-prompt-history-plugin.spec.ts`), and a scoped post-cleanup
-source-diff check for the fixture paths.
+and `mobile-prompt-history-plugin.spec.ts`), and a scoped
+post-cleanup worktree-cleanliness assertion using `git status
+--porcelain` for the fixture paths.
 
 ## Work orders
 

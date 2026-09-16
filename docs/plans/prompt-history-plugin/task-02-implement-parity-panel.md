@@ -91,8 +91,9 @@ contracts.
   and `openMessage` outcome handling above, consumed by `panel.tsx`
   and tested against `test-host`. The vitest suite now includes
   permanent rendered component tests that import `panel.tsx` directly
-  from source (not the built bundle), with `react`, `react-dom`, and
-  `@testing-library/react` as dev dependencies and `test-host` installed
+  from source (not the built bundle), with `react`, `react-dom`,
+  `@types/react`, `@types/react-dom`, and `@testing-library/react`
+  as dev dependencies and `test-host` installed
   with the same real React instance (Vitest does not apply the production
   `react` alias; `panel.tsx` and the renderer resolve the installed
   `react` package, and `test-host` passes that same module to `setHost`;

@@ -74,7 +74,8 @@ Makefile `VERSION` matches the manifest `version`);
 repository. The template's own package-name references are renamed with
 the identity: the `release.yml` README sed pattern, the `release.yml`
 Extract checksums `tar -xzf` glob, the `release.yml` release-asset glob,
-and the `Makefile` `clean` archive glob. Replace the template demo
+the `Makefile` `clean` archive glob, and the `Makefile`'s "When you
+rename the plugin" header comment. Replace the template demo
 behavior:
 
 - Manifest: `api_version: 2`, `min_kandev_version: "0.95.0"` (the first
@@ -82,8 +83,8 @@ behavior:
   cut), `capabilities: { api_read: ["messages"] }`, `ui.bundle: "/ui/bundle.js"`,
   `ui.styles: ["/ui/plugin.css"]`, a one-line `description`,
   `categories: ["tools"]`, all five platform executables. Remove webhooks,
-  actions, `config_schema`, events, `state`, `secrets`, `agent_invoke`,
-  providers, and agent tools.
+  actions, `config_schema`, events, `state`, `user_state`, `secrets`,
+  `agent_invoke`, `auth`, providers, and agent tools.
 - `server/`: no-op `pluginsdk.UnimplementedPlugin` (the browser facade needs
   no backend logic; AC-PLUGINS-PROMPT-HISTORY-HOST-002.8).
 - `ui/bundle.js`: minimal registration of a placeholder task panel
@@ -148,10 +149,15 @@ behavior:
   as the first
   release carrying the browser conversation facade (0.95.0 at writing
   time) and drop its source-control-recipe floor paragraph, update the
-  `manifest.yaml` and `bundle.js` Layout comments (the former cites
-  `config_schema`, removed from the manifest; the latter says
+  `manifest.yaml`, `bundle.js`, `server/plugin.go`, and
+  `server/plugin_test.go` Layout comments (the `manifest.yaml` one cites
+  `config_schema`, removed from the manifest; the `bundle.js` one says
   "hand-written, no-build ES module", which Task 02's esbuild output
-  replaces), drop the recharts "needs no bundler" clause (Task 02's
+  replaces; the `plugin.go` one names the new type with no overridden
+  RPCs; the `plugin_test.go` one describes the no-op contract test),
+  drop the `templatePlugin`/`Serve(&templatePlugin{})` sentence in
+  `How a plugin runs`, drop the recharts "needs no bundler" clause
+  (Task 02's
   esbuild build is the bundler), rewrite the workflow pin sentence that
   names the recipe ("reproducible provider contracts" and the "rerun
   both contract suites" tail - both recipe suites are gone with the

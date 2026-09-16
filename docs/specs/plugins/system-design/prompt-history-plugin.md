@@ -149,12 +149,16 @@ Module layout:
   ordered by the host); derive does not re-sort. Mirrors
   `buildPromptHistoryEntries` in
   `apps/web/lib/prompt-history.ts` so parity assertions compare the same
-  arithmetic, and provides the plugin-local `formatPromptDuration` mirror
+  arithmetic, including the fraction-preserving nanosecond timestamp parse
+  (not `Date.parse`/millisecond truncation), and provides the
+  plugin-local `formatPromptDuration` mirror
   (`h m s` unit labels from the translation catalog) matching
   `apps/web/lib/prompt-history.ts` `formatPromptDuration`. The vitest suite
   includes a case with two identical `createdAt` values whose ids are
   seeded so ascending-id order contradicts the facade page order, to pin
-  that derive preserves page order rather than sorting by timestamp.
+  that derive preserves page order rather than sorting by timestamp, and a
+  case with microsecond `createdAt`/`completedAt` values straddling a
+  second boundary, to pin the fraction-preserving parse.
 - `ui/src/panel-state.ts` — pure panel state determination and
   `openMessage` outcome handling, consumed by `panel.tsx` and tested
   against `test-host`: the states rendered above (initial loading,

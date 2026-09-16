@@ -45,12 +45,15 @@ contracts.
   suppressed until turns hydrate (the core `turnsHydrated` gate); plus the
   plugin-local `formatPromptDuration` mirror (`h m s` unit labels from the
   translation catalog) matching `apps/web/lib/prompt-history.ts`
-  `formatPromptDuration`. Ordering is the facade's page order (older pages
-  append; live updates arrive already ordered by the host); derive does
-  not re-sort. The vitest suite includes a case with two identical
-  `createdAt` values whose ids are seeded so ascending-id order
-  contradicts the facade page order, to pin that derive preserves page
-  order rather than sorting by timestamp.
+  `formatPromptDuration`, including the fraction-preserving nanosecond
+  timestamp parse (not `Date.parse`/millisecond truncation). Ordering is
+  the facade's page order (older pages append; live updates arrive already
+  ordered by the host); derive does not re-sort. The vitest suite includes
+  a case with two identical `createdAt` values whose ids are seeded so
+  ascending-id order contradicts the facade page order, to pin that derive
+  preserves page order rather than sorting by timestamp, and a case with
+  microsecond `createdAt`/`completedAt` values straddling a second
+  boundary, to pin the fraction-preserving parse.
 - `ui/src/panel.tsx`: consumes
   `conversation.history.useSessionMessages({ sessionId, taskId,
   authorTypes: ["user"], sort: "desc", pageSize: 20 })` (passing

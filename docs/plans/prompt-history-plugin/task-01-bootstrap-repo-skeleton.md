@@ -38,7 +38,8 @@ instance.
   "kandev"`, and `repo_url`; renaming the template's own package-name
   references with it (`release.yml` README sed pattern, `release.yml`
   Extract checksums `tar -xzf` glob, `release.yml` release-asset glob,
-  `Makefile` `clean` archive glob).
+  `Makefile` `clean` archive glob), and dropping the Makefile's
+  "When you rename the plugin" header comment.
 - Replacing the template `README.md` demo-surface documentation (the
   `/template` nav route, host-component page, webhook and `config_schema`
   surfaces) with plugin-specific content - identity, `api_read:
@@ -62,11 +63,16 @@ instance.
   02's esbuild build output), restating the
   "Minimum host version" section as the first release carrying the
   browser conversation facade (0.95.0 at writing time) and dropping its
-  source-control-recipe floor paragraph, updating the `manifest.yaml`
-  and `bundle.js` Layout comments (the former cites `config_schema`,
-  removed from the manifest; the latter says "hand-written, no-build ES
-  module", which Task 02's esbuild output replaces), dropping the
-  recharts "needs no bundler" clause (Task 02's esbuild build is the
+  source-control-recipe floor paragraph, updating the `manifest.yaml`,
+  `bundle.js`, `server/plugin.go`, and `server/plugin_test.go` Layout
+  comments (the `manifest.yaml` one cites `config_schema`, removed from
+  the manifest; the `bundle.js` one says "hand-written, no-build ES
+  module", which Task 02's esbuild output replaces; the `plugin.go` one
+  names the new type with no overridden RPCs; the `plugin_test.go` one
+  describes the no-op contract test), dropping the
+  `templatePlugin`/`Serve(&templatePlugin{})` sentence in `How a plugin
+  runs`, dropping the recharts "needs no bundler" clause (Task 02's
+  esbuild build is the
   bundler), rewriting the workflow pin sentence that names the recipe
   ("reproducible provider contracts" and the "rerun both contract
   suites" tail - both recipe suites are gone with the recipe strip; the
@@ -84,8 +90,9 @@ instance.
   cut), `capabilities: { api_read: ["messages"] }`, `ui.bundle: "/ui/bundle.js"`,
   `ui.styles: ["/ui/plugin.css"]`, a one-line `description`,
   `categories: ["tools"]`, all five platform executables; webhooks, actions,
-  `config_schema`, events, `state`, `secrets`, `agent_invoke`, providers,
-  and agent tools, and strip the template onboarding comments that name
+  `config_schema`, events, `state`, `user_state`, `secrets`, `agent_invoke`,
+  `auth`, providers, and agent tools, and strip the template onboarding
+  comments that name
   removed surfaces (the "Start by renaming the plugin" header line, the
   capabilities `events`/`state` comment, and the Git-provider
   `recipes/source-control/` opt-in comment), rewriting only the

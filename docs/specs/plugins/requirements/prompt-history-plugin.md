@@ -60,9 +60,11 @@ declared identity and least-privilege manifest.
   stable release cut after the PR #3588 merge (0.95.0 at writing time;
   confirm at release cut).
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-001.3:** The manifest shall declare no
-  webhooks, event subscriptions, `state`, `secrets`, `agent_invoke`,
-  `api_write`, repository providers, reference sources, agent tools, or
-  `config_schema`. The plugin shall exercise only the capabilities it
+  webhooks, actions, `config_schema`, `ui.pages`, `ui.keybindings`,
+  `web_apps`, repository providers, reference sources, agent tools, or
+  `events`/`state`/`user_state`/`secrets`/`agent_invoke`/`auth`/`api_write`
+  capabilities (the manifest declares `capabilities.api_read: ["messages"]`
+  and nothing else). The plugin shall exercise only the capabilities it
   declares.
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-001.4:** When the operator disables or
   uninstalls the plugin, the host shall remove the panel registration without

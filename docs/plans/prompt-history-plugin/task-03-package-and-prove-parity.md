@@ -104,7 +104,10 @@ confirm the core panel and fixture remain behaviorally unchanged.
   pagination/live updates stop), and the pseudo-locale run asserting the
   panel's rendered labels and states after selecting pseudo.
 - The core prompt-history and fixture E2E specs pass unchanged after the
-  parity runs.
+  parity runs, and a scoped post-cleanup `git status --porcelain`
+  assertion confirms the worktree is clean for every fixture-owned path
+  (`apps/backend/cmd/plugin-fixture`, `apps/web/e2e/fixtures/plugins/
+  prompt-history-plugin`, and both fixture E2E specs).
 
 ## Verification
 
@@ -135,6 +138,18 @@ trap 'rm -rf .tmp/prompt-history-plugin \
 (cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/plugins/mobile-prompt-history-parity-check.spec.ts)
 (cd apps && pnpm --filter @kandev/web e2e:run -- --no-build -- e2e/tests/task/prompt-history-panel.spec.ts e2e/tests/task/prompt-history-auto-load.spec.ts e2e/tests/plugins/prompt-history-plugin.spec.ts)
 (cd apps && pnpm --filter @kandev/web e2e:run -- --project mobile-chrome --no-build -- e2e/tests/task/mobile-prompt-history-panel.spec.ts e2e/tests/plugins/mobile-prompt-history-plugin.spec.ts)
+# After the runs, remove the staged tarball and the throwaway spec files
+# (the EXIT trap is a fallback for failure cleanup).
+rm -rf .tmp/prompt-history-plugin \
+  apps/web/e2e/tests/plugins/prompt-history-parity-check.spec.ts \
+  apps/web/e2e/tests/plugins/mobile-prompt-history-parity-check.spec.ts
+# Prove the fixture plugin and its E2E specs stayed unchanged: assert the
+# worktree is clean for every fixture-owned path, catching untracked files
+# (not only tracked diffs).
+test -z "$(git status --porcelain -- apps/backend/cmd/plugin-fixture \
+  apps/web/e2e/fixtures/plugins/prompt-history-plugin \
+  apps/web/e2e/tests/plugins/prompt-history-plugin.spec.ts \
+  apps/web/e2e/tests/plugins/mobile-prompt-history-plugin.spec.ts)"
 ```
 
 ## Files likely touched

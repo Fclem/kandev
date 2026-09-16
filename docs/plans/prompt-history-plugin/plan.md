@@ -246,7 +246,9 @@ target depends on `ui`.
   expansion/40% cap, favorites/live updates, terminal removal, indicator
   placement (in flow when not scrollable, floating when scrollable) with
   older-page appends preserving bottom anchoring, and the expand control's
-  size for both pointer modes; `panel.tsx` is also rendered by the
+  size across the three-context matrix (desktop/tablet+fine pointer
+  24x24 px, desktop/tablet+coarse pointer and phone-width+fine pointer
+  each at least 44x44 px); `panel.tsx` is also rendered by the
   throwaway parity spec for
   cross-repository production-artifact parity).
   The panel
@@ -268,8 +270,10 @@ target depends on `ui`.
   `<button>` expand control with `aria-expanded`, a catalog `aria-label`,
   and the three-context size matrix (desktop/tablet+fine pointer 24x24
   px, desktop/tablet+coarse pointer and phone-width+fine pointer each at
-  least 44x44 px) matching the parity reference's `size-6`/`size-11`
-  split; deliberate delta: the plugin
+  least 44x44 px) matching the parity reference's two nominal sizes (24
+  px and 44 px); phone-width+fine-pointer sizing is a control-sizing/
+  mobile accessibility delta from the core's pointer-only
+  implementation; deliberate delta: the plugin
   also puts `role="status"` on the empty state (the core's empty and
   passthrough states are plain divs with no role).
 - `ui/plugin.css`: the plugin-owned stylesheet (declared as
@@ -430,7 +434,7 @@ plugin-localized (AC-002.10).
 One-shot, throwaway (not committed): `prompt-history-parity-check.spec.ts`
 (desktop, chromium project) and the mobile equivalent (mobile-chrome /
 Pixel 5), both driving the production tarball and mapping to
-AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1, AC-003.2, and the Task 03 in-scope
+AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1, and the Task 03 in-scope
 behavior list (ordering, `#N` ordinals, alias rendering, durations,
 favorite distinction, agent-sent indicator, older-page auto-loading, live
 transitions, navigation, initial loading, fetch-failure with retry,

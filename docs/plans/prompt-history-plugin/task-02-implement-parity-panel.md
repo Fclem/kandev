@@ -127,10 +127,12 @@ contracts.
   `aria-expanded`, a catalog `aria-label`, and the three-context size
   matrix (desktop/tablet+fine pointer 24x24 px, desktop/tablet+coarse
   pointer and phone-width+fine pointer each at least 44x44 px) matching
-  the parity reference's `size-6`/`size-11` split (the parity spec's
-  role-based queries and 44 px tap-target assertions depend on these; the
-  rendered component suite asserts the expand control's size across the
-  three-context matrix); deliberate delta: the
+  the parity reference's two nominal sizes (24 px and 44 px);
+  phone-width+fine-pointer sizing is a control-sizing/mobile
+  accessibility delta from the core's pointer-only implementation (the
+  parity spec's role-based queries and 44 px tap-target assertions depend
+  on these; the rendered component suite asserts the expand control's
+  size across the three-context matrix); deliberate delta: the
   plugin also puts
   `role="status"` on the empty state (the core's empty and passthrough
   states are plain divs with no role).
@@ -245,8 +247,6 @@ contracts.
   indicator, expand with the 40% cap, older-page auto-load, navigation),
   declares `mobileEnabled: true`, and declares no `visible` predicate.
 - No copy is hardcoded: every user-facing string resolves through the plugin
-  translation catalog with the English fallback.
-
 ## ASCII UI preview
 
 ### UI-01: Desktop panel (dockview, via "+" menu)

@@ -45,8 +45,12 @@ instance.
   layout, and the make targets - keeping the
   `kandev-plugin-prompt-history-0.1.0.tar.gz` archive name mentioned once
   so the `release.yml` README sed keeps applying. Also removing the
-  source-control recipe pitch, the `recipes/`+`package.json`+
-  `tsconfig.recipes.json` Layout entries, the "hand-written, no build
+  source-control recipe pitch (the intro pitch paragraph, the
+  `Make it yours` Git-provider opt-in paragraph, and the
+  `pluginsdk.ActionHandler`/`EntityReferenceSearcher`/
+  `EntityReferenceAuthorizer` example in `How a plugin runs`), the
+  `recipes/`+`package.json`+`tsconfig.recipes.json` Layout entries,
+  the "hand-written, no build
   step" `ui/bundle.js` paragraph (Task 02's esbuild toolchain replaces
   it), and the recipe-only `npm ci --ignore-scripts` install line,
   rewriting the "Developing against the SDK" frontend paragraph that
@@ -75,7 +79,8 @@ instance.
   `ui.styles: ["/ui/plugin.css"]`, a one-line `description`,
   `categories: ["tools"]`, all five platform executables; webhooks, actions,
   `config_schema`, events, `state`, `secrets`, `agent_invoke`, providers,
-  and agent tools removed.
+  and agent tools removed, and the `min_kandev_version` comment block
+  rewritten for the facade floor (0.95.0).
 - `server/`: no-op `pluginsdk.UnimplementedPlugin`, with
   `server/plugin_test.go` rewritten to the no-op contract (the
   template's `OnEvent`/`HandleWebhook` tests drive the demo backend,

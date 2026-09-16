@@ -58,7 +58,9 @@ contracts.
   `conversation.history.useSessionTurns(sessionId, taskId)`; per-row
   `useMessageFavorite` with the favorite highlight; `host.ui
   .PromptMentionText` alias rendering in both the truncated and expanded
-  views; `host.utils.formatRelativeTime` for the send time; the agent-sent
+  views; `host.i18n.t` / `host.i18n.useTranslation()` for every
+  user-facing string (the plugin-scoped catalog namespace);
+  `host.utils.formatRelativeTime` for the send time; the agent-sent
   indicator (inline SVG glyph, since `host.ui` exposes no icon primitive);
   truncation with overflow detection and a distinct expand control;
   expanded box capped at 40% of the panel height with its own scroll;
@@ -114,7 +116,10 @@ contracts.
   nesting), at most 1000 messages per locale and 4096 characters per
   message (a violation throws at `initialize` and aborts every
   registration); registered through
-  `registry.registerTranslations` in a repeatable `initialize`.
+  `registry.registerTranslations` in a repeatable `initialize`; the
+  vitest suite in `ui/src/strings.test.ts` asserts every catalog (`en`,
+  `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`, `pseudo`) carries exactly the same
+  key set.
 - `ui/plugin.css`: the plugin-owned stylesheet (declared as
   `ui.styles: ["/ui/plugin.css"]` in the manifest; the Task 01 placeholder
   is replaced here). The bundle is built in a separate repository and
@@ -136,7 +141,10 @@ contracts.
 - `ui/src/host.ts`: re-exports the `@kandev/plugin-sdk` types (the
   `file:../../kdlbs-kandev/apps/packages/plugin-sdk` dependency in
   `ui/package.json`) instead of restating the contract, so
-  `tsc --noEmit` typechecks the panel against the pinned SDK.
+  `tsc --noEmit` typechecks the panel against the pinned SDK, and,
+  mirroring `kdlbs/kandev-plugin-voice`, owns the module-scoped host
+  handle (`host()`, `maybeHost()`, `hostReact()`) that
+  `ui/src/react-shim.ts` and the panel import.
 - Makefile: `ui-install`, `ui` (the esbuild build), `typecheck` (tsc
   --noEmit), and `test-ui` (vitest) targets mirroring
   `kdlbs/kandev-plugin-voice`, the `package`/`package-host` staging
@@ -148,7 +156,10 @@ contracts.
   present, and `ui/src`, `ui/node_modules`, and `ui/package.json` absent
   from the archive, adding `ui/bundle.js` to the `clean` target (Task 01
   renames its archive glob), and updating the README's "Both stage
-  `manifest.yaml` + `ui/`" sentence to the `stage_common` file set.
+  `manifest.yaml` + `ui/`" sentence and its "make package" inline comment
+  ("packs manifest + ui/ + binaries") to the `stage_common` file set, and
+  updating the `ui.bundle` comment in `manifest.yaml` (esbuild output, no
+  longer hand-written).
 - CI: each workflow gains the `kandev-plugin-voice` UI steps -
   `Set up Node` (node 24), `Set up pnpm` (v10), and `make ui-install` -
   anchored to its verification step, not to packaging (all three have

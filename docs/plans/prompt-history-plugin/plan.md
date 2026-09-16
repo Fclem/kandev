@@ -130,8 +130,12 @@ behavior:
   layout, and the `make ui-install`/`typecheck`/`test-ui`/`ui`/`package`
   targets - keeping the `kandev-plugin-prompt-history-0.1.0.tar.gz`
   archive name mentioned once so the `release.yml` README sed keeps
-  applying. Also remove the source-control recipe pitch, the
-  `recipes/`+`package.json`+`tsconfig.recipes.json` Layout entries, the
+  applying. Also remove the source-control recipe pitch (the intro
+  pitch paragraph, the `Make it yours` Git-provider opt-in paragraph,
+  and the `pluginsdk.ActionHandler`/`EntityReferenceSearcher`/
+  `EntityReferenceAuthorizer` example in `How a plugin runs`), the
+  `recipes/`+`package.json`+`tsconfig.recipes.json` Layout entries,
+  the
   "hand-written, no build step" `ui/bundle.js` paragraph (Task 02's
   esbuild toolchain replaces it), and the recipe-only `npm
   ci --ignore-scripts` install line; rewrite the "Developing against
@@ -373,7 +377,7 @@ plugin-localized (AC-002.10).
 | AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
 | AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam - the rendered favorite distinction, the agent-sent indicator, and the states are proven by the throwaway parity spec): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values |
 | AC-002.1, .5, .6, .7, .8 and AC-003.1, .2 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
-| AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` (the catalog-shape unit test) in the plugin repo |
+| AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` in the plugin repo (the catalog-shape unit test: asserts every catalog - `en`, `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`, `pseudo` - carries exactly the same key set) |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |
 
 ## E2E tests

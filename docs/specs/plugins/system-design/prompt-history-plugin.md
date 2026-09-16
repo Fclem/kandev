@@ -54,7 +54,7 @@ Manifest fields, per the [manifest reference](../../../public/plugins-manifest.m
   The installer requires a managed runtime even for a UI-focused plugin; the
   executable is a no-op `pluginsdk.UnimplementedPlugin` server (the Host
   prerequisites requirements
-  [AC-PLUGINS-PROMPT-HISTORY-HOST-002.8](prompt-history-extraction-host.md#req-plugins-prompt-history-host-002-browser-conversation-host-boundary)
+  [AC-PLUGINS-PROMPT-HISTORY-HOST-002.8](../requirements/prompt-history-extraction-host.md#req-plugins-prompt-history-host-002-browser-conversation-host-boundary)
   confirm the browser facade needs no plugin backend).
 - `capabilities: { api_read: ["messages"] }` and only that capability.
 - `ui: { bundle: "/ui/bundle.js", styles: ["/ui/plugin.css"] }`. No
@@ -166,14 +166,18 @@ Module layout:
   and the pseudo locale), registered through
   `registry.registerTranslations`. Catalog shape is pinned: flat keys
   matching `^[a-z][a-zA-Z0-9_-]*$` (no dots or nesting), exactly the
-  supported locale set (`en` required; `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`,
-  `pseudo` optional), at most 1000 messages per locale and 4096 characters
+  supported locale set (`en` is the only catalog the host requires;
+  AC-002.10 requires all six), at most 1000 messages per locale and 4096
+  characters
   per message; a violation throws at `initialize` and aborts every
   registration.
 - `ui/src/host.ts` — re-exports the `@kandev/plugin-sdk` types (the
   `file:../../kdlbs-kandev/apps/packages/plugin-sdk` dependency in
   `ui/package.json`) instead of restating the contract, so
-  `tsc --noEmit` typechecks the panel against the pinned SDK.
+  `tsc --noEmit` typechecks the panel against the pinned SDK, and,
+  mirroring `kdlbs/kandev-plugin-voice`, owns the module-scoped host
+  handle (`host()`, `maybeHost()`, `hostReact()`) that
+  `ui/src/react-shim.ts` and the panel import.
 - `ui/src/react-shim.ts` — the host-delegating shim that `ui/build.mjs`
   aliases `react` and `react/jsx-runtime` to (mirroring
   `kdlbs/kandev-plugin-voice`): every `react` import in the bundle
@@ -216,6 +220,10 @@ The panel component receives `PluginTaskPanelProps`
   follow the user's locale. Accepted delta: the core row's absolute-time
   `title` tooltip (`formatDateTime`) has no `host.utils` counterpart, so the
   plugin omits it.
+- `host.i18n.t` / `host.i18n.useTranslation()` — resolution of every
+  user-facing string through the plugin-scoped catalog namespace built
+  from `ui/src/strings.ts` (the SDK `PluginI18nApi`; the only surface
+  that reads the registered catalogs).
 
 DTO fields used: `id`, `turnId`, `createdAt`, `updatedAt`, `promptIndex`,
 `senderTaskId`, `content`, `authorType` (messages); `id`, `startedAt`,
@@ -338,8 +346,9 @@ runs against a disposable development instance:
   contents, checksums, staging leak check, absence of `ui/src`,
   `ui/node_modules`, `ui/package.json`), CI equivalent.
 - Parity: the throwaway desktop and mobile Playwright runs from the parity
-  proof section, plus `make -C apps/backend e2e-plugin-package` and the
-  existing core prompt-history E2E specs to confirm core preservation.
+  proof section, plus the harness build step, which packages the
+  plugin-fixture, and the existing core prompt-history E2E specs to
+  confirm core preservation.
 
 ## Related decisions
 

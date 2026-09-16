@@ -124,9 +124,12 @@ Module layout:
   and a focusable full-row navigate `<button>` (the core's `min-h-11`),
   both supplied by `ui/plugin.css`, and `aria-describedby` pointing at an
   `sr-only` row label whose text is the row `aria-label`, and a real
-  `<button>` expand control with `aria-expanded` and a catalog
-  `aria-label` (the parity spec's role-based
-  queries and 44 px tap-target assertions depend on these). Deliberate
+  `<button>` expand control with `aria-expanded`, a catalog `aria-label`,
+  and 44x44 px geometry for phone/coarse pointer and the parity
+  reference's 24x24 px fine-pointer release (the parity spec's role-based
+  queries and 44 px tap-target assertions depend on these; the rendered
+  component suite asserts the expand control's size for both pointer
+  modes). Deliberate
   delta: the plugin also puts `role="status"` on the empty state; the
   core's empty and passthrough states are plain divs with no role.
 - `ui/plugin.css` — the plugin-owned stylesheet, declared as
@@ -179,8 +182,9 @@ Module layout:
   loading grace, expansion/40% cap, favorites/live updates, and terminal
   removal, plus indicator placement (non-scrollable content renders the
   indicator in flow, scrollable content renders it as the floating
-  indicator) and older-page appends while the sentinel is active
-  preserving bottom anchoring; `panel.tsx` is also rendered by the
+  indicator), older-page appends while the sentinel is active preserving
+  bottom anchoring, and the expand control's size for both pointer modes;
+  `panel.tsx` is also rendered by the
   throwaway parity spec for cross-repository production-artifact parity.
 - `ui/src/strings.ts` — translation catalogs (en plus every supported locale
   and the pseudo locale), registered through
@@ -353,8 +357,10 @@ runs against a disposable development instance:
    `apps/web/lib/plugins/conversation-host.test.tsx:638-648`),
    and the computed-style parity checks (favorite highlight background,
    expanded-box cap) plus the loading-indicator placement (in flow when
-   not scrollable, floating when scrollable) and bottom anchoring on
-   older-page appends. The older-page auto-load check takes its
+   not scrollable, floating when scrollable), bottom anchoring on
+   older-page appends, and the expand button's `boundingBox()` width and
+   height each at least 44 px on the mobile parity run. The older-page
+   auto-load check takes its
    oracle from `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts`
    with the `apps/web/e2e/helpers/prompt-history-long-seed.ts` 121-prompt
    seed: scroll-to-sentinel, no load-more assertion (the production panel

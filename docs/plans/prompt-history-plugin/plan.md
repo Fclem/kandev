@@ -243,10 +243,11 @@ target depends on `ui`.
   `react-jsx-runtime` to `react-shim.ts`) plus controlled
   ResizeObserver/IntersectionObserver and fake timers - for initial load,
   retry/recovery, in-flight pagination suppression, loading grace,
-  expansion/40% cap, favorites/live updates, terminal removal, and
-  indicator placement (in flow when not scrollable, floating when
-  scrollable) with older-page appends preserving bottom anchoring;
-  `panel.tsx` is also rendered by the throwaway parity spec for
+  expansion/40% cap, favorites/live updates, terminal removal, indicator
+  placement (in flow when not scrollable, floating when scrollable) with
+  older-page appends preserving bottom anchoring, and the expand control's
+  size for both pointer modes; `panel.tsx` is also rendered by the
+  throwaway parity spec for
   cross-repository production-artifact parity).
   The panel
   registers with panel key `prompt-history`, a `titleKey`,
@@ -264,8 +265,9 @@ target depends on `ui`.
   and a focusable full-row navigate `<button>` (the core's `min-h-11`),
   both supplied by `ui/plugin.css`, and `aria-describedby` pointing at an
   `sr-only` row label whose text is the row `aria-label`, and a real
-  `<button>` expand control with `aria-expanded` and a catalog
-  `aria-label`; deliberate delta: the plugin
+  `<button>` expand control with `aria-expanded`, a catalog `aria-label`,
+  and 44x44 px geometry for phone/coarse pointer and the parity
+  reference's 24x24 px fine-pointer release; deliberate delta: the plugin
   also puts `role="status"` on the empty state (the core's empty and
   passthrough states are plain divs with no role).
 - `ui/plugin.css`: the plugin-owned stylesheet (declared as
@@ -432,9 +434,10 @@ transitions, navigation, initial loading, fetch-failure with retry,
 empty, error, passthrough, and terminal removed states (committed rows
 remain; `loadMore` emits no request; post-terminal transport fencing is
 covered by the existing Host unit test), desktop plus mobile placement,
-the computed-style parity checks, and the loading-indicator placement
-(in flow when not scrollable, floating when scrollable) with bottom
-anchoring preserved on older-page appends). Core preservation
+the computed-style parity checks, the loading-indicator placement (in
+flow when not scrollable, floating when scrollable) with bottom anchoring
+preserved on older-page appends, and the expand button's `boundingBox()`
+width and height each at least 44 px on the mobile run). Core preservation
 is confirmed by re-running the existing
 `e2e/tests/task/prompt-history-panel.spec.ts`,
 `mobile-prompt-history-panel.spec.ts`, and

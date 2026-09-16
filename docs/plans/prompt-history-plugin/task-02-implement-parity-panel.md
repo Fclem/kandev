@@ -103,8 +103,9 @@ contracts.
   loading grace, expansion/40% cap, favorites/live updates, and terminal
   removal, plus indicator placement (non-scrollable content renders the
   indicator in flow, scrollable content renders it as the floating
-  indicator) and older-page appends while the sentinel is active
-  preserving bottom anchoring; `panel.tsx` is also rendered by the
+  indicator), older-page appends while the sentinel is active preserving
+  bottom anchoring, and the expand control's size for both pointer modes;
+  `panel.tsx` is also rendered by the
   throwaway parity spec for cross-repository production-artifact parity.
 - The panel registers with panel key `prompt-history` (layout id
   `plugin:kandev-plugin-prompt-history:prompt-history`), a `titleKey`,
@@ -121,9 +122,12 @@ contracts.
   and
   `aria-describedby` pointing at an `sr-only` row label whose text is the
   row `aria-label`, and a real `<button>` expand control with
-  `aria-expanded` and a catalog `aria-label` (the parity spec's role-based
-  queries and 44 px tap-target assertions
-  depend on these); deliberate delta: the plugin also puts
+  `aria-expanded`, a catalog `aria-label`, and 44x44 px geometry for
+  phone/coarse pointer and the parity reference's 24x24 px fine-pointer
+  release (the parity spec's role-based queries and 44 px tap-target
+  assertions depend on these; the rendered component suite asserts the
+  expand control's size for both pointer modes); deliberate delta: the
+  plugin also puts
   `role="status"` on the empty state (the core's empty and passthrough
   states are plain divs with no role).
 - `ui/src/strings.ts`: translation catalogs for en plus every supported

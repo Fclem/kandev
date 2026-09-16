@@ -156,9 +156,11 @@ trap 'rm -rf .tmp/prompt-history-plugin \
   identity; if the implementation's ids differ from the pinned scheme,
   update the throwaway spec (not the committed core specs) before the run.
 - The throwaway spec's role-based queries (`getByRole("button")`,
-  `role="status"`) and 44 px tap-target assertions depend on the
-  accessibility attributes pinned in Task 02; if the implementation omits
-  them, the spec fails before any parity judgment.
+  `role="status"`) and 44 px tap-target assertions - including the
+  expand button's `boundingBox()` width and height each at least
+  44 px - depend on the accessibility attributes pinned in Task 02; if
+  the implementation omits them, the spec fails before any parity
+  judgment.
 
 ## Parallelism
 

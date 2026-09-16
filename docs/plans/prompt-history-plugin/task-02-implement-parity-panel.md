@@ -247,7 +247,10 @@ contracts.
   rendering, duration, send time, favorite highlight, agent-sent
   indicator, expand with the 40% cap, older-page auto-load, navigation),
   declares `mobileEnabled: true`, and declares no `visible` predicate.
-- No copy is hardcoded: every user-facing string resolves through the plugin
+- No copy is hardcoded: every user-facing string resolves through the
+  plugin translation catalog with an English fallback, and catalogs
+  exist for en, pt-pt, zh-cn, zh-hk, zh-tw, and pseudo with identical
+  key sets.
 ## ASCII UI preview
 
 ### UI-01: Desktop panel (dockview, via "+" menu)

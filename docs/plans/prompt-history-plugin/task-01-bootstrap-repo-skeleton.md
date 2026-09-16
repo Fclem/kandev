@@ -31,9 +31,10 @@ instance.
 
 - Creating the public `kdlbs/kandev-plugin-prompt-history` repository from
   the template, preserving its packaging, test, and release safeguards.
-- Renaming the identity in all four synchronized places (manifest `id`,
-  `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`,
-  `window.registerKandevPlugin` id) and setting `display_name`, `author:
+- Renaming the identity in the manifest `id`, the `go.mod` module, the
+  Makefile `BIN` and its derived `PKG_OUT`, and the
+  `window.registerKandevPlugin` id (the Makefile `VERSION` matches the
+  manifest `version`); setting `display_name`, `author:
   "kandev"`, and `repo_url`; renaming the template's own package-name
   references with it (`release.yml` README sed pattern, `release.yml`
   Extract checksums `tar -xzf` glob, `release.yml` release-asset glob,
@@ -53,10 +54,12 @@ instance.
   the "hand-written, no build
   step" `ui/bundle.js` paragraph (Task 02's esbuild toolchain replaces
   it), and the recipe-only `npm ci --ignore-scripts` install line,
-  rewriting the "Developing against the SDK" frontend paragraph that
-  names the recipe and the removed root `package.json` (after this task
-  the `@kandev/plugin-sdk` `file:` dependency lives in `ui/package.json`
-  and `ui/bundle.js` is Task 02's esbuild build output), restating the
+  rewriting the "Developing against the SDK" section (the `replace`
+  snippet and `some-dir/` sibling diagram to `kdlbs-kandev` paths, and
+  the frontend paragraph that names the recipe and the removed root
+  `package.json`, which after this task has the `@kandev/plugin-sdk`
+  `file:` dependency in `ui/package.json` and `ui/bundle.js` as Task
+  02's esbuild build output), restating the
   "Minimum host version" section as the first release carrying the
   browser conversation facade (0.95.0 at writing time) and dropping its
   source-control-recipe floor paragraph, updating the `manifest.yaml`

@@ -33,9 +33,10 @@ the UI system and is not modified here.
 
 The repository is created from `kdlbs/kandev-plugin-template` and keeps the
 template's packaging, test, and release safeguards. Identity is synchronized
-across the manifest `id`, the `go.mod` module, the Makefile `BIN`/`PKG_OUT`/
-`VERSION`, and the `window.registerKandevPlugin` id:
-`kandev-plugin-prompt-history`.
+across the manifest `id`, the `go.mod` module, the Makefile `BIN` and its
+derived `PKG_OUT`, and the `window.registerKandevPlugin` id:
+`kandev-plugin-prompt-history`; the Makefile `VERSION` matches the manifest
+`version`.
 
 Manifest fields, per the [manifest reference](../../../public/plugins-manifest.md):
 
@@ -87,8 +88,10 @@ build aliases `react` and `react/jsx-runtime` to a host-delegating shim.
 Module layout:
 
 - `ui/src/index.tsx` — `window.registerKandevPlugin` entry;
-  `initialize(registry, host)` registers the task panel and translations,
-  repeatable across enable/disable cycles.
+  `initialize(registry, host)` calls `setHost(host)` before registering
+  the task panel and translations, and `destroy()` calls `clearHost()` so
+  a same-tab disable/enable cycle starts clean (AC-001.4); the
+  registrations are repeatable across enable/disable cycles.
 - `ui/src/panel.tsx` — the `PromptHistoryPanel` component, registered with
   panel key `prompt-history` (layout id
   `plugin:kandev-plugin-prompt-history:prompt-history`), a `titleKey`
@@ -149,8 +152,9 @@ Module layout:
   arithmetic, and provides the plugin-local `formatPromptDuration` mirror
   (`h m s` unit labels from the translation catalog) matching
   `apps/web/lib/prompt-history.ts` `formatPromptDuration`. The vitest suite
-  includes a case with two identical `createdAt` values to pin that derive
-  preserves page order rather than sorting by timestamp.
+  includes a case with two identical `createdAt` values whose ids are
+  seeded so ascending-id order contradicts the facade page order, to pin
+  that derive preserves page order rather than sorting by timestamp.
 - `ui/src/panel-state.ts` — pure panel state determination and
   `openMessage` outcome handling, consumed by `panel.tsx` and tested
   against `test-host`: the states rendered above (initial loading,
@@ -177,7 +181,9 @@ Module layout:
   `tsc --noEmit` typechecks the panel against the pinned SDK, and,
   mirroring `kdlbs/kandev-plugin-voice`, owns the module-scoped host
   handle (`host()`, `maybeHost()`, `hostReact()`) that
-  `ui/src/react-shim.ts` and the panel import.
+  `ui/src/react-shim.ts` and the panel import, and its write side
+  (`setHost(host)`, `clearHost()`) that `ui/src/index.tsx` calls from
+  `initialize` and `destroy`.
 - `ui/src/react-shim.ts` — the host-delegating shim that `ui/build.mjs`
   aliases `react` and `react/jsx-runtime` to (mirroring
   `kdlbs/kandev-plugin-voice`): every `react` import in the bundle

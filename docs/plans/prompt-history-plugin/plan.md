@@ -139,10 +139,12 @@ behavior:
   "hand-written, no build step" `ui/bundle.js` paragraph (Task 02's
   esbuild toolchain replaces it), and the recipe-only `npm
   ci --ignore-scripts` install line; rewrite the "Developing against
-  the SDK" frontend paragraph that names the recipe and the removed
-  root `package.json` (after this task the `file:` dependency lives in
-  `ui/package.json` and `ui/bundle.js` is Task 02's esbuild build
-  output), restate the "Minimum host version" section as the first
+  the SDK" section (the `replace` snippet and `some-dir/` sibling diagram
+  to `kdlbs-kandev` paths, and the frontend paragraph that names the
+  recipe and the removed root `package.json`, which after this task has
+  the `file:` dependency in `ui/package.json` and `ui/bundle.js` as Task
+  02's esbuild build output), restate the "Minimum host version" section
+  as the first
   release carrying the browser conversation facade (0.95.0 at writing
   time) and drop its source-control-recipe floor paragraph, update the
   `manifest.yaml` and `bundle.js` Layout comments (the former cites
@@ -191,9 +193,10 @@ target depends on `ui`.
   `turnsHydrated` gate); plus the plugin-local `formatPromptDuration`
   mirror (`h m s` unit labels from the translation catalog). Ordering is
   the facade's page order (older pages append; live updates arrive already
-  ordered by the host); derive does not re-sort. The vitest suite includes a
-  case with two identical `createdAt` values to pin that derive preserves
-  page order rather than sorting by timestamp.
+  ordered by the host); derive does not re-sort. The vitest suite includes
+  a case with two identical `createdAt` values whose ids are seeded so
+  ascending-id order contradicts the facade page order, to pin that derive
+  preserves page order rather than sorting by timestamp.
 - `ui/src/panel.tsx`: consumes
   `conversation.history.useSessionMessages({ sessionId, taskId,
   authorTypes: ["user"], sort: "desc", pageSize: 20 })` (passing
@@ -372,10 +375,10 @@ plugin-localized (AC-002.10).
 
 | Criterion | Evidence |
 | --- | --- |
-| AC-001.1 | Identity assertions: manifest `id`, `go.mod` module, Makefile `BIN`/`PKG_OUT`/`VERSION`, and UI registration id all read `kandev-plugin-prompt-history`; staged executables keep the platform names |
+| AC-001.1 | Identity assertions: manifest `id`, `go.mod` module, Makefile `BIN` and its derived `PKG_OUT`, and UI registration id all read `kandev-plugin-prompt-history`, and the Makefile `VERSION` matches the manifest `version`; staged executables keep the platform names |
 | AC-001.2, .3, AC-003.3 | Manifest assertions in `server/` or `ui/` tests plus `make verify-package` (archive contents, checksums, staging leak check) |
 | AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
-| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam - the rendered favorite distinction, the agent-sent indicator, and the states are proven by the throwaway parity spec): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values |
+| AC-002.2, .3, .4, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam - the rendered favorite distinction, the agent-sent indicator, and the states are proven by the throwaway parity spec): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values (ids seeded to contradict page order) |
 | AC-002.1, .5, .6, .7, .8 and AC-003.1, .2 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
 | AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` in the plugin repo (the catalog-shape unit test: asserts every catalog - `en`, `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`, `pseudo` - carries exactly the same key set) |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |

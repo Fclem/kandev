@@ -46,10 +46,11 @@ contracts.
   plugin-local `formatPromptDuration` mirror (`h m s` unit labels from the
   translation catalog) matching `apps/web/lib/prompt-history.ts`
   `formatPromptDuration`. Ordering is the facade's page order (older pages
-  append; live updates arrive already ordered by the host); derive does not
-  re-sort. The vitest suite includes a case with two identical
-  `createdAt` values to pin that derive preserves page order rather than
-  sorting by timestamp.
+  append; live updates arrive already ordered by the host); derive does
+  not re-sort. The vitest suite includes a case with two identical
+  `createdAt` values whose ids are seeded so ascending-id order
+  contradicts the facade page order, to pin that derive preserves page
+  order rather than sorting by timestamp.
 - `ui/src/panel.tsx`: consumes
   `conversation.history.useSessionMessages({ sessionId, taskId,
   authorTypes: ["user"], sort: "desc", pageSize: 20 })` (passing
@@ -131,8 +132,8 @@ contracts.
   `kandev-plugin-voice` (`ui/plugin.css` + `ui.styles`).
 - `ui/build.mjs` (esbuild, no bundled React, `react` and
   `react/jsx-runtime` aliased to `ui/src/react-shim.ts`, the
-  host-delegating shim) and `ui/src/test-host.ts` (Host mock for the
-  vitest suite).
+  host-delegating shim) and `ui/src/test-host.ts` (the Host mock for the
+  vitest suite, installed through `setHost`).
 - `ui/pnpm-workspace.yaml`: allowlists esbuild's build script
   (`onlyBuiltDependencies: [esbuild]`, mirroring `kandev-plugin-voice`;
   pnpm 10 does not run dependency lifecycle scripts unless allowlisted,
@@ -144,7 +145,9 @@ contracts.
   `tsc --noEmit` typechecks the panel against the pinned SDK, and,
   mirroring `kdlbs/kandev-plugin-voice`, owns the module-scoped host
   handle (`host()`, `maybeHost()`, `hostReact()`) that
-  `ui/src/react-shim.ts` and the panel import.
+  `ui/src/react-shim.ts` and the panel import, and its write side
+  (`setHost(host)`, `clearHost()`) that `ui/src/index.tsx` calls from
+  `initialize` and `destroy`.
 - Makefile: `ui-install`, `ui` (the esbuild build), `typecheck` (tsc
   --noEmit), and `test-ui` (vitest) targets mirroring
   `kdlbs/kandev-plugin-voice`, the `package`/`package-host` staging
@@ -192,9 +195,9 @@ contracts.
   ordering, ordinals, duration bounds, the turns-hydration gate, the
   agent-sent flag (derive.ts), state determination, `openMessage` outcome
   handling, and page-order preservation with identical `createdAt`
-  values (the rendered favorite distinction, the agent-sent indicator,
-  and the states are proven by the throwaway parity spec - the pinned
-  harness is logic-only).
+  values (ids seeded to contradict page order; the rendered favorite
+  distinction, the agent-sent indicator, and the states are proven by the
+  throwaway parity spec - the pinned harness is logic-only).
 - `make package-host` produces a bundle whose panel registration matches
   the parity reference's feature set (user-prompt rows, `#N`, alias
   rendering, duration, send time, favorite highlight, agent-sent

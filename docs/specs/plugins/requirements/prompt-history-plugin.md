@@ -45,9 +45,10 @@ declared identity and least-privilege manifest.
   a Kandev host at or above the declared `min_kandev_version`, the host shall
   activate the plugin with id `kandev-plugin-prompt-history`, author `kandev`,
   and `repo_url` pointing at `https://github.com/kdlbs/kandev-plugin-prompt-history`.
-  The manifest `id`, the `go.mod` module, the Makefile `BIN`/`PKG_OUT`/
-  `VERSION`, and the UI registration id shall all use that same identity;
-  the staged runtime executables keep the platform names
+  The manifest `id`, the `go.mod` module, the Makefile `BIN` and its
+  derived `PKG_OUT`, and the UI registration id shall all use that same
+  identity, and the Makefile `VERSION` shall match the manifest
+  `version`; the staged runtime executables keep the platform names
   (`server/plugin-<goos>-<goarch>`).
 - **AC-PLUGINS-PROMPT-HISTORY-PLUGIN-001.2:** The manifest shall declare
   `api_version: 2`, `capabilities.api_read: ["messages"]`, a `runtime` block

@@ -238,8 +238,55 @@ contracts.
 
 ## ASCII UI preview
 
-See [UI-01 in the plan](plan.md#ascii-ui-preview) (desktop panel, expanded
-row, phone composition, and shared states).
+### UI-01: Desktop panel (dockview, via "+" menu)
+
+```text
++----------------------------+
+| Prompt History             |
++----------------------------+
+| #3 fix the login flow ...  | 12 minutes ago  (AC-002.2, .4)
+|            [expand]        | 1m 23s    (AC-002.3, .4)
+|                            |
+| #2 why did the deploy ...  | 1 hour ago
+|            [expand]        | 2m 05s
+|                            |
+| #1 set up the project ...  | 3 days ago
+|                            |
++----------------------------+
+| Loading older messages     |  floating chip only when the
++----------------------------+  panel scrolls; in-flow otherwise
+                                  (AC-002.6)
+```
+
+### UI-01E: Expanded row
+
+```text
++----------------------------+
+| #3 fix the login flow      |
+|   (wrapped text inside a   |  cap: 40% of panel height,
+|   box with its own scroll) |  own scroll area (AC-002.3)
+|            [collapse]      |
++----------------------------+
+```
+
+### UI-01M: Phone (Panels picker, full height)
+
+```text
++--------------------------+
+| Prompt History            |
++--------------------------+
+| #3 fix the login flow ... | 12 minutes ago
+|            [expand]       | 1m 23s
+|                           |  rows: min 44px tap targets;
+| #2 why did the deploy ... | 1 hour ago   expansion is a distinct
+|            [expand]       | 2m 05s   control (AC-002.1, .3)
++--------------------------+
+```
+
+Fixed regions: panel header, panel chrome. Scrolling region: the prompt
+rows. The preview is structural; spacing is not a pixel specification. Full
+preview with shared states: [ASCII UI preview in the
+plan](plan.md#ascii-ui-preview).
 
 ## Verification
 

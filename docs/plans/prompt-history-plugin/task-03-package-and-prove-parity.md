@@ -48,8 +48,11 @@ confirm the core panel and fixture remain behaviorally unchanged.
   transitions, navigation, initial loading (hold the first read to assert
   the loading state), fetch-failure with retry (fail then recover the first
   read through Retry), empty, error, passthrough, and removed (after rows
-  commit, delete the active session and assert committed rows remain while
-  both further pagination and further live reconciliation stop) states,
+  commit, delete the active session and assert committed rows remain and a
+  sentinel-triggered `loadMore` emits no request; post-terminal transport
+  fencing - later events do not change rows - is covered by the existing
+  Host unit test `apps/web/lib/plugins/conversation-host.test.tsx:638-648`)
+  states,
   desktop plus mobile placement,
   and computed-style parity of the favorite highlight and the 40%
   expanded-box cap - targeting the production
@@ -106,8 +109,8 @@ make package
 make verify-package
 ```
 
-Parity runs (from the monorepo worktree; the throwaway spec file is created
-for the run and deleted after):
+Parity runs (from the monorepo worktree; the throwaway spec files are
+created for the run and deleted after):
 
 ```bash
 # Stage the already-verified production tarball under REPO_ROOT (the Docker
@@ -117,7 +120,9 @@ for the run and deleted after):
 mkdir -p .tmp/prompt-history-plugin
 cp ../kandev-plugin-prompt-history/kandev-plugin-prompt-history-0.1.0.tar.gz \
    .tmp/prompt-history-plugin/kandev-plugin-prompt-history-0.1.0.tar.gz
-trap 'rm -rf .tmp/prompt-history-plugin' EXIT
+trap 'rm -rf .tmp/prompt-history-plugin \
+  apps/web/e2e/tests/plugins/prompt-history-parity-check.spec.ts \
+  apps/web/e2e/tests/plugins/mobile-prompt-history-parity-check.spec.ts' EXIT
 
 (cd apps && pnpm install --frozen-lockfile)
 (cd apps && pnpm --filter @kandev/web e2e:run -- e2e/tests/plugins/prompt-history-parity-check.spec.ts)

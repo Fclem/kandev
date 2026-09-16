@@ -90,12 +90,17 @@ contracts.
 - `ui/src/panel-state.ts`: the pure seam for the state determination
   and `openMessage` outcome handling above, consumed by `panel.tsx`
   and tested against `test-host`. The vitest suite now includes
-  permanent rendered component tests (host React supplied through the
-  shim, plus controlled ResizeObserver/IntersectionObserver and fake
-  timers) for initial load, retry/recovery, in-flight pagination
-  suppression, loading grace, expansion/40% cap, favorites/live updates,
-  and terminal removal; `panel.tsx` is also rendered by the throwaway
-  parity spec for cross-repository production-artifact parity.
+  permanent rendered component tests that import `panel.tsx` directly
+  from source (not the built bundle), with `react`, `react-dom`, and
+  `@testing-library/react` as dev dependencies and `test-host` installed
+  with the same real React instance (the `react` alias in `react-shim.ts`
+  points at the same `react` package the renderer uses, so the renderer
+  is not aliased into the shim) plus controlled
+  ResizeObserver/IntersectionObserver and fake timers; the suite covers
+  initial load, retry/recovery, in-flight pagination suppression,
+  loading grace, expansion/40% cap, favorites/live updates, and terminal
+  removal; `panel.tsx` is also rendered by the throwaway parity spec for
+  cross-repository production-artifact parity.
 - The panel registers with panel key `prompt-history` (layout id
   `plugin:kandev-plugin-prompt-history:prompt-history`), a `titleKey`,
   `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
@@ -138,7 +143,9 @@ contracts.
 - `ui/build.mjs` (esbuild, no bundled React, `react` and
   `react/jsx-runtime` aliased to `ui/src/react-shim.ts`, the
   host-delegating shim) and `ui/src/test-host.ts` (the Host mock for the
-  vitest suite, installed through `setHost`).
+  vitest suite, installed through `setHost` with the same real `react`
+  instance the renderer uses, so the renderer is not aliased into the
+  shim).
 - `ui/pnpm-workspace.yaml`: allowlists esbuild's build script
   (`onlyBuiltDependencies: [esbuild]`, mirroring `kandev-plugin-voice`;
   pnpm 10 does not run dependency lifecycle scripts unless allowlisted,
@@ -208,8 +215,12 @@ contracts.
   agent-sent flag (derive.ts), state determination, `openMessage` outcome
   handling, and page-order preservation with identical `createdAt`
   values (ids seeded to contradict page order; the rendered favorite
-  distinction, the agent-sent indicator, and the states are proven by
-  the permanent rendered component tests in the plugin repo).
+  distinction, the agent-sent indicator, and the complete rendered
+  scenario suite - initial load, retry/recovery, in-flight pagination
+  suppression, loading grace, expansion/40% cap, favorites/live updates,
+  and terminal removal, with controlled observers and fake timers -
+  are proven by the permanent rendered component tests in the plugin
+  repo).
 - `make package-host` produces a bundle whose panel registration matches
   the parity reference's feature set (user-prompt rows, `#N`, alias
   rendering, duration, send time, favorite highlight, agent-sent

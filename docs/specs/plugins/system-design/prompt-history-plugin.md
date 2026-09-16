@@ -166,12 +166,17 @@ Module layout:
   `loadingMore` while `hasMore`, passthrough, and `removed` - rows stay,
   pagination and live updates stopped -) and the `unavailable`
   outcome consumed without error surfacing. The vitest suite now includes
-  permanent rendered component tests (host React supplied through the
-  shim, plus controlled ResizeObserver/IntersectionObserver and fake
-  timers) for initial load, retry/recovery, in-flight pagination
-  suppression, loading grace, expansion/40% cap, favorites/live updates,
-  and terminal removal; `panel.tsx` is also rendered by the throwaway
-  parity spec for cross-repository production-artifact parity.
+  permanent rendered component tests that import `panel.tsx` directly
+  from source (not the built bundle), with `react`, `react-dom`, and
+  `@testing-library/react` as dev dependencies and `test-host` installed
+  with the same real React instance (the `react` alias in `react-shim.ts`
+  points at the same `react` package the renderer uses, so the renderer
+  is not aliased into the shim) plus controlled
+  ResizeObserver/IntersectionObserver and fake timers; the suite covers
+  initial load, retry/recovery, in-flight pagination suppression,
+  loading grace, expansion/40% cap, favorites/live updates, and terminal
+  removal; `panel.tsx` is also rendered by the throwaway parity spec for
+  cross-repository production-artifact parity.
 - `ui/src/strings.ts` — translation catalogs (en plus every supported locale
   and the pseudo locale), registered through
   `registry.registerTranslations`. Catalog shape is pinned: flat keys
@@ -337,8 +342,10 @@ runs against a disposable development instance:
    navigation assertions, plus the passthrough degraded state (reachable in
    the plugin only because the registration declares no `visible`
    predicate), the initial loading and fetch-failure-with-retry states,
-   the terminal removed state (committed rows remain, both further
-   pagination and further live reconciliation stop),
+   the terminal removed state (committed rows remain, a sentinel-triggered
+   `loadMore` emits no request; post-terminal transport fencing - later
+   events do not change rows - is covered by the existing Host unit test
+   `apps/web/lib/plugins/conversation-host.test.tsx:638-648`),
    and the computed-style parity checks (favorite highlight background,
    expanded-box cap). The older-page auto-load check takes its
    oracle from `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts`

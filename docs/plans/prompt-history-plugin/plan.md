@@ -233,12 +233,17 @@ target depends on `ui`.
   flight). Row selection calls `conversation.openMessage(messageId)`;
   `unavailable` outcomes are consumed without error surfacing - both
   delegate to the pure `ui/src/panel-state.ts` seam (the vitest suite
-  now includes permanent rendered component tests - host React supplied
-  through the shim, plus controlled ResizeObserver/IntersectionObserver
-  and fake timers - for initial load, retry/recovery, in-flight
-  pagination suppression, loading grace, expansion/40% cap, favorites/live
-  updates, and terminal removal; `panel.tsx` is also rendered by the
-  throwaway parity spec for cross-repository production-artifact parity).
+  now includes permanent rendered component tests that import `panel.tsx`
+  directly from source (not the built bundle), with `react`, `react-dom`,
+  and `@testing-library/react` as dev dependencies and `test-host`
+  installed with the same real React instance (the `react` alias in
+  `react-shim.ts` points at the same `react` package the renderer uses,
+  so the renderer is not aliased into the shim) plus controlled
+  ResizeObserver/IntersectionObserver and fake timers - for initial load,
+  retry/recovery, in-flight pagination suppression, loading grace,
+  expansion/40% cap, favorites/live updates, and terminal removal;
+  `panel.tsx` is also rendered by the throwaway parity spec for
+  cross-repository production-artifact parity).
   The panel
   registers with panel key `prompt-history`, a `titleKey`,
   `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
@@ -308,8 +313,10 @@ proof against a disposable development instance:
    (hold the first read to assert the loading state), fetch-failure with
    retry (fail then recover the first read through Retry), empty, error,
    passthrough, and removed (after rows commit, delete the active session
-   and assert committed rows remain while both further pagination and
-   further live reconciliation stop)
+   and assert committed rows remain and a sentinel-triggered `loadMore`
+   emits no request; post-terminal transport fencing - later events do not
+   change rows - is covered by the existing Host unit test
+   `apps/web/lib/plugins/conversation-host.test.tsx:638-648`)
    states, desktop plus mobile placement, and computed-style
    parity of the favorite highlight and the 40% expanded-box cap. The
    fixture specs (`prompt-history-plugin.spec.ts` and
@@ -418,8 +425,10 @@ AC-PLUGINS-PROMPT-HISTORY-PLUGIN-003.1, AC-003.2, and the Task 03 in-scope
 behavior list (ordering, `#N` ordinals, alias rendering, durations,
 favorite distinction, agent-sent indicator, older-page auto-loading, live
 transitions, navigation, initial loading, fetch-failure with retry,
-empty, error, passthrough, and terminal removed states, desktop plus
-mobile placement, and the computed-style parity checks). Core preservation
+empty, error, passthrough, and terminal removed states (committed rows
+remain; `loadMore` emits no request; post-terminal transport fencing is
+covered by the existing Host unit test), desktop plus mobile placement,
+and the computed-style parity checks). Core preservation
 is confirmed by re-running the existing
 `e2e/tests/task/prompt-history-panel.spec.ts`,
 `mobile-prompt-history-panel.spec.ts`, and

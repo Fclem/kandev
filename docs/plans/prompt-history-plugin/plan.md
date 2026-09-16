@@ -236,12 +236,16 @@ target depends on `ui`.
   now includes permanent rendered component tests that import `panel.tsx`
   directly from source (not the built bundle), with `react`, `react-dom`,
   and `@testing-library/react` as dev dependencies and `test-host`
-  installed with the same real React instance (the `react` alias in
-  `react-shim.ts` points at the same `react` package the renderer uses,
-  so the renderer is not aliased into the shim) plus controlled
+  installed with the same real React instance (Vitest does not apply the
+  production `react` alias; `panel.tsx` and the renderer resolve the
+  installed `react` package, and `test-host` passes that same module to
+  `setHost`; only the esbuild production build aliases `react`/
+  `react-jsx-runtime` to `react-shim.ts`) plus controlled
   ResizeObserver/IntersectionObserver and fake timers - for initial load,
   retry/recovery, in-flight pagination suppression, loading grace,
-  expansion/40% cap, favorites/live updates, and terminal removal;
+  expansion/40% cap, favorites/live updates, terminal removal, and
+  indicator placement (in flow when not scrollable, floating when
+  scrollable) with older-page appends preserving bottom anchoring;
   `panel.tsx` is also rendered by the throwaway parity spec for
   cross-repository production-artifact parity).
   The panel
@@ -428,7 +432,9 @@ transitions, navigation, initial loading, fetch-failure with retry,
 empty, error, passthrough, and terminal removed states (committed rows
 remain; `loadMore` emits no request; post-terminal transport fencing is
 covered by the existing Host unit test), desktop plus mobile placement,
-and the computed-style parity checks). Core preservation
+the computed-style parity checks, and the loading-indicator placement
+(in flow when not scrollable, floating when scrollable) with bottom
+anchoring preserved on older-page appends). Core preservation
 is confirmed by re-running the existing
 `e2e/tests/task/prompt-history-panel.spec.ts`,
 `mobile-prompt-history-panel.spec.ts`, and

@@ -54,8 +54,10 @@ confirm the core panel and fixture remain behaviorally unchanged.
   Host unit test `apps/web/lib/plugins/conversation-host.test.tsx:638-648`)
   states,
   desktop plus mobile placement,
-  and computed-style parity of the favorite highlight and the 40%
-  expanded-box cap - targeting the production
+  and computed-style parity of the favorite highlight, the 40%
+  expanded-box cap, and the loading-indicator placement (in flow when not
+  scrollable, floating when scrollable) with older-page appends preserving
+  bottom anchoring - targeting the production
   panel's `ph-plugin-` test ids. The fixture specs
   (`apps/web/e2e/tests/plugins/prompt-history-plugin.spec.ts` and
   `mobile-prompt-history-plugin.spec.ts`) are the source for the ordering,

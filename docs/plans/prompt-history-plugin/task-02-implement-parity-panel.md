@@ -93,14 +93,19 @@ contracts.
   permanent rendered component tests that import `panel.tsx` directly
   from source (not the built bundle), with `react`, `react-dom`, and
   `@testing-library/react` as dev dependencies and `test-host` installed
-  with the same real React instance (the `react` alias in `react-shim.ts`
-  points at the same `react` package the renderer uses, so the renderer
-  is not aliased into the shim) plus controlled
+  with the same real React instance (Vitest does not apply the production
+  `react` alias; `panel.tsx` and the renderer resolve the installed
+  `react` package, and `test-host` passes that same module to `setHost`;
+  only the esbuild production build aliases `react`/`react-jsx-runtime`
+  to `react-shim.ts`) plus controlled
   ResizeObserver/IntersectionObserver and fake timers; the suite covers
   initial load, retry/recovery, in-flight pagination suppression,
   loading grace, expansion/40% cap, favorites/live updates, and terminal
-  removal; `panel.tsx` is also rendered by the throwaway parity spec for
-  cross-repository production-artifact parity.
+  removal, plus indicator placement (non-scrollable content renders the
+  indicator in flow, scrollable content renders it as the floating
+  indicator) and older-page appends while the sentinel is active
+  preserving bottom anchoring; `panel.tsx` is also rendered by the
+  throwaway parity spec for cross-repository production-artifact parity.
 - The panel registers with panel key `prompt-history` (layout id
   `plugin:kandev-plugin-prompt-history:prompt-history`), a `titleKey`,
   `mobileEnabled: true` (the mobile Panels picker and bottom nav filter on
@@ -218,7 +223,9 @@ contracts.
   distinction, the agent-sent indicator, and the complete rendered
   scenario suite - initial load, retry/recovery, in-flight pagination
   suppression, loading grace, expansion/40% cap, favorites/live updates,
-  and terminal removal, with controlled observers and fake timers -
+  terminal removal, and indicator placement (in flow when not scrollable,
+  floating when scrollable) with older-page appends preserving bottom
+  anchoring, with controlled observers and fake timers -
   are proven by the permanent rendered component tests in the plugin
   repo).
 - `make package-host` produces a bundle whose panel registration matches

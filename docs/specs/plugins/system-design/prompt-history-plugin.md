@@ -169,14 +169,19 @@ Module layout:
   permanent rendered component tests that import `panel.tsx` directly
   from source (not the built bundle), with `react`, `react-dom`, and
   `@testing-library/react` as dev dependencies and `test-host` installed
-  with the same real React instance (the `react` alias in `react-shim.ts`
-  points at the same `react` package the renderer uses, so the renderer
-  is not aliased into the shim) plus controlled
+  with the same real React instance (Vitest does not apply the production
+  `react` alias; `panel.tsx` and the renderer resolve the installed
+  `react` package, and `test-host` passes that same module to `setHost`;
+  only the esbuild production build aliases `react`/`react-jsx-runtime`
+  to `react-shim.ts`) plus controlled
   ResizeObserver/IntersectionObserver and fake timers; the suite covers
   initial load, retry/recovery, in-flight pagination suppression,
   loading grace, expansion/40% cap, favorites/live updates, and terminal
-  removal; `panel.tsx` is also rendered by the throwaway parity spec for
-  cross-repository production-artifact parity.
+  removal, plus indicator placement (non-scrollable content renders the
+  indicator in flow, scrollable content renders it as the floating
+  indicator) and older-page appends while the sentinel is active
+  preserving bottom anchoring; `panel.tsx` is also rendered by the
+  throwaway parity spec for cross-repository production-artifact parity.
 - `ui/src/strings.ts` — translation catalogs (en plus every supported locale
   and the pseudo locale), registered through
   `registry.registerTranslations`. Catalog shape is pinned: flat keys
@@ -347,7 +352,9 @@ runs against a disposable development instance:
    events do not change rows - is covered by the existing Host unit test
    `apps/web/lib/plugins/conversation-host.test.tsx:638-648`),
    and the computed-style parity checks (favorite highlight background,
-   expanded-box cap). The older-page auto-load check takes its
+   expanded-box cap) plus the loading-indicator placement (in flow when
+   not scrollable, floating when scrollable) and bottom anchoring on
+   older-page appends. The older-page auto-load check takes its
    oracle from `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts`
    with the `apps/web/e2e/helpers/prompt-history-long-seed.ts` 121-prompt
    seed: scroll-to-sentinel, no load-more assertion (the production panel

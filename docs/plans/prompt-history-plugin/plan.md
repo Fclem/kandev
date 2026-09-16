@@ -74,8 +74,9 @@ Makefile `VERSION` matches the manifest `version`);
 repository. The template's own package-name references are renamed with
 the identity: the `release.yml` README sed pattern, the `release.yml`
 Extract checksums `tar -xzf` glob, the `release.yml` release-asset glob,
-the `Makefile` `clean` archive glob, and the `Makefile`'s "When you
-rename the plugin" header comment. Replace the template demo
+and the `Makefile` `clean` archive glob; the `Makefile`'s "When you
+rename the plugin" header comment is dropped rather than renamed.
+Replace the template demo
 behavior:
 
 - Manifest: `api_version: 2`, `min_kandev_version: "0.95.0"` (the first
@@ -96,8 +97,10 @@ behavior:
   `KANDEV_SDK` are plain paths with no ref (the template's root
   `package.json` `file:` devDependency goes away with the recipe slice;
   the SDK `file:` dependency exists only in the `ui/package.json` Task 02
-  creates); only the CI checkout `ref:` values pin `f218880e`, which
-  predates the facade. Bump every CI `ref:` to the PR #3588 merge commit
+  creates); the `ci.yml` verify, `build.yml`, and `release.yml` SDK
+  checkouts pin `f218880e` (the `ci.yml` `base-floor` checkout pins tag
+  `v0.86.0`), which predates the facade. Bump every CI `ref:` to the PR
+  #3588 merge commit
   (`2b1d0cf7d`) or later, rename every CI checkout `path: kandev` to
   `kdlbs-kandev` (the `ci.yml` verify job, the `ci.yml` `base-floor` job,
   `release.yml`, and `build.yml`), add `apps/packages/plugin-sdk` to

@@ -113,8 +113,10 @@ instance.
   `KANDEV_SDK` are plain paths with no ref (the template's root
   `package.json` `file:` devDependency goes away with the recipe slice;
   the SDK `file:` dependency exists only in the `ui/package.json` Task 02
-  creates); only the CI checkout `ref:` values pin `f218880e`, which
-  predates the facade. Bump every CI `ref:` to the PR #3588 merge commit
+  creates); the `ci.yml` verify, `build.yml`, and `release.yml` SDK
+  checkouts pin `f218880e` (the `ci.yml` `base-floor` checkout pins tag
+  `v0.86.0`), which predates the facade. Bump every CI `ref:` to the PR
+  #3588 merge commit
   (`2b1d0cf7d`) or later, rename every CI checkout `path: kandev` to
   `kdlbs-kandev` (the `ci.yml` verify job, the `ci.yml` `base-floor` job,
   `release.yml`, and `build.yml`), add `apps/packages/plugin-sdk` to

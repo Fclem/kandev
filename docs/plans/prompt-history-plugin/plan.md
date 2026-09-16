@@ -299,8 +299,12 @@ proof against a disposable development instance:
    drives the parity checks, targeting the production
    panel's `ph-plugin-` test ids: prompt ordering, `#N` ordinals, alias
    rendering, durations, favorite distinction, agent-sent indicator,
-   older-page auto-loading, live transitions, navigation, empty, error, and
-   passthrough states, desktop plus mobile placement, and computed-style
+   older-page auto-loading, live transitions, navigation, initial loading
+   (hold the first read to assert the loading state), fetch-failure with
+   retry (fail then recover the first read through Retry), empty, error,
+   passthrough, and removed (after rows commit, remove the session/task and
+   assert committed rows remain while pagination and live updates stop)
+   states, desktop plus mobile placement, and computed-style
    parity of the favorite highlight and the 40% expanded-box cap. The
    fixture specs (`prompt-history-plugin.spec.ts` and
    `mobile-prompt-history-plugin.spec.ts`) are the source for the ordering,
@@ -309,6 +313,10 @@ proof against a disposable development instance:
    `e2e/helpers/prompt-history-long-seed.ts` 121-prompt seed -
    scroll-to-sentinel, no load-more assertion (the production panel has no
    load-more control).
+   Before the runs, copy the already-verified tarball to a temporary
+   ignored path under REPO_ROOT (the Docker runner mounts only REPO_ROOT at
+   /work), and point the spec at that path; remove the copy after the run,
+   and do not rebuild or replace it with `package-host`.
 3. Re-run the core prompt-history E2E specs (including
    `e2e/tests/task/prompt-history-auto-load.spec.ts`) to confirm the core
    panel and fixture remain behaviorally unchanged.

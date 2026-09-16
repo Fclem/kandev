@@ -334,14 +334,20 @@ runs against a disposable development instance:
    `mobile-prompt-history-plugin.spec.ts` for the ordering, live, and
    navigation assertions, plus the passthrough degraded state (reachable in
    the plugin only because the registration declares no `visible`
-   predicate) and the computed-style parity checks (favorite highlight
-   background, expanded-box cap). The older-page auto-load check takes its
+   predicate), the initial loading and fetch-failure-with-retry states,
+   the terminal removed state (committed rows remain, pagination stops),
+   and the computed-style parity checks (favorite highlight background,
+   expanded-box cap). The older-page auto-load check takes its
    oracle from `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts`
    with the `apps/web/e2e/helpers/prompt-history-long-seed.ts` 121-prompt
    seed: scroll-to-sentinel, no load-more assertion (the production panel
    has no load-more control). The spec addresses the production panel by
    its `ph-plugin-` test ids and layout identity, distinct from the core
    panel's ids.
+   Before the runs, copy the already-verified tarball to a temporary
+   ignored path under REPO_ROOT (the Docker runner mounts only REPO_ROOT at
+   /work), and point the spec at that path; remove the copy after the run,
+   and do not rebuild or replace it with `package-host`.
 3. The core panel (including
    `e2e/tests/task/prompt-history-auto-load.spec.ts`) and the fixture plugin
    are exercised alongside to confirm they remain behaviorally unchanged.

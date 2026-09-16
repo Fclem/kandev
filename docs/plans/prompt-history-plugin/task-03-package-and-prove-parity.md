@@ -45,9 +45,13 @@ confirm the core panel and fixture remain behaviorally unchanged.
   production tarball, and drive the parity checks - prompt
   ordering, `#N` ordinals, alias rendering, durations, favorite
   distinction, agent-sent indicator, older-page auto-loading, live
-  transitions, navigation, empty, error, and passthrough states, desktop
-  plus mobile placement, and computed-style parity of the favorite
-  highlight and the 40% expanded-box cap - targeting the production
+  transitions, navigation, initial loading (hold the first read to assert
+  the loading state), fetch-failure with retry (fail then recover the first
+  read through Retry), empty, error, passthrough, and removed (after rows
+  commit, remove the session/task and assert committed rows remain while
+  pagination and live updates stop) states, desktop plus mobile placement,
+  and computed-style parity of the favorite highlight and the 40%
+  expanded-box cap - targeting the production
   panel's `ph-plugin-` test ids. The fixture specs
   (`apps/web/e2e/tests/plugins/prompt-history-plugin.spec.ts` and
   `mobile-prompt-history-plugin.spec.ts`) are the source for the ordering,
@@ -56,6 +60,12 @@ confirm the core panel and fixture remain behaviorally unchanged.
   with the `apps/web/e2e/helpers/prompt-history-long-seed.ts` 121-prompt
   seed (scroll-to-sentinel, no load-more assertion - the production panel
   has no load-more control).
+- Tarball access: before the parity runs, copy the already-verified
+  `kandev-plugin-prompt-history-0.1.0.tar.gz` to a temporary ignored path
+  under REPO_ROOT (the Docker runner mounts only REPO_ROOT at /work, so the
+  sibling path is absent in the container when `run-e2e.sh` auto-selects
+  Docker), and point both throwaway specs at that path; remove the copy
+  after the run, and do not rebuild or replace it with `package-host`.
 - Core preservation: re-run the existing core prompt-history E2E specs
   (`e2e/tests/task/prompt-history-panel.spec.ts`,
   `e2e/tests/task/mobile-prompt-history-panel.spec.ts`, and
@@ -77,7 +87,10 @@ confirm the core panel and fixture remain behaviorally unchanged.
   `ui/node_modules`, or `ui/package.json` entries.
 - The throwaway parity runs pass on the disposable instance: desktop
   (chromium project) and mobile (mobile-chrome / Pixel 5), covering the
-  behaviors listed in the plan's Technical approach.
+  behaviors listed in the plan's Technical approach, including the
+  AC-002.9 observable states (initial loading, fetch-failure with retry,
+  and the terminal removed state where committed rows remain and
+  pagination/live updates stop).
 - The core prompt-history and fixture E2E specs pass unchanged after the
   parity runs.
 

@@ -125,11 +125,12 @@ Module layout:
   both supplied by `ui/plugin.css`, and `aria-describedby` pointing at an
   `sr-only` row label whose text is the row `aria-label`, and a real
   `<button>` expand control with `aria-expanded`, a catalog `aria-label`,
-  and 44x44 px geometry for phone/coarse pointer and the parity
-  reference's 24x24 px fine-pointer release (the parity spec's role-based
-  queries and 44 px tap-target assertions depend on these; the rendered
-  component suite asserts the expand control's size for both pointer
-  modes). Deliberate
+  and the three-context size matrix (desktop/tablet+fine pointer 24x24
+  px, desktop/tablet+coarse pointer and phone-width+fine pointer each at
+  least 44x44 px) matching the parity reference's `size-6`/`size-11`
+  split (the parity spec's role-based queries and 44 px tap-target
+  assertions depend on these; the rendered component suite asserts the
+  expand control's size across the three-context matrix). Deliberate
   delta: the plugin also puts `role="status"` on the empty state; the
   core's empty and passthrough states are plain divs with no role.
 - `ui/plugin.css` — the plugin-owned stylesheet, declared as
@@ -183,7 +184,9 @@ Module layout:
   removal, plus indicator placement (non-scrollable content renders the
   indicator in flow, scrollable content renders it as the floating
   indicator), older-page appends while the sentinel is active preserving
-  bottom anchoring, and the expand control's size for both pointer modes;
+  bottom anchoring, and the expand control's size across the three-context
+  matrix (desktop/tablet+fine pointer 24x24 px, desktop/tablet+coarse
+  pointer and phone-width+fine pointer each at least 44x44 px);
   `panel.tsx` is also rendered by the
   throwaway parity spec for cross-repository production-artifact parity.
 - `ui/src/strings.ts` — translation catalogs (en plus every supported locale

@@ -57,7 +57,8 @@ confirm the core panel and fixture remain behaviorally unchanged.
   and computed-style parity of the favorite highlight, the 40%
   expanded-box cap, and the loading-indicator placement (in flow when not
   scrollable, floating when scrollable) with older-page appends preserving
-  bottom anchoring - targeting the production
+  bottom anchoring, and a pseudo-locale run asserting the panel's rendered
+  labels and states after selecting pseudo - targeting the production
   panel's `ph-plugin-` test ids. The fixture specs
   (`apps/web/e2e/tests/plugins/prompt-history-plugin.spec.ts` and
   `mobile-prompt-history-plugin.spec.ts`) are the source for the ordering,
@@ -77,8 +78,10 @@ confirm the core panel and fixture remain behaviorally unchanged.
 - Core preservation: re-run the existing core prompt-history E2E specs
   (`e2e/tests/task/prompt-history-panel.spec.ts`,
   `e2e/tests/task/mobile-prompt-history-panel.spec.ts`, and
-  `e2e/tests/task/prompt-history-auto-load.spec.ts`) and the fixture spec
-  (`e2e/tests/plugins/prompt-history-plugin.spec.ts`).
+  `e2e/tests/task/prompt-history-auto-load.spec.ts`), both fixture specs
+  (`e2e/tests/plugins/prompt-history-plugin.spec.ts` and
+  `mobile-prompt-history-plugin.spec.ts`), and a scoped post-cleanup
+  source-diff check for the fixture paths.
 
 ## Out of scope
 
@@ -98,7 +101,8 @@ confirm the core panel and fixture remain behaviorally unchanged.
   behaviors listed in the plan's Technical approach, including the
   AC-002.9 observable states (initial loading, fetch-failure with retry,
   and the terminal removed state where committed rows remain and
-  pagination/live updates stop).
+  pagination/live updates stop), and the pseudo-locale run asserting the
+  panel's rendered labels and states after selecting pseudo.
 - The core prompt-history and fixture E2E specs pass unchanged after the
   parity runs.
 

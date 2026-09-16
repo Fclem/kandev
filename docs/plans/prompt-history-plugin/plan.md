@@ -266,8 +266,10 @@ target depends on `ui`.
   both supplied by `ui/plugin.css`, and `aria-describedby` pointing at an
   `sr-only` row label whose text is the row `aria-label`, and a real
   `<button>` expand control with `aria-expanded`, a catalog `aria-label`,
-  and 44x44 px geometry for phone/coarse pointer and the parity
-  reference's 24x24 px fine-pointer release; deliberate delta: the plugin
+  and the three-context size matrix (desktop/tablet+fine pointer 24x24
+  px, desktop/tablet+coarse pointer and phone-width+fine pointer each at
+  least 44x44 px) matching the parity reference's `size-6`/`size-11`
+  split; deliberate delta: the plugin
   also puts `role="status"` on the empty state (the core's empty and
   passthrough states are plain divs with no role).
 - `ui/plugin.css`: the plugin-owned stylesheet (declared as
@@ -417,8 +419,9 @@ plugin-localized (AC-002.10).
 | AC-001.1 | Identity assertions: manifest `id`, `go.mod` module, Makefile `BIN` and its derived `PKG_OUT`, and UI registration id all read `kandev-plugin-prompt-history`, and the Makefile `VERSION` matches the manifest `version`; staged executables keep the platform names |
 | AC-001.2, .3, AC-003.3 | Manifest assertions in `server/` or `ui/` tests plus `make verify-package` (archive contents, checksums, staging leak check) |
 | AC-001.4 | Disposable-instance enable, disable, and re-enable smoke: the panel registration is removed without error and restored on re-enable |
-| AC-002.2, .3, .4, .6, .7, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam and the permanent rendered component tests - the rendered favorite distinction, the agent-sent indicator, the states, and controlled ResizeObserver/IntersectionObserver + fake-timer coverage for non-scrollable in-flow indicator placement, scrollable floating indicator placement, and older-page append while the sentinel is active preserving bottom anchoring): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values (ids seeded to contradict page order) |
-| AC-002.1, .5, .6, .7, .8 and AC-003.1, .2 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
+| AC-002.2, .3, .4, .6, .7, .9 | `ui/src/derive.test.ts` and `ui/src/panel.test.ts` in the plugin repo (vitest against `test-host`; `.ts` because the mirrored `vitest.config.ts` collects `src/**/*.test.ts`; `panel.test.ts` covers the pure `panel-state.ts` seam and the permanent rendered component tests - the rendered favorite distinction, the agent-sent indicator, the states, and controlled ResizeObserver/IntersectionObserver + fake-timer coverage for non-scrollable in-flow indicator placement, scrollable floating indicator placement, older-page append while the sentinel is active preserving bottom anchoring, and the expand control's size across the three-context matrix (desktop/tablet+fine pointer 24x24 px, desktop/tablet+coarse pointer and phone-width+fine pointer each at least 44x44 px)): ordering, ordinals, duration bounds, the turns-hydration gate, the agent-sent flag, state determination, `openMessage` outcome handling, and page-order preservation with identical `createdAt` values (ids seeded to contradict page order) |
+| AC-002.1, .5, .6, .7, .8 and AC-003.1 | Throwaway parity spec from Task 03 against the disposable instance (desktop + mobile), older-page auto-load oracled by `e2e/tests/task/prompt-history-auto-load.spec.ts` + `e2e/helpers/prompt-history-long-seed.ts` |
+| AC-003.2 | Both fixture E2E specs (`e2e/tests/plugins/prompt-history-plugin.spec.ts` and `e2e/tests/plugins/mobile-prompt-history-plugin.spec.ts`) plus a scoped post-cleanup source-diff check for the fixture paths |
 | AC-002.10 | Pseudo-locale pass in the throwaway parity spec plus `ui/src/strings.test.ts` in the plugin repo (the catalog-shape unit test: asserts every catalog - `en`, `pt-pt`, `zh-cn`, `zh-tw`, `zh-hk`, `pseudo` - carries exactly the same key set) |
 | Go backend no-op contract | `server/plugin_test.go` (template-derived) |
 
@@ -436,12 +439,17 @@ remain; `loadMore` emits no request; post-terminal transport fencing is
 covered by the existing Host unit test), desktop plus mobile placement,
 the computed-style parity checks, the loading-indicator placement (in
 flow when not scrollable, floating when scrollable) with bottom anchoring
-preserved on older-page appends, and the expand button's `boundingBox()`
-width and height each at least 44 px on the mobile run). Core preservation
-is confirmed by re-running the existing
-`e2e/tests/task/prompt-history-panel.spec.ts`,
+preserved on older-page appends, the expand button's `boundingBox()`
+width and height each at least 44 px on the mobile run, and the
+pseudo-locale run asserting the panel's rendered labels and states after
+selecting pseudo). Core preservation
+is confirmed by re-running the existing core specs
+(`e2e/tests/task/prompt-history-panel.spec.ts`,
 `mobile-prompt-history-panel.spec.ts`, and
-`e2e/tests/task/prompt-history-auto-load.spec.ts`.
+`e2e/tests/task/prompt-history-auto-load.spec.ts`),
+both fixture specs (`e2e/tests/plugins/prompt-history-plugin.spec.ts`
+and `mobile-prompt-history-plugin.spec.ts`), and a scoped post-cleanup
+source-diff check for the fixture paths.
 
 ## Work orders
 

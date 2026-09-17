@@ -166,17 +166,14 @@ function hydrateKanbanAndWorkspace(draft: Draft<AppState>, state: HydrationState
 function hydrateSettings(draft: Draft<AppState>, state: HydrationState): void {
   if (state.executors) deepMerge(draft.executors, state.executors);
   if (state.agentDiscovery) deepMerge(draft.agentDiscovery, state.agentDiscovery);
-  if (state.settingsAgents) {
-    deepMerge(draft.settingsAgents, {
-      ...state.settingsAgents,
-      items: state.settingsAgents.items.map(normalizeAgentProfiles),
-    });
-  }
   mergeWithLoading(draft.availableAgents, state.availableAgents);
   const preserveLiveAgentProfiles =
     (state.agentProfiles?.version ?? 0) < draft.agentProfiles.version;
   if (state.settingsAgents && !preserveLiveAgentProfiles) {
-    deepMerge(draft.settingsAgents, state.settingsAgents);
+    deepMerge(draft.settingsAgents, {
+      ...state.settingsAgents,
+      items: state.settingsAgents.items.map(normalizeAgentProfiles),
+    });
   }
   if (state.agentProfiles) {
     // Preserve a newer profile mutation delivered over WebSocket while this

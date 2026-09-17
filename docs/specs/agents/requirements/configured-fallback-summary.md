@@ -11,17 +11,21 @@ owners:
 ## Overview
 
 Agent profile rows on the Agents settings page expose the fallback policy saved
-for each profile. The summary lets users distinguish strict operation, automatic
-selection of the next model, and a configured explicit fallback without opening
-the profile editor.
+for each profile. The summary lets users distinguish executor-default behavior,
+exact-model selection, automatic selection of the next model, and a configured
+explicit fallback without opening the profile editor.
 
 ## Terminology
 
-- **Strict fallback state:** `auto_fallback` is false and `fallback_model` is empty.
-- **Automatic fallback state:** `auto_fallback` is true. The configured explicit
-  fallback value is ignored by runtime precedence.
-- **Explicit fallback state:** `auto_fallback` is false and `fallback_model` is
-  non-empty.
+- **Exact-model state:** `require_exact_model` is true. Saved automatic or
+  explicit fallback values are dormant while this policy is enabled.
+- **Executor-default state:** `require_exact_model` is false, `auto_fallback` is
+  false, and `fallback_model` is empty. The executor may use its default model.
+- **Automatic fallback state:** `require_exact_model` is false and
+  `auto_fallback` is true. The configured explicit fallback value is ignored by
+  runtime precedence.
+- **Explicit fallback state:** `require_exact_model` is false,
+  `auto_fallback` is false, and `fallback_model` is non-empty.
 
 ## Requirements
 
@@ -37,12 +41,13 @@ model will be handled without opening every profile.
 
 - **AC-AGENTS-CONFIGURED-FALLBACK-SUMMARY-001.1:** When a profile row is shown
   on Settings > Agents, it shall render a fallback pill immediately after the
-  model pill, with `fallback: none` for the strict fallback state, `fallback:
-  next` for the automatic fallback state, or `fallback: <configured model>` for
-  the explicit fallback state.
+  model pill, with `fallback: exact` for the exact-model state, `fallback: none`
+  for the executor-default state, `fallback: next` for the automatic fallback
+  state, or `fallback: <configured model>` for the explicit fallback state.
 - **AC-AGENTS-CONFIGURED-FALLBACK-SUMMARY-001.2:** The fallback pill shall use
-  the profile's saved `auto_fallback` and `fallback_model` values, and shall not
-  change those values or infer runtime availability.
+  the profile's saved `require_exact_model`, `auto_fallback`, and
+  `fallback_model` values, and shall not change those values or infer runtime
+  availability.
 - **AC-AGENTS-CONFIGURED-FALLBACK-SUMMARY-001.3:** The fallback summary shall
   remain readable and wrap with the existing profile metadata on phone-sized
   screens without introducing document-level horizontal overflow.

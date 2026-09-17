@@ -20,10 +20,11 @@ then render and localize it, and finally prove desktop and mobile behavior.
 
 ### In scope
 
-- Show `fallback: none`, `fallback: next`, or `fallback: <model>` after the
-  saved model pill.
-- Derive the display from normalized profile fields with automatic fallback
-  taking precedence over an explicit saved model.
+- Show `fallback: exact`, `fallback: none`, `fallback: next`, or
+  `fallback: <model>` after the saved model pill.
+- Derive the display from normalized profile fields with exact-model selection
+  taking precedence over saved fallbacks, then automatic fallback taking
+  precedence over an explicit saved model.
 - Localize the new labels in all required web locales.
 - Preserve wrapping, accessibility, and mobile overflow behavior.
 
@@ -36,21 +37,21 @@ then render and localize it, and finally prove desktop and mobile behavior.
 ## Technical approach
 
 Add a pure helper under `apps/web/lib/` that classifies normalized
-`AgentProfile` fallback fields into strict, automatic, or explicit-model display
-states. Use it from `ProfileRowCard` in
+`AgentProfile` fallback fields into exact, executor-default, automatic, or
+explicit-model display states. Use it from `ProfileRowCard` in
 `apps/web/components/settings/agents/agent-profiles-section.tsx`, translating
 only the display label and keeping model IDs opaque. Keep the existing
 flex-wrapped metadata container and place the fallback badge after the model
 badge.
 
-Add the three labels to `agents.json` for `en`, `pt-pt`, `zh-cn`, `zh-hk`, and
+Add the four labels to `agents.json` for `en`, `pt-pt`, `zh-cn`, `zh-hk`, and
 `zh-tw`, plus pseudo-locale generation/ratchet coverage through the repository's
 existing i18n checks.
 
 ## Tests
 
-- `apps/web/lib/*fallback*.test.ts`: strict, automatic, explicit, and automatic
-  precedence classification.
+- `apps/web/lib/*fallback*.test.ts`: exact, executor-default, automatic,
+  explicit, and precedence classification.
 - `apps/web/components/settings/agents/agent-profiles-section.test.tsx`: badge
   ordering and opaque explicit model rendering.
 

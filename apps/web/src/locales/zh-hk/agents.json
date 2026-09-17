@@ -139,6 +139,7 @@
   "model": "模型",
   "modelHeading": "模型",
   "fallbackNone": "後備：無",
+  "fallbackExact": "後備：精確模型",
   "fallbackNext": "後備：下一個",
   "fallbackModel": "後備：{{model}}",
   "modelRequiredForAllProfiles": "所有設定都需要模型。",

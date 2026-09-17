@@ -26,7 +26,8 @@ existing responsive row layout and saved profile data.
 
 ## In scope
 
-- Add helper and unit tests for strict, automatic, explicit, and precedence
+- Add helper and unit tests for exact, executor-default, automatic, explicit,
+  and precedence
   cases.
 - Add the fallback badge and component regression coverage.
 - Add required locale keys and update desktop/mobile settings E2E assertions.
@@ -38,9 +39,10 @@ existing responsive row layout and saved profile data.
 
 ## Acceptance
 
-- Profile rows show the three required fallback states in the specified order.
+- Profile rows show the four required fallback states in the specified order.
 - A saved explicit model is rendered unchanged, while automatic fallback takes
-  precedence when both fields are set.
+  precedence when both fields are set. Exact-model selection takes precedence
+  when dormant automatic or explicit fallback values are also saved.
 - Desktop and phone-sized rows remain accessible, wrapped, and free of document
   horizontal overflow.
 

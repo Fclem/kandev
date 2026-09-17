@@ -146,7 +146,7 @@ describe("ProfileRow fallback summary", () => {
     ).map((badge) => badge.textContent);
     expect(badges).toEqual([MODEL_NAME, `fallback: ${fallbackModel}`]);
   });
-  it("renders the strict fallback label", () => {
+  it("renders the no-configured-fallback label", () => {
     const strictProfile = {
       ...profile("p-strict", "Strict"),
       model: MODEL_NAME,
@@ -160,6 +160,38 @@ describe("ProfileRow fallback summary", () => {
       .getByTestId(PROFILE_ROW_TEST_ID)
       .querySelectorAll(PROFILE_BADGES_SELECTOR);
     expect(badges[1]?.textContent).toBe("fallback: none");
+  });
+  it("renders exact when exact-model selection keeps a saved explicit fallback", () => {
+    const exactProfile = {
+      ...profile("p-exact", "Exact"),
+      model: MODEL_NAME,
+      fallbackModel: "saved-explicit-model",
+      autoFallback: false,
+      requireExactModel: true,
+    } as AgentProfile;
+
+    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={exactProfile} />);
+
+    const badges = screen
+      .getByTestId(PROFILE_ROW_TEST_ID)
+      .querySelectorAll(PROFILE_BADGES_SELECTOR);
+    expect(badges[1]?.textContent).toBe("fallback: exact");
+  });
+  it("renders exact when exact-model selection keeps automatic fallback enabled", () => {
+    const exactProfile = {
+      ...profile("p-exact-auto", "Exact automatic"),
+      model: MODEL_NAME,
+      fallbackModel: "",
+      autoFallback: true,
+      requireExactModel: true,
+    } as AgentProfile;
+
+    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={exactProfile} />);
+
+    const badges = screen
+      .getByTestId(PROFILE_ROW_TEST_ID)
+      .querySelectorAll(PROFILE_BADGES_SELECTOR);
+    expect(badges[1]?.textContent).toBe("fallback: exact");
   });
   it("renders next when automatic fallback takes precedence", () => {
     const automaticProfile = {

@@ -258,7 +258,9 @@ function ProfileRowCard({
   const { t } = useTranslation();
   const fallbackState = classifyAgentProfileFallback(profile);
   let fallbackLabel = t("agents:fallbackNone");
-  if (fallbackState.kind === "next") {
+  if (fallbackState.kind === "exact") {
+    fallbackLabel = t("agents:fallbackExact");
+  } else if (fallbackState.kind === "next") {
     fallbackLabel = t("agents:fallbackNext");
   } else if (fallbackState.kind === "model") {
     fallbackLabel = t("agents:fallbackModel", { model: fallbackState.model });
@@ -286,7 +288,7 @@ function ProfileRowCard({
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 pl-3.5">
             {profile.model && <Badge variant="outline">{profile.model}</Badge>}
             <Badge
-              className="h-auto min-h-5 max-w-full min-w-0 overflow-visible whitespace-normal break-all text-left"
+              className="h-auto min-h-5 max-w-full min-w-0 overflow-visible whitespace-pre-wrap break-all text-left"
               variant="secondary"
             >
               {fallbackLabel}

@@ -139,6 +139,7 @@
   "model": "模型",
   "modelHeading": "模型",
   "fallbackNone": "回退：无",
+  "fallbackExact": "回退：精确模型",
   "fallbackNext": "回退：下一个",
   "fallbackModel": "回退：{{model}}",
   "modelRequiredForAllProfiles": "所有配置都需要模型。",

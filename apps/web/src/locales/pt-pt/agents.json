@@ -129,6 +129,7 @@
   "model": "Modelo",
   "modelHeading": "Modelo",
   "fallbackNone": "alternativa: nenhum",
+  "fallbackExact": "alternativa: exato",
   "fallbackNext": "alternativa: seguinte",
   "fallbackModel": "alternativa: {{model}}",
   "modelOptionsAuthenticationRequired": "Inicie sessão neste agente para carregar as opções do modelo.",

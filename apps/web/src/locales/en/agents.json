@@ -141,6 +141,7 @@
   "model": "Model",
   "modelHeading": "Model",
   "fallbackNone": "fallback: none",
+  "fallbackExact": "fallback: exact",
   "fallbackNext": "fallback: next",
   "fallbackModel": "fallback: {{model}}",
   "modelRequiredForAllProfiles": "Model is required for all profiles.",

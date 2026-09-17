@@ -117,7 +117,7 @@ function renderRows() {
   );
 }
 describe("ProfileRow fallback summary", () => {
-  const MODEL_BADGE_SELECTOR = '[data-slot="badge"]';
+  const PROFILE_BADGES_SELECTOR = '[data-slot="badge"]';
   const MODEL_NAME = "start-model";
   beforeEach(() => {
     storeState = {
@@ -142,7 +142,7 @@ describe("ProfileRow fallback summary", () => {
     renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={fallbackProfile} />);
 
     const badges = Array.from(
-      screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(MODEL_BADGE_SELECTOR),
+      screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(PROFILE_BADGES_SELECTOR),
     ).map((badge) => badge.textContent);
     expect(badges).toEqual([MODEL_NAME, `fallback: ${fallbackModel}`]);
   });
@@ -156,7 +156,9 @@ describe("ProfileRow fallback summary", () => {
 
     renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={strictProfile} />);
 
-    const badges = screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(MODEL_BADGE_SELECTOR);
+    const badges = screen
+      .getByTestId(PROFILE_ROW_TEST_ID)
+      .querySelectorAll(PROFILE_BADGES_SELECTOR);
     expect(badges[1]?.textContent).toBe("fallback: none");
   });
   it("renders next when automatic fallback takes precedence", () => {
@@ -169,7 +171,9 @@ describe("ProfileRow fallback summary", () => {
 
     renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={automaticProfile} />);
 
-    const badges = screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(MODEL_BADGE_SELECTOR);
+    const badges = screen
+      .getByTestId(PROFILE_ROW_TEST_ID)
+      .querySelectorAll(PROFILE_BADGES_SELECTOR);
     expect(badges[1]?.textContent).toBe("fallback: next");
   });
 });

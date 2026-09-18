@@ -55,11 +55,34 @@ Extend `apps/web/e2e/tests/integrations/sentry-settings.spec.ts` with a scenario
 
 ## Work orders
 
-- [ ] [Task 01: Honor all Sentry watcher lookback periods](task-01-honor-sentry-watcher-lookback-periods.md)
+- [x] [Task 01: Honor all Sentry watcher lookback periods](task-01-honor-sentry-watcher-lookback-periods.md)
 
 ## Verification results
 
-Pending.
+Ran from the repository root by the implementing sub-agent (commit `0c82dd006`), with the parent
+re-running the focused tests and diagnosing the one failing gate:
+
+- `(cd apps && pnpm install --frozen-lockfile)` — pass, workspace already current.
+- `(cd apps/backend && go test -v -run '<the four tests>' ./internal/sentry)` — pass. The parent
+  re-ran it with `-count=1`: `ok github.com/kandev/kandev/internal/sentry 0.097s`. The whole
+  `./internal/sentry` package passes.
+- `(cd apps/web && pnpm e2e:run tests/integrations/sentry-settings.spec.ts -- --grep "persists
+  selected lookback period")` — 1 passed (17.5s).
+- `(cd apps/web && pnpm e2e:sleep-ratchet)` — clean.
+- `make fmt` — clean.
+- `make typecheck` — clean.
+- `make test` — fails in four packages unrelated to this change: `internal/common/config`,
+  `internal/launcher`, `internal/system/updates`, and `internal/agentctl/server/config`. This
+  session exports `KANDEV_SERVER_PORT`, `KANDEV_BACKEND_PORT`, `KANDEV_TRUSTED_PROXIES`,
+  `KANDEV_RUNNING_AS_SERVICE`, and `KANDEV_VERSION`, which those tests read instead of their
+  fixtures. The parent reproduced one on the same tree: it fails under the ambient environment and
+  passes with those variables unset. No failing package is touched by this change.
+- `make lint` — golangci-lint 0 issues, eslint clean, harness/specification/architecture lint pass.
+- `python3 scripts/list-docs.py validate` — validated 291 decisions and 1036 specifications.
+
+Test evidence: `TestRESTClient_SearchIssues_ForwardsLookbackOnlyWhereAccepted` and
+`TestService_IssueWatch_LookbackPeriodValidation` were red before their production change; the two
+persistence tests were green before and after, exactly as the design's test strategy states.
 
 ## Risks
 

@@ -1,7 +1,7 @@
 ---
 id: "01-honor-sentry-watcher-lookback-periods"
 title: "Honor all Sentry watcher lookback periods"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"

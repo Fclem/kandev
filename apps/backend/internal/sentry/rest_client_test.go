@@ -212,12 +212,12 @@ func TestRESTClient_SearchIssues_AllProjectsUsesOrgEndpoint(t *testing.T) {
 
 // TestRESTClient_SearchIssues_ForwardsLookbackOnlyWhereAccepted locks in the
 // fix for the "only 24h and 14d work" report. The two issue endpoints accept
-// different statsPeriod sets: the project-scoped endpoint takes only ”/24h/14d
-// there and answers 400 for every other offered lookback, while the
-// organization-scoped endpoint takes any relative duration and uses it as its
-// request time range. The lookback must therefore reach only the org-scoped
-// request, while the `age:` term that actually limits issue eligibility is sent
-// on both.
+// different statsPeriod sets: the project-scoped endpoint accepts only the
+// empty value, 24h, and 14d there and answers 400 for every other offered
+// lookback, while the organization-scoped endpoint takes any relative duration
+// and uses it as its request time range. The lookback must therefore reach only
+// the org-scoped request, while the `age:` term that actually limits issue
+// eligibility is sent on both.
 //
 // @covers AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.1, AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.2, AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.5
 func TestRESTClient_SearchIssues_ForwardsLookbackOnlyWhereAccepted(t *testing.T) {

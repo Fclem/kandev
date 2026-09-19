@@ -58,7 +58,13 @@ automation under different GitHub Apps without operating separate Kandev deploym
   stderr, while preserving non-empty stdout as the authoritative command result.
 - User-triggered mutations prefer the workspace's verified personal connection, then a human
   PAT/CLI automation connection, then the App installation. The UI always identifies the effective
-  actor and never labels an App mutation as human-attributed.
+  actor and never labels an App mutation as human-attributed. This generic fallback applies only to
+  operations whose contract permits automation fallback; strict personal capabilities define their
+  own resolver boundary.
+- GitHub repository starring is a strict personal exception: it resolves only the dedicated
+  personal star OAuth App connection and never falls back to a PAT, `gh` CLI account, existing
+  GitHub App user-to-server connection, or App installation. Its actor and capability contract are
+  defined by the GitHub repository stars system design.
 - Background watches, cleanup, repository discovery, and workflow sync always use the workspace
   automation connection. Personal credentials are never exposed to agents or executors.
 - Task Git credential routing is a separate workspace policy. **Managed workspace credentials**
@@ -205,11 +211,13 @@ select **Inherit executor Git credentials** explicitly.
 | Managed task git and `gh` access | Workspace automation | Explicit profile token | Automation principal, or runtime-selected override |
 | Inherited task Git access | Executor-visible Git/SSH credentials | None | Runtime-selected |
 | `My GitHub` reads | Personal connection | Human PAT/CLI automation | Human principal |
-| User-triggered mutation | Personal connection | Human PAT/CLI, then App installation | Effective principal shown in UI |
+| User-triggered mutation (generic) | Personal connection | Human PAT/CLI, then App installation | Effective principal shown in UI; only operations permitting automation fallback |
+| User-triggered repository star | Dedicated personal star OAuth App connection | None | Personal GitHub user only |
 
 An App-only workspace without personal OAuth remains usable for automation and App-attributed
-mutations. `My GitHub` instead offers a personal connection created with the same App registration
-as the workspace installation.
+mutations. Repository starring is not one of those App-attributed mutations. `My GitHub` instead
+offers the existing personal connection created with the workspace App registration for operations
+that use the generic routing purpose; the dedicated star connection is a separate OAuth App flow.
 
 ## GitHub App Policy
 

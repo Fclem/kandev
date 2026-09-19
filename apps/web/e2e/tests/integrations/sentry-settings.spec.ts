@@ -198,9 +198,10 @@ test.describe("Sentry settings — issue watchers", () => {
     });
   });
 
-  // Every offered lookback token must survive the settings round trip; this
-  // uses a non-default one so the assertion cannot pass on the dialog's 24h
-  // default.
+  // One non-default lookback token carried end to end through the dialog, so
+  // the assertion cannot pass on the dialog's 24h default. The full token
+  // matrix is covered elsewhere: the request-shape test sends every offered
+  // token on both endpoints, and the form test pins the option values.
   //
   // @covers AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.1, AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.3
   test("persists selected lookback period", async ({ testPage, apiClient, seedData }) => {

@@ -33,6 +33,7 @@ Make every offered Sentry lookback token work against the provider by forwarding
 - Correct the five comments that deny or misstate the mechanism: the `statsPeriodPattern`, `parseStatsPeriodUnits`, `statsPeriodAgeToken`, and `buildIssueQueryString` doc comments in `rest_client.go`, plus the stats-period test comment in `rest_client_test.go`. Three assert the parameter never affects which issues a search returns, and the other two present Kandev's hour/day/week set as Sentry's own relative-duration syntax, which also accepts seconds and minutes.
 - Add the service round-trip, update-persistence, rejection, empty-acceptance, unaffected-update, and poll-refusal cases.
 - Carry an `@covers AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.<n>` anchor on each new test function and on the E2E scenario, matching the traceability guide.
+- Pin the offered lookback values in the watch form's unit tests, so the dialog cannot offer a token the backend's write guard rejects.
 - Add the Sentry watcher settings E2E scenario for a non-default token.
 
 ## Out of scope

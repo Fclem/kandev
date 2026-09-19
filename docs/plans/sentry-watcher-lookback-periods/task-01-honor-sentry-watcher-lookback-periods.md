@@ -98,4 +98,16 @@ None.
 
 ## Results
 
-Pending.
+Implemented in commit `0c82dd006` (5 files, +365/−26): the endpoint-gated `statsPeriod`, the write
+guard on create and on a filter-carrying update, the poll-time guard, the five corrected comments,
+the four Go tests with `@covers` anchors, and the `persists selected lookback period` E2E scenario.
+
+Verification: the focused Go tests pass (re-run with `-count=1`), the E2E scenario passes (15.5s),
+`pnpm e2e:sleep-ratchet` is clean, `make fmt`, `make typecheck`, and `make lint` pass, and the
+specification gates pass. `make test` fails only in four packages unrelated to this change that
+read this session's ambient `KANDEV_*` variables; the failure reproduces under that environment and
+clears with those variables unset. Exact commands and outcomes are in the plan's Verification
+results.
+
+Review: the design package passed 28 adversarial rounds before implementation, and the implemented
+change passed its first implementation round with no findings.

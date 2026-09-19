@@ -23,6 +23,7 @@ Send the selected Sentry lookback only to the issue endpoint whose accepted valu
 - Preserve the existing `age:-<period>` eligibility constraint on both.
 - Reject a non-empty lookback value outside Kandev's supported lookback syntax, on watch create and on a filter-carrying update; keep an empty value accepted.
 - Fail a poll closed when a stored lookback value is outside that syntax, so such a row creates no tasks.
+- Reject an invalid non-empty lookback on direct issue-browse requests before the provider client runs.
 - Correct the request/comment claims that the parameter never affects which issues are returned.
 - Add REST-client, service, and settings-E2E coverage.
 
@@ -38,6 +39,8 @@ Add `TestRESTClient_SearchIssues_ForwardsLookbackOnlyWhereAccepted` to `apps/bac
 
 Add the fail-closed guard in `internal/sentry/service_issue_watch.go`: reject `StatsPeriod` only when it is non-empty and `parseStatsPeriodUnits` cannot express it, on create and on the `req.Filter != nil` branch of update, mirroring `validateFilterStatuses` so an unrelated partial update never re-validates a stored value. The deleted project-scoped parameter used to be the only rejection of an inexpressible token, so `CheckIssueWatch` also needs the matching poll-time guard: a row that already stores such a value must stamp the watch error and return without searching, mirroring its existing project-less guard, or the fix would let that row dispatch tasks for issues of any age.
 
+Apply the same `validateFilterStatsPeriod` guard in `Service.SearchIssues` for the direct issue browser. Trim the value first, reject invalid non-empty values before resolving the instance client, and rely on the existing handler mapping from `ErrInvalidConfig` to HTTP 400. This keeps project- and organization-scoped browse requests from silently dropping an invalid age constraint.
+
 Correct the comments that misstate the parameter's effect: three assert that it never affects which issues a search returns — false for the organization-scoped endpoint, where the value becomes that request's time range — and two present Kandev's hour/day/week set as Sentry's own relative-duration syntax, which also accepts seconds and minutes. The work order lists the exact sites.
 
 Extend `apps/web/e2e/tests/integrations/sentry-settings.spec.ts` with a scenario titled `persists selected lookback period` in the existing issue-watcher block: select the `Last 30 days` option (`30d`), create the watch, reload, and assert the persisted summary.
@@ -49,6 +52,7 @@ Extend `apps/web/e2e/tests/integrations/sentry-settings.spec.ts` with a scenario
 - `AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.4`: `TestService_IssueWatch_LookbackPeriodValidation` in the same file rejects a value outside the supported syntax (`30m`) on create and on a filter-carrying update, accepts an empty value, and lets an unrelated partial update through when the stored value is one the syntax rejects.
 - `AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.1` (offered set): `STATS_PERIOD_OPTIONS` in `apps/web/components/sentry/sentry-issue-watch-form.test.ts` pins the five option values, so the dialog cannot offer a token the backend's write guard rejects.
 - `AC-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001.6`: the same test proves the poll refusal: a stored value outside the syntax stamps the watch error and returns without calling the search client.
+- Direct browse validation: `TestService_Browse_RejectsInvalidStatsPeriod` rejects invalid periods for project- and organization-scoped searches before the client call, and `TestHTTP_SearchIssues_RejectsInvalidStatsPeriod` proves the HTTP boundary returns 400.
 
 ## E2E tests
 
@@ -97,3 +101,8 @@ state of this branch.
 - A previously stored inexpressible token is not rewritten and its polls fail closed, so the row stays idle until its lookback is replaced from the watch dialog: that dialog always sends the persisted filter, so saving another field alone is refused, and the period selector offers no way to clear the stored value.
 - A watch whose polls previously failed for every stored token other than `24h` and `14d` resumes on the next poll and can import up to one page (100 issues) per configured project before deduplication catches up.
 - The E2E mock enforces the window from the filter itself, so the E2E scenario cannot detect this regression on its own.
+- Direct issue-browse requests now reject invalid non-empty periods at the service boundary, so an API caller cannot receive an unfiltered project search after the project endpoint stops receiving `statsPeriod`.
+
+## Follow-up verification
+
+- `(cd apps/backend && go test -run 'TestService_Browse_RejectsInvalidStatsPeriod|TestHTTP_SearchIssues_RejectsInvalidStatsPeriod' ./internal/sentry)` — pass.

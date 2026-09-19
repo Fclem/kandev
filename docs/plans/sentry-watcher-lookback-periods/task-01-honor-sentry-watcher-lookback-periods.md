@@ -110,5 +110,10 @@ read this session's ambient `KANDEV_*` variables; the failure reproduces under t
 clears with those variables unset. Exact commands and outcomes are in the plan's Verification
 results.
 
+Follow-up fix: `Service.SearchIssues` now trims and rejects invalid non-empty lookback periods before
+the browse client runs. `TestService_Browse_RejectsInvalidStatsPeriod` covers project- and
+organization-scoped service calls, and `TestHTTP_SearchIssues_RejectsInvalidStatsPeriod` covers the
+HTTP 400 mapping. The focused command and result are recorded in the plan's follow-up verification.
+
 Review: the design package passed 28 adversarial rounds before implementation, and the implemented
 change passed its first implementation round with no findings.

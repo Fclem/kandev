@@ -1,6 +1,6 @@
 ---
 created: 2026-09-18
-status: draft
+status: implemented
 requirements:
   - REQ-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001
 system_design:

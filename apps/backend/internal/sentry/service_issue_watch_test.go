@@ -151,9 +151,10 @@ func TestService_IssueWatch_LookbackPeriodValidation(t *testing.T) {
 		}
 	}
 
-	// 30m is a valid Sentry relative duration but outside the accepted set, and
-	// age:-30m would be a no-op on the shared query path, so both write sites
-	// must reject it rather than store a search with no age limit.
+	// 30m is a valid Sentry relative duration but outside the accepted set. Both
+	// write sites must reject it: the shared parser derives nothing from it, so
+	// the stored search would carry no age term at all and the watch would match
+	// issues of any age.
 	unsupported := validFilter()
 	unsupported.StatsPeriod = "30m"
 	if _, err := f.svc.CreateIssueWatch(ctx, createReq(unsupported)); !errors.Is(err, ErrInvalidConfig) {

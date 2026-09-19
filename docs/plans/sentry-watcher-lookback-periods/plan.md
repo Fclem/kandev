@@ -84,6 +84,11 @@ Test evidence: `TestRESTClient_SearchIssues_ForwardsLookbackOnlyWhereAccepted` a
 `TestService_IssueWatch_LookbackPeriodValidation` were red before their production change; the two
 persistence tests were green before and after, exactly as the design's test strategy states.
 
+Delivery state lives here and in the work order, not in the paired specification: the design is
+`current` because it describes the implemented system, while the requirement stays `draft` until the
+change lands on `main`, since its `active` status describes the product contract rather than the
+state of this branch.
+
 ## Risks
 
 - The project-scoped request must lose the parameter without losing the `age:` term, or its searches would match issues of any age; the request test asserts the term rather than only asserting absence.

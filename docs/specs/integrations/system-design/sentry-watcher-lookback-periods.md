@@ -1,5 +1,5 @@
 ---
-status: draft
+status: current
 system: integrations
 requirements:
   - REQ-INTEGRATIONS-SENTRY-WATCHER-LOOKBACK-PERIODS-001

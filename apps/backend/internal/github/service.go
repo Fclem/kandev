@@ -183,6 +183,7 @@ type Service struct {
 	freshDefaultsMu        sync.Mutex
 	freshDefaultsDone      bool
 	rateCoordinator        *RateCoordinator
+	personalStarResolver  PersonalStarResolver
 
 	// cleanupFailureMu guards cleanupFailureCounts; the cleanup loop is the
 	// only writer but the global sweep + per-watch sweep can run concurrently

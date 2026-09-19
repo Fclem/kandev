@@ -3,6 +3,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -55,6 +56,7 @@ type Config struct {
 	Features               FeaturesConfig               `mapstructure:"features"`
 	GitHubCredentialBroker GitHubCredentialBrokerConfig `mapstructure:"githubCredentialBroker"`
 	Executors              ExecutorsConfig              `mapstructure:"executors"`
+	GitHub                 GitHubConfig                 `mapstructure:"github"`
 	Source                 ConfigSource                 `mapstructure:"-" json:"-"`
 }
 
@@ -165,6 +167,32 @@ func (c GitHubCredentialBrokerConfig) validate() error {
 		return nil
 	}
 	return validatePublicBaseURL("githubCredentialBroker.publicBaseUrl", c.PublicBaseURL)
+}
+
+// GitHubConfig contains deployment-owned GitHub OAuth capabilities.
+type GitHubConfig struct {
+	PersonalStarOAuth PersonalStarOAuthConfig `mapstructure:"personalStarOAuth"`
+}
+
+// PersonalStarOAuthConfig configures the dedicated OAuth App used exclusively
+// for a user's repository stars.
+type PersonalStarOAuthConfig struct {
+	ClientID        string `mapstructure:"clientId"`
+	ClientSecretRef string `mapstructure:"clientSecretRef"`
+	CallbackURL     string `mapstructure:"callbackURL"`
+}
+
+func (c PersonalStarOAuthConfig) validate() error {
+	clientID := strings.TrimSpace(c.ClientID)
+	secretRef := strings.TrimSpace(c.ClientSecretRef)
+	callbackURL := strings.TrimSpace(c.CallbackURL)
+	if clientID == "" && secretRef == "" && callbackURL == "" {
+		return nil
+	}
+	if clientID == "" || secretRef == "" || callbackURL == "" {
+		return errors.New("github.personalStarOAuth clientId, clientSecretRef, and callbackURL are required together")
+	}
+	return validatePublicBaseURL("github.personalStarOAuth.callbackURL", callbackURL)
 }
 
 func validatePublicBaseURL(field, raw string) error {
@@ -1014,6 +1042,10 @@ func validate(cfg *Config) error {
 	// No validation needed - empty URL means use in-memory
 
 	// Docker validation - optional (agent features disabled if not available)
+
+	if err := cfg.GitHub.PersonalStarOAuth.validate(); err != nil {
+		errs = append(errs, err.Error())
+	}
 	// No validation needed - will gracefully degrade
 
 	// Auth validation - generate random secret if not set (dev mode)

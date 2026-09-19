@@ -36,6 +36,23 @@ func TestConfigurationCatalogIsComplete(t *testing.T) {
 	}
 }
 
+func TestConfigurationCatalogIncludesPersonalStarOAuth(t *testing.T) {
+	for key, env := range map[string]string{
+		"github.personalStarOAuth.clientId":        PersonalStarOAuthClientIDEnv,
+		"github.personalStarOAuth.clientSecretRef": PersonalStarOAuthClientSecretRefEnv,
+		"github.personalStarOAuth.callbackURL":     PersonalStarOAuthCallbackURLEnv,
+	} {
+		entry, ok := CatalogEntryForKey(key)
+		if !ok {
+			t.Errorf("catalog is missing %q", key)
+			continue
+		}
+		if len(entry.EnvVars) != 1 || entry.EnvVars[0] != env {
+			t.Errorf("catalog %q aliases = %v, want %q", key, entry.EnvVars, env)
+		}
+	}
+}
+
 func TestConfigurationCatalogMatchesAuditedEnvironmentInventory(t *testing.T) {
 	if err := validateCatalogAgainstAuditedInventory(ConfigurationCatalog(), ConfigurationExclusions(), auditedStartupEnvironmentInventory()); err != nil {
 		t.Fatal(err)
@@ -148,6 +165,9 @@ func auditedStartupEnvironmentInventory() []auditedStartupEnvironment {
 		{envVar: "KANDEV_OFFICE_SELF_TRIGGER_TOTAL_ALLOWANCE", class: "catalog"},
 		{envVar: "KANDEV_OFFICE_GATE_FAILURE_THRESHOLD", class: "catalog"},
 		{envVar: "KANDEV_GITHUB_CREDENTIAL_BROKER_PUBLIC_BASE_URL", class: "catalog"},
+		{envVar: PersonalStarOAuthClientIDEnv, class: "catalog"},
+		{envVar: PersonalStarOAuthClientSecretRefEnv, class: "catalog"},
+		{envVar: PersonalStarOAuthCallbackURLEnv, class: "catalog"},
 		{envVar: "KANDEV_TASK_PREPARATION_TIMEOUT", class: "catalog"},
 		{envVar: "KANDEV_TASK_STALL_DETECTION_THRESHOLD", class: "catalog"},
 		{envVar: "KANDEV_TASK_DELIVERY_RETENTION_PAYLOAD_GRACE", class: "catalog"},

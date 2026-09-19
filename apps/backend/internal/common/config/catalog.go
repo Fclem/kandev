@@ -18,6 +18,14 @@ const (
 	SourceFlag          SettingSource = "flag"
 )
 
+const (
+	PersonalStarOAuthClientIDEnv        = "KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CLIENT_ID"
+	PersonalStarOAuthClientSecretRefEnv = "KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CLIENT_SECRET_REF"
+	PersonalStarOAuthCallbackURLEnv     = "KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CALLBACK_URL"
+)
+
+const personalStarOAuthOwner = "github personal star OAuth"
+
 // CatalogEntry describes one stable operator-facing startup setting.
 //
 // EnvVars is ordered by compatibility priority. The first non-empty variable
@@ -117,6 +125,9 @@ var startupCatalog = []CatalogEntry{
 	{Key: officeSelfTriggerTotalAllowanceKey, EnvVars: []string{"KANDEV_OFFICE_SELF_TRIGGER_TOTAL_ALLOWANCE"}, Owner: "office", Default: "8"},
 	{Key: officeGateFailureThresholdKey, EnvVars: []string{"KANDEV_OFFICE_GATE_FAILURE_THRESHOLD"}, Owner: "office", Default: "3"},
 	{Key: "githubCredentialBroker.publicBaseUrl", EnvVars: []string{"KANDEV_GITHUB_CREDENTIAL_BROKER_PUBLIC_BASE_URL"}, Owner: "github credential broker", Default: ""},
+	{Key: "github.personalStarOAuth.clientId", EnvVars: []string{PersonalStarOAuthClientIDEnv}, Owner: personalStarOAuthOwner, Default: ""},
+	{Key: "github.personalStarOAuth.clientSecretRef", EnvVars: []string{PersonalStarOAuthClientSecretRefEnv}, Owner: personalStarOAuthOwner, Default: "", Sensitive: true},
+	{Key: "github.personalStarOAuth.callbackURL", EnvVars: []string{PersonalStarOAuthCallbackURLEnv}, Owner: personalStarOAuthOwner, Default: ""},
 	{Key: "tasks.preparationTimeout", EnvVars: []string{"KANDEV_TASK_PREPARATION_TIMEOUT"}, Owner: "task lifecycle", Default: "10m"},
 	{Key: "tasks.stallDetectionThreshold", EnvVars: []string{"KANDEV_TASK_STALL_DETECTION_THRESHOLD"}, Owner: "task lifecycle", Default: "2h"},
 	{Key: "tasks.deliveryRetention.payloadGrace", EnvVars: []string{"KANDEV_TASK_DELIVERY_RETENTION_PAYLOAD_GRACE"}, Owner: "task delivery retention", Default: "1h"},

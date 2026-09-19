@@ -23,6 +23,7 @@ const (
 	TokenCredentialCLI          TokenCredentialKind = "gh_cli"
 	TokenCredentialInstallation TokenCredentialKind = "github_app_installation"
 	TokenCredentialUser         TokenCredentialKind = "github_app_user"
+	TokenCredentialPersonalStar TokenCredentialKind = "github_personal_star"
 )
 
 // TokenPrincipal describes the GitHub actor behind a bearer token.

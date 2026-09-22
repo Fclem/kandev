@@ -69,14 +69,41 @@ describe("pluginCommandChoices", () => {
     };
 
     expect(pluginCommandChoices(entry, "Tasks").map((command) => command.id)).toEqual([
-      "plugin-primary-tags-add-tag-more",
-      "Urgent",
+      "plugin-primary-tags-add-tag-more::child",
+      "Urgent::child",
     ]);
     const [more, urgent] = pluginCommandChoices(entry, "Tasks");
     more.action?.();
     expect(first.onSelect).toHaveBeenCalledTimes(1);
     expect(urgent.disabled).toBe(true);
     expect(more.context).toBe("Add tag...");
+  });
+
+  it("keeps a child's command id distinct from a sibling action's key", () => {
+    // A child key is its parent's key plus its own id, joined by a dash, so a
+    // plugin can name an action such that its key equals another action's child
+    // key. A palette row's id is also cmdk's value, where a duplicate makes
+    // filtering and selection ambiguous.
+    const flat = {
+      kind: "item" as const,
+      key: "plugin-primary-p-quick-pick",
+      label: "Quick pick",
+      onSelect: vi.fn(),
+    };
+    const submenu = {
+      kind: "submenu" as const,
+      key: "plugin-primary-p-quick",
+      label: "Quick",
+      children: [{ ...flat, label: "Pick" }],
+    };
+
+    const ids = [
+      ...pluginCommandChoices(submenu, "Tasks"),
+      ...pluginCommandChoices(flat, "Tasks"),
+    ].map((command) => command.id);
+
+    expect(ids).toEqual(["plugin-primary-p-quick-pick::child", "plugin-primary-p-quick-pick"]);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("ignores a label the palette cannot render", () => {

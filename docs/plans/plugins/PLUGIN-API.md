@@ -1421,7 +1421,7 @@ interface PluginTaskMenuContext {
 interface TaskMenuSubItemRegistration {
   id: string; // unique within the action; contributes to the entry's React key
   label: string;
-  icon?: React.ReactNode;
+  icon?: PluginIcon;
   disabled?: boolean;
   run(context: PluginTaskMenuContext): void | Promise<void>; // a rejection is caught and logged
 }
@@ -1429,7 +1429,7 @@ interface TaskMenuSubItemRegistration {
 interface TaskMenuActionRegistration {
   id: string;
   label: string;
-  icon?: React.ReactNode;
+  icon?: PluginIcon;
   // "edit" nests the item in the card's Edit submenu; "primary" renders it
   // as a flat, top-level item after the "Move to"/"Send to workflow"
   // submenus and before the "Archive"/"Delete" items.

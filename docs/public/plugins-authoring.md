@@ -2543,18 +2543,19 @@ components directly.
 An action of either group that declares `items(context)` renders as a submenu
 instead: `label` becomes an unselectable trigger and the returned
 `TaskMenuSubItemRegistration` children are its entries, in order, each called
-with the same `context` as the action. A child needs a non-blank unique `id`,
-a non-blank `label` and a `run`, plus, if present, a boolean `disabled` and an
-`icon` that is a name, a component or a ready-made element (an absent or `null`
-icon means no icon); a child the host cannot read or render is dropped and
-reported, and if that leaves nothing usable the action falls back to `run`.
-Nesting stops at that one level. The children also reach the command palette
-and the sidebar's task commands, one command each. `items()` is synchronous and is called while the host builds
-that card's or row's menu entries, which happens on every render for both
-menu variants whether or not one is open, so read cached state and memoize
-anything expensive. `run` stays required: it is the flat item a host that
-predates `items` renders, and the fallback whenever `items` yields nothing
-usable (a non-array, an empty list, or a throw, which is caught and logged).
+with the same `context` as the action. Nesting stops at that one level. The
+children also reach the command palette and the sidebar's task commands, one
+command each. `items()` is synchronous and is called while the host builds that
+card's or row's menu entries on every render, whether or not a menu is open; a
+card's dropdown and context variants are built from one evaluation, so read
+cached state and memoize anything expensive. `run` stays required: it is the
+flat item a host that predates `items` renders, and the fallback whenever
+`items` yields nothing usable (a non-array, an empty list, a promise, or a
+throw, which is caught and logged). A child needs a non-blank, unique `id`, a
+non-blank `label` and a callable `run`, with optional fields of the shapes the
+entry builder understands: a boolean `disabled` and an `icon` that is a curated
+name, a component, a ready-made element or `null`. A child the host cannot read
+or render is dropped, and one whose `id` repeats is reported and skipped.
 
 ```js
 registry.registerTaskMenuAction({

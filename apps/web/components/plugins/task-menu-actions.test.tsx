@@ -498,18 +498,28 @@ describe("buildPrimaryPluginEntries — shapes that must survive the boundary", 
     ]);
   });
 
-  it("keeps a child whose icon is null, which is how a bundle spells no icon", () => {
+  it("keeps a child with an absent or null icon and drops an unusable one", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     registerAction({
-      id: "null-icon",
-      items: () => [{ id: "ok", label: "Ok", icon: null as never, run: vi.fn() }],
+      id: "icon-shapes",
+      items: () => [
+        { id: "null-icon", label: "Null icon", icon: null, run: vi.fn() },
+        { id: "no-icon", label: "No icon", run: vi.fn() },
+        { id: "array-icon", label: "Array icon", icon: [] as never, run: vi.fn() },
+        { id: "object-icon", label: "Object icon", icon: {} as never, run: vi.fn() },
+      ],
     });
 
     const entry = buildPrimaryPluginEntries({ context: CONTEXT })[0];
     expect(entry?.kind).toBe("submenu");
     if (entry?.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-null-icon#ok`,
+      `plugin-primary-${PLUGIN_ID}-icon-shapes#null-icon`,
+      `plugin-primary-${PLUGIN_ID}-icon-shapes#no-icon`,
     ]);
+    // The two unusable shapes are one defect of the same kind: one report.
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    consoleErrorSpy.mockRestore();
   });
 
   it("keeps two actions' child keys distinct when their dash-joins would collide", () => {

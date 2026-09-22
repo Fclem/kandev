@@ -1440,10 +1440,10 @@ interface TaskMenuActionRegistration {
   // order. Must be synchronous, and is evaluated on every menu build (see
   // "Kanban card contributions"). Nesting stops at this one level. A child
   // needs a non-blank id and label, a callable run, and optional fields of the
-  // shapes above (a boolean `disabled`, an `icon` that is a name, component or
-  // element) -- ids unique within the action: children the host cannot read or
-  // render are dropped (and reported), duplicate ids keep their first
-  // occurrence, and a result with nothing usable left falls back to `run`.
+  // shapes above (a boolean `disabled`, an `icon` that is a name, component,
+  // element or `null`) -- ids unique within the action: children the host
+  // cannot read or render are dropped (and reported), duplicate ids keep their
+  // first occurrence, and a result with nothing usable left falls back to `run`.
   items?(
     context: PluginTaskMenuContext,
   ): readonly TaskMenuSubItemRegistration[];
@@ -1588,8 +1588,9 @@ bundle is plain JavaScript and these types are not enforced at run time: an
 empty list, a throw, a promise (the contract is synchronous, and its rejection
 is observed so it cannot escape as an unhandled rejection), a non-array, and an
 array whose entries lack a non-blank `id` or `label`, a callable `run`, a
-boolean `disabled` or a recognizable `icon` all fall back to the flat item
-instead of crashing the render or producing a trigger nothing can open. Children are read once, inside the same guard, so a
+boolean `disabled` or a recognizable `icon` (a name, component, element or
+`null`) all fall back to the flat item instead of crashing the render or
+producing a trigger nothing can open. Children are read once, inside the same guard, so a
 throwing getter or a Proxy fails that child rather than the card's render;
 unusable children are dropped when others remain, duplicate ids keep their
 first occurrence, and each defect is logged once per action and kind rather

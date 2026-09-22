@@ -84,6 +84,7 @@ apps/backend/
 │   ├── repoclone/        # Repository cloning for remote executors
 │   ├── scriptengine/     # Script placeholder resolution and interpolation
 │   ├── secrets/          # Secret management
+│   ├── system/deploymentsecret/ # Linux root-owned supervisor availability and deployment-secret boundary
 │   ├── sprites/          # Sprites AI integration
 │   ├── sysprompt/        # System prompt injection
 │   ├── tools/            # Tool integrations
@@ -243,14 +244,13 @@ Client (WS) ← Orchestrator ← Lifecycle Manager ←──── stream update
 - **Agent task plans:** Agent whole-document writes must carry `expected_version` when a plan already exists. The task service rejects suspicious reductions before storage and requires explicit `allow_truncation` plus verified history for intentional reductions. Exact edits and revision recovery stay task-scoped, use the service lock, and check both the current plan version and the selected revision snapshot. Keep browser DTOs and browser write behavior independent from the agent-only version contract.
 - **Workspace deletion side tables:** Any workspace-scoped integration side table without a database foreign key/cascade must be deleted explicitly from its `WorkspaceDeleted` handler. Cover the create → delete lifecycle in a test, and include the same cleanup in E2E reset fixtures; do not assume deleting the workspace row removes orphaned integration metadata.
 - **Testing:** For backend test changes, load [backend-tests.md](../../.agents/skills/tdd/references/backend-tests.md).
-  It covers time, cleanup, filesystem fixtures, environment isolation, and subprocess helpers.
 
 ### Goroutine ownership and leak testing
 
 Every long-running goroutine must have a single owner with explicit start and stop semantics:
 
 - **Lifecycle:** the type that spawns the goroutine also exposes `Start(ctx)` / `Stop()` (or equivalent). `Start` registers on a `sync.WaitGroup`; `Stop` cancels the goroutine's context (or closes a `stopCh`) and `wg.Wait()`s for drain. Idempotent on both ends. Restartable services must reset stopped state and create a fresh cancellable context/cancel under the same mutex used by `Stop`; cover `Stop` → `Start`. `internal/integrations/healthpoll`, `internal/jira`, `internal/linear`, and `internal/github` pollers are the canonical shape.
-- **E2E reset invariant:** `seedData`/backend are worker-scoped, so any workspace-scoped state a global poller reads (for example `github_review_watches`) must be deleted in `cmd/kandev/e2e_reset.go` before task deletion — otherwise the poller recreates rows mid-reset and later tests see duplicates. Add a `Delete...ByWorkspace` cascade when introducing a new poller-backed entity.
+- **E2E reset invariant:** `seedData`/backend are worker-scoped, so any workspace-scoped state a global poller reads (for example `github_review_watches`) must be deleted in `internal/backendapp/e2e_reset.go` before task deletion — otherwise the poller recreates rows mid-reset and later tests see duplicates. Add a `Delete...ByWorkspace` cascade when introducing a new poller-backed entity.
 - **Cancellation:** the goroutine selects on `ctx.Done()` (or `stopCh`) in every long wait. Never use `time.Sleep` in a retry/backoff loop — use `time.NewTimer` inside a `select` that also watches the shutdown signal (see `lifecycle.StreamManager.sleepOrStop`).
 - **Detached helpers:** event handlers and short-lived `go func()` calls in `internal/orchestrator/` and `internal/agent/runtime/lifecycle/` must accept a cancellable context (or check the owning type's shutdown signal) and return promptly when it fires.
 - **Leak testing:** packages that spawn goroutines add `goleak.VerifyTestMain(m)` in a per-package `TestMain`. New packages of this kind must follow suit. Tests that spawn polling goroutines must bound them with a context or timer and stop them via `t.Cleanup`. When a third-party background goroutine genuinely can't be drained, suppress it with `goleak.IgnoreTopFunction(...)` and leave a comment explaining why. Currently instrumented: `internal/gateway/websocket/`, `internal/agent/runtime/lifecycle/`, `internal/agentctl/server/process/`, `internal/orchestrator/`, `internal/github/`, `internal/gitlab/`, `internal/jira/`, `internal/linear/`, `internal/integrations/healthpoll/`.

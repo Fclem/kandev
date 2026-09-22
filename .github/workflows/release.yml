@@ -1313,6 +1313,15 @@ jobs:
             echo "::warning::SignPath returned an incomplete binary pair; publishing the original unsigned Windows runtime bundle."
           fi
 
+      # The root-owned deployment secret daemon is Linux-only and never enters
+      # the runtime bundle: scripts/release/package-bundle.sh still validates
+      # exactly cmd/{kandev,agentctl}, and desktop/Docker archives stay
+      # daemon-free. It links sqlite through cgo, so each Linux runner builds it
+      # for its own architecture instead of cross-compiling it.
+      - name: Build deployment secret daemon
+        if: matrix.goos == 'linux'
+        run: make -C apps/backend build-deployment-secretd
+
       - name: Package bundle
         env:
           IS_STABLE: ${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'stable' }}
@@ -1483,6 +1492,43 @@ jobs:
         run: |
           echo "::error::${{ matrix.platform }} runtime bundle upload failed after 3 attempts." >&2
           exit 1
+
+      # Canonical daemon archive: the supervisor binary, the systemd unit the
+      # installer manages, and checksums. The unit text is rendered by the Go
+      # generator (cmd/kandev-deployment-secretd/unitgen, which wraps the same
+      # launcher code path as kandev.service) so the shipped text can never
+      # drift from the generator. It travels as its own artifact so the runtime
+      # bundle and staged runtime candidate sets stay daemon-free.
+      - name: Package deployment secret daemon
+        if: matrix.goos == 'linux'
+        run: |
+          set -euo pipefail
+          case "${GOARCH}" in
+            amd64) platform=linux-x64 ;;
+            arm64) platform=linux-arm64 ;;
+            *) echo "unsupported deployment secret daemon architecture: ${GOARCH}" >&2; exit 1 ;;
+          esac
+          staging="dist/deployment-secretd-${platform}"
+          rm -rf "${staging}"
+          mkdir -p "${staging}/bin" "${staging}/systemd"
+          cp apps/backend/bin/kandev-deployment-secretd "${staging}/bin/kandev-deployment-secretd"
+          chmod 755 "${staging}/bin/kandev-deployment-secretd"
+          ( cd apps/backend && go run ./cmd/kandev-deployment-secretd/unitgen ) \
+            > "${staging}/systemd/kandev-deployment-secretd.service"
+          (
+            cd "${staging}"
+            shasum -a 256 bin/kandev-deployment-secretd systemd/kandev-deployment-secretd.service > checksums.txt
+          )
+          tar -czf "dist/kandev-deployment-secretd-${platform}.tar.gz" -C "${staging}" bin systemd checksums.txt
+          tar -tzf "dist/kandev-deployment-secretd-${platform}.tar.gz"
+
+      - name: Upload deployment secret daemon archive
+        if: matrix.goos == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployment-secretd-${{ matrix.platform }}
+          path: dist/kandev-deployment-secretd-${{ matrix.platform }}.tar.gz
+          if-no-files-found: error
 
       - name: Upload staged runtime candidates (attempt 1)
         id: upload_runtime_candidates_1
@@ -2377,6 +2423,12 @@ jobs:
           path: dist/desktop-artifacts
           merge-multiple: true
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: deployment-secretd-*
+          path: dist/deployment-secretd
+          merge-multiple: true
+
       - name: Download canonical remote helpers
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -2448,6 +2500,17 @@ jobs:
 
           mkdir -p dist/release-assets
           cp dist/desktop-artifacts/* dist/release-assets/
+          # The root-owned deployment secret daemon is Linux-only, so losing its
+          # archive would silently drop the operator install path for the
+          # personal-star OAuth client secret.
+          for platform in linux-x64 linux-arm64; do
+            archive="dist/deployment-secretd/kandev-deployment-secretd-${platform}.tar.gz"
+            if [ ! -s "$archive" ]; then
+              echo "Missing required deployment secret daemon archive: $archive" >&2
+              exit 1
+            fi
+            cp "$archive" dist/release-assets/
+          done
           platforms=(linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64)
           for platform in "${platforms[@]}"; do
             for variant in "${variants[@]}"; do
@@ -3076,6 +3139,7 @@ jobs:
           files: |
             dist/release-assets/kandev-linux-*.tar.gz
             dist/release-assets/kandev-linux-*.tar.gz.sha256
+            dist/release-assets/kandev-deployment-secretd-linux-*.tar.gz
             dist/release-assets/kandev-macos-*.tar.gz
             dist/release-assets/kandev-macos-*.tar.gz.sha256
             dist/release-assets/kandev-windows-*.tar.gz

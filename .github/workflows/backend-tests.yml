@@ -272,6 +272,19 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: bash scripts/check-agentctl-deps.sh
 
+      # The deployment secret daemon is Linux-only and links the cgo sqlite3
+      # driver for the deployment-owned secret store, so only the native
+      # linux/amd64 build is asserted here; the release pipeline builds each
+      # Linux architecture on its own native runner. The non-Linux stubs must
+      # still compile, because a Windows or macOS host has to fail at runtime
+      # (exit non-zero with an explicit message) rather than at link time.
+      - name: Build deployment secret daemon for every release platform
+        run: |
+          set -euo pipefail
+          go build -o "${RUNNER_TEMP}/kandev-deployment-secretd" ./cmd/kandev-deployment-secretd
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o "${RUNNER_TEMP}/kandev-deployment-secretd.exe" ./cmd/kandev-deployment-secretd
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o "${RUNNER_TEMP}/kandev-deployment-secretd-darwin" ./cmd/kandev-deployment-secretd
+
       - name: Verify settings catalog contract
         working-directory: ${{ github.workspace }}
         run: node --test scripts/settings-contract-ci.test.mjs

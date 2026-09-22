@@ -186,7 +186,7 @@ endif
 DEADCODE_VERSION ?= v0.48.0
 DEADCODE_GO_TOOLCHAIN ?= go1.26.0
 
-.PHONY: all build build-dev build-runtime build-kandev build-kandev-linux build-all build-agentctl build-agentctl-dev build-agentctl-remote build-agentctl-linux build-agentctl-linux-arm64 build-agentctl-darwin-arm64 build-agentctl-darwin-amd64 build-acpdbg acpdbg build-codexdbg codexdbg build-mock-agent build-mock-agent-linux build-preview build-winjob e2e-plugin-ui e2e-plugin-package clean run dev start-debug test test-e2e test-sprites-e2e test-lifecycle-goleak lint deadcode fmt vet sqlguard check-make-shells help
+.PHONY: all build build-dev build-runtime build-kandev build-kandev-linux build-deployment-secretd build-all build-agentctl build-agentctl-dev build-agentctl-remote build-agentctl-linux build-agentctl-linux-arm64 build-agentctl-darwin-arm64 build-agentctl-darwin-amd64 build-acpdbg acpdbg build-codexdbg codexdbg build-mock-agent build-mock-agent-linux build-preview build-winjob e2e-plugin-ui e2e-plugin-package clean run dev start-debug test test-e2e test-sprites-e2e test-lifecycle-goleak lint deadcode fmt vet sqlguard check-make-shells help
 
 ## Default target
 all: build
@@ -268,6 +268,18 @@ build-kandev:
 	@echo "Building $(BINARY_NAME)..."
 	@$(call MKDIR,$(BUILD_DIR))
 	$(CGO_LOCALE) $(CGO_PREFIX) $(GO) build -trimpath $(GOFLAGS) -tags fts5 -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)$(EXE) ./cmd/kandev
+
+## Build the root-owned deployment secret supervisor (cmd/kandev-deployment-secretd).
+## Linux-only: the daemon refuses non-Linux targets, serves a root-owned Unix
+## socket, and links sqlite through cgo, so the release pipeline builds it on the
+## matching Linux runner (see .github/workflows/release.yml) instead of
+## cross-compiling it. It never enters the runtime bundle: desktop, Docker, and
+## the update channels stay daemon-free, and it ships as its own
+## kandev-deployment-secretd-<platform>.tar.gz.
+build-deployment-secretd:
+	@echo "Building kandev-deployment-secretd..."
+	@$(call MKDIR,$(BUILD_DIR))
+	$(CGO_LOCALE) $(CGO_PREFIX) $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/kandev-deployment-secretd$(EXE) ./cmd/kandev-deployment-secretd
 
 ## Build all binaries (unified + individual services + agentctl)
 build-all: build build-agentctl
@@ -521,6 +533,7 @@ help:
 	@echo "  build           Build the unified kandev binary (default)"
 	@echo "  build-all       Build all binaries (unified + individual services + agentctl)"
 	@echo "  build-agentctl  Build the agentctl sidecar binary (includes embedded MCP server)"
+	@echo "  build-deployment-secretd  Build the Linux-only root-owned deployment secret daemon"
 	@echo "  build-mock-agent Build the mock-agent binary for testing"
 	@echo "  build-preview   Build the preview CLI for PR preview environments"
 	@echo "  clean         Remove build artifacts"

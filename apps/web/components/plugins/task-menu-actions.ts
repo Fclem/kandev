@@ -1,6 +1,6 @@
 import { createElement, isValidElement, type ReactNode } from "react";
 import { pluginRegistry } from "@/lib/plugins/registry";
-import { resolvePluginIcon } from "@/lib/plugins/icons";
+import { isPluginIconComponent, resolvePluginIcon } from "@/lib/plugins/icons";
 import type { PluginTaskMenuActionRegistration } from "@/lib/plugins/registry-registration-types";
 import type {
   PluginIcon,
@@ -100,6 +100,17 @@ function readActionIcon(action: PluginTaskMenuActionRegistration): ReactNode {
   }
 }
 
+/**
+ * An icon the menu can render: a curated name, a plugin-owned component
+ * (including React's exotic components, which are objects at run time), or the
+ * menu-only ready-made element. Everything else is a defect, while an absent
+ * icon is null or undefined in a plain bundle.
+ */
+function isRenderableIcon(icon: unknown): boolean {
+  if (icon === undefined || icon === null) return true;
+  return typeof icon === "string" || isPluginIconComponent(icon) || isValidElement(icon);
+}
+
 /** One child, read once into the plain values the menu actually renders. */
 type SubItemSnapshot = {
   id: string;
@@ -126,15 +137,8 @@ function readSubItem(item: unknown): SubItemSnapshot | null {
     if (typeof label !== "string" || label.trim().length === 0) return null;
     if (typeof run !== "function") return null;
     if (disabled !== undefined && typeof disabled !== "boolean") return null;
-    if (
-      icon !== undefined &&
-      typeof icon !== "string" &&
-      typeof icon !== "function" &&
-      !isValidElement(icon)
-    ) {
-      return null;
-    }
-    return { id, label, icon, disabled, run };
+    if (!isRenderableIcon(icon)) return null;
+    return { id, label, icon: icon ?? undefined, disabled, run };
   } catch {
     return null;
   }
@@ -263,7 +267,12 @@ export function pluginMenuEntry(
       disabled,
       children: items.map((item) => ({
         kind: "item",
-        key: `${key}-${item.id}`,
+        // The id is plugin-controlled and the action key is itself a dash-join
+        // of plugin-controlled ids, so `-${id}` can spell another action's child
+        // key exactly; the palette flattens every plugin entry into one list and
+        // uses this key as both its React key and cmdk's value. The separator
+        // stays unambiguous because an id's own `#` is percent-encoded.
+        key: `${key}#${encodeURIComponent(item.id)}`,
         icon: pluginMenuIcon(item.icon),
         label: item.label,
         disabled: disabled || item.disabled,

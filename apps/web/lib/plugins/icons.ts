@@ -55,14 +55,32 @@ export const PLUGIN_ICONS: Record<string, TablerIcon> = {
 };
 
 /**
+ * A component value a plugin may hand us, including React's exotic components:
+ * `memo`, `forwardRef` and `lazy` return *objects* (callable per their types,
+ * not at run time), and an icon set -- which `host-api` explicitly tells
+ * plugins to bundle -- is built from `forwardRef`. A plain `typeof` check
+ * would therefore reject the host's own icon shapes.
+ */
+export function isPluginIconComponent(icon: unknown): icon is ResolvedPluginIcon {
+  if (typeof icon === "function") return true;
+  if (typeof icon !== "object" || icon === null) return false;
+  try {
+    return "$$typeof" in icon;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Strict lookup: the named icon, or undefined when the name is unknown/missing.
  * Only a string names a curated icon: any other value (a stray object or a
  * ready-made element from a JavaScript bundle) has no name to look up, and
  * indexing the map with it would coerce it to a key -- which a hostile
- * `toString` turns into a throw out of whatever is rendering.
+ * `toString` turns into a throw out of whatever is rendering. A component,
+ * exotic or not, needs no lookup at all.
  */
 export function lookupPluginIcon(icon?: PluginIcon): ResolvedPluginIcon | undefined {
-  if (typeof icon === "function") return icon;
+  if (isPluginIconComponent(icon)) return icon;
   return typeof icon === "string" ? PLUGIN_ICONS[icon] : undefined;
 }
 

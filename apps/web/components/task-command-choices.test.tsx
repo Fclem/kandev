@@ -69,8 +69,8 @@ describe("pluginCommandChoices", () => {
     };
 
     expect(pluginCommandChoices(entry, "Tasks").map((command) => command.id)).toEqual([
-      "plugin-primary-tags-add-tag-more::child",
-      "Urgent::child",
+      "plugin-primary-tags-add-tag-more",
+      "Urgent",
     ]);
     const [more, urgent] = pluginCommandChoices(entry, "Tasks");
     more.action?.();
@@ -79,30 +79,24 @@ describe("pluginCommandChoices", () => {
     expect(more.context).toBe("Add tag...");
   });
 
-  it("keeps a child's command id distinct from a sibling action's key", () => {
-    // A child key is its parent's key plus its own id, joined by a dash, so a
-    // plugin can name an action such that its key equals another action's child
-    // key. A palette row's id is also cmdk's value, where a duplicate makes
-    // filtering and selection ambiguous.
-    const flat = {
-      kind: "item" as const,
-      key: "plugin-primary-p-quick-pick",
-      label: "Quick pick",
-      onSelect: vi.fn(),
-    };
+  it("reuses the entry key as the command id, which the builder keeps unique", () => {
+    // Uniqueness is the builder's job: a child's key encodes its id, so the
+    // palette can use it directly as both the React key and cmdk's value.
+    const child = item("Pick", "plugin-primary-p-quick#pick-x");
     const submenu = {
       kind: "submenu" as const,
       key: "plugin-primary-p-quick",
       label: "Quick",
-      children: [{ ...flat, label: "Pick" }],
+      children: [child],
     };
+    const flat = item("Quick pick", "plugin-primary-p-quick-pick");
 
     const ids = [
       ...pluginCommandChoices(submenu, "Tasks"),
       ...pluginCommandChoices(flat, "Tasks"),
     ].map((command) => command.id);
 
-    expect(ids).toEqual(["plugin-primary-p-quick-pick::child", "plugin-primary-p-quick-pick"]);
+    expect(ids).toEqual(["plugin-primary-p-quick#pick-x", "plugin-primary-p-quick-pick"]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 

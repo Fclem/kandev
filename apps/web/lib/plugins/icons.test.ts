@@ -29,6 +29,18 @@ describe("plugin icons", () => {
   // with a non-string coerced it to a key, so an object whose toString threw
   // took the rendering surface down, and any other object silently became the
   // puzzle glyph by way of a "[object Object]" lookup miss.
+  it("passes through an exotic component, which memo/forwardRef produce", () => {
+    // React's memo and forwardRef return objects that are callable per their
+    // types but not at run time, and @tabler/icons-react -- the set
+    // PLUGIN_ICONS maps names onto -- builds every icon with forwardRef.
+    // memo() returns a non-callable object; a function carrying $$typeof would
+    // not reproduce the shape that `typeof icon === "function"` accepts.
+    const ExoticIcon = { $$typeof: Symbol.for("react.memo"), type: () => null };
+
+    expect(lookupPluginIcon(ExoticIcon as never)).toBe(ExoticIcon);
+    expect(resolvePluginIcon(ExoticIcon as never)).toBe(ExoticIcon);
+  });
+
   it("treats a non-string, non-function icon as absent instead of coercing it to a name", () => {
     const hostile = {
       toString() {

@@ -47,20 +47,18 @@ export function pluginCommandChoices(
   entry: KanbanCardMenuEntry,
   group: string,
   parentLabel?: string,
-  parentKey?: string,
 ): CommandItem[] {
   if (entry.kind === "submenu") {
     const label = typeof entry.label === "string" ? entry.label : parentLabel;
-    return entry.children.flatMap((child) => pluginCommandChoices(child, group, label, entry.key));
+    return entry.children.flatMap((child) => pluginCommandChoices(child, group, label));
   }
   if (entry.kind !== "item" || typeof entry.label !== "string") return [];
   return [
     {
-      // A child's key is its parent's key plus its own id, both joined with a
-      // dash, so it can spell a *different* action's key; a palette row's id is
-      // also cmdk's value, where duplicates make filtering and selection
-      // ambiguous. The suffix is therefore unforgeable by an action id.
-      id: parentKey ? `${entry.key}::child` : entry.key,
+      // The entry key is unique across every plugin menu entry, including
+      // flattened children whose key encodes the child id, and it doubles as
+      // this row's React key and cmdk value.
+      id: entry.key,
       label: entry.label,
       group,
       // A child's own label ("Blocked") is meaningless on its own in a palette

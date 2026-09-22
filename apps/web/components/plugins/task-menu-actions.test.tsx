@@ -110,8 +110,8 @@ describe("buildPrimaryPluginEntries — action declaring items", () => {
     expect(entry.key).toBe(ACTION_KEY);
     expect(entry.label).toBe(ACTION_LABEL);
     expect(entry.children.map((child) => child.key)).toEqual([
-      `${ACTION_KEY}-more`,
-      `${ACTION_KEY}-blocked`,
+      `${ACTION_KEY}#more`,
+      `${ACTION_KEY}#blocked`,
     ]);
     // Every child is a selectable item, not a separator or a nested submenu.
     expect(
@@ -310,7 +310,7 @@ describe("buildPrimaryPluginEntries — unreadable and repeated children", () =>
     expect(entry.kind).toBe("submenu");
     if (entry.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-duplicated-dup`,
+      `plugin-primary-${PLUGIN_ID}-duplicated#dup`,
     ]);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining("repeated a child id"),
@@ -375,8 +375,8 @@ describe("buildPrimaryPluginEntries — unreadable and repeated children", () =>
     const entry = entries[0];
     if (entry.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-partly-broken-gone`,
-      `plugin-primary-${PLUGIN_ID}-partly-broken-ok`,
+      `plugin-primary-${PLUGIN_ID}-partly-broken#gone`,
+      `plugin-primary-${PLUGIN_ID}-partly-broken#ok`,
     ]);
     consoleErrorSpy.mockRestore();
   });
@@ -449,7 +449,7 @@ describe("buildPrimaryPluginEntries — unusable registrations and array-likes",
     expect(entry.kind).toBe("submenu");
     if (entry.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-hostile-array-child`,
+      `plugin-primary-${PLUGIN_ID}-hostile-array#child`,
     ]);
   });
 
@@ -474,6 +474,73 @@ describe("buildPrimaryPluginEntries — unusable registrations and array-likes",
         flag,
       ).toEqual([true]);
     }
+  });
+});
+
+describe("buildPrimaryPluginEntries — shapes that must survive the boundary", () => {
+  it("keeps a child whose icon is an exotic component", () => {
+    // React's memo/forwardRef/lazy return objects, not functions, and an icon
+    // set -- which host-api tells plugins to bundle -- is built from
+    // forwardRef, so rejecting objects would drop a contract-valid child.
+    // memo() returns a non-callable object; a function carrying $$typeof would
+    // not reproduce the shape that `typeof icon === "function"` accepts.
+    const ExoticIcon = { $$typeof: Symbol.for("react.memo"), type: () => null };
+    registerAction({
+      id: "exotic-icon",
+      items: () => [{ id: "ok", label: "Ok", icon: ExoticIcon as never, run: vi.fn() }],
+    });
+
+    const entry = buildPrimaryPluginEntries({ context: CONTEXT })[0];
+    expect(entry?.kind).toBe("submenu");
+    if (entry?.kind !== "submenu") return;
+    expect(entry.children.map((child) => child.key)).toEqual([
+      `plugin-primary-${PLUGIN_ID}-exotic-icon#ok`,
+    ]);
+  });
+
+  it("keeps a child whose icon is null, which is how a bundle spells no icon", () => {
+    registerAction({
+      id: "null-icon",
+      items: () => [{ id: "ok", label: "Ok", icon: null as never, run: vi.fn() }],
+    });
+
+    const entry = buildPrimaryPluginEntries({ context: CONTEXT })[0];
+    expect(entry?.kind).toBe("submenu");
+    if (entry?.kind !== "submenu") return;
+    expect(entry.children.map((child) => child.key)).toEqual([
+      `plugin-primary-${PLUGIN_ID}-null-icon#ok`,
+    ]);
+  });
+
+  it("keeps two actions' child keys distinct when their dash-joins would collide", () => {
+    // Action `quick`'s child `pick-x` and action `pick` of plugin `p-quick`
+    // both dash-join to `plugin-primary-p-quick-pick-x`; the palette flattens
+    // every plugin entry into one list, so these keys are React keys and cmdk
+    // values there.
+    pluginRegistry.forPlugin("p").registerTaskMenuAction({
+      id: "quick",
+      label: "Quick",
+      group: "primary",
+      items: () => [{ id: "pick-x", label: "A", run: vi.fn() }],
+      run: vi.fn(),
+    });
+    pluginRegistry.forPlugin("p-quick").registerTaskMenuAction({
+      id: "pick",
+      label: "Pick",
+      group: "primary",
+      items: () => [{ id: "x", label: "B", run: vi.fn() }],
+      run: vi.fn(),
+    });
+
+    const childKeys = buildPrimaryPluginEntries({ context: CONTEXT }).flatMap((entry) =>
+      entry && entry.kind === "submenu" ? entry.children.map((child) => child.key) : [],
+    );
+
+    expect(childKeys).toHaveLength(2);
+    expect(new Set(childKeys).size).toBe(2);
+
+    pluginRegistry.unregisterPlugin("p");
+    pluginRegistry.unregisterPlugin("p-quick");
   });
 });
 

@@ -52,6 +52,12 @@ export type BackendContext = {
   frontendPort: number;
   frontendUrl: string;
   tmpDir: string;
+  /**
+   * The backend's resolved data directory (`<KANDEV_HOME_DIR>/data`) — where
+   * `master.key`, the deployment identity, and `deployment-secrets.sqlite`
+   * live. Fixtures that seed deployment-owned material write here.
+   */
+  dataDir: string;
   /** Active structured backend log for assertions that need Info records. */
   logPath: string;
   /** Current backend PID, exposed for process-owned socket assertions. */
@@ -398,6 +404,7 @@ export const backendFixture = base.extend<object, { backend: BackendContext }>({
 
       await runOwnedBackendFixture(tmpDir, async (registerProcess) => {
         const homeDir = path.join(tmpDir, ".kandev");
+        const dataDir = path.join(homeDir, "data");
         const systemTemporaryRoot = path.join(tmpDir, "system-temporary");
         const dbPath = path.join(tmpDir, "kandev.db");
         const worktreeBase = path.join(tmpDir, "worktrees");
@@ -601,6 +608,7 @@ export const backendFixture = base.extend<object, { backend: BackendContext }>({
           frontendUrl,
           tmpDir,
           compactRuntime,
+          dataDir,
           logPath: backendLogPath,
           pid: () => backendProc?.pid,
           restart,
@@ -626,6 +634,22 @@ export const backendFixture = base.extend<object, { backend: BackendContext }>({
 //   - KANDEV_WEB_TITLE_PREFIX — the browser identity is profile-managed in
 //     this suite. Explicit per-test values are applied after this baseline is
 //     sanitized through `backend.restart(overrides)`.
+//   - KANDEV_GITHUB_PERSONAL_STAR_OAUTH_* — the dedicated personal-star
+//     deployment settings are owned by the deployment fixture
+//     (`fixtures/personal-star-deployment.ts`), which seeds the matching
+//     deployment material and applies these values through
+//     `backend.restart(seed.env)`. A host shell (or another kandev instance)
+//     exporting them would otherwise make a spec's "unsupported deployment"
+//     baseline depend on the developer's environment.
+//   - KANDEV_SERVICE_MODE — the launcher writes "user"/"system" into every
+//     service unit it installs. The suite is often launched from a kandev task
+//     running under `kandev.service`, so the spawned backend would otherwise
+//     inherit "user" and classify itself as a user-scope systemd install. That
+//     is a deployment fact, not a test fact: `deploymentsecret.Available`
+//     rejects a user-systemd backend, which would make the dedicated
+//     personal-star deployment permanently unavailable inside a container-less
+//     developer run. Specs that want that rejection set it explicitly through
+//     `backend.restart({ KANDEV_SERVICE_MODE: "user" })`.
 //   - PATH casing aliases — Windows commonly inherits `Path`; retaining it
 //     beside the fixture's new `PATH` makes child-process lookup order
 //     ambiguous. The caller restores one canonical PATH after sanitizing.
@@ -647,7 +671,11 @@ function sanitizeInheritedEnv(env: Record<string, string>): Record<string, strin
     delete cleaned[key];
   }
   for (const key of Object.keys(cleaned)) {
-    if (key === "KANDEV_WEB_TITLE_PREFIX" || key.startsWith("KANDEV_FEATURES_")) {
+    if (
+      key === "KANDEV_WEB_TITLE_PREFIX" ||
+      key.startsWith("KANDEV_FEATURES_") ||
+      key.startsWith("KANDEV_GITHUB_PERSONAL_STAR_OAUTH_")
+    ) {
       delete cleaned[key];
     }
     if (/^KANDEV_AGENTCTL_(?:LINUX_BINARY|(?:LINUX|DARWIN)_(?:AMD64|ARM64)_BINARY)$/i.test(key)) {

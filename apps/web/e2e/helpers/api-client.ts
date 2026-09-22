@@ -189,6 +189,41 @@ export type MockGitHubPersonalConnection = {
   access_expires_at?: string;
 };
 
+/**
+ * The synthetic identity the backend attributes requests to when
+ * authentication is disabled (`github.DefaultUserID`, mirroring the auth
+ * middleware's default principal). The dedicated personal-star mock controls
+ * and the frontend star cache are both keyed by it, so specs seed under this id.
+ */
+export const E2E_DEFAULT_USER_ID = "default-user";
+
+/** Callback outcome a seeded personal-star connection records. */
+export type MockGitHubPersonalStarOutcome =
+  | "connected"
+  | "declined"
+  | "insufficient_scope"
+  | "failed";
+
+/** A dedicated personal-star connection seeded without an OAuth round trip. */
+export type MockGitHubPersonalStarConnection = {
+  login?: string;
+  /** Whether the seeded grant carries the `public_repo` capability. */
+  public_repo?: boolean;
+  /** Defaults to `connected`; `insufficient_scope` also drops `public_repo`. */
+  outcome?: MockGitHubPersonalStarOutcome;
+  user_id?: string;
+};
+
+/** The non-secret deployment/connection tuple the backend reports. */
+export type GitHubStarConnectionStatus = {
+  user_id: string;
+  credential_generation: number;
+  active: boolean;
+  capable: boolean;
+  reconnect_required: boolean;
+  available: boolean;
+};
+
 export type E2ERemoteContributionBinding = {
   source_repository: {
     remote_url: string;
@@ -2183,6 +2218,105 @@ export class ApiClient {
       "DELETE",
       `/api/v1/github/mock/personal-connections/${encodeURIComponent(workspaceId)}`,
     );
+  }
+
+  // --- GitHub personal star (dedicated OAuth App) mock control ---
+
+  /**
+   * Issues an E2E mock-control request. These routes answer `204 No Content`,
+   * so the JSON-parsing `request` helper cannot be used; the status is still
+   * checked so a rejected control fails loudly instead of silently.
+   */
+  private async mockControl(method: string, path: string, body?: unknown): Promise<void> {
+    const response = await this.rawRequest(method, path, body);
+    if (!response.ok) {
+      throw new Error(
+        `API ${method} ${path} failed (${response.status}): ${await response.text()}`,
+      );
+    }
+  }
+
+  /** Stores one repository's star state for the mock provider. */
+  async mockGitHubSetPersonalStarState(
+    workspaceId: string,
+    state: { repositoryUrl: string; starred: boolean; userId?: string },
+  ): Promise<void> {
+    await this.mockControl("PUT", "/api/v1/github/mock/personal-star-state", {
+      workspace_id: workspaceId,
+      user_id: state.userId ?? E2E_DEFAULT_USER_ID,
+      repository_url: state.repositoryUrl,
+      starred: state.starred,
+    });
+  }
+
+  /** Injects provider failures for the status and/or mutation calls. */
+  async mockGitHubSetPersonalStarFailures(failures: {
+    status?: boolean;
+    mutation?: boolean;
+  }): Promise<void> {
+    await this.mockControl("PUT", "/api/v1/github/mock/personal-star-failures", {
+      status: failures.status ?? false,
+      mutation: failures.mutation ?? false,
+    });
+  }
+
+  /** Commits a capable dedicated connection without an OAuth round trip. */
+  async mockGitHubSetPersonalStarConnection(
+    workspaceId: string,
+    connection: MockGitHubPersonalStarConnection = {},
+  ): Promise<void> {
+    await this.mockControl("PUT", "/api/v1/github/mock/personal-star-connection", {
+      workspace_id: workspaceId,
+      user_id: connection.user_id ?? E2E_DEFAULT_USER_ID,
+      login: connection.login ?? "e2e-star-user",
+      public_repo: connection.public_repo ?? true,
+      outcome: connection.outcome ?? "connected",
+    });
+  }
+
+  /** Removes a seeded dedicated connection and its generation-specific secrets. */
+  async mockGitHubDeletePersonalStarConnection(
+    workspaceId: string,
+    userId = E2E_DEFAULT_USER_ID,
+  ): Promise<void> {
+    await this.mockControl(
+      "DELETE",
+      `/api/v1/github/mock/personal-star-connection?workspace_id=${encodeURIComponent(
+        workspaceId,
+      )}&user_id=${encodeURIComponent(userId)}`,
+    );
+  }
+
+  /** Records a callback outcome without an OAuth exchange. */
+  async mockGitHubSetPersonalStarOutcome(
+    workspaceId: string,
+    outcome: MockGitHubPersonalStarOutcome,
+    userId = E2E_DEFAULT_USER_ID,
+  ): Promise<void> {
+    await this.mockControl("PUT", "/api/v1/github/mock/personal-star-outcome", {
+      workspace_id: workspaceId,
+      user_id: userId,
+      outcome,
+    });
+  }
+
+  /** Reads the dedicated connection tuple for the current request identity. */
+  async getPersonalStarConnectionStatus(workspaceId: string): Promise<GitHubStarConnectionStatus> {
+    return this.request(
+      "GET",
+      `/api/v1/github/user/starred/connection?workspace_id=${encodeURIComponent(workspaceId)}`,
+    );
+  }
+
+  /** Reads confirmed repository star states; `null` means provider-unknown. */
+  async getPersonalStarStates(
+    workspaceId: string,
+    repositoryUrls: string[],
+  ): Promise<{ states: Record<string, boolean | null> }> {
+    return this.request("POST", "/api/v1/github/user/starred/status", {
+      workspace_id: workspaceId,
+      repository_urls: repositoryUrls,
+    });
   }
 
   async mockGitHubSetCLIAccounts(accounts: MockGitHubCLIAccount[]): Promise<void> {

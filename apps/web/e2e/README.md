@@ -432,6 +432,36 @@ Docker image usage remains daemon-wide because images and their layers are
 shared across shards; only container records, cleanup, and container-based
 storage reporting are filtered by the process-scoped ownership label.
 
+### Deployment-capability fixtures
+
+Some capabilities are deployment facts rather than feature flags, so a spec has
+to make the backend's _data directory_ provisioned before it can exercise them.
+The dedicated personal-star flow is the first of these: the GitHub provider only
+builds the star runtime when the OAuth App settings are complete **and**
+`<data dir>` holds a bootstrapped deployment identity, the master key, and a
+readable `deployment-secrets.sqlite` carrying the protected client-secret
+reference. `fixtures/personal-star-deployment.ts` writes exactly that material
+and returns the `KANDEV_GITHUB_PERSONAL_STAR_OAUTH_*` environment; specs apply
+it with `backend.restart(seed.env)`, which is why the fixture helper takes a
+`BackendContext`. The restart env is one-shot, so reverting it restores the
+`available=false` baseline that the "unsupported deployment" cases assert.
+
+The helper mirrors `apps/backend/cmd/deployment-secret-seed` — a test-support
+Go command that performs the same bootstrap and provision through
+`internal/secrets`. Specs cannot shell out to it: the shard image ships no Go
+toolchain and runs against the prebuilt backend artifact, so a spec that seeds a
+capable deployment asserts `available=true` and fails loudly if the two ever
+diverge.
+
+`sanitizeInheritedEnv` strips `KANDEV_SERVICE_MODE` along with the profile-owned
+`KANDEV_FEATURES_*`, `KANDEV_WEB_TITLE_PREFIX`, and
+`KANDEV_GITHUB_PERSONAL_STAR_OAUTH_*` namespaces. The suite is often launched
+from a kandev task running under a user service unit, and an inherited
+`KANDEV_SERVICE_MODE=user` makes `deploymentsecret.Available` reject the target,
+which would leave every personal-star deployment unsupported in a developer run.
+A spec that wants that rejection sets it explicitly through
+`backend.restart({ KANDEV_SERVICE_MODE: "user" })`.
+
 ## Mocked vs real
 
 - **Mocked**: Jira (`KANDEV_MOCK_JIRA=true`), Linear (`KANDEV_MOCK_LINEAR=true`), GitHub (`KANDEV_MOCK_GITHUB=true`), and the agent process itself (`KANDEV_MOCK_AGENT=only`). These are third-party services or external processes we don't want CI to depend on.

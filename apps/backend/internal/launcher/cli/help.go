@@ -9,6 +9,8 @@ Usage:
   kandev [--port <port>] [--verbose] [--debug]
   kandev --dev [--port <port>]
   kandev service install|uninstall|start|stop|restart|status|logs [--system]
+  kandev deployment-secret bootstrap [--data-dir <path>]
+  kandev deployment-secret github-personal-star provision|revoke [flags]
 
 Options:
   dev              Use local repo for dev (Go backend + Vite dev server).
@@ -23,6 +25,12 @@ Options:
   --debug          Retain debug logs in the backend file + agent message dumps.
   --headless       Skip opening the browser. Used by service units.
   --help, -h       Show help.
+
+Deployment secrets (root only):
+  The deployment-secret group creates the deployment root identity and
+  provisions or revokes the github-personal-star OAuth client secret through
+  the root-owned kandev-deployment-secretd socket. It refuses to run without
+  root; run "kandev deployment-secret --help" for the flags.
 
 Advanced:
   --backend-port         Same as --port.

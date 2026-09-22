@@ -21,6 +21,9 @@ func Run(args []string, build BuildInfo) int {
 	if len(args) > 0 && args[0] == "maintenance" {
 		return runMaintenance(args[1:], build)
 	}
+	if len(args) > 0 && args[0] == deploymentSecretGroupName {
+		return runDeploymentSecret(args[1:])
+	}
 	opts, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "[kandev] "+err.Error())

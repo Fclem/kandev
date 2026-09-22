@@ -25,4 +25,14 @@ func TestHelpDescribesPublicCommands(t *testing.T) {
 	if !strings.Contains(help, "info logs on stdout") || !strings.Contains(help, "debug logs in the backend file") {
 		t.Fatalf("help does not explain file/stdout diagnostics:\n%s", help)
 	}
+	for _, want := range []string{
+		"kandev deployment-secret bootstrap",
+		"kandev deployment-secret github-personal-star provision|revoke",
+		"root-owned kandev-deployment-secretd socket",
+		"kandev deployment-secret --help",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("help does not describe %q:\n%s", want, help)
+		}
+	}
 }

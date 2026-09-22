@@ -16,6 +16,10 @@ type GitHubOAuthTokens struct {
 	RefreshToken     string
 	AccessExpiresAt  time.Time
 	RefreshExpiresAt *time.Time
+	// GrantedScopes holds the scopes GitHub reports for this grant. An empty
+	// slice means the response carried no scope field, which callers must treat
+	// as "unknown" rather than "no scopes granted".
+	GrantedScopes []string
 }
 
 type GitHubOAuthUser struct {

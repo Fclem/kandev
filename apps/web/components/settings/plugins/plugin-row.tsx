@@ -13,6 +13,7 @@ import { Button } from "@kandev/ui/button";
 import { Switch } from "@kandev/ui/switch";
 import Link from "@/components/routing/app-link";
 import { PluginRepoLink } from "./plugin-repo-link";
+import { PluginRepositoryStar } from "./plugin-repository-star";
 import { PluginStatusBadge } from "./plugin-status-badge";
 import { PluginErrorDiagnostic } from "./plugin-error-diagnostic";
 import { PluginUninstallConfirmation } from "./uninstall-plugin-dialog";
@@ -65,6 +66,8 @@ type PluginRowProps = {
   isFinePointer?: boolean;
   /** True while this plugin's uninstall request is in flight. */
   uninstallBusy?: boolean;
+  /** The row's owning workspace, used to scope the repository star control. */
+  workspaceId?: string | null;
   onEnable: (plugin: PluginRecord) => void;
   onDisable: (plugin: PluginRecord) => void;
   onConfirmUninstall?: (plugin: PluginRecord) => void | Promise<void>;
@@ -94,6 +97,7 @@ export function PluginRow({
   canManage = true,
   isFinePointer = true,
   uninstallBusy = false,
+  workspaceId,
   onEnable,
   onDisable,
   onConfirmUninstall,
@@ -134,6 +138,7 @@ export function PluginRow({
         canDisable={canDisable}
         confirmingUninstall={confirmingUninstall}
         uninstallAnchorRef={uninstallAnchorRef}
+        workspaceId={workspaceId}
         onEnable={onEnable}
         onDisable={onDisable}
         onUninstall={requestUninstall}
@@ -169,6 +174,7 @@ type PluginRowContentProps = {
   canDisable: boolean;
   confirmingUninstall: boolean;
   uninstallAnchorRef: RefObject<HTMLButtonElement | null>;
+  workspaceId?: string | null;
   onEnable: (plugin: PluginRecord) => void;
   onDisable: (plugin: PluginRecord) => void;
   onUninstall: (plugin: PluginRecord) => void;
@@ -188,6 +194,7 @@ function PluginRowContent({
   canDisable,
   confirmingUninstall,
   uninstallAnchorRef,
+  workspaceId,
   onEnable,
   onDisable,
   onUninstall,
@@ -212,7 +219,12 @@ function PluginRowContent({
       */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <PluginRowIdentity plugin={plugin} needsSetup={needsSetup} update={update} />
+          <PluginRowIdentity
+            plugin={plugin}
+            needsSetup={needsSetup}
+            update={update}
+            workspaceId={workspaceId}
+          />
 
           <div className="flex w-full min-w-0 max-w-full items-center gap-2 sm:w-auto sm:shrink-0">
             {canManage && (
@@ -306,17 +318,19 @@ function usePluginUninstallConfirmation(
 
 /**
  * The row's name, state badges and identifiers. Everything here is inert and
- * sits under the card's overlay link, except the repo link, which raises
- * itself to z-10 to keep its own click.
+ * sits under the card's overlay link, except the star control and the repo
+ * link, which raise themselves to z-10 to keep their own click.
  */
 function PluginRowIdentity({
   plugin,
   needsSetup,
   update,
+  workspaceId,
 }: {
   plugin: PluginRecord;
   needsSetup: boolean;
   update?: PluginRowUpdateState;
+  workspaceId?: string | null;
 }) {
   const { t } = useTranslation();
   return (
@@ -353,6 +367,11 @@ function PluginRowIdentity({
           {plugin.id}
         </span>
         <span className="shrink-0 font-mono">v{plugin.version}</span>
+        <PluginRepositoryStar
+          workspaceId={workspaceId}
+          repositoryUrl={plugin.repo_url}
+          className="relative z-10"
+        />
         <PluginRepoLink url={plugin.repo_url} className="relative z-10" />
         <PluginUpdateInfo pluginId={plugin.id} update={update} />
       </div>

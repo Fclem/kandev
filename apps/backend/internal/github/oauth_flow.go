@@ -424,6 +424,7 @@ func (c *GitHubOAuthClient) exchangeTokens(ctx context.Context, form url.Values)
 		RefreshToken          string `json:"refresh_token"`
 		ExpiresIn             int64  `json:"expires_in"`
 		RefreshTokenExpiresIn int64  `json:"refresh_token_expires_in"`
+		Scope                 string `json:"scope"`
 		Error                 string `json:"error"`
 		ErrorDescription      string `json:"error_description"`
 	}
@@ -438,8 +439,9 @@ func (c *GitHubOAuthClient) exchangeTokens(ctx context.Context, form url.Values)
 	}
 	now := c.now().UTC()
 	tokens := GitHubOAuthTokens{
-		AccessToken:  body.AccessToken,
-		RefreshToken: body.RefreshToken,
+		AccessToken:   body.AccessToken,
+		RefreshToken:  body.RefreshToken,
+		GrantedScopes: NormalizeGitHubScopes(body.Scope),
 	}
 	if body.ExpiresIn > 0 {
 		tokens.AccessExpiresAt = now.Add(time.Duration(body.ExpiresIn) * time.Second)

@@ -7,13 +7,17 @@ import { useTranslation } from "react-i18next";
 import type { MarketplaceEntry } from "@/lib/types/plugins";
 import { MarketplacePreviewGallery } from "./marketplace-preview-gallery";
 import { PluginRepoLink } from "./plugin-repo-link";
+import { PluginRepositoryStar } from "./plugin-repository-star";
 
 export function CanvasMarketplaceDetail({
   entry,
+  workspaceId,
   onBack,
   onInstall,
 }: {
   entry: MarketplaceEntry;
+  /** The selected canvas workspace; never the implicit active workspace. */
+  workspaceId?: string | null;
   onBack: () => void;
   onInstall: () => void;
 }) {
@@ -50,7 +54,10 @@ export function CanvasMarketplaceDetail({
             <dt className="text-muted-foreground">{t("plugins:requiresVersion")}</dt>
             <dd>{entry.min_kandev_version || t("plugins:notSet")}</dd>
           </dl>
-          <PluginRepoLink url={entry.repo_url} className="inline-flex" />
+          <div className="flex flex-wrap items-center gap-3">
+            <PluginRepositoryStar workspaceId={workspaceId} repositoryUrl={entry.repo_url} />
+            <PluginRepoLink url={entry.repo_url} className="inline-flex" />
+          </div>
           <Button
             className="w-full cursor-pointer"
             onClick={onInstall}

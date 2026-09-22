@@ -18,10 +18,16 @@ type MarketplaceBrowserProps = {
   /** Installs a plugin from its package URL; resolves when the install settles. The result is unused here — failures already toast. */
   onInstallUrl: (url: string) => Promise<{ ok: boolean; error?: string }>;
   canManage?: boolean;
+  /** The owning workspace, threaded to each row's repository star control. */
+  workspaceId?: string | null;
 };
 
 /** The "Browse" tab: search/filter/sort the catalog and install from it. */
-export function MarketplaceBrowser({ onInstallUrl, canManage = true }: MarketplaceBrowserProps) {
+export function MarketplaceBrowser({
+  onInstallUrl,
+  canManage = true,
+  workspaceId,
+}: MarketplaceBrowserProps) {
   const [text, setText] = useState("");
   const [category, setCategory] = useState<string>(ALL_CATEGORIES);
   const [sort, setSort] = useState<CatalogQuery["sort"]>("stars");
@@ -76,6 +82,7 @@ export function MarketplaceBrowser({ onInstallUrl, canManage = true }: Marketpla
         installingId={installingId}
         onInstall={install}
         canManage={canManage}
+        workspaceId={workspaceId}
       />
 
       {canManage && (
@@ -208,6 +215,7 @@ type ListProps = {
   installingId: string | null;
   onInstall: (entry: MarketplaceEntry) => void;
   canManage: boolean;
+  workspaceId?: string | null;
 };
 
 function MarketplaceList({
@@ -218,6 +226,7 @@ function MarketplaceList({
   installingId,
   onInstall,
   canManage,
+  workspaceId,
 }: ListProps) {
   const { t } = useTranslation();
   if (error) {
@@ -254,6 +263,7 @@ function MarketplaceList({
             busy={installingId === entry.id}
             onInstall={onInstall}
             canManage={canManage}
+            workspaceId={workspaceId}
           />
         ))}
       </div>

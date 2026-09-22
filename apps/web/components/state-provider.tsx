@@ -139,6 +139,11 @@ export function useAppStoreApi() {
   return store;
 }
 
+/**
+ * The store API when a provider is present, or null in a render tree that has
+ * none (unit tests, isolated previews). Callers must degrade to a
+ * non-assertive UI rather than assume a store exists.
+ */
 export function useOptionalAppStoreApi() {
   return useContext(StoreContext);
 }

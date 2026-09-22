@@ -26,6 +26,7 @@ import { useCanvasInstall } from "@/hooks/domains/canvas/use-canvas-install";
 import { canvasHref } from "@/lib/api/domains/canvas-api";
 import type { MarketplaceEntry } from "@/lib/types/plugins";
 import { MarketplacePreviewGallery } from "./marketplace-preview-gallery";
+import { PluginRepositoryStar } from "./plugin-repository-star";
 
 type InstallMode = "upload" | "url";
 
@@ -182,7 +183,11 @@ export function CanvasInstallDialog({
         </p>
       )}
       {install.review && !install.result && (
-        <InstallReviewCard review={install.review} workspaceName={workspaceName} />
+        <InstallReviewCard
+          review={install.review}
+          workspaceId={workspaceId}
+          workspaceName={workspaceName}
+        />
       )}
       {install.result && (
         <div
@@ -264,9 +269,12 @@ export function CanvasInstallDialog({
 
 function InstallReviewCard({
   review,
+  workspaceId,
   workspaceName,
 }: {
   review: NonNullable<ReturnType<typeof useCanvasInstall>["review"]>;
+  /** The dialog's selected workspace, which is where the canvas will install. */
+  workspaceId: string;
   workspaceName?: string;
 }) {
   const { t } = useTranslation();
@@ -322,6 +330,9 @@ function InstallReviewCard({
           </>
         )}
       </dl>
+      {/* The reviewed package's repository is only starrable while the dialog's
+          workspace has a usable dedicated connection; otherwise nothing renders. */}
+      <PluginRepositoryStar workspaceId={workspaceId} repositoryUrl={metadata.repo_url} />
       <div className="space-y-2">
         <h4 className="text-sm font-medium">{t("plugins:packagePermissions")}</h4>
         <div className="grid gap-2 sm:grid-cols-2">

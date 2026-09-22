@@ -472,6 +472,71 @@ const createTablesSQL = `
 	);
 `
 
+// personalStarTablesSQL holds the dedicated personal-star OAuth App schema.
+// These rows are keyed by (workspace_id, user_id) and never shared with the
+// GitHub App installation or user-connection tables.
+const personalStarTablesSQL = `
+	CREATE TABLE IF NOT EXISTS github_personal_star_lifecycle (
+		workspace_id TEXT NOT NULL CHECK (workspace_id <> ''),
+		user_id TEXT NOT NULL CHECK (user_id <> ''),
+		revision BIGINT NOT NULL CHECK (revision >= 0),
+		credential_generation BIGINT NOT NULL CHECK (credential_generation >= 0),
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (workspace_id, user_id)
+	);
+	CREATE TABLE IF NOT EXISTS github_personal_star_connection (
+		workspace_id TEXT NOT NULL CHECK (workspace_id <> ''),
+		user_id TEXT NOT NULL CHECK (user_id <> ''),
+		login TEXT NOT NULL DEFAULT '',
+		github_user_id BIGINT NOT NULL DEFAULT 0,
+		granted_scopes TEXT NOT NULL DEFAULT '',
+		public_repo INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL CHECK (status IN ('active', 'inactive')),
+		credential_generation BIGINT NOT NULL DEFAULT 0 CHECK (credential_generation >= 0),
+		lifecycle_revision BIGINT NOT NULL DEFAULT 0 CHECK (lifecycle_revision >= 0),
+		access_secret_id TEXT,
+		refresh_secret_id TEXT,
+		access_secret_generation BIGINT NOT NULL DEFAULT 0 CHECK (access_secret_generation >= 0),
+		refresh_secret_generation BIGINT NOT NULL DEFAULT 0 CHECK (refresh_secret_generation >= 0),
+		last_reconnect_outcome TEXT NOT NULL DEFAULT '',
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (workspace_id, user_id)
+	);
+	CREATE TABLE IF NOT EXISTS github_personal_star_flow (
+		state_sha256 TEXT PRIMARY KEY CHECK (state_sha256 <> ''),
+		flow_kind TEXT NOT NULL CHECK (flow_kind = 'github-personal-star'),
+		workspace_id TEXT NOT NULL CHECK (workspace_id <> ''),
+		user_id TEXT NOT NULL CHECK (user_id <> ''),
+		session_subject TEXT NOT NULL,
+		session_id TEXT,
+		expected_revision BIGINT NOT NULL CHECK (expected_revision >= 0),
+		expected_generation BIGINT NOT NULL CHECK (expected_generation >= 0),
+		code_verifier TEXT NOT NULL CHECK (code_verifier <> ''),
+		code_challenge TEXT NOT NULL CHECK (code_challenge <> ''),
+		redirect_uri TEXT NOT NULL CHECK (redirect_uri <> ''),
+		return_path TEXT NOT NULL CHECK (return_path <> ''),
+		created_at DATETIME NOT NULL,
+		expires_at DATETIME NOT NULL,
+		consumed_at DATETIME
+	);
+	CREATE TABLE IF NOT EXISTS github_personal_star_cleanup (
+		id TEXT PRIMARY KEY,
+		workspace_id TEXT NOT NULL CHECK (workspace_id <> ''),
+		user_id TEXT NOT NULL CHECK (user_id <> ''),
+		secret_id TEXT NOT NULL CHECK (secret_id <> ''),
+		secret_kind TEXT NOT NULL CHECK (secret_kind <> ''),
+		credential_generation BIGINT NOT NULL CHECK (credential_generation >= 0),
+		attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+		next_attempt_at DATETIME NOT NULL,
+		claim_lease_until DATETIME,
+		status TEXT NOT NULL CHECK (status IN ('pending', 'terminal')),
+		last_error TEXT NOT NULL DEFAULT '',
+		created_at DATETIME NOT NULL,
+		UNIQUE (workspace_id, user_id, secret_id, credential_generation)
+	);
+`
+
 const appRegistrationTablesSQL = `
 	CREATE TABLE IF NOT EXISTS github_app_registrations (
 		id TEXT PRIMARY KEY CHECK (id <> ''),
@@ -1131,6 +1196,9 @@ func (s *Store) initCoreSchema() error {
 	if err := s.initAppRegistrationSchema(); err != nil {
 		return err
 	}
+	if err := s.initPersonalStarSchema(); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(schemaSQLForDriver(createTablesSQL, s.db.DriverName()))
 	return err
 }
@@ -1138,6 +1206,13 @@ func (s *Store) initCoreSchema() error {
 func (s *Store) initAppRegistrationSchema() error {
 	if _, err := s.db.Exec(schemaSQLForDriver(appRegistrationTablesSQL, s.db.DriverName())); err != nil {
 		return fmt.Errorf("initialize GitHub App registration schema: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) initPersonalStarSchema() error {
+	if _, err := s.db.Exec(schemaSQLForDriver(personalStarTablesSQL, s.db.DriverName())); err != nil {
+		return fmt.Errorf("initialize personal star schema: %w", err)
 	}
 	return nil
 }

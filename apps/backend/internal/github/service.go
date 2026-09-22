@@ -184,6 +184,7 @@ type Service struct {
 	freshDefaultsDone      bool
 	rateCoordinator        *RateCoordinator
 	personalStarResolver  PersonalStarResolver
+	personalStarOAuth     PersonalStarOAuthCoordinator
 
 	// cleanupFailureMu guards cleanupFailureCounts; the cleanup loop is the
 	// only writer but the global sweep + per-watch sweep can run concurrently

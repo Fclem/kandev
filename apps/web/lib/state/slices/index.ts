@@ -21,7 +21,11 @@ export {
   defaultCoordinatorsState,
 } from "./coordinators/coordinators-slice";
 export { createSystemSlice, defaultSystemState } from "./system/system-slice";
-export { createPluginsSlice, defaultPluginsState } from "./plugins/plugins-slice";
+export {
+  createPluginsSlice,
+  defaultPluginsState,
+  defaultPluginStarsState,
+} from "./plugins/plugins-slice";
 export { createReviewSlice, defaultReviewState } from "./review/review-slice";
 export {
   createNeedsYouInboxSlice,
@@ -101,6 +105,9 @@ export type {
   PluginsSliceState,
   PluginsSliceActions,
   PluginsState,
+  PluginStarsState,
+  PluginStarValue,
+  PluginStarConnectionEntry,
 } from "./plugins/types";
 export type { ReviewSlice, ReviewSliceActions, ReviewSliceState } from "./review/types";
 export type {

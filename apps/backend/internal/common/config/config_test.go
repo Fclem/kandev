@@ -579,3 +579,30 @@ func TestAuthCookieNameEnvOverridesFile(t *testing.T) {
 		t.Fatalf("auth.cookieName = %q, want env override %q", got, "env_session")
 	}
 }
+
+func TestPersonalStarOAuthValidationNeverBlocksStartup(t *testing.T) {
+	for name, group := range map[string]PersonalStarOAuthConfig{
+		"partial group": {ClientID: "client-id"},
+		"insecure callback": {
+			ClientID:        "client-id",
+			ClientSecretRef: "kandev-runtime:github-personal-star:client-secret:1",
+			CallbackURL:     "http://kandev.example/api/v1/github/user/starred/oauth/callback",
+		},
+	} {
+		if err := group.Validate(); err == nil {
+			t.Fatalf("Validate(%s) succeeded, want an unavailable-feature error", name)
+		}
+	}
+
+	valid := PersonalStarOAuthConfig{
+		ClientID:        "client-id",
+		ClientSecretRef: "kandev-runtime:github-personal-star:client-secret:1",
+		CallbackURL:     "https://kandev.example/api/v1/github/user/starred/oauth/callback",
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("Validate() rejected a complete group: %v", err)
+	}
+	if err := (PersonalStarOAuthConfig{}).Validate(); err != nil {
+		t.Fatalf("Validate() rejected an unset group: %v", err)
+	}
+}

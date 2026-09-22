@@ -18,6 +18,9 @@ import { PluginConfigForm } from "./plugin-config-form";
 import { PluginManifestCard } from "./plugin-manifest-card";
 import { PluginShortcutsCard } from "./plugin-shortcuts-card";
 import { PluginRepoLink } from "./plugin-repo-link";
+import { PluginRepositoryStar } from "./plugin-repository-star";
+import { usePluginStarConnectionOutcome } from "@/hooks/domains/plugins/use-plugin-repository-stars";
+import { useAppStore } from "@/components/state-provider";
 import { PluginStatusBadge } from "./plugin-status-badge";
 import { PluginCapabilityApproval } from "./plugin-capability-approval";
 import { PluginErrorDiagnostic } from "./plugin-error-diagnostic";
@@ -42,6 +45,10 @@ export function PluginDetail({ pluginId }: { pluginId: string }) {
   const { items, loaded } = usePlugins();
   const router = useRouter();
   const { isFinePointer } = useResponsiveBreakpoint();
+  // This page is a valid Settings > Plugins return path for the star flow, and
+  // the workspace it scopes the control to is passed down explicitly.
+  const workspaceId = useAppStore((state) => state.workspaces.activeId);
+  usePluginStarConnectionOutcome();
   const actions = usePluginActions();
   const plugin = items.find((p) => p.id === pluginId) ?? null;
   const [confirmingUninstall, setConfirmingUninstall] = useState(false);
@@ -63,7 +70,7 @@ export function PluginDetail({ pluginId }: { pluginId: string }) {
 
   return (
     <div className="space-y-6" data-testid={`plugin-detail-${plugin.id}`}>
-      <PluginDetailHeader plugin={plugin} />
+      <PluginDetailHeader plugin={plugin} workspaceId={workspaceId} />
       <Separator />
 
       {canManage && (
@@ -119,9 +126,10 @@ export function PluginDetail({ pluginId }: { pluginId: string }) {
 
 type PluginDetailHeaderProps = {
   plugin: PluginRecord;
+  workspaceId: string | null;
 };
 
-function PluginDetailHeader({ plugin }: PluginDetailHeaderProps) {
+function PluginDetailHeader({ plugin, workspaceId }: PluginDetailHeaderProps) {
   const { t } = useTranslation();
   return (
     <div className="space-y-3">
@@ -153,6 +161,7 @@ function PluginDetailHeader({ plugin }: PluginDetailHeaderProps) {
             <span className="font-mono">
               {plugin.id} · v{plugin.version}
             </span>
+            <PluginRepositoryStar workspaceId={workspaceId} repositoryUrl={plugin.repo_url} />
             <PluginRepoLink url={plugin.repo_url} />
           </div>
           {plugin.description && (

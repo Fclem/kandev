@@ -182,7 +182,10 @@ type PersonalStarOAuthConfig struct {
 	CallbackURL     string `mapstructure:"callbackURL"`
 }
 
-func (c PersonalStarOAuthConfig) validate() error {
+// Validate enforces the dedicated personal-star OAuth App rules. Callers must
+// treat a failure as "feature unavailable" rather than a startup failure: an
+// invalid group must never prevent the backend from starting.
+func (c PersonalStarOAuthConfig) Validate() error {
 	clientID := strings.TrimSpace(c.ClientID)
 	secretRef := strings.TrimSpace(c.ClientSecretRef)
 	callbackURL := strings.TrimSpace(c.CallbackURL)
@@ -1043,10 +1046,8 @@ func validate(cfg *Config) error {
 
 	// Docker validation - optional (agent features disabled if not available)
 
-	if err := cfg.GitHub.PersonalStarOAuth.validate(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	// No validation needed - will gracefully degrade
+	// github.personalStarOAuth is validated by the GitHub provider, which
+	// reports the feature unavailable instead of failing startup.
 
 	// Auth validation - generate random secret if not set (dev mode)
 	if cfg.Auth.JWTSecret == "" {

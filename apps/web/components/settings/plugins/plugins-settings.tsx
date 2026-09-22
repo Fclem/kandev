@@ -7,7 +7,9 @@ import { Button } from "@kandev/ui/button";
 import { Switch } from "@kandev/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kandev/ui/tabs";
 import { SettingsPageTemplate } from "@/components/settings/settings-page-template";
+import { useAppStore } from "@/components/state-provider";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
+import { usePluginStarConnectionOutcome } from "@/hooks/domains/plugins/use-plugin-repository-stars";
 import { useAutoUpdateSettings } from "@/hooks/domains/plugins/use-auto-update-settings";
 import { useIsAdmin } from "@/hooks/domains/auth/use-is-admin";
 import { useFeature } from "@/hooks/domains/features/use-feature";
@@ -35,6 +37,9 @@ export function PluginsSettings() {
   const canManage = useIsAdmin();
   const canvasesEnabled = useFeature("canvases");
   const { isFinePointer } = useResponsiveBreakpoint();
+  // Every Settings > Plugins surface passes this workspace into the star
+  // control explicitly; nothing reads the active workspace on its behalf.
+  const workspaceId = useAppStore((state) => state.workspaces.activeId);
   const list = usePlugins();
   const actions = usePluginActions();
   const autoUpdate = useAutoUpdateSettings();
@@ -46,6 +51,7 @@ export function PluginsSettings() {
     installedIds,
     updates.markUpdated,
   );
+  usePluginStarConnectionOutcome();
 
   const handleMarketplaceInstall = async (url: string) => {
     const result = await actions.marketplaceInstall(url);
@@ -95,11 +101,16 @@ export function PluginsSettings() {
             canManage={canManage}
             updateAction={updateAction}
             isFinePointer={isFinePointer}
+            workspaceId={workspaceId}
           />
         </TabsContent>
 
         <TabsContent value="browse">
-          <MarketplaceBrowser onInstallUrl={handleMarketplaceInstall} canManage={canManage} />
+          <MarketplaceBrowser
+            onInstallUrl={handleMarketplaceInstall}
+            canManage={canManage}
+            workspaceId={workspaceId}
+          />
         </TabsContent>
 
         {canvasesEnabled && (
@@ -131,6 +142,7 @@ type InstalledTabProps = {
   updates: ReturnType<typeof usePluginUpdates>;
   updateAction: ReturnType<typeof usePluginUpdateAction>;
   isFinePointer: boolean;
+  workspaceId: string | null;
 };
 
 /** The Installed tab: auto-update toggle, sync/install toolbar, update status, sync errors, and the plugin list. */
@@ -142,6 +154,7 @@ function InstalledTab({
   canManage,
   updateAction,
   isFinePointer,
+  workspaceId,
 }: InstalledTabProps) {
   return (
     <section className="min-w-0 space-y-3" aria-labelledby="installed-plugins-heading">
@@ -175,6 +188,7 @@ function InstalledTab({
         canManage={canManage}
         updateAction={updateAction}
         isFinePointer={isFinePointer}
+        workspaceId={workspaceId}
       />
     </section>
   );
@@ -275,6 +289,7 @@ type PluginListProps = {
   updates: ReturnType<typeof usePluginUpdates>;
   updateAction: ReturnType<typeof usePluginUpdateAction>;
   isFinePointer: boolean;
+  workspaceId: string | null;
 };
 
 function PluginList({
@@ -285,6 +300,7 @@ function PluginList({
   canManage,
   updateAction,
   isFinePointer,
+  workspaceId,
 }: PluginListProps) {
   const { t } = useTranslation();
   const { items, loaded, loading, error } = list;
@@ -337,6 +353,7 @@ function PluginList({
             canManage={canManage}
             isFinePointer={isFinePointer}
             uninstallBusy={actions.uninstallBusy}
+            workspaceId={workspaceId}
             onEnable={actions.handleEnable}
             onDisable={actions.handleDisable}
             onConfirmUninstall={async (target) => {

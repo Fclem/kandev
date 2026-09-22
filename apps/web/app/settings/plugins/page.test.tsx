@@ -84,6 +84,26 @@ vi.mock("@/lib/plugins/host-api", () => ({
   buildHostApi: (pluginId: string) => ({ pluginId }),
 }));
 
+// The plugin rows now compose the repository star control, which reads the
+// dedicated star connection. This suite is about the installed/browse flows, so
+// the star endpoints report an unsupported deployment and render nothing.
+vi.mock("@/lib/api/domains/github-api", () => ({
+  fetchGitHubStarConnection: () =>
+    Promise.resolve({
+      user_id: "user-1",
+      credential_generation: 1,
+      active: false,
+      capable: false,
+      reconnect_required: false,
+      available: false,
+    }),
+  fetchGitHubStarStates: () => Promise.resolve({ states: {} }),
+  startGitHubStarConnection: () =>
+    Promise.resolve({ authorization_url: "", state_expires_at: "2026-09-22T10:00:00Z" }),
+  starGitHubRepository: () => Promise.resolve({ starred: true }),
+  unstarGitHubRepository: () => Promise.resolve({ starred: false }),
+}));
+
 vi.mock("@/components/theme/app-theme", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
 }));
@@ -94,6 +114,14 @@ vi.mock("@/components/state-provider", () => ({
   useAppStoreApi: () => ({
     getState: () => storeState,
     setState: vi.fn(),
+    subscribe: vi.fn(() => () => {}),
+  }),
+  useOptionalAppStore: (
+    selector: (state: Record<string, unknown>) => unknown,
+    fallback: unknown,
+  ) => selector(storeState) ?? fallback,
+  useOptionalAppStoreApi: () => ({
+    getState: () => storeState,
     subscribe: vi.fn(() => () => {}),
   }),
 }));
@@ -148,7 +176,11 @@ function setStoreState(plugins: PluginRecord[]) {
   storeState = {
     auth: { user: null },
     features: { canvases: false },
+    workspaces: { activeId: "workspace-1" },
     plugins: { items: plugins, loading: false, loaded: true, error: null },
+    pluginStars: { connections: {}, values: {}, epochs: {}, pending: {}, busy: {} },
+    beginPluginStarConnectionRequest: () => 1,
+    applyPluginStarConnection: () => true,
     setPlugins: vi.fn(),
     setPluginsLoading: vi.fn(),
     setPluginsError: vi.fn(),

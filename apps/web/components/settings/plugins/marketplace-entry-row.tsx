@@ -9,6 +9,7 @@ import { formatNumber } from "@/lib/i18n/formats";
 import type { MarketplaceEntry } from "@/lib/types/plugins";
 import { SETTINGS_TYPOGRAPHY } from "@/components/settings/settings-typography";
 import { PluginRepoLink } from "./plugin-repo-link";
+import { PluginRepositoryStar } from "./plugin-repository-star";
 import { MarketplacePreviewGallery } from "./marketplace-preview-gallery";
 
 // Id of the built-in official source (marketplace.officialSourceID). Entries
@@ -20,6 +21,8 @@ type MarketplaceEntryRowProps = {
   busy: boolean;
   onInstall: (entry: MarketplaceEntry) => void;
   canManage?: boolean;
+  /** The catalog surface's owning workspace, used to scope the star control. */
+  workspaceId?: string | null;
 };
 
 /** One catalog card: a neutral tile, metadata, stars, and an install-state action. */
@@ -28,6 +31,7 @@ export function MarketplaceEntryRow({
   busy,
   onInstall,
   canManage = true,
+  workspaceId,
 }: MarketplaceEntryRowProps) {
   return (
     <div
@@ -83,7 +87,10 @@ export function MarketplaceEntryRow({
             {cat}
           </Badge>
         ))}
-        <PluginRepoLink url={entry.repo_url} className="ml-auto" />
+        <span className="ml-auto inline-flex items-center gap-3">
+          <PluginRepositoryStar workspaceId={workspaceId} repositoryUrl={entry.repo_url} />
+          <PluginRepoLink url={entry.repo_url} />
+        </span>
       </div>
     </div>
   );

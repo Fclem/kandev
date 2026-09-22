@@ -34,6 +34,7 @@ import { invalidateIntegrationAvailabilityAfter } from "@/lib/integrations/integ
 
 export * from "./github-auth-api";
 export * from "./github-pr-api";
+export * from "./github-star-api";
 
 // Token configuration
 export async function configureGitHubToken(workspaceId: string, token: string) {

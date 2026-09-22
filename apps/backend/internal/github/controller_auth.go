@@ -385,8 +385,11 @@ func githubAuthErrorResponse(err error) (int, string) {
 		status, code = http.StatusUnauthorized, "github_credential_denied"
 	case errors.Is(err, ErrInvalidToken):
 		status, code = http.StatusBadRequest, "github_invalid_token"
-	case errors.Is(err, ErrInvalidGitHubRepositoryURL):
+	case errors.Is(err, ErrInvalidGitHubRepositoryURL), errors.Is(err, ErrPersonalStarInvalidCallback),
+		errors.Is(err, ErrPersonalStarReturnPath), errors.Is(err, ErrPersonalStarFlowUnavailable):
 		status, code = http.StatusBadRequest, "github_invalid_request"
+	case errors.Is(err, ErrPersonalStarFence):
+		status, code = http.StatusConflict, "github_connection_changed"
 	}
 	return status, code
 }

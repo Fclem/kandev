@@ -86,6 +86,7 @@ export function CanvasMarketplace() {
       <div className="space-y-4">
         <CanvasMarketplaceDetail
           entry={selected}
+          workspaceId={workspaceId}
           onBack={() => setSelected(null)}
           onInstall={() => {
             setInstallEntry(selected);

@@ -21,3 +21,16 @@ func TestAvailabilityAcceptsLinuxSystemService(t *testing.T) {
 		t.Fatal("Available() = false")
 	}
 }
+
+func TestValidateTargetExplainsUnavailableDeploymentSecretTargets(t *testing.T) {
+	for _, target := range []Target{
+		{GOOS: "darwin", BackendUID: 1000},
+		{GOOS: linuxOS, BackendUID: 0},
+		{GOOS: linuxOS, BackendUID: 1000, Container: true},
+		{GOOS: linuxOS, BackendUID: 1000, UserSystemd: true},
+	} {
+		if err := ValidateTarget(target); err == nil {
+			t.Fatalf("ValidateTarget(%+v) succeeded, want unavailable target error", target)
+		}
+	}
+}

@@ -26,6 +26,9 @@ type MockController struct {
 	eventBus bus.EventBus
 	logger   *logger.Logger
 	service  *Service
+	// starControls mounts the dedicated personal-star controls. Registration
+	// requires both the E2E profile selector and a MockClient.
+	starControls bool
 }
 
 // NewMockController creates a new MockController.
@@ -40,6 +43,9 @@ func NewMockController(mock *MockClient, store *Store, eventBus bus.EventBus, sv
 // RegisterRoutes registers all mock control HTTP routes.
 func (c *MockController) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api/v1/github/mock")
+	if c.starControls {
+		c.registerPersonalStarRoutes(api)
+	}
 	api.PUT("/user", c.setUser)
 	api.POST("/prs", c.addPRs)
 	api.POST("/issues", c.addIssues)

@@ -12,12 +12,25 @@ type PersonalStarDeploymentStatus struct {
 	Settings  PersonalStarOAuthSettings
 }
 
+// PersonalStarClientBuilder turns a resolved access token into the narrow star
+// client. Production uses the GitHub REST client; E2E mock runs substitute
+// MockClient state so no provider call leaves the process.
+type PersonalStarClientBuilder func(token, workspaceID, userID string) PersonalStarClient
+
 // PersonalStarResolverService resolves only dedicated OAuth App star
 // connections. Every other credential source fails closed.
 type PersonalStarResolverService struct {
 	store      *Store
 	secrets    PersonalStarSecrets
 	deployment PersonalStarDeploymentStatus
+	builder    PersonalStarClientBuilder
+}
+
+// SetClientBuilder overrides star client construction.
+func (r *PersonalStarResolverService) SetClientBuilder(builder PersonalStarClientBuilder) {
+	if r != nil {
+		r.builder = builder
+	}
 }
 
 // NewPersonalStarResolverService wires the strict dedicated resolver.
@@ -94,6 +107,9 @@ func (r *PersonalStarResolverService) ResolvePersonalStarClient(
 	token, err := r.secrets.Reveal(ctx, connection.AccessSecretID)
 	if err != nil || strings.TrimSpace(token) == "" {
 		return nil, ErrGitHubPersonalRequired
+	}
+	if r.builder != nil {
+		return r.builder(token, workspaceID, userID), nil
 	}
 	return NewPersonalStarClient(token), nil
 }

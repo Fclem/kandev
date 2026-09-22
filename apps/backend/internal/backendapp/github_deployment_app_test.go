@@ -43,7 +43,7 @@ func TestGitHubAppBootLoadsCatalogRegistrationFromEncryptedStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedService, cleanupGitHub, err := github.Provide(database, database, nil, nil, log)
+	seedService, cleanupGitHub, err := github.Provide(database, database, nil, nil, nil, log, github.PersonalStarDeployment{})
 	if err != nil {
 		t.Fatal(err)
 	}

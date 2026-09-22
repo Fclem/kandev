@@ -26,6 +26,19 @@ type PersonalStarResolver interface {
 	ResolvePersonalStarClient(context.Context, string, string) (PersonalStarClient, error)
 }
 
+// SetPersonalStarClientBuilder overrides how a resolved dedicated access token
+// becomes a star client. Only the E2E mock runtime substitutes it.
+func (s *Service) SetPersonalStarClientBuilder(builder PersonalStarClientBuilder) {
+	if s == nil {
+		return
+	}
+	if setter, ok := s.personalStarResolver.(interface {
+		SetClientBuilder(PersonalStarClientBuilder)
+	}); ok {
+		setter.SetClientBuilder(builder)
+	}
+}
+
 func (s *Service) SetPersonalStarResolver(resolver PersonalStarResolver) {
 	if s != nil {
 		s.personalStarResolver = resolver

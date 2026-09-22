@@ -119,6 +119,7 @@ type mockReviewWatchResponses struct {
 // MockClient implements Client with in-memory configurable data for E2E testing.
 // All data is protected by a sync.RWMutex for thread safety.
 type MockClient struct {
+	starState     *mockStarState
 	mu            sync.RWMutex
 	user          string
 	authenticated bool
@@ -188,6 +189,7 @@ type mockGist struct {
 // NewMockClient creates a new MockClient with default values.
 func NewMockClient() *MockClient {
 	return &MockClient{
+		starState:         newMockStarState(),
 		user:              mockDefaultUser,
 		authenticated:     true,
 		prs:               make(map[prKey]*PR),

@@ -103,6 +103,7 @@ type Services struct {
 	Workflow      *workflowservice.Service
 	GitHub        *github.Service
 	GitLab        *gitlab.Service
+	GitHubCleanup func() error
 	GitLabCleanup func() error
 	Jira          *jira.Service
 	Linear        *linear.Service

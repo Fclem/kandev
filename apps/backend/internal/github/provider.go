@@ -4,11 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
-	"github.com/kandev/kandev/internal/events/bus"
 )
 
 // rateLimitSeedTimeout caps the startup `gh api rate_limit` probe so a slow
@@ -47,41 +45,6 @@ func wireRateAdmission(client Client, admission *RateAdmission) {
 	case *GHClient:
 		c.withRateAdmission(admission)
 	}
-}
-
-// Provide creates the full GitHub integration stack: store, client, and service.
-// Returns the service, a cleanup function, and any error.
-func Provide(
-	writer, reader *sqlx.DB,
-	secrets SecretProvider,
-	eventBus bus.EventBus,
-	log *logger.Logger,
-) (*Service, func() error, error) {
-	store, err := NewStore(writer, reader)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ctx := context.Background()
-	client, authMethod, err := NewClient(ctx, secrets, log)
-	if err != nil {
-		// Not fatal — service works with nil client (unauthenticated).
-		log.Warn("GitHub client not available: " + err.Error())
-	}
-
-	svc := NewService(client, authMethod, secrets, store, eventBus, log)
-	attachRateTracker(client, svc.RateTracker(), log)
-	svc.subscribeTaskEvents()
-
-	cleanup := func() error {
-		// Stop background goroutines (currently the per-workspace
-		// stale-PR refreshes) before tearing down event subs so an
-		// in-flight refresh's DB writes don't race with shutdown.
-		svc.Stop()
-		svc.unsubscribeTaskEvents()
-		return nil
-	}
-	return svc, cleanup, nil
 }
 
 func clientRateTracker(client Client) *RateTracker {

@@ -21,6 +21,21 @@ func newFakePersonalStarSecrets() *fakePersonalStarSecrets {
 	return &fakePersonalStarSecrets{values: map[string]string{}}
 }
 
+// ListIDs satisfies ConnectionSecretStore so the same fake can back Provide.
+func (f *fakePersonalStarSecrets) ListIDs(context.Context) ([]string, error) {
+	ids := make([]string, 0, len(f.values))
+	for id := range f.values {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// Exists satisfies ConnectionSecretStore so the same fake can back Provide.
+func (f *fakePersonalStarSecrets) Exists(_ context.Context, id string) (bool, error) {
+	_, ok := f.values[id]
+	return ok, nil
+}
+
 func (f *fakePersonalStarSecrets) Reveal(_ context.Context, id string) (string, error) {
 	value, ok := f.values[id]
 	if !ok {

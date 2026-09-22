@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -34,7 +35,13 @@ func RegisterMockRoutes(router *gin.Engine, svc *Service, log *logger.Logger) {
 		return
 	}
 	ctrl := NewMockController(mock, svc.TestStore(), svc.TestEventBus(), svc, log)
+	ctrl.starControls = personalStarE2EControlsEnabled(mock, os.Getenv)
 	ctrl.RegisterRoutes(router)
+	if ctrl.starControls {
+		svc.SetPersonalStarClientBuilder(func(_ string, workspaceID, userID string) PersonalStarClient {
+			return mock.PersonalStarClientFor(workspaceID, userID)
+		})
+	}
 	log.Info("registered GitHub mock control endpoints")
 }
 

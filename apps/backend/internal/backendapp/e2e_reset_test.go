@@ -194,15 +194,29 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 		CREATE TABLE github_workspace_connections (workspace_id TEXT PRIMARY KEY);
 		CREATE TABLE github_user_connections (workspace_id TEXT, user_id TEXT);
 		CREATE TABLE github_auth_flows (state_hash TEXT PRIMARY KEY, workspace_id TEXT);
+		CREATE TABLE github_personal_star_lifecycle (workspace_id TEXT PRIMARY KEY);
+		CREATE TABLE github_personal_star_connection (workspace_id TEXT PRIMARY KEY);
+		CREATE TABLE github_personal_star_flow (state_sha256 TEXT PRIMARY KEY, workspace_id TEXT);
+		CREATE TABLE github_personal_star_cleanup (id TEXT PRIMARY KEY, workspace_id TEXT, status TEXT);
 		CREATE TABLE secrets (id TEXT PRIMARY KEY);
 		INSERT INTO github_workspace_connections VALUES ('ws-1'), ('ws-2');
 		INSERT INTO github_user_connections VALUES ('ws-1', 'user-1'), ('ws-2', 'user-2');
 		INSERT INTO github_auth_flows VALUES ('state-1', 'ws-1'), ('state-2', 'ws-2');
+		INSERT INTO github_personal_star_lifecycle VALUES ('ws-1'), ('ws-2');
+		INSERT INTO github_personal_star_connection VALUES ('ws-1'), ('ws-2');
+		INSERT INTO github_personal_star_flow VALUES ('flow-1', 'ws-1'), ('flow-2', 'ws-2');
+		INSERT INTO github_personal_star_cleanup VALUES
+			('cleanup-1', 'ws-1', 'pending'), ('cleanup-2', 'ws-1', 'terminal'), ('cleanup-3', 'ws-2', 'pending');
 		INSERT INTO secrets VALUES
 			('github:workspace:ws-1:pat'),
 			('github:user:ws-1:user-1:access'),
 			('github:user:ws-1:user-1:refresh'),
-			('github:workspace:ws-2:pat')
+			('github-personal-star:access:ws-1:user-1:1'),
+			('github-personal-star:refresh:ws-1:user-1:1'),
+			('github-personal-star:access:ws-1:user-1:2'),
+			('github:workspace:ws-2:pat'),
+			('github-personal-star:access:ws-2:user-2:1'),
+			('github-personal-star:refresh:ws-2:user-2:1')
 	`); err != nil {
 		t.Fatalf("seed database: %v", err)
 	}
@@ -212,10 +226,15 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 	}
 	for _, table := range []string{
 		"github_workspace_connections", "github_user_connections", "github_auth_flows",
+		"github_personal_star_lifecycle", "github_personal_star_connection", "github_personal_star_flow",
 	} {
 		assertWorkspaceRows(t, database, table, "ws-1", 0)
 		assertWorkspaceRows(t, database, table, "ws-2", 1)
 	}
+	// Cleanup rows cover both queue states and, like every other star row, are
+	// scoped to the reset workspace.
+	assertWorkspaceRows(t, database, "github_personal_star_cleanup", "ws-1", 0)
+	assertWorkspaceRows(t, database, "github_personal_star_cleanup", "ws-2", 1)
 	var ws1Secrets, ws2Secrets int
 	if err := database.Get(&ws1Secrets,
 		`SELECT COUNT(*) FROM secrets WHERE id = ? OR substr(id, 1, length(?)) = ?`,
@@ -229,6 +248,20 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 	}
 	if ws1Secrets != 0 || ws2Secrets != 1 {
 		t.Fatalf("secret counts = ws-1:%d ws-2:%d, want 0 and 1", ws1Secrets, ws2Secrets)
+	}
+	// Every generation-specific star secret of the reset workspace must be gone
+	// while the other workspace keeps both of its own.
+	var ws1StarSecrets, ws2StarSecrets int
+	if err := database.Get(&ws1StarSecrets,
+		`SELECT COUNT(*) FROM secrets WHERE id LIKE 'github-personal-star:%ws-1:%'`); err != nil {
+		t.Fatalf("count reset star secrets: %v", err)
+	}
+	if err := database.Get(&ws2StarSecrets,
+		`SELECT COUNT(*) FROM secrets WHERE id LIKE 'github-personal-star:%ws-2:%'`); err != nil {
+		t.Fatalf("count preserved star secrets: %v", err)
+	}
+	if ws1StarSecrets != 0 || ws2StarSecrets != 2 {
+		t.Fatalf("star secret counts = ws-1:%d ws-2:%d, want 0 and 2", ws1StarSecrets, ws2StarSecrets)
 	}
 }
 

@@ -799,6 +799,13 @@ func deleteGitHubAuthForReset(ctx context.Context, database *sql.DB, workspaceID
 		`DELETE FROM github_auth_flows WHERE workspace_id = ?`,
 		`DELETE FROM github_user_connections WHERE workspace_id = ?`,
 		`DELETE FROM github_workspace_connections WHERE workspace_id = ?`,
+		// Dedicated personal-star state: flow rows, then the queue, then the
+		// connection and its fence, so a later boot cannot see a fence without
+		// its connection.
+		`DELETE FROM github_personal_star_flow WHERE workspace_id = ?`,
+		`DELETE FROM github_personal_star_cleanup WHERE workspace_id = ?`,
+		`DELETE FROM github_personal_star_connection WHERE workspace_id = ?`,
+		`DELETE FROM github_personal_star_lifecycle WHERE workspace_id = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, query, workspaceID); err != nil {
 			return err
@@ -810,6 +817,18 @@ func deleteGitHubAuthForReset(ctx context.Context, database *sql.DB, workspaceID
 		WHERE id = ? OR substr(id, 1, length(?)) = ?`,
 		github.WorkspacePATSecretKey(workspaceID), userSecretPrefix, userSecretPrefix); err != nil {
 		return err
+	}
+	// Generation-specific star secrets embed the workspace id between the kind
+	// and user segments, so each kind is matched by its own exact prefix.
+	for _, prefix := range []string{
+		"github-personal-star:access:" + workspaceID + ":",
+		"github-personal-star:refresh:" + workspaceID + ":",
+	} {
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM secrets WHERE substr(id, 1, length(?)) = ?`,
+			prefix, prefix); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

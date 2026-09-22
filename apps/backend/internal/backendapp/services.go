@@ -176,6 +176,7 @@ func assembleServices(
 		Workflow:                 core.workflowSvc,
 		GitHub:                   providers.github,
 		GitLab:                   providers.gitlab,
+		GitHubCleanup:            providers.githubCleanup,
 		GitLabCleanup:            providers.gitlabCleanup,
 		Jira:                     providers.jira,
 		Linear:                   providers.linear,
@@ -573,6 +574,7 @@ func wireTaskWorkflowCrossReferences(
 // without repeating each one's init-and-record boilerplate inline.
 type thirdPartyProviders struct {
 	github        *github.Service
+	githubCleanup func() error
 	gitlab        *gitlab.Service
 	gitlabCleanup func() error
 	jira          *jira.Service
@@ -593,7 +595,7 @@ func initThirdPartyProviders(
 	workflowSvc *workflowservice.Service,
 	log *logger.Logger,
 ) (*thirdPartyProviders, error) {
-	githubSvc, _, githubErr := initGitHubServiceRequired(cfg, dbPool, eventBus, repos.Secrets, log)
+	githubSvc, githubCleanup, githubErr := initGitHubServiceRequired(cfg, dbPool, eventBus, repos.Secrets, log)
 	if recordErr := recordRequiredStore(ctx, storeTracker, "github", githubErr); recordErr != nil {
 		return nil, fmt.Errorf("initialize github: %w", recordErr)
 	}
@@ -633,7 +635,7 @@ func initThirdPartyProviders(
 		return nil, fmt.Errorf("initialize workflow sync: %w", recordErr)
 	}
 	return &thirdPartyProviders{
-		github: githubSvc, gitlab: gitlabSvc, gitlabCleanup: gitlabCleanup,
+		github: githubSvc, githubCleanup: githubCleanup, gitlab: gitlabSvc, gitlabCleanup: gitlabCleanup,
 		jira: jiraSvc, linear: linearSvc,
 		sentry: sentrySvc, workflowSync: workflowSyncSvc,
 	}, nil
@@ -1415,7 +1417,9 @@ func initGitHubServiceRequired(
 	log *logger.Logger,
 ) (*github.Service, func() error, error) {
 	adapter := &githubSecretAdapter{store: secretsStore}
-	svc, cleanup, err := github.Provide(dbPool.Writer(), dbPool.Reader(), adapter, eventBus, log)
+	connectionSecrets := secretadapter.New(secretsStore)
+	deployment := buildPersonalStarDeployment(cfg, log)
+	svc, cleanup, err := github.Provide(dbPool.Writer(), dbPool.Reader(), adapter, connectionSecrets, eventBus, log, deployment)
 	if err != nil {
 		return nil, nil, fmt.Errorf("github store: %w", err)
 	}
@@ -1424,7 +1428,6 @@ func initGitHubServiceRequired(
 		// (mutating) — same adapter satisfies both interfaces, but the
 		// service needs the mutating one wired explicitly.
 		svc.SetSecretManager(adapter)
-		svc.SetConnectionSecretStore(secretadapter.New(secretsStore))
 		if authErr := svc.InitializeAppRegistrationLifecycle(); authErr != nil {
 			log.Warn("GitHub App registration lifecycle failed to initialize", zap.Error(authErr))
 		}

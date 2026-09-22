@@ -462,6 +462,9 @@ func startServices( //nolint:cyclop
 	if services.Workflow != nil {
 		addCleanup(services.Workflow.Close)
 	}
+	if services.GitHubCleanup != nil {
+		addCleanup(services.GitHubCleanup)
+	}
 	if services.GitLabCleanup != nil {
 		addCleanup(services.GitLabCleanup)
 	}

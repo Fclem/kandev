@@ -8,6 +8,7 @@ import (
 // PersonalStarOAuthCoordinator owns the dedicated OAuth App consent lifecycle.
 type PersonalStarOAuthCoordinator interface {
 	Start(context.Context, PersonalStarStartRequest) (PersonalStarStartResult, error)
+	RefreshPersonalStarConnection(context.Context, string, string) error
 	CompleteCallback(context.Context, GitHubStarCallbackQuery, string, string) (PersonalStarCallbackOutcome, error)
 	DisconnectPersonalStarConnection(context.Context, string, string) error
 }
@@ -54,6 +55,22 @@ func (s *Service) CompletePersonalStarConsent(
 		return PersonalStarCallbackOutcome{}, ErrGitHubNotConfigured
 	}
 	return s.personalStarOAuth.CompleteCallback(ctx, query, sessionSubject, sessionID)
+}
+
+// RefreshPersonalStarConnection rotates the dedicated access token. It is
+// reachable only through the dedicated star path, never through App
+// credentials, and authorizes the workspace first.
+func (s *Service) RefreshPersonalStarConnection(
+	ctx context.Context,
+	workspaceID, userID string,
+) error {
+	if err := s.authorizeWorkspaceAccess(ctx, workspaceID); err != nil {
+		return err
+	}
+	if s == nil || s.personalStarOAuth == nil {
+		return ErrGitHubNotConfigured
+	}
+	return s.personalStarOAuth.RefreshPersonalStarConnection(ctx, workspaceID, userID)
 }
 
 // DisconnectPersonalStarConnection authorizes the workspace before mutating.

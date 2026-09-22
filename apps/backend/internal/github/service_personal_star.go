@@ -2,7 +2,9 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -70,13 +72,10 @@ func (s *Service) RepositoryStarStatus(
 	if err != nil {
 		return nil, err
 	}
-	client, err := s.resolvePersonalStarClient(ctx, workspaceID, userID)
-	if err != nil {
-		return nil, err
-	}
 	states := make(map[string]*bool, len(repositories))
 	for key, repository := range repositories {
-		starred, statusErr := client.IsStarred(ctx, repository)
+		starred, statusErr := s.withPersonalStarRefresh(ctx, workspaceID, userID,
+			func(client PersonalStarClient) (bool, error) { return client.IsStarred(ctx, repository) })
 		if statusErr != nil {
 			states[key] = nil
 			continue
@@ -112,14 +111,44 @@ func (s *Service) mutateRepositoryStar(
 	if err != nil {
 		return false, err
 	}
+	return s.withPersonalStarRefresh(ctx, workspaceID, userID, func(client PersonalStarClient) (bool, error) {
+		if star {
+			return client.Star(ctx, repository)
+		}
+		return client.Unstar(ctx, repository)
+	})
+}
+
+// withPersonalStarRefresh runs one dedicated star operation and, when the
+// provider rejects the access token, rotates it once through the stored refresh
+// token before retrying. Any other failure returns unchanged: a refresh is
+// never attempted through another credential source.
+func (s *Service) withPersonalStarRefresh(
+	ctx context.Context,
+	workspaceID, userID string,
+	operation func(PersonalStarClient) (bool, error),
+) (bool, error) {
 	client, err := s.resolvePersonalStarClient(ctx, workspaceID, userID)
 	if err != nil {
 		return false, err
 	}
-	if star {
-		return client.Star(ctx, repository)
+	value, err := operation(client)
+	if err == nil || !isPersonalStarUnauthorized(err) {
+		return value, err
 	}
-	return client.Unstar(ctx, repository)
+	if refreshErr := s.RefreshPersonalStarConnection(ctx, workspaceID, userID); refreshErr != nil {
+		return false, err
+	}
+	refreshed, err := s.resolvePersonalStarClient(ctx, workspaceID, userID)
+	if err != nil {
+		return false, err
+	}
+	return operation(refreshed)
+}
+
+func isPersonalStarUnauthorized(err error) bool {
+	var apiError *GitHubAPIError
+	return errors.As(err, &apiError) && apiError.StatusCode == http.StatusUnauthorized
 }
 
 func (s *Service) resolvePersonalStarClient(

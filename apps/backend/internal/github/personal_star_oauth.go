@@ -108,6 +108,7 @@ type PersonalStarCallbackOutcome struct {
 // flow uses.
 type PersonalStarOAuthClient interface {
 	ExchangeUserCode(ctx context.Context, code, pkceVerifier, redirectURI string) (GitHubOAuthTokens, error)
+	RefreshUserToken(ctx context.Context, refreshToken string) (GitHubOAuthTokens, error)
 	GetOAuthUser(ctx context.Context, accessToken string) (GitHubOAuthUser, error)
 }
 
@@ -415,6 +416,85 @@ func (s *PersonalStarOAuthService) enqueuePersonalStarCleanup(
 			return
 		}
 	}
+}
+
+// RefreshPersonalStarConnection rotates the dedicated access token through the
+// stored refresh token. The new grant's scopes are re-normalized: losing
+// public_repo disables the capability, and the previous access secret is
+// enqueued only after the new one is committed.
+func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
+	ctx context.Context,
+	workspaceID, userID string,
+) error {
+	tokens, connection, err := s.refreshTokens(ctx, workspaceID, userID)
+	if err != nil {
+		return err
+	}
+	revision, generation, err := s.store.BumpPersonalStarLifecycle(ctx, workspaceID, userID)
+	if err != nil {
+		return err
+	}
+	replacement := *connection
+	replacement.CredentialGeneration = generation
+	replacement.LifecycleRevision = revision
+	replacement.AccessSecretGeneration = generation
+	replacement.AccessSecretID = personalStarAccessSecretID(workspaceID, userID, generation)
+	if len(tokens.GrantedScopes) > 0 {
+		replacement.GrantedScopes = strings.Join(tokens.GrantedScopes, " ")
+		replacement.PublicRepo = HasPublicRepoScope(tokens.GrantedScopes)
+	}
+	staged := []string{}
+	if err := s.secrets.Set(ctx, replacement.AccessSecretID,
+		"github personal star access token", tokens.AccessToken); err != nil {
+		return ErrGitHubPersonalRequired
+	}
+	staged = append(staged, replacement.AccessSecretID)
+	if tokens.RefreshToken != "" {
+		replacement.RefreshSecretID = personalStarRefreshSecretID(workspaceID, userID, generation)
+		replacement.RefreshSecretGeneration = generation
+		if err := s.secrets.Set(ctx, replacement.RefreshSecretID,
+			"github personal star refresh token", tokens.RefreshToken); err != nil {
+			s.discardPersonalStarSecrets(ctx, staged)
+			return ErrGitHubPersonalRequired
+		}
+		staged = append(staged, replacement.RefreshSecretID)
+	}
+	// The committed row still carries the pre-bump fence, so that is the
+	// expectation the swap must satisfy.
+	superseded, err := s.store.ReplacePersonalStarConnection(
+		ctx, &replacement, connection.LifecycleRevision, connection.CredentialGeneration)
+	if err != nil {
+		s.discardPersonalStarSecrets(ctx, staged)
+		return err
+	}
+	s.enqueuePersonalStarCleanup(ctx, &replacement, superseded)
+	return nil
+}
+
+// refreshTokens loads the committed connection and exchanges its refresh token.
+func (s *PersonalStarOAuthService) refreshTokens(
+	ctx context.Context,
+	workspaceID, userID string,
+) (GitHubOAuthTokens, *PersonalStarConnection, error) {
+	if !s.Available() {
+		return GitHubOAuthTokens{}, nil, ErrGitHubNotConfigured
+	}
+	connection, err := s.store.GetPersonalStarConnection(ctx, workspaceID, userID)
+	if err != nil {
+		return GitHubOAuthTokens{}, nil, err
+	}
+	if connection == nil || connection.RefreshSecretID == "" || connection.Status != PersonalStarStatusActive {
+		return GitHubOAuthTokens{}, nil, ErrGitHubPersonalRequired
+	}
+	refreshToken, err := s.secrets.Reveal(ctx, connection.RefreshSecretID)
+	if err != nil || strings.TrimSpace(refreshToken) == "" {
+		return GitHubOAuthTokens{}, nil, ErrGitHubPersonalRequired
+	}
+	tokens, err := s.client.RefreshUserToken(ctx, refreshToken)
+	if err != nil || tokens.AccessToken == "" {
+		return GitHubOAuthTokens{}, nil, ErrGitHubPersonalRequired
+	}
+	return tokens, connection, nil
 }
 
 // DisconnectPersonalStarConnection bumps the fence, clears the committed token

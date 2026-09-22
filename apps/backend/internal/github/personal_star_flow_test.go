@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -63,10 +64,23 @@ func (f *fakePersonalStarSecrets) Delete(_ context.Context, id string) error {
 
 type fakePersonalStarOAuth struct {
 	tokens       GitHubOAuthTokens
+	refreshed    GitHubOAuthTokens
+	refreshErr   error
+	refreshCalls int
+	seenRefresh  string
 	user         GitHubOAuthUser
 	exchangeErr  error
 	seenVerifier string
 	seenCode     string
+}
+
+func (f *fakePersonalStarOAuth) RefreshUserToken(_ context.Context, refreshToken string) (GitHubOAuthTokens, error) {
+	f.refreshCalls++
+	f.seenRefresh = refreshToken
+	if f.refreshErr != nil {
+		return GitHubOAuthTokens{}, f.refreshErr
+	}
+	return f.refreshed, nil
 }
 
 func (f *fakePersonalStarOAuth) ExchangeUserCode(
@@ -491,4 +505,157 @@ func cleanupRecordID(t *testing.T, store *Store) string {
 		t.Fatalf("cleanup records = %d, %v", len(records), err)
 	}
 	return records[0].ID
+}
+
+// scriptedStarClient returns a provider failure on the first call so the
+// unauthorized refresh path is exercised end to end.
+type scriptedStarClient struct {
+	calls int
+	err   error
+	value bool
+}
+
+func (c *scriptedStarClient) IsStarred(context.Context, GitHubRepositoryRef) (bool, error) {
+	c.calls++
+	if c.err != nil {
+		failure := c.err
+		c.err = nil
+		return false, failure
+	}
+	return c.value, nil
+}
+
+func (c *scriptedStarClient) Star(context.Context, GitHubRepositoryRef) (bool, error) {
+	return c.IsStarred(context.Background(), GitHubRepositoryRef{})
+}
+
+func (c *scriptedStarClient) Unstar(context.Context, GitHubRepositoryRef) (bool, error) {
+	_, err := c.IsStarred(context.Background(), GitHubRepositoryRef{})
+	return false, err
+}
+
+func TestPersonalStarRefreshRotatesSecretsAndPreservesScopes(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	state := startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client.refreshed = GitHubOAuthTokens{
+		AccessToken: "access-2", RefreshToken: "refresh-2", GrantedScopes: []string{"public_repo"},
+	}
+	if err := service.RefreshPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.CredentialGeneration <= before.CredentialGeneration {
+		t.Fatalf("generation did not advance: %d -> %d", before.CredentialGeneration, after.CredentialGeneration)
+	}
+	if client.seenRefresh != "refresh-1" {
+		t.Fatalf("refresh used %q, want the stored refresh token", client.seenRefresh)
+	}
+	if !after.PublicRepo || !strings.Contains(after.GrantedScopes, PersonalStarScope) {
+		t.Fatalf("refresh dropped the grant: %+v", after)
+	}
+	if secrets.values[after.AccessSecretID] != "access-2" || secrets.values[after.RefreshSecretID] != "refresh-2" {
+		t.Fatalf("refreshed tokens were not staged: %v", secrets.values)
+	}
+	records, err := store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	supersededIDs := make([]string, 0, len(records))
+	for _, record := range records {
+		supersededIDs = append(supersededIDs, record.SecretID)
+	}
+	if len(records) != 2 ||
+		!slices.Contains(supersededIDs, before.AccessSecretID) ||
+		!slices.Contains(supersededIDs, before.RefreshSecretID) {
+		t.Fatalf("superseded secret cleanup rows = %+v", supersededIDs)
+	}
+
+	// A refresh that loses public_repo disables the capability instead of
+	// falling back to another credential source.
+	client.refreshed = GitHubOAuthTokens{AccessToken: "access-3", GrantedScopes: []string{"read:user"}}
+	if err := service.RefreshPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	resolver := NewPersonalStarResolverService(store, secrets, PersonalStarDeploymentStatus{
+		Available: true,
+		Settings:  PersonalStarOAuthSettings{ClientID: "id", ClientSecret: "s", CallbackURL: "https://example/x"},
+	})
+	status, err := resolver.ConnectionStatus(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Active || status.Capable || !status.ReconnectRequired {
+		t.Fatalf("reduced-scope refresh status = %+v", status)
+	}
+	if _, err := resolver.ResolvePersonalStarClient(ctx, "ws-1", "user-1"); !errors.Is(err, ErrGitHubCapabilityDenied) {
+		t.Fatalf("resolve after reduced-scope refresh error = %v", err)
+	}
+}
+
+func TestPersonalStarRepositoryStatusRefreshesOnceAfterUnauthorized(t *testing.T) {
+	ctx := context.Background()
+	sqlxDB := newProviderTestDatabase(t)
+	secrets := newFakePersonalStarSecrets()
+	oauthClient := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service, cleanup, err := Provide(sqlxDB, sqlxDB, nil, secrets, nil, newTestLogger(), PersonalStarDeployment{
+		Available: true,
+		Settings: PersonalStarOAuthSettings{
+			ClientID:    "client-id",
+			CallbackURL: "https://kandev.example/api/v1/github/user/starred/oauth/callback",
+		},
+		ReadClientSecret: func(context.Context) (string, error) { return "client-secret", nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cleanup() })
+	starOAuth := NewPersonalStarOAuthService(service.TestStore(), secrets, PersonalStarOAuthSettings{
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+		CallbackURL:  "https://kandev.example/api/v1/github/user/starred/oauth/callback",
+	}, true)
+	starOAuth.client = oauthClient
+	service.SetPersonalStarOAuthCoordinator(starOAuth)
+	if err := service.SeedPersonalStarConnectionForE2E(ctx, "ws-1", "user-1", "octocat", true, personalStarOutcomeConnected); err != nil {
+		t.Fatal(err)
+	}
+	secrets.values[personalStarRefreshSecretID("ws-1", "user-1", 1)] = "refresh-1"
+
+	scripted := &scriptedStarClient{err: &GitHubAPIError{StatusCode: 401}, value: true}
+	service.SetPersonalStarClientBuilder(func(_ string, _, _ string) PersonalStarClient { return scripted })
+	oauthClient.refreshed = GitHubOAuthTokens{AccessToken: "access-2", GrantedScopes: []string{"public_repo"}}
+
+	states, err := service.RepositoryStarStatus(ctx, "ws-1", "user-1", []string{"https://github.com/kdlbs/kandev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := states["kdlbs/kandev"]
+	if state == nil || !*state {
+		t.Fatalf("state after refresh retry = %+v", states)
+	}
+	if scripted.calls != 2 || oauthClient.refreshCalls != 1 {
+		t.Fatalf("provider calls = %d, refresh calls = %d; want one rejected attempt plus one retry", scripted.calls, oauthClient.refreshCalls)
+	}
 }

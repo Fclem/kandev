@@ -11,7 +11,7 @@ import (
 
 func TestUnixPeerUIDReadsKernelCredential(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "deployment-secret.sock")
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	listener, err := net.ListenUnix(unixSocketNetwork, &net.UnixAddr{Name: path, Net: unixSocketNetwork})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestUnixPeerUIDReadsKernelCredential(t *testing.T) {
 			accepted <- conn
 		}
 	}()
-	client, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: path, Net: "unix"})
+	client, err := net.DialUnix(unixSocketNetwork, nil, &net.UnixAddr{Name: path, Net: unixSocketNetwork})
 	if err != nil {
 		t.Fatal(err)
 	}

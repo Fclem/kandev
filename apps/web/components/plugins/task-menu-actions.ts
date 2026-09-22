@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from "react";
+import { createElement, isValidElement, type ReactNode } from "react";
 import { pluginRegistry } from "@/lib/plugins/registry";
 import { resolvePluginIcon } from "@/lib/plugins/icons";
 import type { PluginTaskMenuActionRegistration } from "@/lib/plugins/registry-registration-types";
@@ -32,9 +32,17 @@ export function visiblePluginMenuActions(
   });
 }
 
-/** Plugin icons get the same sizing every neighbouring native menu icon uses. */
+/**
+ * Plugin icons get the same sizing every neighbouring native menu icon uses.
+ * A ready-made element — the shape registered before icon names/components
+ * were resolved, and still shipped by kandev-plugin-tags — renders as-is:
+ * passing it to the resolver would treat it as a name, miss the curated map,
+ * and silently replace the plugin's own glyph with the fallback puzzle.
+ */
 function pluginMenuIcon(icon?: PluginIcon): ReactNode {
-  return icon ? createElement(resolvePluginIcon(icon), { className: "mr-2 h-4 w-4" }) : undefined;
+  if (!icon) return undefined;
+  if (isValidElement(icon)) return icon;
+  return createElement(resolvePluginIcon(icon), { className: "mr-2 h-4 w-4" });
 }
 
 /**

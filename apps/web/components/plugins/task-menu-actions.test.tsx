@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@kandev/ui/dropdown-menu";
 import { pluginRegistry } from "@/lib/plugins/registry";
@@ -212,5 +213,24 @@ describe("buildPrimaryPluginEntries — mixed registrations", () => {
       ACTION_KEY,
       `plugin-primary-${PLUGIN_ID}-other`,
     ]);
+  });
+});
+
+describe("buildPrimaryPluginEntries — icon resolution", () => {
+  // Regression: icons registered before the name/component resolution landed
+  // are ready-made elements (kandev-plugin-tags ships one). Reading one as a
+  // name looked up `PLUGIN_ICONS["[object Object]"]` and rendered the puzzle
+  // fallback glyph instead of the plugin's own icon.
+  it("renders an element-form icon instead of the fallback glyph", () => {
+    const elementIcon = createElement(
+      "svg",
+      { "data-testid": "plugin-menu-icon", viewBox: "0 0 24 24" },
+      createElement("path", { d: "M4 4h16" }),
+    );
+    registerAction({ icon: elementIcon as unknown as PluginIcon });
+
+    renderEntries(buildPrimaryPluginEntries({ context: CONTEXT }));
+
+    expect(screen.getByTestId("plugin-menu-icon")).toBeTruthy();
   });
 });

@@ -30,7 +30,9 @@ const OTHER_WORKSPACE_ID = "ws-2";
 const REPOSITORY_URL = "https://github.com/kdlbs/kandev";
 const CANONICAL = "kdlbs/kandev";
 
-function connection(overrides: Partial<GitHubStarConnectionStatus> = {}): GitHubStarConnectionStatus {
+function connection(
+  overrides: Partial<GitHubStarConnectionStatus> = {},
+): GitHubStarConnectionStatus {
   return {
     user_id: "user-a",
     credential_generation: 1,
@@ -126,7 +128,9 @@ describe("usePluginRepositoryStar hydration", () => {
       workspace_id: WORKSPACE_ID,
       repository_urls: [REPOSITORY_URL],
     });
-    await waitFor(() => expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true"));
+    await waitFor(() =>
+      expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true"),
+    );
     expect(screen.getByTestId(`mode-${WORKSPACE_ID}`).textContent).toBe("stars");
   });
 
@@ -137,7 +141,9 @@ describe("usePluginRepositoryStar hydration", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByTestId(`mode-${WORKSPACE_ID}`).textContent).toBe("omit"));
+    await waitFor(() =>
+      expect(screen.getByTestId(`mode-${WORKSPACE_ID}`).textContent).toBe("omit"),
+    );
     expect(fetchStarStates).not.toHaveBeenCalled();
 
     act(() => screen.getByText(`toggle-${WORKSPACE_ID}`).click());
@@ -175,7 +181,9 @@ describe("usePluginRepositoryStar hydration", () => {
     );
     expect(fetchStarStates).toHaveBeenCalledTimes(1);
   });
+});
 
+describe("usePluginRepositoryStar scoping", () => {
   it("requests a repository state once for sibling rows sharing the key", async () => {
     renderHarness(
       <>
@@ -297,7 +305,9 @@ describe("usePluginRepositoryStar mutations", () => {
 
     act(() => screen.getByText(`toggle-${WORKSPACE_ID}`).click());
 
-    await waitFor(() => expect(screen.getByTestId(`busy-${WORKSPACE_ID}`).textContent).toBe("false"));
+    await waitFor(() =>
+      expect(screen.getByTestId(`busy-${WORKSPACE_ID}`).textContent).toBe("false"),
+    );
     expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true");
   });
 
@@ -318,6 +328,9 @@ describe("usePluginRepositoryStar mutations", () => {
     act(() => {
       const scopeKey = Object.keys(store.getState().pluginStars.epochs)[0];
       const epoch = store.getState().beginPluginStarRequest(scopeKey, "mutation");
+      if (epoch === null) {
+        throw new Error("expected a mutation epoch for the seeded key");
+      }
       store.getState().applyPluginStarResult(scopeKey, epoch, true);
     });
     await waitFor(() =>

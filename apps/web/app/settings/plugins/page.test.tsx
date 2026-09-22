@@ -89,23 +89,11 @@ vi.mock("@/lib/plugins/host-api", () => ({
 // the star endpoints report an unsupported deployment and render nothing.
 vi.mock("@/lib/api/domains/github-api", () => ({
   fetchGitHubStarConnection: () =>
-    Promise.resolve({
-      user_id: "user-1",
-      credential_generation: 1,
-      active: false,
-      capable: false,
-      reconnect_required: false,
-      available: false,
-    }),
+    Promise.resolve({ available: false, active: false, capable: false }),
   fetchGitHubStarStates: () => Promise.resolve({ states: {} }),
-  startGitHubStarConnection: () =>
-    Promise.resolve({ authorization_url: "", state_expires_at: "2026-09-22T10:00:00Z" }),
-  starGitHubRepository: () => Promise.resolve({ starred: true }),
+  startGitHubStarConnection: () => Promise.resolve({ authorization_url: "" }),
+  /* prettier-ignore */ starGitHubRepository: () => Promise.resolve({ starred: true }),
   unstarGitHubRepository: () => Promise.resolve({ starred: false }),
-}));
-
-vi.mock("@/components/theme/app-theme", () => ({
-  useTheme: () => ({ resolvedTheme: "light" }),
 }));
 
 let storeState: Record<string, unknown> = {};
@@ -116,14 +104,9 @@ vi.mock("@/components/state-provider", () => ({
     setState: vi.fn(),
     subscribe: vi.fn(() => () => {}),
   }),
-  useOptionalAppStore: (
-    selector: (state: Record<string, unknown>) => unknown,
-    fallback: unknown,
-  ) => selector(storeState) ?? fallback,
-  useOptionalAppStoreApi: () => ({
-    getState: () => storeState,
-    subscribe: vi.fn(() => () => {}),
-  }),
+  useOptionalAppStore: (selector: (state: Record<string, unknown>) => unknown, fallback: unknown) =>
+    selector(storeState) ?? fallback,
+  useOptionalAppStoreApi: () => ({ getState: () => storeState, subscribe: vi.fn(() => () => {}) }),
 }));
 
 import PluginsSettingsPage from "./page";

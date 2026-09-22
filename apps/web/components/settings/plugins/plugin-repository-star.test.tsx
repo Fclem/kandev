@@ -25,8 +25,11 @@ const REPOSITORY_URL = "https://github.com/kdlbs/kandev";
 const CANONICAL = "kdlbs/kandev";
 const TOGGLE_ID = "plugin-star-toggle";
 const CTA_ID = "plugin-star-connect";
+const PRESSED = "aria-pressed";
 
-function connection(overrides: Partial<GitHubStarConnectionStatus> = {}): GitHubStarConnectionStatus {
+function connection(
+  overrides: Partial<GitHubStarConnectionStatus> = {},
+): GitHubStarConnectionStatus {
   return {
     user_id: "user-a",
     credential_generation: 1,
@@ -114,7 +117,7 @@ describe("PluginRepositoryStar availability", () => {
     await renderControl();
 
     const toggle = await screen.findByTestId(TOGGLE_ID);
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(toggle.getAttribute(PRESSED)).toBe("true"));
     expect(screen.getByTestId(CTA_ID).textContent).toBe("Reconnect GitHub");
   });
 });
@@ -124,7 +127,7 @@ describe("PluginRepositoryStar star state", () => {
     await renderControl();
 
     const toggle = await screen.findByTestId(TOGGLE_ID);
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(toggle.getAttribute(PRESSED)).toBe("true"));
     expect(toggle.textContent).toBe("Unstar");
     expect(fetchStarStates).toHaveBeenCalledWith({
       workspace_id: WORKSPACE_ID,
@@ -138,7 +141,7 @@ describe("PluginRepositoryStar star state", () => {
     await renderControl();
 
     const toggle = await screen.findByTestId(TOGGLE_ID);
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("false"));
+    await waitFor(() => expect(toggle.getAttribute(PRESSED)).toBe("false"));
     expect(toggle.textContent).toBe("Star");
   });
 
@@ -148,7 +151,7 @@ describe("PluginRepositoryStar star state", () => {
     await renderControl();
 
     await waitFor(() => expect(fetchStarStates).toHaveBeenCalled());
-    await waitFor(() => expect(document.querySelector("[aria-pressed]")).toBeNull());
+    await waitFor(() => expect(document.querySelector(`[${PRESSED}]`)).toBeNull());
     expect(screen.queryByTestId(TOGGLE_ID)).toBeNull();
   });
 
@@ -159,7 +162,7 @@ describe("PluginRepositoryStar star state", () => {
 
     await waitFor(() => expect(fetchStarStates).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByTestId(TOGGLE_ID)).toBeNull());
-    expect(document.querySelector("[aria-pressed]")).toBeNull();
+    expect(document.querySelector(`[${PRESSED}]`)).toBeNull();
   });
 });
 
@@ -174,7 +177,7 @@ describe("PluginRepositoryStar mutations", () => {
 
     await renderControl();
     const toggle = await screen.findByTestId(TOGGLE_ID);
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(toggle.getAttribute(PRESSED)).toBe("true"));
 
     act(() => toggle.click());
 
@@ -184,7 +187,7 @@ describe("PluginRepositoryStar mutations", () => {
 
     await act(async () => confirmUnstar({ starred: false }));
 
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("false"));
+    await waitFor(() => expect(toggle.getAttribute(PRESSED)).toBe("false"));
     expect(screen.getByRole("status").textContent).toBe("");
   });
 
@@ -193,11 +196,11 @@ describe("PluginRepositoryStar mutations", () => {
 
     await renderControl();
     const toggle = await screen.findByTestId(TOGGLE_ID);
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(toggle.getAttribute(PRESSED)).toBe("true"));
 
     act(() => toggle.click());
 
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(toggle.getAttribute(PRESSED)).toBe("true"));
     expect((toggle as HTMLButtonElement).disabled).toBe(false);
   });
 });

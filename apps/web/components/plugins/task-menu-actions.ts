@@ -50,19 +50,54 @@ function pluginMenuIcon(icon?: PluginIcon): ReactNode {
  * promise, not a guarantee. One log per action *and kind* is enough: `items()`
  * runs on every menu build, so a permanently malformed registration would
  * otherwise log on every render, while a later defect of a different kind on
- * the same action still reports.
+ * the same action still reports. The set is never cleared, so the same kind
+ * recurring on the same action after a re-registration stays silent for the
+ * life of the page -- accepted: this module has no registration-lifecycle hook
+ * (the registry that would clear it imports this one, so wiring the call back
+ * would be a cycle), and a lost diagnostic line is cheaper than that coupling.
+ * Reading the registration itself is only guarded here, not at the registry,
+ * which spreads the raw object into its own copy before this module sees it.
+ * A *value* of the wrong shape on the registration itself is handled here (see
+ * readActionLabel/readActionIcon), but a throwing *getter* on the registration
+ * object is not: the registry spreads that object into its own copy
+ * (getTaskMenuActions) before this module ever sees it, so that boundary is the
+ * registry's to harden, for every registration type rather than this one.
  */
-const loggedSubItemDefects = new Set<string>();
+const loggedMenuDefects = new Set<string>();
 
-function logSubItemDefect(
+function logMenuDefect(
   action: PluginTaskMenuActionRegistration,
   kind: string,
   detail?: unknown,
 ): void {
   const key = `${action.pluginId}:${action.id}:${kind}`;
-  if (loggedSubItemDefects.has(key)) return;
-  loggedSubItemDefects.add(key);
+  if (loggedMenuDefects.has(key)) return;
+  loggedMenuDefects.add(key);
   console.error(`[plugins] task menu action "${action.pluginId}:${action.id}" ${kind}`, detail);
+}
+
+/**
+ * The action's own label, read once and only when it is a non-blank string.
+ * A registration is plugin-authored data too, so a missing or hostile accessor
+ * omits the entry (and reports it) rather than handing React an object child.
+ */
+function readActionLabel(action: PluginTaskMenuActionRegistration): string | null {
+  try {
+    const { label } = action;
+    return typeof label === "string" && label.trim().length > 0 ? label : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The action's own icon, read once; an unreadable one simply means no icon. */
+function readActionIcon(action: PluginTaskMenuActionRegistration): ReactNode {
+  try {
+    return pluginMenuIcon(action.icon);
+  } catch {
+    logMenuDefect(action, "registration icon could not be read");
+    return undefined;
+  }
 }
 
 /** One child, read once into the plain values the menu actually renders. */
@@ -132,11 +167,11 @@ function pluginSubItems(
     const result: unknown = action.items(context);
 
     if (result && typeof (result as { then?: unknown }).then === "function") {
-      logSubItemDefect(action, "items() returned a promise; it must be synchronous");
+      logMenuDefect(action, "items() returned a promise; it must be synchronous");
       // Observe the rejection so an out-of-contract async callback cannot
       // surface as an unhandled rejection out of the host's menu build.
       void Promise.resolve(result).catch((error: unknown) => {
-        logSubItemDefect(action, "items() rejected", error);
+        logMenuDefect(action, "items() rejected", error);
       });
       return null;
     }
@@ -144,7 +179,7 @@ function pluginSubItems(
     if (!Array.isArray(result)) {
       // null/undefined means "no children"; anything else is out of contract.
       if (result !== null && result !== undefined) {
-        logSubItemDefect(action, "items() must return an array");
+        logMenuDefect(action, "items() must return an array");
       }
       return null;
     }
@@ -157,11 +192,11 @@ function pluginSubItems(
     list.forEach((item) => {
       const child = readSubItem(item);
       if (!child) {
-        logSubItemDefect(action, "items() returned an unusable child", item);
+        logMenuDefect(action, "items() returned an unusable child", item);
         return;
       }
       if (seen.has(child.id)) {
-        logSubItemDefect(action, "items() repeated a child id", child.id);
+        logMenuDefect(action, "items() repeated a child id", child.id);
         return;
       }
       seen.add(child.id);
@@ -169,7 +204,7 @@ function pluginSubItems(
     });
     return usable.length > 0 ? usable : null;
   } catch (error: unknown) {
-    logSubItemDefect(action, "items() could not be read", error);
+    logMenuDefect(action, "items() could not be read", error);
     return null;
   }
 }
@@ -209,7 +244,13 @@ export function pluginMenuEntry(
   context: PluginTaskMenuContext,
   disabled?: boolean,
   keyPrefix = "plugin-edit",
-): KanbanCardMenuEntry {
+): KanbanCardMenuEntry | null {
+  const label = readActionLabel(action);
+  if (label === null) {
+    logMenuDefect(action, "registration has no usable label");
+    return null;
+  }
+  const icon = readActionIcon(action);
   const key = `${keyPrefix}-${action.pluginId}-${action.id}`;
   const items = pluginSubItems(action, context);
 
@@ -217,8 +258,8 @@ export function pluginMenuEntry(
     return {
       kind: "submenu",
       key,
-      icon: pluginMenuIcon(action.icon),
-      label: action.label,
+      icon,
+      label,
       disabled,
       children: items.map((item) => ({
         kind: "item",
@@ -231,11 +272,15 @@ export function pluginMenuEntry(
     };
   }
 
+  if (typeof action.run !== "function") {
+    logMenuDefect(action, "registration has no run");
+    return null;
+  }
   return {
     kind: "item",
     key,
-    icon: pluginMenuIcon(action.icon),
-    label: action.label,
+    icon,
+    label,
     disabled,
     onSelect: () => runPluginCallback(action, action.run, context),
   };
@@ -255,7 +300,7 @@ export function buildPrimaryPluginEntries({
   disabled?: boolean;
   context: PluginTaskMenuContext;
 }): KanbanCardMenuEntry[] {
-  return visiblePluginMenuActions("primary", context).map((action) =>
-    pluginMenuEntry(action, context, disabled, "plugin-primary"),
-  );
+  return visiblePluginMenuActions("primary", context)
+    .map((action) => pluginMenuEntry(action, context, disabled, "plugin-primary"))
+    .filter((entry): entry is KanbanCardMenuEntry => entry !== null);
 }

@@ -54,10 +54,16 @@ export const PLUGIN_ICONS: Record<string, TablerIcon> = {
   users: IconUsers,
 };
 
-/** Strict lookup: the named icon, or undefined when the name is unknown/missing. */
+/**
+ * Strict lookup: the named icon, or undefined when the name is unknown/missing.
+ * Only a string names a curated icon: any other value (a stray object or a
+ * ready-made element from a JavaScript bundle) has no name to look up, and
+ * indexing the map with it would coerce it to a key -- which a hostile
+ * `toString` turns into a throw out of whatever is rendering.
+ */
 export function lookupPluginIcon(icon?: PluginIcon): ResolvedPluginIcon | undefined {
   if (typeof icon === "function") return icon;
-  return icon ? PLUGIN_ICONS[icon] : undefined;
+  return typeof icon === "string" ? PLUGIN_ICONS[icon] : undefined;
 }
 
 /** Sidebar lookup: always renders something — unknown/missing names get the puzzle glyph. */

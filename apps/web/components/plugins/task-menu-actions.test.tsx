@@ -8,7 +8,11 @@ import type {
   PluginTaskMenuContext,
   TaskMenuSubItemRegistration,
 } from "@/lib/plugins/types";
-import { KanbanCardDropdownMenuItems, type KanbanCardMenuEntry } from "../kanban-card-menu-items";
+import {
+  buildCardPluginEntries,
+  KanbanCardDropdownMenuItems,
+  type KanbanCardMenuEntry,
+} from "../kanban-card-menu-items";
 import { buildPrimaryPluginEntries } from "./task-menu-actions";
 
 const PLUGIN_ID = "kandev-plugin-tags";
@@ -31,7 +35,10 @@ function registerAction(
     group?: "edit" | "primary";
     icon?: PluginIcon;
     run?: (context: PluginTaskMenuContext) => void | Promise<void>;
-    items?: (context: PluginTaskMenuContext) => readonly TaskMenuSubItemRegistration[];
+    // Deliberately wider than the contract: this helper also registers results
+    // the types forbid (a promise, an unknown-returning wrapper), which is what
+    // a JavaScript bundle can actually send.
+    items?: (context: PluginTaskMenuContext) => unknown;
   } = {},
 ) {
   const run = overrides.run ?? vi.fn();
@@ -41,7 +48,13 @@ function registerAction(
     group: overrides.group ?? "primary",
     run,
     ...(overrides.icon ? { icon: overrides.icon } : {}),
-    ...(overrides.items ? { items: overrides.items } : {}),
+    ...(overrides.items
+      ? {
+          items: overrides.items as (
+            context: PluginTaskMenuContext,
+          ) => readonly TaskMenuSubItemRegistration[],
+        }
+      : {}),
   });
   return run;
 }
@@ -212,6 +225,11 @@ describe("buildPrimaryPluginEntries — malformed plugin results", () => {
     ["a null child", () => [null]],
     ["a child without an id or label", () => [{ run: vi.fn() }]],
     ["a child with a blank id", () => [{ id: "   ", label: "X", run: vi.fn() }]],
+    ["a child with a blank label", () => [{ id: "x", label: "  ", run: vi.fn() }]],
+    [
+      "a child with a non-boolean disabled",
+      () => [{ id: "x", label: "X", run: vi.fn(), disabled: 1 }],
+    ],
     ["a child without a run", () => [{ id: "x", label: "X" }]],
     ["a child with an unusable icon", () => [{ id: "x", label: "X", icon: {}, run: vi.fn() }]],
     ["a non-array result", () => "nope"],
@@ -239,7 +257,7 @@ describe("buildPrimaryPluginEntries — malformed plugin results", () => {
   for (const [index, [label, items]] of fallbackCases.entries()) {
     it(`falls back to the flat item and reports ${label} once`, async () => {
       const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      registerAction({ id: `broken-${index}`, items: items as never });
+      registerAction({ id: `broken-${index}`, items });
 
       expect(buildPrimaryPluginEntries({ context: CONTEXT }).map((entry) => entry.kind)).toEqual([
         "item",
@@ -361,6 +379,101 @@ describe("buildPrimaryPluginEntries — unreadable and repeated children", () =>
       `plugin-primary-${PLUGIN_ID}-partly-broken-ok`,
     ]);
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("buildPrimaryPluginEntries — unusable registrations and array-likes", () => {
+  // A registration is plugin-authored data as much as its `items()` result: an
+  // action whose own fields cannot be read degrades to no entry instead of
+  // handing React an object child, and a result whose array methods are
+  // hostile must be copied rather than called.
+  it("omits an action whose label is not a usable string, and logs once", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Registered around the helper, which defaults a missing label.
+    const broken = (id: string, label: unknown) => ({ id, label, group: "primary", run: vi.fn() });
+    pluginRegistry
+      .forPlugin(PLUGIN_ID)
+      .registerTaskMenuAction(broken("blank-label", "   ") as never);
+    pluginRegistry
+      .forPlugin(PLUGIN_ID)
+      .registerTaskMenuAction(broken("object-label", { toString: () => "not a label" }) as never);
+
+    const entries = buildPrimaryPluginEntries({ context: CONTEXT });
+
+    expect(entries).toEqual([]);
+    // One report per action: the two registrations fail the same way but are
+    // different action ids.
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("renders an action whose icon is an object that refuses to be coerced", () => {
+    // The icon resolver looks a name up in its curated map, so a non-string
+    // icon is no name at all: the entry keeps rendering with the fallback glyph
+    // instead of throwing out of the card's render while the map coerces the
+    // object to a key.
+    const icon = {
+      toString() {
+        throw new Error("key coercion");
+      },
+    };
+    registerAction({
+      id: "object-icon",
+      label: "Object icon",
+      icon: icon as unknown as PluginIcon,
+    });
+
+    const entries = buildPrimaryPluginEntries({ context: CONTEXT });
+
+    expect(entries.map((entry) => entry.kind)).toEqual(["item"]);
+    const entry = entries[0];
+    if (entry.kind !== "item") return;
+    expect(entry.label).toBe("Object icon");
+    expect(entry.icon).toBeDefined();
+  });
+
+  it("copies a hostile array-like instead of calling its methods", () => {
+    class HostileArray extends Array<unknown> {
+      forEach(): void {
+        throw new Error("forEach is not yours to call");
+      }
+      map(): never {
+        throw new Error("map is not yours to call");
+      }
+    }
+    const items = HostileArray.from([{ id: "child", label: "Child", run: vi.fn() }]);
+    registerAction({ id: "hostile-array", items: () => items });
+
+    const entry = buildPrimaryPluginEntries({ context: CONTEXT })[0];
+
+    expect(entry.kind).toBe("submenu");
+    if (entry.kind !== "submenu") return;
+    expect(entry.children.map((child) => child.key)).toEqual([
+      `plugin-primary-${PLUGIN_ID}-hostile-array-child`,
+    ]);
+  });
+
+  it("treats every processing flag as disabling the plugin entries, on both paths", () => {
+    registerAction({ id: "flagged", items: () => [{ id: "child", label: "Child", run: vi.fn() }] });
+
+    for (const flag of ["disabled", "isDeleting", "isArchiving", "isDetaching"] as const) {
+      const inputs = { pluginMenuContext: CONTEXT, [flag]: true };
+      const prebuilt = buildCardPluginEntries(inputs).primary.find(
+        (entry) => entry.key === `plugin-primary-${PLUGIN_ID}-flagged`,
+      );
+      const internal = buildPrimaryPluginEntries({ context: CONTEXT, disabled: true })[0];
+      // Both paths must agree, and a submenu's children inherit the state.
+      const prebuiltSubmenu = prebuilt?.kind === "submenu" ? prebuilt : undefined;
+      const internalSubmenu = internal.kind === "submenu" ? internal : undefined;
+      expect(prebuiltSubmenu?.disabled, flag).toBe(true);
+      expect(internalSubmenu?.disabled, flag).toBe(true);
+      expect(
+        prebuiltSubmenu?.children.map((child) =>
+          child.kind === "item" ? child.disabled : undefined,
+        ),
+        flag,
+      ).toEqual([true]);
+    }
   });
 });
 

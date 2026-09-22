@@ -59,7 +59,9 @@ export function buildEditMenuEntry({
         disabled: disabled || !onEdit,
         onSelect: onEdit,
       },
-      ...pluginActions.map((action) => pluginMenuEntry(action, context, disabled)),
+      ...pluginActions
+        .map((action) => pluginMenuEntry(action, context, disabled))
+        .filter((entry): entry is KanbanCardMenuEntry => entry !== null),
     ],
   };
 }

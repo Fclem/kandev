@@ -17,7 +17,7 @@ type Target struct {
 // root-owned deployment-secret supervisor. Root-run, container, and
 // user-systemd backends are rejected so the backend cannot become a provisioner.
 func Available(target Target) bool {
-	return target.GOOS == linuxOS && target.BackendUID != 0 && !target.Container && !target.UserSystemd
+	return ValidateTarget(target) == nil
 }
 
 // ValidateTarget returns an explicit startup error for unsupported deployment

@@ -193,6 +193,7 @@ The URL is still printed. `KANDEV_NO_BROWSER=1` also suppresses browser launch.
 kandev [run] [options]
 kandev start [options]
 kandev service <action> [service options]
+kandev deployment-secret <action> [deployment secret options]
 ```
 
 | Option                       | Meaning                                                                                                                                             |
@@ -448,6 +449,45 @@ capacity alerts.
 `POST /api/v1/system/database/refresh` requests an immediate background retry
 and bypasses any remaining automatic retry backoff. It returns `204` without
 waiting for the scan, or `503` while persistence is known to be unavailable.
+
+## Deployment secrets for repository starring
+
+The GitHub star control in **Settings > Plugins** uses the client secret of a dedicated GitHub
+OAuth App that belongs to the deployment. That secret is not a user or workspace secret, and only
+root can provision it. Run these commands as root on the Linux host that runs Kandev:
+
+```text
+kandev deployment-secret bootstrap [--data-dir <path>]
+kandev deployment-secret github-personal-star provision --version <n> --client-secret-file <path> [--socket <path>] [--data-dir <path>]
+kandev deployment-secret github-personal-star revoke --version <n> [--socket <path>] [--data-dir <path>]
+```
+
+| Command or flag | Meaning |
+|---|---|
+| `kandev deployment-secret bootstrap` | Creates the deployment identity: an installation ID and an Ed25519 root keypair. The private key stays root-owned with mode `0600`. It is idempotent, never overwrites existing trust material, and runs once per deployment before the first provision. |
+| `kandev deployment-secret github-personal-star provision` | Seals one client secret with the existing `<data-dir>/master.key` and stores it as a new immutable version. It never creates or rotates the master key, and the plaintext is never written to disk, logged, or printed. |
+| `--version <n>` | Positive integer version of the stored secret reference; valid for provision and revoke. A provisioned version is immutable, and provisioning a newer version leaves earlier versions in place until you revoke them. |
+| `--client-secret-file <path>` | Provision only. File holding the OAuth App client secret, at most 1024 bytes. One trailing line break is stripped; every other byte is used verbatim. Use `-` to read the secret from standard input. |
+| `kandev deployment-secret github-personal-star revoke --version <n>` | Marks one provisioned version revoked after you have rotated to a newer one. It never deletes stored rows and never reveals the sealed value. |
+| `--socket <path>` | Provision and revoke only. Deployment-secret supervisor socket. Default: `/run/kandev/deployment-secret.sock`. |
+| `--data-dir <path>` | Deployment data directory holding `master.key` and the bootstrapped deployment identity. Default: `$KANDEV_HOME_DIR/data`, or `~/.kandev/data` when `KANDEV_HOME_DIR` is unset. |
+
+These commands are root-only. A non-root invocation exits with status 1 before it opens the socket
+or writes any file, so the refusal does not depend on the supervisor being reachable. A usage
+error, such as an unknown flag or a missing required value, exits with status 2. Run
+`kandev deployment-secret --help` for the group help.
+
+The commands talk to the root-owned supervisor socket created by the [deployment secret
+daemon](run-as-a-service.md#deployment-secret-daemon-for-repository-starring). The socket's parent
+directory is mode `0700` and the socket itself is mode `0600`, and the supervisor accepts a
+connection only from a peer whose kernel-reported user ID is `0`. When the daemon is not running,
+the command fails without provisioning anything.
+
+Provisioning stores the client secret; it does not enable the feature. Set
+`github.personalStarOAuth.clientId`, `github.personalStarOAuth.clientSecretRef`, and
+`github.personalStarOAuth.callbackURL`, then restart the backend. See
+[Configuration](configuration.md#github-personal-star-oauth-app) for those settings, the rotation
+procedure, and the fail-closed behavior.
 
 ## Ports and network exposure
 

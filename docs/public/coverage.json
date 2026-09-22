@@ -897,6 +897,32 @@
       ]
     },
     {
+      "id": "deployment-secret-provisioning",
+      "audiences": [
+        "operator"
+      ],
+      "stability": "stable",
+      "docs": [
+        "cli",
+        "run-as-a-service",
+        "configuration",
+        "security"
+      ],
+      "sources": [
+        "apps/backend/internal/common/config/catalog.go",
+        "apps/backend/internal/secrets/deployment_master_keyring.go",
+        "apps/backend/internal/secrets/deployment_secret_store.go",
+        "apps/backend/internal/system/deploymentsecret/availability.go",
+        "apps/backend/internal/system/deploymentsecret/server.go"
+      ],
+      "tests": [
+        "apps/backend/internal/common/config/catalog_test.go",
+        "apps/backend/internal/secrets/deployment_secret_store_test.go",
+        "apps/backend/internal/system/deploymentsecret/availability_test.go",
+        "apps/backend/internal/system/deploymentsecret/server_test.go"
+      ]
+    },
+    {
       "id": "office-mode",
       "audiences": [
         "user",

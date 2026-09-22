@@ -6,6 +6,7 @@ import path from "node:path";
 import test, { after } from "node:test";
 import {
   validateCoverageInventory,
+  validateDeploymentSecretDocs,
   validateFeatureMedia,
   validatePublicDocs,
 } from "./validate-public-docs.mjs";
@@ -242,6 +243,43 @@ test("plugin authoring reference documents authenticated actions and live host w
   assert.match(manifest, /webhooks\[\]\.access/);
   assert.match(manifest, /webhooks\[\]\.max_body_bytes/);
   assert.match(integrations, /Bitbucket/);
+});
+
+test("requires deployment-secret operator pages to keep the shipped contract", async () => {
+  const docsDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "kandev-doc-deployment-secret-"),
+  );
+  tempDirs.push(docsDir);
+  await Promise.all(
+    [
+      "cli.md",
+      "run-as-a-service.md",
+      "configuration.md",
+      "security.md",
+      "plugins.md",
+      "plugins-marketplace.md",
+      "integrations.md",
+      "feature-status.md",
+    ].map((page) =>
+      fs.copyFile(
+        path.join(process.cwd(), "docs/public", page),
+        path.join(docsDir, page),
+      ),
+    ),
+  );
+  const paths = { repoRoot: process.cwd(), docsDir };
+
+  await assert.doesNotReject(validateDeploymentSecretDocs(paths));
+
+  const cli = await fs.readFile(path.join(docsDir, "cli.md"), "utf8");
+  await fs.writeFile(
+    path.join(docsDir, "cli.md"),
+    cli.replaceAll("kandev deployment-secret bootstrap", "kandev secret bootstrap"),
+  );
+  await assert.rejects(
+    validateDeploymentSecretDocs(paths),
+    /cli\.md must document: kandev deployment-secret bootstrap/,
+  );
 });
 
 test("rejects public pages that contain an em dash", async () => {

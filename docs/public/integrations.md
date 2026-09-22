@@ -50,7 +50,7 @@ Compatibility routes under **Settings > Integrations** use the active workspace 
 
 The **Enabled** badge in Settings navigation appears only when the integration is connected and its saved workspace toggle is on. After changing a toggle, select **Save changes** to update the badge. With **Hide disabled integrations from left panel navigation** off, a disabled integration stays listed without the badge.
 
-GitHub, GitLab, Jira, and Linear configuration are workspace-specific. GitHub supports one automation connection per workspace and, for App-backed workspaces, one personal identity per Kandev user and workspace. GitHub supports `github.com`, Enterprise Cloud tenant hosts such as `acme.ghe.com`, and GitHub Enterprise Server hosts; GitLab supports `gitlab.com` and self-managed origins. Sentry supports multiple named instances per workspace. Do not assume that configuring one workspace gives another the same provider scope.
+GitHub, GitLab, Jira, and Linear configuration are workspace-specific. GitHub supports one automation connection per workspace, one GitHub App user-to-server personal identity per Kandev user and workspace when that workspace is App-backed, and a separate dedicated OAuth App connection per user and workspace for repository starring. GitHub supports `github.com`, Enterprise Cloud tenant hosts such as `acme.ghe.com`, and GitHub Enterprise Server hosts; GitLab supports `gitlab.com` and self-managed origins. Sentry supports multiple named instances per workspace. Do not assume that configuring one workspace gives another the same provider scope.
 
 Provider secrets saved by these forms use Kandev's encrypted secret store. The backend must still decrypt them to make API requests. Limit access to settings and the Kandev data directory, and use the narrowest provider scope that works.
 
@@ -201,6 +201,14 @@ Kandev routes credentials as follows:
 | Background reads/writes, watches, task Git, and agent `gh` | Workspace automation | PAT/CLI user or App |
 | **My GitHub** reads | Personal identity, then human PAT/CLI automation | User |
 | User-triggered review, merge, or other mutation | Personal identity, then human PAT/CLI automation, then App | Effective actor shown in the UI |
+| User-triggered repository star | Dedicated personal star OAuth App connection | Personal GitHub user only |
+
+Repository starring is the strict exception to that fallback order. It resolves only the dedicated
+personal star OAuth App connection and never falls back to a PAT, a `gh` account, a GitHub App
+installation, or the GitHub App user-to-server connection. That connection requests `public_repo`
+and is stored per workspace and Kandev user; it covers the star controls in **Settings > Plugins**,
+and a connection without the grant shows **Reconnect GitHub**. No star request is retried with
+another identity. See [Configuration](configuration.md#github-personal-star-oauth-app).
 
 An App-only workspace continues automation without a personal connection, but **My GitHub** remains unavailable. A personal connection cannot widen access: Kandev intersects the workspace repository scope, the App installation's repositories, and the user's GitHub access. Personal access and refresh tokens are never exposed to agents or executors.
 

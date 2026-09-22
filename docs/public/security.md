@@ -154,6 +154,37 @@ Webhook secrets are a separate case. A workspace automation stores its webhook s
 
 See [Configuration](configuration.md) for storage and environment fields and [Operations](operations.md) for backup, restore, logs, and reset behavior.
 
+### Deployment-owned repository-star secret
+
+Repository starring from **Settings > Plugins** uses a client secret that belongs to the
+deployment rather than to a user or workspace. It is not a row in the user or workspace secret
+store, it is never returned to the browser, and no secret value is ever shown in **Settings**. Its
+boundary is deliberately narrower than the rest of the secret store:
+
+- Provisioning runs as root on the Linux host. The root-only
+  [`kandev deployment-secret`](cli.md#deployment-secrets-for-repository-starring) commands refuse
+  to run for any other user before they touch the socket or the filesystem.
+- The commands talk over a root-owned Unix socket, `/run/kandev/deployment-secret.sock` by default.
+  Its parent directory is mode `0700` and the socket itself is mode `0600`, and the supervisor
+  checks the kernel-reported peer user ID and accepts a connection only from `UID 0`. The non-root
+  backend runs in a different process and cannot dispatch provisioning calls.
+- The secret is stored in the deployment-owned `deployment_secret_refs` store
+  (`deployment-secrets.sqlite` below the data directory), encrypted with the existing deployment
+  master key `<home>/data/master.key` under the stable key id `legacy-master-key-v1`. Kandev opens
+  that key read-only; it never generates or rotates it, and the key is not part of the database
+  snapshot.
+- A backend that runs as `UID 0` is unsupported. It would satisfy the same peer check as the
+  operator CLI, so such an installation reports repository starring as unavailable and creates no
+  supervisor socket.
+- Token material for the personal connection stays server-side. Settings shows connection state,
+  not tokens, and personal access and refresh tokens are never exposed to agents or executors.
+
+Protect `master.key` and the bootstrapped deployment identity as root-only files. Losing the key
+makes the stored deployment secret unrecoverable, and a copy of both lets another process decrypt
+it. See [Configuration](configuration.md#github-personal-star-oauth-app) for the settings and
+rotation procedure and [Run as a service](run-as-a-service.md#deployment-secret-daemon-for-repository-starring)
+for the daemon.
+
 ## Keep a human in the loop
 
 Kandev can automate planning, implementation, review preparation, and pull-request operations without making the agent the final authority.

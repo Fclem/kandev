@@ -11,6 +11,102 @@ const repoRoot = path.resolve(
 const defaultDocsDir = path.join(repoRoot, "docs/public");
 
 /**
+ * Operator-facing markers for the deployment-secret surface.
+ *
+ * Repository starring is provisioned outside the product UI: a root-only CLI
+ * writes a client secret that a separate Linux daemon seals and stores. These
+ * pages are the whole public contract, so the build fails when a marker that
+ * states the shipped command, socket, daemon, setting, or refusal is dropped.
+ */
+const deploymentSecretDocMarkers = [
+  {
+    page: "cli.md",
+    markers: [
+      "kandev deployment-secret <action> [deployment secret options]",
+      "kandev deployment-secret bootstrap",
+      "kandev deployment-secret github-personal-star provision --version <n> --client-secret-file <path>",
+      "kandev deployment-secret github-personal-star revoke --version <n>",
+      "--client-secret-file <path>",
+      "--socket <path>",
+      "--data-dir <path>",
+      "/run/kandev/deployment-secret.sock",
+      "exits with status 1",
+    ],
+  },
+  {
+    page: "run-as-a-service.md",
+    markers: [
+      "kandev-deployment-secretd.service",
+      "kandev-deployment-secretd-linux-x64.tar.gz",
+      "kandev-deployment-secretd-linux-arm64.tar.gz",
+      "bin/kandev-deployment-secretd",
+      "systemd/kandev-deployment-secretd.service",
+      "/usr/local/bin/kandev-deployment-secretd",
+      "checksums.txt",
+      "User=root",
+      "KANDEV_HOME_DIR",
+      "0700",
+      "0600",
+      "Desktop (Tauri) install",
+      "Docker or containerized backend",
+      "User-scoped systemd install",
+      "Backend running as `UID 0`",
+      "macOS (Darwin)",
+      "Windows",
+    ],
+  },
+  {
+    page: "configuration.md",
+    markers: [
+      "github.personalStarOAuth.clientId",
+      "github.personalStarOAuth.clientSecretRef",
+      "github.personalStarOAuth.callbackURL",
+      "KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CLIENT_ID",
+      "KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CLIENT_SECRET_REF",
+      "KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CALLBACK_URL",
+      "kandev-runtime:github-personal-star:client-secret:<version>",
+      "legacy-master-key-v1",
+      "required together",
+    ],
+  },
+  {
+    page: "security.md",
+    markers: [
+      "deployment_secret_refs",
+      "legacy-master-key-v1",
+      "kernel-reported peer user ID",
+      "0700",
+      "0600",
+      "UID 0",
+    ],
+  },
+  {
+    page: "plugins.md",
+    markers: [
+      "Reconnect GitHub",
+      "public_repo",
+      "available=true",
+      "never sent to the browser",
+    ],
+  },
+  {
+    page: "plugins-marketplace.md",
+    markers: ["Reconnect GitHub", "public_repo", "repository starring"],
+  },
+  {
+    page: "integrations.md",
+    markers: [
+      "| User-triggered repository star | Dedicated personal star OAuth App connection | Personal GitHub user only |",
+      "never falls back to a PAT",
+    ],
+  },
+  {
+    page: "feature-status.md",
+    markers: ["GitHub repository starring from plugin surfaces"],
+  },
+];
+
+/**
  * Validate that every published Markdown page has frontmatter and appears
  * exactly once in the public navigation metadata.
  *
@@ -81,6 +177,7 @@ export async function validatePublicDocs(docsDir = defaultDocsDir) {
 
   if (path.resolve(docsDir) === defaultDocsDir) {
     await validateCoverageInventory({ repoRoot, docsDir });
+    await validateDeploymentSecretDocs({ repoRoot, docsDir });
   }
 
   return { pageCount: pagesBySlug.size };
@@ -424,6 +521,66 @@ async function pathExists(target) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Require the deployment-secret operator surface to stay documented.
+ *
+ * The root-only provisioning CLI, its supervisor socket, the Linux daemon, and
+ * the dedicated personal-star OAuth App settings form one operator contract.
+ * This check ties the published pages to the shipped configuration catalog, so
+ * a renamed setting or a dropped command fails the docs build instead of
+ * shipping silently.
+ *
+ * @param {{repoRoot: string, docsDir: string}} paths Repository and docs roots.
+ * @returns {Promise<{markerCount: number, settingCount: number}>} Validated counts.
+ */
+export async function validateDeploymentSecretDocs({ repoRoot, docsDir }) {
+  const pages = new Map();
+  const readPage = async (page) => {
+    if (!pages.has(page)) {
+      pages.set(page, await fs.readFile(path.join(docsDir, page), "utf8"));
+    }
+    return pages.get(page);
+  };
+  let markerCount = 0;
+
+  for (const { page, markers } of deploymentSecretDocMarkers) {
+    const markdown = await readPage(page);
+    for (const marker of markers) {
+      if (!markdown.includes(marker)) {
+        throw new Error(`${page} must document: ${marker}`);
+      }
+      markerCount += 1;
+    }
+  }
+
+  const catalog = await fs.readFile(
+    path.join(repoRoot, "apps/backend/internal/common/config/catalog.go"),
+    "utf8",
+  );
+  const settings = new Set([
+    ...[...catalog.matchAll(/Key:\s*"(github\.personalStarOAuth\.[^"]+)"/g)].map(
+      (match) => match[1],
+    ),
+    ...[
+      ...catalog.matchAll(/"(KANDEV_GITHUB_PERSONAL_STAR_OAUTH_[A-Z0-9_]+)"/g),
+    ].map((match) => match[1]),
+  ]);
+  if (settings.size < 3) {
+    throw new Error(
+      "configuration catalog no longer declares the personal-star OAuth settings",
+    );
+  }
+
+  const configuration = await readPage("configuration.md");
+  for (const setting of settings) {
+    if (!configuration.includes(setting)) {
+      throw new Error(`configuration.md must document: ${setting}`);
+    }
+  }
+
+  return { markerCount, settingCount: settings.size };
 }
 
 /**

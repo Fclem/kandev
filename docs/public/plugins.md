@@ -251,6 +251,32 @@ authenticated"). This is owner-scoped, so a plugin's card only ever appears on
 its own settings page. See [supported named
 slots](plugins-authoring.md#supported-named-slots) in the authoring guide.
 
+## Repository stars
+
+When a plugin's repository link points at a public GitHub repository, its marketplace card,
+installed row, installed-plugin page, and Canvases detail can also show a star control for your own
+GitHub account. Starring is optional and never installs, enables, configures, or removes a plugin;
+a failed star request leaves the catalog, plugin management, and navigation usable.
+
+- The control appears only when the deployment supports repository starring and connection status
+  reports `available=true`. When the deployment cannot run the secret daemon, or the dedicated
+  OAuth App settings are missing or invalid, Kandev omits the control and its call to action
+  entirely and makes no start request.
+- The personal connection is per workspace and per Kandev user. It is a dedicated OAuth App
+  authorization that is separate from the workspace GitHub App, from a GitHub App user-to-server
+  connection, and from workspace PAT or `gh` credentials. See
+  [Configuration](configuration.md#github-personal-star-oauth-app).
+- When a previously valid connection no longer has the `public_repo` grant, the control shows
+  **Reconnect GitHub** instead of asserting a star state. Kandev does not claim a repository is
+  starred or unstarred until the connection is usable again.
+- Only `https://github.com/<owner>/<repo>` repository URLs are used for starring. Kandev rejects a
+  URL with credentials, a port, a query, a fragment, or percent-encoding before it calls GitHub.
+- Token material for the connection stays server-side: it is never sent to the browser, and no
+  secret value is ever shown in **Settings**.
+
+The star count shown for sorting in the marketplace is a catalog metric and is unrelated to your
+own star state. See [Plugin marketplace](plugins-marketplace.md#browse-and-install).
+
 <details>
 <summary>Package signing, storage, and security details</summary>
 

@@ -250,6 +250,71 @@ If the target unit/plist already exists and lacks Kandev's managed marker, insta
 
 The service manager starts the control plane only. Agents still need their configured executor dependencies and credentials, for example Docker access for a Docker profile or network reachability and keys for SSH. See [Executors](executors.md).
 
+## Deployment secret daemon for repository starring
+
+GitHub repository starring needs a deployment-owned client secret, sealed with the existing
+`<home>/data/master.key`. A separate root-owned service stores it, so the backend process never
+provisions that secret itself. The Linux release publishes this daemon in its own archive; the
+desktop and Docker runtime archives stay daemon-free.
+
+### Install on a Linux host
+
+Install it only when the backend runs as a non-root Linux system service.
+
+1. Download `kandev-deployment-secretd-linux-x64.tar.gz`, or `kandev-deployment-secretd-linux-arm64.tar.gz` on arm64, from the same release as your `kandev` binary. Verify it against the `.sha256` file published beside it.
+2. Extract the archive. It contains `bin/kandev-deployment-secretd`, `systemd/kandev-deployment-secretd.service`, and `checksums.txt`.
+3. Install the binary as `/usr/local/bin/kandev-deployment-secretd` and the unit file as `/etc/systemd/system/kandev-deployment-secretd.service`.
+4. Set `KANDEV_HOME_DIR` in the unit to the Kandev home your backend uses, then reload and start it:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now kandev-deployment-secretd.service
+   ```
+
+The shipped unit runs as `User=root` and starts
+`/usr/local/bin/kandev-deployment-secretd --socket /run/kandev/deployment-secret.sock`. Change the
+socket path only if you also pass the same `--socket` value to the
+[`kandev deployment-secret`](cli.md#deployment-secrets-for-repository-starring) commands.
+
+`kandev service install` and `kandev service uninstall` manage only `kandev.service`. This unit is
+installed and removed separately, and neither direction rewrites the other.
+
+### Operate the daemon
+
+```bash
+sudo systemctl status kandev-deployment-secretd.service
+sudo systemctl restart kandev-deployment-secretd.service
+sudo journalctl -u kandev-deployment-secretd.service -n 200 --no-pager
+```
+
+The daemon:
+
+- creates the socket's parent directory with mode `0700` and the socket itself with mode `0600`;
+- accepts a connection only from a peer whose kernel-reported user ID is `0`, so the non-root backend cannot dispatch provisioning calls;
+- resolves its data directory as `${KANDEV_HOME_DIR}/data`, or `~/.kandev/data` when that variable is unset, and reads the existing `master.key` and deployment identity there without generating or rotating either; and
+- never creates the deployment identity. Run `kandev deployment-secret bootstrap` before the first provision; the daemon fails closed when the identity or `master.key` is missing.
+
+### Where repository starring is unavailable
+
+| Deployment | Repository starring |
+|---|---|
+| Linux backend running as a non-root system service | Supported |
+| Desktop (Tauri) install | Unavailable |
+| Docker or containerized backend | Unavailable |
+| User-scoped systemd install | Unavailable |
+| Backend running as `UID 0` | Unavailable |
+| macOS (Darwin) | Unavailable |
+| Windows | Unavailable |
+
+On an unavailable target the backend stays healthy, connection status reports `available=false`,
+and no OAuth, start, or provisioning request is accepted. Kandev creates no supervisor socket and
+performs no provisioning side effect. A backend that runs as `UID 0` is unsupported on purpose: it
+would satisfy the same peer check as the root operator CLI.
+
+See [Configuration](configuration.md#github-personal-star-oauth-app) for the three OAuth App
+settings and [Security and trust](security.md#deployment-owned-repository-star-secret) for the
+trust boundary.
+
 ## Operate and inspect
 
 ```bash

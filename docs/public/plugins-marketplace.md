@@ -74,6 +74,15 @@ usage telemetry, so there is no "most installed" metric; ranking is GitHub
 stars only, and "Recently updated" surfaces new or actively maintained plugins
 that high-star incumbents would otherwise bury.
 
+When the deployment supports repository starring, marketplace cards, installed rows, and the
+installed-plugin and Canvases detail views also show a star control for your own GitHub account.
+It depends on a dedicated personal GitHub connection that is separate from the workspace GitHub
+App, from a GitHub App user-to-server connection, and from workspace PAT or `gh` credentials; see
+[Plugins → Repository stars](plugins.md#repository-stars). When the deployment is unsupported or
+its OAuth App settings are missing or invalid, Kandev omits the control and its call to action and
+sends no start request. A connection that no longer has the `public_repo` grant shows
+**Reconnect GitHub** instead of a star state.
+
 Click **Install** on a card to install it. This resolves the entry to its
 latest release tarball and runs the same verified install pipeline as
 install-by-URL (`POST /api/plugins/install`), see [Plugins → Installing a

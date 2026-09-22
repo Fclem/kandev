@@ -325,6 +325,59 @@ Do not infer security from `auth.jwtSecret`: setting it currently does not turn 
 [Voice Mode plugin](https://github.com/kdlbs/kandev-plugin-voice), and its transcription key lives
 in that plugin's own settings. Kandev ignores the old key and no longer serves `/api/v1/transcribe`.
 
+### GitHub personal star OAuth App
+
+Repository starring from **Settings > Plugins** uses a dedicated GitHub OAuth App that belongs to
+the deployment, not to a workspace. It is separate from the GitHub App registration, from GitHub
+App user-to-server authorization, and from workspace PAT or GitHub CLI credentials.
+
+| YAML key | Environment variable | Default | Current behavior |
+|---|---|---|---|
+| `github.personalStarOAuth.clientId` | `KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CLIENT_ID` | empty | Client ID of the dedicated OAuth App used only for personal starring. |
+| `github.personalStarOAuth.clientSecretRef` | `KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CLIENT_SECRET_REF` | empty | Sensitive reference to the provisioned client secret. Only the protected deployment namespace `kandev-runtime:github-personal-star:client-secret:<version>` is usable; any other non-empty value is treated as unavailable. |
+| `github.personalStarOAuth.callbackURL` | `KANDEV_GITHUB_PERSONAL_STAR_OAUTH_CALLBACK_URL` | empty | Absolute callback URL registered on that OAuth App; HTTPS outside loopback development. Its origin is authoritative for the callback and the return path. |
+
+Environment values override YAML. The three values are required together, and only the protected
+namespace above is usable for `clientSecretRef`. Missing, partial, or invalid values never
+partially enable the feature: the backend starts normally, GitHub personal-star connection status
+reports `available=false`, no star control or call to action is rendered, and Kandev attempts no
+OAuth start or provisioning call. The same unavailable state applies when the callback URL is not
+absolute HTTPS outside loopback development, or when the referenced secret is missing, revoked,
+owned by a user instead of the deployment, or owned by another installation.
+
+The client secret is not a user or workspace secret row and never appears in **Settings**. It lives
+in the deployment-owned `deployment_secret_refs` store, encrypted with the existing deployment
+master key (`<home>/data/master.key`, stable key id `legacy-master-key-v1`). Kandev opens that key
+read-only and never generates or rotates it. Do not put the client secret itself in `config.yaml`;
+record only its reference.
+
+Use a dedicated OAuth App for personal starring. Do not reuse the GitHub App registration, a PR
+credential, or another workspace's token. See [Integrations](integrations.md#github) for the
+workspace credential sources it is independent of, and [Run as a
+service](run-as-a-service.md#deployment-secret-daemon-for-repository-starring) for the daemon that
+stores the secret.
+
+#### Provision the client secret
+
+1. Create the OAuth App in GitHub, register the callback URL, and note its client ID and client secret.
+2. Run `kandev deployment-secret bootstrap` once on the host.
+3. Provision the secret as version `1`: `sudo kandev deployment-secret github-personal-star provision --version 1 --client-secret-file ./client-secret`.
+4. Set `github.personalStarOAuth.clientId`, `github.personalStarOAuth.clientSecretRef` (for example `kandev-runtime:github-personal-star:client-secret:1`), and `github.personalStarOAuth.callbackURL` in `config.yaml` or the environment, then restart the backend.
+5. Check the connection status for a workspace and user. When it resolves with `available=true`, the star control appears in **Settings > Plugins** for public GitHub repositories.
+
+#### Rotate the client secret
+
+1. Provision the new secret as the next version: `sudo kandev deployment-secret github-personal-star provision --version <n+1> --client-secret-file <path>`.
+2. Update `github.personalStarOAuth.clientSecretRef`, or its environment alias, to that version.
+3. Restart the backend so the new version is resolved at startup.
+4. Verify that connection status resolves again and that starring still works for an affected workspace and user.
+5. Revoke the previous version: `sudo kandev deployment-secret github-personal-star revoke --version <n>`.
+
+Rotation never edits a user connection row and never rewrites a stored access or refresh token.
+Revoking a version leaves existing personal connections refreshable; a connection whose grant is no
+longer accepted fails closed and asks the user to connect again from **Settings > Plugins**. See
+[CLI](cli.md#deployment-secrets-for-repository-starring) for the command reference.
+
 ### Trusted proxies for X-Forwarded-For
 
 `server.trustedProxies` and its `KANDEV_TRUSTED_PROXIES` override list the

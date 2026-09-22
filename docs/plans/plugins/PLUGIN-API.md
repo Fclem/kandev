@@ -1559,8 +1559,10 @@ An action from either group that declares `items(context)` renders as a
 submenu instead of a flat item: `label` is the trigger (there is nothing to
 run on the trigger itself), and the returned items are its children in order,
 each invoked with the same `PluginTaskMenuContext` as the action. `items()` is
-called synchronously during the menu build — once per open, per card/row — so
-it must read cached state rather than fetch. A child's `disabled` (or the
+called synchronously while the host builds that card's or row's menu entries —
+on every render, for both the dropdown and the context variant, whether or not
+a menu is open — so it must read cached state rather than fetch, and anything
+expensive behind it should be memoized on the state it reads. A child's `disabled` (or the
 action's own host-level disabled state, e.g. while a row-local move is
 running) still renders the entry, unlike `visible()`, which filters.
 

@@ -1119,7 +1119,8 @@ interface PluginRegistry {
 
   // Contributes an item to the kanban card's Edit submenu (group "edit") or
   // a flat, top-level card menu item after "Move to"/"Send to workflow"
-  // and before "Archive"/"Delete" (group "primary"). See "Kanban card contributions" below.
+  // and before "Archive"/"Delete" (group "primary"), optionally as a
+  // submenu of plugin-provided children (`items`). See "Kanban card contributions" below.
   registerTaskMenuAction(registration: TaskMenuActionRegistration): void;
 
   // Contributes a client-side filter section to the kanban board's display
@@ -1411,6 +1412,14 @@ interface PluginTaskMenuContext {
   presentation: PluginPresentation; // the actual kanban layout: desktop or mobile
 }
 
+interface TaskMenuSubItemRegistration {
+  id: string; // unique within the action; contributes to the entry's React key
+  label: string;
+  icon?: React.ReactNode;
+  disabled?: boolean;
+  run(context: PluginTaskMenuContext): void | Promise<void>; // a rejection is caught and logged
+}
+
 interface TaskMenuActionRegistration {
   id: string;
   label: string;
@@ -1420,6 +1429,14 @@ interface TaskMenuActionRegistration {
   // submenus and before the "Archive"/"Delete" items.
   group: "edit" | "primary";
   visible?(context: PluginTaskMenuContext): boolean; // default: always visible
+  // Declaring this renders the action as a submenu instead of a flat item:
+  // `label` becomes an unselectable trigger and these are its children, in
+  // order. Synchronous and evaluated once per menu build. Nesting stops at
+  // this one level.
+  items?(context: PluginTaskMenuContext): readonly TaskMenuSubItemRegistration[];
+  // Flat behavior, and the fallback whenever `items` is absent, yields no
+  // entries, or throws (caught and logged) -- so a host that predates
+  // `items` still renders a working flat item.
   run(context: PluginTaskMenuContext): void | Promise<void>; // a rejection is caught and logged
 }
 
@@ -1531,12 +1548,30 @@ action calls `run(context)`; a rejected promise is caught and logged to the
 console, and the menu still closes either way (Radix's own close-on-select,
 independent of the async result).
 
-Group `"primary"` renders each visible action as its own flat, top-level menu
-item instead of nesting it under `Edit`. It appears after the movement items
+Group `"primary"` renders each visible action as its own top-level menu item
+instead of nesting it under `Edit`. It appears after the movement items
 and before the Archive/Delete items on cards and on the shared desktop/mobile
 task-row menu. Group `"edit"` remains card-only. Visibility filtering,
 registration order, and `run()`/error handling are identical; the two groups
 are independent lists (an action only ever belongs to one).
+
+An action from either group that declares `items(context)` renders as a
+submenu instead of a flat item: `label` is the trigger (there is nothing to
+run on the trigger itself), and the returned items are its children in order,
+each invoked with the same `PluginTaskMenuContext` as the action. `items()` is
+called synchronously during the menu build — once per open, per card/row — so
+it must read cached state rather than fetch. A child's `disabled` (or the
+action's own host-level disabled state, e.g. while a row-local move is
+running) still renders the entry, unlike `visible()`, which filters.
+
+`run` is not a second action for a submenu: it stays the flat behavior for a
+host that predates `items` — such a host ignores the unknown field and renders
+the item it has always rendered — and the fallback whenever `items` yields no
+usable children, meaning an empty list or a throw (caught and logged, the same
+defensive handling as `visible`). An action can therefore ship both: a quick
+child list on a host that supports it, and its existing flat behavior
+elsewhere. Submenu nesting stops at this one level; a `run` rejection is
+caught and logged, and the menu closes either way.
 
 `"task-card-indicators"` (documented above with the other slots) is the
 matching read-only surface: a small icon/badge rendered beside the PR status

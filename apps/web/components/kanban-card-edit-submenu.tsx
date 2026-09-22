@@ -3,7 +3,7 @@
 import { IconPencil } from "@tabler/icons-react";
 import { t } from "@/lib/i18n";
 import type { PluginTaskMenuContext } from "@/lib/plugins/types";
-import { runnablePluginMenuEntry, visiblePluginMenuActions } from "./plugins/task-menu-actions";
+import { pluginMenuEntry, visiblePluginMenuActions } from "./plugins/task-menu-actions";
 import type { KanbanCardMenuEntry } from "./kanban-card-menu-items";
 
 /**
@@ -59,7 +59,7 @@ export function buildEditMenuEntry({
         disabled: disabled || !onEdit,
         onSelect: onEdit,
       },
-      ...pluginActions.map((action) => runnablePluginMenuEntry(action, context, disabled)),
+      ...pluginActions.map((action) => pluginMenuEntry(action, context, disabled)),
     ],
   };
 }

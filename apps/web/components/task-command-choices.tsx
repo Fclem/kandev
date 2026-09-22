@@ -43,9 +43,14 @@ type ChoiceOptions = {
  * dropping the whole contribution, and mirrors what the search surface shows
  * for every other card action.
  */
-export function pluginCommandChoices(entry: KanbanCardMenuEntry, group: string): CommandItem[] {
+export function pluginCommandChoices(
+  entry: KanbanCardMenuEntry,
+  group: string,
+  parentLabel?: string,
+): CommandItem[] {
   if (entry.kind === "submenu") {
-    return entry.children.flatMap((child) => pluginCommandChoices(child, group));
+    const label = typeof entry.label === "string" ? entry.label : parentLabel;
+    return entry.children.flatMap((child) => pluginCommandChoices(child, group, label));
   }
   if (entry.kind !== "item" || typeof entry.label !== "string") return [];
   return [
@@ -53,6 +58,10 @@ export function pluginCommandChoices(entry: KanbanCardMenuEntry, group: string):
       id: entry.key,
       label: entry.label,
       group,
+      // A child's own label ("Blocked") is meaningless on its own in a palette
+      // listing every action, so the trigger it came from is the entry's
+      // context -- the same field the sidebar task commands use for the title.
+      context: parentLabel,
       action: entry.onSelect,
       disabled: entry.disabled,
       icon: entry.icon,

@@ -76,6 +76,7 @@ describe("pluginCommandChoices", () => {
     more.action?.();
     expect(first.onSelect).toHaveBeenCalledTimes(1);
     expect(urgent.disabled).toBe(true);
+    expect(more.context).toBe("Add tag...");
   });
 
   it("ignores a label the palette cannot render", () => {

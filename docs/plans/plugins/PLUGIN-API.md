@@ -900,6 +900,7 @@ The continuation-renew endpoint from the predecessor transport is not part of
 the source contract. Load-more and retry use a current source read and preserve
 the public state until that read succeeds. No browser code imports a persistence
 store or writes conversation history.
+
 ## `registry: PluginRegistry`
 
 ```ts
@@ -916,6 +917,11 @@ store or writes conversation history.
 // renders on no surface. Hosts predating a section value, or seeing an
 // unrecognised one, simply degrade to "main"'s placement — nothing is ever
 // silently dropped.
+// A curated name (`PLUGIN_ICONS` in the host) or a plugin-owned component.
+// Task menu entries additionally render a ready-made React element unchanged,
+// for plugins that registered one before icons were resolved this way; that
+// tolerance is menu-only (other surfaces map an element to the fallback glyph)
+// and is not part of the type.
 type PluginIcon = string | React.ComponentType<{ className?: string }>;
 export type PluginNavSection =
   | "main"
@@ -1431,9 +1437,16 @@ interface TaskMenuActionRegistration {
   visible?(context: PluginTaskMenuContext): boolean; // default: always visible
   // Declaring this renders the action as a submenu instead of a flat item:
   // `label` becomes an unselectable trigger and these are its children, in
-  // order. Synchronous and evaluated once per menu build. Nesting stops at
-  // this one level.
-  items?(context: PluginTaskMenuContext): readonly TaskMenuSubItemRegistration[];
+  // order. Must be synchronous, and is evaluated on every menu build (see
+  // "Kanban card contributions"). Nesting stops at this one level. A child
+  // needs a non-blank id and label, a callable run, and optional fields of the
+  // shapes above (a boolean `disabled`, an `icon` that is a name, component or
+  // element) -- ids unique within the action: children the host cannot read or
+  // render are dropped (and reported), duplicate ids keep their first
+  // occurrence, and a result with nothing usable left falls back to `run`.
+  items?(
+    context: PluginTaskMenuContext,
+  ): readonly TaskMenuSubItemRegistration[];
   // Flat behavior, and the fallback whenever `items` is absent, yields no
   // entries, or throws (caught and logged) -- so a host that predates
   // `items` still renders a working flat item.
@@ -1560,18 +1573,28 @@ submenu instead of a flat item: `label` is the trigger (there is nothing to
 run on the trigger itself), and the returned items are its children in order,
 each invoked with the same `PluginTaskMenuContext` as the action. `items()` is
 called synchronously while the host builds that card's or row's menu entries —
-on every render, for both the dropdown and the context variant, whether or not
-a menu is open — so it must read cached state rather than fetch, and anything
-expensive behind it should be memoized on the state it reads. A child's `disabled` (or the
+on every render, with a card's dropdown and context variants sharing one
+evaluation, whether or not a menu is open — so it must read cached state rather
+than fetch, and anything expensive behind it should be memoized on the state it
+reads. A child's `disabled` (or the
 action's own host-level disabled state, e.g. while a row-local move is
 running) still renders the entry, unlike `visible()`, which filters.
 
 `run` is not a second action for a submenu: it stays the flat behavior for a
 host that predates `items` — such a host ignores the unknown field and renders
 the item it has always rendered — and the fallback whenever `items` yields no
-usable children, meaning an empty list or a throw (caught and logged, the same
-defensive handling as `visible`). An action can therefore ship both: a quick
-child list on a host that supports it, and its existing flat behavior
+usable children. That boundary is deliberately runtime-defensive, because a
+bundle is plain JavaScript and these types are not enforced at run time: an
+empty list, a throw, a promise (the contract is synchronous, and its rejection
+is observed so it cannot escape as an unhandled rejection), a non-array, and an
+array whose entries lack a non-blank `id` or `label`, a callable `run`, a
+boolean `disabled` or a recognizable `icon` all fall back to the flat item
+instead of crashing the render or producing a trigger nothing can open. Children are read once, inside the same guard, so a
+throwing getter or a Proxy fails that child rather than the card's render;
+unusable children are dropped when others remain, duplicate ids keep their
+first occurrence, and each defect is logged once per action and kind rather
+than on every menu build. An action can therefore ship both: a
+quick child list on a host that supports it, and its existing flat behavior
 elsewhere. Submenu nesting stops at this one level; a `run` rejection is
 caught and logged, and the menu closes either way.
 

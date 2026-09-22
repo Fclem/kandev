@@ -429,9 +429,9 @@ export interface TaskMenuActionRegistration {
    * as an unselectable submenu trigger and calls `items(context)` to get its
    * children, in the returned order. It must be synchronous and cheap: the
    * host cannot await a menu item, and it builds a card's or row's entries on
-   * every render — both the dropdown and the context variant, whether or not a
-   * menu is open — so an implementation that scans or sorts should memoize on
-   * the state it reads.
+   * every render — a card's dropdown and context variants are built from one
+   * evaluation, whether or not a menu is open — so an implementation that
+   * scans or sorts should memoize on the state it reads.
    *
    * `run` then serves as the fallback for a host that predates submenus (it
    * ignores this field and renders the flat item) and for a build where

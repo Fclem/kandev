@@ -46,25 +46,130 @@ function pluginMenuIcon(icon?: PluginIcon): ReactNode {
 }
 
 /**
+ * Plugin bundles are plain JavaScript, so the registration types are a
+ * promise, not a guarantee. One log per action *and kind* is enough: `items()`
+ * runs on every menu build, so a permanently malformed registration would
+ * otherwise log on every render, while a later defect of a different kind on
+ * the same action still reports.
+ */
+const loggedSubItemDefects = new Set<string>();
+
+function logSubItemDefect(
+  action: PluginTaskMenuActionRegistration,
+  kind: string,
+  detail?: unknown,
+): void {
+  const key = `${action.pluginId}:${action.id}:${kind}`;
+  if (loggedSubItemDefects.has(key)) return;
+  loggedSubItemDefects.add(key);
+  console.error(`[plugins] task menu action "${action.pluginId}:${action.id}" ${kind}`, detail);
+}
+
+/** One child, read once into the plain values the menu actually renders. */
+type SubItemSnapshot = {
+  id: string;
+  label: string;
+  icon?: PluginIcon;
+  disabled?: boolean;
+  run: (context: PluginTaskMenuContext) => void | Promise<void>;
+};
+
+/**
+ * Reads one plugin-supplied child into a snapshot the render can trust: a
+ * non-blank id and label, a callable run, and optional fields of the shapes
+ * the entry builder understands (a curated name, a component, or a ready-made
+ * element -- never an arbitrary object, which the icon resolver would coerce
+ * into a key). Everything the render will read is read here, inside the
+ * catch, so a throwing getter or a Proxy fails this child instead of the
+ * card's render, and nothing is read twice.
+ */
+function readSubItem(item: unknown): SubItemSnapshot | null {
+  if (!item || typeof item !== "object") return null;
+  try {
+    const { id, label, icon, disabled, run } = item as Partial<TaskMenuSubItemRegistration>;
+    if (typeof id !== "string" || id.trim().length === 0) return null;
+    if (typeof label !== "string" || label.trim().length === 0) return null;
+    if (typeof run !== "function") return null;
+    if (disabled !== undefined && typeof disabled !== "boolean") return null;
+    if (
+      icon !== undefined &&
+      typeof icon !== "string" &&
+      typeof icon !== "function" &&
+      !isValidElement(icon)
+    ) {
+      return null;
+    }
+    return { id, label, icon, disabled, run };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The children of an action that declares `items`, or null when the action
- * has no usable submenu — leaving `run` as the entry's behavior. `items()` is
- * a plugin callback running inside the host's menu build, so an empty or
- * malformed result and a throw all degrade to the flat fallback rather than
- * rendering a submenu trigger nothing can open; a throw is logged.
+ * has no usable submenu — leaving `run` as the entry's behavior.
+ *
+ * That fallback is the whole defensive boundary, because `items()` is a
+ * plugin callback running inside the host's menu build, and every way its
+ * result can be unreadable is the same answer: a throw, a thenable (the
+ * contract is synchronous), a non-array, a result whose entries cannot be
+ * rendered (blank/absent id or label, no callable run, an icon of the wrong
+ * shape), a child that cannot even be read (a throwing getter, a Proxy), and
+ * a repeated id all degrade to the flat item — or drop just that child —
+ * instead of crashing the card's render, producing a trigger nothing can
+ * open, or handing React children it cannot key. The body is one `try` on
+ * purpose: a plugin object is free to throw from any property access,
+ * including the array methods and the `then` lookup this function would
+ * otherwise perform on it.
  */
 function pluginSubItems(
   action: PluginTaskMenuActionRegistration,
   context: PluginTaskMenuContext,
-): readonly TaskMenuSubItemRegistration[] | null {
+): readonly SubItemSnapshot[] | null {
   if (typeof action.items !== "function") return null;
+
   try {
-    const items = action.items(context);
-    return Array.isArray(items) && items.length > 0 ? items : null;
+    const result: unknown = action.items(context);
+
+    if (result && typeof (result as { then?: unknown }).then === "function") {
+      logSubItemDefect(action, "items() returned a promise; it must be synchronous");
+      // Observe the rejection so an out-of-contract async callback cannot
+      // surface as an unhandled rejection out of the host's menu build.
+      void Promise.resolve(result).catch((error: unknown) => {
+        logSubItemDefect(action, "items() rejected", error);
+      });
+      return null;
+    }
+
+    if (!Array.isArray(result)) {
+      // null/undefined means "no children"; anything else is out of contract.
+      if (result !== null && result !== undefined) {
+        logSubItemDefect(action, "items() must return an array");
+      }
+      return null;
+    }
+
+    // Array.from copies through the array's own length and indices, so no
+    // array method is looked up on the plugin's object.
+    const list = Array.from(result as readonly unknown[]);
+    const seen = new Set<string>();
+    const usable: SubItemSnapshot[] = [];
+    list.forEach((item) => {
+      const child = readSubItem(item);
+      if (!child) {
+        logSubItemDefect(action, "items() returned an unusable child", item);
+        return;
+      }
+      if (seen.has(child.id)) {
+        logSubItemDefect(action, "items() repeated a child id", child.id);
+        return;
+      }
+      seen.add(child.id);
+      usable.push(child);
+    });
+    return usable.length > 0 ? usable : null;
   } catch (error: unknown) {
-    console.error(
-      `[plugins] task menu action "${action.pluginId}:${action.id}" items() threw`,
-      error,
-    );
+    logSubItemDefect(action, "items() could not be read", error);
     return null;
   }
 }

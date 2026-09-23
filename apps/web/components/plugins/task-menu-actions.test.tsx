@@ -545,6 +545,19 @@ describe("buildPrimaryPluginEntries — ids the encoder must survive", () => {
     expect(entries[0]?.kind === "submenu" ? entries[0].children[0]?.key : "").toContain("%d83c");
   });
 
+  it("keeps an escaped unit from running into the literal after it", () => {
+    // Regression from review: a two-digit minimum made `%250` mean both "%" + "0"
+    // and the single unit U+0250, so two ids could share one key. Escapes are now
+    // fixed width, which makes each token self-delimiting.
+    registerAction({ id: "%0", label: "Percent" });
+    registerAction({ id: "\u0250", label: "Unit" });
+
+    const keys = buildPrimaryPluginEntries({ context: CONTEXT }).map((entry) => entry?.key);
+
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+  });
+
   it("keeps a lone-surrogate id distinct from a valid astral one", () => {
     registerAction({ id: "\ud83c", label: "Half" });
     registerAction({ id: "\ud83c\udf89", label: "Whole" });

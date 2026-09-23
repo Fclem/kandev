@@ -88,9 +88,13 @@ const KEY_SAFE_CHARS = /[A-Za-z0-9\-_.!~*'()]/;
  * Percent-encodes one key part without `encodeURIComponent`'s `URIError`: a lone
  * surrogate -- a truncated astral character, which `slice` and `[0]` produce --
  * is not a code point, and would otherwise throw straight out of the card's
- * render with no error boundary to catch it. Escaping per code unit keeps the
- * encoding injective, because `%` is itself escaped: every `%XX` token is
- * produced here and can never occur inside an id.
+ * render with no error boundary to catch it.
+ *
+ * Every escaped unit becomes exactly four hex digits, which is what keeps the
+ * encoding injective: `%` is itself escaped, and a fixed width makes each token
+ * self-delimiting, so no escaped unit can run into the literal characters that
+ * follow it (`"%0"` and `"\u0250"` must not share a key) and every `%XXXX` token
+ * is produced here rather than occurring inside an id.
  */
 function encodeKeyPart(value: string): string {
   let encoded = "";
@@ -98,7 +102,7 @@ function encodeKeyPart(value: string): string {
     const char = value[index];
     encoded += KEY_SAFE_CHARS.test(char)
       ? char
-      : `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`;
+      : `%${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
   }
   return encoded;
 }

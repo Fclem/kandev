@@ -65,14 +65,17 @@ func (r *PersonalStarResolverService) ConnectionStatus(
 		return PersonalStarConnectionStatus{}, err
 	}
 	status.CredentialGeneration = lifecycle.CredentialGeneration
+	// "A previously valid generation exists" is evidence of a committed
+	// connection, not of a bumped fence: every start bumps the fence, so a
+	// started-then-abandoned first consent must still offer Connect.
+	everConnected := lifecycle.ConnectedGeneration >= 1
 	if connection == nil {
-		status.ReconnectRequired = lifecycle.CredentialGeneration >= 1
+		status.ReconnectRequired = everConnected
 		return status, nil
 	}
 	status.CredentialGeneration = connection.CredentialGeneration
 	status.Active = connection.Status == PersonalStarStatusActive && connection.AccessSecretID != ""
 	status.Capable = status.Active && connection.PublicRepo
-	everConnected := lifecycle.CredentialGeneration >= 1
 	status.ReconnectRequired = (everConnected && (!status.Active || !status.Capable)) ||
 		(status.Active && status.Capable && personalStarOutcomeNeedsReconnect(connection.LastReconnectOutcome))
 	return status, nil

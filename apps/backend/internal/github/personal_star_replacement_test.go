@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestPersonalStarTokenSecretIDsStayInTheReservedNamespace pins where dedicated
@@ -417,5 +418,140 @@ func TestPersonalStarStaleCallbackOutcomeDoesNotRelabelANewerConsent(t *testing.
 	}
 	if status.ReconnectRequired {
 		t.Fatalf("stale failure made a valid connection need a reconnect: %+v", status)
+	}
+}
+
+// TestPersonalStarReconnectRequiredNeedsACommittedConsent pins the documented
+// invariant: reconnect_required stays false until a consent actually commits a
+// usable connection. Every start bumps the fence, so a started-then-abandoned
+// (or declined, or failed, or reduced-scope) first consent must still offer
+// Connect rather than Reconnect.
+func TestPersonalStarReconnectRequiredNeedsACommittedConsent(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	resolver := NewPersonalStarResolverService(store, secrets, PersonalStarDeploymentStatus{
+		Available: true,
+		Settings:  PersonalStarOAuthSettings{ClientID: "id", ClientSecret: "s", CallbackURL: "https://example/x"},
+	})
+	status := func() PersonalStarConnectionStatus {
+		t.Helper()
+		s, err := resolver.ConnectionStatus(ctx, "ws-1", "user-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+
+	if got := status(); got.ReconnectRequired {
+		t.Fatalf("pristine status = %+v", got)
+	}
+
+	// Started and abandoned.
+	abandoned := startPersonalStarConsent(t, service, "/settings/plugins")
+	_ = abandoned
+	if got := status(); got.ReconnectRequired {
+		t.Fatalf("abandoned first consent asked for a reconnect: %+v", got)
+	}
+
+	// Declined first consent.
+	declined := startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: declined, Error: "access_denied"}, "user-1", "session-1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := status(); got.ReconnectRequired {
+		t.Fatalf("declined first consent asked for a reconnect: %+v", got)
+	}
+
+	// Reduced scope first consent.
+	client.tokens = GitHubOAuthTokens{AccessToken: "access-1", GrantedScopes: []string{"read:user"}}
+	reduced := startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: reduced, Code: "code"}, "user-1", "session-1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := status(); got.ReconnectRequired {
+		t.Fatalf("reduced-scope first consent asked for a reconnect: %+v", got)
+	}
+
+	// A consent that commits flips the invariant, and a disconnect keeps it:
+	// a previously valid generation now exists.
+	client.tokens = GitHubOAuthTokens{AccessToken: "access-2", RefreshToken: "refresh-2", GrantedScopes: []string{"public_repo"}}
+	connected := startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: connected, Code: "code"}, "user-1", "session-1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := status(); !got.Active || !got.Capable || got.ReconnectRequired {
+		t.Fatalf("connected status = %+v", got)
+	}
+	if err := service.DisconnectPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := status(); got.Active || got.Capable || !got.ReconnectRequired {
+		t.Fatalf("post-disconnect status = %+v", got)
+	}
+}
+
+// TestStarSecretCleanupTerminalFailureIsVisible pins the operator-visible half
+// of the cleanup contract: a deletion that keeps failing must record the
+// attempt count that gave up, keep its diagnostic last_error, stay out of the
+// retry loop, and be counted so the failure is not silent.
+func TestStarSecretCleanupTerminalFailureIsVisible(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	secrets.values["stuck-secret"] = "token"
+	secrets.failOn = "stuck-secret"
+	if err := store.EnqueuePersonalStarSecretCleanup(ctx, "ws-1", "user-1", "stuck-secret",
+		personalStarSecretKindAccess, 3); err != nil {
+		t.Fatal(err)
+	}
+	runner := NewStarSecretCleanupRunner(store, secrets, nil)
+	now := time.Now()
+	runner.now = func() time.Time { return now }
+
+	terminalBefore := personalStarCleanupAttempts.Get(personalStarCleanupOutcomeTerminal).String()
+	for attempt := 0; attempt < personalStarCleanupMaxAttempts; attempt++ {
+		now = now.Add(24 * time.Hour)
+		if deleted, err := runner.RunOnce(ctx); err != nil || deleted != 0 {
+			t.Fatalf("RunOnce() = %d, %v", deleted, err)
+		}
+	}
+
+	records, err := store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records = %d, %v", len(records), err)
+	}
+	record := records[0]
+	if record.Status != personalStarCleanupTerminal {
+		t.Fatalf("record = %+v, want terminal", record)
+	}
+	if record.Attempts != personalStarCleanupMaxAttempts {
+		t.Fatalf("terminal attempts = %d, want %d", record.Attempts, personalStarCleanupMaxAttempts)
+	}
+	if record.LastError == "" {
+		t.Fatal("terminal record carries no diagnostic")
+	}
+
+	// A terminal row leaves the retry loop: further passes neither delete nor
+	// reschedule it.
+	now = now.Add(24 * time.Hour)
+	if deleted, err := runner.RunOnce(ctx); err != nil || deleted != 0 {
+		t.Fatalf("RunOnce() after terminal = %d, %v", deleted, err)
+	}
+	if after, err := store.GetPersonalStarSecretCleanup(ctx, record.ID); err != nil || after == nil || after.Status != personalStarCleanupTerminal {
+		t.Fatalf("record after terminal = %+v, %v", after, err)
+	}
+
+	terminalAfter := personalStarCleanupAttempts.Get(personalStarCleanupOutcomeTerminal).String()
+	if terminalAfter == terminalBefore {
+		t.Fatal("a terminal cleanup failure was not counted")
 	}
 }

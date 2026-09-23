@@ -481,6 +481,10 @@ const personalStarTablesSQL = `
 		user_id TEXT NOT NULL CHECK (user_id <> ''),
 		revision BIGINT NOT NULL CHECK (revision >= 0),
 		credential_generation BIGINT NOT NULL CHECK (credential_generation >= 0),
+		-- Newest generation that committed a usable connection. Unlike
+		-- credential_generation this stays 0 until a consent actually succeeds,
+		-- which is what "a previously valid generation exists" means.
+		connected_generation BIGINT NOT NULL DEFAULT 0 CHECK (connected_generation >= 0),
 		updated_at DATETIME NOT NULL,
 		PRIMARY KEY (workspace_id, user_id)
 	);

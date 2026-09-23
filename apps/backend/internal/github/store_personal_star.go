@@ -58,9 +58,13 @@ type PersonalStarConnection struct {
 
 // PersonalStarLifecycle is the durable revision/credential-generation fence.
 type PersonalStarLifecycle struct {
-	Revision             int64     `db:"revision"`
-	CredentialGeneration int64     `db:"credential_generation"`
-	UpdatedAt            time.Time `db:"updated_at"`
+	Revision             int64 `db:"revision"`
+	CredentialGeneration int64 `db:"credential_generation"`
+	// ConnectedGeneration advances only when a consent commits a usable
+	// connection, so it distinguishes "a first consent was started" from "a
+	// connection actually existed".
+	ConnectedGeneration int64     `db:"connected_generation"`
+	UpdatedAt           time.Time `db:"updated_at"`
 }
 
 const personalStarConnectionSelect = `
@@ -102,7 +106,8 @@ func getPersonalStarLifecycleOn(
 		return PersonalStarLifecycle{}, errors.New("personal star lifecycle executor cannot query")
 	}
 	err := sqlx.GetContext(ctx, queryer, &lifecycle, exec.Rebind(`
-		SELECT revision, credential_generation, updated_at FROM github_personal_star_lifecycle
+		SELECT revision, credential_generation, connected_generation, updated_at
+		FROM github_personal_star_lifecycle
 		WHERE workspace_id = ? AND user_id = ?`), workspaceID, userID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PersonalStarLifecycle{}, nil
@@ -194,6 +199,9 @@ func (s *Store) ReplacePersonalStarConnection(
 	}
 	supersededIDs := supersededPersonalStarSecretRefs(previous, connection)
 	if err := enqueuePersonalStarSecretRefsTx(ctx, tx, connection.WorkspaceID, connection.UserID, supersededIDs); err != nil {
+		return nil, err
+	}
+	if err := markPersonalStarConnectedTx(ctx, tx, connection); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -329,7 +337,26 @@ func (s *Store) InsertPersonalStarConnection(
 	if affected == 0 {
 		return ErrPersonalStarFence
 	}
+	if _, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE github_personal_star_lifecycle SET connected_generation = ?, updated_at = ?
+		WHERE workspace_id = ? AND user_id = ?`),
+		connection.CredentialGeneration, now, connection.WorkspaceID, connection.UserID); err != nil {
+		return fmt.Errorf("record personal star connected generation: %w", err)
+	}
 	connection.CreatedAt, connection.UpdatedAt = now, now
+	return nil
+}
+
+// markPersonalStarConnectedTx records that this generation carries a usable
+// connection, on the transaction that commits it.
+func markPersonalStarConnectedTx(ctx context.Context, tx *sqlx.Tx, connection *PersonalStarConnection) error {
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE github_personal_star_lifecycle SET connected_generation = ?, updated_at = ?
+		WHERE workspace_id = ? AND user_id = ?`),
+		connection.CredentialGeneration, time.Now().UTC(),
+		connection.WorkspaceID, connection.UserID); err != nil {
+		return fmt.Errorf("record personal star connected generation: %w", err)
+	}
 	return nil
 }
 

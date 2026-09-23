@@ -245,7 +245,11 @@ func TestPersonalStarConsentFailsClosedAfterDisconnect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Active || status.Capable || !status.ReconnectRequired {
+	// This user never completed a consent, so no previously valid generation
+	// exists: disconnecting must leave the Connect CTA, not Reconnect. The
+	// disconnect-after-consent case is covered by
+	// TestPersonalStarReconnectRequiredNeedsACommittedConsent.
+	if status.Active || status.Capable || status.ReconnectRequired {
 		t.Fatalf("post-disconnect status = %+v", status)
 	}
 	if _, err := resolver.ResolvePersonalStarClient(ctx, "ws-1", "user-1"); !errors.Is(err, ErrGitHubPersonalRequired) {

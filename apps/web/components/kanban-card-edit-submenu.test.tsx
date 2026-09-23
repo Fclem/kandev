@@ -35,6 +35,11 @@ function registerEnhanceAction(
   overrides: {
     run?: () => Promise<void> | void;
     visible?: (context: PluginTaskMenuContext) => boolean;
+    items?: (context: PluginTaskMenuContext) => readonly {
+      id: string;
+      label: string;
+      run: (context: PluginTaskMenuContext) => Promise<void> | void;
+    }[];
   } = {},
 ) {
   pluginRegistry.forPlugin(PLUGIN_ID).registerTaskMenuAction({
@@ -43,6 +48,7 @@ function registerEnhanceAction(
     group: "edit",
     run: overrides.run ?? vi.fn(),
     ...(overrides.visible ? { visible: overrides.visible } : {}),
+    ...(overrides.items ? { items: overrides.items } : {}),
   });
 }
 
@@ -102,6 +108,27 @@ describe("buildEditMenuEntry — AC9 (plugin action registered)", () => {
         `plugin-edit-${PLUGIN_ID}%enhance`,
       ]);
     }
+  });
+
+  it("renders an edit action's children inside the Edit submenu", () => {
+    registerEnhanceAction({
+      items: () => [{ id: "quick", label: "Quick enhance", run: vi.fn() }],
+    });
+
+    const entry = buildEditMenuEntry({ onEdit: vi.fn(), context: CONTEXT });
+    expect(entry.kind).toBe("submenu");
+    if (entry.kind !== "submenu") return;
+
+    const pluginChild = entry.children.find(
+      (child) => child.key === `plugin-edit-${PLUGIN_ID}%enhance`,
+    );
+    expect(pluginChild?.kind).toBe("submenu");
+    if (pluginChild?.kind !== "submenu") return;
+    expect(pluginChild.children).toHaveLength(1);
+    const child = pluginChild.children[0];
+    expect(child?.kind).toBe("item");
+    if (child?.kind !== "item") return;
+    expect(child.label).toBe("Quick enhance");
   });
 });
 

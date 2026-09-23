@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/kandev/kandev/internal/secrets"
+	"syscall"
 )
 
 type recordedProvision struct {
@@ -368,7 +369,9 @@ func TestSupervisorFailsClosedForUnavailableTargetsAndPeers(t *testing.T) {
 		InstallationID: identity.InstallationID,
 		ClientNonceB64: testClientNonce(),
 	})
-	if err := secrets.WriteDeploymentFrame(connection, request); err != nil {
+	// A non-root peer is rejected before the server reads the frame, so the
+	// server can answer and close while this write is still in flight.
+	if err := secrets.WriteDeploymentFrame(connection, request); err != nil && !errors.Is(err, syscall.EPIPE) {
 		t.Fatal(err)
 	}
 	if result := harness.readResult(t, connection); result.ErrorCode != secrets.DeploymentErrorInvalidRequest {

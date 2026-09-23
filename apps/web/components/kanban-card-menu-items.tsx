@@ -138,7 +138,13 @@ export type BuildKanbanCardMenuEntriesArgs = {
   onSendToWorkflow?: (workflowId: string, stepId: string) => void;
   /** Defaults to an empty-id context (no visible plugin actions match it in practice). */
   pluginMenuContext?: PluginTaskMenuContext;
-  /** Plugin contributions already built from this call's `PluginEntryInputs`. */
+  /**
+   * Plugin contributions already built from this call's `PluginEntryInputs`.
+   * Callers must build them with the same inputs they pass here: the entries
+   * carry the disabled state, the edit handler and the menu context, so reusing
+   * a set across an input mismatch silently renders one call's plugin entries
+   * with another's behaviour. Building them in place is always correct.
+   */
   pluginEntries?: CardPluginEntries;
   /**
    * Forces the flat Edit item regardless of registered plugin `edit`-group

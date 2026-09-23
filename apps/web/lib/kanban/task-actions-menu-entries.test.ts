@@ -131,7 +131,7 @@ describe("buildTaskActionsMenuEntries — archived tier", () => {
 
     const entries = buildTaskActionsMenuEntries("archived", baseArgs);
     expect(itemKeys(entries)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-primary-action`,
+      `plugin-primary-${PLUGIN_ID}%primary-action`,
       REMOVE_SEPARATOR,
       "delete",
     ]);
@@ -164,7 +164,7 @@ describe("buildTaskActionsMenuEntries — unresolved board row tier", () => {
 
     const entries = buildTaskActionsMenuEntries("unresolved-row", baseArgs);
     expect(itemKeys(entries)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-primary-action`,
+      `plugin-primary-${PLUGIN_ID}%primary-action`,
       REMOVE_SEPARATOR,
       "archive",
       "delete",

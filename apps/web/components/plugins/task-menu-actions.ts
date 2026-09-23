@@ -255,7 +255,11 @@ export function pluginMenuEntry(
     return null;
   }
   const icon = readActionIcon(action);
-  const key = `${keyPrefix}-${action.pluginId}-${action.id}`;
+  // Both ids are plugin-controlled, so a dash-join can spell another action's
+  // key (`p` + `q-x` vs `p-q` + `x`); the palette flattens every plugin entry
+  // into one list where the key is both a React key and cmdk's value, so each id
+  // is percent-encoded after a `%` separator an id cannot produce.
+  const key = `${keyPrefix}-${encodeURIComponent(action.pluginId)}%${encodeURIComponent(action.id)}`;
   const items = pluginSubItems(action, context);
 
   if (items) {

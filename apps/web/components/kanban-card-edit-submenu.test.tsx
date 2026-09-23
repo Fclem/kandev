@@ -76,7 +76,7 @@ describe("buildEditMenuEntry — AC9 (plugin action registered)", () => {
     if (entry.kind === "submenu") {
       expect(entry.children.map((c) => c.key)).toEqual([
         "edit-task",
-        `plugin-edit-${PLUGIN_ID}-enhance`,
+        `plugin-edit-${PLUGIN_ID}%enhance`,
       ]);
     }
   });

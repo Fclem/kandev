@@ -18,7 +18,7 @@ import { buildPrimaryPluginEntries } from "./task-menu-actions";
 const PLUGIN_ID = "kandev-plugin-tags";
 const ACTION_ID = "add-tag";
 const ACTION_LABEL = "Add tag";
-const ACTION_KEY = `plugin-primary-${PLUGIN_ID}-${ACTION_ID}`;
+const ACTION_KEY = `plugin-primary-${PLUGIN_ID}%${ACTION_ID}`;
 
 const CONTEXT: PluginTaskMenuContext = {
   workspaceId: "ws-1",
@@ -310,7 +310,7 @@ describe("buildPrimaryPluginEntries — unreadable and repeated children", () =>
     expect(entry.kind).toBe("submenu");
     if (entry.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-duplicated#dup`,
+      `plugin-primary-${PLUGIN_ID}%duplicated#dup`,
     ]);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining("repeated a child id"),
@@ -375,8 +375,8 @@ describe("buildPrimaryPluginEntries — unreadable and repeated children", () =>
     const entry = entries[0];
     if (entry.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-partly-broken#gone`,
-      `plugin-primary-${PLUGIN_ID}-partly-broken#ok`,
+      `plugin-primary-${PLUGIN_ID}%partly-broken#gone`,
+      `plugin-primary-${PLUGIN_ID}%partly-broken#ok`,
     ]);
     consoleErrorSpy.mockRestore();
   });
@@ -449,7 +449,7 @@ describe("buildPrimaryPluginEntries — unusable registrations and array-likes",
     expect(entry.kind).toBe("submenu");
     if (entry.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-hostile-array#child`,
+      `plugin-primary-${PLUGIN_ID}%hostile-array#child`,
     ]);
   });
 
@@ -459,7 +459,7 @@ describe("buildPrimaryPluginEntries — unusable registrations and array-likes",
     for (const flag of ["disabled", "isDeleting", "isArchiving", "isDetaching"] as const) {
       const inputs = { pluginMenuContext: CONTEXT, [flag]: true };
       const prebuilt = buildCardPluginEntries(inputs).primary.find(
-        (entry) => entry.key === `plugin-primary-${PLUGIN_ID}-flagged`,
+        (entry) => entry.key === `plugin-primary-${PLUGIN_ID}%flagged`,
       );
       const internal = buildPrimaryPluginEntries({ context: CONTEXT, disabled: true })[0];
       // Both paths must agree, and a submenu's children inherit the state.
@@ -494,7 +494,7 @@ describe("buildPrimaryPluginEntries — shapes that must survive the boundary", 
     expect(entry?.kind).toBe("submenu");
     if (entry?.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-exotic-icon#ok`,
+      `plugin-primary-${PLUGIN_ID}%exotic-icon#ok`,
     ]);
   });
 
@@ -514,43 +514,63 @@ describe("buildPrimaryPluginEntries — shapes that must survive the boundary", 
     expect(entry?.kind).toBe("submenu");
     if (entry?.kind !== "submenu") return;
     expect(entry.children.map((child) => child.key)).toEqual([
-      `plugin-primary-${PLUGIN_ID}-icon-shapes#null-icon`,
-      `plugin-primary-${PLUGIN_ID}-icon-shapes#no-icon`,
+      `plugin-primary-${PLUGIN_ID}%icon-shapes#null-icon`,
+      `plugin-primary-${PLUGIN_ID}%icon-shapes#no-icon`,
     ]);
     // The two unusable shapes are one defect of the same kind: one report.
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
     consoleErrorSpy.mockRestore();
   });
 
-  it("keeps two actions' child keys distinct when their dash-joins would collide", () => {
-    // Action `quick`'s child `pick-x` and action `pick` of plugin `p-quick`
-    // both dash-join to `plugin-primary-p-quick-pick-x`; the palette flattens
-    // every plugin entry into one list, so these keys are React keys and cmdk
-    // values there.
+  it("keeps child keys distinct when two actions' ids dash-join identically", () => {
+    // Every key here is a dash-join (before this fix) of plugin-controlled ids,
+    // and the palette flattens all plugin entries into one list where a key is
+    // both a React key and cmdk's value. Both pairs below collided under a
+    // dash-join: a child against a flat action's key, and two actions whose id
+    // joins agree (`p` + `q-x` versus `p-q` + `x`).
     pluginRegistry.forPlugin("p").registerTaskMenuAction({
-      id: "quick",
-      label: "Quick",
-      group: "primary",
-      items: () => [{ id: "pick-x", label: "A", run: vi.fn() }],
-      run: vi.fn(),
-    });
-    pluginRegistry.forPlugin("p-quick").registerTaskMenuAction({
       id: "pick",
       label: "Pick",
       group: "primary",
-      items: () => [{ id: "x", label: "B", run: vi.fn() }],
+      items: () => [{ id: "x", label: "A", run: vi.fn() }],
+      run: vi.fn(),
+    });
+    pluginRegistry.forPlugin("p-pick").registerTaskMenuAction({
+      id: "pick",
+      label: "Pick x",
+      group: "primary",
+      items: () => [{ id: "pick-x", label: "B", run: vi.fn() }],
+      run: vi.fn(),
+    });
+    pluginRegistry.forPlugin("p").registerTaskMenuAction({
+      id: "q-x",
+      label: "Q x",
+      group: "primary",
+      items: () => [{ id: "c", label: "C", run: vi.fn() }],
+      run: vi.fn(),
+    });
+    pluginRegistry.forPlugin("p-q").registerTaskMenuAction({
+      id: "x",
+      label: "X",
+      group: "primary",
+      items: () => [{ id: "c", label: "D", run: vi.fn() }],
       run: vi.fn(),
     });
 
-    const childKeys = buildPrimaryPluginEntries({ context: CONTEXT }).flatMap((entry) =>
+    const entries = buildPrimaryPluginEntries({ context: CONTEXT });
+    const keys = entries.map((entry) => entry.key);
+    const childKeys = entries.flatMap((entry) =>
       entry && entry.kind === "submenu" ? entry.children.map((child) => child.key) : [],
     );
 
-    expect(childKeys).toHaveLength(2);
-    expect(new Set(childKeys).size).toBe(2);
+    expect(keys).toHaveLength(4);
+    expect(new Set(keys).size).toBe(4);
+    expect(childKeys).toHaveLength(4);
+    expect(new Set(childKeys).size).toBe(4);
+    // A child key can never equal a flat action key either.
+    expect(childKeys.filter((key) => keys.includes(key))).toEqual([]);
 
-    pluginRegistry.unregisterPlugin("p");
-    pluginRegistry.unregisterPlugin("p-quick");
+    for (const pluginId of ["p", "p-pick", "p-q"]) pluginRegistry.unregisterPlugin(pluginId);
   });
 });
 
@@ -564,7 +584,7 @@ describe("buildPrimaryPluginEntries — mixed registrations", () => {
     expect(entries.map((entry) => entry.kind)).toEqual(["submenu", "item"]);
     expect(entries.map((entry) => entry.key)).toEqual([
       ACTION_KEY,
-      `plugin-primary-${PLUGIN_ID}-other`,
+      `plugin-primary-${PLUGIN_ID}%other`,
     ]);
   });
 });

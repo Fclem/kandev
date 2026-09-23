@@ -1,6 +1,7 @@
+import { createElement, forwardRef, lazy } from "react";
 import { describe, expect, it } from "vitest";
 import { IconPuzzle, IconTicket } from "@tabler/icons-react";
-import { lookupPluginIcon, resolvePluginIcon } from "./icons";
+import { isPluginIconComponent, lookupPluginIcon, resolvePluginIcon } from "./icons";
 
 describe("plugin icons", () => {
   it("looks up a known icon name", () => {
@@ -39,6 +40,37 @@ describe("plugin icons", () => {
 
     expect(lookupPluginIcon(ExoticIcon as never)).toBe(ExoticIcon);
     expect(resolvePluginIcon(ExoticIcon as never)).toBe(ExoticIcon);
+  });
+
+  it("does not treat an element, a lazy component or a bare tag as a component", () => {
+    // An element is a rendered node, so handing it to createElement on the twelve
+    // surfaces that do `createElement(resolvePluginIcon(icon))` would throw; a
+    // lazy component cannot resolve synchronously in a menu; and an object that
+    // merely carries `$$typeof` is not a component at all. All three fall back.
+    const element = createElement("svg", { viewBox: "0 0 24 24" });
+    const lazyIcon = lazy(() => Promise.resolve({ default: () => null }));
+    const bogus = { $$typeof: 1 };
+
+    for (const icon of [element, lazyIcon, bogus]) {
+      expect(isPluginIconComponent(icon)).toBe(false);
+      expect(lookupPluginIcon(icon as never)).toBeUndefined();
+      expect(resolvePluginIcon(icon as never)).toBe(IconPuzzle);
+    }
+  });
+
+  it("passes through a forwardRef component, the shape an icon set builds", () => {
+    const Forwarded = forwardRef<SVGSVGElement, { className?: string }>(() => null);
+
+    expect(isPluginIconComponent(Forwarded)).toBe(true);
+    expect(lookupPluginIcon(Forwarded as never)).toBe(Forwarded);
+  });
+
+  it("resolves only own keys, so a prototype member is not an icon", () => {
+    for (const name of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+      expect(lookupPluginIcon(name)).toBeUndefined();
+      expect(resolvePluginIcon(name)).toBe(IconPuzzle);
+    }
+    expect(lookupPluginIcon("ticket")).toBe(IconTicket);
   });
 
   it("treats a non-string, non-function icon as absent instead of coercing it to a name", () => {

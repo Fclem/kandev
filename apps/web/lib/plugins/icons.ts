@@ -55,20 +55,28 @@ export const PLUGIN_ICONS: Record<string, TablerIcon> = {
 };
 
 /**
- * A component value a plugin may hand us, including React's exotic components:
- * `memo`, `forwardRef` and `lazy` return *objects* (callable per their types,
- * not at run time), and an icon set -- which `host-api` explicitly tells
- * plugins to bundle -- is built from `forwardRef`. A plain `typeof` check
- * would therefore reject the host's own icon shapes.
+ * The React tags a *component* carries at run time. `memo` and `forwardRef`
+ * return objects (callable per their types, not at run time), and an icon set --
+ * which `host-api` explicitly tells plugins to bundle -- is built from
+ * `forwardRef`, so a plain `typeof` check would reject the host's own icon
+ * shapes.
+ *
+ * Only those two count. A lazy component cannot resolve synchronously in a menu,
+ * and a *rendered* element is not a component at all: the menu passes an element
+ * through itself while every other surface maps it to the fallback glyph, so
+ * admitting it here would hand `createElement` something it refuses and take the
+ * render down.
  */
+const PLUGIN_ICON_COMPONENT_TAGS = new Set<symbol>([
+  Symbol.for("react.memo"),
+  Symbol.for("react.forward_ref"),
+]);
+
 export function isPluginIconComponent(icon: unknown): icon is ResolvedPluginIcon {
   if (typeof icon === "function") return true;
   if (typeof icon !== "object" || icon === null) return false;
-  try {
-    return "$$typeof" in icon;
-  } catch {
-    return false;
-  }
+  const tag = (icon as { $$typeof?: unknown }).$$typeof;
+  return typeof tag === "symbol" && PLUGIN_ICON_COMPONENT_TAGS.has(tag);
 }
 
 /**
@@ -81,7 +89,10 @@ export function isPluginIconComponent(icon: unknown): icon is ResolvedPluginIcon
  */
 export function lookupPluginIcon(icon?: PluginIcon): ResolvedPluginIcon | undefined {
   if (isPluginIconComponent(icon)) return icon;
-  return typeof icon === "string" ? PLUGIN_ICONS[icon] : undefined;
+  if (typeof icon !== "string") return undefined;
+  // Own keys only: `PLUGIN_ICONS["__proto__"]` or `["constructor"]` would
+  // otherwise resolve through the prototype chain to a value that is not an icon.
+  return Object.hasOwn(PLUGIN_ICONS, icon) ? PLUGIN_ICONS[icon] : undefined;
 }
 
 /** Sidebar lookup: always renders something — unknown/missing names get the puzzle glyph. */

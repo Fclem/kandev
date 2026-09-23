@@ -29,10 +29,16 @@ export function buildEditMenuEntry({
   forceFlat?: boolean;
 }): KanbanCardMenuEntry {
   const pluginActions = forceFlat ? [] : visiblePluginMenuActions("edit", context);
+  // Built and filtered before choosing between the submenu and the flat item: an
+  // action the host cannot render contributes no child, so a list yielding none
+  // must leave the native Edit item as it is rather than wrap it in a submenu.
+  const pluginEntries = pluginActions
+    .map((action) => pluginMenuEntry(action, context, disabled))
+    .filter((entry): entry is KanbanCardMenuEntry => entry !== null);
 
   const icon = <IconPencil className="mr-2 h-4 w-4" />;
 
-  if (pluginActions.length === 0) {
+  if (pluginEntries.length === 0) {
     return {
       kind: "item",
       key: "edit",
@@ -59,9 +65,7 @@ export function buildEditMenuEntry({
         disabled: disabled || !onEdit,
         onSelect: onEdit,
       },
-      ...pluginActions
-        .map((action) => pluginMenuEntry(action, context, disabled))
-        .filter((entry): entry is KanbanCardMenuEntry => entry !== null),
+      ...pluginEntries,
     ],
   };
 }

@@ -521,6 +521,64 @@ describe("buildPrimaryPluginEntries — shapes that must survive the boundary", 
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
     consoleErrorSpy.mockRestore();
   });
+});
+
+describe("buildPrimaryPluginEntries — key identity", () => {
+  it("keeps keys distinct when an id carries the child delimiter or a dash", () => {
+    // A `#` inside an action id must not forge a sibling child's key, and a `-`
+    // must not let one (pluginId, actionId) pair spell another's.
+    pluginRegistry.forPlugin("p").registerTaskMenuAction({
+      id: "quick",
+      label: "Quick",
+      group: "primary",
+      items: () => [{ id: "x", label: "Child", run: vi.fn() }],
+      run: vi.fn(),
+    });
+    pluginRegistry.forPlugin("p").registerTaskMenuAction({
+      id: "quick#x",
+      label: "Hashed",
+      group: "primary",
+      run: vi.fn(),
+    });
+    pluginRegistry.forPlugin("p").registerTaskMenuAction({
+      id: "a-b",
+      label: "Dashed",
+      group: "primary",
+      run: vi.fn(),
+    });
+    pluginRegistry.forPlugin("p-a").registerTaskMenuAction({
+      id: "b",
+      label: "Shifted",
+      group: "primary",
+      run: vi.fn(),
+    });
+
+    const entries = buildPrimaryPluginEntries({ context: CONTEXT });
+    const keys = entries.flatMap((entry) =>
+      entry
+        ? [entry.key, ...(entry.kind === "submenu" ? entry.children.map((c) => c.key) : [])]
+        : [],
+    );
+
+    expect(keys).toHaveLength(5);
+    expect(new Set(keys).size).toBe(5);
+    // A flat key never contains the raw child delimiter, so it cannot equal a child key.
+    expect(keys.filter((key) => key.includes("#"))).toHaveLength(1);
+
+    for (const pluginId of ["p", "p-a"]) pluginRegistry.unregisterPlugin(pluginId);
+  });
+
+  it("omits an action whose id is not a usable string", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    registerAction({ id: {} as never, items: () => [{ id: "ok", label: "Ok", run: vi.fn() }] });
+
+    expect(buildPrimaryPluginEntries({ context: CONTEXT })).toEqual([]);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("no usable id"),
+      undefined,
+    );
+    consoleErrorSpy.mockRestore();
+  });
 
   it("keeps child keys distinct when two actions' ids dash-join identically", () => {
     // Every key here is a dash-join (before this fix) of plugin-controlled ids,
@@ -573,7 +631,6 @@ describe("buildPrimaryPluginEntries — shapes that must survive the boundary", 
     for (const pluginId of ["p", "p-pick", "p-q"]) pluginRegistry.unregisterPlugin(pluginId);
   });
 });
-
 describe("buildPrimaryPluginEntries — mixed registrations", () => {
   it("renders a submenu action as one entry and keeps the rest flat", () => {
     registerAction({ id: "add-tag", items: () => [{ id: "more", label: "More", run: vi.fn() }] });

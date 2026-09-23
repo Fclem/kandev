@@ -51,6 +51,29 @@ afterEach(() => {
   pluginRegistry.unregisterPlugin(PLUGIN_ID);
 });
 
+describe("buildEditMenuEntry — a registration the host cannot render", () => {
+  // Regression: the submenu-vs-flat decision was made from the number of visible
+  // registrations, so an action with no usable label wrapped the native Edit item
+  // in a submenu even though its own entry was dropped -- unlike the primary
+  // group, which omits such an action entirely.
+  it("keeps the flat Edit item when the only edit-group action is unusable", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    pluginRegistry.forPlugin(PLUGIN_ID).registerTaskMenuAction({
+      id: "broken",
+      label: "" as never,
+      group: "edit",
+      run: vi.fn(),
+    });
+
+    const entry = buildEditMenuEntry({ onEdit: vi.fn(), context: CONTEXT });
+
+    expect(entry.kind).toBe("item");
+    expect(entry.kind === "item" ? entry.key : "").toBe("edit");
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+});
+
 describe("buildEditMenuEntry — AC10 (no plugin actions)", () => {
   it("renders the flat Edit item exactly as before", () => {
     const entry = renderEntry(vi.fn());

@@ -81,6 +81,16 @@ function logMenuDefect(
  * A registration is plugin-authored data too, so a missing or hostile accessor
  * omits the entry (and reports it) rather than handing React an object child.
  */
+/** The action's own id, read once and only when it is a non-blank string. */
+function readActionId(action: PluginTaskMenuActionRegistration): string | null {
+  try {
+    const { id } = action;
+    return typeof id === "string" && id.trim().length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 function readActionLabel(action: PluginTaskMenuActionRegistration): string | null {
   try {
     const { label } = action;
@@ -254,12 +264,17 @@ export function pluginMenuEntry(
     logMenuDefect(action, "registration has no usable label");
     return null;
   }
+  const actionId = readActionId(action);
+  if (actionId === null) {
+    logMenuDefect(action, "registration has no usable id");
+    return null;
+  }
   const icon = readActionIcon(action);
-  // Both ids are plugin-controlled, so a dash-join can spell another action's
-  // key (`p` + `q-x` vs `p-q` + `x`); the palette flattens every plugin entry
-  // into one list where the key is both a React key and cmdk's value, so each id
-  // is percent-encoded after a `%` separator an id cannot produce.
-  const key = `${keyPrefix}-${encodeURIComponent(action.pluginId)}%${encodeURIComponent(action.id)}`;
+  // Every plugin-controlled part is percent-encoded, so a dash-join cannot spell
+  // another action's key (`p` + `q-x` vs `p-q` + `x`) and no part can contain the
+  // separators: the palette flattens every plugin entry into one list where the
+  // key is both a React key and cmdk's value.
+  const key = `${keyPrefix}-${encodeURIComponent(action.pluginId)}%${encodeURIComponent(actionId)}`;
   const items = pluginSubItems(action, context);
 
   if (items) {

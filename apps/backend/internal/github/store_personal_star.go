@@ -304,14 +304,22 @@ func personalStarSecretIDsFor(connection *PersonalStarConnection) []personalStar
 	return refs
 }
 
-// InsertPersonalStarConnection commits the first connection for a key.
+// InsertPersonalStarConnection commits the first connection for a key. The row
+// and its durable generation marker share one transaction: a row without the
+// marker reads as active and capable while the failed callback compensates the
+// tokens it points at, so no state would offer the user a reconnect path.
 func (s *Store) InsertPersonalStarConnection(
 	ctx context.Context,
 	connection *PersonalStarConnection,
 	expectedRevision, expectedGeneration int64,
 ) error {
 	now := time.Now().UTC()
-	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("insert personal star connection: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO github_personal_star_connection (
 			workspace_id, user_id, login, github_user_id, granted_scopes, public_repo, status,
 			credential_generation, lifecycle_revision, access_secret_id, refresh_secret_id,
@@ -337,11 +345,11 @@ func (s *Store) InsertPersonalStarConnection(
 	if affected == 0 {
 		return ErrPersonalStarFence
 	}
-	if _, err := s.db.ExecContext(ctx, s.db.Rebind(`
-		UPDATE github_personal_star_lifecycle SET connected_generation = ?, updated_at = ?
-		WHERE workspace_id = ? AND user_id = ?`),
-		connection.CredentialGeneration, now, connection.WorkspaceID, connection.UserID); err != nil {
-		return fmt.Errorf("record personal star connected generation: %w", err)
+	if err := markPersonalStarConnectedTx(ctx, tx, connection); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("insert personal star connection: %w", err)
 	}
 	connection.CreatedAt, connection.UpdatedAt = now, now
 	return nil

@@ -555,3 +555,88 @@ func TestStarSecretCleanupTerminalFailureIsVisible(t *testing.T) {
 		t.Fatal("a terminal cleanup failure was not counted")
 	}
 }
+
+// failPersonalStarMarkerWrite installs a trigger that makes the durable
+// generation marker unwritable, so the first-consent commit contract can be
+// exercised deterministically. It returns a restore function.
+func failPersonalStarMarkerWrite(t *testing.T, store *Store) func() {
+	t.Helper()
+	const trigger = `CREATE TRIGGER fail_star_connected_generation
+		BEFORE UPDATE ON github_personal_star_lifecycle
+		BEGIN SELECT RAISE(ABORT, 'lifecycle marker unavailable'); END`
+	if _, err := store.db.Exec(trigger); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		if _, err := store.db.Exec(`DROP TRIGGER fail_star_connected_generation`); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestPersonalStarFirstConsentRollsBackWhenMarkerWriteFails pins that the
+// connection row and its durable generation marker commit together. A row that
+// commits while the marker fails would read as active and capable, but the
+// failed callback compensates the staged tokens the row points at, so every
+// star call would fail while no state offered the user a reconnect path.
+func TestPersonalStarFirstConsentRollsBackWhenMarkerWriteFails(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	resolver := NewPersonalStarResolverService(store, secrets, PersonalStarDeploymentStatus{
+		Available: true,
+		Settings:  PersonalStarOAuthSettings{ClientID: "id", ClientSecret: "s", CallbackURL: "https://example/x"},
+	})
+
+	restore := failPersonalStarMarkerWrite(t, store)
+	state := startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1"); err == nil {
+		t.Fatal("first consent committed while the generation marker was unwritable")
+	}
+	restore()
+
+	connection, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if connection != nil {
+		t.Fatalf("failed first consent left a committed row: %+v", connection)
+	}
+	lifecycle, err := store.GetPersonalStarLifecycle(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lifecycle.ConnectedGeneration != 0 {
+		t.Fatalf("connected generation = %d after a failed first consent", lifecycle.ConnectedGeneration)
+	}
+	status, err := resolver.ConnectionStatus(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Active || status.Capable || status.ReconnectRequired {
+		t.Fatalf("failed first consent left an unusable state: %+v", status)
+	}
+
+	// The user consents again and gets a usable, capable connection.
+	state = startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1"); err != nil {
+		t.Fatal(err)
+	}
+	status, err = resolver.ConnectionStatus(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Active || !status.Capable || status.ReconnectRequired {
+		t.Fatalf("retried consent did not produce a usable connection: %+v", status)
+	}
+	if _, err := resolver.ResolvePersonalStarClient(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatalf("retried consent cannot resolve a star client: %v", err)
+	}
+}

@@ -1,6 +1,8 @@
 package backendapp
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,4 +84,64 @@ func TestPersonalStarDeploymentStaysUnavailableAfterReferencesFail(t *testing.T)
 		t.Fatal("available deployment exposed no secret reader")
 	}
 	assertNoDeploymentSideEffects(t, cfg)
+}
+
+// TestPersonalStarDeploymentResolvesSeededMaterialWithTheE2ETargetOverride
+// proves the CI path: an e2e run inside a container declares the host
+// supported, the fixture seeds the deployment material exactly as production
+// requires, and the composition root resolves the client secret into a usable
+// feature.
+func TestPersonalStarDeploymentResolvesSeededMaterialWithTheE2ETargetOverride(t *testing.T) {
+	t.Setenv("KANDEV_DEPLOYMENT_SECRET_TARGET", "supported")
+	t.Setenv("KANDEV_SERVICE_MODE", "user")
+	cfg := personalStarTestConfig(t)
+	dataDir := cfg.ResolvedDataDir()
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	key := bytes.Repeat([]byte{9}, secrets.MasterKeySize)
+	if err := os.WriteFile(filepath.Join(dataDir, secrets.MasterKeyFile), key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := secrets.BootstrapDeploymentIdentity(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring, err := secrets.DeploymentMasterKeyringOpenExisting(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer, err := secrets.OpenDeploymentSecretStoreWriter(dataDir, identity, keyring)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+	sealed, err := secrets.SealDeploymentSecret(keyring.ID(), key, []byte("e2e-client-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisioner := secrets.NewDeploymentSecretProvisioner(writer)
+	if err := provisioner.Provision(context.Background(), secrets.DeploymentProvisionRequest{
+		InstallationID:   identity.InstallationID,
+		SecretClass:      secrets.DeploymentSecretClassGitHubPersonalStar,
+		ReferenceVersion: 1,
+		SealedEnvelope:   sealed.Bytes(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	deployment := buildPersonalStarDeployment(cfg, newDeploymentTestLogger(t))
+	if !deployment.Available {
+		t.Fatal("seeded deployment with the e2e target override stayed unavailable")
+	}
+	if deployment.ReadClientSecret == nil || deployment.Close == nil {
+		t.Fatalf("deployment runtime hooks = %+v", deployment)
+	}
+	secret, err := deployment.ReadClientSecret(context.Background())
+	if err != nil || secret != "e2e-client-secret" {
+		t.Fatalf("ReadClientSecret() = %q, %v", secret, err)
+	}
+	if err := deployment.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

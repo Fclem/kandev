@@ -12,6 +12,16 @@ import (
 const (
 	serviceModeEnvVar = "KANDEV_SERVICE_MODE"
 	serviceModeUser   = "user"
+
+	// targetOverrideEnvVar lets the e2e profile declare that the host counts as
+	// a supported system-service target. CI runs the e2e backend inside a
+	// container, where the marker probes below would otherwise report an
+	// unsupported target and the star cohort could never exercise the capable
+	// path. It only clears the container and user-scoped-service facts: the
+	// Linux and non-root requirements are still enforced, so a root or
+	// non-Linux backend stays unavailable.
+	targetOverrideEnvVar    = "KANDEV_DEPLOYMENT_SECRET_TARGET"
+	targetOverrideSupported = "supported"
 )
 
 // DetectBackendTarget reports the runtime facts that decide whether this
@@ -19,12 +29,13 @@ const (
 // running as UID 0 is unsupported by design: it would satisfy the same socket
 // peer check as the operator CLI, so it could provision its own credentials.
 func DetectBackendTarget() Target {
-	return Target{
-		GOOS:        runtime.GOOS,
-		BackendUID:  os.Geteuid(),
-		Container:   runningInContainer(),
-		UserSystemd: strings.TrimSpace(os.Getenv(serviceModeEnvVar)) == serviceModeUser,
+	target := Target{GOOS: runtime.GOOS, BackendUID: os.Geteuid()}
+	if strings.TrimSpace(os.Getenv(targetOverrideEnvVar)) == targetOverrideSupported {
+		return target
 	}
+	target.Container = runningInContainer()
+	target.UserSystemd = strings.TrimSpace(os.Getenv(serviceModeEnvVar)) == serviceModeUser
+	return target
 }
 
 func runningInContainer() bool {

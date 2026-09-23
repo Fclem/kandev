@@ -222,6 +222,15 @@ mocks:
     prod: ""
     dev:  ""
     e2e:  ""
+  # Declare the host a supported deployment-secret target for the e2e run.
+  # CI executes the e2e backend inside a container, so the container marker
+  # would otherwise disable the deployment-secret feature and the star
+  # cohort could not exercise its capable states. It cannot relax the Linux
+  # or non-root requirements, and no shipped profile sets it.
+  KANDEV_DEPLOYMENT_SECRET_TARGET:
+    prod: ""
+    dev:  ""
+    e2e:  "supported"
 
   # Replace third-party clients with in-memory fakes
   # so e2e specs don't hit live APIs (and dev doesn't need tokens).

@@ -77,3 +77,30 @@ func TestUnavailablePlatformNeverCreatesASocket(t *testing.T) {
 		t.Fatalf("socket stat = %v, want absent", err)
 	}
 }
+
+func TestDeploymentTargetOverrideClearsOnlyHostFacts(t *testing.T) {
+	t.Setenv(targetOverrideEnvVar, targetOverrideSupported)
+	t.Setenv(serviceModeEnvVar, serviceModeUser)
+	target := DetectBackendTarget()
+	if target.Container || target.UserSystemd {
+		t.Fatalf("override did not clear the host facts: %+v", target)
+	}
+	if target.GOOS != runtime.GOOS || target.BackendUID != os.Geteuid() {
+		t.Fatalf("override changed the process identity: %+v", target)
+	}
+	// The security guards the override must never relax.
+	if Available(Target{GOOS: linuxOS, BackendUID: 0}) {
+		t.Fatal("override allowed a root-run backend")
+	}
+	if Available(Target{GOOS: "darwin", BackendUID: 1000}) {
+		t.Fatal("override allowed a non-Linux backend")
+	}
+}
+
+func TestDeploymentTargetOverrideIgnoresOtherValues(t *testing.T) {
+	t.Setenv(targetOverrideEnvVar, "yes")
+	t.Setenv(serviceModeEnvVar, serviceModeUser)
+	if !DetectBackendTarget().UserSystemd {
+		t.Fatal("an unrecognised override value changed the detected facts")
+	}
+}

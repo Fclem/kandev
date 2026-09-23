@@ -156,3 +156,36 @@ func TestPersonalStarConnectionLifecycleOnPostgres(t *testing.T) {
 		t.Fatalf("second claim error = %v, want unavailable", err)
 	}
 }
+
+// TestPersonalStarLifecycleUpgradesAnOlderSchema pins the upgrade path for the
+// column this feature added after its tables first shipped on the branch:
+// CREATE TABLE IF NOT EXISTS cannot add a column to an existing table, so the
+// store must migrate it idempotently.
+func TestPersonalStarLifecycleUpgradesAnOlderSchema(t *testing.T) {
+	store := newTestStore(t)
+	ctx := t.Context()
+
+	// Simulate a database written before the marker existed.
+	if _, err := store.db.Exec(`ALTER TABLE github_personal_star_lifecycle DROP COLUMN connected_generation`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := store.db.Exec(`SELECT connected_generation FROM github_personal_star_lifecycle`); err == nil {
+		t.Fatal("column still present after the simulated downgrade")
+	}
+
+	// A reopened store migrates it back, and both reads and the marker write work.
+	upgraded, err := NewStore(store.db, store.ro)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	if _, _, err := upgraded.BumpPersonalStarLifecycle(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatalf("bump after upgrade: %v", err)
+	}
+	lifecycle, err := upgraded.GetPersonalStarLifecycle(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatalf("read lifecycle after upgrade: %v", err)
+	}
+	if lifecycle.ConnectedGeneration != 0 {
+		t.Fatalf("upgraded lifecycle = %+v, want a zero marker", lifecycle)
+	}
+}

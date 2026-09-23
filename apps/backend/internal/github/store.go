@@ -683,6 +683,14 @@ func (s *Store) applyIdempotentSchemaColumns() error {
 	if err := exec("github_task_prs.has_merge_conflicts", `ALTER TABLE github_task_prs ADD COLUMN has_merge_conflicts BOOLEAN`); err != nil {
 		return err
 	}
+	// The dedicated personal-star lifecycle gained the committed-generation
+	// marker after its tables first shipped on this branch, so a database
+	// created by an earlier build needs the column added: CREATE TABLE IF NOT
+	// EXISTS leaves the older shape untouched.
+	if err := exec("github_personal_star_lifecycle.connected_generation",
+		`ALTER TABLE github_personal_star_lifecycle ADD COLUMN connected_generation BIGINT NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
 	// Phase 4 (multi-repo): per-repo PR association on github_task_prs.
 	if err := exec("github_task_prs.repository_id", `ALTER TABLE github_task_prs ADD COLUMN repository_id TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err

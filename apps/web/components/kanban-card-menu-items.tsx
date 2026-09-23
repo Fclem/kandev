@@ -442,16 +442,16 @@ export function buildKanbanCardMenuEntries({
     onSendToWorkflow,
   });
 
-  const pluginInputs = {
-    disabled,
-    isDeleting,
-    isArchiving,
-    isDetaching,
-    onEdit,
-    forceFlatEdit,
-    pluginMenuContext,
-  };
-  const pluginContributions = pluginEntries ?? buildCardPluginEntries(pluginInputs);
+  // `forceFlatEdit` outranks a prebuilt bundle: those surfaces must never show the submenu form.
+  const pluginContributions =
+    pluginEntries && !forceFlatEdit
+      ? pluginEntries
+      : buildCardPluginEntries({
+          disabled: isProcessing,
+          onEdit,
+          forceFlatEdit,
+          pluginMenuContext,
+        });
 
   const linkEntry = buildLinkSubmenu({
     disabled: isProcessing,

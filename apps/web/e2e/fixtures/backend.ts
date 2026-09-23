@@ -3,7 +3,11 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BackendFixtureEnvOverrides, createScopedEnvUse } from "./backend-env";
+import {
+  BackendFixtureEnvOverrides,
+  createScopedEnvUse,
+  sanitizeInheritedEnv,
+} from "./backend-env";
 import { prepareCompactRuntimeFixture, type CompactRuntimeFixture } from "./compact-runtime";
 import { E2E_DOCKER_SCOPE } from "./docker-probe";
 import { dwell } from "../helpers/causal-waits";
@@ -620,72 +624,3 @@ export const backendFixture = base.extend<object, { backend: BackendContext }>({
     { scope: "worker", timeout: 60_000 },
   ],
 });
-
-/** Strip host-specific state before spawning E2E backends. */
-//   - GitHub tokens — tests must hit the mock GitHub, never a real token.
-//   - KANDEV_FEATURES_* flags — these are profile-managed (profiles.yaml `e2e:`
-//     column turns them on). When the suite is launched from inside a kandev
-//     task, the parent process exports KANDEV_FEATURES_OFFICE=false; left in
-//     place it survives the spread and, because the backend's ApplyProfile
-//     leaves already-set vars alone, disables Office (and any future feature)
-//     in the test backend → /api/v1/office/* 404s. Dropping the whole
-//     KANDEV_FEATURES_* namespace lets the e2e profile govern feature flags so
-//     the suite always exercises them, regardless of where it's launched.
-//   - KANDEV_WEB_TITLE_PREFIX — the browser identity is profile-managed in
-//     this suite. Explicit per-test values are applied after this baseline is
-//     sanitized through `backend.restart(overrides)`.
-//   - KANDEV_GITHUB_PERSONAL_STAR_OAUTH_* — the dedicated personal-star
-//     deployment settings are owned by the deployment fixture
-//     (`fixtures/personal-star-deployment.ts`), which seeds the matching
-//     deployment material and applies these values through
-//     `backend.restart(seed.env)`. A host shell (or another kandev instance)
-//     exporting them would otherwise make a spec's "unsupported deployment"
-//     baseline depend on the developer's environment.
-//   - KANDEV_SERVICE_MODE — the launcher writes "user"/"system" into every
-//     service unit it installs. The suite is often launched from a kandev task
-//     running under `kandev.service`, so the spawned backend would otherwise
-//     inherit "user" and classify itself as a user-scope systemd install. That
-//     is a deployment fact, not a test fact: `deploymentsecret.Available`
-//     rejects a user-systemd backend, which would make the dedicated
-//     personal-star deployment permanently unavailable inside a container-less
-//     developer run. Specs that want that rejection set it explicitly through
-//     `backend.restart({ KANDEV_SERVICE_MODE: "user" })`.
-//   - PATH casing aliases — Windows commonly inherits `Path`; retaining it
-//     beside the fixture's new `PATH` makes child-process lookup order
-//     ambiguous. The caller restores one canonical PATH after sanitizing.
-//   - Service-install markers — a host's managed service identity must not make
-//     the source-built e2e backend appear eligible for managed updates.
-//   - Remote helper paths — container-backed tests must exercise the standard
-//     package cache path, never an inherited helper override.
-function sanitizeInheritedEnv(env: Record<string, string>): Record<string, string> {
-  const cleaned = { ...env };
-  delete cleaned.GH_TOKEN;
-  delete cleaned.GITHUB_TOKEN;
-  for (const key of [
-    "KANDEV_RUNNING_AS_SERVICE",
-    "KANDEV_SERVICE_MODE",
-    "KANDEV_SERVICE_MANAGER",
-    "KANDEV_INSTALL_KIND",
-    "KANDEV_SERVICE_METADATA",
-  ]) {
-    delete cleaned[key];
-  }
-  // A host value here would win over the e2e profile's "supported" (the
-  // profile only fills gaps), silently disabling the deployment-secret
-  // feature and every capable-path star spec on that machine.
-  delete cleaned.KANDEV_DEPLOYMENT_SECRET_TARGET;
-  for (const key of Object.keys(cleaned)) {
-    if (
-      key === "KANDEV_WEB_TITLE_PREFIX" ||
-      key.startsWith("KANDEV_FEATURES_") ||
-      key.startsWith("KANDEV_GITHUB_PERSONAL_STAR_OAUTH_")
-    ) {
-      delete cleaned[key];
-    }
-    if (/^KANDEV_AGENTCTL_(?:LINUX_BINARY|(?:LINUX|DARWIN)_(?:AMD64|ARM64)_BINARY)$/i.test(key)) {
-      delete cleaned[key];
-    }
-    if (key.toUpperCase() === "PATH") delete cleaned[key];
-  }
-  return cleaned;
-}

@@ -95,7 +95,7 @@ describe("MarketplaceEntryRow attribution", () => {
 describe("MarketplaceEntryRow repository star", () => {
   it("keeps the star toggle beside the repo link instead of inside it", async () => {
     fetchStarConnection.mockResolvedValue({
-      user_id: "user-a",
+      user_id: "default-user",
       credential_generation: 1,
       active: true,
       capable: true,
@@ -121,7 +121,7 @@ describe("MarketplaceEntryRow repository star", () => {
 
   it("renders no star control for a non-GitHub repository URL", async () => {
     fetchStarConnection.mockResolvedValue({
-      user_id: "user-a",
+      user_id: "default-user",
       credential_generation: 1,
       active: true,
       capable: true,

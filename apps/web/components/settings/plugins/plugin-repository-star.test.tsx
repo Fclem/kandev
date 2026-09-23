@@ -31,7 +31,9 @@ function connection(
   overrides: Partial<GitHubStarConnectionStatus> = {},
 ): GitHubStarConnectionStatus {
   return {
-    user_id: "user-a",
+    // The backend resolves the authenticated identity to this id while
+    // authentication is disabled, and the store's default auth state matches.
+    user_id: "default-user",
     credential_generation: 1,
     active: true,
     capable: true,

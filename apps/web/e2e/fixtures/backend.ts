@@ -670,6 +670,10 @@ function sanitizeInheritedEnv(env: Record<string, string>): Record<string, strin
   ]) {
     delete cleaned[key];
   }
+  // A host value here would win over the e2e profile's "supported" (the
+  // profile only fills gaps), silently disabling the deployment-secret
+  // feature and every capable-path star spec on that machine.
+  delete cleaned.KANDEV_DEPLOYMENT_SECRET_TARGET;
   for (const key of Object.keys(cleaned)) {
     if (
       key === "KANDEV_WEB_TITLE_PREFIX" ||

@@ -16,6 +16,7 @@ import (
 
 	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/githubauth"
+	repoerrors "github.com/kandev/kandev/internal/task/repository"
 )
 
 const defaultGitHubUserID = DefaultUserID
@@ -390,6 +391,10 @@ func githubAuthErrorResponse(err error) (int, string) {
 		status, code = http.StatusBadRequest, "github_invalid_request"
 	case errors.Is(err, ErrPersonalStarFence):
 		status, code = http.StatusConflict, "github_connection_changed"
+	case errors.Is(err, repoerrors.ErrWorkspaceNotFound):
+		// A missing workspace and a foreign workspace are indistinguishable on
+		// purpose: the caller learns only that the workspace is not usable.
+		status, code = http.StatusNotFound, "github_workspace_not_found"
 	}
 	return status, code
 }

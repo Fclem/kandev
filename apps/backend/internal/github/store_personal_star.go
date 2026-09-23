@@ -16,6 +16,9 @@ const (
 	PersonalStarStatusActive   = "active"
 	PersonalStarStatusInactive = "inactive"
 
+	personalStarSecretKindAccess  = "github-personal-star-access"
+	personalStarSecretKindRefresh = "github-personal-star-refresh"
+
 	PersonalStarFlowKind = "github-personal-star"
 
 	personalStarCleanupPending  = "pending"
@@ -126,20 +129,27 @@ func (s *Store) BumpPersonalStarLifecycle(ctx context.Context, workspaceID, user
 }
 
 // ReplacePersonalStarConnection atomically commits a verified replacement when
-// the fence still matches. Superseded secret IDs are returned so the caller can
-// schedule their cleanup only after this commit succeeds.
+// the fence still matches. The superseded secret ids are recorded in the
+// durable cleanup queue inside the same transaction, so a replacement can never
+// commit while the tokens it stopped referencing are unqueued: that window
+// would orphan ciphertext that no row points at any more.
 func (s *Store) ReplacePersonalStarConnection(
 	ctx context.Context,
 	connection *PersonalStarConnection,
 	expectedRevision, expectedGeneration int64,
 ) ([]string, error) {
 	now := time.Now().UTC()
-	previous, err := s.GetPersonalStarConnection(ctx, connection.WorkspaceID, connection.UserID)
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("replace personal star connection: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	previous, err := personalStarConnectionForUpdate(ctx, tx, connection.WorkspaceID, connection.UserID)
 	if err != nil {
 		return nil, err
 	}
-	superseded := supersededPersonalStarSecrets(previous, connection)
-	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE github_personal_star_connection SET
 			login = ?, github_user_id = ?, granted_scopes = ?, public_repo = ?, status = ?,
 			credential_generation = ?, lifecycle_revision = ?, access_secret_id = ?,
@@ -163,8 +173,100 @@ func (s *Store) ReplacePersonalStarConnection(
 	if affected == 0 {
 		return nil, ErrPersonalStarFence
 	}
+	supersededIDs := supersededPersonalStarSecretRefs(previous, connection)
+	if err := enqueuePersonalStarSecretRefsTx(ctx, tx, connection.WorkspaceID, connection.UserID, supersededIDs); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("replace personal star connection: %w", err)
+	}
 	connection.CreatedAt, connection.UpdatedAt = now, now
-	return superseded, nil
+	return supersededSecretIDs(supersededIDs), nil
+}
+
+// personalStarSecretRef names one generation-specific secret awaiting deletion.
+type personalStarSecretRef struct {
+	SecretID   string
+	Kind       string
+	Generation int64
+}
+
+// personalStarConnectionForUpdate reads a connection row inside a transaction,
+// locking it on PostgreSQL so a concurrent replacement cannot interleave.
+func personalStarConnectionForUpdate(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	workspaceID, userID string,
+) (*PersonalStarConnection, error) {
+	query := personalStarConnectionSelect + ` WHERE workspace_id = ? AND user_id = ?`
+	if tx.DriverName() == "postgres" {
+		query += ` FOR UPDATE`
+	}
+	var connection PersonalStarConnection
+	err := tx.GetContext(ctx, &connection, tx.Rebind(query), workspaceID, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load personal star connection: %w", err)
+	}
+	return &connection, nil
+}
+
+// enqueuePersonalStarSecretRefsTx records cleanup rows on the caller's
+// transaction. Duplicate tuples are ignored so a retried replacement stays
+// idempotent.
+func enqueuePersonalStarSecretRefsTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	workspaceID, userID string,
+	refs []personalStarSecretRef,
+) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	for _, ref := range refs {
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`
+			INSERT INTO github_personal_star_cleanup (
+				id, workspace_id, user_id, secret_id, secret_kind, credential_generation,
+				attempts, next_attempt_at, status, last_error, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, '', ?)
+			ON CONFLICT (workspace_id, user_id, secret_id, credential_generation) DO NOTHING`),
+			uuid.NewString(), workspaceID, userID, ref.SecretID, ref.Kind, ref.Generation,
+			now, personalStarCleanupPending, now); err != nil {
+			return fmt.Errorf("queue personal star secret cleanup: %w", err)
+		}
+	}
+	return nil
+}
+
+func supersededSecretIDs(refs []personalStarSecretRef) []string {
+	ids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ids = append(ids, ref.SecretID)
+	}
+	return ids
+}
+
+func personalStarSecretIDsFor(connection *PersonalStarConnection) []personalStarSecretRef {
+	if connection == nil {
+		return nil
+	}
+	refs := make([]personalStarSecretRef, 0, 2)
+	if connection.AccessSecretID != "" {
+		refs = append(refs, personalStarSecretRef{
+			SecretID: connection.AccessSecretID, Kind: personalStarSecretKindAccess,
+			Generation: connection.AccessSecretGeneration,
+		})
+	}
+	if connection.RefreshSecretID != "" {
+		refs = append(refs, personalStarSecretRef{
+			SecretID: connection.RefreshSecretID, Kind: personalStarSecretKindRefresh,
+			Generation: connection.RefreshSecretGeneration,
+		})
+	}
+	return refs
 }
 
 // InsertPersonalStarConnection commits the first connection for a key.
@@ -221,17 +323,31 @@ func (s *Store) DisconnectPersonalStarConnection(
 	ctx context.Context,
 	workspaceID, userID string,
 ) ([]string, error) {
-	revision, generation, err := s.BumpPersonalStarLifecycle(ctx, workspaceID, userID)
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("disconnect personal star connection: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	previous, err := personalStarConnectionForUpdate(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return nil, err
 	}
-	previous, err := s.GetPersonalStarConnection(ctx, workspaceID, userID)
-	if err != nil {
-		return nil, err
+	var lifecycle PersonalStarLifecycle
+	if err := tx.GetContext(ctx, &lifecycle, tx.Rebind(`
+		INSERT INTO github_personal_star_lifecycle (workspace_id, user_id, revision, credential_generation, updated_at)
+		VALUES (?, ?, 1, 1, ?)
+		ON CONFLICT (workspace_id, user_id) DO UPDATE SET
+			revision = github_personal_star_lifecycle.revision + 1,
+			credential_generation = github_personal_star_lifecycle.credential_generation + 1,
+			updated_at = excluded.updated_at
+		RETURNING revision, credential_generation`), workspaceID, userID, time.Now().UTC()); err != nil {
+		return nil, fmt.Errorf("bump personal star lifecycle: %w", err)
 	}
+	revision, generation := lifecycle.Revision, lifecycle.CredentialGeneration
 	now := time.Now().UTC()
-	superseded := personalStarSecretIDs(previous)
-	if _, err := s.db.ExecContext(ctx, s.db.Rebind(`
+	superseded := personalStarSecretIDsFor(previous)
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO github_personal_star_connection (
 			workspace_id, user_id, login, github_user_id, granted_scopes, public_repo, status,
 			credential_generation, lifecycle_revision, access_secret_id, refresh_secret_id,
@@ -247,7 +363,13 @@ func (s *Store) DisconnectPersonalStarConnection(
 		workspaceID, userID, PersonalStarStatusInactive, generation, revision, nil, nil, now, now); err != nil {
 		return nil, fmt.Errorf("disconnect personal star connection: %w", err)
 	}
-	return superseded, nil
+	if err := enqueuePersonalStarSecretRefsTx(ctx, tx, workspaceID, userID, superseded); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("disconnect personal star connection: %w", err)
+	}
+	return supersededSecretIDs(superseded), nil
 }
 
 // ListPersonalStarConnections returns every dedicated connection in a
@@ -302,13 +424,16 @@ func (s *Store) EnqueuePersonalStarSecretCleanup(
 	return nil
 }
 
-func supersededPersonalStarSecrets(previous, replacement *PersonalStarConnection) []string {
+// supersededPersonalStarSecretRefs returns the previous generation's secrets
+// that the replacement no longer references, each with the generation it was
+// written for.
+func supersededPersonalStarSecretRefs(previous, replacement *PersonalStarConnection) []personalStarSecretRef {
 	if previous == nil {
 		return nil
 	}
-	superseded := make([]string, 0, 2)
-	for _, candidate := range []string{previous.AccessSecretID, previous.RefreshSecretID} {
-		if candidate == "" || candidate == replacement.AccessSecretID || candidate == replacement.RefreshSecretID {
+	superseded := make([]personalStarSecretRef, 0, 2)
+	for _, candidate := range personalStarSecretIDsFor(previous) {
+		if candidate.SecretID == replacement.AccessSecretID || candidate.SecretID == replacement.RefreshSecretID {
 			continue
 		}
 		superseded = append(superseded, candidate)

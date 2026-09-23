@@ -320,12 +320,10 @@ func (s *PersonalStarOAuthService) commitGrant(
 	if err != nil {
 		return s.finishCallback(ctx, base, personalStarOutcomeFailed, nil)
 	}
-	superseded, err := s.commitPersonalStarConnection(ctx, connection, flow)
-	if err != nil {
+	if err := s.commitPersonalStarConnection(ctx, connection, flow); err != nil {
 		s.discardPersonalStarSecrets(ctx, staged)
 		return PersonalStarCallbackOutcome{}, err
 	}
-	s.enqueuePersonalStarCleanup(ctx, connection, superseded)
 	return PersonalStarCallbackOutcome{
 		WorkspaceID: connection.WorkspaceID,
 		UserID:      connection.UserID,
@@ -340,16 +338,16 @@ func (s *PersonalStarOAuthService) commitPersonalStarConnection(
 	ctx context.Context,
 	connection *PersonalStarConnection,
 	flow *PersonalStarFlow,
-) ([]string, error) {
+) error {
 	existing, err := s.store.GetPersonalStarConnection(ctx, connection.WorkspaceID, connection.UserID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if existing == nil {
-		err = s.store.InsertPersonalStarConnection(ctx, connection, flow.ExpectedRevision, flow.ExpectedGeneration)
-		return nil, err
+		return s.store.InsertPersonalStarConnection(ctx, connection, flow.ExpectedRevision, flow.ExpectedGeneration)
 	}
-	return s.store.ReplacePersonalStarConnection(ctx, connection, flow.ExpectedRevision, flow.ExpectedGeneration)
+	_, err = s.store.ReplacePersonalStarConnection(ctx, connection, flow.ExpectedRevision, flow.ExpectedGeneration)
+	return err
 }
 
 func (s *PersonalStarOAuthService) finishCallback(
@@ -405,19 +403,6 @@ func (s *PersonalStarOAuthService) discardPersonalStarSecrets(ctx context.Contex
 	}
 }
 
-func (s *PersonalStarOAuthService) enqueuePersonalStarCleanup(
-	ctx context.Context,
-	connection *PersonalStarConnection,
-	superseded []string,
-) {
-	for _, secretID := range superseded {
-		if err := s.store.EnqueuePersonalStarSecretCleanup(ctx, connection.WorkspaceID, connection.UserID,
-			secretID, "github-personal-star", connection.CredentialGeneration-1); err != nil {
-			return
-		}
-	}
-}
-
 // RefreshPersonalStarConnection rotates the dedicated access token through the
 // stored refresh token. The new grant's scopes are re-normalized: losing
 // public_repo disables the capability, and the previous access secret is
@@ -461,13 +446,11 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 	}
 	// The committed row still carries the pre-bump fence, so that is the
 	// expectation the swap must satisfy.
-	superseded, err := s.store.ReplacePersonalStarConnection(
-		ctx, &replacement, connection.LifecycleRevision, connection.CredentialGeneration)
-	if err != nil {
+	if _, err := s.store.ReplacePersonalStarConnection(
+		ctx, &replacement, connection.LifecycleRevision, connection.CredentialGeneration); err != nil {
 		s.discardPersonalStarSecrets(ctx, staged)
 		return err
 	}
-	s.enqueuePersonalStarCleanup(ctx, &replacement, superseded)
 	return nil
 }
 
@@ -497,23 +480,16 @@ func (s *PersonalStarOAuthService) refreshTokens(
 	return tokens, connection, nil
 }
 
-// DisconnectPersonalStarConnection bumps the fence, clears the committed token
-// pointers, and enqueues every generation-specific secret for deletion.
+// DisconnectPersonalStarConnection bumps the fence and clears the committed
+// token pointers. The store records the superseded generations in the durable
+// cleanup queue in the same transaction, so a disconnect can never leave token
+// ciphertext that no row references and no queue retries.
 func (s *PersonalStarOAuthService) DisconnectPersonalStarConnection(
 	ctx context.Context,
 	workspaceID, userID string,
 ) error {
-	superseded, err := s.store.DisconnectPersonalStarConnection(ctx, workspaceID, userID)
-	if err != nil {
-		return err
-	}
-	for _, secretID := range superseded {
-		if err := s.store.EnqueuePersonalStarSecretCleanup(ctx, workspaceID, userID,
-			secretID, "github-personal-star", 0); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := s.store.DisconnectPersonalStarConnection(ctx, workspaceID, userID)
+	return err
 }
 
 // ParseGitHubStarCallbackRawQuery parses the untouched callback query bytes.

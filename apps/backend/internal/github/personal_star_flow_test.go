@@ -684,3 +684,162 @@ func TestPersonalStarTokenSecretIDsStayInTheReservedNamespace(t *testing.T) {
 		t.Fatal("exported teardown prefixes do not match the token secret ids")
 	}
 }
+
+// failStarCleanupEnqueue installs a trigger that makes every cleanup-queue
+// insert fail, so the atomic swap/enqueue contract can be exercised
+// deterministically. It returns a restore function.
+func failStarCleanupEnqueue(t *testing.T, store *Store) func() {
+	t.Helper()
+	const trigger = `CREATE TRIGGER fail_star_cleanup_insert
+		BEFORE INSERT ON github_personal_star_cleanup
+		BEGIN SELECT RAISE(ABORT, 'cleanup queue unavailable'); END`
+	if _, err := store.db.Exec(trigger); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		if _, err := store.db.Exec(`DROP TRIGGER fail_star_cleanup_insert`); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func seedConnectedPersonalStar(t *testing.T, service *PersonalStarOAuthService, client *fakePersonalStarOAuth) *PersonalStarConnection {
+	t.Helper()
+	state := startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(context.Background(),
+		GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1"); err != nil {
+		t.Fatal(err)
+	}
+	connection, err := service.store.GetPersonalStarConnection(context.Background(), "ws-1", "user-1")
+	if err != nil || connection == nil {
+		t.Fatalf("connection = %+v, %v", connection, err)
+	}
+	_ = client
+	return connection
+}
+
+func TestPersonalStarReplacementRollsBackWhenCleanupEnqueueFails(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	before := seedConnectedPersonalStar(t, service, client)
+
+	restore := failStarCleanupEnqueue(t, store)
+	client.refreshed = GitHubOAuthTokens{AccessToken: "access-2", GrantedScopes: []string{"public_repo"}}
+	if err := service.RefreshPersonalStarConnection(ctx, "ws-1", "user-1"); err == nil {
+		t.Fatal("refresh succeeded while the cleanup queue was unavailable")
+	}
+
+	// The committed row must still reference the tokens it had before: a
+	// replacement that cannot record its superseded secrets must not orphan
+	// them by committing.
+	after, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || after == nil {
+		t.Fatalf("connection = %+v, %v", after, err)
+	}
+	if after.AccessSecretID != before.AccessSecretID ||
+		after.CredentialGeneration != before.CredentialGeneration ||
+		after.LifecycleRevision != before.LifecycleRevision {
+		t.Fatalf("failed refresh mutated the committed row: %+v -> %+v", before, after)
+	}
+	// The rejected refresh compensates the secret it staged, and the live
+	// token stays untouched.
+	if len(secrets.deleted) != 1 || !strings.Contains(secrets.deleted[0], "access") {
+		t.Fatalf("staged secrets were not compensated: %v", secrets.deleted)
+	}
+	if _, ok := secrets.values[before.AccessSecretID]; !ok {
+		t.Fatal("the live access token was deleted by a rejected refresh")
+	}
+
+	// Once the queue is writable the same refresh succeeds and queues the
+	// superseded generation.
+	restore()
+	superseded := before.AccessSecretID
+	if err := service.RefreshPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	records, err := store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].SecretID != superseded {
+		t.Fatalf("queued cleanup rows = %+v, want the superseded access secret", records)
+	}
+	if records[0].CredentialGeneration != before.AccessSecretGeneration {
+		t.Fatalf("queued generation = %d, want %d", records[0].CredentialGeneration, before.AccessSecretGeneration)
+	}
+	if records[0].SecretKind != personalStarSecretKindAccess {
+		t.Fatalf("queued kind = %q", records[0].SecretKind)
+	}
+}
+
+func TestPersonalStarDisconnectRollsBackWhenCleanupEnqueueFails(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	before := seedConnectedPersonalStar(t, service, client)
+
+	restore := failStarCleanupEnqueue(t, store)
+	if err := service.DisconnectPersonalStarConnection(ctx, "ws-1", "user-1"); err == nil {
+		t.Fatal("disconnect succeeded while the cleanup queue was unavailable")
+	}
+	after, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || after == nil {
+		t.Fatalf("connection = %+v, %v", after, err)
+	}
+	if after.Status != PersonalStarStatusActive || after.AccessSecretID != before.AccessSecretID {
+		t.Fatalf("failed disconnect tombstoned the row: %+v", after)
+	}
+	lifecycle, err := store.GetPersonalStarLifecycle(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lifecycle.Revision != before.LifecycleRevision {
+		t.Fatalf("failed disconnect bumped the fence: %d -> %d", before.LifecycleRevision, lifecycle.Revision)
+	}
+
+	restore()
+	if err := service.DisconnectPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	records, err := store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued := map[string]int64{}
+	for _, record := range records {
+		queued[record.SecretID] = record.CredentialGeneration
+	}
+	for _, expected := range []struct {
+		id         string
+		generation int64
+	}{
+		{before.AccessSecretID, before.AccessSecretGeneration},
+		{before.RefreshSecretID, before.RefreshSecretGeneration},
+	} {
+		generation, ok := queued[expected.id]
+		if !ok {
+			t.Fatalf("disconnect did not queue %q: %v", expected.id, queued)
+		}
+		if generation != expected.generation {
+			t.Fatalf("queued generation for %q = %d, want %d", expected.id, generation, expected.generation)
+		}
+	}
+	runner := NewStarSecretCleanupRunner(store, secrets, nil)
+	if deleted, err := runner.RunOnce(ctx); err != nil || deleted != len(records) {
+		t.Fatalf("RunOnce() = %d, %v; want %d", deleted, err, len(records))
+	}
+	if len(secrets.values) != 0 {
+		t.Fatalf("disconnect left token values behind: %v", secrets.values)
+	}
+}

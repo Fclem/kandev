@@ -1520,6 +1520,15 @@ jobs:
             shasum -a 256 bin/kandev-deployment-secretd systemd/kandev-deployment-secretd.service > checksums.txt
           )
           tar -czf "dist/kandev-deployment-secretd-${platform}.tar.gz" -C "${staging}" bin systemd checksums.txt
+          # Operators verify the archive against a detached .sha256 exactly as
+          # they do for the runtime archives, and the release workflow treats a
+          # missing checksum as a failed release. The checksum names the bare
+          # archive so `sha256sum -c` works from the download directory.
+          (
+            cd dist
+            shasum -a 256 "kandev-deployment-secretd-${platform}.tar.gz" \
+              > "kandev-deployment-secretd-${platform}.tar.gz.sha256"
+          )
           tar -tzf "dist/kandev-deployment-secretd-${platform}.tar.gz"
 
       - name: Upload deployment secret daemon archive
@@ -1527,7 +1536,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: deployment-secretd-${{ matrix.platform }}
-          path: dist/kandev-deployment-secretd-${{ matrix.platform }}.tar.gz
+          path: |
+            dist/kandev-deployment-secretd-${{ matrix.platform }}.tar.gz
+            dist/kandev-deployment-secretd-${{ matrix.platform }}.tar.gz.sha256
           if-no-files-found: error
 
       - name: Upload staged runtime candidates (attempt 1)
@@ -2505,11 +2516,12 @@ jobs:
           # personal-star OAuth client secret.
           for platform in linux-x64 linux-arm64; do
             archive="dist/deployment-secretd/kandev-deployment-secretd-${platform}.tar.gz"
-            if [ ! -s "$archive" ]; then
-              echo "Missing required deployment secret daemon archive: $archive" >&2
+            if [ ! -s "$archive" ] || [ ! -s "${archive}.sha256" ]; then
+              echo "Missing required deployment secret daemon archive or checksum: $archive" >&2
               exit 1
             fi
-            cp "$archive" dist/release-assets/
+            (cd dist/deployment-secretd && sha256sum -c "$(basename "${archive}.sha256")")
+            cp "$archive" "${archive}.sha256" dist/release-assets/
           done
           platforms=(linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64)
           for platform in "${platforms[@]}"; do
@@ -3140,6 +3152,7 @@ jobs:
             dist/release-assets/kandev-linux-*.tar.gz
             dist/release-assets/kandev-linux-*.tar.gz.sha256
             dist/release-assets/kandev-deployment-secretd-linux-*.tar.gz
+            dist/release-assets/kandev-deployment-secretd-linux-*.tar.gz.sha256
             dist/release-assets/kandev-macos-*.tar.gz
             dist/release-assets/kandev-macos-*.tar.gz.sha256
             dist/release-assets/kandev-windows-*.tar.gz

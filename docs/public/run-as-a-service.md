@@ -311,6 +311,11 @@ and no OAuth, start, or provisioning request is accepted. Kandev creates no supe
 performs no provisioning side effect. A backend that runs as `UID 0` is unsupported on purpose: it
 would satisfy the same peer check as the root operator CLI.
 
+The `e2e` profile declares `KANDEV_DEPLOYMENT_SECRET_TARGET=supported` so the end-to-end suite can
+exercise the supported path from inside its CI container. That value clears only the container and
+user-session detections; the Linux and non-root requirements are still enforced, and no shipped
+profile sets it.
+
 See [Configuration](configuration.md#github-personal-star-oauth-app) for the three OAuth App
 settings and [Security and trust](security.md#deployment-owned-repository-star-secret) for the
 trust boundary.

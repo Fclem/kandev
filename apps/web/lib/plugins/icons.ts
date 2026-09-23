@@ -75,7 +75,16 @@ const PLUGIN_ICON_COMPONENT_TAGS = new Set<symbol>([
 export function isPluginIconComponent(icon: unknown): icon is ResolvedPluginIcon {
   if (typeof icon === "function") return true;
   if (typeof icon !== "object" || icon === null) return false;
-  const tag = (icon as { $$typeof?: unknown }).$$typeof;
+  // The `in` check and the read both run a plugin-supplied trap -- a Proxy `has`,
+  // or an accessor whose getter throws -- and this function runs on every icon
+  // surface, so an unreadable tag means "not a component" rather than an escape.
+  let tag: unknown;
+  try {
+    if (!("$$typeof" in icon)) return false;
+    tag = icon.$$typeof;
+  } catch {
+    return false;
+  }
   return typeof tag === "symbol" && PLUGIN_ICON_COMPONENT_TAGS.has(tag);
 }
 

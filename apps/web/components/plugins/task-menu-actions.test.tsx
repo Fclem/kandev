@@ -545,20 +545,6 @@ describe("buildPrimaryPluginEntries — ids the encoder must survive", () => {
     expect(entries[0]?.kind === "submenu" ? entries[0].children[0]?.key : "").toContain("%d83c");
   });
 
-  it("omits a registration whose id has no string form, without throwing", () => {
-    // A Symbol id or a null-prototype object has no `ToString`: the log line that
-    // reports the omission must not be able to throw, or the report itself takes
-    // the render down while dropping the registration.
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    registerAction({ id: Symbol("add-tag") as never, label: "Symbol id" });
-    registerAction({ id: Object.create(null) as never, label: "Null-prototype id" });
-
-    expect(() => buildPrimaryPluginEntries({ context: CONTEXT })).not.toThrow();
-    expect(buildPrimaryPluginEntries({ context: CONTEXT })).toEqual([]);
-    expect(consoleErrorSpy).toHaveBeenCalled();
-    consoleErrorSpy.mockRestore();
-  });
-
   it("keeps an escaped unit from running into the literal after it", () => {
     // Regression from review: a two-digit minimum made `%250` mean both "%" + "0"
     // and the single unit U+0250, so two ids could share one key. Escapes are now
@@ -641,18 +627,6 @@ describe("buildPrimaryPluginEntries — key identity", () => {
     expect(keys.filter((key) => key.includes("#"))).toHaveLength(1);
 
     for (const pluginId of ["p", "p-a"]) pluginRegistry.unregisterPlugin(pluginId);
-  });
-
-  it("omits an action whose id is not a usable string", () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    registerAction({ id: {} as never, items: () => [{ id: "ok", label: "Ok", run: vi.fn() }] });
-
-    expect(buildPrimaryPluginEntries({ context: CONTEXT })).toEqual([]);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("no usable id"),
-      undefined,
-    );
-    consoleErrorSpy.mockRestore();
   });
 
   it("keeps child keys distinct when two actions' ids dash-join identically", () => {

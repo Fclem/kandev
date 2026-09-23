@@ -65,6 +65,27 @@ describe("plugin icons", () => {
     expect(lookupPluginIcon(Forwarded as never)).toBe(Forwarded);
   });
 
+  it("treats an icon whose tag read throws as absent, not as a component", () => {
+    // Regression: the tag read (and the `in` check before it) runs a
+    // plugin-supplied trap, and this function backs every icon surface.
+    const hostile = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("hostile $$typeof getter");
+        },
+        has() {
+          throw new Error("hostile in trap");
+        },
+      },
+    );
+
+    expect(() => isPluginIconComponent(hostile)).not.toThrow();
+    expect(isPluginIconComponent(hostile)).toBe(false);
+    expect(lookupPluginIcon(hostile as never)).toBeUndefined();
+    expect(resolvePluginIcon(hostile as never)).toBe(IconPuzzle);
+  });
+
   it("resolves only own keys, so a prototype member is not an icon", () => {
     for (const name of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
       expect(lookupPluginIcon(name)).toBeUndefined();

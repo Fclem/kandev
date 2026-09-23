@@ -30,11 +30,14 @@ const OTHER_WORKSPACE_ID = "ws-2";
 const REPOSITORY_URL = "https://github.com/kdlbs/kandev";
 const CANONICAL = "kdlbs/kandev";
 
+/** The identity the store reports while authentication is disabled. */
+const DEFAULT_USER_ID = "default-user";
+
 function connection(
   overrides: Partial<GitHubStarConnectionStatus> = {},
 ): GitHubStarConnectionStatus {
   return {
-    user_id: "user-a",
+    user_id: DEFAULT_USER_ID,
     credential_generation: 1,
     active: true,
     capable: true,
@@ -257,14 +260,50 @@ describe("usePluginRepositoryStar scoping", () => {
       expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true"),
     );
 
+    // Same user, new credential generation: the states scoped to the previous
+    // generation are dropped before the new scope hydrates.
     act(() => {
-      const epoch = store.getState().beginPluginStarConnectionRequest(WORKSPACE_ID);
+      const epoch = store
+        .getState()
+        .beginPluginStarConnectionRequest(WORKSPACE_ID, DEFAULT_USER_ID);
       store
         .getState()
-        .applyPluginStarConnection(WORKSPACE_ID, epoch, connection({ user_id: "user-b" }));
+        .applyPluginStarConnection(
+          WORKSPACE_ID,
+          epoch,
+          connection({ credential_generation: 2 }),
+          DEFAULT_USER_ID,
+        );
     });
 
     expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("null");
+  });
+
+  it("discards a connection response that answers for another account", async () => {
+    renderHarness();
+    await waitFor(() =>
+      expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true"),
+    );
+
+    act(() => {
+      const epoch = store
+        .getState()
+        .beginPluginStarConnectionRequest(WORKSPACE_ID, DEFAULT_USER_ID);
+      store
+        .getState()
+        .applyPluginStarConnection(
+          WORKSPACE_ID,
+          epoch,
+          connection({ user_id: "user-b" }),
+          DEFAULT_USER_ID,
+        );
+    });
+
+    // The tuple is refused outright: no other account's state is ever adopted.
+    expect(store.getState().pluginStars.connections[WORKSPACE_ID]?.status?.user_id).toBe(
+      DEFAULT_USER_ID,
+    );
+    expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true");
   });
 });
 
@@ -381,6 +420,65 @@ describe("usePluginRepositoryStar connect flow", () => {
     );
     await waitFor(() =>
       expect(assign).toHaveBeenCalledWith("https://github.com/login/oauth/authorize?state=s"),
+    );
+  });
+});
+
+describe("usePluginRepositoryStar authenticated identity", () => {
+  it("drops the previous user's tuple and refetches when the account changes", async () => {
+    renderHarness();
+    await waitFor(() =>
+      expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true"),
+    );
+
+    // A late response for the previous account must not repopulate the cache.
+    const staleRead = deferred<GitHubStarConnectionStatus>();
+    fetchStarConnection.mockReturnValueOnce(staleRead.promise);
+    act(() => {
+      store.getState().setAuthState({
+        mode: "enabled",
+        authenticated: true,
+        user: {
+          id: "user-b",
+          email: "b@example.com",
+          display_name: "B",
+          role: "member",
+          status: "active",
+        },
+      });
+    });
+
+    // The switch clears the previous account's visible state immediately.
+    await waitFor(() =>
+      expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("null"),
+    );
+
+    await act(async () => {
+      staleRead.resolve(connection({ user_id: DEFAULT_USER_ID }));
+      await staleRead.promise;
+    });
+
+    // The abandoned read answered for the old user, so it is discarded.
+    expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("null");
+
+    // The new account's own read lands and hydrates normally.
+    fetchStarConnection.mockResolvedValue(connection({ user_id: "user-b" }));
+    await waitFor(() =>
+      expect(fetchStarConnection).toHaveBeenCalledWith(WORKSPACE_ID, { cache: "no-store" }),
+    );
+    act(() => {
+      const epoch = store.getState().beginPluginStarConnectionRequest(WORKSPACE_ID, "user-b");
+      store
+        .getState()
+        .applyPluginStarConnection(
+          WORKSPACE_ID,
+          epoch,
+          connection({ user_id: "user-b" }),
+          "user-b",
+        );
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId(`mode-${WORKSPACE_ID}`).textContent).toBe("stars"),
     );
   });
 });

@@ -18,7 +18,8 @@ import {
   type PluginStarControlMode,
 } from "@/lib/plugins/plugin-star-connection";
 import type { AppState } from "@/lib/state/store";
-import type { PluginStarsState } from "@/lib/state/slices/plugins/types";
+import type { PluginStarConnectionEntry, PluginStarsState } from "@/lib/state/slices/plugins/types";
+import type { GitHubStarConnectionStatus } from "@/lib/types/github";
 
 /** Stable fallback so a store-less render keeps a referentially stable snapshot. */
 const EMPTY_PLUGIN_STARS: PluginStarsState = {
@@ -31,6 +32,25 @@ const EMPTY_PLUGIN_STARS: PluginStarsState = {
 
 const selectPluginStars = (state: AppState): PluginStarsState =>
   state.pluginStars ?? EMPTY_PLUGIN_STARS;
+
+// Mirrors lib/ws/use-websocket.tsx: authentication-disabled installs act as the
+// single default user, so their star cache never churns on identity changes.
+const selectAuthenticatedUserId = (state: AppState): string | null =>
+  state.auth.user?.id ?? (state.auth.mode === "disabled" ? "default-user" : null);
+
+/**
+ * Whether the cached connection tuple needs a fresh read: absent, never
+ * loaded, or read for a different authenticated account. An entry loaded for
+ * another user is stale even though it is loaded.
+ */
+function needsConnectionLoad(
+  entry: PluginStarConnectionEntry | undefined,
+  authUserId: string | null,
+): boolean {
+  if (!entry) return true;
+  if (entry.userId !== authUserId) return true;
+  return !entry.loading && !entry.loaded;
+}
 
 export type PluginRepositoryStar = {
   /** What the surface renders; `omit` means an unsupported deployment. */
@@ -53,6 +73,42 @@ export type PluginRepositoryStar = {
   toggle: () => void;
 };
 
+type PluginStarViewInput = {
+  stars: PluginStarsState;
+  workspaceId: string | null | undefined;
+  canonicalRepository: string | null;
+  status: GitHubStarConnectionStatus | null;
+};
+
+/**
+ * Resolves what one surface renders. Hydration is gated on the capable tuple
+ * rather than on the CTA: an unknown or failed connection must never become an
+ * asserted star state, and a non-canonical repository gets no control at all.
+ */
+function resolvePluginStarView({
+  stars,
+  workspaceId,
+  canonicalRepository,
+  status,
+}: PluginStarViewInput): {
+  mode: PluginStarControlMode;
+  scopeKey: string | null;
+  starred: boolean | null;
+  busy: boolean;
+} {
+  const mode = canonicalRepository ? resolvePluginStarControlMode(status) : "omit";
+  if (!workspaceId || !canonicalRepository || !status || mode !== "stars") {
+    return { mode, scopeKey: null, starred: null, busy: false };
+  }
+  const scopeKey = pluginStarKey(workspaceId, status, canonicalRepository);
+  return {
+    mode,
+    scopeKey,
+    starred: stars.values[scopeKey] ?? null,
+    busy: Boolean(stars.busy[scopeKey]),
+  };
+}
+
 /**
  * Star state for one plugin repository on one surface.
  *
@@ -71,40 +127,46 @@ export function usePluginRepositoryStar({
 }): PluginRepositoryStar {
   const store = useOptionalAppStoreApi();
   const stars = useOptionalAppStore(selectPluginStars, EMPTY_PLUGIN_STARS);
+  // The connection tuple belongs to one authenticated user: reading the
+  // identity here is what invalidates the cache on an account switch.
+  const authUserId = useOptionalAppStore(selectAuthenticatedUserId, null);
   const [starting, setStarting] = useState(false);
-  const canonicalRepository = useMemo(() => parseGitHubRepositoryUrl(repositoryUrl), [repositoryUrl]);
+  const canonicalRepository = useMemo(
+    () => parseGitHubRepositoryUrl(repositoryUrl),
+    [repositoryUrl],
+  );
 
   const entry = workspaceId ? stars.connections[workspaceId] : undefined;
   const status = entry?.status ?? null;
-  // A URL that is not a canonical public GitHub repository gets no control at
-  // all, not even the Connect CTA.
-  const mode = canonicalRepository ? resolvePluginStarControlMode(status) : "omit";
-  // Hydration is gated on the capable tuple, not on the CTA: an unknown or
-  // failed connection must never become an asserted star state.
-  const scopeKey =
-    workspaceId && canonicalRepository && status && mode === "stars"
-      ? pluginStarKey(workspaceId, status, canonicalRepository)
-      : null;
-  const starred = scopeKey ? (stars.values[scopeKey] ?? null) : null;
-  const busy = scopeKey ? Boolean(stars.busy[scopeKey]) : false;
+  const view = resolvePluginStarView({ stars, workspaceId, canonicalRepository, status });
+  const { mode, scopeKey, starred, busy } = view;
 
   const loadConnection = useCallback(() => {
     if (!store || !workspaceId) return;
-    const epoch = store.getState().beginPluginStarConnectionRequest(workspaceId);
+    const epoch = store.getState().beginPluginStarConnectionRequest(workspaceId, authUserId);
     fetchGitHubStarConnection(workspaceId, { cache: "no-store" })
       .then((response) =>
-        store.getState().applyPluginStarConnection(workspaceId, epoch, response),
+        store.getState().applyPluginStarConnection(workspaceId, epoch, response, authUserId),
       )
       // A failed read leaves the previous tuple and its states untouched.
-      .catch(() => store.getState().applyPluginStarConnection(workspaceId, epoch, null));
-  }, [store, workspaceId]);
+      .catch(() =>
+        store.getState().applyPluginStarConnection(workspaceId, epoch, null, authUserId),
+      );
+  }, [authUserId, store, workspaceId]);
 
   useEffect(() => {
     if (!store || !workspaceId) return;
     const current = store.getState().pluginStars?.connections[workspaceId];
-    if (current?.loading || current?.loaded) return;
-    loadConnection();
-  }, [loadConnection, store, workspaceId, entry?.loaded, entry?.loading]);
+    if (needsConnectionLoad(current, authUserId)) loadConnection();
+  }, [
+    authUserId,
+    loadConnection,
+    store,
+    workspaceId,
+    entry?.loaded,
+    entry?.loading,
+    entry?.userId,
+  ]);
 
   const hydrate = useCallback(() => {
     if (!store || !scopeKey || !workspaceId || !repositoryUrl) return;

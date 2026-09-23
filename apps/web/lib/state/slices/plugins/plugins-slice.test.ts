@@ -4,6 +4,7 @@ import { immer } from "zustand/middleware/immer";
 import { createPluginsSlice } from "./plugins-slice";
 import type { PluginsSlice } from "./types";
 import type { PluginRecord } from "@/lib/types/plugins";
+import { pluginStarKey } from "@/lib/plugins/plugin-star-connection";
 
 function makeStore() {
   return create<PluginsSlice>()(
@@ -88,5 +89,70 @@ describe("plugins slice", () => {
     store.getState().setPlugins([plugin("a"), plugin("b"), plugin("c")]);
     store.getState().removePlugin("b");
     expect(store.getState().plugins.items.map((p) => p.id)).toEqual(["a", "c"]);
+  });
+});
+
+describe("plugin star connection identity", () => {
+  const connection = (userId: string) => ({
+    user_id: userId,
+    credential_generation: 1,
+    active: true,
+    capable: true,
+    reconnect_required: false,
+    available: true,
+  });
+
+  it("clears the tuple and visible states when the authenticated user changes", () => {
+    const store = makeStore();
+    const firstEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    expect(
+      store
+        .getState()
+        .applyPluginStarConnection("ws-1", firstEpoch, connection("user-a"), "user-a"),
+    ).toBe(true);
+    const scopeKey = pluginStarKey("ws-1", connection("user-a"), "owner/repo");
+    const mutationEpoch = store.getState().beginPluginStarRequest(scopeKey, "mutation");
+    expect(mutationEpoch).not.toBeNull();
+    store.getState().applyPluginStarResult(scopeKey, mutationEpoch as number, true);
+    expect(store.getState().pluginStars.values[scopeKey]).toBe(true);
+
+    const secondEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-b");
+    const entry = store.getState().pluginStars.connections["ws-1"];
+    expect(entry.userId).toBe("user-b");
+    expect(entry.status).toBeNull();
+    expect(entry.loaded).toBe(false);
+    expect(store.getState().pluginStars.values[scopeKey]).toBeUndefined();
+    expect(secondEpoch).toBeGreaterThan(firstEpoch);
+  });
+
+  it("keeps the tuple when the same user reconnects", () => {
+    const store = makeStore();
+    const firstEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    store.getState().applyPluginStarConnection("ws-1", firstEpoch, connection("user-a"), "user-a");
+
+    store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    const entry = store.getState().pluginStars.connections["ws-1"];
+    expect(entry.status?.user_id).toBe("user-a");
+    expect(entry.loaded).toBe(true);
+  });
+
+  it("refuses a response that answers for another account", () => {
+    const store = makeStore();
+    const epoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    expect(
+      store.getState().applyPluginStarConnection("ws-1", epoch, connection("user-b"), "user-a"),
+    ).toBe(false);
+    expect(store.getState().pluginStars.connections["ws-1"].status).toBeNull();
+  });
+
+  it("refuses a response whose epoch was superseded", () => {
+    const store = makeStore();
+    const staleEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    expect(
+      store
+        .getState()
+        .applyPluginStarConnection("ws-1", staleEpoch, connection("user-a"), "user-a"),
+    ).toBe(false);
   });
 });

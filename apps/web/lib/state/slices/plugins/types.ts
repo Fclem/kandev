@@ -17,6 +17,12 @@ export type PluginStarValue = boolean | null;
 export type PluginStarConnectionEntry = {
   /** The connection-status tuple, or null when the read failed or never landed. */
   status: GitHubStarConnectionStatus | null;
+  /**
+   * The authenticated user this entry was read for. A connection tuple belongs
+   * to one Kandev user, so an identity change invalidates it even when the
+   * workspace stays the same.
+   */
+  userId: string | null;
   loaded: boolean;
   loading: boolean;
   /** Bumped per read; a response is applied only while its epoch is current. */
@@ -54,18 +60,24 @@ export type PluginsSliceActions = {
   upsertPlugin: (plugin: PluginRecord) => void;
   removePlugin: (id: string) => void;
 
-  /** Opens a connection-status read for `workspaceId` and returns its epoch. */
-  beginPluginStarConnectionRequest: (workspaceId: string) => number;
   /**
-   * Commits a connection-status read whose epoch is still current. A null
-   * status (failed read) keeps the previous tuple so an optional control never
-   * regresses on a transient failure; an accepted tuple whose scope changed
-   * drops the prior scope's visible states before a new hydration.
+   * Opens a connection-status read for `workspaceId` on behalf of `userId` and
+   * returns its epoch. A different authenticated user than the one the cached
+   * tuple belongs to clears the tuple and its visible states first.
+   */
+  beginPluginStarConnectionRequest: (workspaceId: string, userId: string | null) => number;
+  /**
+   * Commits a connection-status read whose epoch and authenticated user are
+   * still current. A null status (failed read) keeps the previous tuple so an
+   * optional control never regresses on a transient failure; an accepted tuple
+   * whose scope changed drops the prior scope's visible states before a new
+   * hydration.
    */
   applyPluginStarConnection: (
     workspaceId: string,
     epoch: number,
     status: GitHubStarConnectionStatus | null,
+    userId: string | null,
   ) => boolean;
   /** Drops one workspace's connection tuple and every visible star state. */
   resetPluginStarConnection: (workspaceId: string) => void;

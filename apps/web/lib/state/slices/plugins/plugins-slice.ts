@@ -50,13 +50,19 @@ function createPluginStarActions(
   | "failPluginStarRequest"
 > {
   return {
-    beginPluginStarConnectionRequest: (workspaceId) => {
+    beginPluginStarConnectionRequest: (workspaceId, userId) => {
       const entry = get().pluginStars.connections[workspaceId];
       const epoch = (entry?.epoch ?? 0) + 1;
+      // A different authenticated user owns a different connection: drop the
+      // previous tuple and its star states before the new read so the surface
+      // never shows, or acts on, another account's state.
+      const identityChanged = (entry?.userId ?? null) !== userId;
       set((draft) => {
+        if (identityChanged) clearWorkspacePluginStars(draft.pluginStars, workspaceId);
         draft.pluginStars.connections[workspaceId] = {
-          status: entry?.status ?? null,
-          loaded: entry?.loaded ?? false,
+          status: identityChanged ? null : (entry?.status ?? null),
+          userId,
+          loaded: identityChanged ? false : (entry?.loaded ?? false),
           loading: true,
           epoch,
         };
@@ -64,10 +70,12 @@ function createPluginStarActions(
       return epoch;
     },
 
-    applyPluginStarConnection: (workspaceId, epoch, status) => {
+    applyPluginStarConnection: (workspaceId, epoch, status, userId) => {
       const entry = get().pluginStars.connections[workspaceId];
-      // A response whose scope was invalidated (or superseded) is discarded.
-      if (!entry || entry.epoch !== epoch) return false;
+      // A response whose scope was invalidated (or superseded) is discarded, as
+      // is one that answers for a different authenticated user.
+      if (!entry || entry.epoch !== epoch || (entry.userId ?? null) !== userId) return false;
+      if (status && status.user_id !== userId) return false;
       set((draft) => {
         const stars = draft.pluginStars;
         const previous = entry.status;
@@ -76,6 +84,7 @@ function createPluginStarActions(
           // optional control never regresses on a transient failure.
           stars.connections[workspaceId] = {
             status: previous,
+            userId,
             loaded: true,
             loading: false,
             epoch,
@@ -90,7 +99,7 @@ function createPluginStarActions(
             previous.capable !== status.capable ||
             previous.reconnect_required !== status.reconnect_required);
         if (scopeChanged) clearWorkspacePluginStars(stars, workspaceId);
-        stars.connections[workspaceId] = { status, loaded: true, loading: false, epoch };
+        stars.connections[workspaceId] = { status, userId, loaded: true, loading: false, epoch };
       });
       return true;
     },

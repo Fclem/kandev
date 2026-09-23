@@ -25,7 +25,7 @@ type DeploymentSecretdUnitInput struct {
 func RenderDeploymentSecretdUnit(input DeploymentSecretdUnitInput) string {
 	executable := deploymentSecretdUnitValue(input.Executable, deploymentsecretd.InstallPath)
 	homeDir := deploymentSecretdUnitValue(input.HomeDir, defaultSystemServiceHomeDir)
-	socketPath := deploymentSecretdUnitValue(input.SocketPath, deploymentsecretd.SocketPath)
+	socketPath := DeploymentSecretdUnitSocketPath(input)
 	return "# managed by kandev — install as " + deploymentsecretd.UnitPath + " and never edit by hand\n" +
 		"[Unit]\nDescription=Kandev root-owned deployment secret supervisor\n\n" +
 		"[Service]\nType=simple\n" +
@@ -37,6 +37,14 @@ func RenderDeploymentSecretdUnit(input DeploymentSecretdUnitInput) string {
 		serviceEnvLine("KANDEV_HOME_DIR", homeDir) + "\n" +
 		"Restart=on-failure\nRestartSec=5s\nKillMode=mixed\nTimeoutStopSec=30s\n\n" +
 		"[Install]\nWantedBy=multi-user.target\n"
+}
+
+// DeploymentSecretdUnitSocketPath resolves the socket the rendered unit's
+// ExecStart names: the install override when set, otherwise the release
+// contract. The generator validates this exact value, so the checked path and
+// the installed path cannot differ.
+func DeploymentSecretdUnitSocketPath(input DeploymentSecretdUnitInput) string {
+	return deploymentSecretdUnitValue(input.SocketPath, deploymentsecretd.SocketPath)
 }
 
 func deploymentSecretdUnitValue(value, fallback string) string {

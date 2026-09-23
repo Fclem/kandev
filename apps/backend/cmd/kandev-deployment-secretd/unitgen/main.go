@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/kandev/kandev/internal/launcher"
+	"github.com/kandev/kandev/internal/launcher/deploymentsecretd"
 )
 
 const unitgenUsage = `unitgen — render the kandev-deployment-secretd systemd unit
@@ -68,6 +69,12 @@ func parseUnitgenArgs(argv []string) (launcher.DeploymentSecretdUnitInput, bool,
 		default:
 			return input, false, fmt.Errorf("unknown flag %q; run unitgen --help", arg)
 		}
+	}
+	// The unit's ExecStart names the resolved socket, so an unbindable path is
+	// rejected at generation time instead of becoming a daemon that cannot
+	// start.
+	if err := deploymentsecretd.ValidateSocketPath(launcher.DeploymentSecretdUnitSocketPath(input)); err != nil {
+		return input, false, err
 	}
 	return input, false, nil
 }

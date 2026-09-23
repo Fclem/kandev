@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kandev/kandev/internal/launcher/deploymentsecretd"
 	"github.com/kandev/kandev/internal/secrets"
 )
 
@@ -67,6 +68,12 @@ func NewServer(config Config) (*Server, error) {
 	}
 	if config.SocketPath == "" {
 		return nil, errors.New("deployment secret socket path is required")
+	}
+	// Checked here, before Listen creates the socket directory or binds: a path
+	// past the platform limit only fails inside bind() with an unusable
+	// "invalid argument".
+	if err := deploymentsecretd.ValidateSocketPath(config.SocketPath); err != nil {
+		return nil, err
 	}
 	if config.Provisioner == nil {
 		return nil, errors.New("deployment secret provisioner is required")

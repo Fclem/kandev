@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kandev/kandev/internal/launcher/deploymentsecretd"
 	"github.com/kandev/kandev/internal/secrets"
 	"github.com/kandev/kandev/internal/system/deploymentsecret"
 )
@@ -340,7 +341,10 @@ func TestDeploymentSecretCLIBootstrapIsIdempotent(t *testing.T) {
 func TestDeploymentSecretCLIReportsMissingIdentityAndUnreachableDaemon(t *testing.T) {
 	emptyDataDir := filepath.Join(t.TempDir(), "data")
 	code, _, errOut := runAsRoot(t,
-		DeploymentSecretDefaults{DataDir: emptyDataDir, Socket: filepath.Join(emptyDataDir, "run", "deployment-secret.sock")},
+		// A bindable socket path: the subject here is the missing deployment
+		// identity, and a path under the temp data dir exceeds the unix socket
+		// limit before the daemon ever gets to it.
+		DeploymentSecretDefaults{DataDir: emptyDataDir, Socket: shortSocketPath(t)},
 		testClientSecret,
 		"github-personal-star", "provision", "--version", "1", "--client-secret-file", "-")
 	if code != 1 || !strings.Contains(errOut, "bootstrap") {
@@ -441,5 +445,28 @@ func TestDeploymentSecretCLIHelpDescribesEveryCommand(t *testing.T) {
 	code, explicit, errOut := runAsRoot(t, DeploymentSecretDefaults{DataDir: t.TempDir()}, "", "--help")
 	if code != 0 || errOut != "" || explicit != out {
 		t.Fatalf("--help exit = %d, stderr = %q", code, errOut)
+	}
+}
+
+// TestRunRefusesUnbindableSocketPath pins the client-side half of the socket
+// path preflight: the daemon cannot bind a path past the platform limit, so the
+// operator CLI must report that before dialing instead of surfacing a raw
+// connect error against a socket that can never exist.
+func TestRunRefusesUnbindableSocketPath(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), strings.Repeat("repository-star-", 8), "deployment-secret.sock")
+	if len(socketPath) <= deploymentsecretd.UnixSocketPathLimit {
+		t.Fatalf("probe socket path is only %d bytes; the test needs one above the limit", len(socketPath))
+	}
+	code, _, errOut := runAsRoot(t, DeploymentSecretDefaults{
+		DataDir: t.TempDir(),
+		Socket:  socketPath,
+	}, testClientSecret, "github-personal-star", "provision", "--version", "1", "--client-secret-file", "-")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	for _, want := range []string{socketPath, "107", "--socket"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("stderr %q does not name %q", errOut, want)
+		}
 	}
 }

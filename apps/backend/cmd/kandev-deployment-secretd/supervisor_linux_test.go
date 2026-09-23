@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kandev/kandev/internal/launcher/deploymentsecretd"
 	"github.com/kandev/kandev/internal/secrets"
 )
 
@@ -126,4 +127,69 @@ func waitForSocket(t *testing.T, path string) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("socket %s was never created", path)
+}
+
+// TestSuperviseRefusesSocketPathBeyondThePlatformLimit pins the preflight that
+// keeps a deep socket path from reaching bind(), where the kernel reports only
+// an unusable "invalid argument". The daemon must fail closed without creating
+// the socket's directory, and the error must name the path, the limit, and the
+// remedy.
+func TestSuperviseRefusesSocketPathBeyondThePlatformLimit(t *testing.T) {
+	withRootUID(t, 0)
+	dataDir := preparedDataDir(t)
+	deepParent := filepath.Join(t.TempDir(), strings.Repeat("repository-star-", 8))
+	socketPath := filepath.Join(deepParent, "deployment-secret.sock")
+	if len(socketPath) <= deploymentsecretd.UnixSocketPathLimit {
+		t.Fatalf("probe socket path is only %d bytes; the test needs one above the limit", len(socketPath))
+	}
+	err := supervise(context.Background(), &bytes.Buffer{}, daemonConfig{socketPath: socketPath, dataDir: dataDir})
+	if err == nil {
+		t.Fatal("the daemon accepted a socket path the kernel cannot bind")
+	}
+	for _, want := range []string{socketPath, "107", "--socket"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("supervise error %q does not name %q", err, want)
+		}
+	}
+	if _, statErr := os.Stat(deepParent); !os.IsNotExist(statErr) {
+		t.Fatalf("the daemon created the socket directory before failing (stat error %v)", statErr)
+	}
+}
+
+// TestSuperviseBindsSocketPathAtTheExactPlatformLimit proves the constant is the
+// kernel's real ceiling rather than a guess: a path one byte shorter than the
+// limit binds, so a daemon that rejected it would refuse a valid install.
+func TestSuperviseBindsSocketPathAtTheExactPlatformLimit(t *testing.T) {
+	withRootUID(t, 0)
+	dataDir := preparedDataDir(t)
+	base, err := os.MkdirTemp("", "kandev-ds-limit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	const suffix = "/deployment-secret.sock"
+	padding := deploymentsecretd.UnixSocketPathLimit - len(base) - len(suffix) - 1
+	if padding < 1 {
+		t.Fatalf("temp dir %s is too deep (%d bytes) to build a boundary path", base, len(base))
+	}
+	socketPath := filepath.Join(base, strings.Repeat("d", padding), "deployment-secret.sock")
+	if len(socketPath) != deploymentsecretd.UnixSocketPathLimit {
+		t.Fatalf("probe socket path is %d bytes, want exactly %d", len(socketPath), deploymentsecretd.UnixSocketPathLimit)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- supervise(ctx, &bytes.Buffer{}, daemonConfig{socketPath: socketPath, dataDir: dataDir})
+	}()
+	waitForSocket(t, socketPath)
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("supervise returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("supervise did not stop after cancellation")
+	}
 }

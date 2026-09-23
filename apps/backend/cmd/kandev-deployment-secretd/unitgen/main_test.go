@@ -57,3 +57,22 @@ func TestUnitgenRejectsUnknownFlags(t *testing.T) {
 		t.Fatalf("exit = %d, stdout = %q, stderr = %q", code, stdout, stderr)
 	}
 }
+
+// TestUnitgenRejectsUnbindableSocketPath pins the install-time half of the
+// socket path preflight: a unit whose ExecStart names a path past the platform
+// limit installs cleanly and only fails later, as a bind error with no remedy.
+func TestUnitgenRejectsUnbindableSocketPath(t *testing.T) {
+	socketPath := "/srv/" + strings.Repeat("repository-star-", 8) + "deployment-secret.sock"
+	if len(socketPath) <= deploymentsecretd.UnixSocketPathLimit {
+		t.Fatalf("probe socket path is only %d bytes; the test needs one above the limit", len(socketPath))
+	}
+	code, stdout, stderr := runUnitgen(t, "--socket", socketPath)
+	if code != 2 || stdout != "" {
+		t.Fatalf("exit = %d, stdout = %q", code, stdout)
+	}
+	for _, want := range []string{socketPath, "107", "--socket"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("stderr %q does not name %q", stderr, want)
+		}
+	}
+}

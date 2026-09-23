@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"github.com/kandev/kandev/internal/launcher/deploymentsecretd"
 	"io"
 	"os"
 	"strconv"
@@ -138,6 +139,13 @@ func (r *deploymentSecretRunner) run(argv []string) int {
 	}
 	if strings.TrimSpace(options.dataDir) == "" {
 		r.fail(errors.New("deployment data directory is unavailable; pass --data-dir <path>"))
+		return deploymentSecretExitFailure
+	}
+	// A path past the platform limit can never be bound, so dialing it would
+	// only surface a raw connect error. Reported before any filesystem or
+	// socket access, like every other operator input refusal here.
+	if err := deploymentsecretd.ValidateSocketPath(options.socket); err != nil {
+		r.fail(err)
 		return deploymentSecretExitFailure
 	}
 	switch options.action {

@@ -276,6 +276,12 @@ The shipped unit runs as `User=root` and starts
 socket path only if you also pass the same `--socket` value to the
 [`kandev deployment-secret`](cli.md#deployment-secrets-for-repository-starring) commands.
 
+A socket path must fit the platform's unix socket limit (107 bytes on Linux: `sun_path` is 108 bytes
+including its terminator). The supervisor, the `kandev deployment-secret` commands, and the unit
+generator all refuse a longer path with the path, its byte length, and the limit, because the kernel
+reports only `bind: invalid argument` for one. The default path always fits, so keep it unless you
+have a reason to move it; if you must move it, keep it short and near the filesystem root.
+
 `kandev service install` and `kandev service uninstall` manage only `kandev.service`. This unit is
 installed and removed separately, and neither direction rewrites the other.
 

@@ -109,8 +109,8 @@ The star button is separate from repository navigation and row overlay links, us
 
 ## Verification results
 
-All three work orders are implemented and verified on `feature/sync-plugin-reposito-673` at
-`12c6a5d6f`; each work order's `## Results` carries its own commits and gates.
+All three work orders are implemented and verified on `feature/sync-plugin-reposito-673`; each work
+order's `## Results` carries its own commits and gates, including the corrections that followed it.
 
 Passing at head: the Task 01 verification block (gates 1-11, including the Windows cross-build, the
 Linux-only daemon build, the runtime-bundle contract, and the `-race` unsupported-target filter);
@@ -122,6 +122,17 @@ E2E specs (14/3/2/2/2) and the E2E project, shard-planner and fixture regression
 workflow-contract cases); and the public-docs and specification validators.
 
 Known residual gaps, recorded rather than hidden:
+- Four packages fail only on this workstation. Two of them,
+  `internal/agentctl/server/config` (`TestCollectAgentEnvGitHubCLIShimSurvivesLoginShell`) and
+  `internal/common/config` (`TestConfigSourceLoadsStableYAMLFields`), were re-run at the pre-change
+  base commit `57bbae10a` in a separate worktree and fail there identically, so they are
+  pre-existing on this host (its login shell puts a real `gh` ahead of the test shim, and its
+  ambient config wins the discovery assertions). The other two,
+  `internal/agent/settings/handlers` and `internal/system/deploymentsecret`, fail only under
+  `make`'s package parallelism: the first with `database is locked` timeouts, the second with the
+  fail-closed socket test losing a scheduling race, and both pass isolated (`-count=3` and
+  `-count=20` respectively). The second race is now tolerated by that test; the first is a load
+  artifact of this host.
 - The PostgreSQL star-store lifecycle test ships but skips without `KANDEV_TEST_POSTGRES_DSN`, so
   Postgres has not executed here.
 - The capable-path E2E cohort depends on the e2e profile's
@@ -131,6 +142,16 @@ Known residual gaps, recorded rather than hidden:
   headroom against its 32768-byte limit.
 - `internal/launcher` `TestRunStartBuildVersion` fails on this workstation because the live kandev
   service holds port 38429; it is environmental, reproducible with the port variables unset.
+- The supervisor's socket path is bounded by the platform's unix socket limit (107 bytes on Linux).
+  The shipped default (`/run/kandev/deployment-secret.sock`) and the unit's `--socket` value always
+  fit, and the supervisor, the operator CLI, and the unit generator now refuse a longer path before
+  binding. That limit only bites a deliberate `--socket` override, including one under a deep data
+  root, which is how this branch's own test harness hit it. Relocating the socket to a shorter
+  system path, or deriving it from the data root deliberately, is deliberately out of scope here: it
+  would touch the installer, the unit, and the CLI path derivation together.
+- Tests whose temp root is deeper than roughly 46 characters cannot bind a unix socket under
+  `t.TempDir()`, so the deployment-secret suite must be run with a short `TMPDIR` (and note that
+  `GOTMPDIR` overrides `TMPDIR` for test processes under `make`).
 
 ## Risks
 

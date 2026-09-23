@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createShardPlan,
   discoverTestCatalog,
@@ -48,6 +48,62 @@ const units: CatalogUnit[] = [
   { project: "chromium", file: "tests/c.spec.ts", fileHash: "hash-c", testCount: 3 },
   { project: "mobile-chrome", file: "tests/mobile-c.spec.ts", fileHash: "hash-m", testCount: 2 },
 ];
+
+/**
+ * A disposable web root that consumes the **real** `playwright.config.ts` (and
+ * its context-option module), so the project matchers under test are the ones
+ * CI actually runs. The planner asks Playwright for every project in
+ * `NORMAL_PROJECT_NAMES`, and Playwright fails the listing outright when a
+ * requested project does not exist — a synthetic mini-config would therefore
+ * stop testing the real cohort the moment a project is added.
+ */
+function createWebRootWithRealConfig(specs: ReadonlyArray<readonly [string, string]>): string {
+  const webRoot = fs.mkdtempSync(path.join(os.tmpdir(), "kandev-planner-"));
+  const e2eDir = path.join(webRoot, "e2e");
+  fs.mkdirSync(path.join(e2eDir, "fixtures"), { recursive: true });
+  fs.symlinkSync(
+    path.resolve(__dirname, "../../node_modules"),
+    path.join(webRoot, "node_modules"),
+    "dir",
+  );
+  fs.copyFileSync(
+    path.resolve(__dirname, "../playwright.config.ts"),
+    path.join(e2eDir, "playwright.config.ts"),
+  );
+  fs.copyFileSync(
+    path.resolve(__dirname, "../fixtures/project-contexts.ts"),
+    path.join(e2eDir, "fixtures", "project-contexts.ts"),
+  );
+  // `--list` never runs global setup; the copied config only references it.
+  fs.writeFileSync(
+    path.join(e2eDir, "global-setup.ts"),
+    "export default async function globalSetup(): Promise<void> {}\n",
+  );
+  for (const [relativePath, source] of specs) {
+    const target = path.join(e2eDir, relativePath);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, source);
+  }
+  return webRoot;
+}
+
+const FOUR_TEST_SPEC = [
+  'import { test } from "@playwright/test";',
+  'test.describe("suite", () => {',
+  "  test.beforeEach(async () => {});",
+  '  test("works", async () => {});',
+  '  test.skip("skipped", async () => {});',
+  '  for (const name of ["generated one", "generated two"]) {',
+  "    test(name, async () => {});",
+  "  }",
+  "});",
+].join("\n");
+
+const TWO_TEST_SPEC = [
+  'import { test } from "@playwright/test";',
+  'test("first", async () => {});',
+  'test("second", async () => {});',
+].join("\n");
 
 describe("duration-aware shard planning", () => {
   it("discovers specs below the web e2e test root and hashes their source", () => {
@@ -398,5 +454,71 @@ describe("duration-aware shard planning", () => {
     });
 
     expect(plan.summary.staleUnits).toBe(2);
+  });
+});
+
+describe("normal cohort project retention", () => {
+  // The temp web root reuses the *real* playwright.config.ts and the real
+  // context-option module, so these tests fail the moment a project matcher, an
+  // ignore rule, or the planner's project list drifts from what the config
+  // declares. A catalog gap here would leave a whole project with no shard to
+  // run in, and a double match would plan the same file twice.
+  let webRoot = "";
+
+  beforeAll(() => {
+    webRoot = createWebRootWithRealConfig([
+      ["tests/settings/plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
+      ["tests/settings/desktop-coarse-pointer-plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
+      ["tests/settings/mobile-plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
+      ["tests/settings/mobile-fine-pointer-plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
+      ["tests/auth/plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
+      ["tests/chat/example.spec.ts", TWO_TEST_SPEC],
+      ["tests/chat/mobile-example.spec.ts", TWO_TEST_SPEC],
+    ]);
+  });
+
+  afterAll(() => {
+    if (webRoot) fs.rmSync(webRoot, { recursive: true, force: true });
+  });
+
+  it("catalogs every repository-star spec under exactly one normal project", () => {
+    const catalog = discoverTestCatalog(webRoot, "normal");
+
+    expect(catalog.map((unit) => `${unit.project}::${unit.file}`)).toEqual([
+      "chromium::tests/chat/example.spec.ts",
+      "chromium::tests/settings/plugin-repository-stars.spec.ts",
+      "desktop-coarse-pointer::tests/settings/desktop-coarse-pointer-plugin-repository-stars.spec.ts",
+      "mobile-chrome::tests/chat/mobile-example.spec.ts",
+      "mobile-chrome::tests/settings/mobile-plugin-repository-stars.spec.ts",
+      "mobile-fine-pointer::tests/settings/mobile-fine-pointer-plugin-repository-stars.spec.ts",
+    ]);
+    // The dedicated auth project is not part of the normal cohort.
+    expect(catalog.some((unit) => unit.project === "auth")).toBe(false);
+    for (const unit of catalog) {
+      expect(unit.testCount).toBe(2);
+    }
+  });
+
+  it("retains both added projects when the catalog is sharded", () => {
+    const catalog = discoverTestCatalog(webRoot, "normal");
+    const manifest = createShardPlan(catalog, {
+      cohort: "normal",
+      shardCount: 2,
+      generatedAt: "2026-09-22T00:00:00.000Z",
+    });
+
+    validateShardManifest(manifest, catalog);
+    expect(manifest.projects).toEqual([
+      "chromium",
+      "desktop-coarse-pointer",
+      "mobile-chrome",
+      "mobile-fine-pointer",
+    ]);
+    for (const project of ["desktop-coarse-pointer", "mobile-fine-pointer"] as const) {
+      const planned = manifest.shards.flatMap((shard) => shard.units);
+      expect(planned.filter((unit) => unit.project === project)).toHaveLength(1);
+    }
+    // Every catalog unit is still assigned exactly once across the shards.
+    expect(manifest.shards.flatMap((shard) => shard.units)).toHaveLength(catalog.length);
   });
 });

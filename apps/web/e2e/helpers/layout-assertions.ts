@@ -10,6 +10,27 @@ export async function requireBox(locator: Locator, label: string): Promise<Eleme
 }
 
 /**
+ * Asserts that the element itself — or one of its own descendants — receives
+ * the hit test at the element's center point.
+ *
+ * This is the pointer-level check behind "control kept its own click": a row
+ * overlay link, sticky bar, or sibling control stacked above the target would
+ * swallow the click without changing any DOM relationship a locator can see.
+ */
+export async function expectTopmostAtCenter(locator: Locator, label = "element"): Promise<void> {
+  await locator.scrollIntoViewIfNeeded();
+  const hit = await locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return {
+      own: top === element || element.contains(top),
+      tag: top ? top.tagName.toLowerCase() : "none",
+    };
+  });
+  expect(hit.own, `${label}: center is covered by <${hit.tag}>`).toBe(true);
+}
+
+/**
  * Returns descendant text in the order Chromium paints its glyphs from left to
  * right. DOM text remains in logical order when bidi layout moves punctuation,
  * so each character needs its own rendered range for visual-order assertions.

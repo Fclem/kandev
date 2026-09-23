@@ -16,6 +16,22 @@ const WORKER_PRESETS_FILE = "tests/kubernetes/kubernetes-worker-presets.spec.ts"
 export const SHARD_MANIFEST_VERSION = 1;
 export const NORMAL_SHARD_COUNT = 28;
 export const CONTAINER_SHARD_COUNT = 6;
+/**
+ * Every Playwright project the normal (non-container) cohort plans for, and the
+ * only ones whose `--project` flag the catalog listing asks Playwright for.
+ *
+ * Kept as the single source of truth so the listing, the catalog filter, and
+ * the project-cohort regression in `playwright-projects.test.ts` cannot drift:
+ * a project added to `playwright.config.ts` without being added here would run
+ * in no shard at all.
+ */
+export const NORMAL_PROJECT_NAMES = [
+  "chromium",
+  "mobile-chrome",
+  "desktop-coarse-pointer",
+  "mobile-fine-pointer",
+] as const;
+export const CONTAINER_PROJECT_NAMES = ["containers"] as const;
 export const DEFAULT_NORMAL_TEST_SECONDS = 10;
 export const DEFAULT_CONTAINER_TEST_SECONDS = 20;
 export const DEFAULT_KUBERNETES_TEST_SECONDS = 180;
@@ -83,8 +99,8 @@ export function catalogUnitsFromCases(
   cohort: Cohort,
   cases: CatalogCase[],
 ): CatalogUnit[] {
-  const allowedProjects = new Set(
-    cohort === "containers" ? ["containers"] : ["chromium", "mobile-chrome"],
+  const allowedProjects = new Set<string>(
+    cohort === "containers" ? CONTAINER_PROJECT_NAMES : NORMAL_PROJECT_NAMES,
   );
   const counts = new Map<string, { project: string; file: string; testCount: number }>();
   for (const { project, file } of cases) {

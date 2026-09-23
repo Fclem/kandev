@@ -94,7 +94,12 @@ journal to the shipped 256 MiB limit and checks pruning after Retry.
 
 ## Playwright projects
 
-The suite is split into six projects. Pick one with `--project=<name>`.
+The suite is split into seven projects. Pick one with `--project=<name>`.
+
+Four of them form the **normal cohort** that the CI shard manifest plans for:
+`chromium`, `mobile-chrome`, `desktop-coarse-pointer`, and `mobile-fine-pointer`.
+Each spec file must match exactly one of them — a file matched by two would be
+planned twice, and a project missing from the plan would never run.
 
 ### `routing`
 
@@ -119,9 +124,15 @@ Select the project explicitly; otherwise Playwright reports `No tests found`:
 pnpm e2e:raw --project=auth tests/auth/auth-lifecycle.spec.ts
 ```
 
+`plugin-repository-stars.spec.ts` uses the raw `backendFixture` (no `testPage`,
+`apiClient`, or `seedData`), because test-base's automatic setup and cleanup
+endpoints need a session that does not exist until the spec has created the
+first admin. CI runs that file in the dedicated, gated `e2e-auth` job described
+under [CI](#ci); it is never part of a normal shard manifest.
+
 ### `chromium` (default)
 
-The everyday surface — runs in every CI shard. Excludes the heavyweight `containers` specs and the mobile specs.
+The everyday surface — runs in every CI shard. Excludes the heavyweight `containers` specs, the mobile specs, and the desktop coarse-pointer specs (their own project, below).
 
 ```sh
 pnpm e2e:raw
@@ -129,7 +140,41 @@ pnpm e2e:raw
 
 ### `mobile-chrome`
 
-Same as `chromium` but on Playwright's Pixel-5 viewport, gated on `tests/**/mobile-*.spec.ts`. Runs in the same CI shard matrix as `chromium`.
+Same as `chromium` but on Playwright's Pixel-5 viewport (393px, touch → coarse
+pointer), gated on `tests/**/mobile-*.spec.ts`. Runs in the same CI shard matrix
+as `chromium`. It ignores `mobile-fine-pointer-*.spec.ts`, which names its own
+project below, so a phone-width spec belongs to exactly one normal project.
+
+### `desktop-coarse-pointer`
+
+Desktop width (1280x900) with touch emulation, so Chromium reports a coarse
+primary pointer. Width alone proves nothing about the pointer: a control that
+sizes itself for touch must be measured in a context that actually reports
+`pointer: coarse`, which is why this is a project rather than a viewport tweak
+inside `chromium`. Owns `desktop-coarse-pointer-*.spec.ts` only, and `chromium`
+ignores those files.
+
+```sh
+pnpm e2e:raw --project=desktop-coarse-pointer tests/settings/desktop-coarse-pointer-plugin-repository-stars.spec.ts
+```
+
+### `mobile-fine-pointer`
+
+767px — the largest width the responsive hook still classifies as mobile — with
+an explicit **fine** pointer. It is the counterpart to `mobile-chrome`: the same
+fine pointer as the desktop projects, one pixel below the mobile breakpoint.
+Owns `mobile-fine-pointer-*.spec.ts` only, and `mobile-chrome` ignores those
+files.
+
+```sh
+pnpm e2e:raw --project=mobile-fine-pointer tests/settings/mobile-fine-pointer-plugin-repository-stars.spec.ts
+```
+
+`fixtures/project-contexts.ts` is the single definition of these contexts:
+`playwright.config.ts` and `test-base.ts` (which opens `testPage`'s own context)
+both read it, so the emulated viewport and pointer cannot drift between the
+project and the fixture. `e2e/scripts/playwright-projects.test.ts` asserts the
+routing table in both directions.
 
 ### `containers` — **Docker required**
 

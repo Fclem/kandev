@@ -8,6 +8,7 @@ import shutil
 import textwrap
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -645,6 +646,57 @@ cat "${FAKE_DOCKER_MANIFEST}"
         self.assertIn('setup_mode="cache-hit"', container_job)
         self.assertIn('setup_mode="image-fallback"', container_job)
         self.assertGreaterEqual(container_job.count("continue-on-error: true"), 2)
+
+    def test_authenticated_suite_runs_in_a_dedicated_gated_job(self) -> None:
+        workflow = E2E_WORKFLOW.read_text(encoding="utf-8")
+
+        # Appended after `e2e-gate` so every block sliced by this file keeps its
+        # asserted contents; `job_block` cannot slice the last job, so partition
+        # instead.
+        _, separator, auth_job = workflow.partition("\n  e2e-auth:\n")
+        self.assertTrue(separator, "workflow must declare an e2e-auth job")
+        # Placement contract: `e2e-gate` precedes it and no other job follows it,
+        # so the (desktop-e2e -> e2e-report), (e2e-report -> e2e-gate) and
+        # gate-to-end slices above keep exactly the blocks they assert.
+        self.assertLess(
+            workflow.index("  e2e-gate:\n"),
+            workflow.index("  e2e-auth:\n"),
+        )
+        self.assertEqual(re.findall(r"^  [a-z0-9-]+:$", auth_job, re.MULTILINE), [])
+
+        self.assertIn("runs-on: ubuntu-latest", auth_job)
+        self.assertIn("image: ghcr.io/kdlbs/kandev-ci:runtime-latest", auth_job)
+        self.assertIn("--project=auth", auth_job)
+        self.assertIn("--workers=1", auth_job)
+        self.assertIn("tests/auth/plugin-repository-stars.spec.ts", auth_job)
+        self.assertIn("KANDEV_FEATURES_AUTH", auth_job)
+        # Always-present blob report under the `blob-report-*` prefix the merge
+        # job globs, so the authenticated run lands in the unified report.
+        self.assertIn("name: blob-report-auth", auth_job)
+        self.assertIn("if: always()", auth_job)
+
+        for forbidden in (
+            "pnpm/action-setup",
+            "actions/setup-node",
+            "rustup toolchain install",
+            "apt-get",
+            "sudo",
+            "runner_plan",
+            "KANDEV_CI_",
+        ):
+            self.assertNotIn(forbidden, auth_job)
+
+        report_job = job_block(workflow, "e2e-report", "e2e-gate")
+        self.assertIn(
+            "needs: [changes, e2e, e2e-containers, desktop-e2e, e2e-auth]",
+            report_job,
+        )
+        self.assertIn("pattern: blob-report-*", report_job)
+
+        _, gate_separator, gate_job = workflow.partition("  e2e-gate:\n")
+        self.assertTrue(gate_separator, "workflow must keep the e2e-gate job")
+        self.assertIn("E2E_AUTH_RESULT: ${{ needs['e2e-auth'].result }}", gate_job)
+        self.assertIn('"e2e-auth:${E2E_AUTH_RESULT}"', gate_job)
 
     def test_image_digest_resolver_hashes_raw_manifest_bytes(self) -> None:
         self.assertTrue(IMAGE_DIGEST_RESOLVER.exists())

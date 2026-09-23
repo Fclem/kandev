@@ -1321,7 +1321,7 @@ jobs:
 
   e2e-report:
     name: E2E Tests Passed
-    needs: [changes, helper_compile, build, playwright_image, e2e, e2e-containers, e2e-kubernetes-compatibility, desktop-e2e]
+    needs: [changes, helper_compile, build, playwright_image, e2e, e2e-containers, e2e-kubernetes-compatibility, desktop-e2e, e2e-auth]
     if: always()
     # Report aggregation queries GitHub history and downloads artifacts with the
     # job token, so it remains on a GitHub-hosted runner during the pilot.
@@ -1686,6 +1686,7 @@ jobs:
       - name: Verify required jobs and evidence
         if: always()
         env:
+
           CHANGES_RESULT: ${{ needs.changes.result }}
           RUNNER_PLAN: ${{ needs.changes.outputs.plan }}
           RUN_REQUIRED: ${{ needs.changes.outputs.run }}
@@ -1698,6 +1699,7 @@ jobs:
           E2E_CONTAINERS_RESULT: ${{ needs['e2e-containers'].result }}
           E2E_KUBERNETES_COMPATIBILITY_RESULT: ${{ needs['e2e-kubernetes-compatibility'].result }}
           DESKTOP_E2E_RESULT: ${{ needs['desktop-e2e'].result }}
+          E2E_AUTH_RESULT: ${{ needs['e2e-auth'].result }}
         run: |
           set -euo pipefail
           if [[ "${CHANGES_RESULT}" != "success" || -z "${RUNNER_PLAN}" ]]; then
@@ -1717,7 +1719,8 @@ jobs:
             "e2e:${E2E_RESULT}" \
             "e2e-containers:${E2E_CONTAINERS_RESULT}" \
             "e2e-kubernetes-compatibility:${E2E_KUBERNETES_COMPATIBILITY_RESULT}" \
-            "desktop-e2e:${DESKTOP_E2E_RESULT}"; do
+            "desktop-e2e:${DESKTOP_E2E_RESULT}" \
+            "e2e-auth:${E2E_AUTH_RESULT}"; do
             name="${entry%%:*}"
             result="${entry#*:}"
             required="${expected}"
@@ -1740,3 +1743,111 @@ jobs:
               exit 1
             fi
           done
+
+  # Dedicated authenticated star suite. `tests/auth/plugin-repository-stars.spec.ts`
+  # restarts its worker backend with KANDEV_FEATURES_AUTH=true, so it lives in
+  # the `auth` Playwright project and can never share a shard with the normal
+  # cohort (which assumes an open backend and a tokenless API client). Serial by
+  # design: one account setup feeds the whole flow.
+  #
+  # Appended after `e2e-gate` on purpose — every block sliced by
+  # `.github/scripts/e2e-tests-workflow-contract_test.py` keeps its asserted
+  # contents, and this job still reports into `e2e-report` (blob-report-auth
+  # matches the `blob-report-*` glob) and gates through `e2e-auth` in
+  # `e2e-gate`'s needs list.
+  e2e-auth:
+    name: E2E Auth (plugin repository stars)
+    needs: [changes, build]
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    # Pre-baked image bundles Node 24, pnpm 9.15.9, and the Playwright browser
+    # binaries, so this job needs no setup-node/pnpm/apt bootstrap. `--ipc=host`
+    # is required for Chromium's renderer shared memory.
+    container:
+      image: ghcr.io/kdlbs/kandev-ci:runtime-latest
+      options: --ipc=host
+    timeout-minutes: 35
+    # Container jobs default to `sh`; pin to bash.
+    defaults:
+      run:
+        shell: bash
+    env:
+      NODE_OPTIONS: --dns-result-order=ipv4first
+      # The e2e backend fixture strips inherited KANDEV_FEATURES_* so the
+      # profile controls the baseline; the spec's explicit
+      # `beforeAll backend.restart({ KANDEV_FEATURES_AUTH: "true" })` is what
+      # actually turns authentication on for the run.
+      KANDEV_FEATURES_AUTH: "true"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache pnpm store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('apps/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: apps
+        run: pnpm install --frozen-lockfile
+
+      - name: Download backend build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-backend-build
+          path: apps/backend/bin/
+
+      - name: Make backend binaries executable
+        run: chmod +x apps/backend/bin/*
+
+      - name: Download E2E fixture plugin package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-plugin-package
+          path: apps/backend/.build/
+
+      - name: Download web build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-web-build
+          path: apps/web/
+
+      - name: Extract web build
+        working-directory: apps/web
+        run: tar -xf web-dist.tar && rm web-dist.tar
+
+      # `auth` is selected explicitly: the project owns every authenticated
+      # spec, and the manifest-based normal shards never include it.
+      - name: Run authenticated plugin repository star spec
+        working-directory: apps/web
+        env:
+          KANDEV_E2E_BUILD_IDENTITY: ${{ github.workspace }}/apps/backend/bin/e2e-build-identity.json
+          KANDEV_E2E_EXPECTED_SOURCE_REVISION: ${{ github.sha }}
+        run: pnpm exec playwright test --config e2e/playwright.config.ts --project=auth --workers=1 tests/auth/plugin-repository-stars.spec.ts
+
+      # Always present, and named with the `blob-report-*` prefix the merge job
+      # globs, so the authenticated run lands in the unified HTML report
+      # alongside the sharded and container runs.
+      - name: Upload auth blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blob-report-auth
+          path: apps/web/e2e/blob-report/
+          retention-days: 3
+
+      - name: Upload auth E2E results
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: auth-e2e-test-results
+          path: apps/web/e2e/test-results/
+          retention-days: 7

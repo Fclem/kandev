@@ -1,14 +1,39 @@
-import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../../fixtures/test-base";
-import type { BackendContext } from "../../fixtures/backend";
-import type { ApiClient } from "../../helpers/api-client";
 import { waitForHttp } from "../../helpers/causal-waits";
-import { installFixturePlugin, PLUGIN_ID } from "../../helpers/plugin-fixture";
-import { seedPersonalStarDeployment } from "../../fixtures/personal-star-deployment";
+import { expectControlHeight } from "../../helpers/control-sizing";
+import {
+  assertNoDocumentHorizontalOverflow,
+  expectTopmostAtCenter,
+} from "../../helpers/layout-assertions";
+import { installFixturePlugin, uninstallFixturePlugin } from "../../helpers/plugin-fixture";
+import { enableCanvasFeature } from "../canvas/canvas-fixture";
+import {
+  CONNECTION_STATUS_PATH,
+  CONNECTION_START_PATH,
+  COMPACT_STAR_HEIGHT,
+  INSTALLED_DETAIL,
+  INSTALLED_ROW,
+  INSTALLED_ROW_LINK,
+  REPO_LINK,
+  REPOSITORY_KEY,
+  REPOSITORY_URL,
+  STAR_CTA,
+  STAR_MUTATION_PATH,
+  STAR_STATUS_PATH,
+  STAR_TOGGLE,
+  canvasCatalogEntry,
+  mockMarketplaceCatalog,
+  openCanvasMarketplaceCard,
+  openMarketplaceEntry,
+  pluginCatalogEntry,
+  seedConnectedRepository,
+  useCapableDeployment,
+} from "./plugin-stars-helpers";
 
 /**
  * The dedicated personal star flow (`REQ-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001`)
- * as the user sees it in Settings > Plugins.
+ * as the user sees it in Settings > Plugins — the desktop fine-pointer
+ * `chromium` project.
  *
  * Every assertion here is about *what the deployment permits the UI to claim*:
  * an unsupported deployment renders no control at all, an inactive or
@@ -22,91 +47,36 @@ import { seedPersonalStarDeployment } from "../../fixtures/personal-star-deploym
  * test exposes it with a one-shot `backend.restart(seed.env)`.
  */
 
-/**
- * The fixture plugin's manifest `repo_url`. The installed row and detail read
- * it from the packaged manifest, so this proves the shipped fixture package
- * carries a canonical GitHub repository URL end to end.
- */
-const REPOSITORY_URL = "https://github.com/kdlbs/kandev-plugin-template";
-
-const STAR_TOGGLE = "plugin-star-toggle";
-const STAR_CTA = "plugin-star-connect";
-const MARKETPLACE_ENTRY = `marketplace-entry-${PLUGIN_ID}`;
-const CONNECTION_STATUS_PATH = /^\/api\/v1\/github\/user\/starred\/connection$/;
-const CONNECTION_START_PATH = /^\/api\/v1\/github\/user\/starred\/connection\/start$/;
-const STAR_STATUS_PATH = /^\/api\/v1\/github\/user\/starred\/status$/;
-const STAR_MUTATION_PATH = /^\/api\/v1\/github\/user\/starred$/;
-
-async function useCapableDeployment(backend: BackendContext): Promise<void> {
-  const seed = seedPersonalStarDeployment(backend);
-  await backend.restart(seed.env);
-}
-
-/** Serves one marketplace catalog entry carrying a canonical GitHub repo URL. */
-async function mockMarketplaceCatalog(page: Page): Promise<void> {
-  await page.route("**/api/plugins/marketplace*", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        plugins: [
-          {
-            id: PLUGIN_ID,
-            name: "E2E Hello",
-            description: "",
-            author: "kandev",
-            categories: [],
-            icon_url: "",
-            repo_url: REPOSITORY_URL,
-            version: "1.0.0",
-            min_kandev_version: "",
-            package_url: "https://example.invalid/kandev-plugin-e2e-1.0.0.tar.gz",
-            package_sha256: "",
-            stars: 0,
-            updated_at: "2026-01-01T00:00:00.000Z",
-            install_state: "available",
-            source_id: "official",
-            source_name: "Kandev Official",
-          },
-        ],
-        sources: [
-          {
-            id: "official",
-            name: "Kandev Official",
-            url: "https://example.invalid",
-            enabled: true,
-            builtin: true,
-            healthy: true,
-          },
-        ],
-      }),
-    });
-  });
-}
-
-async function openMarketplaceEntry(page: Page): Promise<Locator> {
-  await page.goto("/settings/plugins");
-  await page.getByTestId("plugins-tab-browse").click();
-  const row = page.getByTestId(MARKETPLACE_ENTRY);
-  await expect(row).toBeVisible();
-  return row;
-}
-
-/** Seeds a capable connection and one confirmed repository state. */
-async function seedConnectedRepository(
-  apiClient: ApiClient,
-  workspaceId: string,
-  starred: boolean,
-): Promise<void> {
-  await apiClient.mockGitHubSetPersonalStarConnection(workspaceId);
-  await apiClient.mockGitHubSetPersonalStarState(workspaceId, {
-    repositoryUrl: REPOSITORY_URL,
-    starred,
-  });
+/** The `InstallReview` the mocked canvas-install preparation returns. */
+function installReview(workspaceId: string) {
+  const entry = canvasCatalogEntry();
+  return {
+    preparation_id: "preparation-star-e2e",
+    workspace_id: workspaceId,
+    metadata: {
+      package_id: entry.id,
+      version: entry.version,
+      display_name: entry.name,
+      description: entry.description,
+      author: entry.author,
+      license: entry.license,
+      source_mode: "project",
+      min_kandev_version: entry.min_kandev_version,
+      repo_url: REPOSITORY_URL,
+    },
+    sha256: "d".repeat(64),
+    archive_sha256: "e".repeat(64),
+    permissions: {
+      reads: ["tasks"],
+      writes: [],
+      events: [],
+      external_origins: [],
+      shared_state: false,
+    },
+    origin_kind: "registry",
+    source_id: "official",
+    expires_at: "2026-12-31T00:00:00Z",
+  };
 }
 
 test.describe("Plugin repository stars", () => {
@@ -123,7 +93,7 @@ test.describe("Plugin repository stars", () => {
     backend,
   }) => {
     await useCapableDeployment(backend);
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     const row = await openMarketplaceEntry(testPage);
 
@@ -140,7 +110,7 @@ test.describe("Plugin repository stars", () => {
   }) => {
     await useCapableDeployment(backend);
     await seedConnectedRepository(apiClient, seedData.workspaceId, false);
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     const row = await openMarketplaceEntry(testPage);
     const toggle = row.getByTestId(STAR_TOGGLE);
@@ -152,7 +122,7 @@ test.describe("Plugin repository stars", () => {
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(
       (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
-        "kdlbs/kandev-plugin-template"
+        REPOSITORY_KEY
       ],
     ).toBe(true);
 
@@ -167,7 +137,7 @@ test.describe("Plugin repository stars", () => {
     await expect(row.getByTestId(STAR_TOGGLE)).toHaveAttribute("aria-pressed", "false");
     expect(
       (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
-        "kdlbs/kandev-plugin-template"
+        REPOSITORY_KEY
       ],
     ).toBe(false);
   });
@@ -183,7 +153,7 @@ test.describe("Plugin repository stars", () => {
     await seedConnectedRepository(apiClient, seedData.workspaceId, false);
 
     await installFixturePlugin(testPage);
-    const row = testPage.getByTestId(`plugin-row-${PLUGIN_ID}`);
+    const row = testPage.getByTestId(INSTALLED_ROW);
     const rowToggle = row.getByTestId(STAR_TOGGLE);
     await expect(rowToggle).toHaveAttribute("aria-pressed", "false");
 
@@ -194,13 +164,70 @@ test.describe("Plugin repository stars", () => {
 
     // The detail surface renders the same scoped key, so the confirmed state
     // is already there without a second provider read.
-    await row.getByTestId(`plugin-row-link-${PLUGIN_ID}`).click();
-    await expect(testPage.getByTestId(`plugin-detail-${PLUGIN_ID}`)).toBeVisible();
-    await expect(
-      testPage.getByTestId(`plugin-detail-${PLUGIN_ID}`).getByTestId(STAR_TOGGLE),
-    ).toHaveAttribute("aria-pressed", "true");
+    await row.getByTestId(INSTALLED_ROW_LINK).click();
+    await expect(testPage.getByTestId(INSTALLED_DETAIL)).toBeVisible();
+    await expect(testPage.getByTestId(INSTALLED_DETAIL).getByTestId(STAR_TOGGLE)).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
-    await apiClient.rawRequest("DELETE", `/api/plugins/${PLUGIN_ID}`).catch(() => undefined);
+    await uninstallFixturePlugin(apiClient);
+  });
+
+  test("keeps the compact 24px target on a desktop fine pointer without capturing row navigation", async ({
+    testPage,
+    apiClient,
+    backend,
+    seedData,
+  }) => {
+    test.setTimeout(90_000);
+    // The compact rule belongs to a *non-mobile fine pointer*: guard both, or a
+    // dropped touch emulation would silently move this spec into the 44px case.
+    expect(await testPage.evaluate(() => matchMedia("(pointer: fine)").matches)).toBe(true);
+    expect(await testPage.evaluate(() => matchMedia("(any-pointer: coarse)").matches)).toBe(false);
+
+    await useCapableDeployment(backend);
+    await seedConnectedRepository(apiClient, seedData.workspaceId, false);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
+
+    try {
+      const card = await openMarketplaceEntry(testPage);
+      const cardToggle = card.getByTestId(STAR_TOGGLE);
+      await expect(cardToggle).toHaveAttribute("aria-pressed", "false");
+      await expectControlHeight(cardToggle, COMPACT_STAR_HEIGHT);
+      await expectTopmostAtCenter(cardToggle, "marketplace star toggle");
+      await assertNoDocumentHorizontalOverflow(testPage);
+
+      const starred = waitForHttp(testPage, "PUT", STAR_MUTATION_PATH);
+      await cardToggle.click();
+      expect((await starred).ok()).toBe(true);
+      await expect(cardToggle).toHaveAttribute("aria-pressed", "true");
+      await expectControlHeight(cardToggle, COMPACT_STAR_HEIGHT);
+
+      await installFixturePlugin(testPage);
+      const row = testPage.getByTestId(INSTALLED_ROW);
+      const rowToggle = row.getByTestId(STAR_TOGGLE);
+      await expect(rowToggle).toHaveAttribute("aria-pressed", "true");
+      await expectControlHeight(rowToggle, COMPACT_STAR_HEIGHT);
+
+      // The row's overlay link spans the whole card; the compact star keeps its
+      // own click above it and is not nested inside it.
+      expect(await rowToggle.evaluate((element) => element.closest("a") !== null)).toBe(false);
+      await expectTopmostAtCenter(rowToggle, "installed row star toggle");
+      await expectTopmostAtCenter(row.getByTestId(REPO_LINK), "installed row repository link");
+
+      const before = testPage.url();
+      const unstarred = waitForHttp(testPage, "DELETE", STAR_MUTATION_PATH);
+      await rowToggle.click();
+      expect((await unstarred).ok()).toBe(true);
+      await expect(rowToggle).toHaveAttribute("aria-pressed", "false");
+      expect(testPage.url()).toBe(before);
+
+      await row.getByTestId(INSTALLED_ROW_LINK).click();
+      await expect(testPage.getByTestId(INSTALLED_DETAIL)).toBeVisible();
+    } finally {
+      await uninstallFixturePlugin(apiClient);
+    }
   });
 
   test("never renders a provider-unknown status as unstarred", async ({
@@ -212,7 +239,7 @@ test.describe("Plugin repository stars", () => {
     await useCapableDeployment(backend);
     await apiClient.mockGitHubSetPersonalStarConnection(seedData.workspaceId);
     await apiClient.mockGitHubSetPersonalStarFailures({ status: true });
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     // Armed before navigation: hydration fires on mount.
     const statusRead = waitForHttp(testPage, "POST", STAR_STATUS_PATH);
@@ -222,14 +249,14 @@ test.describe("Plugin repository stars", () => {
     // The backend really answered "unknown" for this repository…
     expect(
       (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
-        "kdlbs/kandev-plugin-template"
+        REPOSITORY_KEY
       ],
     ).toBeNull();
     // …so the control asserts nothing: no unstarred toggle, and no CTA that
     // would imply the user could act on an unknown state.
     await expect(row.getByTestId(STAR_TOGGLE)).toHaveCount(0);
     await expect(row.getByTestId(STAR_CTA)).toHaveCount(0);
-    await expect(row.getByTestId("plugin-repo-link")).toBeVisible();
+    await expect(row.getByTestId(REPO_LINK)).toBeVisible();
   });
 
   test("keeps the confirmed state and the list when a mutation fails", async ({
@@ -241,7 +268,7 @@ test.describe("Plugin repository stars", () => {
     await useCapableDeployment(backend);
     await seedConnectedRepository(apiClient, seedData.workspaceId, false);
     await apiClient.mockGitHubSetPersonalStarFailures({ mutation: true });
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     const row = await openMarketplaceEntry(testPage);
     const toggle = row.getByTestId(STAR_TOGGLE);
@@ -257,11 +284,11 @@ test.describe("Plugin repository stars", () => {
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await expect(toggle).toBeEnabled();
     await expect(row).toBeVisible();
-    await expect(row.getByTestId("plugin-repo-link")).toBeVisible();
+    await expect(row.getByTestId(REPO_LINK)).toBeVisible();
     await expect(testPage.locator("[data-sonner-toast]")).toHaveCount(0);
     expect(
       (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
-        "kdlbs/kandev-plugin-template"
+        REPOSITORY_KEY
       ],
     ).toBe(false);
   });
@@ -277,7 +304,7 @@ test.describe("Plugin repository stars", () => {
       public_repo: false,
       outcome: "insufficient_scope",
     });
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     const statusRead = waitForHttp(testPage, "GET", CONNECTION_STATUS_PATH);
     const row = await openMarketplaceEntry(testPage);
@@ -298,7 +325,7 @@ test.describe("Plugin repository stars", () => {
     // A declined re-consent leaves the previous valid generation usable, so the
     // truth table keeps the star control and adds the reconnect entry point.
     await apiClient.mockGitHubSetPersonalStarOutcome(seedData.workspaceId, "declined");
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     const row = await openMarketplaceEntry(testPage);
     await expect(row.getByTestId(STAR_TOGGLE)).toHaveAttribute("aria-pressed", "true");
@@ -321,7 +348,7 @@ test.describe("Plugin repository stars", () => {
         startRequests.push(request.url());
       }
     });
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     const connectionRead = waitForHttp(testPage, "GET", CONNECTION_STATUS_PATH, {
       predicate: async (response) => {
@@ -348,7 +375,7 @@ test.describe("Plugin repository stars", () => {
     seedData,
   }) => {
     await useCapableDeployment(backend);
-    await mockMarketplaceCatalog(testPage);
+    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
 
     // A stale "declined" value cannot manufacture a reconnect state: with no
     // connection yet, the truth table still says Connect.
@@ -412,7 +439,7 @@ test.describe("Plugin repository stars", () => {
       });
       expect(
         (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
-          "kdlbs/kandev-plugin-template"
+          REPOSITORY_KEY
         ],
       ).toBeNull();
 
@@ -421,12 +448,200 @@ test.describe("Plugin repository stars", () => {
       expect(otherAfter.credential_generation).toBe(otherBefore.credential_generation);
       expect(otherAfter).toMatchObject({ active: true, capable: true });
       expect(
-        (await apiClient.getPersonalStarStates(other.id, [REPOSITORY_URL])).states[
-          "kdlbs/kandev-plugin-template"
+        (await apiClient.getPersonalStarStates(other.id, [REPOSITORY_URL])).states[REPOSITORY_KEY],
+      ).toBe(true);
+    } finally {
+      await apiClient.deleteWorkspace(other.id, other.name).catch(() => undefined);
+    }
+  });
+
+  test("stars the shared repository from the Canvases detail surface", async ({
+    testPage,
+    apiClient,
+    backend,
+    seedData,
+  }) => {
+    test.setTimeout(90_000);
+    const entry = canvasCatalogEntry();
+    const releaseCanvasFeature = await enableCanvasFeature(
+      backend,
+      apiClient,
+      seedData.workspaceId,
+    );
+    try {
+      await useCapableDeployment(backend);
+      await seedConnectedRepository(apiClient, seedData.workspaceId, true);
+      await mockMarketplaceCatalog(testPage, { canvases: [entry] });
+
+      const card = await openCanvasMarketplaceCard(testPage, entry.id);
+      await card.getByRole("button").first().click();
+
+      const detail = testPage.getByTestId(`canvas-marketplace-detail-${entry.id}`);
+      await expect(detail).toBeVisible();
+      const toggle = detail.getByTestId(STAR_TOGGLE);
+      // Same repository as the plugin surfaces, so the confirmed state is
+      // already hydrated — and the compact desktop geometry applies here too.
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await expectControlHeight(toggle, COMPACT_STAR_HEIGHT);
+      await expect(detail.getByTestId(REPO_LINK)).toHaveAttribute("href", REPOSITORY_URL);
+
+      const unstarred = waitForHttp(testPage, "DELETE", STAR_MUTATION_PATH);
+      await toggle.click();
+      expect((await unstarred).ok()).toBe(true);
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      expect(
+        (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
+          REPOSITORY_KEY
+        ],
+      ).toBe(false);
+    } finally {
+      await releaseCanvasFeature();
+    }
+  });
+
+  test("reads the CanvasInstallDialog star from its selected workspace, not the active one", async ({
+    testPage,
+    apiClient,
+    backend,
+    seedData,
+  }) => {
+    test.setTimeout(90_000);
+    const entry = canvasCatalogEntry();
+    const releaseCanvasFeature = await enableCanvasFeature(
+      backend,
+      apiClient,
+      seedData.workspaceId,
+    );
+    const other = await apiClient.createWorkspace("Star Dialog Workspace");
+    try {
+      await useCapableDeployment(backend);
+      // The active workspace A is starred; the dialog's selected workspace B is
+      // not. A control that read the active workspace would show `true`.
+      await seedConnectedRepository(apiClient, seedData.workspaceId, true);
+      await seedConnectedRepository(apiClient, other.id, false);
+      await mockMarketplaceCatalog(testPage, { canvases: [entry] });
+
+      const preparedWorkspaces: string[] = [];
+      await testPage.route("**/api/v1/canvases/install-preparations", async (route) => {
+        if (route.request().method() !== "POST") {
+          await route.fallback();
+          return;
+        }
+        const request = route.request().postDataJSON() as { workspace_id?: string };
+        preparedWorkspaces.push(request.workspace_id ?? "");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(installReview(request.workspace_id ?? "")),
+        });
+      });
+
+      // Workspace B only becomes selectable once the app has booted with it.
+      await testPage.reload();
+      const card = await openCanvasMarketplaceCard(testPage, entry.id);
+      await testPage.getByTestId("canvas-marketplace-workspace").click();
+      await testPage.getByRole("option", { name: other.name }).click();
+      await expect(testPage.getByTestId("canvas-marketplace-workspace")).toHaveText(other.name);
+
+      await card.getByRole("button").first().click();
+      const detail = testPage.getByTestId(`canvas-marketplace-detail-${entry.id}`);
+      await detail.getByRole("button", { name: "Review and install", exact: true }).click();
+
+      const dialog = testPage.getByRole("dialog").last();
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Review bundle", exact: true }).click();
+
+      // The inspected review names the selected workspace, and the preparation
+      // was requested for it.
+      const review = dialog.getByTestId("canvas-install-review");
+      await expect(review).toBeVisible();
+      await expect(review.getByText(`${other.name} (${other.id})`)).toBeVisible();
+      expect(preparedWorkspaces).toEqual([other.id]);
+
+      const toggle = dialog.getByTestId(STAR_TOGGLE);
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expectControlHeight(toggle, COMPACT_STAR_HEIGHT);
+
+      const starred = waitForHttp(testPage, "PUT", STAR_MUTATION_PATH);
+      await toggle.click();
+      const starResponse = await starred;
+      expect((starResponse.request().postDataJSON() as { workspace_id: string }).workspace_id).toBe(
+        other.id,
+      );
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+      const unstarred = waitForHttp(testPage, "DELETE", STAR_MUTATION_PATH);
+      await toggle.click();
+      const unstarResponse = await unstarred;
+      expect(
+        (unstarResponse.request().postDataJSON() as { workspace_id: string }).workspace_id,
+      ).toBe(other.id);
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+      // Selected workspace B moved; the global active workspace A did not.
+      expect(
+        (await apiClient.getPersonalStarStates(other.id, [REPOSITORY_URL])).states[REPOSITORY_KEY],
+      ).toBe(false);
+      expect(
+        (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
+          REPOSITORY_KEY
         ],
       ).toBe(true);
     } finally {
       await apiClient.deleteWorkspace(other.id, other.name).catch(() => undefined);
+      await releaseCanvasFeature();
+    }
+  });
+
+  test("omits the CanvasInstallDialog star control when the provider status is unknown", async ({
+    testPage,
+    apiClient,
+    backend,
+    seedData,
+  }) => {
+    test.setTimeout(90_000);
+    const entry = canvasCatalogEntry();
+    const releaseCanvasFeature = await enableCanvasFeature(
+      backend,
+      apiClient,
+      seedData.workspaceId,
+    );
+    try {
+      await useCapableDeployment(backend);
+      await apiClient.mockGitHubSetPersonalStarConnection(seedData.workspaceId);
+      await apiClient.mockGitHubSetPersonalStarFailures({ status: true });
+      await mockMarketplaceCatalog(testPage, { canvases: [entry] });
+
+      await testPage.route("**/api/v1/canvases/install-preparations", async (route) => {
+        if (route.request().method() !== "POST") {
+          await route.fallback();
+          return;
+        }
+        const request = route.request().postDataJSON() as { workspace_id?: string };
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(installReview(request.workspace_id ?? "")),
+        });
+      });
+
+      const card = await openCanvasMarketplaceCard(testPage, entry.id);
+      await card.getByRole("button").first().click();
+      const detail = testPage.getByTestId(`canvas-marketplace-detail-${entry.id}`);
+      await detail.getByRole("button", { name: "Review and install", exact: true }).click();
+
+      const dialog = testPage.getByRole("dialog").last();
+      await dialog.getByRole("button", { name: "Review bundle", exact: true }).click();
+
+      // The review still renders in full — the omission is the star control
+      // asserting a state it cannot know, not a broken dialog.
+      const review = dialog.getByTestId("canvas-install-review");
+      await expect(review).toBeVisible();
+      await expect(review.getByText(REPOSITORY_URL)).toBeVisible();
+      await expect(dialog.getByTestId(STAR_TOGGLE)).toHaveCount(0);
+      await expect(dialog.getByTestId(STAR_CTA)).toHaveCount(0);
+    } finally {
+      await releaseCanvasFeature();
     }
   });
 });

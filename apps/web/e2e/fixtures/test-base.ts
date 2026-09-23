@@ -1,4 +1,4 @@
-import { devices, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
 import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,6 +8,7 @@ import {
   restoreSeedRepositoryOrigin,
 } from "./seed-repository-origin";
 export { restoreSeedRepositoryOrigin } from "./seed-repository-origin";
+import { projectContextOptions } from "./project-contexts";
 import { ApiClient } from "../helpers/api-client";
 import { dwell } from "../helpers/causal-waits";
 import { PrAssetCapture } from "../helpers/pr-asset-capture";
@@ -456,7 +457,10 @@ export const test = backendFixture.extend<
       });
     });
     const context = await browser.newContext({
-      ...(testInfo.project.name === "mobile-chrome" ? devices["Pixel 5"] : {}),
+      // One definition per project, shared with playwright.config.ts: the phone
+      // (Pixel 5), 767px fine-pointer, and desktop coarse-pointer projects each
+      // get the same context the project declares.
+      ...projectContextOptions(testInfo.project.name),
       baseURL: backend.frontendUrl,
     });
     const page = await context.newPage();
@@ -505,10 +509,10 @@ export const test = backendFixture.extend<
   coarseDesktopTestPage: async ({ browser, backend, testPage }, use) => {
     void testPage;
     const context = await browser.newContext({
+      // Same context the `desktop-coarse-pointer` project declares, so an
+      // ad-hoc coarse-pointer page and the project-scoped one cannot diverge.
+      ...projectContextOptions("desktop-coarse-pointer"),
       baseURL: backend.frontendUrl,
-      viewport: { width: 1280, height: 900 },
-      hasTouch: true,
-      isMobile: false,
     });
     const page = await context.newPage();
     await setupPage(page, backend);

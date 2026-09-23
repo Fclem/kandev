@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { projectContextOptions } from "./fixtures/project-contexts";
 
 const CI = !!process.env.CI;
 const upgradeRun = ["upgrade-desktop", "upgrade-mobile"].includes(
@@ -89,6 +90,10 @@ export default defineConfig({
       testIgnore: [
         /upgrade\/.*\.spec\.ts/,
         /mobile-.*\.spec\.ts/,
+        // The desktop-width coarse-pointer specs run in their own project; a
+        // file that matched two normal projects would produce two catalog
+        // units for one spec and be planned twice.
+        /desktop-coarse-pointer-.*\.spec\.ts/,
         // Container-backed tests (Docker, SSH, and Kubernetes executors) live in the
         // `containers` project and skip when Docker is not available locally.
         // See apps/web/e2e/README.md for what runs there.
@@ -104,10 +109,26 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
+      // Desktop width with touch/coarse-pointer emulation. Width alone proves
+      // nothing about the pointer, so the spec asserts `pointer: coarse` from
+      // inside the context as its own guard. Excluded from every other normal
+      // project by the `desktop-coarse-pointer-` filename prefix.
+      name: "desktop-coarse-pointer",
+      testMatch: /desktop-coarse-pointer-.*\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], ...projectContextOptions("desktop-coarse-pointer") },
+    },
+    {
       name: "mobile-chrome",
       testMatch: /mobile-.*\.spec\.ts/,
-      testIgnore: [/ssh\/.*\.spec\.ts/, /upgrade\/.*\.spec\.ts/],
-      use: { ...devices["Pixel 5"] },
+      // Fine-pointer phone specs belong to their own project, not Pixel 5.
+      testIgnore: [/ssh\/.*\.spec\.ts/, /upgrade\/.*\.spec\.ts/, /mobile-fine-pointer-.*\.spec\.ts/],
+      use: { ...projectContextOptions("mobile-chrome") },
+    },
+    {
+      // 767px with a fine pointer proves the phone target is viewport-driven.
+      name: "mobile-fine-pointer",
+      testMatch: /mobile-fine-pointer-.*\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], ...projectContextOptions("mobile-fine-pointer") },
     },
     {
       // Real-container E2E. Opt-in: run with `playwright test --project=containers`.

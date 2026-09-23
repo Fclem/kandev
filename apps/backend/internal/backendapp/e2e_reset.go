@@ -821,8 +821,8 @@ func deleteGitHubAuthForReset(ctx context.Context, database *sql.DB, workspaceID
 	// Generation-specific star secrets embed the workspace id between the kind
 	// and user segments, so each kind is matched by its own exact prefix.
 	for _, prefix := range []string{
-		"github-personal-star:access:" + workspaceID + ":",
-		"github-personal-star:refresh:" + workspaceID + ":",
+		github.KandevRuntimePersonalStarAccessPrefix + workspaceID + ":",
+		github.KandevRuntimePersonalStarRefreshPrefix + workspaceID + ":",
 	} {
 		if _, err := tx.ExecContext(ctx, `
 			DELETE FROM secrets WHERE substr(id, 1, length(?)) = ?`,

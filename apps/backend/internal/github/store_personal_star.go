@@ -250,26 +250,31 @@ func (s *Store) DisconnectPersonalStarConnection(
 	return superseded, nil
 }
 
-// DeletePersonalStarWorkspaceState removes every dedicated star row for a
-// workspace. Secret cleanup rows are returned so callers can delete the
-// encrypted values they name.
-func (s *Store) DeletePersonalStarWorkspaceState(ctx context.Context, workspaceID string) ([]string, error) {
-	var secretIDs []string
-	if err := s.db.SelectContext(ctx, &secretIDs, s.db.Rebind(`
-		SELECT secret_id FROM github_personal_star_cleanup WHERE workspace_id = ?`), workspaceID); err != nil {
-		return nil, fmt.Errorf("list personal star secrets: %w", err)
-	}
+// ListPersonalStarConnections returns every dedicated connection in a
+// workspace: state is keyed by (workspace, user), so a workspace can hold one
+// per participating user.
+func (s *Store) ListPersonalStarConnections(ctx context.Context, workspaceID string) ([]*PersonalStarConnection, error) {
+	var connections []*PersonalStarConnection
+	err := s.ro.SelectContext(ctx, &connections,
+		s.ro.Rebind(personalStarConnectionSelect+` WHERE workspace_id = ? ORDER BY user_id`), workspaceID)
+	return connections, err
+}
+
+// DeletePersonalStarWorkspaceState removes the workspace's dedicated star rows
+// but deliberately leaves github_personal_star_cleanup intact: those rows are
+// the only remaining record of the generation-specific secrets that still have
+// to be deleted, so dropping them would orphan encrypted token material.
+func (s *Store) DeletePersonalStarWorkspaceState(ctx context.Context, workspaceID string) error {
 	for _, statement := range []string{
-		`DELETE FROM github_personal_star_cleanup WHERE workspace_id = ?`,
 		`DELETE FROM github_personal_star_flow WHERE workspace_id = ?`,
 		`DELETE FROM github_personal_star_connection WHERE workspace_id = ?`,
 		`DELETE FROM github_personal_star_lifecycle WHERE workspace_id = ?`,
 	} {
 		if _, err := s.db.ExecContext(ctx, s.db.Rebind(statement), workspaceID); err != nil {
-			return nil, fmt.Errorf("delete personal star workspace state: %w", err)
+			return fmt.Errorf("delete personal star workspace state: %w", err)
 		}
 	}
-	return secretIDs, nil
+	return nil
 }
 
 // EnqueuePersonalStarSecretCleanup durably records a generation-specific secret

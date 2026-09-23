@@ -659,3 +659,28 @@ func TestPersonalStarRepositoryStatusRefreshesOnceAfterUnauthorized(t *testing.T
 		t.Fatalf("provider calls = %d, refresh calls = %d; want one rejected attempt plus one retry", scripted.calls, oauthClient.refreshCalls)
 	}
 }
+
+// TestPersonalStarTokenSecretIDsStayInTheReservedNamespace pins where dedicated
+// OAuth token rows live. The backend-owned credential policy
+// (secrets.IsInternalID) protects the `kandev-runtime:` namespace, so a builder
+// that produced a user-visible id would expose access and refresh tokens to the
+// secrets API and to agent credential selection.
+func TestPersonalStarTokenSecretIDsStayInTheReservedNamespace(t *testing.T) {
+	access := personalStarAccessSecretID("ws-1", "user-1", 7)
+	refresh := personalStarRefreshSecretID("ws-1", "user-1", 7)
+	for name, id := range map[string]string{"access": access, "refresh": refresh} {
+		if !strings.HasPrefix(id, "kandev-runtime:github-personal-star:") {
+			t.Fatalf("%s secret id %q is outside the reserved runtime namespace", name, id)
+		}
+		if !strings.Contains(id, "ws-1") || !strings.Contains(id, "user-1") || !strings.HasSuffix(id, ":7") {
+			t.Fatalf("%s secret id %q does not name its workspace/user/generation", name, id)
+		}
+	}
+	if access == refresh {
+		t.Fatal("access and refresh tokens share one secret id")
+	}
+	if !strings.HasPrefix(access, KandevRuntimePersonalStarAccessPrefix) ||
+		!strings.HasPrefix(refresh, KandevRuntimePersonalStarRefreshPrefix) {
+		t.Fatal("exported teardown prefixes do not match the token secret ids")
+	}
+}

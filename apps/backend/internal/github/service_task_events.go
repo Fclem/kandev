@@ -95,6 +95,26 @@ type connectionSecretIDLister interface {
 	ListIDs(context.Context) ([]string, error)
 }
 
+// queuePersonalStarTokenCleanup records every generation-specific dedicated
+// star secret in the durable cleanup queue before the connection rows that name
+// them are deleted. These rows are Global-scope, so workspace-scoped secret
+// deletion never sees them.
+func (s *Service) queuePersonalStarTokenCleanup(ctx context.Context, workspaceID string) error {
+	connections, err := s.store.ListPersonalStarConnections(ctx, workspaceID)
+	if err != nil {
+		return fmt.Errorf("list personal star connections: %w", err)
+	}
+	for _, connection := range connections {
+		for _, secretID := range personalStarSecretIDs(connection) {
+			if err := s.store.EnqueuePersonalStarSecretCleanup(ctx, workspaceID, connection.UserID,
+				secretID, "github-personal-star", connection.CredentialGeneration); err != nil {
+				return fmt.Errorf("queue personal star secret cleanup: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
 // handleWorkspaceDeleted removes workspace-owned GitHub metadata and encrypted
 // credentials after the task repository deletes the workspace row. Secret IDs
 // are namespaced, so future multi-user connections are covered without reading
@@ -112,8 +132,14 @@ func (s *Service) handleWorkspaceDeleted(ctx context.Context, event *bus.Event) 
 		broker.RevokeWorkspace(workspaceID)
 	}
 	if s.store != nil {
+		if err := s.queuePersonalStarTokenCleanup(ctx, workspaceID); err != nil {
+			return err
+		}
 		if err := s.store.DeleteWorkspaceSettings(ctx, workspaceID); err != nil {
 			return fmt.Errorf("delete GitHub workspace settings: %w", err)
+		}
+		if err := s.store.DeletePersonalStarWorkspaceState(ctx, workspaceID); err != nil {
+			return fmt.Errorf("delete personal star workspace state: %w", err)
 		}
 	}
 	if s.connectionSecrets == nil {

@@ -211,12 +211,12 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 			('github:workspace:ws-1:pat'),
 			('github:user:ws-1:user-1:access'),
 			('github:user:ws-1:user-1:refresh'),
-			('github-personal-star:access:ws-1:user-1:1'),
-			('github-personal-star:refresh:ws-1:user-1:1'),
-			('github-personal-star:access:ws-1:user-1:2'),
+			('kandev-runtime:github-personal-star:access:ws-1:user-1:1'),
+			('kandev-runtime:github-personal-star:refresh:ws-1:user-1:1'),
+			('kandev-runtime:github-personal-star:access:ws-1:user-1:2'),
 			('github:workspace:ws-2:pat'),
-			('github-personal-star:access:ws-2:user-2:1'),
-			('github-personal-star:refresh:ws-2:user-2:1')
+			('kandev-runtime:github-personal-star:access:ws-2:user-2:1'),
+			('kandev-runtime:github-personal-star:refresh:ws-2:user-2:1')
 	`); err != nil {
 		t.Fatalf("seed database: %v", err)
 	}
@@ -253,11 +253,11 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 	// while the other workspace keeps both of its own.
 	var ws1StarSecrets, ws2StarSecrets int
 	if err := database.Get(&ws1StarSecrets,
-		`SELECT COUNT(*) FROM secrets WHERE id LIKE 'github-personal-star:%ws-1:%'`); err != nil {
+		`SELECT COUNT(*) FROM secrets WHERE id LIKE 'kandev-runtime:github-personal-star:%ws-1:%'`); err != nil {
 		t.Fatalf("count reset star secrets: %v", err)
 	}
 	if err := database.Get(&ws2StarSecrets,
-		`SELECT COUNT(*) FROM secrets WHERE id LIKE 'github-personal-star:%ws-2:%'`); err != nil {
+		`SELECT COUNT(*) FROM secrets WHERE id LIKE 'kandev-runtime:github-personal-star:%ws-2:%'`); err != nil {
 		t.Fatalf("count preserved star secrets: %v", err)
 	}
 	if ws1StarSecrets != 0 || ws2StarSecrets != 2 {

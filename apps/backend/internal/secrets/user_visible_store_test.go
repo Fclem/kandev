@@ -176,3 +176,89 @@ func TestUserVisibleStoreWorkspaceOperationsFilterInternalSecrets(t *testing.T) 
 		t.Fatalf("internal workspace secret after cleanup = %v, want not found", err)
 	}
 }
+
+// TestUserVisibleStoreHidesDedicatedPersonalStarTokens pins the invariant that
+// the dedicated OAuth App token namespace is backend-owned: the star feature
+// stores access and refresh tokens as `kandev-runtime:github-personal-star:*`
+// rows, and no user-visible surface may list, read, mutate, transfer, or select
+// them as an agent credential.
+func TestUserVisibleStoreHidesDedicatedPersonalStarTokens(t *testing.T) {
+	store := newTestSQLiteStore(t)
+	ctx := context.Background()
+	access := &SecretWithValue{
+		Secret: Secret{ID: "kandev-runtime:github-personal-star:access:ws-1:user-1:1", Name: "github personal star access token"},
+		Value:  "oauth-access-token",
+	}
+	refresh := &SecretWithValue{
+		Secret: Secret{ID: "kandev-runtime:github-personal-star:refresh:ws-1:user-1:1", Name: "github personal star refresh token"},
+		Value:  "oauth-refresh-token",
+	}
+	visible := &SecretWithValue{Secret: Secret{ID: "user-secret", Name: "user token"}, Value: "user-value"}
+	for _, secret := range []*SecretWithValue{access, refresh, visible} {
+		if err := store.Create(ctx, secret); err != nil {
+			t.Fatalf("create %s: %v", secret.ID, err)
+		}
+	}
+
+	wrapped := NewUserVisibleStore(store)
+	items, err := wrapped.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != visible.ID {
+		t.Fatalf("visible secrets = %+v, want only %q", items, visible.ID)
+	}
+
+	for name, operation := range map[string]func() error{
+		"Get":    func() error { _, err := wrapped.Get(ctx, access.ID); return err },
+		"Reveal": func() error { _, err := wrapped.Reveal(ctx, access.ID); return err },
+		"Update": func() error { return wrapped.Update(ctx, access.ID, &UpdateSecretRequest{}) },
+		"Delete": func() error { return wrapped.Delete(ctx, access.ID) },
+		"Create": func() error {
+			return wrapped.Create(ctx, &SecretWithValue{
+				Secret: Secret{ID: "kandev-runtime:github-personal-star:access:ws-1:user-1:2", Name: "star token"},
+				Value:  "x",
+			})
+		},
+	} {
+		if err := operation(); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%s error = %v, want not found", name, err)
+		}
+	}
+
+	scoped, ok := wrapped.(SecretTransferStore)
+	if !ok {
+		t.Fatal("wrapped store does not expose scope transfers")
+	}
+	if _, err := scoped.CopyScoped(ctx, access.ID, "", ScopeGlobal, "", nil, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("CopyScoped error = %v, want not found", err)
+	}
+	if _, err := scoped.MoveScoped(ctx, refresh.ID, "", ScopeGlobal, "", nil, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("MoveScoped error = %v, want not found", err)
+	}
+
+	// The provider used for agent credential selection must reject the same ids.
+	provider := NewSecretStoreProvider(wrapped)
+	for _, id := range []string{access.ID, refresh.ID} {
+		if _, err := provider.GetCredential(ctx, id); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("credential selection error for %s = %v, want not found", id, err)
+		}
+	}
+	available, err := provider.ListAvailable(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range available {
+		if id == access.ID || id == refresh.ID {
+			t.Fatalf("credential selection listed %s", id)
+		}
+	}
+
+	// Integration services keep direct access to the rows they own.
+	if got, err := store.Reveal(ctx, access.ID); err != nil || got != "oauth-access-token" {
+		t.Fatalf("raw reveal = %q, %v", got, err)
+	}
+	if !IsInternalID(access.ID) || !IsInternalID(refresh.ID) {
+		t.Fatal("dedicated star token ids are not classified as internal")
+	}
+}

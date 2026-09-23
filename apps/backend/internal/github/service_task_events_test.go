@@ -296,3 +296,59 @@ func revocationTestBroker(workspaceID, taskID, sessionID string) *CredentialBrok
 	}
 	return broker
 }
+
+// TestHandleWorkspaceDeletedQueuesDedicatedStarTokenCleanup pins the workspace
+// teardown contract for the dedicated OAuth App connection: the Global-scope
+// access and refresh token rows must be recorded in the durable cleanup queue
+// before the connection rows that name them are deleted, so the tokens are
+// still deleted after the workspace is gone.
+func TestHandleWorkspaceDeletedQueuesDedicatedStarTokenCleanup(t *testing.T) {
+	svc, secrets := newWorkspaceConnectionService(t, "octocat")
+	ctx := context.Background()
+	if err := svc.SeedPersonalStarConnectionForE2E(ctx, "ws-1", "user-1", "octocat", true, personalStarOutcomeConnected); err != nil {
+		t.Fatal(err)
+	}
+	connection, err := svc.store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || connection == nil {
+		t.Fatalf("connection = %+v, %v", connection, err)
+	}
+	if _, ok := secrets.values[connection.AccessSecretID]; !ok {
+		t.Fatalf("seeded access secret %q is missing", connection.AccessSecretID)
+	}
+
+	event := bus.NewEvent(events.WorkspaceDeleted, "task-service", map[string]interface{}{"id": "ws-1"})
+	if err := svc.handleWorkspaceDeleted(ctx, event); err != nil {
+		t.Fatalf("handleWorkspaceDeleted: %v", err)
+	}
+
+	if connection, err := svc.store.GetPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil || connection != nil {
+		t.Fatalf("connection after deletion = %+v, %v", connection, err)
+	}
+	records, err := svc.store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued := make(map[string]bool, len(records))
+	for _, record := range records {
+		queued[record.SecretID] = true
+		if record.Status != personalStarCleanupPending {
+			t.Fatalf("queued record = %+v, want pending", record)
+		}
+	}
+	if !queued[connection.AccessSecretID] {
+		t.Fatalf("access secret %q was not queued: %v", connection.AccessSecretID, queued)
+	}
+	if connection.RefreshSecretID != "" && !queued[connection.RefreshSecretID] {
+		t.Fatalf("refresh secret %q was not queued: %v", connection.RefreshSecretID, queued)
+	}
+
+	// The runner still holds the only reference to those values and must be
+	// able to delete them after the workspace row is gone.
+	runner := NewStarSecretCleanupRunner(svc.store, secrets, nil)
+	if deleted, err := runner.RunOnce(ctx); err != nil || deleted != len(records) {
+		t.Fatalf("RunOnce() = %d, %v; want %d", deleted, err, len(records))
+	}
+	if _, ok := secrets.values[connection.AccessSecretID]; ok {
+		t.Fatal("access token survived workspace deletion")
+	}
+}

@@ -712,12 +712,26 @@ func personalStarStateDigest(state string) string {
 	return hex.EncodeToString(digest[:])
 }
 
+// personalStarTokenSecretPrefix reserves the dedicated star token namespace.
+// It sits under kandev-runtime: so the backend-owned credential policy
+// (secrets.IsInternalID) keeps OAuth token material out of every user-visible
+// secret surface and out of agent credential selection.
+const personalStarTokenSecretPrefix = "kandev-runtime:github-personal-star:"
+
+const (
+	// KandevRuntimePersonalStarAccessPrefix and
+	// KandevRuntimePersonalStarRefreshPrefix name the reserved token
+	// namespaces so workspace teardown and E2E reset delete them by prefix.
+	KandevRuntimePersonalStarAccessPrefix  = personalStarTokenSecretPrefix + "access:"
+	KandevRuntimePersonalStarRefreshPrefix = personalStarTokenSecretPrefix + "refresh:"
+)
+
 func personalStarAccessSecretID(workspaceID, userID string, generation int64) string {
-	return fmt.Sprintf("github-personal-star:access:%s:%s:%d", workspaceID, userID, generation)
+	return fmt.Sprintf(personalStarTokenSecretPrefix+"access:%s:%s:%d", workspaceID, userID, generation)
 }
 
 func personalStarRefreshSecretID(workspaceID, userID string, generation int64) string {
-	return fmt.Sprintf("github-personal-star:refresh:%s:%s:%d", workspaceID, userID, generation)
+	return fmt.Sprintf(personalStarTokenSecretPrefix+"refresh:%s:%s:%d", workspaceID, userID, generation)
 }
 
 func randomPersonalStarValue(source io.Reader, size int, encoding *base64.Encoding) (string, error) {

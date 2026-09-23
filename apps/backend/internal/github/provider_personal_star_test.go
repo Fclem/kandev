@@ -61,12 +61,17 @@ func TestProvidePersonalStarRuntimeUnavailableLeavesFeatureOff(t *testing.T) {
 	}
 }
 
-func TestProvidePersonalStarRuntimeFailsClosedWithoutClientSecret(t *testing.T) {
+func TestProvidePersonalStarRuntimeDegradesWhenClientSecretIsUnresolvable(t *testing.T) {
+	ctx := context.Background()
 	sqlxDB := newProviderTestDatabase(t)
 	log := newTestLogger()
 	counter := &closeCountingDeployment{}
 
-	_, _, err := Provide(sqlxDB, sqlxDB, nil, newFakePersonalStarSecrets(), nil, log, PersonalStarDeployment{
+	// An unresolvable reference (never provisioned, revoked, foreign
+	// installation, or outside the namespace) disables the feature. It must not
+	// fail provider startup: the docs promise a healthy backend that reports
+	// available=false.
+	service, cleanup, err := Provide(sqlxDB, sqlxDB, nil, newFakePersonalStarSecrets(), nil, log, PersonalStarDeployment{
 		Available: true,
 		Settings: PersonalStarOAuthSettings{
 			ClientID:    "client-id",
@@ -77,11 +82,27 @@ func TestProvidePersonalStarRuntimeFailsClosedWithoutClientSecret(t *testing.T) 
 		},
 		Close: counter.close,
 	})
-	if err == nil {
-		t.Fatal("Provide() succeeded without a resolvable client secret")
+	if err != nil {
+		t.Fatalf("Provide() failed on an unresolvable client secret: %v", err)
+	}
+	if service == nil {
+		t.Fatal("Provide() returned no service")
+	}
+	status, err := service.PersonalStarConnectionStatus(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Available || status.Active || status.Capable {
+		t.Fatalf("status = %+v, want an unavailable feature", status)
 	}
 	if counter.closes != 1 {
-		t.Fatalf("deployment closes = %d, want the owner released on the failure path", counter.closes)
+		t.Fatalf("deployment closes = %d, want the owner released once", counter.closes)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if counter.closes != 1 {
+		t.Fatalf("deployment closes after cleanup = %d, want 1", counter.closes)
 	}
 }
 

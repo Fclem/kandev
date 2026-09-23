@@ -352,3 +352,69 @@ func TestHandleWorkspaceDeletedQueuesDedicatedStarTokenCleanup(t *testing.T) {
 		t.Fatal("access token survived workspace deletion")
 	}
 }
+
+// TestWorkspaceDeletionKeepsPerSecretCleanupMetadata pins that the teardown
+// queue labels each token with its own kind and generation. A refresh that
+// returns no new refresh token keeps the earlier refresh generation while the
+// credential generation advances, so a single shared generation would be wrong.
+func TestWorkspaceDeletionKeepsPerSecretCleanupMetadata(t *testing.T) {
+	svc, secrets := newWorkspaceConnectionService(t, "octocat")
+	ctx := context.Background()
+	if err := svc.SeedPersonalStarConnectionForE2E(ctx, "ws-1", "user-1", "octocat", true, personalStarOutcomeConnected); err != nil {
+		t.Fatal(err)
+	}
+	connection, err := svc.store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || connection == nil {
+		t.Fatalf("connection = %+v, %v", connection, err)
+	}
+	// The seed stages the access token only; the refresh token is what this
+	// test needs to exercise the refresh path.
+	secrets.values[connection.RefreshSecretID] = "refresh-1"
+
+	// A refresh that returns no new refresh token: the access token rotates,
+	// the stored refresh token and its generation stay put.
+	starOAuth := NewPersonalStarOAuthService(svc.store, secrets, PersonalStarOAuthSettings{
+		ClientID: "client-id", ClientSecret: "client-secret", CallbackURL: "https://kandev.example/cb",
+	}, true)
+	starOAuth.client = &fakePersonalStarOAuth{
+		refreshed: GitHubOAuthTokens{AccessToken: "access-2", GrantedScopes: []string{"public_repo"}},
+	}
+	svc.SetPersonalStarOAuthCoordinator(starOAuth)
+	if err := svc.RefreshPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	renewed, err := svc.store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || renewed == nil {
+		t.Fatalf("connection = %+v, %v", renewed, err)
+	}
+	if renewed.AccessSecretGeneration == connection.AccessSecretGeneration {
+		t.Fatalf("access generation did not advance: %+v", renewed)
+	}
+	if renewed.RefreshSecretGeneration != connection.RefreshSecretGeneration {
+		t.Fatalf("refresh generation changed without a new token: %+v", renewed)
+	}
+
+	event := bus.NewEvent(events.WorkspaceDeleted, "task-service", map[string]interface{}{"id": "ws-1"})
+	if err := svc.handleWorkspaceDeleted(ctx, event); err != nil {
+		t.Fatalf("handleWorkspaceDeleted: %v", err)
+	}
+	records, err := svc.store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := make(map[string]PersonalStarSecretCleanup, len(records))
+	for _, record := range records {
+		byID[record.SecretID] = *record
+	}
+	liveAccess := byID[renewed.AccessSecretID]
+	if liveAccess.SecretKind != personalStarSecretKindAccess || liveAccess.CredentialGeneration != renewed.AccessSecretGeneration {
+		t.Fatalf("live access queue row = %+v", liveAccess)
+	}
+	liveRefresh := byID[renewed.RefreshSecretID]
+	if liveRefresh.SecretKind != personalStarSecretKindRefresh || liveRefresh.CredentialGeneration != renewed.RefreshSecretGeneration {
+		t.Fatalf("live refresh queue row = %+v", liveRefresh)
+	}
+	if liveAccess.CredentialGeneration == liveRefresh.CredentialGeneration {
+		t.Fatal("the two live secrets were labelled with one shared generation")
+	}
+}

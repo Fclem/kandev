@@ -128,7 +128,10 @@ func (s *Service) SeedPersonalStarConnectionForE2E(
 	if existing == nil {
 		return s.store.InsertPersonalStarConnection(ctx, connection, revision, generation)
 	}
-	_, err = s.store.ReplacePersonalStarConnection(ctx, connection, revision, generation)
+	// A re-seed replaces a committed row, so the expectation is that row's own
+	// fence rather than the values this seed just bumped to.
+	_, err = s.store.ReplacePersonalStarConnection(
+		ctx, connection, existing.LifecycleRevision, existing.CredentialGeneration)
 	return err
 }
 

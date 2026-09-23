@@ -346,7 +346,12 @@ func (s *PersonalStarOAuthService) commitPersonalStarConnection(
 	if existing == nil {
 		return s.store.InsertPersonalStarConnection(ctx, connection, flow.ExpectedRevision, flow.ExpectedGeneration)
 	}
-	_, err = s.store.ReplacePersonalStarConnection(ctx, connection, flow.ExpectedRevision, flow.ExpectedGeneration)
+	// The committed row still carries the fence from before this start bumped
+	// it, so that row's own fence is the expectation the swap must satisfy. The
+	// flow's bumped values are the new row values, and the claim-time lifecycle
+	// check remains the staleness authority.
+	_, err = s.store.ReplacePersonalStarConnection(
+		ctx, connection, existing.LifecycleRevision, existing.CredentialGeneration)
 	return err
 }
 

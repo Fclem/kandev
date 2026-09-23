@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events/bus"
@@ -104,7 +105,12 @@ func applyPersonalStarRuntime(
 ) (*personalStarRuntime, error) {
 	resolved, err := deployment.resolve(context.Background())
 	if err != nil {
-		return nil, err
+		// A reference that cannot be resolved (not provisioned, revoked,
+		// outside the protected namespace, or bound to another installation)
+		// disables the feature without failing provider startup: the backend
+		// stays healthy and the connection reports available=false.
+		log.Warn("GitHub personal star client secret is unavailable", zap.Error(err))
+		return nil, nil
 	}
 	if !resolved.Available {
 		return nil, nil

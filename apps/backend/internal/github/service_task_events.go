@@ -105,9 +105,12 @@ func (s *Service) queuePersonalStarTokenCleanup(ctx context.Context, workspaceID
 		return fmt.Errorf("list personal star connections: %w", err)
 	}
 	for _, connection := range connections {
-		for _, secretID := range personalStarSecretIDs(connection) {
+		// Each secret carries its own kind and generation: a refresh that
+		// returns no new refresh token keeps the earlier refresh generation
+		// while the credential generation advances.
+		for _, ref := range personalStarSecretIDsFor(connection) {
 			if err := s.store.EnqueuePersonalStarSecretCleanup(ctx, workspaceID, connection.UserID,
-				secretID, "github-personal-star", connection.CredentialGeneration); err != nil {
+				ref.SecretID, ref.Kind, ref.Generation); err != nil {
 				return fmt.Errorf("queue personal star secret cleanup: %w", err)
 			}
 		}

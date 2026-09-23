@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/kandev/kandev/internal/db/dialect"
 )
 
 // Personal-star persistence statuses and error sentinels.
@@ -184,6 +186,17 @@ func (s *Store) ReplacePersonalStarConnection(
 	return supersededSecretIDs(supersededIDs), nil
 }
 
+// personalStarRowLockClause locks the selected row on PostgreSQL. The driver
+// name is "pgx" there, so the check must go through the shared dialect helper:
+// an equality test against "postgres" silently never matches and leaves the
+// read unguarded.
+func personalStarRowLockClause(driver string) string {
+	if dialect.IsPostgres(driver) {
+		return " FOR UPDATE"
+	}
+	return ""
+}
+
 // personalStarSecretRef names one generation-specific secret awaiting deletion.
 type personalStarSecretRef struct {
 	SecretID   string
@@ -198,10 +211,7 @@ func personalStarConnectionForUpdate(
 	tx *sqlx.Tx,
 	workspaceID, userID string,
 ) (*PersonalStarConnection, error) {
-	query := personalStarConnectionSelect + ` WHERE workspace_id = ? AND user_id = ?`
-	if tx.DriverName() == "postgres" {
-		query += ` FOR UPDATE`
-	}
+	query := personalStarConnectionSelect + ` WHERE workspace_id = ? AND user_id = ?` + personalStarRowLockClause(tx.DriverName())
 	var connection PersonalStarConnection
 	err := tx.GetContext(ctx, &connection, tx.Rebind(query), workspaceID, userID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -439,20 +449,6 @@ func supersededPersonalStarSecretRefs(previous, replacement *PersonalStarConnect
 		superseded = append(superseded, candidate)
 	}
 	return superseded
-}
-
-func personalStarSecretIDs(connection *PersonalStarConnection) []string {
-	if connection == nil {
-		return nil
-	}
-	ids := make([]string, 0, 2)
-	if connection.AccessSecretID != "" {
-		ids = append(ids, connection.AccessSecretID)
-	}
-	if connection.RefreshSecretID != "" {
-		ids = append(ids, connection.RefreshSecretID)
-	}
-	return ids
 }
 
 func nullableSecretID(secretID string) any {

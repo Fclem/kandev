@@ -91,10 +91,7 @@ func (s *Store) ClaimPersonalStarFlowForExchange(
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	statement := personalStarFlowSelect + ` WHERE state_sha256 = ?`
-	if s.db.DriverName() == "postgres" {
-		statement += ` FOR UPDATE`
-	}
+	statement := personalStarFlowSelect + ` WHERE state_sha256 = ?` + personalStarRowLockClause(s.db.DriverName())
 	var flow PersonalStarFlow
 	err = tx.GetContext(ctx, &flow, tx.Rebind(statement), stateDigest)
 	if errors.Is(err, sql.ErrNoRows) {

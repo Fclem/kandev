@@ -24,7 +24,7 @@ export function visiblePluginMenuActions(
       return action.visible(context);
     } catch (error: unknown) {
       console.error(
-        `[plugins] task menu action "${action.pluginId}:${action.id}" visible() threw`,
+        `[plugins] task menu action "${describeAction(action)}" visible() threw`,
         error,
       );
       return false;
@@ -65,15 +65,42 @@ function pluginMenuIcon(icon?: PluginIcon): ReactNode {
  */
 const loggedMenuDefects = new Set<string>();
 
+/**
+ * A plugin value's printable form. Template interpolation would call `ToString`,
+ * which throws for a value that has no string form -- a `Symbol` id or a
+ * null-prototype object -- and the omission paths are exactly where such a value
+ * arrives, so the log must not be able to throw.
+ */
+function printable(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return String(value);
+  } catch {
+    // i18n-exempt: log placeholder for a value with no string form, never rendered.
+    return "<unprintable>";
+  }
+}
+
+/** The action's identity as a log label, read defensively for the same reason. */
+function describeAction(action: PluginTaskMenuActionRegistration): string {
+  try {
+    return `${printable(action.pluginId)}:${printable(action.id)}`;
+  } catch {
+    // i18n-exempt: log placeholder for a registration that cannot be read, never rendered.
+    return "<unreadable registration>";
+  }
+}
+
 function logMenuDefect(
   action: PluginTaskMenuActionRegistration,
   kind: string,
   detail?: unknown,
 ): void {
-  const key = `${action.pluginId}:${action.id}:${kind}`;
+  const actionLabel = describeAction(action);
+  const key = `${actionLabel}:${kind}`;
   if (loggedMenuDefects.has(key)) return;
   loggedMenuDefects.add(key);
-  console.error(`[plugins] task menu action "${action.pluginId}:${action.id}" ${kind}`, detail);
+  console.error(`[plugins] task menu action "${actionLabel}" ${kind}`, detail);
 }
 
 /**
@@ -201,9 +228,8 @@ function pluginSubItems(
   action: PluginTaskMenuActionRegistration,
   context: PluginTaskMenuContext,
 ): readonly SubItemSnapshot[] | null {
-  if (typeof action.items !== "function") return null;
-
   try {
+    if (typeof action.items !== "function") return null;
     const result: unknown = action.items(context);
 
     if (result && typeof (result as { then?: unknown }).then === "function") {

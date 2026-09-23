@@ -545,17 +545,47 @@ describe("buildPrimaryPluginEntries — ids the encoder must survive", () => {
     expect(entries[0]?.kind === "submenu" ? entries[0].children[0]?.key : "").toContain("%d83c");
   });
 
+  it("omits a registration whose id has no string form, without throwing", () => {
+    // A Symbol id or a null-prototype object has no `ToString`: the log line that
+    // reports the omission must not be able to throw, or the report itself takes
+    // the render down while dropping the registration.
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    registerAction({ id: Symbol("add-tag") as never, label: "Symbol id" });
+    registerAction({ id: Object.create(null) as never, label: "Null-prototype id" });
+
+    expect(() => buildPrimaryPluginEntries({ context: CONTEXT })).not.toThrow();
+    expect(buildPrimaryPluginEntries({ context: CONTEXT })).toEqual([]);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
   it("keeps an escaped unit from running into the literal after it", () => {
     // Regression from review: a two-digit minimum made `%250` mean both "%" + "0"
     // and the single unit U+0250, so two ids could share one key. Escapes are now
     // fixed width, which makes each token self-delimiting.
     registerAction({ id: "%0", label: "Percent" });
     registerAction({ id: "\u0250", label: "Unit" });
+    // The same class one width up: a two-digit escape plus one literal hex digit.
+    registerAction({ id: "\u00e9a", label: "Accented" });
+    registerAction({ id: "\u0e9a", label: "Thai" });
+    registerAction({
+      id: "children",
+      label: "Children",
+      items: () => [
+        { id: "\u00e9a", label: "Accented child", run: vi.fn() },
+        { id: "\u0e9a", label: "Thai child", run: vi.fn() },
+      ],
+    });
 
-    const keys = buildPrimaryPluginEntries({ context: CONTEXT }).map((entry) => entry?.key);
+    const entries = buildPrimaryPluginEntries({ context: CONTEXT });
+    const keys = entries.flatMap((entry) =>
+      entry
+        ? [entry.key, ...(entry.kind === "submenu" ? entry.children.map((c) => c.key) : [])]
+        : [],
+    );
 
-    expect(keys).toHaveLength(2);
-    expect(new Set(keys).size).toBe(2);
+    expect(keys).toHaveLength(7);
+    expect(new Set(keys).size).toBe(7);
   });
 
   it("keeps a lone-surrogate id distinct from a valid astral one", () => {

@@ -2543,9 +2543,9 @@ components directly.
 An action of either group that declares `items(context)` renders as a submenu
 instead: `label` becomes an unselectable trigger and the returned
 `TaskMenuSubItemRegistration` children are its entries, in order, each called
-with the same `context` as the action. Nesting stops at that one level. The
-children also reach the command palette and the sidebar's task commands, one
-command each. `items()` is synchronous and is called while the host builds that
+with the same `context` as the action. Nesting stops at that one level. A
+`primary` action's children also reach the command palette and the sidebar's
+task commands, one command each; `edit` stays card-only, as it always was. `items()` is synchronous and is called while the host builds that
 card's or row's menu entries on every render, whether or not a menu is open; a
 card's dropdown and context variants are built from one evaluation, so read
 cached state and memoize anything expensive. `run` stays required: it is the

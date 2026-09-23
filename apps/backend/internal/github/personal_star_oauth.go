@@ -246,16 +246,17 @@ func (s *PersonalStarOAuthService) CompleteCallback(
 		UserID:      flow.UserID,
 		ReturnPath:  flow.ReturnPath,
 	}
+	claimed := PersonalStarFence{Revision: flow.ExpectedRevision, Generation: flow.ExpectedGeneration}
 	if query.Denied() {
-		return s.finishCallback(ctx, base, personalStarOutcomeDeclined, nil)
+		return s.finishCallback(ctx, base, claimed, personalStarOutcomeDeclined)
 	}
 	tokens, err := s.client.ExchangeUserCode(ctx, query.Code, flow.CodeVerifier, flow.RedirectURI)
 	if err != nil {
-		return s.finishCallback(ctx, base, personalStarOutcomeFailed, nil)
+		return s.finishCallback(ctx, base, claimed, personalStarOutcomeFailed)
 	}
 	user, err := s.client.GetOAuthUser(ctx, tokens.AccessToken)
 	if err != nil {
-		return s.finishCallback(ctx, base, personalStarOutcomeFailed, nil)
+		return s.finishCallback(ctx, base, claimed, personalStarOutcomeFailed)
 	}
 	return s.commitGrant(ctx, flow, base, tokens, user)
 }
@@ -299,7 +300,9 @@ func (s *PersonalStarOAuthService) commitGrant(
 ) (PersonalStarCallbackOutcome, error) {
 	capable := HasPublicRepoScope(tokens.GrantedScopes)
 	if tokens.AccessToken == "" || !capable {
-		return s.finishCallback(ctx, base, personalStarOutcomeInsufficientScope, nil)
+		return s.finishCallback(ctx, base,
+			PersonalStarFence{Revision: flow.ExpectedRevision, Generation: flow.ExpectedGeneration},
+			personalStarOutcomeInsufficientScope)
 	}
 	connection := &PersonalStarConnection{
 		WorkspaceID:             flow.WorkspaceID,
@@ -318,7 +321,9 @@ func (s *PersonalStarOAuthService) commitGrant(
 	}
 	staged, err := s.stagePersonalStarSecrets(ctx, connection, tokens)
 	if err != nil {
-		return s.finishCallback(ctx, base, personalStarOutcomeFailed, nil)
+		return s.finishCallback(ctx, base,
+			PersonalStarFence{Revision: flow.ExpectedRevision, Generation: flow.ExpectedGeneration},
+			personalStarOutcomeFailed)
 	}
 	if err := s.commitPersonalStarConnection(ctx, connection, flow); err != nil {
 		s.discardPersonalStarSecrets(ctx, staged)
@@ -357,26 +362,43 @@ func (s *PersonalStarOAuthService) commitPersonalStarConnection(
 	return err
 }
 
+// finishCallback records an attempt that did not commit a connection. The
+// write is fenced on the fence this callback claimed: if a newer consent or a
+// disconnect has moved the lifecycle on, this attempt lost the race and must
+// leave the newer row alone, reporting the state that row actually carries.
 func (s *PersonalStarOAuthService) finishCallback(
 	ctx context.Context,
 	base PersonalStarCallbackOutcome,
+	claimed PersonalStarFence,
 	outcome string,
-	_ []string,
 ) (PersonalStarCallbackOutcome, error) {
 	existing, err := s.store.GetPersonalStarConnection(ctx, base.WorkspaceID, base.UserID)
 	if err != nil {
 		return PersonalStarCallbackOutcome{}, err
 	}
+	applied := false
 	if existing != nil {
-		if err := s.store.SetPersonalStarReconnectOutcome(ctx, base.WorkspaceID, base.UserID, outcome); err != nil {
+		applied, err = s.store.SetPersonalStarReconnectOutcome(ctx, base.WorkspaceID, base.UserID, outcome, claimed)
+		if err != nil {
 			return PersonalStarCallbackOutcome{}, err
 		}
 	}
 	base.Outcome = outcome
-	if existing != nil {
+	if existing == nil {
+		return base, nil
+	}
+	if !applied {
+		// Another operation owns the row now; the attempt's outcome is not the
+		// connection's state.
+		if existing.LastReconnectOutcome != "" {
+			base.Outcome = existing.LastReconnectOutcome
+		}
 		base.Active = existing.Status == PersonalStarStatusActive
 		base.Capable = base.Active && existing.PublicRepo
+		return base, nil
 	}
+	base.Active = existing.Status == PersonalStarStatusActive
+	base.Capable = base.Active && existing.PublicRepo
 	return base, nil
 }
 

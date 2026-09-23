@@ -160,7 +160,13 @@ func (s *Service) SetPersonalStarReconnectOutcomeForE2E(
 			return err
 		}
 	}
-	return s.store.SetPersonalStarReconnectOutcome(ctx, workspaceID, userID, outcome)
+	lifecycle, err := s.store.GetPersonalStarLifecycle(ctx, workspaceID, userID)
+	if err != nil {
+		return err
+	}
+	_, err = s.store.SetPersonalStarReconnectOutcome(ctx, workspaceID, userID, outcome,
+		PersonalStarFence{Revision: lifecycle.Revision, Generation: lifecycle.CredentialGeneration})
+	return err
 }
 
 // ClearPersonalStarConnectionForE2E removes the dedicated connection and its

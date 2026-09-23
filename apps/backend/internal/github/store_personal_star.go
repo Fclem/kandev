@@ -333,15 +333,33 @@ func (s *Store) InsertPersonalStarConnection(
 	return nil
 }
 
-// SetPersonalStarReconnectOutcome records the last start/callback outcome.
-func (s *Store) SetPersonalStarReconnectOutcome(ctx context.Context, workspaceID, userID, outcome string) error {
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
+// SetPersonalStarReconnectOutcome records the last start/callback outcome when
+// the lifecycle still carries expectedFence. It reports whether the write
+// applied: a callback that lost the race against a newer consent or a
+// disconnect must not relabel the row that newer operation committed, because
+// the resolver reads a failed outcome as "reconnect required".
+func (s *Store) SetPersonalStarReconnectOutcome(
+	ctx context.Context,
+	workspaceID, userID, outcome string,
+	expectedFence PersonalStarFence,
+) (bool, error) {
+	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE github_personal_star_connection SET last_reconnect_outcome = ?, updated_at = ?
-		WHERE workspace_id = ? AND user_id = ?`), outcome, time.Now().UTC(), workspaceID, userID)
+		WHERE workspace_id = ? AND user_id = ?
+			AND EXISTS (
+				SELECT 1 FROM github_personal_star_lifecycle
+				WHERE workspace_id = ? AND user_id = ?
+					AND revision = ? AND credential_generation = ?)`),
+		outcome, time.Now().UTC(), workspaceID, userID,
+		workspaceID, userID, expectedFence.Revision, expectedFence.Generation)
 	if err != nil {
-		return fmt.Errorf("record personal star reconnect outcome: %w", err)
+		return false, fmt.Errorf("record personal star reconnect outcome: %w", err)
 	}
-	return nil
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
 }
 
 // DisconnectPersonalStarConnection creates or updates an inactive tombstone and

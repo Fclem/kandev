@@ -343,3 +343,79 @@ func TestPersonalStarDisconnectDuringExchangeWins(t *testing.T) {
 			row.LifecycleRevision, row.CredentialGeneration, lifecycle.Revision, lifecycle.CredentialGeneration)
 	}
 }
+
+// TestPersonalStarStaleCallbackOutcomeDoesNotRelabelANewerConsent covers a
+// callback that lost the race: it claimed its flow, then a newer consent
+// committed a healthy connection while this callback was still in flight (or
+// simply failed later). The stale attempt must not relabel the newer row,
+// because the resolver treats a failed outcome as "reconnect required" and the
+// design promises a failed reconnect never invalidates a valid connection.
+func TestPersonalStarStaleCallbackOutcomeDoesNotRelabelANewerConsent(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+
+	// Flow A claims its fence and parks inside the token exchange.
+	blocking := &blockingStarOAuth{
+		tokens:  GitHubOAuthTokens{AccessToken: "access-stale"},
+		user:    GitHubOAuthUser{ID: 42, Login: "octocat"},
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	service.client = blocking
+	staleState := startPersonalStarConsent(t, service, "/settings/plugins")
+	staleResult := make(chan error, 1)
+	go func() {
+		_, err := service.CompleteCallback(ctx,
+			GitHubStarCallbackQuery{State: staleState, Code: "code-stale"}, "user-1", "session-1")
+		staleResult <- err
+	}()
+	<-blocking.entered
+
+	// Flow B starts after A, completes, and commits a healthy connection.
+	service.client = client
+	client.tokens = GitHubOAuthTokens{AccessToken: "access-2", RefreshToken: "refresh-2", GrantedScopes: []string{"public_repo"}}
+	freshState := startPersonalStarConsent(t, service, "/settings/plugins")
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: freshState, Code: "code-fresh"}, "user-1", "session-1"); err != nil {
+		t.Fatalf("newer consent: %v", err)
+	}
+	connected, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || connected == nil {
+		t.Fatalf("connection = %+v, %v", connected, err)
+	}
+	if connected.LastReconnectOutcome != personalStarOutcomeConnected {
+		t.Fatalf("newer consent outcome = %q", connected.LastReconnectOutcome)
+	}
+
+	// A resumes and fails.
+	close(blocking.release)
+	<-staleResult
+
+	after, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || after == nil {
+		t.Fatalf("connection = %+v, %v", after, err)
+	}
+	if after.LastReconnectOutcome != personalStarOutcomeConnected {
+		t.Fatalf("stale callback relabelled the newer row: %q", after.LastReconnectOutcome)
+	}
+	if after.AccessSecretID != connected.AccessSecretID {
+		t.Fatalf("stale callback changed the committed secrets: %+v", after)
+	}
+	resolver := NewPersonalStarResolverService(store, secrets, PersonalStarDeploymentStatus{
+		Available: true,
+		Settings:  PersonalStarOAuthSettings{ClientID: "id", ClientSecret: "s", CallbackURL: "https://example/x"},
+	})
+	status, err := resolver.ConnectionStatus(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.ReconnectRequired {
+		t.Fatalf("stale failure made a valid connection need a reconnect: %+v", status)
+	}
+}

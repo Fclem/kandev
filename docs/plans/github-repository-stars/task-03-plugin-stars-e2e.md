@@ -104,4 +104,37 @@ Task 02 frontend controls.
 
 ## Results
 
-Pending.
+Status: complete. Feature commits `870ccbd4a`, `f05c791a3`, `d9f9e1de9` (plus `abe881ec8` for the
+foreign-workspace denial the specs assert).
+
+Delivered: a deployment-capability fixture that seeds `master.key`, the deployment identity, and the
+sealed deployment secret into the worker backend and restarts it with the three OAuth settings
+(`apps/web/e2e/fixtures/personal-star-deployment.ts`); typed E2E mock controls for connection,
+state, failure injection, and callback outcome; a new test-support command
+`apps/backend/cmd/deployment-secret-seed` that provisions the same material through the real
+`internal/secrets` packages; the four-project normal cohort with mutually exclusive matchers
+(`chromium`, `desktop-coarse-pointer`, `mobile-chrome`, `mobile-fine-pointer`) plus the isolated
+`auth` project; the gated `e2e-auth` job with its `blob-report-auth` artifact and the workflow
+contract test updated to 16 cases; the shard-planner and project-matcher regressions; and the
+fixture env sanitizer hardened (`d9f9e1de9`) so a host `KANDEV_SERVICE_MODE` or
+`KANDEV_DEPLOYMENT_SECRET_TARGET` cannot decide the backend's deployment target, pinned by
+`apps/web/e2e/scripts/backend-env.test.ts`.
+
+Gates:
+- `pnpm e2e:run --project chromium tests/settings/plugin-repository-stars.spec.ts` -> 14 passed.
+- `pnpm e2e:run --project desktop-coarse-pointer tests/settings/desktop-coarse-pointer-plugin-repository-stars.spec.ts`
+  -> 3 passed.
+- `pnpm e2e:run --project mobile-chrome tests/settings/mobile-plugin-repository-stars.spec.ts` -> 2 passed.
+- `pnpm e2e:run --project mobile-fine-pointer tests/settings/mobile-fine-pointer-plugin-repository-stars.spec.ts`
+  -> 2 passed.
+- `pnpm e2e:run --project auth tests/auth/plugin-repository-stars.spec.ts` -> 2 passed.
+- `pnpm exec vitest run e2e/scripts/playwright-projects.test.ts e2e/scripts/plan-shards.test.ts
+  e2e/scripts/backend-env.test.ts` green; `python3 .github/scripts/e2e-tests-workflow-contract_test.py`
+  -> 16 tests ok; `bash scripts/release/runtime-bundle.test.sh` PASS (the seed command is not part of
+  the runtime binary set).
+
+Residual gap: the capable-path specs pass on this host, but their CI viability inside the
+containerised `e2e`/`e2e-auth` jobs rests on the e2e profile declaring
+`KANDEV_DEPLOYMENT_SECRET_TARGET=supported` (the override clears only the container and
+user-session detections; Linux and non-root are still enforced). That combination has not yet been
+exercised in a real container, and no PR has run this cohort yet.

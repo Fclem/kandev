@@ -159,4 +159,34 @@ None.
 
 ## Results
 
-Pending.
+Status: complete. Feature commits 8f07a841c..12c6a5d6f on `feature/sync-plugin-reposito-673`.
+
+Delivered: the dedicated OAuth App star API behind a strict personal resolver with no App/PAT/CLI
+fallback (`b2fcc9c1f`, `d99242c307`); the deployment-secret boundary (protected reference
+validation, read-only master-keyring, Linux target policy, root-peer socket authorisation,
+JCS frame/envelope protocol with Ed25519 detached signatures, immutable versioned store, single
+writer provisioner) in `3523894f8`, `2b2b2f370`, `1aec01f86`, `0f5685e0a`, `6e68a33c3`, `5d9d8467a`,
+`eb0eda656`, `21e0c3f2d`, `ae0a5523b`, `dae410dae`; the root-only CLI, daemon and release artifacts in
+`acce4be3b`, `d5ae98677`, `ab5dc0bd5`, `44ebc92cc`; provider wiring in `d20d47b06`; public docs in
+`b27d7652c`; and the review-loop corrections `abe881ec8`, `e0bac36d0`, `5704f8fc8`, `33afe9cc0`,
+`4baf53b78`, `752b8796d`, `c65587367`, `151fd2fe3`, `31fcbc8d9`, `aeb0d0c27`, `d49e0133b`,
+`0a42f1f19`, `12c6a5d6f`.
+
+Gates (all re-run at head, `-count=1`):
+- The work order's verification block passes in full: gates 1-5 (star/API, controller, config/secrets,
+  restart/secrets, daemon filters) ok; gate 6 Windows cross-build of `internal/system/deploymentsecret`
+  ok; gate 7 Linux-only `cmd/kandev-deployment-secretd` build ok; gate 8
+  `bash scripts/release/runtime-bundle.test.sh` PASS; gate 9 (-race, unsupported-target filter) ok;
+  gate 10 (same filter across launcher/backendapp) ok; gate 11 (secrets HTTP/WS filter) ok.
+- Package suites: `go test ./internal/github/ ./internal/backendapp/ ./internal/secrets/
+  ./internal/system/deploymentsecret/ ./internal/profiles/` all pass; `golangci-lint` on the touched
+  packages reports 0 issues.
+- The one red anywhere is `internal/launcher` `TestRunStartBuildVersion`, caused by this workstation's
+  live kandev service holding port 38429 (ambient, reproducible with the port variables unset).
+
+Residual gaps (recorded for the reviewer, not hidden):
+- The PostgreSQL star-store lifecycle test (replace/disconnect/claim) is written but skips without
+  `KANDEV_TEST_POSTGRES_DSN`, so Postgres remains unexecuted in this environment.
+- The capable-path E2E cohort relies on the e2e-profile `KANDEV_DEPLOYMENT_SECRET_TARGET=supported`
+  override so a containerised CI backend can exercise it; that path has not yet run in a real container.
+- `docs/specs/integrations/system-design/github-repository-stars.md` sits at ~32573 of 32768 bytes.

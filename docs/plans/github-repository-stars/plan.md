@@ -103,13 +103,34 @@ The star button is separate from repository navigation and row overlay links, us
 
 ## Work orders
 
-- [ ] [Task 01: Add personal star auth and API](task-01-github-api.md)
-- [ ] [Task 02: Add plugin settings star controls](task-02-plugin-settings-controls.md)
-- [ ] [Task 03: Add browser star flows](task-03-plugin-stars-e2e.md)
+- [x] [Task 01: Add personal star auth and API](task-01-github-api.md)
+- [x] [Task 02: Add plugin settings star controls](task-02-plugin-settings-controls.md)
+- [x] [Task 03: Add browser star flows](task-03-plugin-stars-e2e.md)
 
 ## Verification results
 
-Pending.
+All three work orders are implemented and verified on `feature/sync-plugin-reposito-673` at
+`12c6a5d6f`; each work order's `## Results` carries its own commits and gates.
+
+Passing at head: the Task 01 verification block (gates 1-11, including the Windows cross-build, the
+Linux-only daemon build, the runtime-bundle contract, and the `-race` unsupported-target filter);
+`go test` across `internal/github`, `internal/backendapp`, `internal/secrets`,
+`internal/system/deploymentsecret`, `internal/profiles` and `internal/launcher` (one ambient
+exception below); `golangci-lint` 0 issues on the touched packages; web `typecheck`, eslint and
+`i18n:check`; 216 files / 1911 frontend tests; the five star E2E specs (14/3/2/2/2) and the E2E
+project, shard-planner and fixture regressions (16 workflow-contract cases); and the public-docs and
+specification validators.
+
+Known residual gaps, recorded rather than hidden:
+- The PostgreSQL star-store lifecycle test ships but skips without `KANDEV_TEST_POSTGRES_DSN`, so
+  Postgres has not executed here.
+- The capable-path E2E cohort depends on the e2e profile's
+  `KANDEV_DEPLOYMENT_SECRET_TARGET=supported` override inside containerised CI jobs; that path has
+  not yet run in a real container.
+- `docs/specs/integrations/system-design/github-repository-stars.md` has roughly 195 bytes of
+  headroom against its 32768-byte limit.
+- `internal/launcher` `TestRunStartBuildVersion` fails on this workstation because the live kandev
+  service holds port 38429; it is environmental, reproducible with the port variables unset.
 
 ## Risks
 

@@ -140,4 +140,28 @@ Task 01 API contract.
 
 ## Results
 
-Pending.
+Status: complete. Feature commits `238cce660`, `286611f46`, `544e5b3e3`, `0e4f2d1bd` (plus the
+identity fixture alignment in `0e4f2d1bd`).
+
+Delivered: the typed star API client and the canonical repository-URL parser shared with the backend
+grammar; the `pluginStars` slice with per-key epochs and a connection tuple keyed by workspace,
+authenticated user, credential generation, and capability; the `usePluginRepositoryStars` hook that
+reads connection status first, hydrates only for a capable tuple, fences status and mutation
+responses, and clears visible state when the workspace or authenticated account changes; the
+`PluginRepositoryStar` control implementing the status truth table (omit when unavailable, Connect,
+Reconnect, controls plus a separate reconnect CTA) with 24px compact and 44px touch geometry; wiring
+into the marketplace row, installed row, installed-plugin detail, Canvases detail, and the Canvas
+install dialog; the navigation-only callback-outcome handler that removes `star_connection_outcome`
+with `history.replaceState`; and all copy in five locales plus pseudo.
+
+Gates:
+- `pnpm run typecheck` clean; eslint clean on the touched files.
+- `pnpm run i18n:check` green (keys, `<Trans>` indices, plurals, module-scope `t()`, em dashes,
+  non-JSX copy; pt-pt, zh-cn, zh-hk, zh-tw complete and pseudo in sync).
+- `pnpm exec vitest run components/settings/plugins app/settings/plugins hooks/domains/plugins
+  lib/state/slices lib/plugins lib/api/domains e2e/scripts` -> 216 files / 1911 tests pass.
+- The star suites specifically: parser 51, hook + slice + api + control suites green, including the
+  account-switch, stale-response, superseded-epoch, and unknown-state cases.
+
+Residual gap: none specific to this work order; see the plan-level residuals (the coarse-pointer and
+mobile geometry is asserted by the Task 03 E2E cohort, not by unit tests).

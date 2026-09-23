@@ -1521,14 +1521,10 @@ jobs:
           )
           tar -czf "dist/kandev-deployment-secretd-${platform}.tar.gz" -C "${staging}" bin systemd checksums.txt
           # Operators verify the archive against a detached .sha256 exactly as
-          # they do for the runtime archives, and the release workflow treats a
-          # missing checksum as a failed release. The checksum names the bare
-          # archive so `sha256sum -c` works from the download directory.
-          (
-            cd dist
-            shasum -a 256 "kandev-deployment-secretd-${platform}.tar.gz" \
-              > "kandev-deployment-secretd-${platform}.tar.gz.sha256"
-          )
+          # they do for the runtime archives. write-sha256.sh records the
+          # artifact basename, so the checksum verifies from the download
+          # directory rather than from the build root.
+          bash scripts/release/write-sha256.sh "dist/kandev-deployment-secretd-${platform}.tar.gz"
           tar -tzf "dist/kandev-deployment-secretd-${platform}.tar.gz"
 
       - name: Upload deployment secret daemon archive

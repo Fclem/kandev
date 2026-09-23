@@ -91,6 +91,11 @@ where such a value arrives (AC-PLUGINS-TASK-MENU-SUBMENUS-002.2). The read of th
 registration's own `label`, `id` and `icon` is guarded for the same reason, and a
 registration missing any of them contributes no entry.
 
+The registry also reads each action inside a guard when it filters by group and
+copies the registration. It skips an action whose getter or Proxy throws, reports
+that registration once, and keeps other actions available. It does not validate
+the registration when the plugin registers it.
+
 The set of already-reported defects is module state that is never cleared. A
 defect of the *same* kind that recurs on the same action after a plugin generation
 swap therefore stays silent for the life of the page; that is a deliberate

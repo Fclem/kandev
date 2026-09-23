@@ -51,17 +51,9 @@ function pluginMenuIcon(icon?: PluginIcon): ReactNode {
  * runs on every menu build, so a permanently malformed registration would
  * otherwise log on every render, while a later defect of a different kind on
  * the same action still reports. The set is never cleared, so the same kind
- * recurring on the same action after a re-registration stays silent for the
- * life of the page -- accepted: this module has no registration-lifecycle hook
- * (the registry that would clear it imports this one, so wiring the call back
- * would be a cycle), and a lost diagnostic line is cheaper than that coupling.
- * Reading the registration itself is only guarded here, not at the registry,
- * which spreads the raw object into its own copy before this module sees it.
- * A *value* of the wrong shape on the registration itself is handled here (see
- * readActionLabel/readActionIcon), but a throwing *getter* on the registration
- * object is not: the registry spreads that object into its own copy
- * (getTaskMenuActions) before this module ever sees it, so that boundary is the
- * registry's to harden, for every registration type rather than this one.
+ * after re-registration stays silent for the life of the page.
+ * The registry guards its own read of each registration before this module
+ * receives a copy. The guards below handle malformed values in that copy.
  */
 const loggedMenuDefects = new Set<string>();
 

@@ -13,7 +13,20 @@ const deploymentSecretGroupName = "deployment-secret"
 // and package cli stays independent of the config stack.
 func runDeploymentSecret(argv []string) int {
 	return cli.RunDeploymentSecret(argv, cli.DeploymentSecretDefaults{
-		DataDir: resolveDataDir(),
+		DataDir: discoveryDataDir(),
 		Socket:  deploymentsecretd.SocketPath,
 	})
+}
+
+// discoveryDataDir resolves the deployment data directory the same way the
+// backend does, so a `homeDir` set in config.yaml points the operator CLI at the
+// store the backend actually reads. Discovery failures fall back to the
+// environment-only default: the CLI must still work before a config exists, and
+// its own error text names the directory it tried.
+func discoveryDataDir() string {
+	cfg, err := loadBootstrapConfig()
+	if err != nil {
+		return resolveDataDir()
+	}
+	return resolveDataDirForConfig(cfg)
 }

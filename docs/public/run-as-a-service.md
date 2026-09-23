@@ -320,6 +320,36 @@ See [Configuration](configuration.md#github-personal-star-oauth-app) for the thr
 settings and [Security and trust](security.md#deployment-owned-repository-star-secret) for the
 trust boundary.
 
+### Failed token cleanup
+
+Revoked, rotated, and superseded star tokens are deleted through a durable queue. A deletion that
+fails is retried with bounded backoff (eight attempts, up to one hour apart) and survives a backend
+restart. After the final attempt the queue row becomes `terminal`: it is no longer retried and is
+retained until an operator clears it, because it is the only remaining record of a token that could
+not be deleted.
+
+Terminal failures are visible three ways:
+
+- `kandev service logs` carries a warning naming the secret id, kind, generation, and the last
+  error. Token material is never logged.
+- In dev mode (`KANDEV_MOCK_AGENT=true` or `debug.pprofEnabled`), `/debug/vars` exposes
+  `personal_star_cleanup_attempts_total`, whose `terminal` entry counts them. The structured warning
+  lines above are emitted in every mode.
+- The row itself stays in the `github_personal_star_cleanup` table.
+
+To clear one, list the terminal rows, confirm the token is unused, then delete both the secret and
+its queue row:
+
+```sql
+select id, secret_id, secret_kind, credential_generation, attempts, last_error
+  from github_personal_star_cleanup
+ where status = 'terminal'
+```
+
+Then delete the row named by `secret_id` from `secrets`, and delete the queue row. The default SQLite
+database is `$KANDEV_HOME_DIR/data/kandev.db`; a PostgreSQL deployment uses its configured
+`database.*` settings instead. The end-to-end suite clears these rows for its own workspaces.
+
 ## Operate and inspect
 
 ```bash

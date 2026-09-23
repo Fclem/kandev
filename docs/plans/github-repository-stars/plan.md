@@ -116,10 +116,10 @@ Passing at head: the Task 01 verification block (gates 1-11, including the Windo
 Linux-only daemon build, the runtime-bundle contract, and the `-race` unsupported-target filter);
 `go test` across `internal/github`, `internal/backendapp`, `internal/secrets`,
 `internal/system/deploymentsecret`, `internal/profiles` and `internal/launcher` (one ambient
-exception below); `golangci-lint` 0 issues on the touched packages; web `typecheck`, eslint and
-`i18n:check`; 216 files / 1911 frontend tests; the five star E2E specs (14/3/2/2/2) and the E2E
-project, shard-planner and fixture regressions (16 workflow-contract cases); and the public-docs and
-specification validators.
+exception below); `golangci-lint` 0 issues on the touched packages; `go run ./cmd/sqlguard ./internal`
+exits 0; web `typecheck`, eslint and `i18n:check`; 216 files / 1911 frontend tests; the five star
+E2E specs (14/3/2/2/2) and the E2E project, shard-planner and fixture regressions (16
+workflow-contract cases); and the public-docs and specification validators.
 
 Known residual gaps, recorded rather than hidden:
 - The PostgreSQL star-store lifecycle test ships but skips without `KANDEV_TEST_POSTGRES_DSN`, so

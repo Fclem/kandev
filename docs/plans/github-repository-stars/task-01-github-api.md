@@ -181,8 +181,16 @@ Gates (all re-run at head, `-count=1`):
 - Package suites: `go test ./internal/github/ ./internal/backendapp/ ./internal/secrets/
   ./internal/system/deploymentsecret/ ./internal/profiles/` all pass; `golangci-lint` on the touched
   packages reports 0 issues.
+- `go run ./cmd/sqlguard ./internal` exits 0. The dedicated star table template renders its
+  timestamps through `dialect.MustRenderSchema`, so it is recorded in the guard's exemption file
+  beside the sibling `createTablesSQL` entries; leaving it out kept CI's `static_checks` job red.
 - The one red anywhere is `internal/launcher` `TestRunStartBuildVersion`, caused by this workstation's
   live kandev service holding port 38429 (ambient, reproducible with the port variables unset).
+
+Review-round corrections landed after the work order itself: the first consent commits its row and
+its generation marker in one transaction (`32967d871`), the star schema template is recorded in the
+SQL guard exemptions (`961b2e8de`), and a cleanup retry is counted only once it is durable, with the
+backoff cap matching the schedule the operator documentation promises (`02acfe94a`).
 
 Residual gaps (recorded for the reviewer, not hidden):
 - The PostgreSQL star-store lifecycle test (replace/disconnect/claim) is written but skips without

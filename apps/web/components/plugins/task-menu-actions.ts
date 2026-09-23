@@ -41,8 +41,14 @@ export function visiblePluginMenuActions(
  */
 function pluginMenuIcon(icon?: PluginIcon): ReactNode {
   if (!icon) return undefined;
-  if (isValidElement(icon)) return icon;
-  return createElement(resolvePluginIcon(icon), { className: "mr-2 h-4 w-4" });
+  try {
+    if (isValidElement(icon)) return icon;
+    return createElement(resolvePluginIcon(icon), { className: "mr-2 h-4 w-4" });
+  } catch {
+    // `isValidElement` reads `$$typeof` again, so an icon whose accessors answer
+    // once and then throw must mean "no icon" rather than a failed render.
+    return undefined;
+  }
 }
 
 /**
@@ -100,30 +106,24 @@ function logMenuDefect(
  * A registration is plugin-authored data too, so a missing or hostile accessor
  * omits the entry (and reports it) rather than handing React an object child.
  */
-/** The characters `encodeURIComponent` leaves alone; everything else is escaped. */
-const KEY_SAFE_CHARS = /[A-Za-z0-9\-_.!~*'()]/;
-
 /**
- * Percent-encodes one key part without `encodeURIComponent`'s `URIError`: a lone
- * surrogate -- a truncated astral character, which `slice` and `[0]` produce --
- * is not a code point, and would otherwise throw straight out of the card's
- * render with no error boundary to catch it.
+ * Escapes the three characters a menu key gives meaning to -- `%` first, so an
+ * escape already inside an id cannot alias one this adds, then `:` and `#` -- and
+ * leaves every other character verbatim.
  *
- * Every escaped unit becomes exactly four hex digits, which is what keeps the
- * encoding injective: `%` is itself escaped, and a fixed width makes each token
- * self-delimiting, so no escaped unit can run into the literal characters that
- * follow it (`"%0"` and `"\u0250"` must not share a key) and every `%XXXX` token
- * is produced here rather than occurring inside an id.
+ * That is what makes the key injective for any plugin-authored string: every `%`
+ * in the result starts one of exactly three two-character escapes, so decoding is
+ * unambiguous, and neither the part separator (`:`) nor the child separator (`#`)
+ * survives raw inside a part. A `%XX`-style per-code-unit escape cannot do this,
+ * because a bare `%` separator is then indistinguishable from the start of an
+ * escape: `p` + `abcd\uABCD` and `p\uABCD` + `abcd` would share one key.
+ *
+ * It also cannot throw, which is why it replaced `encodeURIComponent` here: that
+ * raises `URIError` on a lone surrogate, and an exception on this path escapes a
+ * card's render, where no error boundary catches it.
  */
 function encodeKeyPart(value: string): string {
-  let encoded = "";
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    encoded += KEY_SAFE_CHARS.test(char)
-      ? char
-      : `%${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
-  }
-  return encoded;
+  return value.replace(/%/g, "%25").replace(/:/g, "%3A").replace(/#/g, "%23");
 }
 
 /** The action's own id, read once and only when it is a non-blank string. */
@@ -318,7 +318,7 @@ export function pluginMenuEntry(
   // another action's key (`p` + `q-x` vs `p-q` + `x`) and no part can contain the
   // separators: the palette flattens every plugin entry into one list where the
   // key is both a React key and cmdk's value.
-  const key = `${keyPrefix}-${encodeKeyPart(action.pluginId)}%${encodeKeyPart(actionId)}`;
+  const key = `${keyPrefix}-${encodeKeyPart(action.pluginId)}:${encodeKeyPart(actionId)}`;
   const items = pluginSubItems(action, context);
 
   if (items) {

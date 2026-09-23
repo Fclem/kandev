@@ -2553,8 +2553,8 @@ flat item a host that predates `items` renders, and the fallback whenever
 `items` yields nothing usable (a non-array, an empty list, a promise, or a
 throw, which is caught and logged). A child needs a non-blank, unique `id`, a
 non-blank `label` and a callable `run`, with optional fields of the shapes the
-entry builder understands: a boolean `disabled` and an `icon` that is a curated
-name, a component, a ready-made element or `null`. A child the host cannot read
+entry builder understands: a boolean `disabled` (or `null`, meaning enabled) and
+an `icon` that is a curated name, a component, a ready-made element or `null`. A child the host cannot read
 or render is dropped, and one whose `id` repeats is reported and skipped.
 
 ```js

@@ -75,10 +75,10 @@ describe("buildCardPluginEntries", () => {
 
     expect(items).toHaveBeenCalledTimes(1);
     const fromDropdown = dropdown.find(
-      (entry) => entry.key === `plugin-primary-${PLUGIN_ID}%add-tag`,
+      (entry) => entry.key === `plugin-primary-${PLUGIN_ID}:add-tag`,
     );
     const fromContext = contextMenu.find(
-      (entry) => entry.key === `plugin-primary-${PLUGIN_ID}%add-tag`,
+      (entry) => entry.key === `plugin-primary-${PLUGIN_ID}:add-tag`,
     );
     expect(fromDropdown).toBeDefined();
     expect(fromContext).toBe(fromDropdown);
@@ -95,7 +95,7 @@ describe("buildCardPluginEntries", () => {
     });
 
     expect(items).toHaveBeenCalledTimes(1);
-    expect(entries.some((entry) => entry.key === `plugin-primary-${PLUGIN_ID}%add-tag`)).toBe(true);
+    expect(entries.some((entry) => entry.key === `plugin-primary-${PLUGIN_ID}:add-tag`)).toBe(true);
   });
 });
 
@@ -282,7 +282,7 @@ describe("buildKanbanCardMenuEntries — !onEdit does not disable plugin edit ac
       (child) => child.kind === "item" && child.key === "edit-task",
     );
     const pluginAction = editMenu.children.find(
-      (child) => child.kind === "item" && child.key === `plugin-edit-${PLUGIN_ID}%enhance`,
+      (child) => child.kind === "item" && child.key === `plugin-edit-${PLUGIN_ID}:enhance`,
     );
 
     expect(editTask?.kind === "item" && editTask.disabled).toBe(true);
@@ -330,7 +330,7 @@ describe("buildKanbanCardMenuEntries — 'primary' group plugin actions", () => 
 
     const keys = entryKeys(entries);
     const sendToIndex = keys.indexOf("send-to-workflow");
-    const primaryIndex = keys.indexOf(`plugin-primary-${PLUGIN_ID}%quick-tag`);
+    const primaryIndex = keys.indexOf(`plugin-primary-${PLUGIN_ID}:quick-tag`);
     const archiveIndex = keys.indexOf("archive");
 
     expect(sendToIndex).toBeGreaterThanOrEqual(0);
@@ -358,7 +358,7 @@ describe("buildKanbanCardMenuEntries — 'primary' group plugin actions", () => 
 
     const entries = buildKanbanCardMenuEntries({ workflows: [], stepsByWorkflowId: {} });
 
-    expect(entryKeys(entries)).not.toContain(`plugin-primary-${PLUGIN_ID}%quick-tag`);
+    expect(entryKeys(entries)).not.toContain(`plugin-primary-${PLUGIN_ID}:quick-tag`);
   });
 
   it("leaves the 'edit' group submenu unaffected by 'primary' group registrations", () => {

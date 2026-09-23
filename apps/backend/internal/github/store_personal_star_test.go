@@ -73,7 +73,9 @@ func TestPersonalStarConnectionLifecycleOnPostgres(t *testing.T) {
 	second.AccessSecretGeneration = generation
 	second.RefreshSecretGeneration = generation
 	superseded, err := store.ReplacePersonalStarConnection(
-		ctx, &second, first.LifecycleRevision, first.CredentialGeneration)
+		ctx, &second,
+		PersonalStarFence{Revision: first.LifecycleRevision, Generation: first.CredentialGeneration},
+		PersonalStarFence{Revision: revision, Generation: generation})
 	if err != nil {
 		t.Fatalf("replace connection: %v", err)
 	}
@@ -91,7 +93,10 @@ func TestPersonalStarConnectionLifecycleOnPostgres(t *testing.T) {
 	}
 
 	// A stale fence is still rejected.
-	if _, err := store.ReplacePersonalStarConnection(ctx, &second, revision, generation); err != ErrPersonalStarFence {
+	if _, err := store.ReplacePersonalStarConnection(
+		ctx, &second,
+		PersonalStarFence{Revision: revision, Generation: generation},
+		PersonalStarFence{Revision: revision, Generation: generation}); err != ErrPersonalStarFence {
 		t.Fatalf("stale replace error = %v, want fence mismatch", err)
 	}
 

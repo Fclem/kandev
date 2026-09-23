@@ -130,15 +130,27 @@ func (s *Store) BumpPersonalStarLifecycle(ctx context.Context, workspaceID, user
 	return lifecycle.Revision, lifecycle.CredentialGeneration, nil
 }
 
+// PersonalStarFence is a lifecycle revision/generation pair.
+type PersonalStarFence struct {
+	Revision   int64
+	Generation int64
+}
+
 // ReplacePersonalStarConnection atomically commits a verified replacement when
-// the fence still matches. The superseded secret ids are recorded in the
-// durable cleanup queue inside the same transaction, so a replacement can never
-// commit while the tokens it stopped referencing are unqueued: that window
-// would orphan ciphertext that no row points at any more.
+// the committed row still carries rowFence and the lifecycle row still carries
+// expectedFence. The lifecycle guard is what stops a disconnect or a competing
+// start that landed after the caller claimed its fence from being overwritten:
+// the caller's own fence read is not enough, because the row it is replacing
+// can already have been tombstoned by that disconnect.
+//
+// The superseded secret ids are recorded in the durable cleanup queue inside the
+// same transaction, so a replacement can never commit while the tokens it
+// stopped referencing are unqueued: that window would orphan ciphertext that no
+// row points at any more.
 func (s *Store) ReplacePersonalStarConnection(
 	ctx context.Context,
 	connection *PersonalStarConnection,
-	expectedRevision, expectedGeneration int64,
+	rowFence, expectedFence PersonalStarFence,
 ) ([]string, error) {
 	now := time.Now().UTC()
 	tx, err := s.db.BeginTxx(ctx, nil)
@@ -158,13 +170,18 @@ func (s *Store) ReplacePersonalStarConnection(
 			refresh_secret_id = ?, access_secret_generation = ?, refresh_secret_generation = ?,
 			last_reconnect_outcome = ?, updated_at = ?
 		WHERE workspace_id = ? AND user_id = ?
-			AND lifecycle_revision = ? AND credential_generation = ?`),
+			AND lifecycle_revision = ? AND credential_generation = ?
+			AND EXISTS (
+				SELECT 1 FROM github_personal_star_lifecycle
+				WHERE workspace_id = ? AND user_id = ?
+					AND revision = ? AND credential_generation = ?)`),
 		connection.Login, connection.GitHubUserID, connection.GrantedScopes, connection.PublicRepo,
 		PersonalStarStatusActive, connection.CredentialGeneration, connection.LifecycleRevision,
 		nullableSecretID(connection.AccessSecretID), nullableSecretID(connection.RefreshSecretID),
 		connection.AccessSecretGeneration, connection.RefreshSecretGeneration,
 		connection.LastReconnectOutcome, now,
-		connection.WorkspaceID, connection.UserID, expectedRevision, expectedGeneration)
+		connection.WorkspaceID, connection.UserID, rowFence.Revision, rowFence.Generation,
+		connection.WorkspaceID, connection.UserID, expectedFence.Revision, expectedFence.Generation)
 	if err != nil {
 		return nil, fmt.Errorf("replace personal star connection: %w", err)
 	}

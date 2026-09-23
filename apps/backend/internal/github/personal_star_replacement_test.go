@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -253,5 +254,92 @@ func TestPersonalStarSecondConsentCommitsANewGeneration(t *testing.T) {
 	}
 	if connected.Status != PersonalStarStatusActive || secrets.values[connected.AccessSecretID] != "access-3" {
 		t.Fatalf("connect after disconnect = %+v", connected)
+	}
+}
+
+// blockingStarOAuth lets a test land a disconnect inside the token-exchange
+// window, i.e. after the flow claim and before the commit.
+type blockingStarOAuth struct {
+	tokens  GitHubOAuthTokens
+	user    GitHubOAuthUser
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingStarOAuth) ExchangeUserCode(
+	ctx context.Context, _, _, _ string,
+) (GitHubOAuthTokens, error) {
+	close(b.entered)
+	<-b.release
+	return b.tokens, nil
+}
+
+func (b *blockingStarOAuth) RefreshUserToken(context.Context, string) (GitHubOAuthTokens, error) {
+	return GitHubOAuthTokens{}, errors.New("unexpected refresh")
+}
+
+func (b *blockingStarOAuth) GetOAuthUser(context.Context, string) (GitHubOAuthUser, error) {
+	return b.user, nil
+}
+
+// TestPersonalStarDisconnectDuringExchangeWins covers the window the claim
+// check cannot see: the flow is claimed, the token exchange is in flight, and
+// the user disconnects before the commit. The commit must not resurrect the
+// tombstone or write back a fence older than the lifecycle row.
+func TestPersonalStarDisconnectDuringExchangeWins(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{"public_repo"}},
+		user:   GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	if _, _, err := store.BumpPersonalStarLifecycle(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DisconnectPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	blocking := &blockingStarOAuth{
+		tokens:  GitHubOAuthTokens{AccessToken: "access-9", GrantedScopes: []string{"public_repo"}},
+		user:    GitHubOAuthUser{ID: 42, Login: "octocat"},
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	service.client = blocking
+	state := startPersonalStarConsent(t, service, "/settings/plugins")
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := service.CompleteCallback(ctx,
+			GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1")
+		result <- err
+	}()
+	<-blocking.entered
+	// The disconnect lands while the exchange is in flight.
+	if _, err := store.DisconnectPersonalStarConnection(ctx, "ws-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	close(blocking.release)
+	if err := <-result; err == nil {
+		t.Fatal("a consent committed after the user disconnected during its exchange")
+	}
+
+	lifecycle, err := store.GetPersonalStarLifecycle(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := store.GetPersonalStarConnection(ctx, "ws-1", "user-1")
+	if err != nil || row == nil {
+		t.Fatalf("connection = %+v, %v", row, err)
+	}
+	if row.Status != PersonalStarStatusInactive || row.AccessSecretID != "" {
+		t.Fatalf("disconnected row was resurrected: %+v", row)
+	}
+	if row.LifecycleRevision != lifecycle.Revision || row.CredentialGeneration != lifecycle.CredentialGeneration {
+		t.Fatalf("row fence %d/%d regressed behind lifecycle %d/%d",
+			row.LifecycleRevision, row.CredentialGeneration, lifecycle.Revision, lifecycle.CredentialGeneration)
 	}
 }

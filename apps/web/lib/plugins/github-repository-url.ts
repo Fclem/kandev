@@ -22,10 +22,12 @@ const GIT_SUFFIX = ".git";
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 
 /**
- * One-character names are valid; no trailing dot or hyphen. The bounded middle
- * group expresses GitHub's 100-character repository-name ceiling.
+ * One-character names are valid and GitHub permits `.`, `-`, and `_` anywhere,
+ * so a trailing hyphen is accepted; a trailing dot is not, because it collides
+ * with the clone-URL `.git` suffix. The bounded middle group expresses GitHub's
+ * 100-character repository-name ceiling.
  */
-const NAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9_])?$/;
+const NAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9_-])?$/;
 
 /**
  * A single terminal `.git` belongs to the clone URL, never the repository name.

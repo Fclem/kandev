@@ -11,11 +11,17 @@ describe("parseGitHubRepositoryUrl canonicalization", () => {
     ["https://github.com/o/r.git", "o/r"],
     ["https://github.com/A-1/R_e.p-o", "a-1/r_e.p-o"],
     ["https://github.com/a/repository-name", "a/repository-name"],
+    // GitHub allows `.`, `-`, and `_` anywhere in a repository name, so a
+    // trailing hyphen is a real repository and must keep its star control.
+    ["https://github.com/acme/widget-", "acme/widget-"],
     ["HTTPS://github.com/owner/repo", "owner/repo"],
     // The `.git` suffix is matched case-insensitively, like the backend.
     ["https://github.com/o/r.GIT", "o/r"],
     // Boundary lengths: 39-character owner, 100-character repository.
-    [`https://github.com/${"a".repeat(39)}/${"b".repeat(100)}`, `${"a".repeat(39)}/${"b".repeat(100)}`],
+    [
+      `https://github.com/${"a".repeat(39)}/${"b".repeat(100)}`,
+      `${"a".repeat(39)}/${"b".repeat(100)}`,
+    ],
   ])("canonicalizes %s", (raw, expected) => {
     expect(parseGitHubRepositoryUrl(raw)).toBe(expected);
   });
@@ -57,7 +63,6 @@ describe("parseGitHubRepositoryUrl canonicalization", () => {
     // Out-of-grammar owner/repository names.
     "https://github.com/-owner/repo",
     "https://github.com/owner-/repo",
-    "https://github.com/owner/repo-",
     "https://github.com/owner/repo.",
     "https://github.com/owner/re po",
     "https://github.com/owner/repo ",

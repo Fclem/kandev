@@ -11,10 +11,14 @@ import (
 )
 
 const (
-	personalStarCleanupInterval     = time.Minute
-	personalStarCleanupLease        = 2 * time.Minute
-	personalStarCleanupBaseBackoff  = 30 * time.Second
-	personalStarCleanupMaxBackoff   = time.Hour
+	personalStarCleanupInterval    = time.Minute
+	personalStarCleanupLease       = 2 * time.Minute
+	personalStarCleanupBaseBackoff = 30 * time.Second
+	// personalStarCleanupMaxBackoff caps one retry delay. The delay doubles per
+	// failed attempt and the attempt that reaches personalStarCleanupMaxAttempts
+	// is terminal, so the slowest delay the schedule produces is the seventh
+	// attempt's 30s·2^6.
+	personalStarCleanupMaxBackoff   = 32 * time.Minute
 	personalStarCleanupMaxAttempts  = 8
 	personalStarCleanupBatchSize    = 32
 	personalStarFlowSweepEveryTicks = 15
@@ -118,7 +122,6 @@ func (r *StarSecretCleanupRunner) RunOnce(ctx context.Context) (int, error) {
 			// operator has to be able to see: the ciphertext stays in the
 			// secret store until it is retried or declared terminal.
 			r.logFailure(record, err)
-			recordPersonalStarCleanupAttempt(personalStarCleanupOutcomeRetry)
 			if rescheduleErr := r.reschedule(ctx, record, err); rescheduleErr != nil {
 				return deleted, rescheduleErr
 			}
@@ -163,9 +166,15 @@ func (r *StarSecretCleanupRunner) reschedule(ctx context.Context, record *Person
 		}
 		return r.store.MarkPersonalStarSecretCleanupTerminal(ctx, record.ID, attempts, cause.Error())
 	}
-	return r.store.ReschedulePersonalStarSecretCleanup(
+	if err := r.store.ReschedulePersonalStarSecretCleanup(
 		ctx, record.ID, attempts, r.now().UTC().Add(personalStarCleanupBackoff(attempts)), cause.Error(),
-	)
+	); err != nil {
+		return err
+	}
+	// Counted once the retry is durable, so the attempt buckets describe what
+	// happened to each attempt and keep summing to the attempt count.
+	recordPersonalStarCleanupAttempt(personalStarCleanupOutcomeRetry)
+	return nil
 }
 
 func personalStarCleanupBackoff(attempts int) time.Duration {

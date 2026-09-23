@@ -323,9 +323,9 @@ trust boundary.
 ### Failed token cleanup
 
 Revoked, rotated, and superseded star tokens are deleted through a durable queue. A deletion that
-fails is retried with bounded backoff (eight attempts, up to one hour apart) and survives a backend
-restart. After the final attempt the queue row becomes `terminal`: it is no longer retried and is
-retained until an operator clears it, because it is the only remaining record of a token that could
+fails is retried with bounded backoff (eight attempts, up to about half an hour apart) and survives a
+backend restart. After the final attempt the queue row becomes `terminal`: it is no longer retried and
+is retained until an operator clears it, because it is the only remaining record of a token that could
 not be deleted.
 
 Terminal failures are visible three ways:

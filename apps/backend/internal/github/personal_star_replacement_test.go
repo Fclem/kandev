@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -517,7 +518,7 @@ func TestStarSecretCleanupTerminalFailureIsVisible(t *testing.T) {
 	now := time.Now()
 	runner.now = func() time.Time { return now }
 
-	terminalBefore := personalStarCleanupAttempts.Get(personalStarCleanupOutcomeTerminal).String()
+	terminalBefore := personalStarCleanupAttemptCount(personalStarCleanupOutcomeTerminal)
 	for attempt := 0; attempt < personalStarCleanupMaxAttempts; attempt++ {
 		now = now.Add(24 * time.Hour)
 		if deleted, err := runner.RunOnce(ctx); err != nil || deleted != 0 {
@@ -550,7 +551,7 @@ func TestStarSecretCleanupTerminalFailureIsVisible(t *testing.T) {
 		t.Fatalf("record after terminal = %+v, %v", after, err)
 	}
 
-	terminalAfter := personalStarCleanupAttempts.Get(personalStarCleanupOutcomeTerminal).String()
+	terminalAfter := personalStarCleanupAttemptCount(personalStarCleanupOutcomeTerminal)
 	if terminalAfter == terminalBefore {
 		t.Fatal("a terminal cleanup failure was not counted")
 	}
@@ -639,4 +640,70 @@ func TestPersonalStarFirstConsentRollsBackWhenMarkerWriteFails(t *testing.T) {
 	if _, err := resolver.ResolvePersonalStarClient(ctx, "ws-1", "user-1"); err != nil {
 		t.Fatalf("retried consent cannot resolve a star client: %v", err)
 	}
+}
+
+// TestPersonalStarCleanupAttemptBucketsSumToAttempts pins the meaning of
+// personal_star_cleanup_attempts_total: every failed attempt is counted exactly
+// once, in the bucket that describes what happened to it, so the buckets sum to
+// the attempt count an operator would read from the queue row.
+func TestPersonalStarCleanupAttemptBucketsSumToAttempts(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	secrets.values["stuck-secret"] = "token"
+	secrets.failOn = "stuck-secret"
+	if err := store.EnqueuePersonalStarSecretCleanup(ctx, "ws-1", "user-1", "stuck-secret",
+		personalStarSecretKindAccess, 3); err != nil {
+		t.Fatal(err)
+	}
+	runner := NewStarSecretCleanupRunner(store, secrets, nil)
+	now := time.Now()
+	runner.now = func() time.Time { return now }
+
+	before := map[string]int64{}
+	for _, outcome := range []string{
+		personalStarCleanupOutcomeDeleted,
+		personalStarCleanupOutcomeRetry,
+		personalStarCleanupOutcomeTerminal,
+	} {
+		before[outcome] = personalStarCleanupAttemptCount(outcome)
+	}
+	for attempt := 0; attempt < personalStarCleanupMaxAttempts; attempt++ {
+		now = now.Add(24 * time.Hour)
+		if deleted, err := runner.RunOnce(ctx); err != nil || deleted != 0 {
+			t.Fatalf("RunOnce() = %d, %v", deleted, err)
+		}
+	}
+	total := int64(0)
+	for outcome := range before {
+		total += personalStarCleanupAttemptCount(outcome) - before[outcome]
+	}
+	if total != personalStarCleanupMaxAttempts {
+		t.Fatalf("attempt buckets sum to %d, want %d (deleted %d, retry %d, terminal %d)",
+			total, personalStarCleanupMaxAttempts,
+			personalStarCleanupAttemptCount(personalStarCleanupOutcomeDeleted)-before[personalStarCleanupOutcomeDeleted],
+			personalStarCleanupAttemptCount(personalStarCleanupOutcomeRetry)-before[personalStarCleanupOutcomeRetry],
+			personalStarCleanupAttemptCount(personalStarCleanupOutcomeTerminal)-before[personalStarCleanupOutcomeTerminal])
+	}
+	if terminal := personalStarCleanupAttemptCount(personalStarCleanupOutcomeTerminal) - before[personalStarCleanupOutcomeTerminal]; terminal != 1 {
+		t.Fatalf("terminal attempts = %d, want 1", terminal)
+	}
+	if retry := personalStarCleanupAttemptCount(personalStarCleanupOutcomeRetry) - before[personalStarCleanupOutcomeRetry]; retry != 7 {
+		t.Fatalf("scheduled retries = %d, want %d", retry, personalStarCleanupMaxAttempts-1)
+	}
+}
+
+// personalStarCleanupAttemptCount reads one attempt bucket. expvar creates a
+// bucket on first write, so an untouched outcome reads as nil and therefore as
+// zero: the buckets belong to the process, not to a single test.
+func personalStarCleanupAttemptCount(outcome string) int64 {
+	value := personalStarCleanupAttempts.Get(outcome)
+	if value == nil {
+		return 0
+	}
+	parsed, err := strconv.ParseInt(value.String(), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return parsed
 }

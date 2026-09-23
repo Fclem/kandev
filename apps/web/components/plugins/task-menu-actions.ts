@@ -81,6 +81,28 @@ function logMenuDefect(
  * A registration is plugin-authored data too, so a missing or hostile accessor
  * omits the entry (and reports it) rather than handing React an object child.
  */
+/** The characters `encodeURIComponent` leaves alone; everything else is escaped. */
+const KEY_SAFE_CHARS = /[A-Za-z0-9\-_.!~*'()]/;
+
+/**
+ * Percent-encodes one key part without `encodeURIComponent`'s `URIError`: a lone
+ * surrogate -- a truncated astral character, which `slice` and `[0]` produce --
+ * is not a code point, and would otherwise throw straight out of the card's
+ * render with no error boundary to catch it. Escaping per code unit keeps the
+ * encoding injective, because `%` is itself escaped: every `%XX` token is
+ * produced here and can never occur inside an id.
+ */
+function encodeKeyPart(value: string): string {
+  let encoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    encoded += KEY_SAFE_CHARS.test(char)
+      ? char
+      : `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`;
+  }
+  return encoded;
+}
+
 /** The action's own id, read once and only when it is a non-blank string. */
 function readActionId(action: PluginTaskMenuActionRegistration): string | null {
   try {
@@ -146,9 +168,9 @@ function readSubItem(item: unknown): SubItemSnapshot | null {
     if (typeof id !== "string" || id.trim().length === 0) return null;
     if (typeof label !== "string" || label.trim().length === 0) return null;
     if (typeof run !== "function") return null;
-    if (disabled !== undefined && typeof disabled !== "boolean") return null;
+    if (disabled !== undefined && disabled !== null && typeof disabled !== "boolean") return null;
     if (!isRenderableIcon(icon)) return null;
-    return { id, label, icon: icon ?? undefined, disabled, run };
+    return { id, label, icon: icon ?? undefined, disabled: disabled ?? undefined, run };
   } catch {
     return null;
   }
@@ -274,7 +296,7 @@ export function pluginMenuEntry(
   // another action's key (`p` + `q-x` vs `p-q` + `x`) and no part can contain the
   // separators: the palette flattens every plugin entry into one list where the
   // key is both a React key and cmdk's value.
-  const key = `${keyPrefix}-${encodeURIComponent(action.pluginId)}%${encodeURIComponent(actionId)}`;
+  const key = `${keyPrefix}-${encodeKeyPart(action.pluginId)}%${encodeKeyPart(actionId)}`;
   const items = pluginSubItems(action, context);
 
   if (items) {
@@ -291,7 +313,7 @@ export function pluginMenuEntry(
         // key exactly; the palette flattens every plugin entry into one list and
         // uses this key as both its React key and cmdk's value. The separator
         // stays unambiguous because an id's own `#` is percent-encoded.
-        key: `${key}#${encodeURIComponent(item.id)}`,
+        key: `${key}#${encodeKeyPart(item.id)}`,
         icon: pluginMenuIcon(item.icon),
         label: item.label,
         disabled: disabled || item.disabled,

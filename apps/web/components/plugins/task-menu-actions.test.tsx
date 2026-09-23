@@ -507,6 +507,7 @@ describe("buildPrimaryPluginEntries — shapes that must survive the boundary", 
         { id: "no-icon", label: "No icon", run: vi.fn() },
         { id: "array-icon", label: "Array icon", icon: [] as never, run: vi.fn() },
         { id: "object-icon", label: "Object icon", icon: {} as never, run: vi.fn() },
+        { id: "null-disabled", label: "Null disabled", disabled: null as never, run: vi.fn() },
       ],
     });
 
@@ -516,10 +517,41 @@ describe("buildPrimaryPluginEntries — shapes that must survive the boundary", 
     expect(entry.children.map((child) => child.key)).toEqual([
       `plugin-primary-${PLUGIN_ID}%icon-shapes#null-icon`,
       `plugin-primary-${PLUGIN_ID}%icon-shapes#no-icon`,
+      `plugin-primary-${PLUGIN_ID}%icon-shapes#null-disabled`,
     ]);
     // The two unusable shapes are one defect of the same kind: one report.
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("buildPrimaryPluginEntries — ids the encoder must survive", () => {
+  // Regression: `encodeURIComponent` raises `URIError` on a lone surrogate, which
+  // a truncated astral character (`slice`, `[0]`) produces. The throw left
+  // `pluginMenuEntry`, so it escaped the builder called during a card's render and
+  // unmounted the whole route -- and a lone surrogate is a non-blank string, so the
+  // id guard did not catch it either.
+  it("builds an entry whose id is a lone surrogate instead of throwing", () => {
+    const loneSurrogate = "\ud83c";
+    registerAction({
+      id: loneSurrogate,
+      items: () => [{ id: loneSurrogate, label: "Child", run: vi.fn() }],
+    });
+
+    const entries = buildPrimaryPluginEntries({ context: CONTEXT });
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.key).toContain("%d83c");
+    expect(entries[0]?.kind === "submenu" ? entries[0].children[0]?.key : "").toContain("%d83c");
+  });
+
+  it("keeps a lone-surrogate id distinct from a valid astral one", () => {
+    registerAction({ id: "\ud83c", label: "Half" });
+    registerAction({ id: "\ud83c\udf89", label: "Whole" });
+
+    const keys = buildPrimaryPluginEntries({ context: CONTEXT }).map((entry) => entry?.key);
+
+    expect(new Set(keys).size).toBe(2);
   });
 });
 

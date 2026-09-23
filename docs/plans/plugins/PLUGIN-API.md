@@ -1440,10 +1440,11 @@ interface TaskMenuActionRegistration {
   // order. Must be synchronous, and is evaluated on every menu build (see
   // "Kanban card contributions"). Nesting stops at this one level. A child
   // needs a non-blank id and label, a callable run, and optional fields of the
-  // shapes above (a boolean `disabled`, an `icon` that is a name, component,
-  // element or `null`) -- ids unique within the action: children the host
-  // cannot read or render are dropped (and reported), duplicate ids keep their
-  // first occurrence, and a result with nothing usable left falls back to `run`.
+  // shapes above (a boolean or `null` `disabled`, an `icon` that is a name,
+  // component or element; `null` means absent for both) -- ids unique within the
+  // action: children the host cannot read or render are dropped (and reported),
+  // duplicate ids keep their first occurrence, and a result with nothing usable
+  // left falls back to `run`.
   items?(
     context: PluginTaskMenuContext,
   ): readonly TaskMenuSubItemRegistration[];

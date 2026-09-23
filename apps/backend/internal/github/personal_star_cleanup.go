@@ -114,6 +114,11 @@ func (r *StarSecretCleanupRunner) RunOnce(ctx context.Context) (int, error) {
 	deleted := 0
 	for _, record := range claimed {
 		if err := r.secrets.Delete(ctx, record.SecretID); err != nil {
+			// A deletion the runner cannot complete is the one state an
+			// operator has to be able to see: the ciphertext stays in the
+			// secret store until it is retried or declared terminal.
+			r.logFailure(record, err)
+			recordPersonalStarCleanupAttempt(personalStarCleanupOutcomeRetry)
 			if rescheduleErr := r.reschedule(ctx, record, err); rescheduleErr != nil {
 				return deleted, rescheduleErr
 			}
@@ -122,15 +127,41 @@ func (r *StarSecretCleanupRunner) RunOnce(ctx context.Context) (int, error) {
 		if err := r.store.CompletePersonalStarSecretCleanup(ctx, record.ID); err != nil {
 			return deleted, err
 		}
+		recordPersonalStarCleanupAttempt(personalStarCleanupOutcomeDeleted)
 		deleted++
 	}
 	return deleted, nil
 }
 
+// logFailure reports one failed deletion attempt: identity and location only,
+// never token material.
+func (r *StarSecretCleanupRunner) logFailure(record *PersonalStarSecretCleanup, cause error) {
+	if r.log == nil {
+		return
+	}
+	r.log.Warn("personal star secret cleanup failed",
+		zap.String("secret_id", record.SecretID),
+		zap.String("secret_kind", record.SecretKind),
+		zap.Int64("credential_generation", record.CredentialGeneration),
+		zap.Int("attempts", record.Attempts+1),
+		zap.Error(cause))
+}
+
 func (r *StarSecretCleanupRunner) reschedule(ctx context.Context, record *PersonalStarSecretCleanup, cause error) error {
 	attempts := record.Attempts + 1
 	if attempts >= personalStarCleanupMaxAttempts {
-		return r.store.MarkPersonalStarSecretCleanupTerminal(ctx, record.ID, cause.Error())
+		// Terminal is the state operators act on, so it is counted and logged
+		// with the attempt count that gave up.
+		recordPersonalStarCleanupAttempt(personalStarCleanupOutcomeTerminal)
+		if r.log != nil {
+			r.log.Warn("personal star secret cleanup gave up; the token must be deleted manually",
+				zap.String("secret_id", record.SecretID),
+				zap.String("secret_kind", record.SecretKind),
+				zap.Int64("credential_generation", record.CredentialGeneration),
+				zap.Int("attempts", attempts),
+				zap.Error(cause))
+		}
+		return r.store.MarkPersonalStarSecretCleanupTerminal(ctx, record.ID, attempts, cause.Error())
 	}
 	return r.store.ReschedulePersonalStarSecretCleanup(
 		ctx, record.ID, attempts, r.now().UTC().Add(personalStarCleanupBackoff(attempts)), cause.Error(),

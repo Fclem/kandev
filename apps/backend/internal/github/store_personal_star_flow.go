@@ -195,11 +195,12 @@ func (s *Store) ReschedulePersonalStarSecretCleanup(
 }
 
 // MarkPersonalStarSecretCleanupTerminal keeps a permanently failed deletion
-// visible to operators instead of retrying forever.
-func (s *Store) MarkPersonalStarSecretCleanupTerminal(ctx context.Context, id, lastError string) error {
+// visible to operators instead of retrying forever. The attempt count is
+// persisted with the terminal state so the row records how hard it tried.
+func (s *Store) MarkPersonalStarSecretCleanupTerminal(ctx context.Context, id string, attempts int, lastError string) error {
 	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
-		UPDATE github_personal_star_cleanup SET status = ?, claim_lease_until = NULL, last_error = ?
-		WHERE id = ?`), personalStarCleanupTerminal, truncatePersonalStarError(lastError), id)
+		UPDATE github_personal_star_cleanup SET status = ?, attempts = ?, claim_lease_until = NULL, last_error = ?
+		WHERE id = ?`), personalStarCleanupTerminal, attempts, truncatePersonalStarError(lastError), id)
 	if err != nil {
 		return fmt.Errorf("terminate personal star cleanup: %w", err)
 	}

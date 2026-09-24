@@ -202,7 +202,7 @@ composition is substituted for the phone sheet.
 
 ## Work orders
 
-- [ ] [Task 01: Remove the built-in panel surfaces](task-01-remove-panel-surfaces.md)
+- [x] [Task 01: Remove the built-in panel surfaces](task-01-remove-panel-surfaces.md)
 - [ ] [Task 02: Remove the core prompt projection](task-02-remove-core-projection.md)
 - [ ] [Task 03: Harden and prove layout compatibility](task-03-layout-compat-and-e2e.md)
 

@@ -1,7 +1,7 @@
 ---
 id: "01-remove-panel-surfaces"
 title: "Remove the built-in panel surfaces"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -310,4 +310,49 @@ Task 02 deletes.
 
 ## Results
 
-Pending.
+Done. Commands run from the repository root.
+
+```bash
+(cd apps/web && pnpm exec vitest run \
+  components/task/dockview-add-panel-items.test.tsx \
+  components/task/dockview-desktop-layout.test.ts \
+  components/task/dockview-panel-content.todos.test.tsx \
+  components/task/dockview-shared.test.tsx \
+  components/task/mobile/session-mobile-layout.test.tsx \
+  components/task/mobile/session-mobile-bottom-nav.test.tsx \
+  lib/state/layout-manager/panel-titles.test.ts \
+  lib/state/layout-manager/serializer.test.ts \
+  lib/state/dockview-panel-actions.scroll-target.test.ts)
+# 9 files passed, 97 tests passed
+(cd apps/web && pnpm run typecheck)   # tsc --noEmit clean
+(cd apps/web && pnpm run i18n:check)  # keys, <Trans> indices, plurals, module-scope t(), em dashes, non-JSX copy all OK; all six locale catalogs complete
+(cd apps/web && pnpm run lint)        # eslint --max-warnings 0 clean
+```
+
+Both searches from the Verification block were re-run through the agent search
+tool.
+
+- Zero-match gate (locales, `components/task/mobile`, the dockview
+  registrations, `layout-editor.tsx`, `layout-manager/`, `dockview-store.ts`,
+  `dockview-extra-panel-actions.ts`): no matches.
+- Listing gate (`apps/web/e2e`, `apps/web/scripts`): only the plugin fixture,
+  its identity setup (`global-setup.ts`, `e2e/README.md`), the kept plugin specs,
+  and the fixture build tooling match. None of
+  `e2e/tests/task/prompt-history-panel.spec.ts`,
+  `prompt-history-auto-load.spec.ts`,
+  `e2e/tests/task/mobile-prompt-history-panel.spec.ts`, or
+  `e2e/helpers/prompt-history-long-seed.ts` appears; all four are deleted.
+
+One gate-driven comment fix was made beyond the named edits: the
+`buildSidePanelActions` docblock in `dockview-extra-panel-actions.ts` listed
+`prompt-history` among the side panels it builds, and the zero-match gate covers
+that file.
+
+Deleted files: `prompt-history-panel-content.tsx`,
+`prompt-history-panel-row.tsx`, `prompt-history-panel-host.tsx`,
+`prompt-history-panel-content.test.tsx`,
+`prompt-history-panel-content.reactivity.test.tsx`, the three core panel e2e
+specs, and `e2e/helpers/prompt-history-long-seed.ts`.
+`dockview-panel-actions.prompt-history-panel.test.ts` was renamed to
+`dockview-panel-actions.scroll-target.test.ts` with the `addPromptHistoryPanel`
+coverage dropped and the `scrollTranscriptToMessage` coverage kept.

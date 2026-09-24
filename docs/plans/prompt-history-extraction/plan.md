@@ -1,6 +1,6 @@
 ---
 created: 2026-09-23
-status: draft
+status: implemented
 requirements:
   - REQ-PLUGINS-PROMPT-HISTORY-EXTRACTION-001
 system_design:
@@ -204,7 +204,7 @@ composition is substituted for the phone sheet.
 
 - [x] [Task 01: Remove the built-in panel surfaces](task-01-remove-panel-surfaces.md)
 - [x] [Task 02: Remove the core prompt projection](task-02-remove-core-projection.md)
-- [ ] [Task 03: Harden and prove layout compatibility](task-03-layout-compat-and-e2e.md)
+- [x] [Task 03: Harden and prove layout compatibility](task-03-layout-compat-and-e2e.md)
 
 Execution order is 01 -> 02 -> 03. The three work orders touch the same
 frontend compilation unit, so they are sequential.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: current
 system: plugins
 requirements:
   - REQ-PLUGINS-PROMPT-HISTORY-EXTRACTION-001

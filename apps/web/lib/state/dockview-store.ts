@@ -47,6 +47,12 @@ import {
   withHiddenRightPaneMetadata,
   type HiddenRightPane,
 } from "./dockview-right-pane";
+import {
+  filterLayoutStateByComponents,
+  maximizedGroupIdOf,
+  sanitizeSerializedLayout,
+  serializedGridGroupIds,
+} from "./layout-manager/sanitize-serialized-layout";
 import { enforcePinnedTargets } from "./dockview-pinned-enforce";
 import {
   injectIntentPanels,
@@ -864,8 +870,11 @@ function restoreCustomLayout({
   if (state?.columns) {
     // Normalize first so both old saved layouts with session-specific panels
     // and newer reusable layouts with chat placeholders apply through one path.
+    // Panels whose component is no longer renderable are dropped here as well
+    // as during profile validation, because this explicit apply path does not
+    // go through the settings normalizer.
     const activeState = materializeReusableChatPanel(
-      normalizeReusableSessionPanels(state),
+      normalizeReusableSessionPanels(filterLayoutStateByComponents(state)),
       opts?.activeSessionId ?? null,
       opts?.sessionIds ?? [],
     );
@@ -879,7 +888,9 @@ function restoreCustomLayout({
   }
 
   try {
-    restoreSerializedDockview(api, layout.layout as unknown as SerializedDockview);
+    const sanitized = sanitizeSerializedLayout(layout.layout);
+    if (!sanitized) return { appliedState: state, oldFormatRestoreFailed: true };
+    restoreSerializedDockview(api, sanitized as SerializedDockview);
     replaceStaleSessionPanels(api, opts?.activeSessionId ?? null, opts?.sessionIds ?? []);
     set(applyLayoutFixups(api));
     return { appliedState: state, oldFormatRestoreFailed: false };
@@ -912,7 +923,23 @@ function restoreMaximizeFromStorage(
   const saved = getEnvMaximizeState(envId);
   if (!saved) return false;
   try {
-    restoreSerializedDockview(api, saved.maximizedDockviewJson as SerializedDockview);
+    const rawMaximized = saved.maximizedDockviewJson;
+    const maximizedGroupId = maximizedGroupIdOf(rawMaximized);
+    const sanitizedMaximized = sanitizeSerializedLayout(rawMaximized);
+    if (!sanitizedMaximized) {
+      removeEnvMaximizeState(envId);
+      return false;
+    }
+    if (
+      maximizedGroupId &&
+      !serializedGridGroupIds(sanitizedMaximized.grid?.root).has(maximizedGroupId)
+    ) {
+      // The maximized group itself did not survive: returning false lets the
+      // env-switch path apply this environment's sanitized saved layout, which
+      // is normally the same pre-maximize layout.
+      return false;
+    }
+    restoreSerializedDockview(api, sanitizedMaximized as SerializedDockview);
     replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);
     // After fromJSON, `api.width/height` reflect the JSON's recorded grid
     // dims, which may not match the live container. Always lay out against
@@ -921,7 +948,7 @@ function restoreMaximizeFromStorage(
     const { width, height } = measureDockviewContainer(api);
     api.layout(width, height);
     const ids = applyLayoutFixups(api, undefined, getManualRightWidth(envId));
-    const preMax = saved.preMaximizeLayout as unknown as LayoutState;
+    const preMax = filterLayoutStateByComponents(saved.preMaximizeLayout as unknown as LayoutState);
     // The maximized layout is `[sidebar?, maximized]` — the non-sidebar group
     // is the one being maximized, which `resolveGroupIds` returns as
     // `centerGroupId`. Tracking it keeps the store consistent with what

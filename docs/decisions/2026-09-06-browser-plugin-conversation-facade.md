@@ -27,7 +27,7 @@ Add a typed browser `host.conversation` facade and scoped task-panel navigation 
 - Kandev remains responsible for authorization, content sanitization, subscription gaps, native navigation, and private user-state semantics.
 - The supported browser contract is capability-gated, but native same-origin plugins are still not a hard security sandbox. This decision does not claim otherwise.
 - Additive SDK and task-panel fields remain compatible with existing plugins. Consumers require a `min_kandev_version` that includes the facade.
-- Core prompt history remains until a separate plugin and extraction package prove parity and migrate saved built-in panel identities.
+- Core prompt history remained until a separate plugin and extraction package proved parity. Both have since landed: [Prompt History Extraction](../specs/plugins/requirements/prompt-history-extraction.md) removes the built-in panel, its projection, and its saved-layout identity, and deliberately does not migrate saved identities (see the extraction decision below).
 
 ## Alternatives considered
 

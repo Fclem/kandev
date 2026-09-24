@@ -28,6 +28,7 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { useLspFileOpener } from "@/hooks/use-lsp-file-opener";
 import { useEditorKeybinds } from "@/hooks/use-editor-keybinds";
 import { usePlanPanelAutoOpen } from "@/hooks/use-plan-panel-auto-open";
+import { RENDERABLE_COMPONENT_NAMES } from "@/lib/state/layout-manager/renderable-components";
 
 // Panel components (rendered via portals, not directly by dockview)
 import { LeftHeaderActions, RightHeaderActions } from "./dockview-header-actions";
@@ -131,27 +132,15 @@ function PortalSlot(props: IDockviewPanelProps) {
 // --- COMPONENT MAP ---
 // All panel types use the same PortalSlot wrapper — dockview only manages
 // layout positioning.  Actual rendering happens in PanelPortalHost below.
-const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = {
-  chat: PortalSlot,
-  "diff-viewer": PortalSlot,
-  "file-editor": PortalSlot,
-  "commit-detail": PortalSlot,
-  changes: PortalSlot,
-  files: PortalSlot,
-  terminal: PortalSlot,
-  browser: PortalSlot,
-  vscode: PortalSlot,
-  plan: PortalSlot,
-  todos: PortalSlot,
-  "pr-detail": PortalSlot,
-  "mr-detail": PortalSlot,
-  "review-detail": PortalSlot,
-  "plugin-panel": PortalSlot,
-  canvas: PortalSlot,
-  // Backwards compat aliases for saved layouts
-  "diff-files": PortalSlot,
-  "all-files": PortalSlot,
-};
+// Built from the static renderable-component list so the registered set and
+// the restore/validation predicate cannot diverge.
+const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(
+  RENDERABLE_COMPONENT_NAMES.map((name) => [name, PortalSlot]),
+);
+
+/** Component names this renderer registers; must equal
+ *  `RENDERABLE_COMPONENT_NAMES`. */
+export const DESKTOP_COMPONENT_NAMES: readonly string[] = Object.keys(components);
 
 // --- TAB COMPONENTS ---
 /** Tab header for permanent panels: renders the default dockview tab without

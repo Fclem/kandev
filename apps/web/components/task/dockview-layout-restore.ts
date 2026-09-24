@@ -2,11 +2,15 @@ import type { DockviewReadyEvent, SerializedDockview } from "dockview-react";
 import type { StoreApi } from "zustand";
 import { hasRightColumn, useDockviewStore } from "@/lib/state/dockview-store";
 import { applyLayoutFixups } from "@/lib/state/dockview-layout-builders";
-import { isLayoutShapeHealthy } from "@/lib/state/dockview-layout-health";
 import { measureDockviewContainer } from "@/lib/state/dockview-measure";
-import { isEnvScopedDockviewComponent } from "@/lib/state/dockview-env-scoped-components";
 import type { LayoutState } from "@/lib/state/layout-manager";
-import { setPinnedTarget } from "@/lib/state/layout-manager";
+import { applyLayout, resolveGroupIds, setPinnedTarget } from "@/lib/state/layout-manager";
+import {
+  filterLayoutStateByComponents,
+  maximizedGroupIdOf,
+  sanitizeSerializedLayout,
+  serializedGridGroupIds,
+} from "@/lib/state/layout-manager/sanitize-serialized-layout";
 import type { AppState } from "@/lib/state/store";
 import {
   getEnvLayout,
@@ -19,156 +23,47 @@ import { stripHiddenRightPaneMetadata } from "@/lib/state/dockview-right-pane";
 
 const debug = createDebugLogger("dockview:restore");
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type SanitizeLayoutOptions =
-  | { stripSessionPanels: true; stripEnvScopedPanels?: boolean; excludeSessionIds?: never }
-  | {
-      stripSessionPanels?: false | undefined;
-      stripEnvScopedPanels?: boolean;
-      excludeSessionIds?: Set<string>;
-    };
-
-function describeSanitizeMode(options: {
-  stripSessionPanels?: boolean;
-  stripEnvScopedPanels?: boolean;
-  excludeSessionIds?: Set<string>;
-}): string {
-  if (options.stripSessionPanels && options.stripEnvScopedPanels)
-    return "stripSessionsAndEnvScoped";
-  if (options.stripSessionPanels) return "stripAllSessions";
-  if (options.stripEnvScopedPanels) return "stripEnvScoped";
-  if (options.excludeSessionIds) return "excludeSpecificSessions";
-  return "keepAll";
-}
-
-function logSanitizeOutcome(
-  options: {
-    stripSessionPanels?: boolean;
-    stripEnvScopedPanels?: boolean;
-    excludeSessionIds?: Set<string>;
-  },
-  totalPanels: Record<string, any>,
-  validPanels: Record<string, any>,
-  invalidIds: Set<string>,
-): void {
-  if (!isDebug()) return;
-  debug("sanitizeLayout", {
-    mode: describeSanitizeMode(options),
-    excludeSessionCount: options.excludeSessionIds?.size ?? 0,
-    excludeSessionIds: options.excludeSessionIds
-      ? Array.from(options.excludeSessionIds)
-      : undefined,
-    totalPanels: Object.keys(totalPanels).length,
-    keptPanels: Object.keys(validPanels).length,
-    strippedPanels: Array.from(invalidIds),
-  });
-}
-
-function shouldKeepSessionPanel(id: string, options: SanitizeLayoutOptions): boolean {
-  if (options.stripSessionPanels) return false;
-  if (!options.excludeSessionIds) return true;
-
-  // Per-env restore: drop session panels that we know belong to a
-  // different env (a phantom from a previously-deleted task). Sessions
-  // we have no mapping for are kept — they may be a still-loading WS
-  // arrival, and useAutoSessionTab's reconcile will clean them up if
-  // they turn out to be stale.
-  const sid = id.slice("session:".length);
-  return !options.excludeSessionIds.has(sid);
-}
-
-function shouldKeepPanel(
-  id: string,
-  panel: any,
-  validComponents: Set<string>,
-  options: SanitizeLayoutOptions,
-): boolean {
-  const comp = panel.contentComponent;
-
-  // Session panels are scoped to a specific environment; when restoring the
-  // global fallback (no envId yet), they belong to the previous task and
-  // would leak in as duplicate tabs. Strip them in that case. The session
-  // check must happen before component-validity, since session panels are
-  // serialized with contentComponent: "chat" (a valid component) and would
-  // otherwise short-circuit the strip guard.
-  if (id.startsWith("session:")) return shouldKeepSessionPanel(id, options);
-
-  if (options.stripEnvScopedPanels && isEnvScopedDockviewComponent(comp)) return false;
-  return !!(comp && validComponents.has(comp));
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-export function sanitizeLayout(
-  layout: any,
-  validComponents: Set<string>,
-  options: SanitizeLayoutOptions = {},
-): any {
-  if (!isLayoutShapeHealthy(layout)) {
-    debug("sanitizeLayout: layout shape unhealthy, returning null");
-    return null;
-  }
-
-  const invalidIds = new Set<string>();
-  const validPanels: Record<string, any> = {};
-  for (const [id, panel] of Object.entries(layout.panels)) {
-    if (shouldKeepPanel(id, panel, validComponents, options)) {
-      validPanels[id] = panel;
-    } else {
-      invalidIds.add(id);
-    }
-  }
-
-  logSanitizeOutcome(options, layout.panels, validPanels, invalidIds);
-
-  if (invalidIds.size === 0) return layout;
-
-  function cleanNode(node: any): any {
-    if (node.type === "leaf") {
-      const views = (node.data.views as string[]).filter((v) => !invalidIds.has(v));
-      if (views.length === 0) return null;
-      const activeView = views.includes(node.data.activeView) ? node.data.activeView : views[0];
-      return { ...node, data: { ...node.data, views, activeView } };
-    }
-    if (node.type === "branch") {
-      const children = (node.data as any[]).map(cleanNode).filter(Boolean);
-      if (children.length === 0) return null;
-      return { ...node, data: children };
-    }
-    return node;
-  }
-
-  const cleanedRoot = cleanNode(layout.grid.root);
-  if (!cleanedRoot) {
-    debug("sanitizeLayout: cleanedRoot is null after stripping, returning null");
-    return null;
-  }
-
-  return {
-    ...layout,
-    grid: { ...layout.grid, root: cleanedRoot },
-    panels: validPanels,
-  };
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
 type SavedMax = ReturnType<typeof getEnvMaximizeState>;
 
 /**
  * Apply a saved maximize blob onto the live dockview api and mirror the full
  * maximize state into the store. Single source of truth for both restore
  * call sites — keeping `preMaximizeLayout` and `maximizedGroupId` in lockstep.
+ *
+ * Both stored structures are filtered first, because neither is sanitized on
+ * the way in: an entry whose component is no longer registered throws inside
+ * `api.fromJSON`. Returns false when the maximized group itself does not
+ * survive, so the caller can fall back to the filtered pre-maximize layout
+ * instead of restoring an overlay around a group the user no longer has.
  */
 function applySavedMaximize(
   api: DockviewReadyEvent["api"],
   savedMax: NonNullable<SavedMax>,
+  validComponents: ReadonlySet<string>,
   manualRightWidth?: number | null,
-): void {
-  api.fromJSON(savedMax.maximizedDockviewJson as SerializedDockview);
+): boolean {
+  const rawMaximized = savedMax.maximizedDockviewJson;
+  const maximizedGroupId = maximizedGroupIdOf(rawMaximized);
+  const sanitizedMaximized = sanitizeSerializedLayout(rawMaximized, validComponents);
+  if (!sanitizedMaximized) {
+    debug("applySavedMaximize: maximized payload unusable after sanitize");
+    return false;
+  }
+  if (
+    maximizedGroupId &&
+    !serializedGridGroupIds(sanitizedMaximized.grid?.root).has(maximizedGroupId)
+  ) {
+    debug("applySavedMaximize: maximized group did not survive sanitize", { maximizedGroupId });
+    return false;
+  }
+  const preMaximizeLayout = filterLayoutStateByComponents(
+    savedMax.preMaximizeLayout as unknown as LayoutState,
+    validComponents,
+  );
+  api.fromJSON(sanitizedMaximized as SerializedDockview);
   const { width, height } = measureDockviewContainer(api);
   api.layout(width, height);
   const ids = applyLayoutFixups(api, undefined, manualRightWidth);
-  const preMaximizeLayout = savedMax.preMaximizeLayout as unknown as LayoutState;
   // The maximize JSON is 2-column — captureRightTarget skips it (sv.length < 3).
   // Seed the right target directly so enforcePinnedTargets can snap the column
   // back to the saved width when the user exits maximize mode.
@@ -181,28 +76,61 @@ function applySavedMaximize(
     maximizedGroupId: ids.centerGroupId,
     rightPanelsVisible: hasRightColumn(preMaximizeLayout),
   });
+  return true;
 }
 
-function applyFixupsWithMaximize(api: DockviewReadyEvent["api"], envId: string | null): void {
+/** Layout fixups for a restored env layout, with the maximize overlay applied
+ *  when it survived sanitization and plain measurement otherwise. */
+function applyFixupsWithMaximize(
+  api: DockviewReadyEvent["api"],
+  envId: string | null,
+  validComponents: ReadonlySet<string>,
+): void {
   const manualRightWidth = getManualRightWidth(envId);
   const savedMax = envId ? getEnvMaximizeState(envId) : null;
-  if (savedMax) {
-    applySavedMaximize(api, savedMax, manualRightWidth);
-  } else {
-    const { width, height } = measureDockviewContainer(api);
-    api.layout(width, height);
-    // Anchor the right column to its per-env manual width when one exists;
-    // serialized geometry otherwise remains responsive to the current viewport.
-    const ids = applyLayoutFixups(api, undefined, manualRightWidth);
-    useDockviewStore.setState(ids);
-  }
+  if (savedMax && applySavedMaximize(api, savedMax, validComponents, manualRightWidth)) return;
+  const { width, height } = measureDockviewContainer(api);
+  api.layout(width, height);
+  // Anchor the right column to its per-env manual width when one exists;
+  // serialized geometry otherwise remains responsive to the current viewport.
+  const ids = applyLayoutFixups(api, undefined, manualRightWidth);
+  useDockviewStore.setState(ids);
 }
 
-function tryRestoreMaximizeOnly(api: DockviewReadyEvent["api"], envId: string): boolean {
+/** Apply the filtered pre-maximize layout without maximize state. */
+function applyPreMaximizeLayout(
+  api: DockviewReadyEvent["api"],
+  preMaximizeLayout: LayoutState,
+): void {
+  const { width, height } = measureDockviewContainer(api);
+  applyLayout(api, preMaximizeLayout, new Map(), width, height);
+  useDockviewStore.setState({
+    ...resolveGroupIds(api),
+    preMaximizeLayout: null,
+    maximizedGroupId: null,
+    rightPanelsVisible: hasRightColumn(preMaximizeLayout),
+  });
+}
+
+function tryRestoreMaximizeOnly(
+  api: DockviewReadyEvent["api"],
+  envId: string,
+  validComponents: ReadonlySet<string>,
+): boolean {
   const savedMax = getEnvMaximizeState(envId);
   if (!savedMax) return false;
   try {
-    applySavedMaximize(api, savedMax);
+    if (applySavedMaximize(api, savedMax, validComponents)) return true;
+    // This reader is reached only when there is no usable per-environment
+    // layout, so falling through would end in the built-in default and discard
+    // the panels the blob still holds. Apply what survived instead.
+    applyPreMaximizeLayout(
+      api,
+      filterLayoutStateByComponents(
+        savedMax.preMaximizeLayout as unknown as LayoutState,
+        validComponents,
+      ),
+    );
     return true;
   } catch {
     // Drop the bad blob so subsequent page loads for this env don't keep
@@ -239,9 +167,13 @@ function tryRestoreEnvLayout(
       phantomSessionIds: phantomSessionIds ? Array.from(phantomSessionIds) : [],
     });
   }
-  const sanitized = sanitizeLayout(stripHiddenRightPaneMetadata(envLayout), validComponents, {
-    excludeSessionIds: phantomSessionIds,
-  });
+  const sanitized = sanitizeSerializedLayout(
+    stripHiddenRightPaneMetadata(envLayout),
+    validComponents,
+    {
+      excludeSessionIds: phantomSessionIds,
+    },
+  );
   if (!sanitized) {
     debug("tryRestoreEnvLayout: sanitize returned null", { envId });
     return false;
@@ -253,7 +185,7 @@ function tryRestoreEnvLayout(
     });
   }
   api.fromJSON(sanitized as SerializedDockview);
-  applyFixupsWithMaximize(api, envId);
+  applyFixupsWithMaximize(api, envId, validComponents);
   return true;
 }
 
@@ -275,7 +207,7 @@ export function tryRestoreLayout(
   } catch {
     // fall through to maximize-only
   }
-  return tryRestoreMaximizeOnly(api, currentEnvId);
+  return tryRestoreMaximizeOnly(api, currentEnvId, validComponents);
 }
 
 /**

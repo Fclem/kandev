@@ -1,7 +1,7 @@
 ---
 id: "03-layout-compat-and-e2e"
 title: "Harden and prove layout compatibility"
-status: pending
+status: done
 wave: 3
 depends_on:
   - "02-remove-core-projection"
@@ -453,4 +453,90 @@ Depends on Tasks 01 and 02.
 
 ## Results
 
-Pending.
+Done. Commands run from the repository root.
+
+### Unit evidence
+
+```bash
+(cd apps/web && pnpm exec vitest run \
+  components/task/dockview-layout-restore.test.ts \
+  components/task/dockview-desktop-layout.test.ts \
+  lib/state/dockview-right-pane.test.ts \
+  lib/state/dockview-env-switch-action.test.ts \
+  lib/state/dockview-preset-persistence.test.ts \
+  lib/layout/layout-profiles.test.ts)
+# 6 files passed, 123 tests passed
+(cd apps/web && pnpm run typecheck)   # tsc --noEmit clean
+(cd apps/web && pnpm run lint)        # eslint --max-warnings 0 clean
+```
+
+### Browser evidence
+
+```bash
+(cd apps/web && pnpm e2e:run --project chromium \
+  tests/task/prompt-history-removed.spec.ts \
+  tests/settings/layout-profiles.spec.ts \
+  tests/plugins/prompt-history-plugin.spec.ts \
+  tests/plugins/conversation-recovery.spec.ts)
+# 11 passed
+
+(cd apps/web && pnpm e2e:run --project mobile-chrome \
+  tests/task/mobile-prompt-history-removed.spec.ts \
+  tests/settings/mobile-layout-profiles.spec.ts \
+  tests/plugins/mobile-prompt-history-plugin.spec.ts \
+  tests/plugins/mobile-plugin-task-panel.spec.ts)
+# 10 passed
+```
+
+### Documentation
+
+- The whole-tree search matches 80 files. Every match is in an expected category:
+  this package's own documents, the retained Host prerequisite requirement and design
+  (whose REQ/AC ids contain the words) and the designs/decisions that cite them, the
+  deprecated and superseded UI panel pair, historical plans, and the
+  browser-conversation-facade passages in `docs/public`. The single invalidated
+  statement was the facade ADR's consequence "Core prompt history remains until a
+  separate plugin and extraction package prove parity and migrate saved built-in panel
+  identities", now corrected to record that both landed and that saved identities are
+  deliberately not migrated.
+- The retained Host design already cited `apps/web/lib/turn-duration.test.ts` and the
+  fixture parity suites for prompt derivation, the two plugin specs for panel states
+  and end-to-end coverage, and already recorded the panel requirement and design as
+  deprecated and superseded. Nothing there was stale.
+  `docs/specs/plugins/requirements/prompt-history-extraction-host.md` was not edited,
+  so its size headroom is untouched.
+- `python3 scripts/list-docs.py validate` and `python3 scripts/lint-spec-files.py --all`
+  pass.
+- Status promotions: the extraction system design is `current`, this plan is
+  `implemented`, and the requirements doc stays `active`.
+
+### Choices recorded
+
+- The static renderable set lives in
+  `lib/state/layout-manager/renderable-components.ts`, and
+  `dockview-desktop-layout.tsx` now builds its `components` map from that list and
+  exports `DESKTOP_COMPONENT_NAMES` from the map, so the registered set and the
+  restore/validation predicate cannot diverge; the registry test pairs that equality
+  with the direction that is not tautological (no renderable name resolves to the
+  `unknownPanel` placeholder, and each legacy alias resolves to its canonical
+  renderer).
+- `maximizedGroupIdOf` and `serializedGridGroupIds` live in the neutral sanitizer
+  module rather than in `dockview-layout-restore.ts`, because the store cannot import
+  a component module that already imports the store.
+- Overlay readers differ on purpose when the maximized group does not survive:
+  `restoreMaximizeFromStorage` returns false so `performEnvSwitch` applies the
+  environment's sanitized saved layout, while `tryRestoreMaximizeOnly` applies the
+  filtered `preMaximizeLayout`, leaves `preMaximizeLayout`/`maximizedGroupId` null, and
+  returns true, because that reader has no saved layout to fall back on.
+- E2E adjustments made while proving the flows; none weakens an assertion:
+  - The Todos panel is runtime preference-gated (`show_todo_list_panel`, default
+    false), so the workbench removes a saved `todos` tab unless the preference is on.
+    Both layout-profile cases enable it before opening a task.
+  - The Todos panel's root test id is `todos-panel` when it has entries and
+    `todos-panel-empty-state` on an empty session, so the "usable" assertion matches
+    the panel surface either way.
+  - The retired row/option absence checks are label-exact: the in-repo fixture plugin
+    registers a panel titled "Prompt history fixture", which a substring match counts.
+  - `dockview-preset-persistence.test.ts`'s existing "does not persist when legacy
+    fromJSON restore throws" case now seeds a shape-healthy legacy payload so it keeps
+    exercising the `fromJSON` throw path rather than the sanitizer's null path.

@@ -7,6 +7,7 @@ import type {
   LayoutState,
 } from "./layout-manager/types";
 import { LAYOUT_PINNED_MIN_PX } from "./layout-manager/caps";
+import { filterLayoutStateByComponents } from "./layout-manager/sanitize-serialized-layout";
 import { getPinnedWidth } from "./layout-manager/sizing";
 
 export const HIDDEN_RIGHT_PANE_METADATA_KEY = "kandevHiddenRightPane";
@@ -489,13 +490,15 @@ export function restoreRightPane(
   const usedPanelIds = new Set(panelIdsInLayout(layout));
   const column = filterColumn(hiddenRightPane.column, usedPanelIds);
   if (!column) return null;
+  const prunedColumn = filterLayoutStateByComponents({ columns: [column] }).columns[0];
+  if (!prunedColumn) return null;
 
   const columns = [...layout.columns];
   const insertionIndex = Math.min(hiddenRightPane.sourceIndex, columns.length);
-  columns.splice(insertionIndex, 0, column);
+  columns.splice(insertionIndex, 0, prunedColumn);
   const restored = {
     ...layout,
-    columns: rebalanceRestoredFlexWidths(columns, column.id, options),
+    columns: rebalanceRestoredFlexWidths(columns, prunedColumn.id, options),
   };
   return isValidLayoutState(restored) ? restored : null;
 }

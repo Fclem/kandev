@@ -31,6 +31,7 @@ import {
 } from "./dockview-env-switch-active-views";
 import { ENV_SCOPED_DOCKVIEW_COMPONENTS } from "./dockview-env-scoped-components";
 import { stripHiddenRightPaneMetadata } from "./dockview-right-pane";
+import { sanitizeSerializedLayout } from "./layout-manager/sanitize-serialized-layout";
 import { createDebugLogger, isDebug } from "@/lib/debug/log";
 import {
   snapshotColumnWidths,
@@ -597,7 +598,7 @@ export function performEnvSwitch(params: EnvSwitchParams): LayoutGroupIds {
     return fastResult;
   }
 
-  const saved = getHealthyEnvLayout(newEnvId);
+  const saved = sanitizeSerializedLayout(getHealthyEnvLayout(newEnvId));
   if (saved) {
     try {
       if (isDebug()) {

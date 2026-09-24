@@ -378,3 +378,64 @@ it("round-trips and strips environment recovery metadata", () => {
   });
   expect(readHiddenRightPane({ kandevHiddenRightPane: { version: 99 } })).toBeNull();
 });
+
+/**
+ * A retained hidden column is re-inserted as live panels, so a component core
+ * no longer registers must never reach the grid: applying it throws and rolls
+ * the whole layout back, leaving the column's surviving panels unreachable.
+ */
+describe("restoreRightPane — retained column with an unrenderable component", () => {
+  const RETIRED_COMPONENT = "prompt-history";
+
+  /** A hidden column whose only panel is the retired component. */
+  function retiredOnlyRightColumn(): LayoutColumn {
+    return {
+      id: "retired-region",
+      width: 420,
+      groups: [
+        {
+          id: "retired-group",
+          activePanel: RETIRED_COMPONENT,
+          panels: [panel(RETIRED_COMPONENT)],
+        },
+      ],
+    };
+  }
+
+  /** A hidden column mixing the retired component with a renderable panel. */
+  function mixedRightColumn(): LayoutColumn {
+    return {
+      id: "mixed-region",
+      width: 420,
+      groups: [
+        {
+          id: "mixed-top",
+          activePanel: RETIRED_COMPONENT,
+          panels: [panel(RETIRED_COMPONENT), panel("todos")],
+        },
+        { id: "mixed-bottom", panels: [panel("browser", "browser")] },
+      ],
+    };
+  }
+
+  it("does not re-insert a column whose only panel carries the retired component", () => {
+    const captured = captureRightPane(visibleLayout([centerColumn(), retiredOnlyRightColumn()]))!;
+
+    expect(restoreRightPane(captured.layout, captured.hiddenRightPane)).toBeNull();
+  });
+
+  it("inserts only the survivors of a mixed column and preserves its geometry", () => {
+    const captured = captureRightPane(visibleLayout([centerColumn(), mixedRightColumn()]))!;
+
+    const restored = restoreRightPane(captured.layout, captured.hiddenRightPane);
+
+    const column = restored?.columns.find((candidate) => candidate.id === "mixed-region");
+    expect(column?.width).toBe(420);
+    expect(column?.groups.map((group) => group.panels.map((item) => item.id))).toEqual([
+      ["todos"],
+      ["browser"],
+    ]);
+    // The dropped panel held the group's active tab, so the survivor takes it.
+    expect(column?.groups[0]?.activePanel).toBe("todos");
+  });
+});

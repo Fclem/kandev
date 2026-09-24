@@ -1,7 +1,7 @@
 ---
 id: "02-remove-core-projection"
 title: "Remove the core prompt projection"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "01-remove-panel-surfaces"
@@ -276,4 +276,58 @@ them first leaves an uncompilable tree.
 
 ## Results
 
-Pending.
+Done. Commands run from the repository root.
+
+```bash
+(cd apps/web && pnpm exec vitest run \
+  lib/turn-duration.test.ts \
+  hooks/use-lazy-load-sentinel.test.ts \
+  hooks/use-lazy-load-messages.test.ts \
+  lib/state/slices/session \
+  components/task/chat/messages/message-actions.test.tsx)
+# 30 files passed, 376 tests passed
+(cd apps/web && pnpm run typecheck)   # tsc --noEmit clean
+(cd apps/web && pnpm run i18n:check)  # keys OK (8664 referenced, 10973 en entries), all gates OK, six catalogs complete
+(cd apps/web && pnpm run lint)        # eslint --max-warnings 0 clean
+(cd apps/backend && go test ./internal/task/repository/sqlite -run 'PromptIndex|InitialTaskBrief' -count=1)
+# ok  github.com/kandev/kandev/internal/task/repository/sqlite  1.489s
+```
+
+The final search (`apps/web/lib`, `apps/web/hooks`, `apps/web/components`,
+`apps/web/src`) returned no matches, so the naming half of 001.4 holds: no
+retained Host contract gained a prompt-history name, branch, or option.
+
+### Choices recorded
+
+- `lib/turn-duration.ts` / `lib/turn-duration.test.ts` are the new home of
+  `PromptDurationUnits`, `epochNanoseconds`, `messageTurnDurationSeconds`, and
+  `formatPromptDuration`. The duration and formatting cases moved with them
+  (19 tests); `lib/prompt-history.ts`, its entry half, and its entry cases are
+  deleted. `message-actions.tsx` renders unchanged and its suite passes
+  unmodified.
+- All three sentinel options had no production caller left
+  (`message-list-native-scroll.ts` passes only `rootMargin`,
+  `rearmWhileIntersecting`, `shouldContinueWhileIntersecting`,
+  `isCurrentGeometryEligible`, `onLoadSettled`, and `isRequestCurrent`), so
+  `joinInFlightWhileLoading`, `stickToBottomWhileLoading`, and `lifecycleKey`
+  were removed together with `useScrollPinnedToBottom`,
+  `STICK_BOTTOM_TOLERANCE_PX`, and the pin plumbing.
+- `minUserPromptsPerLoad` had no production caller either
+  (`components/task/chat/message-list-native.tsx` passes only
+  `minTextPartsPerLoad`), so it went with `countUserPrompts` and the
+  `loadedPrompts` accumulator. The kept default case was re-homed as
+  `useLazyLoadMessages default targets`, and the four option-bearing cases were
+  deleted.
+- Sentinel test cutover: the three `lifecycleKey` cases, the blocked
+  `joinInFlightWhileLoading` case, the pinned-stick case, the pin-refresh case,
+  and the not-pinned stick case were deleted. The no-join half of the in-flight
+  case and the no-stick case were re-homed next to the transcript
+  default-option coverage as "does not fire during an in-flight load without
+  the option" and "does not stick to the bottom without the option (transcript
+  behavior)". The "serializes continuation pages when loading state toggles
+  around each request" case was deleted rather than re-expressed around the
+  eligibility-retry path: its subject was the in-flight join, and
+  "retries when loading becomes eligible while the sentinel remains
+  intersecting" already covers the eligibility retry. The blocked gate keeps
+  evidence because that case asserts `loadMore` is not called while blocked.
+  The file dropped from 36 to 27 cases, and all 27 pass.

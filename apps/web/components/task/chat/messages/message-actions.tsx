@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/utils";
 import { parseStrictRfc3339Timestamp } from "@/lib/utils/strict-timestamp";
-import { formatPromptDuration, messageTurnDurationSeconds } from "@/lib/prompt-history";
+import { formatPromptDuration, messageTurnDurationSeconds } from "@/lib/turn-duration";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useAppStore } from "@/components/state-provider";
 import type { Message, Turn } from "@/lib/types/http";

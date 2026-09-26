@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useLayoutEffect } from "react";
 import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { StateProvider, useAppStoreApi } from "@/components/state-provider";
 import type { AppState } from "@/lib/state/store";
@@ -62,12 +63,17 @@ let store: StoreApi<AppState>;
 function Harness({
   workspaceId = WORKSPACE_ID,
   repositoryUrl = REPOSITORY_URL,
+  onStarredCommit,
 }: {
   workspaceId?: string;
   repositoryUrl?: string;
+  onStarredCommit?: (starred: boolean | null) => void;
 }) {
   const star = usePluginRepositoryStar({ workspaceId, repositoryUrl });
   store = useAppStoreApi();
+  useLayoutEffect(() => {
+    onStarredCommit?.(star.starred);
+  });
   return (
     <div>
       <span data-testid={`mode-${workspaceId}`}>{star.mode}</span>
@@ -480,5 +486,29 @@ describe("usePluginRepositoryStar authenticated identity", () => {
     await waitFor(() =>
       expect(screen.getByTestId(`mode-${WORKSPACE_ID}`).textContent).toBe("stars"),
     );
+  });
+  it("does not commit a previous account's star state after an identity switch", async () => {
+    const onStarredCommit = vi.fn();
+    renderHarness(<Harness onStarredCommit={onStarredCommit} />);
+    await waitFor(() =>
+      expect(screen.getByTestId(`starred-${WORKSPACE_ID}`).textContent).toBe("true"),
+    );
+    onStarredCommit.mockClear();
+
+    act(() => {
+      store.getState().setAuthState({
+        mode: "enabled",
+        authenticated: true,
+        user: {
+          id: "user-b",
+          email: "b@example.com",
+          display_name: "B",
+          role: "member",
+          status: "active",
+        },
+      });
+    });
+
+    expect(onStarredCommit).not.toHaveBeenCalledWith(true);
   });
 });

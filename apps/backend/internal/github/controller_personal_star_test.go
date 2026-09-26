@@ -58,12 +58,43 @@ func TestRepositoryStarStatusControllerRejectsOversizeRequest(t *testing.T) {
 	NewController(service, nil).RegisterHTTPRoutes(router)
 
 	response := httptest.NewRecorder()
-	body := bytes.Repeat([]byte("x"), maxRepositoryStarStatusBodyBytes+1)
+	body := bytes.Repeat([]byte("x"), maxRepositoryStarRequestBodyBytes+1)
 	router.ServeHTTP(response, httptest.NewRequest(
 		http.MethodPost, "/api/v1/github/user/starred/status", bytes.NewReader(body),
 	))
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("oversize status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestRepositoryStarMutationControllersRejectOversizeRequests(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := &personalStarClientStub{}
+	service := NewService(nil, AuthMethodNone, nil, nil, nil, nil)
+	service.SetPersonalStarResolver(&personalStarResolverStub{
+		status: PersonalStarConnectionStatus{Available: true, Active: true, Capable: true},
+		client: client,
+	})
+	router := gin.New()
+	NewController(service, nil).RegisterHTTPRoutes(router)
+
+	body := []byte(`{"workspace_id":"workspace-1","repository_url":"https://github.com/owner/`)
+	body = append(body, bytes.Repeat([]byte("a"), maxRepositoryStarRequestBodyBytes+1)...)
+	body = append(body, []byte(`"}`)...)
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(
+			method, "/api/v1/github/user/starred", bytes.NewReader(body),
+		))
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("%s oversize status = %d, body = %s", method, response.Code, response.Body.String())
+		}
+		if !bytes.Contains(response.Body.Bytes(), []byte(errMsgInvalidPayload)) {
+			t.Errorf("%s error = %s, want body-size rejection", method, response.Body.String())
+		}
+	}
+	if client.calls != 0 {
+		t.Fatalf("provider calls = %d, want none for oversized mutations", client.calls)
 	}
 }
 

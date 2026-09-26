@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	maxRepositoryStarStatusBodyBytes = 4 * 1024
-	githubAPIErrorCodeField          = "code"
-	githubInvalidRequestCode         = "github_invalid_request"
-	githubWorkspaceRequiredCode      = "github_workspace_required"
+	maxRepositoryStarRequestBodyBytes = 4 * 1024
+	githubAPIErrorCodeField           = "code"
+	githubInvalidRequestCode          = "github_invalid_request"
+	githubWorkspaceRequiredCode       = "github_workspace_required"
 )
 
 type repositoryStarRequest struct {
@@ -38,7 +38,7 @@ func (c *Controller) httpGetPersonalStarConnection(ctx *gin.Context) {
 }
 
 func (c *Controller) httpGetRepositoryStarStatus(ctx *gin.Context) {
-	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxRepositoryStarStatusBodyBytes)
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxRepositoryStarRequestBodyBytes)
 	var request repositoryStarStatusRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		writeInvalidRepositoryStarRequest(ctx)
@@ -65,6 +65,7 @@ func (c *Controller) httpUnstarRepository(ctx *gin.Context) {
 }
 
 func (c *Controller) httpMutateRepositoryStar(ctx *gin.Context, star bool) {
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxRepositoryStarRequestBodyBytes)
 	var request repositoryStarRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		writeInvalidRepositoryStarRequest(ctx)

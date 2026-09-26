@@ -137,7 +137,7 @@ export function usePluginRepositoryStar({
   );
 
   const entry = workspaceId ? stars.connections[workspaceId] : undefined;
-  const status = entry?.status ?? null;
+  const status = entry?.userId === authUserId ? (entry.status ?? null) : null;
   const view = resolvePluginStarView({ stars, workspaceId, canonicalRepository, status });
   const { mode, scopeKey, starred, busy } = view;
 

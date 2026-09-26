@@ -18,9 +18,8 @@ type personalStarConsentStartRequest struct {
 }
 
 func (c *Controller) httpStartPersonalStarConsent(ctx *gin.Context) {
-	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxRepositoryStarRequestBodyBytes)
 	var request personalStarConsentStartRequest
-	if err := ctx.ShouldBindJSON(&request); err != nil {
+	if err := bindPersonalStarJSON(ctx, &request); err != nil {
 		writeInvalidRepositoryStarRequest(ctx)
 		return
 	}

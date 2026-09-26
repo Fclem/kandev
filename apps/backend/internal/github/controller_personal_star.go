@@ -1,6 +1,8 @@
 package github
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -24,6 +26,15 @@ type repositoryStarStatusRequest struct {
 	RepositoryURLs []string `json:"repository_urls"`
 }
 
+func bindPersonalStarJSON(ctx *gin.Context, request any) error {
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxRepositoryStarRequestBodyBytes)
+	body, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, request)
+}
+
 func (c *Controller) httpGetPersonalStarConnection(ctx *gin.Context) {
 	workspaceID, ok := requiredPersonalStarWorkspace(ctx, ctx.Query("workspace_id"))
 	if !ok {
@@ -38,9 +49,8 @@ func (c *Controller) httpGetPersonalStarConnection(ctx *gin.Context) {
 }
 
 func (c *Controller) httpGetRepositoryStarStatus(ctx *gin.Context) {
-	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxRepositoryStarRequestBodyBytes)
 	var request repositoryStarStatusRequest
-	if err := ctx.ShouldBindJSON(&request); err != nil {
+	if err := bindPersonalStarJSON(ctx, &request); err != nil {
 		writeInvalidRepositoryStarRequest(ctx)
 		return
 	}
@@ -65,9 +75,8 @@ func (c *Controller) httpUnstarRepository(ctx *gin.Context) {
 }
 
 func (c *Controller) httpMutateRepositoryStar(ctx *gin.Context, star bool) {
-	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxRepositoryStarRequestBodyBytes)
 	var request repositoryStarRequest
-	if err := ctx.ShouldBindJSON(&request); err != nil {
+	if err := bindPersonalStarJSON(ctx, &request); err != nil {
 		writeInvalidRepositoryStarRequest(ctx)
 		return
 	}

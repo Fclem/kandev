@@ -203,27 +203,37 @@ func (s *Store) BumpPersonalStarLifecycle(ctx context.Context, workspaceID, user
 	return lifecycle.Revision, lifecycle.CredentialGeneration, nil
 }
 
-// PersonalStarFence is a lifecycle revision/generation pair.
+// PersonalStarFence is a lifecycle revision/credential-generation pair.
 type PersonalStarFence struct {
 	Revision   int64
 	Generation int64
 }
 
-// ReplacePersonalStarConnection atomically commits a verified replacement when
-// the committed row still carries rowFence and the lifecycle row still carries
-// expectedFence. The lifecycle guard is what stops a disconnect or a competing
-// start that landed after the caller claimed its fence from being overwritten:
-// the caller's own fence read is not enough, because the row it is replacing
-// can already have been tombstoned by that disconnect.
-//
-// The superseded secret ids are recorded in the durable cleanup queue inside the
-// same transaction, so a replacement can never commit while the tokens it
-// stopped referencing are unqueued: that window would orphan ciphertext that no
-// row points at any more.
+// ReplacePersonalStarConnection commits a replacement under an already advanced
+// consent fence.
 func (s *Store) ReplacePersonalStarConnection(
 	ctx context.Context,
 	connection *PersonalStarConnection,
 	rowFence, expectedFence PersonalStarFence,
+) ([]string, error) {
+	return s.replacePersonalStarConnection(ctx, connection, rowFence, expectedFence, false)
+}
+
+// RotatePersonalStarConnection advances the captured connection fence and
+// commits refreshed credentials in one transaction.
+func (s *Store) RotatePersonalStarConnection(
+	ctx context.Context,
+	connection *PersonalStarConnection,
+	rowFence, expectedFence PersonalStarFence,
+) ([]string, error) {
+	return s.replacePersonalStarConnection(ctx, connection, rowFence, expectedFence, true)
+}
+
+func (s *Store) replacePersonalStarConnection(
+	ctx context.Context,
+	connection *PersonalStarConnection,
+	rowFence, expectedFence PersonalStarFence,
+	advanceLifecycle bool,
 ) ([]string, error) {
 	now := time.Now().UTC()
 	tx, err := s.db.BeginTxx(ctx, nil)
@@ -239,12 +249,21 @@ func (s *Store) ReplacePersonalStarConnection(
 	if err != nil {
 		return nil, err
 	}
-	lifecycle, err := personalStarLifecycleForUpdate(ctx, tx, connection.WorkspaceID, connection.UserID)
-	if err != nil {
-		return nil, err
-	}
-	if !personalStarFenceMatches(lifecycle, expectedFence) {
-		return nil, ErrPersonalStarFence
+	rowLifecycleFence := expectedFence
+	if advanceLifecycle {
+		rowLifecycleFence, err = advancePersonalStarLifecycleTx(
+			ctx, tx, connection, expectedFence, now)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		lifecycle, err := personalStarLifecycleForUpdate(ctx, tx, connection.WorkspaceID, connection.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if !personalStarFenceMatches(lifecycle, rowLifecycleFence) {
+			return nil, ErrPersonalStarFence
+		}
 	}
 	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE github_personal_star_connection SET
@@ -264,7 +283,7 @@ func (s *Store) ReplacePersonalStarConnection(
 		connection.AccessSecretGeneration, connection.RefreshSecretGeneration,
 		connection.LastReconnectOutcome, now,
 		connection.WorkspaceID, connection.UserID, rowFence.Revision, rowFence.Generation,
-		connection.WorkspaceID, connection.UserID, expectedFence.Revision, expectedFence.Generation)
+		connection.WorkspaceID, connection.UserID, rowLifecycleFence.Revision, rowLifecycleFence.Generation)
 	if err != nil {
 		return nil, fmt.Errorf("replace personal star connection: %w", err)
 	}
@@ -279,7 +298,7 @@ func (s *Store) ReplacePersonalStarConnection(
 	if err := enqueuePersonalStarSecretRefsTx(ctx, tx, connection.WorkspaceID, connection.UserID, supersededIDs); err != nil {
 		return nil, err
 	}
-	if err := markPersonalStarConnectedTx(ctx, tx, connection, expectedFence); err != nil {
+	if err := markPersonalStarConnectedTx(ctx, tx, connection, rowLifecycleFence); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -287,6 +306,36 @@ func (s *Store) ReplacePersonalStarConnection(
 	}
 	connection.CreatedAt, connection.UpdatedAt = now, now
 	return supersededSecretIDs(supersededIDs), nil
+}
+
+func advancePersonalStarLifecycleTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	connection *PersonalStarConnection,
+	expected PersonalStarFence,
+	now time.Time,
+) (PersonalStarFence, error) {
+	var lifecycle PersonalStarLifecycle
+	err := tx.GetContext(ctx, &lifecycle, tx.Rebind(`
+		UPDATE github_personal_star_lifecycle
+		SET revision = revision + 1,
+			credential_generation = credential_generation + 1,
+			updated_at = ?
+		WHERE workspace_id = ? AND user_id = ?
+			AND revision = ? AND credential_generation = ?
+		RETURNING revision, credential_generation, connected_generation, updated_at`),
+		now, connection.WorkspaceID, connection.UserID, expected.Revision, expected.Generation)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PersonalStarFence{}, ErrPersonalStarFence
+	}
+	if err != nil {
+		return PersonalStarFence{}, fmt.Errorf("advance personal star lifecycle: %w", err)
+	}
+	fence := PersonalStarFence{Revision: lifecycle.Revision, Generation: lifecycle.CredentialGeneration}
+	if connection.LifecycleRevision != fence.Revision || connection.CredentialGeneration != fence.Generation {
+		return PersonalStarFence{}, ErrPersonalStarFence
+	}
+	return fence, nil
 }
 
 // personalStarRowLockClause locks the selected row on PostgreSQL. The driver

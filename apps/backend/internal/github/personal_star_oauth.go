@@ -591,19 +591,27 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 	ctx context.Context,
 	workspaceID, userID string,
 ) error {
+	if !s.Available() {
+		return ErrGitHubNotConfigured
+	}
+	// Keep refresh IDs distinct when consent reserves the next generation in flight.
+	uniqueSuffix, err := randomPersonalStarValue(s.random, personalStarStateBytes, base64.RawURLEncoding)
+	if err != nil {
+		return ErrGitHubPersonalRequired
+	}
 	tokens, connection, err := s.refreshTokens(ctx, workspaceID, userID)
 	if err != nil {
 		return err
 	}
-	revision, generation, err := s.store.BumpPersonalStarLifecycle(ctx, workspaceID, userID)
-	if err != nil {
-		return err
+	expectedFence := PersonalStarFence{
+		Revision: connection.LifecycleRevision, Generation: connection.CredentialGeneration,
 	}
+	revision, generation := expectedFence.Revision+1, expectedFence.Generation+1
 	replacement := *connection
 	replacement.CredentialGeneration = generation
 	replacement.LifecycleRevision = revision
 	replacement.AccessSecretGeneration = generation
-	replacement.AccessSecretID = personalStarAccessSecretID(workspaceID, userID, generation)
+	replacement.AccessSecretID = personalStarAccessSecretID(workspaceID, userID, generation) + ":" + uniqueSuffix
 	if len(tokens.GrantedScopes) > 0 {
 		replacement.GrantedScopes = strings.Join(tokens.GrantedScopes, " ")
 		replacement.PublicRepo = HasPublicRepoScope(tokens.GrantedScopes)
@@ -618,7 +626,7 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 		Generation: replacement.AccessSecretGeneration,
 	})
 	if tokens.RefreshToken != "" {
-		replacement.RefreshSecretID = personalStarRefreshSecretID(workspaceID, userID, generation)
+		replacement.RefreshSecretID = personalStarRefreshSecretID(workspaceID, userID, generation) + ":" + uniqueSuffix
 		replacement.RefreshSecretGeneration = generation
 		if err := s.secrets.Set(ctx, replacement.RefreshSecretID,
 			"github personal star refresh token", tokens.RefreshToken); err != nil {
@@ -633,12 +641,9 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 			Generation: replacement.RefreshSecretGeneration,
 		})
 	}
-	// The committed row still carries the pre-bump fence, so that is the
-	// expectation the swap must satisfy.
-	if _, err := s.store.ReplacePersonalStarConnection(
-		ctx, &replacement,
-		PersonalStarFence{Revision: connection.LifecycleRevision, Generation: connection.CredentialGeneration},
-		PersonalStarFence{Revision: revision, Generation: generation}); err != nil {
+	// Rotate only if neither consent nor disconnect changed the captured fence.
+	if _, err := s.store.RotatePersonalStarConnection(
+		ctx, &replacement, expectedFence, expectedFence); err != nil {
 		return s.handleRefreshPersonalStarCommitError(ctx, workspaceID, userID, &replacement, staged, err)
 	}
 	return nil

@@ -73,9 +73,8 @@ func TestPersonalStarConsentStartControllerRejectsOversizeRequest(t *testing.T) 
 	router := gin.New()
 	NewController(service, nil).RegisterHTTPRoutes(router)
 
-	body := []byte(`{"workspace_id":"workspace-1","return_path":"/settings/plugins","padding":"`)
-	body = append(body, bytes.Repeat([]byte("a"), maxRepositoryStarRequestBodyBytes)...)
-	body = append(body, []byte(`"}`)...)
+	body := []byte(`{"workspace_id":"workspace-1","return_path":"/settings/plugins"}`)
+	body = append(body, bytes.Repeat([]byte(" "), maxRepositoryStarRequestBodyBytes)...)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(
 		http.MethodPost, "/api/v1/github/user/starred/connection/start", bytes.NewReader(body),
@@ -85,6 +84,74 @@ func TestPersonalStarConsentStartControllerRejectsOversizeRequest(t *testing.T) 
 	}
 	if !bytes.Contains(response.Body.Bytes(), []byte(errMsgInvalidPayload)) {
 		t.Fatalf("oversize consent error = %s, want body-size rejection", response.Body.String())
+	}
+}
+
+func TestPersonalStarEndpointsRejectOversizedTrailingWhitespace(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := &personalStarClientStub{}
+	service := NewService(nil, AuthMethodNone, nil, nil, nil, nil)
+	service.SetPersonalStarResolver(&personalStarResolverStub{
+		status: PersonalStarConnectionStatus{Available: true, Active: true, Capable: true},
+		client: client,
+	})
+	router := gin.New()
+	NewController(service, nil).RegisterHTTPRoutes(router)
+
+	requests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{
+			method: http.MethodPost,
+			path:   "/api/v1/github/user/starred/connection/start",
+			body:   `{"workspace_id":"workspace-1","return_path":"/settings/plugins"}`,
+		},
+		{
+			method: http.MethodPost,
+			path:   "/api/v1/github/user/starred/status",
+			body:   `{"workspace_id":"workspace-1","repository_urls":[]}`,
+		},
+		{
+			method: http.MethodPut,
+			path:   "/api/v1/github/user/starred",
+			body:   `{"workspace_id":"workspace-1","repository_url":"https://github.com/owner/repository"}`,
+		},
+		{
+			method: http.MethodDelete,
+			path:   "/api/v1/github/user/starred",
+			body:   `{"workspace_id":"workspace-1","repository_url":"https://github.com/owner/repository"}`,
+		},
+	}
+	for _, request := range requests {
+		t.Run(request.method+" "+request.path, func(t *testing.T) {
+			body := append([]byte(request.body), bytes.Repeat([]byte(" "), maxRepositoryStarRequestBodyBytes)...)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(request.method, request.path, bytes.NewReader(body)))
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("oversized request status = %d, body = %s", response.Code, response.Body.String())
+			}
+		})
+	}
+	if client.calls != 0 {
+		t.Fatalf("provider calls = %d, want none for oversized request bodies", client.calls)
+	}
+}
+
+func TestPersonalStarConsentStartRejectsTrailingJSONValue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := NewService(nil, AuthMethodNone, nil, nil, nil, nil)
+	router := gin.New()
+	NewController(service, nil).RegisterHTTPRoutes(router)
+
+	body := `{"workspace_id":"workspace-1","return_path":"/settings/plugins"} {}`
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(
+		http.MethodPost, "/api/v1/github/user/starred/connection/start", bytes.NewBufferString(body),
+	))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("trailing JSON value status = %d, body = %s", response.Code, response.Body.String())
 	}
 }
 

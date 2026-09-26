@@ -13,10 +13,12 @@ import (
 )
 
 type fakePersonalStarSecrets struct {
-	values       map[string]string
-	deleted      []string
-	failOn       string
-	failDeleteOn string
+	values             map[string]string
+	deleted            []string
+	failOn             string
+	failDeleteOn       string
+	writeThenFailValue string
+	cancelAfterWrite   context.CancelFunc
 }
 
 func newFakePersonalStarSecrets() *fakePersonalStarSecrets {
@@ -51,7 +53,14 @@ func (f *fakePersonalStarSecrets) Set(_ context.Context, id, _, value string) er
 		return errors.New("secret store unavailable")
 	}
 	f.values[id] = value
+	if f.writeThenFailValue == value {
+		if f.cancelAfterWrite != nil {
+			f.cancelAfterWrite()
+		}
+		return errors.New("secret store write acknowledgement lost")
+	}
 	return nil
+
 }
 
 func (f *fakePersonalStarSecrets) Delete(_ context.Context, id string) error {

@@ -117,10 +117,13 @@ func (r *StarSecretCleanupRunner) RunOnce(ctx context.Context) (int, error) {
 	}
 	deleted := 0
 	for _, record := range claimed {
-		if err := r.secrets.Delete(ctx, record.SecretID); err != nil {
-			// A deletion the runner cannot complete is the one state an
-			// operator has to be able to see: the ciphertext stays in the
-			// secret store until it is retried or declared terminal.
+		exists, err := r.secrets.Exists(ctx, record.SecretID)
+		if err == nil && exists {
+			err = r.secrets.Delete(ctx, record.SecretID)
+		}
+		if err != nil {
+			// Failed existence checks and deletes remain retriable; absence
+			// completes the cleanup record.
 			r.logFailure(record, err)
 			if rescheduleErr := r.reschedule(ctx, record, err); rescheduleErr != nil {
 				return deleted, rescheduleErr
@@ -130,8 +133,10 @@ func (r *StarSecretCleanupRunner) RunOnce(ctx context.Context) (int, error) {
 		if err := r.store.CompletePersonalStarSecretCleanup(ctx, record.ID); err != nil {
 			return deleted, err
 		}
-		recordPersonalStarCleanupAttempt(personalStarCleanupOutcomeDeleted)
-		deleted++
+		if exists {
+			recordPersonalStarCleanupAttempt(personalStarCleanupOutcomeDeleted)
+			deleted++
+		}
 	}
 	return deleted, nil
 }

@@ -115,6 +115,7 @@ type PersonalStarOAuthClient interface {
 // PersonalStarSecrets stores generation-specific encrypted token material.
 type PersonalStarSecrets interface {
 	Reveal(ctx context.Context, id string) (string, error)
+	Exists(ctx context.Context, id string) (bool, error)
 	Set(ctx context.Context, id, name, value string) error
 	Delete(ctx context.Context, id string) error
 }
@@ -516,73 +517,6 @@ func (s *PersonalStarOAuthService) finishCallback(
 	return base, nil
 }
 
-func (s *PersonalStarOAuthService) stagePersonalStarSecrets(
-	ctx context.Context,
-	connection *PersonalStarConnection,
-	tokens GitHubOAuthTokens,
-) ([]personalStarSecretRef, error) {
-	staged := make([]personalStarSecretRef, 0, 2)
-	if err := s.secrets.Set(ctx, connection.AccessSecretID,
-		"github personal star access token", tokens.AccessToken); err != nil {
-		return staged, err
-	}
-	staged = append(staged, personalStarSecretRef{
-		SecretID: connection.AccessSecretID, Kind: personalStarSecretKindAccess,
-		Generation: connection.AccessSecretGeneration,
-	})
-	if tokens.RefreshToken != "" {
-		if err := s.secrets.Set(ctx, connection.RefreshSecretID,
-			"github personal star refresh token", tokens.RefreshToken); err != nil {
-			return staged, err
-		}
-		staged = append(staged, personalStarSecretRef{
-			SecretID: connection.RefreshSecretID, Kind: personalStarSecretKindRefresh,
-			Generation: connection.RefreshSecretGeneration,
-		})
-	} else {
-		connection.RefreshSecretID = ""
-	}
-	return staged, nil
-}
-
-func (s *PersonalStarOAuthService) discardPersonalStarSecrets(
-	ctx context.Context,
-	workspaceID, userID string,
-	refs []personalStarSecretRef,
-) error {
-	var cleanupErr error
-	for _, ref := range refs {
-		cleanupErr = errors.Join(cleanupErr, s.discardPersonalStarSecret(ctx, workspaceID, userID, ref))
-	}
-	return cleanupErr
-}
-
-func (s *PersonalStarOAuthService) discardPersonalStarSecret(
-	ctx context.Context,
-	workspaceID, userID string,
-	ref personalStarSecretRef,
-) error {
-	if err := s.secrets.Delete(ctx, ref.SecretID); err != nil {
-		if queueErr := s.queuePersonalStarSecretCleanup(ctx, workspaceID, userID, ref); queueErr != nil {
-			return fmt.Errorf("delete staged personal star secret %q: %w", ref.SecretID, errors.Join(err, queueErr))
-		}
-	}
-	return nil
-}
-
-func (s *PersonalStarOAuthService) queuePersonalStarSecretCleanup(
-	ctx context.Context,
-	workspaceID, userID string,
-	ref personalStarSecretRef,
-) error {
-	if err := s.store.EnqueuePersonalStarSecretCleanup(
-		ctx, workspaceID, userID, ref.SecretID, ref.Kind, ref.Generation,
-	); err != nil {
-		return fmt.Errorf("enqueue personal star secret cleanup for %q: %w", ref.SecretID, err)
-	}
-	return nil
-}
-
 // RefreshPersonalStarConnection rotates the dedicated access token through the
 // stored refresh token. The new grant's scopes are re-normalized: losing
 // public_repo disables the capability, and the previous access secret is
@@ -617,29 +551,34 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 		replacement.PublicRepo = HasPublicRepoScope(tokens.GrantedScopes)
 	}
 	staged := make([]personalStarSecretRef, 0, 2)
-	if err := s.secrets.Set(ctx, replacement.AccessSecretID,
-		"github personal star access token", tokens.AccessToken); err != nil {
-		return ErrGitHubPersonalRequired
-	}
-	staged = append(staged, personalStarSecretRef{
+	accessRef := personalStarSecretRef{
 		SecretID: replacement.AccessSecretID, Kind: personalStarSecretKindAccess,
 		Generation: replacement.AccessSecretGeneration,
-	})
+	}
+	if err := s.secrets.Set(ctx, replacement.AccessSecretID,
+		"github personal star access token", tokens.AccessToken); err != nil {
+		cleanupErr := s.reconcilePersonalStarSecretWriteFailure(ctx, workspaceID, userID, accessRef)
+		if cleanupErr != nil {
+			cleanupErr = errors.Join(cleanupErr,
+				s.discardPersonalStarSecrets(ctx, workspaceID, userID, []personalStarSecretRef{accessRef}))
+		}
+		return errors.Join(ErrGitHubPersonalRequired, cleanupErr)
+	}
+	staged = append(staged, accessRef)
 	if tokens.RefreshToken != "" {
 		replacement.RefreshSecretID = personalStarRefreshSecretID(workspaceID, userID, generation) + ":" + uniqueSuffix
 		replacement.RefreshSecretGeneration = generation
-		if err := s.secrets.Set(ctx, replacement.RefreshSecretID,
-			"github personal star refresh token", tokens.RefreshToken); err != nil {
-			cleanupErr := s.discardPersonalStarSecrets(ctx, workspaceID, userID, staged)
-			if cleanupErr != nil {
-				return errors.Join(ErrGitHubPersonalRequired, cleanupErr)
-			}
-			return ErrGitHubPersonalRequired
-		}
-		staged = append(staged, personalStarSecretRef{
+		refreshRef := personalStarSecretRef{
 			SecretID: replacement.RefreshSecretID, Kind: personalStarSecretKindRefresh,
 			Generation: replacement.RefreshSecretGeneration,
-		})
+		}
+		if err := s.secrets.Set(ctx, replacement.RefreshSecretID,
+			"github personal star refresh token", tokens.RefreshToken); err != nil {
+			cleanupErr := s.reconcilePersonalStarSecretWriteFailure(ctx, workspaceID, userID, refreshRef)
+			stagedCleanupErr := s.discardPersonalStarSecrets(ctx, workspaceID, userID, staged)
+			return errors.Join(ErrGitHubPersonalRequired, cleanupErr, stagedCleanupErr)
+		}
+		staged = append(staged, refreshRef)
 	}
 	// Rotate only if neither consent nor disconnect changed the captured fence.
 	if _, err := s.store.RotatePersonalStarConnection(

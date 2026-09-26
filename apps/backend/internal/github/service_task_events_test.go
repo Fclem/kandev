@@ -342,11 +342,14 @@ func TestHandleWorkspaceDeletedQueuesDedicatedStarTokenCleanup(t *testing.T) {
 		t.Fatalf("refresh secret %q was not queued: %v", connection.RefreshSecretID, queued)
 	}
 
-	// The runner still holds the only reference to those values and must be
-	// able to delete them after the workspace row is gone.
+	// The seed writes only the access secret; cleanup must also complete the
+	// queued refresh ID without counting it as a deletion.
 	runner := NewStarSecretCleanupRunner(svc.store, secrets, nil)
-	if deleted, err := runner.RunOnce(ctx); err != nil || deleted != len(records) {
-		t.Fatalf("RunOnce() = %d, %v; want %d", deleted, err, len(records))
+	if deleted, err := runner.RunOnce(ctx); err != nil || deleted != 1 {
+		t.Fatalf("RunOnce() = %d, %v; want one stored secret deleted", deleted, err)
+	}
+	if remaining, err := svc.store.ListPersonalStarSecretCleanups(ctx, "ws-1"); err != nil || len(remaining) != 0 {
+		t.Fatalf("cleanup records after workspace deletion = %+v, %v", remaining, err)
 	}
 	if _, ok := secrets.values[connection.AccessSecretID]; ok {
 		t.Fatal("access token survived workspace deletion")

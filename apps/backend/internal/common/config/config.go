@@ -405,6 +405,12 @@ type EventsConfig struct {
 }
 
 // DockerConfig holds Docker client configuration.
+//
+// Every field here configures Kandev as a Docker *client*, driving the daemon
+// it creates task containers on. None of them configures the container Kandev
+// itself runs in: when Kandev runs from the published image, its own network,
+// volumes, and ports come from the `docker run` or Compose invocation that
+// started it, which Kandev never reads.
 type DockerConfig struct {
 	// Enabled controls whether the Docker runtime is available for task execution.
 	// When true and Docker is accessible, tasks can use Docker-based executors.
@@ -413,7 +419,6 @@ type DockerConfig struct {
 	Host           string `mapstructure:"host"`
 	APIVersion     string `mapstructure:"apiVersion"`
 	TLSVerify      bool   `mapstructure:"tlsVerify"`
-	DefaultNetwork string `mapstructure:"defaultNetwork"`
 	VolumeBasePath string `mapstructure:"volumeBasePath"`
 }
 
@@ -694,7 +699,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("docker.host", DefaultDockerHost())
 	v.SetDefault("docker.apiVersion", "") // Empty = auto-negotiate with daemon
 	v.SetDefault("docker.tlsVerify", false)
-	v.SetDefault("docker.defaultNetwork", "kandev-network")
 	v.SetDefault("docker.volumeBasePath", defaultDockerVolumePath())
 
 	// Agent defaults (runtime selection is now per-task based on executor type)

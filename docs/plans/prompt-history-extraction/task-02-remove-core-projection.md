@@ -173,8 +173,10 @@ pagination, turn state, and the message contract stay exactly as they are.
 
 ## Out of scope
 
-- `prompt_index`, the `author_type=user` message filter, the session prompt
-  sequence, the initial-task-brief fallback, and any backend code.
+- `prompt_index`, the `author_type=user` filter, live-session prompt-sequence
+  allocation semantics, the initial-task-brief fallback, and backend APIs or
+  schema. Backend repository changes are limited to removing sequence rows in
+  the same transaction as hard deletion of their owning tasks or sessions.
 - The browser conversation façade, plugin scope caches, favorite state, and
   `host.ui.PromptMentionText`.
 - Saved-layout compatibility proof and browser coverage (Task 03).
@@ -291,7 +293,20 @@ Done. Commands run from the repository root.
 (cd apps/web && pnpm run lint)        # eslint --max-warnings 0 clean
 (cd apps/backend && go test ./internal/task/repository/sqlite -run 'PromptIndex|InitialTaskBrief' -count=1)
 # ok  github.com/kandev/kandev/internal/task/repository/sqlite  1.489s
+(cd apps/backend && go test -race ./internal/task/repository/sqlite -count=1)
+# ok  github.com/kandev/kandev/internal/task/repository/sqlite  369.433s
+(cd apps/backend && go test -race ./internal/task/repository/sqlite -run \
+  'Test(PurgePromptSequencesForSessionsChunksLargeBatches|DeleteEphemeralTasksByAgentProfileDoesNotDeleteNewlyMatchingTask|DeleteExpiredQuickChatRemovesPromptMarkerAfterDeletingTask|ClaimInitialPromptFallbackRejectsMissingSession)$' \
+  -count=1)
+# ok  github.com/kandev/kandev/internal/task/repository/sqlite  2.523s
 ```
+
+The PostgreSQL delete/claim interleaving test compiled but skipped because
+`KANDEV_TEST_POSTGRES_DSN` was not configured in this environment.
+
+The SQLite regressions cover bind-limit chunking, newly matching tasks during
+ephemeral cleanup, conditional quick-chat deletion, and fallback claims for
+deleted sessions.
 
 The final search (`apps/web/lib`, `apps/web/hooks`, `apps/web/components`,
 `apps/web/src`) returned no matches in production sources. At the branch tip the

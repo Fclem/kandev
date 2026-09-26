@@ -149,6 +149,15 @@ func (r *Repository) ClaimInitialPromptFallback(ctx context.Context, sessionID s
 	if err := lockSessionTurnWrites(ctx, tx, r.db.DriverName(), sessionID); err != nil {
 		return false, err
 	}
+	var sessionExists bool
+	if err := tx.GetContext(ctx, &sessionExists, r.db.Rebind(
+		`SELECT EXISTS (SELECT 1 FROM task_sessions WHERE id = ?)`,
+	), sessionID); err != nil {
+		return false, fmt.Errorf("check fallback session: %w", err)
+	}
+	if !sessionExists {
+		return false, nil
+	}
 	result, err := tx.ExecContext(ctx, r.db.Rebind(`
 		INSERT INTO task_session_prompt_seq (task_session_id, last_seq)
 		VALUES (?, 0)

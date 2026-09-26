@@ -3066,7 +3066,7 @@ func (r *Repository) DeleteTaskWithVacatedStep(ctx context.Context, id string) (
 	if err != nil {
 		return "", err
 	}
-	if err := r.purgeTaskPromptSequenceTx(ctx, tx, id); err != nil {
+	if err := r.purgeTaskPromptSequenceTx(ctx, tx, id, sessions); err != nil {
 		return "", err
 	}
 	result, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM tasks WHERE id = ?`), id)
@@ -3077,9 +3077,6 @@ func (r *Repository) DeleteTaskWithVacatedStep(ctx context.Context, id string) (
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return "", fmt.Errorf("%w: %s", ErrTaskNotFound, id)
-	}
-	if err := r.purgePromptSequencesForSessionsTx(ctx, tx, sessions); err != nil {
-		return "", err
 	}
 	if err := r.purgeTaskQueueInTx(ctx, tx, id, sessions, true); err != nil {
 		return "", err
@@ -4568,7 +4565,7 @@ func (r *Repository) DeleteExpiredQuickChatTask(ctx context.Context, id string, 
 	if err != nil {
 		return false, err
 	}
-	if err := r.purgeTaskPromptSequenceTx(ctx, tx, id); err != nil {
+	if err := lockSessionTurnWrites(ctx, tx, r.db.DriverName(), sessions...); err != nil {
 		return false, err
 	}
 	query := "WITH candidate AS (" + candidate + ") DELETE FROM tasks WHERE id = ? AND EXISTS (SELECT 1 FROM candidate)"

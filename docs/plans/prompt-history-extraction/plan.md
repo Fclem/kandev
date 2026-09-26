@@ -19,9 +19,11 @@ uses. The durable contract is
 the technical path is
 [Prompt History Extraction System Design](../../specs/plugins/system-design/prompt-history-extraction.md).
 
-This is a deletion package. It ships no new panel, no new API, and no backend
-change. Delivery order: remove the panel surfaces, remove the core prompt
-projection, then prove saved-layout compatibility and the plugin evidence path.
+This is a deletion package. It ships no new panel, API, or backend data contract.
+Delivery order: remove the panel surfaces, remove the core prompt projection,
+then prove saved-layout compatibility and the plugin evidence path. Backend
+repository deletion paths also remove session ordinal markers with their owning
+task or session; this is persistence cleanup, not a change to prompt behavior.
 
 The specification work is already complete in this design turn: the UI panel
 requirement and design are deprecated and superseded, and the turn-duration and
@@ -53,6 +55,8 @@ production code, tests, and browser coverage only.
 - Removing the core user-message prompt projection, its pagination hooks, its
   layout-profile placeholder, and its panel-only test coverage.
 - Relocating the transcript turn-duration helpers out of the removed module.
+- Removing internal per-session prompt-sequence markers transactionally with
+  hard-deleted owning tasks and sessions, without changing live ordinal behavior.
 - Proving saved layouts, saved profiles, and per-environment layouts that
   contain the retired panel restore cleanly, and keeping the plugin fixtures
   green on desktop and phone.
@@ -60,8 +64,8 @@ production code, tests, and browser coverage only.
 ### Out of scope
 
 - Any change to the browser conversation façade, task-panel registration and
-  navigation, `host.ui.PromptMentionText`, favorite state, message or turn
-  storage, `prompt_index`, or the `author_type=user` message filter.
+  navigation, `host.ui.PromptMentionText`, favorite state, message or turn data
+  contracts, live `prompt_index` behavior, or the `author_type=user` filter.
 - Implementing, publishing, or versioning the external replacement plugin.
 - Migrating stored layouts to the plugin's panel id, and carrying the panel's
   browser-local state into the plugin.

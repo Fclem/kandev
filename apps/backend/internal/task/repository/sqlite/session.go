@@ -3718,7 +3718,11 @@ func (r *Repository) DeleteEphemeralTasksByAgentProfile(ctx context.Context, age
 		return 0, err
 	}
 
-	var sessionIDs []string
+	type candidate struct {
+		taskID     string
+		sessionIDs []string
+	}
+	candidates := make([]candidate, 0, len(taskIDs))
 	for _, taskID := range taskIDs {
 		if err := r.lockTaskRowInTx(ctx, tx, taskID); err != nil {
 			if errors.Is(err, ErrTaskNotFound) {
@@ -3744,35 +3748,50 @@ func (r *Repository) DeleteEphemeralTasksByAgentProfile(ctx context.Context, age
 		if err != nil {
 			return 0, err
 		}
-		sessionIDs = append(sessionIDs, sessions...)
-		if err := r.purgeTaskPromptSequenceTx(ctx, tx, taskID); err != nil {
-			return 0, err
+		if err := lockSessionTurnWrites(ctx, tx, r.db.DriverName(), sessions...); err != nil {
+			return 0, fmt.Errorf("lock ephemeral task sessions %s: %w", taskID, err)
 		}
+		candidates = append(candidates, candidate{taskID: taskID, sessionIDs: sessions})
 	}
 
-	result, err := tx.ExecContext(ctx, r.db.Rebind(`
-		DELETE FROM tasks
-		WHERE is_ephemeral = 1
-		  AND id IN (
-			SELECT DISTINCT task_id FROM task_sessions WHERE agent_profile_id = ?
-		  )
-	`), agentProfileID)
-	if err != nil {
-		return 0, err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	if rows > 0 {
-		if err := r.purgePromptSequencesForSessionsTx(ctx, tx, sessionIDs); err != nil {
+	var deleted int64
+	for _, item := range candidates {
+		removed, err := r.deleteEphemeralTaskForProfileTx(ctx, tx, item.taskID, agentProfileID)
+		if err != nil {
+			return 0, err
+		}
+		if !removed {
+			continue
+		}
+		deleted++
+		if err := r.purgePromptSequencesForSessionsTx(ctx, tx, item.sessionIDs); err != nil {
 			return 0, err
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	return rows, nil
+	return deleted, nil
+}
+
+func (r *Repository) deleteEphemeralTaskForProfileTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	taskID, agentProfileID string,
+) (bool, error) {
+	result, err := tx.ExecContext(ctx, r.db.Rebind(`
+		DELETE FROM tasks
+		WHERE id = ? AND is_ephemeral = 1
+		  AND EXISTS (
+			SELECT 1 FROM task_sessions
+			WHERE task_id = ? AND agent_profile_id = ?
+		  )
+	`), taskID, taskID, agentProfileID)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows > 0, err
 }
 
 // scanTaskSessions is a helper to scan multiple agent session rows
@@ -3958,6 +3977,10 @@ func (r *Repository) purgeTaskSessionStateTx(
 	tx *sqlx.Tx,
 	session *models.TaskSession,
 ) ([]*models.TaskMessageAttachment, error) {
+	if err := lockSessionTurnWrites(ctx, tx, r.db.DriverName(), session.ID); err != nil {
+		return nil, err
+	}
+
 	identity := messagequeue.QueueSessionIdentity{
 		TaskID:               session.TaskID,
 		SessionID:            session.ID,
@@ -3991,7 +4014,10 @@ func (r *Repository) purgeTaskSessionStateTx(
 	return deletedAttachments, nil
 }
 
-func (r *Repository) purgeTaskPromptSequenceTx(ctx context.Context, tx *sqlx.Tx, taskID string) error {
+func (r *Repository) purgeTaskPromptSequenceTx(ctx context.Context, tx *sqlx.Tx, taskID string, sessions []string) error {
+	if err := lockSessionTurnWrites(ctx, tx, r.db.DriverName(), sessions...); err != nil {
+		return fmt.Errorf("lock prompt sequence sessions for task %s: %w", taskID, err)
+	}
 	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM task_session_prompt_seq
 		WHERE task_session_id IN (SELECT id FROM task_sessions WHERE task_id = ?)
@@ -4001,19 +4027,18 @@ func (r *Repository) purgeTaskPromptSequenceTx(ctx context.Context, tx *sqlx.Tx,
 	return nil
 }
 
+// purgePromptSequencesForSessionsTx assumes the caller holds the turn-write
+// lock for each session through its owning task/session deletion.
 func (r *Repository) purgePromptSequencesForSessionsTx(ctx context.Context, tx *sqlx.Tx, sessionIDs []string) error {
 	if len(sessionIDs) == 0 {
 		return nil
 	}
-	query, args, err := sqlx.In(
-		`DELETE FROM task_session_prompt_seq WHERE task_session_id IN (?)`,
-		sessionIDs,
-	)
-	if err != nil {
-		return fmt.Errorf("build prompt sequence purge query: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(query), args...); err != nil {
-		return fmt.Errorf("purge prompt sequences for deleted sessions: %w", err)
+	for _, chunk := range chunkIDs(sessionIDs, sqliteMaxHostParams) {
+		placeholders, args := buildInPlaceholders(chunk)
+		query := fmt.Sprintf(`DELETE FROM task_session_prompt_seq WHERE task_session_id IN (%s)`, placeholders)
+		if _, err := tx.ExecContext(ctx, r.db.Rebind(query), args...); err != nil {
+			return fmt.Errorf("purge prompt sequences for deleted sessions: %w", err)
+		}
 	}
 	return nil
 }

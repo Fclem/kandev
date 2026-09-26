@@ -226,12 +226,13 @@ differently depending on whether the user had visited a task first.
 
 ## Data and contracts
 
-- No backend, DTO, table, migration, or route change. The removal deletes a
-  browser consumer only.
+- No backend API, DTO, table, migration, route, or prompt-projection change.
+  Repository hard-delete paths remove session prompt-sequence rows with their
+  owning task/session so a deleted identity cannot leave stale internal state.
 - `prompt_index` stays on `models.Message` and the public `v1.Message`, and the
   plugin conversation DTO keeps `promptIndex`, because ordinals, durations, and
-  prompt-only pages are plugin-facing behavior. The initial-task-brief fallback
-  and session prompt sequence are untouched.
+  prompt-only pages are plugin-facing behavior. Initial-task-brief fallback and
+  live-session sequence allocation are unchanged.
 - Retired browser identities: the fixed panel id and component name
   `prompt-history` and the `MobileSessionPanel` member `"prompt-history"`. They
   are removed from their registries and are not reused for a different panel.

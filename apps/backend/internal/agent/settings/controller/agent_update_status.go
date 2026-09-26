@@ -33,6 +33,7 @@ type runtimeUpdateStatusCacheEntry struct {
 
 type runtimeUpdateStatusTarget struct {
 	agentName        string
+	updateMode       dto.AgentUpdateMode
 	packageName      string
 	defaultVersion   string
 	activeVersion    string
@@ -84,23 +85,20 @@ func (c *Controller) ListAgentUpdateStatuses(ctx context.Context) (*dto.ListAgen
 
 	now := c.runtimeUpdateStatusTime()
 	entries := make(map[string]runtimeUpdateStatusCacheEntry, len(targets))
-	uniquePackages := make(map[string]struct{}, len(targets))
+	uniquePackages := make(map[string]dto.AgentUpdateMode, len(targets))
 	for _, target := range targets {
-		if _, exists := uniquePackages[target.packageName]; exists {
-			continue
-		}
-		uniquePackages[target.packageName] = struct{}{}
+		uniquePackages[target.packageName] = target.updateMode
 	}
 	type result struct {
 		packageName string
 		entry       runtimeUpdateStatusCacheEntry
 	}
 	results := make(chan result, len(uniquePackages))
-	for packageName := range uniquePackages {
-		go func(packageName string) {
-			entry := c.runtimeUpdateStatusEntry(ctx, packageName, now)
+	for packageName, mode := range uniquePackages {
+		go func(packageName string, mode dto.AgentUpdateMode) {
+			entry := c.runtimeUpdateStatusEntry(ctx, packageName, mode, now)
 			results <- result{packageName: packageName, entry: entry}
-		}(packageName)
+		}(packageName, mode)
 	}
 	for range uniquePackages {
 		item := <-results
@@ -111,6 +109,7 @@ func (c *Controller) ListAgentUpdateStatuses(ctx context.Context) (*dto.ListAgen
 	for _, target := range targets {
 		entry := entries[target.packageName]
 		status := dto.AgentUpdateStatusDTO{
+			UpdateMode:       target.updateMode,
 			AgentName:        target.agentName,
 			Package:          target.packageName,
 			DefaultVersion:   target.defaultVersion,
@@ -126,7 +125,16 @@ func (c *Controller) ListAgentUpdateStatuses(ctx context.Context) (*dto.ListAgen
 			status.LatestVersion = entry.latest
 		}
 		if target.selectionErr == nil && entry.ok {
-			status.CheckState = compareRuntimeUpdateStatus(entry.latest, target.effectiveVersion)
+			if target.updateMode == dto.AgentUpdateModeSelfUpdate {
+				switch harnessUpdateOperation(target.effectiveVersion, entry.latest) {
+				case string(managedruntime.OperationUpToDate):
+					status.CheckState = dto.AgentUpdateCheckStateUpToDate
+				case string(managedruntime.OperationUpdate):
+					status.CheckState = dto.AgentUpdateCheckStateUpdateAvailable
+				}
+			} else {
+				status.CheckState = compareRuntimeUpdateStatus(entry.latest, target.effectiveVersion)
+			}
 		}
 		statuses = append(statuses, status)
 	}
@@ -153,8 +161,21 @@ func (c *Controller) runtimeUpdateStatusTargets(ctx context.Context) ([]runtimeU
 		if c.discovery != nil && !available[ag.ID()] {
 			continue
 		}
-		managed, ok := ag.(agents.ManagedNPMRuntimeAgent)
-		if !ok {
+		managed, pinned := ag.(agents.ManagedNPMRuntimeAgent)
+		if !pinned {
+			harness, ok := ag.(agents.HarnessUpdateAgent)
+			if !ok {
+				continue
+			}
+			spec := harness.HarnessUpdate()
+			if strings.TrimSpace(spec.Package) == "" || spec.UpdateCommand.IsEmpty() {
+				continue
+			}
+			current := c.harnessCurrentVersion(ag.ID())
+			targets = append(targets, runtimeUpdateStatusTarget{
+				agentName: ag.ID(), packageName: spec.Package,
+				updateMode: dto.AgentUpdateModeSelfUpdate, effectiveVersion: current,
+			})
 			continue
 		}
 		spec := managed.ManagedNPMRuntime()
@@ -173,6 +194,7 @@ func (c *Controller) runtimeUpdateStatusTargets(ctx context.Context) ([]runtimeU
 			effectiveVersion = defaultVersion
 		}
 		targets = append(targets, runtimeUpdateStatusTarget{
+			updateMode:       dto.AgentUpdateModePinned,
 			agentName:        ag.ID(),
 			packageName:      packageName,
 			defaultVersion:   defaultVersion,
@@ -187,6 +209,7 @@ func (c *Controller) runtimeUpdateStatusTargets(ctx context.Context) ([]runtimeU
 func (c *Controller) runtimeUpdateStatusEntry(
 	ctx context.Context,
 	packageName string,
+	mode dto.AgentUpdateMode,
 	now time.Time,
 ) runtimeUpdateStatusCacheEntry {
 	c.runtimeUpdateStatusMu.Lock()
@@ -215,7 +238,7 @@ func (c *Controller) runtimeUpdateStatusEntry(
 
 	lookupCtx, cancel := context.WithTimeout(ctx, runtimeUpdateStatusLookupTimeout)
 	defer cancel()
-	latest, err := c.resolveRuntimeUpdateLatest(lookupCtx, packageName)
+	latest, err := c.resolveRuntimeUpdateLatest(lookupCtx, packageName, mode)
 	entry := runtimeUpdateStatusCacheEntry{}
 	if err == nil {
 		entry.latest = latest
@@ -234,12 +257,15 @@ func (c *Controller) runtimeUpdateStatusEntry(
 	return entry
 }
 
-func (c *Controller) resolveRuntimeUpdateLatest(ctx context.Context, packageName string) (string, error) {
+func (c *Controller) resolveRuntimeUpdateLatest(ctx context.Context, packageName string, mode dto.AgentUpdateMode) (string, error) {
 	c.runtimeUpdateStatusMu.Lock()
 	resolver := c.runtimeUpdateStatusResolver
 	c.runtimeUpdateStatusMu.Unlock()
 	if resolver != nil {
 		return validateRuntimeUpdateLatest(resolver(ctx, packageName))
+	}
+	if mode == dto.AgentUpdateModeSelfUpdate {
+		return c.resolveHarnessLatest(ctx, packageName)
 	}
 	if c.runtimeUpdater == nil {
 		return "", errors.New("runtime updater unavailable")

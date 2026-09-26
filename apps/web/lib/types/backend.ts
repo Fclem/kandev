@@ -4,6 +4,7 @@ import type {
   TaskPlanRevisionEventPayload,
 } from "./task-plan-events";
 import type { CaptureRequest } from "@/lib/logger/capture";
+import type { AgentUpdateJob } from "@/lib/api/domains/agent-update-api";
 
 export const SYSTEM_AGENT_RUNTIME_STATUS_CHANGED = "system.agent_runtime.status_changed" as const;
 
@@ -195,19 +196,6 @@ export type AgentInstallOutputPayload = {
   job_id: string;
   agent_name: string;
   chunk: string;
-};
-
-export type AgentUpdateJobPayload = {
-  job_id: string;
-  agent_name: string;
-  status: "queued" | "resolving" | "updating" | "refreshing" | "succeeded" | "failed";
-  current_version?: string;
-  target_version?: string;
-  output?: string;
-  error?: string;
-  refresh_error?: string;
-  started_at: string;
-  finished_at?: string;
 };
 
 export type AgentUpdateOutputPayload = {
@@ -504,9 +492,9 @@ export type BackendMessageMap = SessionBackendMessageMap &
     "agent.install.started": BackendMessage<"agent.install.started", AgentInstallJobPayload>;
     "agent.install.output": BackendMessage<"agent.install.output", AgentInstallOutputPayload>;
     "agent.install.finished": BackendMessage<"agent.install.finished", AgentInstallJobPayload>;
-    "agent.update.started": BackendMessage<"agent.update.started", AgentUpdateJobPayload>;
+    "agent.update.started": BackendMessage<"agent.update.started", AgentUpdateJob>;
     "agent.update.output": BackendMessage<"agent.update.output", AgentUpdateOutputPayload>;
-    "agent.update.finished": BackendMessage<"agent.update.finished", AgentUpdateJobPayload>;
+    "agent.update.finished": BackendMessage<"agent.update.finished", AgentUpdateJob>;
     "terminal.output": BackendMessage<"terminal.output", TerminalOutputPayload>;
     "diff.update": BackendMessage<"diff.update", DiffUpdatePayload>;
     "session.git.event": BackendMessage<"session.git.event", GitEventPayload>;

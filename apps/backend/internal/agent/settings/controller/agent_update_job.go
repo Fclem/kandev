@@ -23,6 +23,7 @@ type AgentUpdateJob struct {
 	ID               string
 	AgentName        string
 	Package          string
+	UpdateMode       dto.AgentUpdateMode
 	Status           dto.AgentUpdateJobStatus
 	Operation        managedruntime.Operation
 	CurrentVersion   string
@@ -108,6 +109,7 @@ func (s *AgentUpdateJobStore) enqueue(
 	}
 	job := &AgentUpdateJob{
 		ID:         uuid.NewString(),
+		UpdateMode: dto.AgentUpdateModePinned,
 		AgentName:  agentName,
 		Package:    spec.Package,
 		Status:     dto.AgentUpdateJobStatusQueued,
@@ -623,6 +625,7 @@ func (s *AgentUpdateJobStore) broadcast(action string, payload dto.AgentUpdateJo
 
 func (j *AgentUpdateJob) snapshot() dto.AgentUpdateJobDTO {
 	snapshot := dto.AgentUpdateJobDTO{
+		UpdateMode:       j.UpdateMode,
 		JobID:            j.ID,
 		AgentName:        j.AgentName,
 		Status:           j.Status,

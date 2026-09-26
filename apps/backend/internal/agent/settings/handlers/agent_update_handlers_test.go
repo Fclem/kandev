@@ -390,3 +390,48 @@ func TestAgentUpdateEndpointRequiresExactTargetVersion(t *testing.T) {
 		}
 	}
 }
+
+type handlerHarnessUpdater struct {
+	handlerRuntimeUpdater
+	current string
+}
+
+func (u *handlerHarnessUpdater) CurrentCapabilities(string) (hostutility.AgentCapabilities, bool) {
+	return hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: u.current}, true
+}
+
+func (u *handlerHarnessUpdater) ResolveHarnessLatest(context.Context, string) (string, error) {
+	return "1.1.0", nil
+}
+
+// AC-AGENTS-RUNTIME-UPDATES-003.6, .13: empty approval is self-update only.
+func TestHarnessUpdateHTTPNoJobAndRejectedTargets(t *testing.T) {
+	router, ctrl, completed := newAgentUpdateRouter(t, &handlerHarnessUpdater{current: "1.1.0"})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, updateJSONRequest(http.MethodPost, "/api/v1/agent-update/omp-acp", `{}`))
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("approval status %d: %s", response.Code, response.Body.String())
+	}
+	var job dto.AgentUpdateJobDTO
+	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job.JobID != "" || job.Operation != "up_to_date" || job.UpdateMode != dto.AgentUpdateModeSelfUpdate || job.CurrentVersion != "1.1.0" || job.Status != dto.AgentUpdateJobStatusSucceeded {
+		t.Errorf("no-job HTTP response = %+v", job)
+	}
+	if len(ctrl.ListAgentUpdateJobs()) != 0 {
+		t.Error("no-job approval was retained")
+	}
+	select {
+	case event := <-completed:
+		t.Errorf("no-job approval broadcast finished event %+v", event)
+	default:
+	}
+	for _, body := range []string{`{\"target_version\":\"1.2.0\"}`, `{\"use_default\":true}`, `{\"command\":[\"sh\",\"-c\",\"exit 0\"],\"target_version\":\"1.2.0\"}`} {
+		rejected := httptest.NewRecorder()
+		router.ServeHTTP(rejected, updateJSONRequest(http.MethodPost, "/api/v1/agent-update/omp-acp", body))
+		if rejected.Code != http.StatusBadRequest {
+			t.Errorf("body %s status = %d: %s", body, rejected.Code, rejected.Body.String())
+		}
+	}
+}

@@ -266,6 +266,7 @@ export type LoginCommand = {
 
 export type RuntimeUpdate = {
   supported: boolean;
+  update_mode: "pinned" | "self_update";
   package: string;
   current_version?: string;
   default_version?: string;

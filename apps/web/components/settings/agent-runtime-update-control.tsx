@@ -16,7 +16,13 @@ import {
   resolveRuntimeVersionPair,
   runtimeOperationLabelKey,
 } from "@/lib/agent-runtime-update";
-import type { AgentUpdateJob, AgentUpdatePreview, AgentUpdateStatus, InstallJob } from "@/lib/api";
+import type {
+  AgentUpdateJob,
+  AgentUpdateMode,
+  AgentUpdatePreview,
+  AgentUpdateStatus,
+  InstallJob,
+} from "@/lib/api";
 import type { RuntimeUpdate } from "@/lib/types/http";
 import { AgentRuntimeUpdateSurface } from "./agent-runtime-update-surface";
 import { RuntimeVersionPicker } from "./runtime-version-picker";
@@ -110,6 +116,24 @@ function RuntimeVersionSummary({
   job?: AgentUpdateJob;
 }) {
   const { t } = useTranslation();
+  if (preview.update_mode === "self_update") {
+    const current = job?.current_version || preview.current_version || t("common:unknown");
+    return (
+      <div className="space-y-2" data-testid={`agent-update-version-summary-${agentName}`}>
+        <p className="font-medium">
+          {t(runtimeOperationLabelKey(resolveRuntimeOperation(preview, job)))}
+        </p>
+        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+          <p data-testid={`agent-update-current-${agentName}`}>
+            {t("agents:installedRuntimeVersion", { version: current })}
+          </p>
+          <p data-testid={`agent-update-stable-reference-${agentName}`}>
+            {t("agents:stableLatestReference", { version: preview.stable_latest_version })}
+          </p>
+        </div>
+      </div>
+    );
+  }
   const { currentVersion, targetVersion } = resolveRuntimeVersionPair(preview, job);
   const activeVersion = resolveRuntimeActiveVersion(preview, job);
   const operation = resolveRuntimeOperation(preview, job);
@@ -160,19 +184,23 @@ function RuntimeUpdatePreviewDetails({
   return (
     <>
       <RuntimeVersionSummary agentName={agentName} preview={preview} job={job} />
-      <RuntimeVersionPicker
-        agentName={agentName}
-        preview={preview}
-        selectedTarget={selectedTarget}
-        selectedUseDefault={selectedUseDefault}
-        loading={loading}
-        starting={starting}
-        job={job}
-        onSelectTarget={onSelectTarget}
-        onSelectDefault={onSelectDefault}
-      />
+      {preview.update_mode === "pinned" && (
+        <RuntimeVersionPicker
+          agentName={agentName}
+          preview={preview}
+          selectedTarget={selectedTarget}
+          selectedUseDefault={selectedUseDefault}
+          loading={loading}
+          starting={starting}
+          job={job}
+          onSelectTarget={onSelectTarget}
+          onSelectDefault={onSelectDefault}
+        />
+      )}
       <div className="space-y-0.5 text-xs text-muted-foreground">
-        <p>{t("agents:runtimeUpdateExplainer")}</p>
+        {preview.update_mode === "self_update"
+          ? t("agents:harnessUpdateChannelNotice")
+          : t("agents:runtimeUpdateExplainer")}
         <p>{t("agents:runtimeUpdateSessionsNote")}</p>
       </div>
       <div className="space-y-0.5">
@@ -394,6 +422,9 @@ function runtimeUpdateStatusLabel(
   displayName: string,
   status?: AgentUpdateStatus,
 ): string {
+  if (status?.update_mode === "self_update" && status.check_state === "update_available") {
+    return t(UPDATE_AGENT_KEY, { name: displayName });
+  }
   if (status?.check_state === "update_available") {
     return t("agents:updateAvailableWithVersions", {
       name: displayName,
@@ -432,6 +463,7 @@ export function AgentRuntimeUpdateControl({
     agentName: string,
     targetVersion: string,
     useDefault?: boolean,
+    updateMode?: AgentUpdateMode,
   ) => Promise<AgentUpdateJob>;
 }) {
   const { isMobile } = useResponsiveBreakpoint();

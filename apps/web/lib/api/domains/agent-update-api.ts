@@ -9,6 +9,7 @@ export type AgentUpdateJobStatus =
   | "failed";
 
 export type AgentUpdateOperation = "update" | "rollback" | "repair" | "up_to_date" | "use_default";
+export type AgentUpdateMode = "pinned" | "self_update";
 
 export type AgentUpdateCheckState = "update_available" | "up_to_date" | "unknown";
 
@@ -18,6 +19,7 @@ export type AgentUpdateVersion = {
 };
 
 export type AgentUpdateJob = {
+  update_mode: AgentUpdateMode;
   job_id: string;
   agent_name: string;
   status: AgentUpdateJobStatus;
@@ -35,6 +37,7 @@ export type AgentUpdateJob = {
 };
 
 export type AgentUpdatePreview = {
+  update_mode: AgentUpdateMode;
   agent_name: string;
   package: string;
   current_version?: string;
@@ -42,6 +45,7 @@ export type AgentUpdatePreview = {
   active_version?: string;
   effective_version?: string;
   target_version: string;
+  stable_latest_version?: string;
   operation?: AgentUpdateOperation;
   available_versions?: AgentUpdateVersion[];
   command: string[];
@@ -70,16 +74,22 @@ export async function previewAgentUpdateUseDefault(
   );
 }
 
+type AgentUpdateRequest =
+  | { update_mode: "pinned"; target_version: string }
+  | { update_mode: "self_update" };
+
 export async function updateAgent(
   agentName: string,
-  targetVersion: string,
+  request: AgentUpdateRequest,
   options?: ApiRequestOptions,
 ): Promise<AgentUpdateJob> {
   return fetchJson<AgentUpdateJob>(`/api/v1/agent-update/${encodeURIComponent(agentName)}`, {
     ...options,
     init: {
       method: "POST",
-      body: JSON.stringify({ target_version: targetVersion }),
+      body: JSON.stringify(
+        request.update_mode === "self_update" ? {} : { target_version: request.target_version },
+      ),
       ...(options?.init ?? {}),
     },
   });
@@ -100,6 +110,7 @@ export async function updateAgentUseDefault(
 }
 
 export type AgentUpdateStatus = {
+  update_mode: AgentUpdateMode;
   agent_name: string;
   package: string;
   default_version: string;

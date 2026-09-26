@@ -158,6 +158,20 @@ func (c *Controller) buildRuntimeUpdateDTO(ctx context.Context, ag agents.Agent,
 	if !available {
 		return nil
 	}
+	if harness, ok := ag.(agents.HarnessUpdateAgent); ok {
+		spec := harness.HarnessUpdate()
+		if spec.Package == "" || spec.UpdateCommand.IsEmpty() {
+			return nil
+		}
+		item := &dto.RuntimeUpdateDTO{
+			Supported:      true,
+			UpdateMode:     dto.AgentUpdateModeSelfUpdate,
+			Package:        spec.Package,
+			CurrentVersion: c.harnessCurrentVersion(ag.ID()),
+		}
+		item.EffectiveVersion = item.CurrentVersion
+		return item
+	}
 	managed, ok := ag.(agents.ManagedNPMRuntimeAgent)
 	if !ok {
 		return nil
@@ -169,6 +183,7 @@ func (c *Controller) buildRuntimeUpdateDTO(ctx context.Context, ag agents.Agent,
 	defaultVersion := spec.DefaultVersionOrPinned()
 	item := &dto.RuntimeUpdateDTO{
 		Supported:        true,
+		UpdateMode:       dto.AgentUpdateModePinned,
 		Package:          spec.Package,
 		DefaultVersion:   defaultVersion,
 		EffectiveVersion: defaultVersion,
@@ -192,6 +207,21 @@ func (c *Controller) buildRuntimeUpdateDTO(ctx context.Context, ag agents.Agent,
 		}
 	}
 	return item
+}
+
+func (c *Controller) harnessCurrentVersion(agentName string) string {
+	if c.runtimeUpdater != nil {
+		if caps, found := c.runtimeUpdater.CurrentCapabilities(agentName); found {
+			return caps.AgentVersion
+		}
+		return ""
+	}
+	if c.hostUtility != nil {
+		if caps, found := c.hostUtility.Get(agentName); found {
+			return caps.AgentVersion
+		}
+	}
+	return ""
 }
 
 // buildLoginCommandDTO surfaces the interactive login command for agents that

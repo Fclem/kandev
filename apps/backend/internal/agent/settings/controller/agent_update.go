@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/kandev/kandev/internal/agent/agents"
 	"github.com/kandev/kandev/internal/agent/hostutility"
 	"github.com/kandev/kandev/internal/agent/managedruntime"
@@ -65,6 +68,9 @@ func (c *Controller) previewAgentUpdate(
 	}
 	managed, ok := ag.(agents.ManagedNPMRuntimeAgent)
 	if !ok {
+		if harness, supported := ag.(agents.HarnessUpdateAgent); supported {
+			return c.previewHarnessUpdate(ctx, ag, harness.HarnessUpdate(), targetVersion, useDefault)
+		}
 		return nil, ErrRuntimeUpdateUnsupported
 	}
 	spec := managed.ManagedNPMRuntime()
@@ -110,6 +116,7 @@ func (c *Controller) previewAgentUpdate(
 		command = spec.UpdateCommand().Args()
 	}
 	return &dto.AgentUpdatePreviewDTO{
+		UpdateMode:        dto.AgentUpdateModePinned,
 		AgentName:         name,
 		Package:           spec.Package,
 		CurrentVersion:    current,
@@ -122,6 +129,63 @@ func (c *Controller) previewAgentUpdate(
 		Command:           command,
 		CommandString:     buildCommandString(command),
 	}, nil
+}
+
+func (c *Controller) previewHarnessUpdate(
+	ctx context.Context,
+	ag agents.Agent,
+	spec agents.HarnessUpdateSpec,
+	targetVersion string,
+	useDefault bool,
+) (*dto.AgentUpdatePreviewDTO, error) {
+	if strings.TrimSpace(spec.Package) == "" || spec.UpdateCommand.IsEmpty() {
+		return nil, ErrRuntimeUpdateUnsupported
+	}
+	if targetVersion != "" || useDefault {
+		return nil, ErrRuntimeUpdateTargetInvalid
+	}
+	latest, err := c.resolveHarnessLatest(ctx, spec.Package)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRuntimeUpdatePreviewFailed, err)
+	}
+	current := ""
+	if caps, found := c.runtimeUpdater.CurrentCapabilities(ag.ID()); found {
+		current = caps.AgentVersion
+	}
+	command := spec.UpdateCommand.Args()
+	return &dto.AgentUpdatePreviewDTO{
+		UpdateMode: dto.AgentUpdateModeSelfUpdate,
+		AgentName:  ag.ID(), Package: spec.Package, CurrentVersion: current,
+		EffectiveVersion: current, StableLatestVersion: latest,
+		Operation:         harnessUpdateOperation(current, latest),
+		AvailableVersions: []dto.AgentUpdateVersionDTO{},
+		Command:           command, CommandString: buildCommandString(command),
+	}, nil
+}
+
+func harnessUpdateOperation(current, latest string) string {
+	if current == "" {
+		return string(managedruntime.OperationRepair)
+	}
+	stable, stableErr := managedruntime.ParseStableVersion(latest)
+	installed, installedErr := semver.NewVersion(current)
+	if stableErr != nil || installedErr != nil {
+		return string(managedruntime.OperationRepair)
+	}
+	if installed.LessThan(stable) {
+		return string(managedruntime.OperationUpdate)
+	}
+	return string(managedruntime.OperationUpToDate)
+}
+
+func (c *Controller) resolveHarnessLatest(ctx context.Context, pkg string) (string, error) {
+	resolver, ok := c.runtimeUpdater.(interface {
+		ResolveHarnessLatest(context.Context, string) (string, error)
+	})
+	if !ok {
+		return "", ErrRuntimeUpdaterUnavailable
+	}
+	return validateRuntimeUpdateLatest(resolver.ResolveHarnessLatest(ctx, pkg))
 }
 
 func resolvePreviewTarget(
@@ -283,8 +347,9 @@ func (c *Controller) InvalidateExecutionCacheVersion(ctx context.Context, packag
 }
 
 type hostRuntimeUpdater struct {
-	host     *hostutility.Manager
-	executor directCommandExecutor
+	host       *hostutility.Manager
+	executor   directCommandExecutor
+	httpClient *http.Client
 }
 
 type directCommandExecutor interface {
@@ -331,6 +396,38 @@ func (u *hostRuntimeUpdater) ResolveTarget(ctx context.Context, packageName stri
 		return "", fmt.Errorf("npm target version is not stable: %w", err)
 	}
 	return target, nil
+}
+
+// ResolveHarnessLatest reads the stable dist-tag from the fixed public HTTPS
+// registry. Unlike pinned runtimes, this lookup never starts an npm process.
+func (u *hostRuntimeUpdater) ResolveHarnessLatest(ctx context.Context, pkg string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://registry.npmjs.org/"+url.PathEscape(pkg), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.npm.install-v1+json")
+	client := u.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("registry metadata: HTTP %d", resp.StatusCode)
+	}
+	var packument struct {
+		DistTags struct {
+			Latest string `json:"latest"`
+		} `json:"dist-tags"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&packument); err != nil {
+		return "", fmt.Errorf("decode registry metadata: %w", err)
+	}
+	return validateRuntimeUpdateLatest(packument.DistTags.Latest, nil)
 }
 
 func (u *hostRuntimeUpdater) ResolveVersions(
@@ -529,7 +626,21 @@ func scanCommandOutput(
 	}
 }
 
-// EnqueueAgentUpdate starts or reuses an update for a built-in managed agent.
+// IsHarnessUpdate derives approval shape from the registered built-in agent,
+// not request fields.
+func (c *Controller) IsHarnessUpdate(name string) bool {
+	if c.agentRegistry == nil {
+		return false
+	}
+	ag, found := c.agentRegistry.Get(name)
+	if !found {
+		return false
+	}
+	_, supported := ag.(agents.HarnessUpdateAgent)
+	return supported
+}
+
+// EnqueueAgentUpdate starts or reuses an update for a built-in agent.
 func (c *Controller) EnqueueAgentUpdate(
 	ctx context.Context,
 	name string,
@@ -556,6 +667,11 @@ func (c *Controller) enqueueAgentUpdate(
 ) (*dto.AgentUpdateJobDTO, error) {
 	if c.updateJobStore == nil || c.runtimeUpdater == nil {
 		return nil, ErrRuntimeUpdaterUnavailable
+	}
+	if ag, ok := c.agentRegistry.Get(name); ok {
+		if harness, supported := ag.(agents.HarnessUpdateAgent); supported {
+			return c.enqueueHarnessUpdate(ctx, ag, harness.HarnessUpdate(), targetVersion, useDefault)
+		}
 	}
 	if active, found := c.updateJobStore.GetActive(name); found {
 		return active, nil
@@ -594,6 +710,48 @@ func (c *Controller) enqueueAgentUpdate(
 	} else {
 		job, err = c.updateJobStore.Enqueue(name, spec, targetVersion)
 	}
+	if err != nil {
+		return nil, err
+	}
+	if snapshot, found := c.updateJobStore.Get(job.ID); found {
+		return snapshot, nil
+	}
+	snapshot := job.snapshot()
+	return &snapshot, nil
+}
+
+func (c *Controller) enqueueHarnessUpdate(
+	ctx context.Context, ag agents.Agent, spec agents.HarnessUpdateSpec,
+	targetVersion string, useDefault bool,
+) (*dto.AgentUpdateJobDTO, error) {
+	if strings.TrimSpace(spec.Package) == "" || spec.UpdateCommand.IsEmpty() {
+		return nil, ErrRuntimeUpdateUnsupported
+	}
+	if targetVersion != "" || useDefault {
+		return nil, ErrRuntimeUpdateTargetInvalid
+	}
+	if active, found := c.updateJobStore.GetActive(ag.ID()); found {
+		return active, nil
+	}
+	latest, err := c.resolveHarnessLatest(ctx, spec.Package)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRuntimeUpdatePreviewFailed, err)
+	}
+	current := ""
+	if caps, found := c.runtimeUpdater.CurrentCapabilities(ag.ID()); found {
+		current = caps.AgentVersion
+	}
+	operation := harnessUpdateOperation(current, latest)
+	if operation == string(managedruntime.OperationUpToDate) {
+		now := time.Now().UTC()
+		return &dto.AgentUpdateJobDTO{
+			UpdateMode: dto.AgentUpdateModeSelfUpdate,
+			AgentName:  ag.ID(), Status: dto.AgentUpdateJobStatusSucceeded,
+			Operation: operation, CurrentVersion: current, EffectiveVersion: current,
+			StartedAt: now, FinishedAt: &now,
+		}, nil
+	}
+	job, err := c.updateJobStore.EnqueueHarness(ag.ID(), spec, latest, ag.Runtime().Cmd)
 	if err != nil {
 		return nil, err
 	}

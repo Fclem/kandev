@@ -108,6 +108,7 @@ type PendingMessageScrollOptions = {
 };
 
 type MessageTargetLifecycle = {
+  hostSessionId: string | null;
   sessionId: string | null;
   messageId: string | null | undefined;
   target?: PendingMessageScrollTarget | null;
@@ -202,6 +203,7 @@ type PendingMessageScrollEffectOptions = {
   readinessKey: string;
   isInitialMessagesLoading: boolean;
   isVisible: boolean;
+  hostSessionId: string | null;
   effectiveSessionId: string | null;
   effectiveMessageId: string | null | undefined;
   effectiveTargetKey: string | null;
@@ -317,6 +319,7 @@ function usePendingMessageScrollEffect(options: PendingMessageScrollEffectOption
     readinessKey,
     isInitialMessagesLoading,
     isVisible,
+    hostSessionId,
     effectiveSessionId,
     effectiveMessageId,
     effectiveTargetKey,
@@ -358,6 +361,7 @@ function usePendingMessageScrollEffect(options: PendingMessageScrollEffectOption
     const isSameTarget = () =>
       refs.mounted.current &&
       refs.targetIdentity.current === effectiveTargetKey &&
+      refs.lifecycle.current.hostSessionId === hostSessionId &&
       refs.lifecycle.current.sessionId === effectiveSessionId &&
       refs.lifecycle.current.messageId === effectiveMessageId &&
       refs.lifecycle.current.generation === generation &&
@@ -442,7 +446,16 @@ export function usePendingMessageScroll({
       reassertionTimer: { current: null as number | null },
       reassertionAttempted: { current: new Set<string>() },
       mounted: { current: true },
-      lifecycle: { current: { sessionId, messageId, target, isVisible, generation: 0 } },
+      lifecycle: {
+        current: {
+          hostSessionId: sessionId,
+          sessionId,
+          messageId,
+          target,
+          isVisible,
+          generation: 0,
+        },
+      },
     }),
     [],
   );
@@ -453,6 +466,7 @@ export function usePendingMessageScroll({
   const effectiveMessageId = target?.messageId ?? messageId;
   const effectiveTargetKey = scrollTargetKey(effectiveSessionId, effectiveMessageId, target);
   refs.lifecycle.current = {
+    hostSessionId: sessionId,
     sessionId: effectiveSessionId,
     messageId: effectiveMessageId,
     target,
@@ -473,6 +487,7 @@ export function usePendingMessageScroll({
     readinessKey,
     isInitialMessagesLoading,
     isVisible,
+    hostSessionId: sessionId,
     effectiveSessionId,
     effectiveMessageId,
     effectiveTargetKey,

@@ -12,6 +12,7 @@ const { aroundRequest, scrollToMessage } = vi.hoisted(() => ({
 }));
 const SESSION = "prompt-panel-session";
 const CONTROL_ID = "last-prompt-control";
+const MESSAGE_LIST_ID = "message-list";
 const prompt = {
   id: "persisted-prompt",
   session_id: SESSION,
@@ -53,7 +54,7 @@ const state = {
   taskSessions: { items: { [SESSION]: { name: null, agent_profile_id: null } } },
   agentProfiles: { items: [] },
   userSettings: {
-    showAnchoredPromptBar: false,
+    showAnchoredPromptBar: true,
     showScrollToLastPrompt: true,
     showScrollToStart: false,
   },
@@ -125,17 +126,20 @@ vi.mock("@/components/task/chat/message-list", () => ({
     ref,
     lastPromptMessageId,
     anchoredBarHeight,
+    stickyPromptBar,
   }: {
     ref?: Ref<MessageListHandle>;
     lastPromptMessageId?: string | null;
     anchoredBarHeight?: number;
+    stickyPromptBar?: ReactNode;
   }) => {
     useImperativeHandle(ref, () => ({ scrollToMessage }), []);
     return (
       <div
-        data-testid="message-list"
+        data-testid={MESSAGE_LIST_ID}
         data-prompt-id={lastPromptMessageId ?? ""}
         data-bar-height={anchoredBarHeight ?? 0}
+        data-sticky-prompt-bar={stickyPromptBar ? "present" : "absent"}
       />
     );
   },
@@ -198,7 +202,7 @@ describe("unloaded last prompt (AC-UI-PINNED-PROMPT-AVAILABILITY-001.1/.2/.6/.9)
   it("offers the control from an observed prompt without inserting a row or changing pagination", () => {
     render(<TaskChatPanel sessionId={SESSION} taskId="task" />);
     expect(screen.getByTestId(CONTROL_ID)).toBeTruthy();
-    expect(screen.getByTestId("message-list").getAttribute("data-prompt-id")).toBe(prompt.id);
+    expect(screen.getByTestId(MESSAGE_LIST_ID).getAttribute("data-prompt-id")).toBe(prompt.id);
     expect(state.messages.bySession[SESSION]).toEqual([agent]);
     expect(state.messages.metaBySession[SESSION]).toMatchObject({
       hasMore: true,
@@ -207,14 +211,25 @@ describe("unloaded last prompt (AC-UI-PINNED-PROMPT-AVAILABILITY-001.1/.2/.6/.9)
     expect(aroundRequest).not.toHaveBeenCalled();
   });
 
-  it("withholds the control for an empty window or an unobserved older-only cache", () => {
+  it("withholds the control and anchored bar when the window is empty", () => {
     state.messages.bySession[SESSION] = [];
-    const { rerender } = render(<TaskChatPanel sessionId={SESSION} taskId="task" />);
+    render(<TaskChatPanel sessionId={SESSION} taskId="task" />);
     expect(screen.queryByTestId(CONTROL_ID)).toBeNull();
-    state.messages.bySession[SESSION] = [agent];
-    state.messagePrompts.observedBySession[SESSION] = { ids: {}, newestKey: null };
-    rerender(<TaskChatPanel sessionId={SESSION} taskId="task" />);
-    expect(screen.queryByTestId(CONTROL_ID)).toBeNull();
+    expect(screen.getByTestId(MESSAGE_LIST_ID).getAttribute("data-sticky-prompt-bar")).toBe(
+      "absent",
+    );
+    expect(screen.getByTestId(MESSAGE_LIST_ID).getAttribute("data-bar-height")).toBe("0");
+  });
+
+  it("does not mount or reserve the bar for a cached prompt filtered out of rendered rows", () => {
+    state.messages.bySession[SESSION] = [prompt, agent];
+    panelState.allMessages = [agent];
+    panelState.groupedItems = [{ type: "message", message: agent }];
+    render(<TaskChatPanel sessionId={SESSION} taskId="task" />);
+    expect(screen.getByTestId(MESSAGE_LIST_ID).getAttribute("data-sticky-prompt-bar")).toBe(
+      "absent",
+    );
+    expect(screen.getByTestId(MESSAGE_LIST_ID).getAttribute("data-bar-height")).toBe("0");
   });
 
   it("loads an unloaded prompt only after activation and shows the existing jump indication", async () => {

@@ -192,6 +192,20 @@ its generation marker in one transaction (`32967d871`), the star schema template
 SQL guard exemptions (`961b2e8de`), and a cleanup retry is counted only once it is durable, with the
 backoff cap matching the schedule the operator documentation promises (`02acfe94a`).
 
+Round-2 review fixes: workspace teardown locks and rereads committed token pointers, then queues
+them atomically with row deletion; consent writes hold the lifecycle fence through commit; terminal
+refresh-token rejection persists reconnect-required status without replacing the committed grant.
+SQLite regressions cover the stale cleanup snapshot, lifecycle advancement before commit, and
+terminal versus transient refresh failures. PostgreSQL-gated interleaving tests cover teardown
+versus refresh and replacement versus consent advancement.
+
+Verification for these fixes: `go test ./internal/github -count=1`,
+`go test ./internal/persistence/storeconformance -count=1`, and
+`go run ./cmd/sqlguard ./internal` pass. PostgreSQL race tests skip without
+`KANDEV_TEST_POSTGRES_DSN`. Local `go test -race` cannot load `runtime/race` because this Go
+installation lacks `src/runtime/race`. Shared Go and linter cache volumes were full; changed-code
+`golangci-lint` passed with isolated caches (0 issues), and `go vet ./internal/github` passes.
+
 Residual gaps (recorded for the reviewer, not hidden):
 - The PostgreSQL star-store lifecycle test (replace/disconnect/claim) is written but skips without
   `KANDEV_TEST_POSTGRES_DSN`, so Postgres remains unexecuted in this environment.

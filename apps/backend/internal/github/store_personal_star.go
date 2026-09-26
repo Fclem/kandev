@@ -168,6 +168,13 @@ func (s *Store) ReplacePersonalStarConnection(
 	if err != nil {
 		return nil, err
 	}
+	lifecycle, err := personalStarLifecycleForUpdate(ctx, tx, connection.WorkspaceID, connection.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if !personalStarFenceMatches(lifecycle, expectedFence) {
+		return nil, ErrPersonalStarFence
+	}
 	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE github_personal_star_connection SET
 			login = ?, github_user_id = ?, granted_scopes = ?, public_repo = ?, status = ?,
@@ -201,7 +208,7 @@ func (s *Store) ReplacePersonalStarConnection(
 	if err := enqueuePersonalStarSecretRefsTx(ctx, tx, connection.WorkspaceID, connection.UserID, supersededIDs); err != nil {
 		return nil, err
 	}
-	if err := markPersonalStarConnectedTx(ctx, tx, connection); err != nil {
+	if err := markPersonalStarConnectedTx(ctx, tx, connection, expectedFence); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -246,6 +253,29 @@ func personalStarConnectionForUpdate(
 		return nil, fmt.Errorf("load personal star connection: %w", err)
 	}
 	return &connection, nil
+}
+func personalStarLifecycleForUpdate(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	workspaceID, userID string,
+) (PersonalStarLifecycle, error) {
+	var lifecycle PersonalStarLifecycle
+	err := tx.GetContext(ctx, &lifecycle, tx.Rebind(`
+		SELECT revision, credential_generation, connected_generation, updated_at
+		FROM github_personal_star_lifecycle
+		WHERE workspace_id = ? AND user_id = ?`+personalStarRowLockClause(tx.DriverName())),
+		workspaceID, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PersonalStarLifecycle{}, nil
+	}
+	if err != nil {
+		return PersonalStarLifecycle{}, fmt.Errorf("lock personal star lifecycle: %w", err)
+	}
+	return lifecycle, nil
+}
+
+func personalStarFenceMatches(lifecycle PersonalStarLifecycle, expected PersonalStarFence) bool {
+	return lifecycle.Revision == expected.Revision && lifecycle.CredentialGeneration == expected.Generation
 }
 
 // enqueuePersonalStarSecretRefsTx records cleanup rows on the caller's
@@ -319,6 +349,14 @@ func (s *Store) InsertPersonalStarConnection(
 		return fmt.Errorf("insert personal star connection: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	lifecycle, err := personalStarLifecycleForUpdate(ctx, tx, connection.WorkspaceID, connection.UserID)
+	if err != nil {
+		return err
+	}
+	expected := PersonalStarFence{Revision: expectedRevision, Generation: expectedGeneration}
+	if !personalStarFenceMatches(lifecycle, expected) {
+		return ErrPersonalStarFence
+	}
 	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO github_personal_star_connection (
 			workspace_id, user_id, login, github_user_id, granted_scopes, public_repo, status,
@@ -345,7 +383,7 @@ func (s *Store) InsertPersonalStarConnection(
 	if affected == 0 {
 		return ErrPersonalStarFence
 	}
-	if err := markPersonalStarConnectedTx(ctx, tx, connection); err != nil {
+	if err := markPersonalStarConnectedTx(ctx, tx, connection, expected); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -355,15 +393,26 @@ func (s *Store) InsertPersonalStarConnection(
 	return nil
 }
 
-// markPersonalStarConnectedTx records that this generation carries a usable
-// connection, on the transaction that commits it.
-func markPersonalStarConnectedTx(ctx context.Context, tx *sqlx.Tx, connection *PersonalStarConnection) error {
-	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+func markPersonalStarConnectedTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	connection *PersonalStarConnection,
+	expected PersonalStarFence,
+) error {
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE github_personal_star_lifecycle SET connected_generation = ?, updated_at = ?
-		WHERE workspace_id = ? AND user_id = ?`),
+		WHERE workspace_id = ? AND user_id = ? AND revision = ? AND credential_generation = ?`),
 		connection.CredentialGeneration, time.Now().UTC(),
-		connection.WorkspaceID, connection.UserID); err != nil {
+		connection.WorkspaceID, connection.UserID, expected.Revision, expected.Generation)
+	if err != nil {
 		return fmt.Errorf("record personal star connected generation: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrPersonalStarFence
 	}
 	return nil
 }
@@ -378,7 +427,26 @@ func (s *Store) SetPersonalStarReconnectOutcome(
 	workspaceID, userID, outcome string,
 	expectedFence PersonalStarFence,
 ) (bool, error) {
-	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("record personal star reconnect outcome: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	connection, err := personalStarConnectionForUpdate(ctx, tx, workspaceID, userID)
+	if err != nil {
+		return false, err
+	}
+	if connection == nil {
+		return false, nil
+	}
+	lifecycle, err := personalStarLifecycleForUpdate(ctx, tx, workspaceID, userID)
+	if err != nil {
+		return false, err
+	}
+	if !personalStarFenceMatches(lifecycle, expectedFence) {
+		return false, nil
+	}
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE github_personal_star_connection SET last_reconnect_outcome = ?, updated_at = ?
 		WHERE workspace_id = ? AND user_id = ?
 			AND EXISTS (
@@ -394,7 +462,13 @@ func (s *Store) SetPersonalStarReconnectOutcome(
 	if err != nil {
 		return false, err
 	}
-	return affected > 0, nil
+	if affected == 0 {
+		return false, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("record personal star reconnect outcome: %w", err)
+	}
+	return true, nil
 }
 
 // DisconnectPersonalStarConnection creates or updates an inactive tombstone and
@@ -462,19 +536,97 @@ func (s *Store) ListPersonalStarConnections(ctx context.Context, workspaceID str
 	return connections, err
 }
 
-// DeletePersonalStarWorkspaceState removes the workspace's dedicated star rows
-// but deliberately leaves github_personal_star_cleanup intact: those rows are
-// the only remaining record of the generation-specific secrets that still have
-// to be deleted, so dropping them would orphan encrypted token material.
+// DeletePersonalStarWorkspaceState queues the current token pointers and removes
+// their rows in one transaction. Connection writers take the same row locks, so
+// teardown either sees a committed replacement or makes a staged write fail its
+// lifecycle fence.
 func (s *Store) DeletePersonalStarWorkspaceState(ctx context.Context, workspaceID string) error {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete personal star workspace state: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if !dialect.IsPostgres(tx.DriverName()) {
+		// SQLite serializes writers at the database level. Acquire its writer
+		// lock before reading the pointers that will be queued.
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`
+			UPDATE github_personal_star_lifecycle SET updated_at = updated_at
+			WHERE workspace_id = ?`), workspaceID); err != nil {
+			return fmt.Errorf("lock personal star workspace state: %w", err)
+		}
+	}
+	if err := lockPersonalStarWorkspaceConnections(ctx, tx, workspaceID); err != nil {
+		return err
+	}
+	if err := lockPersonalStarWorkspaceLifecycles(ctx, tx, workspaceID); err != nil {
+		return err
+	}
+	connections, err := listPersonalStarConnectionsForUpdate(ctx, tx, workspaceID)
+	if err != nil {
+		return err
+	}
+	for _, connection := range connections {
+		if err := enqueuePersonalStarSecretRefsTx(
+			ctx, tx, workspaceID, connection.UserID, personalStarSecretIDsFor(connection),
+		); err != nil {
+			return err
+		}
+	}
 	for _, statement := range []string{
 		`DELETE FROM github_personal_star_flow WHERE workspace_id = ?`,
 		`DELETE FROM github_personal_star_connection WHERE workspace_id = ?`,
 		`DELETE FROM github_personal_star_lifecycle WHERE workspace_id = ?`,
 	} {
-		if _, err := s.db.ExecContext(ctx, s.db.Rebind(statement), workspaceID); err != nil {
+		if _, err := tx.ExecContext(ctx, tx.Rebind(statement), workspaceID); err != nil {
 			return fmt.Errorf("delete personal star workspace state: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete personal star workspace state: %w", err)
+	}
+	return nil
+}
+
+func lockPersonalStarWorkspaceConnections(ctx context.Context, tx *sqlx.Tx, workspaceID string) error {
+	query := `SELECT user_id FROM github_personal_star_connection WHERE workspace_id = ? ORDER BY user_id` +
+		personalStarRowLockClause(tx.DriverName())
+	return drainPersonalStarRows(ctx, tx, query, workspaceID, "lock personal star connections")
+}
+
+func listPersonalStarConnectionsForUpdate(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	workspaceID string,
+) ([]*PersonalStarConnection, error) {
+	var connections []*PersonalStarConnection
+	query := personalStarConnectionSelect + ` WHERE workspace_id = ? ORDER BY user_id` +
+		personalStarRowLockClause(tx.DriverName())
+	if err := tx.SelectContext(ctx, &connections, tx.Rebind(query), workspaceID); err != nil {
+		return nil, fmt.Errorf("list personal star connections for cleanup: %w", err)
+	}
+	return connections, nil
+}
+
+func lockPersonalStarWorkspaceLifecycles(ctx context.Context, tx *sqlx.Tx, workspaceID string) error {
+	query := `SELECT user_id FROM github_personal_star_lifecycle WHERE workspace_id = ? ORDER BY user_id` +
+		personalStarRowLockClause(tx.DriverName())
+	return drainPersonalStarRows(ctx, tx, query, workspaceID, "lock personal star workspace lifecycles")
+}
+
+func drainPersonalStarRows(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	query, workspaceID, operation string,
+) error {
+	rows, err := tx.QueryxContext(ctx, tx.Rebind(query), workspaceID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
 	}
 	return nil
 }

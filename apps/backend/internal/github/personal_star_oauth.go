@@ -505,7 +505,20 @@ func (s *PersonalStarOAuthService) refreshTokens(
 		return GitHubOAuthTokens{}, nil, ErrGitHubPersonalRequired
 	}
 	tokens, err := s.client.RefreshUserToken(ctx, refreshToken)
-	if err != nil || tokens.AccessToken == "" {
+	if err != nil {
+		if isDefinitivePersonalAuthFailure(err) {
+			fence := PersonalStarFence{
+				Revision: connection.LifecycleRevision, Generation: connection.CredentialGeneration,
+			}
+			if _, markErr := s.store.SetPersonalStarReconnectOutcome(
+				ctx, workspaceID, userID, personalStarOutcomeFailed, fence,
+			); markErr != nil {
+				return GitHubOAuthTokens{}, nil, fmt.Errorf("record rejected personal star refresh: %w", markErr)
+			}
+		}
+		return GitHubOAuthTokens{}, nil, ErrGitHubPersonalRequired
+	}
+	if tokens.AccessToken == "" {
 		return GitHubOAuthTokens{}, nil, ErrGitHubPersonalRequired
 	}
 	return tokens, connection, nil

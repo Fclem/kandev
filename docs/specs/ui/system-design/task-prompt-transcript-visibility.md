@@ -24,6 +24,10 @@ while transcript navigation can request an around window for a message that is
 not loaded. Both projections use the existing cursor metadata, message API,
 and `prompt_index` field.
 
+The pinned last-prompt affordances read the same `author_type=user` projection
+without changing this window contract; their availability is owned by
+[pinned prompt availability](pinned-prompt-availability.md).
+
 ## Requirement mapping
 
 | Requirement                                    | Design sections                                                                                                                                                                                             |

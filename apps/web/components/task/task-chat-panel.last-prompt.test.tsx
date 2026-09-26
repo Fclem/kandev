@@ -1,13 +1,14 @@
 import { useImperativeHandle, type ReactNode, type Ref } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Message } from "@/lib/types/http";
 import type { RenderItem } from "@/hooks/use-processed-messages";
 import type { MessageListHandle } from "./chat/message-list-shared";
+import type { LoadMessageWindowResult } from "@/hooks/domains/session/load-message-window";
 
 const { aroundRequest, scrollToMessage } = vi.hoisted(() => ({
   aroundRequest: vi.fn(),
-  scrollToMessage: vi.fn(() => false),
+  scrollToMessage: vi.fn((_messageId: string) => false),
 }));
 const SESSION = "prompt-panel-session";
 const CONTROL_ID = "last-prompt-control";
@@ -82,6 +83,7 @@ const state = {
   setPromptMessagesLoading: vi.fn(),
   installAuthoritativePromptMessages: vi.fn(),
 };
+const storeApi = { getState: () => state };
 vi.mock("./panel-primitives", () => ({
   PanelRoot: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   PanelBody: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -90,7 +92,7 @@ vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state),
   useOptionalAppStore: (selector: (value: typeof state) => unknown, fallback: unknown) =>
     selector(state) ?? fallback,
-  useAppStoreApi: () => ({ getState: () => state }),
+  useAppStoreApi: () => storeApi,
 }));
 vi.mock("@/hooks/domains/settings/use-settings-data", () => ({ useSettingsData: () => undefined }));
 vi.mock("@/hooks/use-responsive-breakpoint", () => ({
@@ -180,6 +182,7 @@ import { TaskChatPanel } from "./task-chat-panel";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  scrollToMessage.mockReset().mockReturnValue(false);
   state.messages.bySession[SESSION] = [agent];
   state.messagePrompts.bySession[SESSION] = [prompt];
   state.messagePrompts.observedBySession[SESSION] = {
@@ -228,6 +231,43 @@ describe("unloaded last prompt (AC-UI-PINNED-PROMPT-AVAILABILITY-001.1/.2/.6/.9)
     );
     expect(screen.getByTestId("transcript-jump-loading")).toBeTruthy();
     expect(scrollToMessage).toHaveBeenCalledWith(
+      prompt.id,
+      expect.objectContaining({ align: "start" }),
+    );
+  });
+
+  it("lands the local jump when a merged raw row reaches the rendered transcript later", async () => {
+    const pending = Promise.withResolvers<LoadMessageWindowResult>();
+    aroundRequest.mockReturnValueOnce(pending.promise);
+    let rowMounted = false;
+    scrollToMessage.mockImplementation((id: string) => rowMounted && id === prompt.id);
+    const view = render(<TaskChatPanel sessionId={SESSION} taskId="task" onOpenFile={vi.fn()} />);
+    fireEvent.click(screen.getByTestId(CONTROL_ID));
+    await waitFor(() => expect(aroundRequest).toHaveBeenCalledTimes(1));
+
+    state.messages.bySession[SESSION] = [prompt, agent];
+    panelState.allMessages = [prompt, agent];
+    view.rerender(<TaskChatPanel sessionId={SESSION} taskId="task" onOpenFile={vi.fn()} />);
+    await act(async () =>
+      pending.resolve({
+        kind: "merged",
+        merged: true,
+        current: true,
+        targetFound: true,
+      }),
+    );
+    const attemptsBeforeRow = scrollToMessage.mock.calls.length;
+
+    rowMounted = true;
+    panelState.groupedItems = [
+      { type: "message", message: prompt },
+      { type: "message", message: agent },
+    ];
+    view.rerender(<TaskChatPanel sessionId={SESSION} taskId="task" onOpenFile={vi.fn()} />);
+    await waitFor(() =>
+      expect(scrollToMessage.mock.calls.length).toBeGreaterThan(attemptsBeforeRow),
+    );
+    expect(scrollToMessage).toHaveBeenLastCalledWith(
       prompt.id,
       expect.objectContaining({ align: "start" }),
     );

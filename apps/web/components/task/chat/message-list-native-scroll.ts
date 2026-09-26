@@ -269,17 +269,16 @@ function usePrependScrollStateCapture({
  * oldest non-synthetic item's identity changes), restores scroll position so
  * the user stays at the same visual spot. A plain append (new item count grows
  * but the oldest real item is unchanged) is left alone — that's the
- * auto-scroll hook's concern, not this one's. Skipped while a user-initiated
- * programmatic scroll (scroll-to-start / scroll-to-last-prompt) is in flight
- * — otherwise writing a stale captured `scrollTop` mid-animation
- * interrupts/cancels the user's smooth scroll and can leave the transcript at
- * the wrong position.
+ * auto-scroll hook's concern. While a start-aligned programmatic jump is in
+ * flight, re-land its target when older rows appear above it; other guarded
+ * jumps defer anchor correction until their motion finishes.
  */
 function useScrollPositionOnPrepend(
   scrollRef: React.RefObject<HTMLDivElement | null>,
   items: RenderItem[],
   isLoadingMore: boolean,
   isProgrammaticScrollLocked: () => boolean,
+  startAlignedTargetRef: React.MutableRefObject<string | null>,
 ): () => void {
   const scrollState = useRef<PrependScrollState>({
     scrollHeight: 0,
@@ -328,17 +327,25 @@ function useScrollPositionOnPrepend(
     prevItemCountRef.current = items.length;
     prevFirstKeyRef.current = nextFirstKey;
     if (olderLoadSettled) olderLoadPendingRef.current = false;
-    if (!el || !prepend || isProgrammaticScrollLocked()) return;
-    const prev = scrollState.current;
-    const anchor = findMessageRow(el, prev.anchorKey);
-    if (anchor && prev.anchorTop !== null) {
-      el.scrollTop += anchor.getBoundingClientRect().top - prev.anchorTop;
+    if (!el || !prepend) return;
+    const targetId = isProgrammaticScrollLocked() ? startAlignedTargetRef.current : null;
+    const target = findMessageRow(el, targetId);
+    if (target) {
+      const margin = parseFloat(getComputedStyle(target).scrollMarginTop) || 0;
+      el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top - margin;
     } else {
-      const delta = el.scrollHeight - prev.scrollHeight;
-      if (delta > 0) el.scrollTop = prev.scrollTop + delta;
+      if (isProgrammaticScrollLocked()) return;
+      const prev = scrollState.current;
+      const anchor = findMessageRow(el, prev.anchorKey);
+      if (anchor && prev.anchorTop !== null) {
+        el.scrollTop += anchor.getBoundingClientRect().top - prev.anchorTop;
+      } else {
+        const delta = el.scrollHeight - prev.scrollHeight;
+        if (delta > 0) el.scrollTop = prev.scrollTop + delta;
+      }
     }
     scrollState.current = capturePrependScrollState(el, newestItemKeyRef.current);
-  }, [items, scrollRef, isLoadingMore, isProgrammaticScrollLocked]);
+  }, [items, scrollRef, isLoadingMore, isProgrammaticScrollLocked, startAlignedTargetRef]);
 
   return beginOlderLoad;
 }
@@ -1203,6 +1210,7 @@ export function useScrollToMessage(
   scrollRef: React.RefObject<HTMLDivElement | null>,
   runGuardedScroll: (performScroll: () => void) => void,
   motionEnabled = true,
+  startAlignedTargetRef?: React.MutableRefObject<string | null>,
 ) {
   // Bumped on every scrollToMessage call; in-flight verifiers of a superseded
   // request bail on the next frame so stale work can never land the
@@ -1230,10 +1238,12 @@ export function useScrollToMessage(
       // row is not rendered yet still returns false, but must invalidate any
       // in-flight verifier so it can never force-land on a stale prompt.
       const generation = ++generationRef.current;
+      if (startAlignedTargetRef) startAlignedTargetRef.current = null;
       const selector = `[id="msg-${CSS.escape(messageId)}"]`;
       const el = scrollRef.current?.querySelector<HTMLElement>(selector);
       if (!el) return false;
       const alignStart = options?.align === "start";
+      if (alignStart && startAlignedTargetRef) startAlignedTargetRef.current = messageId;
       if (scrollRef.current) cancelChatScrollMotion(scrollRef.current);
       runGuardedScroll(() => {
         el.scrollIntoView({
@@ -1294,7 +1304,7 @@ export function useScrollToMessage(
       });
       return true;
     },
-    [runGuardedScroll, scrollRef, motionEnabled],
+    [runGuardedScroll, scrollRef, motionEnabled, startAlignedTargetRef],
   );
 }
 
@@ -1705,6 +1715,38 @@ type NativeScrollManagementParams = {
   isVisible: boolean;
 };
 
+function usePrependAwareMessageScroll({
+  scrollRef,
+  items,
+  isLoadingMore,
+  isProgrammaticScrollLocked,
+  runGuardedScroll,
+  motionEnabled,
+}: {
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  items: RenderItem[];
+  isLoadingMore: boolean;
+  isProgrammaticScrollLocked: () => boolean;
+  runGuardedScroll: (performScroll: () => void) => void;
+  motionEnabled: boolean;
+}) {
+  const startAlignedTargetRef = useRef<string | null>(null);
+  const handleScrollToMessage = useScrollToMessage(
+    scrollRef,
+    runGuardedScroll,
+    motionEnabled,
+    startAlignedTargetRef,
+  );
+  const beginOlderLoad = useScrollPositionOnPrepend(
+    scrollRef,
+    items,
+    isLoadingMore,
+    isProgrammaticScrollLocked,
+    startAlignedTargetRef,
+  );
+  return { handleScrollToMessage, beginOlderLoad };
+}
+
 /**
  * Composes every native-renderer scroll behavior — auto-follow-bottom (honoring
  * the session's auto-scroll toggle, with position persistence and re-enable
@@ -1759,13 +1801,14 @@ export function useNativeScrollManagement(params: NativeScrollManagementParams) 
     programmaticScrollLockRef,
     resyncIsNearBottom,
   );
-  const handleScrollToMessage = useScrollToMessage(scrollRef, runGuardedScroll, motionEnabled);
-  const beginOlderLoad = useScrollPositionOnPrepend(
+  const { handleScrollToMessage, beginOlderLoad } = usePrependAwareMessageScroll({
     scrollRef,
     items,
     isLoadingMore,
     isProgrammaticScrollLocked,
-  );
+    runGuardedScroll,
+    motionEnabled,
+  });
   const loadMoreWithPrependBaseline = useCallback(() => {
     beginOlderLoad();
     return loadMore();

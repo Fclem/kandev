@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import type { SeedData } from "../../fixtures/test-base";
 import type { ApiClient } from "../../helpers/api-client";
 import { SessionPage } from "../../pages/session-page";
@@ -11,6 +11,45 @@ export const LAST_PROMPT_MARKER =
 
 const MIDDLE_FILLER_COUNT = 30;
 const TRAILING_FILLER_COUNT = 50;
+
+export async function persistedLastPromptId(
+  apiClient: ApiClient,
+  sessionId: string,
+): Promise<string> {
+  const { messages } = await apiClient.listSessionMessages(sessionId);
+  const prompt = messages.find(
+    (message) => message.author_type === "user" && message.content === LAST_PROMPT_MARKER,
+  );
+  if (!prompt) throw new Error("Last prompt was not persisted");
+  return prompt.id;
+}
+
+export async function expectPromptAlignedAtStart(row: Locator, list: Locator): Promise<void> {
+  await expect(row).toBeAttached();
+  let previousScrollTop = -1;
+  let stableReads = 0;
+  await expect
+    .poll(
+      async () => {
+        const scrollTop = await list.evaluate((element) => element.scrollTop);
+        stableReads = scrollTop === previousScrollTop ? stableReads + 1 : 0;
+        previousScrollTop = scrollTop;
+        return stableReads;
+      },
+      { timeout: 5_000 },
+    )
+    .toBeGreaterThanOrEqual(2);
+
+  const position = await row.evaluate((element) => {
+    const scrollport = element.closest(".chat-message-list");
+    return {
+      rowTop: element.getBoundingClientRect().top,
+      listTop: scrollport?.getBoundingClientRect().top ?? 0,
+      margin: parseFloat(getComputedStyle(element).scrollMarginTop) || 0,
+    };
+  });
+  expect(Math.abs(position.rowTop - position.listTop - position.margin)).toBeLessThanOrEqual(2);
+}
 
 /**
  * Boots an idle session, sends `FIRST_PROMPT_MARKER` as the first user

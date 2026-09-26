@@ -1185,9 +1185,6 @@ export const TaskChatPanel = memo(function TaskChatPanel({
       ? (state.messages.bySession[resolvedSessionId] ?? EMPTY_WINDOW_MESSAGES)
       : EMPTY_WINDOW_MESSAGES,
   );
-  const readinessKey = `${windowMessages.length}:${isInitialMessagesLoading}:${
-    windowMessages[0]?.id ?? ""
-  }:${windowMessages.at(-1)?.id ?? ""}`;
   const hasHostTarget = Boolean(
     pendingScrollToMessageId ||
     pendingScrollTarget ||
@@ -1197,6 +1194,14 @@ export const TaskChatPanel = memo(function TaskChatPanel({
   );
   const [localTarget, setLocalTarget] = useState<PendingMessageScrollTarget | null>(null);
   const localToken = useRef(0);
+  const pendingRowId =
+    pendingScrollTarget?.messageId ?? pendingScrollToMessageId ?? localTarget?.messageId;
+  const targetRowRendered = Boolean(
+    pendingRowId && isMessageRowRendered(groupedItems, pendingRowId),
+  );
+  const readinessKey = `${windowMessages.length}:${isInitialMessagesLoading}:${
+    windowMessages[0]?.id ?? ""
+  }:${windowMessages.at(-1)?.id ?? ""}:${targetRowRendered}`;
   const generation = useAppStore((state) =>
     resolvedSessionId ? (state.messagePrompts.generationBySession?.[resolvedSessionId] ?? 0) : 0,
   );

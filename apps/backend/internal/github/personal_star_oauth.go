@@ -795,29 +795,6 @@ func optionalPersonalStarValue(values map[string]string, key string) (string, er
 	return decodePersonalStarValue(key, raw)
 }
 
-// validatePersonalStarReturnPath restricts redirect targets to same-origin
-// Settings > Plugins paths.
-func validatePersonalStarReturnPath(returnPath string) (string, error) {
-	trimmed := strings.TrimSpace(returnPath)
-	switch {
-	case trimmed == "":
-		return "", fmt.Errorf("%w: return path is required", ErrPersonalStarReturnPath)
-	case !strings.HasPrefix(trimmed, "/"):
-		return "", fmt.Errorf("%w: return path must be absolute", ErrPersonalStarReturnPath)
-	case strings.HasPrefix(trimmed, "//"):
-		return "", fmt.Errorf("%w: return path must not be protocol-relative", ErrPersonalStarReturnPath)
-	case strings.ContainsAny(trimmed, "\\\r\n\t#"):
-		return "", fmt.Errorf("%w: return path contains reserved characters", ErrPersonalStarReturnPath)
-	case strings.Contains(trimmed, ":"):
-		return "", fmt.Errorf("%w: return path must not carry a scheme", ErrPersonalStarReturnPath)
-	case !strings.HasPrefix(trimmed, personalStarReturnPrefix):
-		return "", fmt.Errorf("%w: return path must stay under settings plugins", ErrPersonalStarReturnPath)
-	case strings.Contains(trimmed, ".."):
-		return "", fmt.Errorf("%w: return path must not traverse", ErrPersonalStarReturnPath)
-	}
-	return trimmed, nil
-}
-
 // NormalizeGitHubScopes parses a space- or comma-separated scope list into a
 // deduplicated, sorted, lowercase set.
 func NormalizeGitHubScopes(raw string) []string {

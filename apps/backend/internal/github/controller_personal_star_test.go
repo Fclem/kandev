@@ -67,6 +67,27 @@ func TestRepositoryStarStatusControllerRejectsOversizeRequest(t *testing.T) {
 	}
 }
 
+func TestPersonalStarConsentStartControllerRejectsOversizeRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := NewService(nil, AuthMethodNone, nil, nil, nil, nil)
+	router := gin.New()
+	NewController(service, nil).RegisterHTTPRoutes(router)
+
+	body := []byte(`{"workspace_id":"workspace-1","return_path":"/settings/plugins","padding":"`)
+	body = append(body, bytes.Repeat([]byte("a"), maxRepositoryStarRequestBodyBytes)...)
+	body = append(body, []byte(`"}`)...)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(
+		http.MethodPost, "/api/v1/github/user/starred/connection/start", bytes.NewReader(body),
+	))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("oversize consent start = %d, body = %s", response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte(errMsgInvalidPayload)) {
+		t.Fatalf("oversize consent error = %s, want body-size rejection", response.Body.String())
+	}
+}
+
 func TestRepositoryStarMutationControllersRejectOversizeRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := &personalStarClientStub{}

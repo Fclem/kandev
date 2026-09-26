@@ -559,13 +559,16 @@ func TestPersonalStarReturnPathValidation(t *testing.T) {
 		t.Fatalf("valid return path rejected: %v", err)
 	}
 	for name, returnPath := range map[string]string{
-		"relative":  "settings/plugins",
-		"protocol":  "//evil.example/settings/plugins",
-		"scheme":    "https://evil.example/settings/plugins",
-		"fragment":  "/settings/plugins#x",
-		"outside":   "/settings/general",
-		"traversal": "/settings/plugins/../../admin",
-		"empty":     "",
+		"relative":            "settings/plugins",
+		"protocol":            "//evil.example/settings/plugins",
+		"scheme":              "https://evil.example/settings/plugins",
+		"fragment":            "/settings/plugins#x",
+		"outside":             "/settings/general",
+		"traversal":           "/settings/plugins/../../admin",
+		"encoded traversal":   "/settings/plugins/%2e%2e/admin",
+		"double encoded path": "/settings/plugins/%252e%252e/admin",
+		"prefix sibling":      "/settings/plugins-evil",
+		"empty":               "",
 	} {
 		if _, err := validatePersonalStarReturnPath(returnPath); err == nil {
 			t.Fatalf("validatePersonalStarReturnPath(%s) accepted %q", name, returnPath)

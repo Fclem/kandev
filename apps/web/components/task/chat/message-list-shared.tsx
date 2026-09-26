@@ -22,7 +22,12 @@ import { useTranslation } from "react-i18next";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import type { MessageHistoryStatus } from "@/hooks/domains/session/use-message-fetch-state";
 import { SessionHistoryFeedback } from "./session-entry-feedback";
-import { findLastStoredUserPromptIndex, isStoredUserPrompt } from "@/lib/session-last-prompt";
+import {
+  comparePromptOrder,
+  findLastStoredUserPromptIndex,
+  isStoredUserPrompt,
+} from "@/lib/session-last-prompt";
+import { TASK_DESCRIPTION_SYNTHETIC_ID } from "@/hooks/initial-prompt-preview";
 
 export type MessageListProps = {
   items: RenderItem[];
@@ -50,6 +55,9 @@ export type MessageListProps = {
    * scroll-to-last-prompt button (always active) and the anchored-bar
    * affordance (opt-in, desktop only). */
   lastPromptMessageId?: string | null;
+  /** Stored last prompt and its absence from the cached transcript window. */
+  lastPromptMessage?: Message | null;
+  lastPromptUnloaded?: boolean;
   /** Called whenever the last prompt's position relative to the transcript
    * viewport changes: fully `"above"` it (scrolled past, further down the
    * transcript), fully `"below"` it (not yet reached, e.g. browsing earlier
@@ -251,6 +259,66 @@ export function resolveLastPromptEdge(container: HTMLElement, target: HTMLElemen
   const tolerance = 2;
   if (targetRect.bottom < containerRect.top - tolerance) return "above";
   if (targetRect.top > containerRect.bottom + tolerance) return "below";
+  return "visible";
+}
+export type PromptNeighbors = {
+  olderKey: string | null;
+  newerKey: string | null;
+  unordered: boolean;
+};
+
+const OLDER_PROMPT_BOUND = 1;
+const NEWER_PROMPT_BOUND = 2;
+const UNORDERED_PROMPT_ROW = 4;
+
+function classifyPromptItem(item: RenderItem, prompt: Message): number {
+  if (item.type !== "message" && item.type !== "turn_group") return 0;
+  let flags = 0;
+  const count = item.type === "message" ? 1 : item.messages.length;
+  for (let index = 0; index < count; index++) {
+    const message = item.type === "message" ? item.message : item.messages[index];
+    if (message.id === TASK_DESCRIPTION_SYNTHETIC_ID) continue;
+    const order = comparePromptOrder(message, prompt);
+    if (order === null) flags |= UNORDERED_PROMPT_ROW;
+    else if (order < 0) flags |= OLDER_PROMPT_BOUND;
+    else if (order > 0) flags |= NEWER_PROMPT_BOUND;
+  }
+  return flags;
+}
+
+export function findPromptNeighbors(
+  items: readonly RenderItem[],
+  prompt: Message,
+): PromptNeighbors {
+  let olderKey: string | null = null;
+  let newerKey: string | null = null;
+  let unordered = false;
+  for (const item of items) {
+    const flags = classifyPromptItem(item, prompt);
+    if (flags & OLDER_PROMPT_BOUND) olderKey = getItemKey(item);
+    if (flags & NEWER_PROMPT_BOUND && !newerKey) newerKey = getItemKey(item);
+    if (flags & UNORDERED_PROMPT_ROW) unordered = true;
+  }
+  return { olderKey, newerKey, unordered };
+}
+
+/** Infers an unloaded prompt's position from the rendered rows that bound its slot. */
+export function resolveUnloadedPromptEdge(
+  container: HTMLElement,
+  older: HTMLElement | null,
+  newer: HTMLElement | null,
+): LastPromptEdge {
+  if (!older && !newer) return "visible";
+  if (!newer) return "below";
+  if (!older) return "above";
+  const viewport = container.getBoundingClientRect();
+  const olderRect = older.getBoundingClientRect();
+  const newerRect = older === newer ? olderRect : newer.getBoundingClientRect();
+  const tolerance = 2;
+  if (olderRect.bottom < viewport.top - tolerance && newerRect.top > viewport.bottom + tolerance)
+    return "visible";
+  if (newerRect.bottom < viewport.top - tolerance) return "above";
+  if (olderRect.top > viewport.bottom + tolerance) return "below";
   return "visible";
 }
 

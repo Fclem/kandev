@@ -361,14 +361,16 @@ function getNewestNonSyntheticItemKey(items: RenderItem[]): string | null {
   return null;
 }
 
-function findMessageRow(scrollRoot: HTMLElement, itemKey: string | null): HTMLElement | null {
+export function findMessageRow(
+  scrollRoot: HTMLElement,
+  itemKey: string | null,
+): HTMLElement | null {
   if (!itemKey) return null;
   const expectedId = `msg-${itemKey}`;
-  return (
-    Array.from(scrollRoot.querySelectorAll<HTMLElement>("[id^='msg-']")).find(
-      (candidate) => candidate.id === expectedId,
-    ) ?? null
-  );
+  for (const candidate of scrollRoot.querySelectorAll<HTMLElement>("[id^='msg-']")) {
+    if (candidate.id === expectedId) return candidate;
+  }
+  return null;
 }
 
 function capturePrependScrollState(scrollRoot: HTMLElement, anchorKey: string | null) {

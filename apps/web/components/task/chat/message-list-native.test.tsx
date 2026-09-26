@@ -67,6 +67,8 @@ vi.mock("@/components/state-provider", () => ({
 }));
 
 import { useScrollToDividerOrBottom } from "./message-list-native";
+import { useTranscriptEdgeTracking } from "./message-list-native";
+import { getItemKey, type LastPromptEdge } from "./message-list-shared";
 import {
   isElementInPreloadRegion,
   resolvePaginationStopReason,
@@ -2299,4 +2301,153 @@ it("cancels pending navigation landing when reduced motion becomes effective", (
   expect(root.scrollTop).toBe(0);
   view.unmount();
   vi.unstubAllGlobals();
+});
+
+const EDGE_PROMPT = { id: "unloaded-prompt", created_at: "2026-08-22T00:00:02Z" } as Message;
+const EDGE_OLDER: Extract<RenderItem, { type: "message" }> = {
+  type: "message",
+  message: { id: "older-edge", created_at: "2026-08-22T00:00:01Z" } as Message,
+};
+const EDGE_NEWER: Extract<RenderItem, { type: "message" }> = {
+  type: "message",
+  message: { id: "newer-edge", created_at: "2026-08-22T00:00:03Z" } as Message,
+};
+
+function EdgeHarness({
+  items,
+  prompt = EDGE_PROMPT,
+  unloaded,
+  onEdge,
+}: {
+  items: RenderItem[];
+  prompt?: Message | null;
+  unloaded: boolean;
+  onEdge: (edge: LastPromptEdge) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useTranscriptEdgeTracking(ref, {
+    lastPromptMessageId: prompt?.id,
+    onLastPromptEdgeChange: onEdge,
+    firstMessageId: null,
+    onFirstMessageHiddenChange: undefined,
+    prompt,
+    unloaded,
+    items,
+  });
+  return (
+    <div data-testid="edge-root" ref={ref}>
+      {items.map((item) => (
+        <div key={getItemKey(item)} id={`msg-${getItemKey(item)}`} />
+      ))}
+    </div>
+  );
+}
+
+describe("unloaded prompt edge tracking", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reclassifies one-sided windows when rendered items arrive or change", () => {
+    const onEdge = vi.fn();
+    const view = render(<EdgeHarness items={[]} unloaded onEdge={onEdge} />);
+    expect(onEdge).toHaveBeenLastCalledWith("visible");
+    view.rerender(<EdgeHarness items={[EDGE_NEWER]} unloaded onEdge={onEdge} />);
+    expect(onEdge).toHaveBeenLastCalledWith("above");
+    view.rerender(<EdgeHarness items={[EDGE_OLDER]} unloaded onEdge={onEdge} />);
+    expect(onEdge).toHaveBeenLastCalledWith("below");
+  });
+
+  it("ignores another transcript's duplicate neighbor row and measures a grouped row", () => {
+    const onEdge = vi.fn();
+    const group: RenderItem = {
+      type: "turn_group",
+      id: "group-edge",
+      turnId: "turn",
+      messages: [EDGE_OLDER.message, EDGE_NEWER.message],
+    };
+    const view = render(
+      <>
+        <div id="msg-group-edge" />
+        <EdgeHarness items={[group]} unloaded onEdge={onEdge} />
+      </>,
+    );
+    const root = screen.getByTestId("edge-root");
+    root.getBoundingClientRect = () => createRect(40, 160);
+    root.querySelector<HTMLElement>("#msg-group-edge")!.getBoundingClientRect = () =>
+      createRect(10, 20);
+    act(() => root.dispatchEvent(new Event("scroll")));
+    expect(onEdge).toHaveBeenLastCalledWith("above");
+    view.unmount();
+  });
+});
+
+describe("missing prompt row scope", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps cached-but-unrendered and unresolved prompts neutral", () => {
+    const onEdge = vi.fn();
+    const view = render(<EdgeHarness items={[EDGE_NEWER]} unloaded={false} onEdge={onEdge} />);
+    expect(onEdge).toHaveBeenLastCalledWith("visible");
+    view.rerender(<EdgeHarness items={[EDGE_NEWER]} prompt={null} unloaded onEdge={onEdge} />);
+    expect(onEdge).toHaveBeenLastCalledWith("visible");
+  });
+
+  it("keeps an incomplete unordered neighborhood neutral until ordering becomes conclusive", () => {
+    const onEdge = vi.fn();
+    const malformed: RenderItem = {
+      type: "message",
+      message: { id: "malformed-edge", created_at: "bad" } as Message,
+    };
+    const view = render(<EdgeHarness items={[malformed, EDGE_NEWER]} unloaded onEdge={onEdge} />);
+    expect(onEdge).toHaveBeenLastCalledWith("visible");
+    view.rerender(<EdgeHarness items={[EDGE_NEWER]} unloaded onEdge={onEdge} />);
+    expect(onEdge).toHaveBeenLastCalledWith("above");
+  });
+
+  it("classifies its own loaded prompt row instead of another transcript's duplicate", () => {
+    const onEdge = vi.fn();
+    const item: RenderItem = { type: "message", message: EDGE_PROMPT };
+    const view = render(
+      <>
+        <div id="msg-unloaded-prompt" />
+        <EdgeHarness items={[item]} unloaded={false} onEdge={onEdge} />
+      </>,
+    );
+    const root = screen.getByTestId("edge-root");
+    root.getBoundingClientRect = () => createRect(40, 160);
+    root.querySelector<HTMLElement>("#msg-unloaded-prompt")!.getBoundingClientRect = () =>
+      createRect(230, 20);
+    act(() => root.dispatchEvent(new Event("scroll")));
+    expect(onEdge).toHaveBeenLastCalledWith("below");
+    view.unmount();
+  });
+
+  it("does not measure a duplicate prompt row mounted outside its scroll container", () => {
+    const onEdge = vi.fn();
+    const view = render(
+      <>
+        <div id="msg-unloaded-prompt" />
+        <EdgeHarness items={[EDGE_NEWER]} unloaded onEdge={onEdge} />
+      </>,
+    );
+    expect(onEdge).toHaveBeenLastCalledWith("above");
+    view.unmount();
+  });
 });

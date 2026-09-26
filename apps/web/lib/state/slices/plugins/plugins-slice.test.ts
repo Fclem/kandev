@@ -155,4 +155,29 @@ describe("plugin star connection identity", () => {
         .applyPluginStarConnection("ws-1", staleEpoch, connection("user-a"), "user-a"),
     ).toBe(false);
   });
+  it("rejects star responses after a scoped cache is cleared and recreated", () => {
+    const store = makeStore();
+    const firstStatusEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    store
+      .getState()
+      .applyPluginStarConnection("ws-1", firstStatusEpoch, connection("user-a"), "user-a");
+    const key = pluginStarKey("ws-1", connection("user-a"), "owner/repo");
+    const staleEpoch = store.getState().beginPluginStarRequest(key, "mutation");
+
+    const secondStatusEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-b");
+    store
+      .getState()
+      .applyPluginStarConnection("ws-1", secondStatusEpoch, connection("user-b"), "user-b");
+    const thirdStatusEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    store
+      .getState()
+      .applyPluginStarConnection("ws-1", thirdStatusEpoch, connection("user-a"), "user-a");
+    const currentEpoch = store.getState().beginPluginStarRequest(key, "mutation");
+
+    expect(store.getState().applyPluginStarResult(key, currentEpoch as number, false)).toBe(true);
+    expect(store.getState().applyPluginStarResult(key, staleEpoch as number, true)).toBe(false);
+    store.getState().failPluginStarRequest(key, staleEpoch as number);
+    expect(store.getState().pluginStars.values[key]).toBe(false);
+    expect(store.getState().pluginStars.busy[key]).toBeUndefined();
+  });
 });

@@ -37,6 +37,16 @@ function clearWorkspacePluginStars(stars: Draft<PluginStarsState>, workspaceId: 
   }
 }
 
+let nextPluginStarRequestEpoch = 0;
+
+function allocatePluginStarRequestEpoch(): number {
+  if (nextPluginStarRequestEpoch === Number.MAX_SAFE_INTEGER) {
+    throw new Error("Plugin star request epoch exhausted");
+  }
+  nextPluginStarRequestEpoch += 1;
+  return nextPluginStarRequestEpoch;
+}
+
 function createPluginStarActions(
   set: ImmerSet,
   get: SliceGet,
@@ -116,7 +126,7 @@ function createPluginStarActions(
         const value = stars.values[key];
         if (stars.pending[key] || (value !== undefined && value !== null)) return null;
       }
-      const epoch = (stars.epochs[key] ?? 0) + 1;
+      const epoch = allocatePluginStarRequestEpoch();
       set((draft) => {
         draft.pluginStars.epochs[key] = epoch;
         if (kind === "mutation") {

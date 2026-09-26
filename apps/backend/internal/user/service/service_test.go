@@ -658,20 +658,34 @@ func TestApplyBasicSettings_TasksListPreferences(t *testing.T) {
 			t.Fatalf("TasksListGroup = %q, want repository", settings.TasksListGroup)
 		}
 	})
+	t.Run("persists facet sort and group selections", func(t *testing.T) {
+		settings := &models.UserSettings{}
+		facet := "facet:com.example.tags:tag-name"
+		if err := applyBasicSettings(settings, &UpdateUserSettingsRequest{
+			TasksListSort: ptr(facet), TasksListGroup: ptr(facet),
+		}); err != nil {
+			t.Fatalf("facet preferences rejected: %v", err)
+		}
+		if settings.TasksListSort != facet || settings.TasksListGroup != facet {
+			t.Fatalf("facet preferences = %q, %q; want %q", settings.TasksListSort, settings.TasksListGroup, facet)
+		}
+	})
 
 	t.Run("rejects invalid sort", func(t *testing.T) {
 		settings := &models.UserSettings{}
 		req := &UpdateUserSettingsRequest{TasksListSort: ptr("priority_desc")}
-		if err := applyBasicSettings(settings, req); err == nil {
-			t.Fatal("expected invalid sort error")
+		err := applyBasicSettings(settings, req)
+		if err == nil || !strings.Contains(err.Error(), "updated_desc") || !strings.Contains(err.Error(), "facet:<pluginId>:<facetId>") {
+			t.Fatalf("invalid sort error = %v, want built-in and facet shapes", err)
 		}
 	})
 
 	t.Run("rejects invalid group", func(t *testing.T) {
 		settings := &models.UserSettings{}
 		req := &UpdateUserSettingsRequest{TasksListGroup: ptr("assignee")}
-		if err := applyBasicSettings(settings, req); err == nil {
-			t.Fatal("expected invalid group error")
+		err := applyBasicSettings(settings, req)
+		if err == nil || !strings.Contains(err.Error(), "state") || !strings.Contains(err.Error(), "facet:<pluginId>:<facetId>") {
+			t.Fatalf("invalid group error = %v, want built-in and facet shapes", err)
 		}
 	})
 }

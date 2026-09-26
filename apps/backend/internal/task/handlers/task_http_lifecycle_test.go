@@ -359,6 +359,21 @@ func TestHTTPListTasksByWorkspacePassesThroughFilters(t *testing.T) {
 	require.NotEmpty(t, repo.listedSort, "sort is normalized rather than dropped")
 }
 
+// AC-PLUGINS-TASKLIST-FACETS-002.7: the HTTP boundary must not forward a facet sort.
+func TestHTTPListTasksByWorkspaceResolvesFacetSort(t *testing.T) {
+	for _, query := range []string{"facet:plugin:tags", "%20facet:plugin:tags%20"} {
+		t.Run(query, func(t *testing.T) {
+			repo := &httpTaskRepo{}
+			h := newHTTPTaskHandlers(t, repo)
+			c, rec := taskRequestAs(t, "", http.MethodGet,
+				"/api/v1/workspaces/ws-b/tasks?sort="+query, "ws-b")
+			h.httpListTasksByWorkspace(c)
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, "updated_desc", repo.listedSort)
+		})
+	}
+}
+
 func TestHTTPListTasksByWorkspaceDeniesForeignWorkspace(t *testing.T) {
 	repo := &httpTaskRepo{}
 	h := newHTTPTaskHandlers(t, repo)

@@ -796,8 +796,7 @@ func applyMCPTaskAgentProfileDefault(settings *models.UserSettings, value *strin
 	}
 }
 
-// applyTasksListPreferences validates and applies the task list sort and
-// group enums, defaulting empty values.
+// applyTasksListPreferences validates built-in and facet selections, defaulting empty values.
 func applyTasksListPreferences(settings *models.UserSettings, sortValue, groupValue *string) error {
 	if sortValue != nil {
 		v := strings.TrimSpace(*sortValue)
@@ -805,7 +804,7 @@ func applyTasksListPreferences(settings *models.UserSettings, sortValue, groupVa
 			v = models.TasksListSortDefault
 		}
 		if !models.IsValidTasksListSort(v) {
-			return fmt.Errorf("tasks_list_sort must be one of %s", strings.Join(models.TasksListSortValues(), ", "))
+			return fmt.Errorf("tasks_list_sort must be one of %s or facet:<pluginId>:<facetId>", strings.Join(models.TasksListSortValues(), ", "))
 		}
 		settings.TasksListSort = v
 	}
@@ -815,7 +814,7 @@ func applyTasksListPreferences(settings *models.UserSettings, sortValue, groupVa
 			v = models.TasksListGroupDefault
 		}
 		if !models.IsValidTasksListGroup(v) {
-			return fmt.Errorf("tasks_list_group must be one of %s", strings.Join(models.TasksListGroupValues(), ", "))
+			return fmt.Errorf("tasks_list_group must be one of %s or facet:<pluginId>:<facetId>", strings.Join(models.TasksListGroupValues(), ", "))
 		}
 		settings.TasksListGroup = v
 	}

@@ -41,7 +41,7 @@
   "gitlabMergeRequest": "GitLab マージリクエスト",
   "goToTask": "タスクへ移動",
   "group": "グループ",
-  "groupTasksIntoSectionsByState": "タスクを状態、ワークフロー、リポジトリ、またはなしでセクションにまとめます。",
+  "groupTasksIntoSectionsByState": "タスクを状態、ワークフロー、リポジトリ、プラグインが提供する値、またはなしでセクションにまとめます。",
   "healthIssues": "健康上の問題",
   "improveKandev": "Kandev を改善する",
   "jiraTicket": "Jira チケット",

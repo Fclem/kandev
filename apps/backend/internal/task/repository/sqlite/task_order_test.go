@@ -23,6 +23,17 @@ func TestTaskListOrderBy_UsesDialectTitleOrdering(t *testing.T) {
 	}
 }
 
+// Existing backstop: page-local facet sorts cannot produce an unspecified SQL ordering.
+func TestTaskListOrderByFacetFallsBackToDefault(t *testing.T) {
+	for _, driver := range []string{dialect.SQLite3, dialect.PGX} {
+		got := taskListOrderBy(driver, "t", "facet:plugin:tags")
+		want := taskListOrderBy(driver, "t", usermodels.TasksListSortDefault)
+		if got != want {
+			t.Errorf("dialect %s: facet ordering = %q, want %q", driver, got, want)
+		}
+	}
+}
+
 func TestTaskSearchSelectQuery_OrdersOutsideDistinctForPostgres(t *testing.T) {
 	query := taskSearchSelectQuery(dialect.PGX, "", "ILIKE", usermodels.TasksListSortTitleAsc)
 	distinctIndex := strings.Index(query, "SELECT DISTINCT")

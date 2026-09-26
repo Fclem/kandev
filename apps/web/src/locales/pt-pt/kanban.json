@@ -36,7 +36,7 @@
   "gitlabMergeRequest": "Merge Request do GitLab",
   "goToTask": "Ir para a tarefa",
   "group": "Agrupar",
-  "groupTasksIntoSectionsByState": "Agrupar as tarefas em secções por estado, fluxo de trabalho, repositório ou não agrupar.",
+  "groupTasksIntoSectionsByState": "Agrupar as tarefas em secções por estado, fluxo de trabalho, repositório, valores de plugin ou não agrupar.",
   "healthIssues": "Problemas de saúde",
   "improveKandev": "Melhorar o Kandev",
   "jiraTicket": "Ticket do Jira",

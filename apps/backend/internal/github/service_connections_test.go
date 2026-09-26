@@ -458,6 +458,13 @@ func TestWorkspaceConnectionStaleUsesConflictResponse(t *testing.T) {
 	}
 }
 
+func TestDeletedPersonalStarWorkspaceUsesNotFoundResponse(t *testing.T) {
+	status, code := githubAuthErrorResponse(errPersonalStarWorkspaceDeleted)
+	if status != http.StatusNotFound || code != "github_workspace_not_found" {
+		t.Fatalf("deleted workspace response = %d, %q", status, code)
+	}
+}
+
 func TestCopyWorkspaceConnectionToWorkspace(t *testing.T) {
 	t.Run("copies PAT connection and secret", func(t *testing.T) {
 		service, secrets := newWorkspaceConnectionService(t, "alice")

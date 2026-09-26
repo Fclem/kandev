@@ -51,6 +51,66 @@ func TestBootstrapDeploymentIdentityIsIdempotentAndReadOnlyLoad(t *testing.T) {
 	}
 }
 
+func TestBootstrapDeploymentIdentityPermissionsSeparatePublicAndPrivateMaterial(t *testing.T) {
+	dataDir := t.TempDir()
+	if _, err := BootstrapDeploymentIdentity(dataDir); err != nil {
+		t.Fatal(err)
+	}
+
+	for path, want := range map[string]os.FileMode{
+		DeploymentIdentityDir(dataDir):                                              0o755,
+		filepath.Join(DeploymentIdentityDir(dataDir), deploymentInstallationIDFile): 0o644,
+		filepath.Join(DeploymentIdentityDir(dataDir), deploymentPublicKeyFile):      0o644,
+		filepath.Join(DeploymentIdentityDir(dataDir), deploymentPrivateKeyFile):     0o600,
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %q: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("permissions for %q = %04o, want %04o", path, got, want)
+		}
+	}
+}
+
+func TestBootstrapDeploymentIdentityRepairsPublicPermissionsOnExistingIdentity(t *testing.T) {
+	dataDir := t.TempDir()
+	if _, err := BootstrapDeploymentIdentity(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	dir := DeploymentIdentityDir(dataDir)
+	publicFiles := []string{
+		filepath.Join(dir, deploymentInstallationIDFile),
+		filepath.Join(dir, deploymentPublicKeyFile),
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range publicFiles {
+		if err := os.Chmod(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := BootstrapDeploymentIdentity(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]os.FileMode{
+		dir:            0o755,
+		publicFiles[0]: 0o644,
+		publicFiles[1]: 0o644,
+		filepath.Join(dir, deploymentPrivateKeyFile): 0o600,
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %q: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("permissions for %q = %04o, want %04o", path, got, want)
+		}
+	}
+}
+
 func TestBootstrapDeploymentIdentityRejectsPartialIdentity(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(DeploymentIdentityDir(dir), 0o700); err != nil {

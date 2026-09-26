@@ -195,6 +195,7 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 		CREATE TABLE github_user_connections (workspace_id TEXT, user_id TEXT);
 		CREATE TABLE github_auth_flows (state_hash TEXT PRIMARY KEY, workspace_id TEXT);
 		CREATE TABLE github_personal_star_lifecycle (workspace_id TEXT PRIMARY KEY);
+		CREATE TABLE github_personal_star_workspace_lifecycle (workspace_id TEXT PRIMARY KEY);
 		CREATE TABLE github_personal_star_connection (workspace_id TEXT PRIMARY KEY);
 		CREATE TABLE github_personal_star_flow (state_sha256 TEXT PRIMARY KEY, workspace_id TEXT);
 		CREATE TABLE github_personal_star_cleanup (id TEXT PRIMARY KEY, workspace_id TEXT, status TEXT);
@@ -203,6 +204,7 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 		INSERT INTO github_user_connections VALUES ('ws-1', 'user-1'), ('ws-2', 'user-2');
 		INSERT INTO github_auth_flows VALUES ('state-1', 'ws-1'), ('state-2', 'ws-2');
 		INSERT INTO github_personal_star_lifecycle VALUES ('ws-1'), ('ws-2');
+		INSERT INTO github_personal_star_workspace_lifecycle VALUES ('ws-1'), ('ws-2');
 		INSERT INTO github_personal_star_connection VALUES ('ws-1'), ('ws-2');
 		INSERT INTO github_personal_star_flow VALUES ('flow-1', 'ws-1'), ('flow-2', 'ws-2');
 		INSERT INTO github_personal_star_cleanup VALUES
@@ -227,6 +229,7 @@ func TestE2EResetDeletesWorkspaceGitHubAuthentication(t *testing.T) {
 	for _, table := range []string{
 		"github_workspace_connections", "github_user_connections", "github_auth_flows",
 		"github_personal_star_lifecycle", "github_personal_star_connection", "github_personal_star_flow",
+		"github_personal_star_workspace_lifecycle",
 	} {
 		assertWorkspaceRows(t, database, table, "ws-1", 0)
 		assertWorkspaceRows(t, database, table, "ws-2", 1)

@@ -298,7 +298,7 @@ The daemon:
 - creates the socket's parent directory with mode `0700` and the socket itself with mode `0600`;
 - accepts a connection only from a peer whose kernel-reported user ID is `0`, so the non-root backend cannot dispatch provisioning calls;
 - resolves its data directory as `${KANDEV_HOME_DIR}/data`, or `~/.kandev/data` when that variable is unset, and reads the existing `master.key` and deployment identity there without generating or rotating either; and
-- never creates the deployment identity. Run `kandev deployment-secret bootstrap` before the first provision; the daemon fails closed when the identity or `master.key` is missing.
+- never creates the deployment identity. Before first provision, run `sudo kandev deployment-secret bootstrap --data-dir /var/lib/kandev/data` (substitute the backend's selected data directory if different). Rerun this idempotent command after upgrades to update public-identity permissions; the daemon fails closed when the identity or `master.key` is missing.
 
 ### Where repository starring is unavailable
 

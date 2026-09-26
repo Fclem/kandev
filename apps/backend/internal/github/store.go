@@ -473,9 +473,13 @@ const createTablesSQL = `
 `
 
 // personalStarTablesSQL holds the dedicated personal-star OAuth App schema.
-// These rows are keyed by (workspace_id, user_id) and never shared with the
-// GitHub App installation or user-connection tables.
+// Per-user rows use (workspace_id, user_id); the teardown fence is workspace-wide.
 const personalStarTablesSQL = `
+	CREATE TABLE IF NOT EXISTS github_personal_star_workspace_lifecycle (
+		workspace_id TEXT PRIMARY KEY CHECK (workspace_id <> ''),
+		deleted_at DATETIME,
+		updated_at DATETIME NOT NULL
+	);
 	CREATE TABLE IF NOT EXISTS github_personal_star_lifecycle (
 		workspace_id TEXT NOT NULL CHECK (workspace_id <> ''),
 		user_id TEXT NOT NULL CHECK (user_id <> ''),

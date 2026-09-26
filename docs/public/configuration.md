@@ -359,19 +359,24 @@ stores the secret.
 
 #### Provision the client secret
 
+Use the backend's exact data directory for every bootstrap, provision, and revoke command. The
+default system service uses `/var/lib/kandev/data`; for a custom service home, use that home's
+`data` directory.
+
 1. Create the OAuth App in GitHub, register the callback URL, and note its client ID and client secret.
-2. Run `kandev deployment-secret bootstrap` once on the host.
-3. Provision the secret as version `1`: `sudo kandev deployment-secret github-personal-star provision --version 1 --client-secret-file ./client-secret`.
+2. Run bootstrap as root: `sudo kandev deployment-secret bootstrap --data-dir /var/lib/kandev/data`.
+   For an identity bootstrapped before the public permissions update, rerun this idempotent command.
+3. Provision version `1` as root: `sudo kandev deployment-secret github-personal-star provision --version 1 --data-dir /var/lib/kandev/data --client-secret-file ./client-secret`.
 4. Set `github.personalStarOAuth.clientId`, `github.personalStarOAuth.clientSecretRef` (for example `kandev-runtime:github-personal-star:client-secret:1`), and `github.personalStarOAuth.callbackURL` in `config.yaml` or the environment, then restart the backend.
 5. Check the connection status for a workspace and user. When it resolves with `available=true`, the star control appears in **Settings > Plugins** for public GitHub repositories.
 
 #### Rotate the client secret
 
-1. Provision the new secret as the next version: `sudo kandev deployment-secret github-personal-star provision --version <n+1> --client-secret-file <path>`.
+1. Provision the new version: `sudo kandev deployment-secret github-personal-star provision --version <n+1> --data-dir /var/lib/kandev/data --client-secret-file <path>`.
 2. Update `github.personalStarOAuth.clientSecretRef`, or its environment alias, to that version.
 3. Restart the backend so the new version is resolved at startup.
 4. Verify that connection status resolves again and that starring still works for an affected workspace and user.
-5. Revoke the previous version: `sudo kandev deployment-secret github-personal-star revoke --version <n>`.
+5. Revoke the previous version: `sudo kandev deployment-secret github-personal-star revoke --version <n> --data-dir /var/lib/kandev/data`.
 
 Rotation never edits a user connection row and never rewrites a stored access or refresh token.
 Revoking a version leaves existing personal connections refreshable; a connection whose grant is no

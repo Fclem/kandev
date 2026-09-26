@@ -391,8 +391,8 @@ func githubAuthErrorResponse(err error) (int, string) {
 		status, code = http.StatusBadRequest, "github_invalid_request"
 	case errors.Is(err, ErrPersonalStarFence):
 		status, code = http.StatusConflict, "github_connection_changed"
-	case errors.Is(err, repoerrors.ErrWorkspaceNotFound):
-		// A missing workspace and a foreign workspace are indistinguishable on
+	case errors.Is(err, repoerrors.ErrWorkspaceNotFound), errors.Is(err, errPersonalStarWorkspaceDeleted):
+		// Missing, deleted, and foreign workspaces are indistinguishable on
 		// purpose: the caller learns only that the workspace is not usable.
 		status, code = http.StatusNotFound, "github_workspace_not_found"
 	}

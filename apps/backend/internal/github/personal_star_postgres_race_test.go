@@ -174,7 +174,7 @@ func TestWorkspaceDeletionSerializesWithPersonalStarRefreshOnPostgres(t *testing
 		deleteDone <- service.handleWorkspaceDeleted(ctx,
 			bus.NewEvent(events.WorkspaceDeleted, "test", map[string]interface{}{"id": workspaceID}))
 	}()
-	waitForPersonalStarLockWait(t, database, "FROM github_personal_star_connection", deleteSettled)
+	waitForPersonalStarLockWait(t, database, "INSERT INTO github_personal_star_workspace_lifecycle", deleteSettled)
 	gateRelease()
 	if err := <-refreshDone; err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -273,7 +273,7 @@ func TestPersonalStarReplacementHoldsLifecycleFenceThroughCommitOnPostgres(t *te
 			err                  error
 		}{nextRevision, nextGeneration, err}
 	}()
-	waitForPersonalStarLockWait(t, database, "INSERT INTO github_personal_star_lifecycle", bumpSettled)
+	waitForPersonalStarLockWait(t, database, "INSERT INTO github_personal_star_workspace_lifecycle", bumpSettled)
 	gateRelease()
 	if err := <-replaceDone; err != nil {
 		t.Fatalf("replace connection: %v", err)

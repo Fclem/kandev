@@ -58,9 +58,18 @@ const personalStarCleanupSelect = `
 		attempts, next_attempt_at, claim_lease_until, status, last_error, created_at
 	FROM github_personal_star_cleanup`
 
-// CreatePersonalStarFlow stores one-time flow state.
+// CreatePersonalStarFlow stores one-time flow state only while its workspace
+// lifecycle remains active.
 func (s *Store) CreatePersonalStarFlow(ctx context.Context, flow *PersonalStarFlow) error {
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("create personal star flow: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := lockPersonalStarWorkspaceLifecycleForUpdate(ctx, tx, flow.WorkspaceID); err != nil {
+		return fmt.Errorf("create personal star flow: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		INSERT INTO github_personal_star_flow (
 			state_sha256, flow_kind, workspace_id, user_id, session_subject, session_id,
 			expected_revision, expected_generation, code_verifier, code_challenge,
@@ -69,9 +78,11 @@ func (s *Store) CreatePersonalStarFlow(ctx context.Context, flow *PersonalStarFl
 		flow.StateDigest, flow.FlowKind, flow.WorkspaceID, flow.UserID, flow.SessionSubject,
 		nullableSecretID(flow.SessionID), flow.ExpectedRevision, flow.ExpectedGeneration,
 		flow.CodeVerifier, flow.CodeChallenge, flow.RedirectURI, flow.ReturnPath,
-		flow.CreatedAt, flow.ExpiresAt)
-	if err != nil {
+		flow.CreatedAt, flow.ExpiresAt); err != nil {
 		return fmt.Errorf("create personal star flow: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit personal star flow: %w", err)
 	}
 	return nil
 }
@@ -85,11 +96,22 @@ func (s *Store) ClaimPersonalStarFlowForExchange(
 	now time.Time,
 	validate func(context.Context, sqlx.Ext, *PersonalStarFlow) error,
 ) (*PersonalStarFlow, error) {
+	var workspaceID string
+	if err := s.db.GetContext(ctx, &workspaceID, s.db.Rebind(`
+		SELECT workspace_id FROM github_personal_star_flow WHERE state_sha256 = ?`), stateDigest); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrPersonalStarFlowUnavailable
+		}
+		return nil, fmt.Errorf("load personal star flow workspace: %w", err)
+	}
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("claim personal star flow: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockPersonalStarWorkspaceLifecycleForUpdate(ctx, tx, workspaceID); err != nil {
+		return nil, err
+	}
 
 	statement := personalStarFlowSelect + ` WHERE state_sha256 = ?` + personalStarRowLockClause(s.db.DriverName())
 	var flow PersonalStarFlow
@@ -99,6 +121,9 @@ func (s *Store) ClaimPersonalStarFlowForExchange(
 	}
 	if err != nil {
 		return nil, fmt.Errorf("claim personal star flow: %w", err)
+	}
+	if flow.WorkspaceID != workspaceID {
+		return nil, ErrPersonalStarFlowUnavailable
 	}
 	if flow.ConsumedAt != nil || !now.Before(flow.ExpiresAt) {
 		return nil, ErrPersonalStarFlowUnavailable

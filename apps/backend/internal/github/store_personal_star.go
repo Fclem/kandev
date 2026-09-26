@@ -32,7 +32,8 @@ var (
 	// generation that no longer matches the committed fence.
 	ErrPersonalStarFence = errors.New("github personal star connection fence changed")
 	// ErrPersonalStarFlowUnavailable reports an absent, consumed, or expired flow.
-	ErrPersonalStarFlowUnavailable = errors.New("github personal star flow is unavailable")
+	ErrPersonalStarFlowUnavailable  = errors.New("github personal star flow is unavailable")
+	errPersonalStarWorkspaceDeleted = errors.New("workspace not found")
 	// A failed transaction commit may have applied before its acknowledgment was lost.
 	errPersonalStarCommitOutcomeUnknown = errors.New("github personal star commit outcome unknown")
 )
@@ -117,6 +118,33 @@ func getPersonalStarLifecycleOn(
 	return lifecycle, err
 }
 
+// lockPersonalStarWorkspaceLifecycleForUpdate serializes state creation and
+// commits with workspace teardown. The retained deletion timestamp prevents
+// later consent attempts from recreating lifecycle rows after cleanup.
+func lockPersonalStarWorkspaceLifecycleForUpdate(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	workspaceID string,
+) error {
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		INSERT INTO github_personal_star_workspace_lifecycle (workspace_id, deleted_at, updated_at)
+		VALUES (?, NULL, ?)
+		ON CONFLICT (workspace_id) DO NOTHING`), workspaceID, now); err != nil {
+		return fmt.Errorf("ensure personal star workspace lifecycle: %w", err)
+	}
+	var deletedAt sql.NullTime
+	query := `SELECT deleted_at FROM github_personal_star_workspace_lifecycle WHERE workspace_id = ?` +
+		personalStarRowLockClause(tx.DriverName())
+	if err := tx.GetContext(ctx, &deletedAt, tx.Rebind(query), workspaceID); err != nil {
+		return fmt.Errorf("lock personal star workspace lifecycle: %w", err)
+	}
+	if deletedAt.Valid {
+		return errPersonalStarWorkspaceDeleted
+	}
+	return nil
+}
+
 // personalStarConnectionStateForCommitReconciliation locks the lifecycle row
 // where supported before reading the connection that may have committed.
 func (s *Store) personalStarConnectionStateForCommitReconciliation(
@@ -149,8 +177,16 @@ func (s *Store) personalStarConnectionStateForCommitReconciliation(
 // credential generation. Every start calls this before creating flow state, so
 // a disconnect that races a start always wins.
 func (s *Store) BumpPersonalStarLifecycle(ctx context.Context, workspaceID, userID string) (int64, int64, error) {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, 0, fmt.Errorf("bump personal star lifecycle: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := lockPersonalStarWorkspaceLifecycleForUpdate(ctx, tx, workspaceID); err != nil {
+		return 0, 0, err
+	}
 	var lifecycle PersonalStarLifecycle
-	err := s.db.GetContext(ctx, &lifecycle, s.db.Rebind(`
+	if err := tx.GetContext(ctx, &lifecycle, tx.Rebind(`
 		INSERT INTO github_personal_star_lifecycle (workspace_id, user_id, revision, credential_generation, updated_at)
 		VALUES (?, ?, 1, 1, ?)
 		ON CONFLICT (workspace_id, user_id) DO UPDATE SET
@@ -158,9 +194,11 @@ func (s *Store) BumpPersonalStarLifecycle(ctx context.Context, workspaceID, user
 			credential_generation = github_personal_star_lifecycle.credential_generation + 1,
 			updated_at = excluded.updated_at
 		RETURNING revision, credential_generation`),
-		workspaceID, userID, time.Now().UTC())
-	if err != nil {
+		workspaceID, userID, time.Now().UTC()); err != nil {
 		return 0, 0, fmt.Errorf("bump personal star lifecycle: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("commit personal star lifecycle: %w", err)
 	}
 	return lifecycle.Revision, lifecycle.CredentialGeneration, nil
 }
@@ -193,6 +231,9 @@ func (s *Store) ReplacePersonalStarConnection(
 		return nil, fmt.Errorf("replace personal star connection: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockPersonalStarWorkspaceLifecycleForUpdate(ctx, tx, connection.WorkspaceID); err != nil {
+		return nil, err
+	}
 
 	previous, err := personalStarConnectionForUpdate(ctx, tx, connection.WorkspaceID, connection.UserID)
 	if err != nil {
@@ -379,6 +420,9 @@ func (s *Store) InsertPersonalStarConnection(
 		return fmt.Errorf("insert personal star connection: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockPersonalStarWorkspaceLifecycleForUpdate(ctx, tx, connection.WorkspaceID); err != nil {
+		return err
+	}
 	lifecycle, err := personalStarLifecycleForUpdate(ctx, tx, connection.WorkspaceID, connection.UserID)
 	if err != nil {
 		return err
@@ -462,6 +506,9 @@ func (s *Store) SetPersonalStarReconnectOutcome(
 		return false, fmt.Errorf("record personal star reconnect outcome: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockPersonalStarWorkspaceLifecycleForUpdate(ctx, tx, workspaceID); err != nil {
+		return false, err
+	}
 	connection, err := personalStarConnectionForUpdate(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return false, err
@@ -513,6 +560,9 @@ func (s *Store) DisconnectPersonalStarConnection(
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if err := lockPersonalStarWorkspaceLifecycleForUpdate(ctx, tx, workspaceID); err != nil {
+		return nil, err
+	}
 	previous, err := personalStarConnectionForUpdate(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return nil, err
@@ -566,24 +616,24 @@ func (s *Store) ListPersonalStarConnections(ctx context.Context, workspaceID str
 	return connections, err
 }
 
-// DeletePersonalStarWorkspaceState queues the current token pointers and removes
-// their rows in one transaction. Connection writers take the same row locks, so
-// teardown either sees a committed replacement or makes a staged write fail its
-// lifecycle fence.
+// DeletePersonalStarWorkspaceState records the workspace deletion fence,
+// queues committed token pointers, and removes per-user state atomically.
+// Consent and connection writers take that fence lock, so cleanup either sees
+// a committed replacement or prevents a late write from recreating state.
 func (s *Store) DeletePersonalStarWorkspaceState(ctx context.Context, workspaceID string) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("delete personal star workspace state: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if !dialect.IsPostgres(tx.DriverName()) {
-		// SQLite serializes writers at the database level. Acquire its writer
-		// lock before reading the pointers that will be queued.
-		if _, err := tx.ExecContext(ctx, tx.Rebind(`
-			UPDATE github_personal_star_lifecycle SET updated_at = updated_at
-			WHERE workspace_id = ?`), workspaceID); err != nil {
-			return fmt.Errorf("lock personal star workspace state: %w", err)
-		}
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		INSERT INTO github_personal_star_workspace_lifecycle (workspace_id, deleted_at, updated_at)
+		VALUES (?, ?, ?)
+		ON CONFLICT (workspace_id) DO UPDATE SET
+			deleted_at = COALESCE(github_personal_star_workspace_lifecycle.deleted_at, excluded.deleted_at),
+			updated_at = excluded.updated_at`), workspaceID, now, now); err != nil {
+		return fmt.Errorf("mark personal star workspace deleted: %w", err)
 	}
 	if err := lockPersonalStarWorkspaceConnections(ctx, tx, workspaceID); err != nil {
 		return err

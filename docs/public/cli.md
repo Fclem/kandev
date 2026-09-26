@@ -464,13 +464,13 @@ kandev deployment-secret github-personal-star revoke --version <n> [--socket <pa
 
 | Command or flag | Meaning |
 |---|---|
-| `kandev deployment-secret bootstrap` | Creates the deployment identity: an installation ID and an Ed25519 root keypair. The private key stays root-owned with mode `0600`. It is idempotent, never overwrites existing trust material, and runs once per deployment before the first provision. |
+| `kandev deployment-secret bootstrap` | Creates the deployment identity: an installation ID and an Ed25519 root keypair. The installation ID and public key are readable by the backend service; the private key stays root-owned with mode `0600`. It never overwrites trust material and may be rerun to apply these permissions to an existing identity. |
 | `kandev deployment-secret github-personal-star provision` | Seals one client secret with the existing `<data-dir>/master.key` and stores it as a new immutable version. It never creates or rotates the master key, and the plaintext is never written to disk, logged, or printed. |
 | `--version <n>` | Positive integer version of the stored secret reference; valid for provision and revoke. A provisioned version is immutable, and provisioning a newer version leaves earlier versions in place until you revoke them. |
 | `--client-secret-file <path>` | Provision only. File holding the OAuth App client secret, at most 1024 bytes. One trailing line break is stripped; every other byte is used verbatim. Use `-` to read the secret from standard input. |
 | `kandev deployment-secret github-personal-star revoke --version <n>` | Marks one provisioned version revoked after you have rotated to a newer one. It never deletes stored rows and never reveals the sealed value. |
 | `--socket <path>` | Provision and revoke only. Deployment-secret supervisor socket. Default: `/run/kandev/deployment-secret.sock`. |
-| `--data-dir <path>` | Deployment data directory holding `master.key` and the bootstrapped deployment identity. Default: `$KANDEV_HOME_DIR/data`, or `~/.kandev/data` when `KANDEV_HOME_DIR` is unset. |
+| `--data-dir <path>` | Deployment data directory holding `master.key` and the bootstrapped deployment identity. Default: `$KANDEV_HOME_DIR/data`, or `~/.kandev/data` when `KANDEV_HOME_DIR` is unset. Root commands for a system service should pass the backend's data directory explicitly. |
 
 These commands are root-only. A non-root invocation exits with status 1 before it opens the socket
 or writes any file, so the refusal does not depend on the supervisor being reachable. A usage

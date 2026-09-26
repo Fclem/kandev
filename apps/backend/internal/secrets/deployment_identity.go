@@ -55,11 +55,14 @@ func LoadDeploymentIdentity(dataDir string) (DeploymentIdentity, error) {
 }
 
 // BootstrapDeploymentIdentity generates the identity exactly once. A partial or
-// malformed existing identity is an error: bootstrap never repairs or
-// overwrites deployment-owned trust material.
+// malformed existing identity is an error. Existing key material is never
+// regenerated; bootstrap only enforces its file and directory permissions.
 func BootstrapDeploymentIdentity(dataDir string) (DeploymentIdentity, error) {
 	existing, err := LoadDeploymentIdentity(dataDir)
 	if err == nil {
+		if err := setDeploymentIdentityPermissions(DeploymentIdentityDir(dataDir)); err != nil {
+			return DeploymentIdentity{}, err
+		}
 		return existing, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
@@ -70,7 +73,7 @@ func BootstrapDeploymentIdentity(dataDir string) (DeploymentIdentity, error) {
 	if findErr := findDeploymentIdentityFile(dir); findErr != nil {
 		return DeploymentIdentity{}, findErr
 	}
-	if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
+	if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
 		return DeploymentIdentity{}, fmt.Errorf("create deployment identity dir: %w", mkErr)
 	}
 	installationID, err := randomDeploymentHex(DeploymentInstallationIDBytes)
@@ -82,6 +85,9 @@ func BootstrapDeploymentIdentity(dataDir string) (DeploymentIdentity, error) {
 		return DeploymentIdentity{}, fmt.Errorf("generate deployment root key: %w", err)
 	}
 	if err := writeDeploymentIdentityFiles(dir, installationID, publicKey, privateKey); err != nil {
+		return DeploymentIdentity{}, err
+	}
+	if err := setDeploymentIdentityPermissions(dir); err != nil {
 		return DeploymentIdentity{}, err
 	}
 	return DeploymentIdentity{InstallationID: installationID, RootPublicKey: publicKey}, nil
@@ -116,6 +122,27 @@ func writeDeploymentIdentityFiles(
 	publicKeyPath := filepath.Join(dir, deploymentPublicKeyFile)
 	if err := os.WriteFile(publicKeyPath, publicKey, 0o644); err != nil {
 		return fmt.Errorf("write deployment root public key: %w", err)
+	}
+	return nil
+}
+
+// setDeploymentIdentityPermissions exposes only the public identity to the
+// backend and keeps the signing key owner-readable.
+func setDeploymentIdentityPermissions(dir string) error {
+	for _, file := range []struct {
+		name string
+		mode os.FileMode
+	}{
+		{name: deploymentInstallationIDFile, mode: 0o644},
+		{name: deploymentPublicKeyFile, mode: 0o644},
+		{name: deploymentPrivateKeyFile, mode: 0o600},
+	} {
+		if err := os.Chmod(filepath.Join(dir, file.name), file.mode); err != nil {
+			return fmt.Errorf("set deployment identity permissions for %s: %w", file.name, err)
+		}
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		return fmt.Errorf("set deployment identity directory permissions: %w", err)
 	}
 	return nil
 }

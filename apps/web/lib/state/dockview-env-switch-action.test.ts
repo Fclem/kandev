@@ -675,7 +675,7 @@ describe("switchEnvLayout — retired panel compatibility", () => {
     expect(state.maximizedGroupId).toBeTruthy();
   });
 
-  it("applies the sanitized env layout when the maximized group was only the retired panel", () => {
+  it("applies the saved pre-maximize layout when the maximized group was only the retired panel", () => {
     const api = makeMockApi();
     vi.mocked(getEnvLayout).mockReturnValue(envLayoutWithRetiredPanel());
     vi.mocked(getEnvMaximizeState).mockReturnValue({
@@ -693,6 +693,7 @@ describe("switchEnvLayout — retired panel compatibility", () => {
       panels: Record<string, unknown>;
     };
     expect(Object.keys(applied.panels)).not.toContain(RETIRED_COMPONENT);
+    expect(Object.keys(applied.panels)).not.toContain("files");
     expect(Object.keys(applied.panels)).toContain("chat");
   });
 });

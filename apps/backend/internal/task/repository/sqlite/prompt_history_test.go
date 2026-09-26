@@ -14,7 +14,16 @@ type promptHistoryReader interface {
 }
 
 type promptHistoryClaimer interface {
-	ClaimInitialPromptFallback(context.Context, string) (bool, error)
+	ClaimInitialPromptFallback(context.Context, string, string) (bool, error)
+}
+
+func promptHistoryIncarnation(t *testing.T, repo *Repository, ctx context.Context, sessionID string) string {
+	t.Helper()
+	session, err := repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("get session %q: %v", sessionID, err)
+	}
+	return session.QueueIncarnationID
 }
 
 func TestHasUserPromptHistory(t *testing.T) {
@@ -101,12 +110,13 @@ func TestClaimInitialPromptFallbackSerializesPromptAdmission(t *testing.T) {
 	if !ok {
 		t.Fatal("repository does not expose ClaimInitialPromptFallback")
 	}
+	claimIncarnation := promptHistoryIncarnation(t, repo, ctx, "session-claim-first")
 
-	claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-claim-first")
+	claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-claim-first", claimIncarnation)
 	if err != nil || !claimed {
 		t.Fatalf("first fallback claim = %t, %v; want claimed", claimed, err)
 	}
-	if claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-claim-first"); err != nil || claimed {
+	if claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-claim-first", claimIncarnation); err != nil || claimed {
 		t.Fatalf("second fallback claim = %t, %v; want rejected", claimed, err)
 	}
 	claimedPrompt := &models.Message{
@@ -134,9 +144,12 @@ func TestClaimInitialPromptFallbackSerializesPromptAdmission(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create direct prompt: %v", err)
 	}
-	if claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-direct-first"); err != nil || claimed {
+	directIncarnation := promptHistoryIncarnation(t, repo, ctx, "session-direct-first")
+	if claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-direct-first", directIncarnation); err != nil || claimed {
 		t.Fatalf("direct-first fallback claim = %t, %v; want rejected", claimed, err)
 	}
+
+	raceIncarnation := promptHistoryIncarnation(t, repo, ctx, "session-claim-race")
 
 	var wg sync.WaitGroup
 	results := make(chan bool, 2)
@@ -144,7 +157,7 @@ func TestClaimInitialPromptFallbackSerializesPromptAdmission(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			claimed, claimErr := claimer.ClaimInitialPromptFallback(ctx, "session-claim-race")
+			claimed, claimErr := claimer.ClaimInitialPromptFallback(ctx, "session-claim-race", raceIncarnation)
 			if claimErr != nil {
 				t.Errorf("concurrent fallback claim: %v", claimErr)
 				return
@@ -171,7 +184,11 @@ func TestDeleteTaskSessionRemovesPromptHistoryClaim(t *testing.T) {
 	seedForMsgTest(t, repo, "task-session-reuse", "session-session-reuse", "turn-session-reuse")
 
 	claimer := any(repo).(promptHistoryClaimer)
-	claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-session-reuse")
+	oldSession, err := repo.GetTaskSession(ctx, "session-session-reuse")
+	if err != nil {
+		t.Fatalf("read initial session: %v", err)
+	}
+	claimed, err := claimer.ClaimInitialPromptFallback(ctx, "session-session-reuse", oldSession.QueueIncarnationID)
 	if err != nil || !claimed {
 		t.Fatalf("initial fallback claim = %t, %v; want claimed", claimed, err)
 	}
@@ -180,6 +197,26 @@ func TestDeleteTaskSessionRemovesPromptHistoryClaim(t *testing.T) {
 	}
 
 	seedForMsgTest(t, repo, "task-session-reuse", "session-session-reuse", "turn-session-reuse-new")
+	if _, err := repo.db.Exec(repo.db.Rebind(`
+		UPDATE task_sessions SET queue_incarnation_id = ? WHERE id = ?
+	`), "replacement-session-incarnation", "session-session-reuse"); err != nil {
+		t.Fatalf("set replacement session incarnation: %v", err)
+	}
+	newSession, err := repo.GetTaskSession(ctx, "session-session-reuse")
+	if err != nil {
+		t.Fatalf("read replacement session: %v", err)
+	}
+	if newSession.QueueIncarnationID == oldSession.QueueIncarnationID {
+		t.Fatal("replacement session reused its predecessor's incarnation")
+	}
+
+	claimed, err = claimer.ClaimInitialPromptFallback(ctx, "session-session-reuse", oldSession.QueueIncarnationID)
+	if err != nil {
+		t.Fatalf("stale fallback claim: %v", err)
+	}
+	if claimed {
+		t.Fatal("stale fallback claim reserved the replacement session's first-prompt slot")
+	}
 	hasHistory, err := repo.HasUserPromptHistory(ctx, "session-session-reuse")
 	if err != nil {
 		t.Fatalf("read reused session history: %v", err)
@@ -187,6 +224,11 @@ func TestDeleteTaskSessionRemovesPromptHistoryClaim(t *testing.T) {
 	if hasHistory {
 		t.Fatal("reused session inherited prompt history from deleted session")
 	}
+	claimed, err = claimer.ClaimInitialPromptFallback(ctx, "session-session-reuse", newSession.QueueIncarnationID)
+	if err != nil || !claimed {
+		t.Fatalf("replacement fallback claim = %t, %v; want claimed", claimed, err)
+	}
+
 }
 func TestDeleteTaskClearsPromptSequenceBeforeSessionIDReuse(t *testing.T) {
 	repo := newRepoForSessionTests(t)
@@ -216,7 +258,7 @@ func TestDeleteTaskClearsPromptSequenceBeforeSessionIDReuse(t *testing.T) {
 	if hasHistory {
 		t.Fatal("recreated session inherited prompt history from deleted task")
 	}
-	claimed, err := repo.ClaimInitialPromptFallback(ctx, "session-reuse-after-delete")
+	claimed, err := repo.ClaimInitialPromptFallback(ctx, "session-reuse-after-delete", promptHistoryIncarnation(t, repo, ctx, "session-reuse-after-delete"))
 	if err != nil || !claimed {
 		t.Fatalf("initial fallback claim after task delete = %t, %v; want claimed", claimed, err)
 	}

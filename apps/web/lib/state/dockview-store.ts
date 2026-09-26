@@ -912,6 +912,43 @@ function captureReusableLayout(get: StoreGet): Record<string, unknown> {
   return normalizeReusableSessionPanels(filtered) as unknown as Record<string, unknown>;
 }
 
+function restorePreMaximizeFallback({
+  api,
+  envId,
+  set,
+  savedLayout,
+  activeSessionId,
+  currentSessionIds,
+}: {
+  api: DockviewApi;
+  envId: string;
+  set: StoreSet;
+  savedLayout: LayoutState;
+  activeSessionId: string | null;
+  currentSessionIds: string[];
+}): void {
+  const preMaximizeLayout = filterLayoutStateByComponents(savedLayout);
+  const { width, height } = measureDockviewContainer(api);
+  const manualRightWidth = getManualRightWidth(envId);
+  const pinnedWidths =
+    manualRightWidth === null ? new Map() : new Map([["right", manualRightWidth]]);
+  restoreSerializedDockview(
+    api,
+    toSerializedDockview(preMaximizeLayout, width, height, pinnedWidths),
+  );
+  replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);
+  api.layout(width, height);
+  const ids = applyLayoutFixups(api, undefined, manualRightWidth);
+  removeEnvMaximizeState(envId);
+  set({
+    ...ids,
+    preMaximizeLayout: null,
+    maximizedGroupId: null,
+    ...visibilityForLayout(preMaximizeLayout, readHiddenRightPane(getEnvLayout(envId))),
+  });
+  requestAnimationFrame(() => set({ isRestoringLayout: false }));
+}
+
 /** Restore a saved maximize state from sessionStorage onto the dockview API. */
 function restoreMaximizeFromStorage(
   api: DockviewApi,
@@ -924,20 +961,22 @@ function restoreMaximizeFromStorage(
   if (!saved) return false;
   try {
     const rawMaximized = saved.maximizedDockviewJson;
-    const maximizedGroupId = maximizedGroupIdOf(rawMaximized);
     const sanitizedMaximized = sanitizeSerializedLayout(rawMaximized);
-    if (!sanitizedMaximized) {
-      removeEnvMaximizeState(envId);
-      return false;
-    }
+    const maximizedGroupId = maximizedGroupIdOf(rawMaximized);
     if (
-      maximizedGroupId &&
-      !serializedGridGroupIds(sanitizedMaximized.grid?.root).has(maximizedGroupId)
+      !sanitizedMaximized ||
+      (maximizedGroupId &&
+        !serializedGridGroupIds(sanitizedMaximized.grid?.root).has(maximizedGroupId))
     ) {
-      // The maximized group itself did not survive: returning false lets the
-      // env-switch path apply this environment's sanitized saved layout, which
-      // is normally the same pre-maximize layout.
-      return false;
+      restorePreMaximizeFallback({
+        api,
+        envId,
+        set,
+        savedLayout: saved.preMaximizeLayout as unknown as LayoutState,
+        activeSessionId,
+        currentSessionIds,
+      });
+      return true;
     }
     restoreSerializedDockview(api, sanitizedMaximized as SerializedDockview);
     replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);

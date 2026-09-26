@@ -160,7 +160,7 @@ func TestDeleteExpiredQuickChatRemovesPromptMarkerAfterDeletingTask(t *testing.T
 
 func TestClaimInitialPromptFallbackRejectsMissingSession(t *testing.T) {
 	repo := newRepoForSessionTests(t)
-	claimed, err := repo.ClaimInitialPromptFallback(context.Background(), "missing-fallback-session")
+	claimed, err := repo.ClaimInitialPromptFallback(context.Background(), "missing-fallback-session", "missing-incarnation")
 	if err != nil {
 		t.Fatalf("claim fallback for missing session: %v", err)
 	}

@@ -15,6 +15,10 @@ func TestPostgresDeleteTaskSerializesWithFallbackClaim(t *testing.T) {
 	}
 	ctx := context.Background()
 	seedTaskWithSession(t, repoA, "task-prompt-delete-race", "workspace-prompt-delete-race", "session-prompt-delete-race")
+	session, err := repoA.GetTaskSession(ctx, "session-prompt-delete-race")
+	if err != nil {
+		t.Fatalf("read session incarnation: %v", err)
+	}
 
 	const barrierKey = "prompt-sequence-delete-trigger-barrier"
 	if _, err := repoA.db.ExecContext(ctx, `
@@ -60,7 +64,7 @@ func TestPostgresDeleteTaskSerializesWithFallbackClaim(t *testing.T) {
 	var claimed bool
 	var claimErr error
 	go func() {
-		claimed, claimErr = claimRepo.ClaimInitialPromptFallback(ctx, "session-prompt-delete-race")
+		claimed, claimErr = claimRepo.ClaimInitialPromptFallback(ctx, "session-prompt-delete-race", session.QueueIncarnationID)
 		close(claimDone)
 	}()
 	if err := waitForPostgresLock(ctx, repoA.db, claimPID, claimDone); err != nil {

@@ -159,28 +159,24 @@ contracts on desktop and phone.
   after sanitization.
 - Prune the retained hidden-right-pane column. `HiddenRightPane.column` is a
   whole `LayoutColumn` with panel definitions, written with the per-environment
-  layout and read back shape-validated only; `restoreRightPane` re-inserts it
-  (deduping by panel id only), and `toggleRightPanels` applies the result, so a
-  user whose retired panel sat in the hidden column keeps the retired component
-  in that metadata and the "show right panels" control silently fails, leaving
-  that column's surviving panels unreachable. Prune the column with
-  `filterLayoutStateByComponents` inside `restoreRightPane` before insertion, and
-  make that the mandatory choke point: `readHiddenRightPane` has three readers —
+  layout and read back shape-validated only; without pruning, the retired
+  component can reach the grid on restore or leave a "show right panels" control
+  that cannot act when no renderable panel survives.
+  `readHiddenRightPane` prunes the column on the way in and returns null when
+  nothing survives. This function is the funnel for all three readers:
   `restoreMaximizeFromStorage` and the environment-switch handler in
-  `apps/web/lib/state/dockview-store.ts`, and `setupReadyDockview` in
+  `apps/web/lib/state/dockview-store.ts`, plus `setupReadyDockview` in
   `apps/web/components/task/dockview-desktop-layout.tsx`, which populates the
-  store on an ordinary page load — so pruning at read sites only would leave that
-  ordinary route broken. The next capture then persists a pruned column.
-  Add two unit cases in `apps/web/lib/state/dockview-right-pane.test.ts`, which
-  imports only the pure module: a retained column whose only panel carries the
-  retired component makes `restoreRightPane` return null, so the column is not
-  re-inserted; and a mixed column (the retired component plus a renderable panel
-  such as `todos`) inserts only the survivors and preserves the surviving panels
-  and geometry. One case cannot assert both: a retired-only column has no
-  survivors, and the emptied column is dropped. Assert the pane's availability in
-  the store test instead, if at all — the metadatum is cleared only by
-  `toggleRightPanels`, and `getRightPaneToggleState` still reads it from the pure
-  module.
+  store on an ordinary page load. `restoreRightPane` also filters immediately
+  before insertion as a guard for callers holding a captured pane. The next
+  capture then persists the pruned column.
+  Add four unit cases in `apps/web/lib/state/dockview-right-pane.test.ts`: a
+  retired-only column returns null from `restoreRightPane`; a mixed column
+  inserts only the survivors and preserves its geometry and active panel; a
+  retired-only stored column reads as null and leaves the toggle unavailable;
+  and a mixed stored column reads with only the renderable panels and its active
+  panel repaired. A retired-only column cannot also assert survivor insertion,
+  because the emptied column is dropped.
 - Sanitize the two remaining stored payloads that still reach the renderer
   unfiltered, using the shared helpers above with the renderable-component
   predicate:
@@ -465,7 +461,7 @@ Done. Commands run from the repository root.
   lib/state/dockview-env-switch-action.test.ts \
   lib/state/dockview-preset-persistence.test.ts \
   lib/layout/layout-profiles.test.ts)
-# 6 files passed, 123 tests passed
+# 6 files passed, 125 tests passed
 (cd apps/web && pnpm run typecheck)   # tsc --noEmit clean
 (cd apps/web && pnpm run lint)        # eslint --max-warnings 0 clean
 ```

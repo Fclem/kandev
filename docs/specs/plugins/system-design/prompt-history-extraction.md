@@ -171,29 +171,32 @@ differently depending on whether the user had visited a task first.
   filters the incoming `SavedLayout.layout` on both branches before applying it.
 - `apps/web/lib/state/dockview-env-switch.ts`: the slow path sanitizes the
   healthy saved layout before `restoreSerializedDockview` and holds the sanitized
-  payload in `saved` — the local is `const` today and becomes `let` — with no
-  storage write, so the active-view replay (`restoreSavedActiveViews`) and the
-  right-column width read (`savedRightColumnWidth`) see the layout that was
-  actually applied.
+  payload in `saved` with no storage write, so the active-view replay
+  (`restoreSavedActiveViews`) and the right-column width read
+  (`savedRightColumnWidth`) see the layout that was actually applied.
   `replaceStaleSessionPanels` takes no payload and is unaffected.
 - `apps/web/components/task/mobile/session-mobile-bottom-nav.tsx`: renders the
   `Panels` entry from the canvases and plugin panels that can actually populate
   its sheet, because the term that always kept it visible belonged to the
   removed panel.
 - `apps/web/lib/state/dockview-right-pane.ts`: the retained hidden-right-pane
-  column is pruned with `filterLayoutStateByComponents` inside `restoreRightPane`
-  before insertion. That is the choke point, not an option: `readHiddenRightPane`
-  has three readers — `restoreMaximizeFromStorage` (`dockview-store.ts`), the
-  environment-switch handler (`dockview-store.ts`), and `setupReadyDockview` in
+  column is pruned with `filterLayoutStateByComponents` at both boundaries —
+  `readHiddenRightPane` prunes on the way in and returns null when nothing
+  survives, and `restoreRightPane` prunes again before insertion as the guard for
+  callers that hold a captured pane. The read is the funnel for all three readers
+  — `restoreMaximizeFromStorage` (`dockview-store.ts`), the environment-switch
+  handler (`dockview-store.ts`), and `setupReadyDockview` in
   `apps/web/components/task/dockview-desktop-layout.tsx`, which populates the
-  store on an ordinary page load — and pruning only at read sites would leave the
-  ordinary route re-inserting an unrenderable component. The next capture
-  persists the pruned column. Without it, a user
-  whose retired panel sat in the hidden column keeps `component:
-  "prompt-history"` in that metadata, the pane still reports available and
-  hidden, and clicking "show right panels" applies an unrenderable component:
-  `applyLayout` throws, `applyLayoutAndSet` rolls back, the handler restores the
-  hidden state, and the column's surviving panels stay unreachable.
+  store on an ordinary page load — so pruning there covers the ordinary route and
+  the control state that `getRightPaneToggleState` derives from the same value.
+  The next capture persists the pruned column. Without it, a user whose retired
+  panel sat in the hidden column keeps `component: "prompt-history"` in that
+  metadata, the pane still reports available and hidden, and clicking "show right
+  panels" applies an unrenderable component: `applyLayout` throws,
+  `applyLayoutAndSet` rolls back, the handler restores the hidden state, and the
+  column's surviving panels stay unreachable — or, when the column held only the
+  retired panel, the control offers an action that cannot
+  act.
 - `apps/web/lib/layout/layout-profiles.ts`: normalizes a saved layout profile
   before validation by dropping panels whose **component is no longer
   renderable** — the same static predicate every other route uses, and one that

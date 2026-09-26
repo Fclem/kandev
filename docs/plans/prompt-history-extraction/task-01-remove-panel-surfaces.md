@@ -237,7 +237,10 @@ setup
 `e2e/README.md`), a kept or rewritten plugin spec
 (`e2e/tests/plugins/**`), or a rewritten layout spec
 (`e2e/tests/settings/layout-profiles.spec.ts` until Task 03 rewrites that one,
-`e2e/tests/settings/mobile-layout-profiles.spec.ts` rewritten here), or the
+`e2e/tests/settings/mobile-layout-profiles.spec.ts` rewritten here), or a Task 03
+replacement spec that asserts the row and the option are gone
+(`e2e/tests/task/prompt-history-removed.spec.ts`,
+`e2e/tests/task/mobile-prompt-history-removed.spec.ts`), or the
 fixture build tooling (`apps/web/scripts/build-e2e-plugin.mjs`,
 `apps/web/scripts/write-e2e-plugin-identity.mjs`). None of the deleted core
 panel files may appear: `e2e/tests/task/prompt-history-panel.spec.ts`,
@@ -337,7 +340,10 @@ tool.
   `dockview-extra-panel-actions.ts`): no matches.
 - Listing gate (`apps/web/e2e`, `apps/web/scripts`): only the plugin fixture,
   its identity setup (`global-setup.ts`, `e2e/README.md`), the kept plugin specs,
-  and the fixture build tooling match. None of
+  the Task 03 replacement specs added after this work order
+  (`e2e/tests/task/prompt-history-removed.spec.ts`,
+  `e2e/tests/task/mobile-prompt-history-removed.spec.ts`), and the fixture build
+  tooling match. None of
   `e2e/tests/task/prompt-history-panel.spec.ts`,
   `prompt-history-auto-load.spec.ts`,
   `e2e/tests/task/mobile-prompt-history-panel.spec.ts`, or

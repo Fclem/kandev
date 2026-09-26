@@ -294,8 +294,14 @@ Done. Commands run from the repository root.
 ```
 
 The final search (`apps/web/lib`, `apps/web/hooks`, `apps/web/components`,
-`apps/web/src`) returned no matches, so the naming half of 001.4 holds: no
-retained Host contract gained a prompt-history name, branch, or option.
+`apps/web/src`) returned no matches in production sources. At the branch tip the
+only matches in those trees are Task 03's own fixtures, which name the retired
+identity on purpose (`lib/layout/layout-profiles.test.ts`,
+`lib/state/dockview-right-pane.test.ts`,
+`lib/state/dockview-preset-persistence.test.ts`,
+`lib/state/dockview-env-switch-action.test.ts`,
+`components/task/dockview-layout-restore.test.ts`), so the naming half of 001.4
+holds: no retained Host contract gained a prompt-history name, branch, or option.
 
 ### Choices recorded
 

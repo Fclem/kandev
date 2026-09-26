@@ -438,4 +438,37 @@ describe("restoreRightPane — retained column with an unrenderable component", 
     // The dropped panel held the group's active tab, so the survivor takes it.
     expect(column?.groups[0]?.activePanel).toBe("todos");
   });
+
+  it("reads a retained column whose only panel is unrenderable as absent", () => {
+    const captured = captureRightPane(visibleLayout([centerColumn(), retiredOnlyRightColumn()]))!;
+    const record = withHiddenRightPaneMetadata(
+      { grid: { root: { type: "branch" } }, panels: {} },
+      captured.hiddenRightPane,
+    );
+
+    expect(readHiddenRightPane(record)).toBeNull();
+    // The control state reads the same value, so it offers no action that cannot act.
+    expect(getRightPaneToggleState(captured.layout, readHiddenRightPane(record))).toEqual({
+      available: false,
+      visible: false,
+      hidden: false,
+    });
+  });
+
+  it("prunes the retired component from a mixed retained column at read", () => {
+    const captured = captureRightPane(visibleLayout([centerColumn(), mixedRightColumn()]))!;
+    const record = withHiddenRightPaneMetadata(
+      { grid: { root: { type: "branch" } }, panels: {} },
+      captured.hiddenRightPane,
+    );
+
+    const read = readHiddenRightPane(record);
+
+    expect(read?.column.groups.map((group) => group.panels.map((item) => item.id))).toEqual([
+      ["todos"],
+      ["browser"],
+    ]);
+    expect(read?.column.groups[0]?.activePanel).toBe("todos");
+    expect(read?.column.width).toBe(420);
+  });
 });

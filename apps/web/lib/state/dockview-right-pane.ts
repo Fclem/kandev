@@ -313,11 +313,16 @@ function isHiddenRightPane(value: unknown): value is HiddenRightPane {
   return isValidHiddenContext(value.context);
 }
 
-/** Read and validate optional recovery metadata from an env layout record. */
+/** Read, validate, and prune optional recovery metadata from an env layout record.
+ *  A retained column whose panels are all unrenderable can never be restored, so
+ *  both the control state and the restore see it as absent. */
 export function readHiddenRightPane(record: object | null): HiddenRightPane | null {
   if (!isRecord(record)) return null;
   const value = record[HIDDEN_RIGHT_PANE_METADATA_KEY];
-  return isHiddenRightPane(value) ? value : null;
+  if (!isHiddenRightPane(value)) return null;
+  const prunedColumn = filterLayoutStateByComponents({ columns: [value.column] }).columns[0];
+  if (!prunedColumn) return null;
+  return prunedColumn === value.column ? value : { ...value, column: prunedColumn };
 }
 
 /** Remove app-owned metadata before passing a record to Dockview. */

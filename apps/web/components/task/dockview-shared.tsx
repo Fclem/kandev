@@ -454,5 +454,3 @@ export function renderPanel(
   if (renderer) return renderer(panelId, params);
   return <div className="p-4 text-muted-foreground">{t("common:unknownPanel", { component })}</div>;
 }
-
-export const VALID_COMPONENTS = new Set(Object.keys(dockviewComponents));

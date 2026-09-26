@@ -217,10 +217,20 @@ Verification: `go test ./internal/github -count=1`, `go vet ./internal/github`, 
 hooks/domains/plugins/use-plugin-repository-stars.test.tsx` pass; the Vitest command reports 29
 tests passed.
 
+Round-4 review fix: connection insert/replace commit errors now have an explicit unknown-outcome
+classification. The OAuth service reconciles the lifecycle-fenced connection row before cleanup,
+returns success when the committed token references match, queues only staged IDs no longer
+referenced, and retains staged secrets when reconciliation cannot establish state. Tests inject
+post-commit acknowledgment loss for initial insert and refresh, a rolled-back commit, and failed
+reconciliation.
+
+Verification: `go test ./internal/github -count=1`, `go vet ./internal/github`,
+`python3 scripts/list-docs.py validate`, and `python3 scripts/lint-spec-files.py --all` pass.
 
 Residual gaps (recorded for the reviewer, not hidden):
 - The PostgreSQL star-store lifecycle test (replace/disconnect/claim) is written but skips without
   `KANDEV_TEST_POSTGRES_DSN`, so Postgres remains unexecuted in this environment.
 - The capable-path E2E cohort relies on the e2e-profile `KANDEV_DEPLOYMENT_SECRET_TARGET=supported`
   override so a containerised CI backend can exercise it; that path has not yet run in a real container.
-- `docs/specs/integrations/system-design/github-repository-stars.md` sits at ~32573 of 32768 bytes.
+- `docs/specs/integrations/system-design/github-repository-stars.md` is 32763 of 32768 bytes;
+  avoid further additions.

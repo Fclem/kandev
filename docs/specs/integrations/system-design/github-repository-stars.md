@@ -92,6 +92,8 @@ The backend maps unavailable, insufficient-scope, or failed GitHub calls to the 
 
 A failed reconnect never invalidates a previously valid connection. A successful mutation is authoritative for the scoped cache; a failed one restores the prior actionable state and retains no optimistic value.
 
+On transaction commit errors, reconcile the lifecycle and connection row before compensation; queue only staged secret IDs no longer referenced, and retain secrets if reconciliation fails.
+
 ## Permissions and security
 
 The backend uses the current request identity to select the user's dedicated personal OAuth App connection and verifies active workspace membership in both the controller and service entry points. It does not require a registered workspace repository for public catalog entries. GitHub App installation identities and existing GitHub App user-to-server connections cannot perform this user-attributed operation, and no fallback changes the actor. Foreign-workspace requests and requests without a dedicated personal connection or `public_repo` capability fail closed.

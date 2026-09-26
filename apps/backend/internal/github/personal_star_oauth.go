@@ -288,9 +288,8 @@ func (s *PersonalStarOAuthService) validateClaim(
 	return nil
 }
 
-// commitGrant stages the token secrets, commits the connection, then records
-// superseded generations for cleanup. Pre-commit failures delete staged secrets
-// or durably queue any deletion that fails.
+// commitGrant stages token secrets and commits the connection before queuing
+// superseded generations. Ambiguous commit errors are reconciled before cleanup.
 func (s *PersonalStarOAuthService) commitGrant(
 	ctx context.Context,
 	flow *PersonalStarFlow,
@@ -331,20 +330,127 @@ func (s *PersonalStarOAuthService) commitGrant(
 		return outcome, finishErr
 	}
 	if err := s.commitPersonalStarConnection(ctx, connection, flow); err != nil {
-		cleanupErr := s.discardPersonalStarSecrets(ctx, connection.WorkspaceID, connection.UserID, staged)
-		if cleanupErr != nil {
-			return PersonalStarCallbackOutcome{}, errors.Join(err, cleanupErr)
-		}
-		return PersonalStarCallbackOutcome{}, err
+		return s.handlePersonalStarCommitError(ctx, connection, flow.ReturnPath, staged, err)
 	}
+	return connectedPersonalStarOutcome(connection, flow.ReturnPath), nil
+}
+
+func connectedPersonalStarOutcome(connection *PersonalStarConnection, returnPath string) PersonalStarCallbackOutcome {
 	return PersonalStarCallbackOutcome{
 		WorkspaceID: connection.WorkspaceID,
 		UserID:      connection.UserID,
-		ReturnPath:  flow.ReturnPath,
+		ReturnPath:  returnPath,
 		Outcome:     personalStarOutcomeConnected,
 		Active:      true,
 		Capable:     true,
-	}, nil
+	}
+}
+
+// reconcilePersonalStarCommit preserves row-referenced tokens and queues unreferenced staged IDs.
+func (s *PersonalStarOAuthService) reconcilePersonalStarCommit(
+	ctx context.Context,
+	candidate *PersonalStarConnection,
+	staged []personalStarSecretRef,
+) (bool, error) {
+	current, lifecycle, err := s.store.personalStarConnectionStateForCommitReconciliation(
+		ctx, candidate.WorkspaceID, candidate.UserID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("reconcile personal star connection commit: %w", err)
+	}
+	if personalStarCommitMatches(current, lifecycle, candidate) {
+		return true, nil
+	}
+	var cleanupErr error
+	for _, ref := range staged {
+		if current != nil && (current.AccessSecretID == ref.SecretID || current.RefreshSecretID == ref.SecretID) {
+			continue
+		}
+		cleanupErr = errors.Join(cleanupErr,
+			s.queuePersonalStarSecretCleanup(ctx, candidate.WorkspaceID, candidate.UserID, ref))
+	}
+	return false, cleanupErr
+}
+
+func personalStarCommitMatches(
+	current *PersonalStarConnection,
+	lifecycle PersonalStarLifecycle,
+	candidate *PersonalStarConnection,
+) bool {
+	if current == nil || lifecycle.ConnectedGeneration != candidate.CredentialGeneration {
+		return false
+	}
+	expected := *candidate
+	expected.Status = PersonalStarStatusActive
+	expected.CreatedAt = current.CreatedAt
+	expected.UpdatedAt = current.UpdatedAt
+	return *current == expected
+}
+
+func (s *PersonalStarOAuthService) handlePersonalStarCommitError(
+	ctx context.Context,
+	candidate *PersonalStarConnection,
+	returnPath string,
+	staged []personalStarSecretRef,
+	commitErr error,
+) (PersonalStarCallbackOutcome, error) {
+	if !errors.Is(commitErr, errPersonalStarCommitOutcomeUnknown) {
+		return s.compensatePersonalStarCommitError(ctx, candidate, staged, commitErr)
+	}
+	committed, reconcileErr := s.reconcilePersonalStarCommit(ctx, candidate, staged)
+	if reconcileErr != nil {
+		return PersonalStarCallbackOutcome{}, errors.Join(commitErr, reconcileErr)
+	}
+	if !committed {
+		return PersonalStarCallbackOutcome{}, commitErr
+	}
+	return connectedPersonalStarOutcome(candidate, returnPath), nil
+}
+
+func (s *PersonalStarOAuthService) compensatePersonalStarCommitError(
+	ctx context.Context,
+	candidate *PersonalStarConnection,
+	staged []personalStarSecretRef,
+	commitErr error,
+) (PersonalStarCallbackOutcome, error) {
+	cleanupErr := s.discardPersonalStarSecrets(ctx, candidate.WorkspaceID, candidate.UserID, staged)
+	if cleanupErr != nil {
+		return PersonalStarCallbackOutcome{}, errors.Join(commitErr, cleanupErr)
+	}
+	return PersonalStarCallbackOutcome{}, commitErr
+}
+
+func (s *PersonalStarOAuthService) handleRefreshPersonalStarCommitError(
+	ctx context.Context,
+	workspaceID, userID string,
+	candidate *PersonalStarConnection,
+	staged []personalStarSecretRef,
+	commitErr error,
+) error {
+	if !errors.Is(commitErr, errPersonalStarCommitOutcomeUnknown) {
+		return s.compensateRefreshPersonalStarCommitError(ctx, workspaceID, userID, staged, commitErr)
+	}
+	committed, reconcileErr := s.reconcilePersonalStarCommit(ctx, candidate, staged)
+	if reconcileErr != nil {
+		return errors.Join(commitErr, reconcileErr)
+	}
+	if !committed {
+		return commitErr
+	}
+	return nil
+}
+
+func (s *PersonalStarOAuthService) compensateRefreshPersonalStarCommitError(
+	ctx context.Context,
+	workspaceID, userID string,
+	staged []personalStarSecretRef,
+	commitErr error,
+) error {
+	cleanupErr := s.discardPersonalStarSecrets(ctx, workspaceID, userID, staged)
+	if cleanupErr != nil {
+		return errors.Join(commitErr, cleanupErr)
+	}
+	return commitErr
 }
 
 func (s *PersonalStarOAuthService) commitPersonalStarConnection(
@@ -446,17 +552,35 @@ func (s *PersonalStarOAuthService) discardPersonalStarSecrets(
 ) error {
 	var cleanupErr error
 	for _, ref := range refs {
-		if err := s.secrets.Delete(ctx, ref.SecretID); err != nil {
-			if queueErr := s.store.EnqueuePersonalStarSecretCleanup(
-				ctx, workspaceID, userID, ref.SecretID, ref.Kind, ref.Generation,
-			); queueErr != nil {
-				cleanupErr = errors.Join(cleanupErr, fmt.Errorf(
-					"delete staged personal star secret %q: %w", ref.SecretID, errors.Join(err, queueErr),
-				))
-			}
-		}
+		cleanupErr = errors.Join(cleanupErr, s.discardPersonalStarSecret(ctx, workspaceID, userID, ref))
 	}
 	return cleanupErr
+}
+
+func (s *PersonalStarOAuthService) discardPersonalStarSecret(
+	ctx context.Context,
+	workspaceID, userID string,
+	ref personalStarSecretRef,
+) error {
+	if err := s.secrets.Delete(ctx, ref.SecretID); err != nil {
+		if queueErr := s.queuePersonalStarSecretCleanup(ctx, workspaceID, userID, ref); queueErr != nil {
+			return fmt.Errorf("delete staged personal star secret %q: %w", ref.SecretID, errors.Join(err, queueErr))
+		}
+	}
+	return nil
+}
+
+func (s *PersonalStarOAuthService) queuePersonalStarSecretCleanup(
+	ctx context.Context,
+	workspaceID, userID string,
+	ref personalStarSecretRef,
+) error {
+	if err := s.store.EnqueuePersonalStarSecretCleanup(
+		ctx, workspaceID, userID, ref.SecretID, ref.Kind, ref.Generation,
+	); err != nil {
+		return fmt.Errorf("enqueue personal star secret cleanup for %q: %w", ref.SecretID, err)
+	}
+	return nil
 }
 
 // RefreshPersonalStarConnection rotates the dedicated access token through the
@@ -515,11 +639,7 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 		ctx, &replacement,
 		PersonalStarFence{Revision: connection.LifecycleRevision, Generation: connection.CredentialGeneration},
 		PersonalStarFence{Revision: revision, Generation: generation}); err != nil {
-		cleanupErr := s.discardPersonalStarSecrets(ctx, workspaceID, userID, staged)
-		if cleanupErr != nil {
-			return errors.Join(err, cleanupErr)
-		}
-		return err
+		return s.handleRefreshPersonalStarCommitError(ctx, workspaceID, userID, &replacement, staged, err)
 	}
 	return nil
 }

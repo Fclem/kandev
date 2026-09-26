@@ -33,6 +33,8 @@ var (
 	ErrPersonalStarFence = errors.New("github personal star connection fence changed")
 	// ErrPersonalStarFlowUnavailable reports an absent, consumed, or expired flow.
 	ErrPersonalStarFlowUnavailable = errors.New("github personal star flow is unavailable")
+	// A failed transaction commit may have applied before its acknowledgment was lost.
+	errPersonalStarCommitOutcomeUnknown = errors.New("github personal star commit outcome unknown")
 )
 
 // PersonalStarConnection is non-secret metadata for the dedicated OAuth App
@@ -113,6 +115,34 @@ func getPersonalStarLifecycleOn(
 		return PersonalStarLifecycle{}, nil
 	}
 	return lifecycle, err
+}
+
+// personalStarConnectionStateForCommitReconciliation locks the lifecycle row
+// where supported before reading the connection that may have committed.
+func (s *Store) personalStarConnectionStateForCommitReconciliation(
+	ctx context.Context,
+	workspaceID, userID string,
+) (*PersonalStarConnection, PersonalStarLifecycle, error) {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, PersonalStarLifecycle{}, fmt.Errorf("begin personal star commit reconciliation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	lifecycle, err := personalStarLifecycleForUpdate(ctx, tx, workspaceID, userID)
+	if err != nil {
+		return nil, PersonalStarLifecycle{}, err
+	}
+	var connection PersonalStarConnection
+	err = tx.GetContext(ctx, &connection,
+		tx.Rebind(personalStarConnectionSelect+` WHERE workspace_id = ? AND user_id = ?`), workspaceID, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, lifecycle, nil
+	}
+	if err != nil {
+		return nil, PersonalStarLifecycle{}, fmt.Errorf("read personal star connection for reconciliation: %w", err)
+	}
+	return &connection, lifecycle, nil
 }
 
 // BumpPersonalStarLifecycle upserts the fence and returns the new revision and
@@ -212,7 +242,7 @@ func (s *Store) ReplacePersonalStarConnection(
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("replace personal star connection: %w", err)
+		return nil, fmt.Errorf("replace personal star connection: %w: %w", errPersonalStarCommitOutcomeUnknown, err)
 	}
 	connection.CreatedAt, connection.UpdatedAt = now, now
 	return supersededSecretIDs(supersededIDs), nil
@@ -387,7 +417,7 @@ func (s *Store) InsertPersonalStarConnection(
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("insert personal star connection: %w", err)
+		return fmt.Errorf("insert personal star connection: %w: %w", errPersonalStarCommitOutcomeUnknown, err)
 	}
 	connection.CreatedAt, connection.UpdatedAt = now, now
 	return nil

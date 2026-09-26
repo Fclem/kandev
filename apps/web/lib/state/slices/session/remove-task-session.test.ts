@@ -72,6 +72,12 @@ describe("removeTaskSession cleanup cascade", () => {
       "2026-07-23T10:00:00Z",
     );
     expect(store.getState().turns.reconcileEpochBySession[SESSION_ID]).toBe(1);
+    s.installAuthoritativePromptMessages(SESSION_ID, [], {
+      hasMore: false,
+      oldestCursor: null,
+    });
+    s.removeMessage(SESSION_ID, "removed-before-response");
+    expect(store.getState().messagePrompts.authoritativeBySession[SESSION_ID]).toBe(true);
 
     store.getState().removeTaskSession(TASK_ID, SESSION_ID);
 
@@ -79,6 +85,9 @@ describe("removeTaskSession cleanup cascade", () => {
     expect(after.messages.bySession[SESSION_ID]).toBeUndefined();
     expect(after.messagePrompts.bySession[SESSION_ID]).toBeUndefined();
     expect(after.messagePrompts.generationBySession[SESSION_ID]).toBe(1);
+    expect(after.messagePrompts.authoritativeBySession[SESSION_ID]).toBeUndefined();
+    expect(after.messagePrompts.observedBySession[SESSION_ID]).toBeUndefined();
+    expect(after.messagePrompts.deletedIdsBySession[SESSION_ID]).toBeUndefined();
     expect(after.turns.bySession[SESSION_ID]).toBeUndefined();
     expect(after.turns.loadedBySession[SESSION_ID]).toBeUndefined();
     expect(after.turns.settledBoundaryBySession[SESSION_ID]).toBeUndefined();

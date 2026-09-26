@@ -72,6 +72,12 @@ describe("signatureOf", () => {
       signatureOf(makeMessage({ content: "two" })),
     );
   });
+
+  it("retains changed content when updated_at is malformed", () => {
+    const previous = makeMessage({ content: "before", updated_at: "malformed" });
+    const incoming = makeMessage({ content: "after", updated_at: "malformed" });
+    expect(reconcileMessages([previous], [incoming])[0].content).toBe("after");
+  });
 });
 
 describe("reconcileMessages", () => {

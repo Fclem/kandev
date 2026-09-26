@@ -5,7 +5,7 @@ import { Button } from "@kandev/ui/button";
 import { IconAlertCircle, IconX } from "@tabler/icons-react";
 import { GridSpinner } from "@/components/grid-spinner";
 import type { Message, TaskSessionState } from "@/lib/types/http";
-import { TASK_DESCRIPTION_SYNTHETIC_ID, type RenderItem } from "@/hooks/use-processed-messages";
+import { type RenderItem } from "@/hooks/use-processed-messages";
 import { MessageRenderer } from "@/components/task/chat/message-renderer";
 import { TurnGroupMessage } from "@/components/task/chat/messages/turn-group-message";
 import { PrepareProgress } from "@/components/session/prepare-progress";
@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import type { MessageHistoryStatus } from "@/hooks/domains/session/use-message-fetch-state";
 import { SessionHistoryFeedback } from "./session-entry-feedback";
+import { findLastStoredUserPromptIndex, isStoredUserPrompt } from "@/lib/session-last-prompt";
 
 export type MessageListProps = {
   items: RenderItem[];
@@ -194,14 +195,11 @@ export function getEffectiveActiveTurnId(
 
 /** Index of the most recent user-authored message, or -1 when there is none. */
 function isStoredUserMessage(message: Message): boolean {
-  return message.author_type === "user" && message.id !== TASK_DESCRIPTION_SYNTHETIC_ID;
+  return isStoredUserPrompt(message);
 }
 
 function findLastUserMessageIndex(messages: Message[]): number {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (isStoredUserMessage(messages[i])) return i;
-  }
-  return -1;
+  return findLastStoredUserPromptIndex(messages);
 }
 
 /** Id of the most recent user-authored message — the "last prompt" the user

@@ -327,7 +327,9 @@ function mergeAgentReviewArtifacts(initialState: HydrationState) {
 function mergePromptHistoryState(initialState: HydrationState) {
   return {
     ...defaultState.messagePrompts,
-    ...initialState.messagePrompts,
+    bySession: initialState.messagePrompts?.bySession ?? defaultState.messagePrompts.bySession,
+    metaBySession:
+      initialState.messagePrompts?.metaBySession ?? defaultState.messagePrompts.metaBySession,
     generationBySession: {
       ...defaultState.messagePrompts.generationBySession,
       ...initialState.messagePrompts?.generationBySession,
@@ -336,6 +338,9 @@ function mergePromptHistoryState(initialState: HydrationState) {
       ...defaultState.messagePrompts.refreshGenerationBySession,
       ...initialState.messagePrompts?.refreshGenerationBySession,
     },
+    authoritativeBySession: {},
+    observedBySession: {},
+    deletedIdsBySession: {},
   };
 }
 

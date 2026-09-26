@@ -42,6 +42,16 @@ describe("prompt cache fan-out", () => {
   });
 });
 
+it("records a live prompt as observed without marking the projection authoritative", () => {
+  const store = makeStore();
+  store.getState().addMessage(message("live", "user"));
+
+  expect(store.getState().messagePrompts.observedBySession?.[SESSION]?.ids).toEqual({
+    live: true,
+  });
+  expect(store.getState().messagePrompts.authoritativeBySession?.[SESSION]).toBeUndefined();
+});
+
 it("updates prompts even when the transcript cache is absent", () => {
   const store = makeStore();
   store.getState().replacePromptMessages(SESSION, [message("user", "user")]);
@@ -67,6 +77,90 @@ it("unions user rows from transcript snapshots without dropping deep prompt page
     "deep",
     "new",
   ]);
+});
+
+it("installs an authoritative page without resetting an older-page cursor", () => {
+  const store = makeStore();
+  const older = message("older", "user");
+  store.getState().prependPromptMessages(SESSION, [older], {
+    hasMore: true,
+    oldestCursor: "older",
+  });
+  store
+    .getState()
+    .installAuthoritativePromptMessages(
+      SESSION,
+      [{ ...message("new", "user"), created_at: SECOND_PROMPT_TIME }],
+      { hasMore: false, oldestCursor: "new" },
+    );
+
+  expect(store.getState().messagePrompts.bySession[SESSION].map((row) => row.id)).toEqual([
+    "older",
+    "new",
+  ]);
+  expect(store.getState().messagePrompts.metaBySession[SESSION].oldestCursor).toBe("older");
+  expect(store.getState().messagePrompts.authoritativeBySession[SESSION]).toBe(true);
+  expect(store.getState().messagePrompts.observedBySession[SESSION].ids).toEqual({ new: true });
+});
+
+it("keeps the newest observed floor across a delayed older authority page", () => {
+  const store = makeStore();
+  store.getState().addMessage({ ...message("live", "user"), created_at: "2026-08-22T00:00:03Z" });
+  store
+    .getState()
+    .installAuthoritativePromptMessages(
+      SESSION,
+      [{ ...message("old", "user"), created_at: SECOND_PROMPT_TIME }],
+      { hasMore: false, oldestCursor: null },
+    );
+
+  expect(store.getState().messagePrompts.observedBySession[SESSION].newestKey).toEqual({
+    id: "live",
+    created_at: "2026-08-22T00:00:03Z",
+  });
+});
+
+it("does not admit foreign projection rows or promote fan-out cache entries on an empty read", () => {
+  const store = makeStore();
+  store.getState().mergeMessages(SESSION, [message("fanout", "user")]);
+  store.getState().installAuthoritativePromptMessages(
+    SESSION,
+    [
+      {
+        ...message("foreign", "user"),
+        session_id: "other" as Message["session_id"],
+        created_at: SECOND_PROMPT_TIME,
+      },
+    ],
+    { hasMore: false, oldestCursor: null },
+  );
+
+  expect(store.getState().messagePrompts.bySession[SESSION].map((row) => row.id)).toEqual([
+    "fanout",
+  ]);
+  expect(store.getState().messagePrompts.observedBySession[SESSION]).toEqual({
+    ids: {},
+    newestKey: null,
+  });
+});
+
+it("keeps cleared pagination metadata when a held authority response settles after deletion", () => {
+  const store = makeStore();
+  store.getState().replacePromptMessages(SESSION, [message("removed", "user")], {
+    hasMore: true,
+    oldestCursor: "removed",
+  });
+  store.getState().removeMessage(SESSION, "removed");
+  store.getState().installAuthoritativePromptMessages(SESSION, [message("removed", "user")], {
+    hasMore: true,
+    oldestCursor: "removed",
+  });
+
+  expect(store.getState().messagePrompts.bySession[SESSION]).toEqual([]);
+  expect(store.getState().messagePrompts.metaBySession[SESSION]).toMatchObject({
+    hasMore: false,
+    oldestCursor: null,
+  });
 });
 
 it("repairs the prompt cursor after deleting the oldest cached prompt", () => {
@@ -139,6 +233,44 @@ it("does not regress a prompt when an older update arrives", () => {
   });
 
   expect(store.getState().messagePrompts.bySession[SESSION][0].content).toBe("new");
+});
+it("keeps a cached prompt on an equal-version authority response", () => {
+  const store = makeStore();
+  store.getState().addMessage({
+    ...message("prompt", "user"),
+    content: "current",
+    updated_at: SECOND_PROMPT_TIME,
+  });
+
+  store
+    .getState()
+    .replacePromptMessages(SESSION, [
+      { ...message("prompt", "user"), content: "stale", updated_at: SECOND_PROMPT_TIME },
+    ]);
+
+  expect(store.getState().messagePrompts.bySession[SESSION][0].content).toBe("current");
+});
+
+it("does not resurrect a deleted prompt from a held projection response", () => {
+  const store = makeStore();
+  store.getState().removeMessage(SESSION, "deleted");
+  store.getState().replacePromptMessages(SESSION, [message("deleted", "user")]);
+
+  expect(store.getState().messagePrompts.bySession[SESSION]).toEqual([]);
+});
+
+it("uses exhausted page metadata after an empty older page", () => {
+  const store = makeStore();
+  store.getState().replacePromptMessages(SESSION, [message("oldest", "user")], {
+    hasMore: true,
+    oldestCursor: "oldest",
+  });
+  store.getState().prependPromptMessages(SESSION, [], { hasMore: false, oldestCursor: null });
+
+  expect(store.getState().messagePrompts.metaBySession[SESSION]).toMatchObject({
+    hasMore: false,
+    oldestCursor: null,
+  });
 });
 
 it("does not regress a prompt when an update is older by less than one millisecond", () => {

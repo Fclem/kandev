@@ -10,6 +10,7 @@ import type {
   TaskWalkthrough,
 } from "@/lib/types/http";
 import type { EntityReference } from "@/lib/types/entity-reference";
+import type { ObservedPrompts } from "@/lib/session-last-prompt";
 
 export type MessagesState = {
   bySession: Record<string, Message[]>;
@@ -34,6 +35,10 @@ export type PromptsState = MessagesState & {
   generationBySession: Record<string, number>;
   /** Incremented whenever an authoritative prompt refresh begins. */
   refreshGenerationBySession: Record<string, number>;
+  /** Only the transcript's own completed projection read establishes authority. */
+  authoritativeBySession: Record<string, true>;
+  observedBySession: Record<string, ObservedPrompts>;
+  deletedIdsBySession: Record<string, Record<string, true>>;
 };
 
 export type TurnsState = {
@@ -336,6 +341,11 @@ export type SessionSliceActions = {
     sessionId: string,
     messages: Message[],
     meta?: { hasMore?: boolean; oldestCursor?: string | null },
+  ) => void;
+  installAuthoritativePromptMessages: (
+    sessionId: string,
+    messages: Message[],
+    meta: { hasMore: boolean; oldestCursor: string | null },
   ) => void;
   setPromptMessagesLoading: (sessionId: string, loading: boolean) => void;
   setPromptMessagesLoadingMore: (sessionId: string, loading: boolean) => void;

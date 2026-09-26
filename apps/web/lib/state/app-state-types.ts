@@ -489,6 +489,11 @@ export type AppState = KanbanSlice & {
     messages: Message[],
     meta?: { hasMore?: boolean; oldestCursor?: string | null },
   ) => void;
+  installAuthoritativePromptMessages: (
+    sessionId: string,
+    messages: Message[],
+    meta: { hasMore: boolean; oldestCursor: string | null },
+  ) => void;
   setPromptMessagesLoading: (sessionId: string, loading: boolean) => void;
   setPromptMessagesLoadingMore: (sessionId: string, loading: boolean) => void;
   setTaskSession: (session: TaskSession) => void;

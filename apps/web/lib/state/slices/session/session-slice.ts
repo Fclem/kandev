@@ -14,6 +14,7 @@ import {
   buildPromptMessageActions,
   fanOutTranscriptPrompts,
   removePromptMessage,
+  observeLivePrompt,
   updatePromptMessage,
 } from "./prompt-message-actions";
 import { purgeSessionRuntimeState } from "@/lib/state/slices/session-runtime/session-runtime-slice";
@@ -201,6 +202,9 @@ export const defaultSessionState: SessionSliceState = {
     metaBySession: {},
     generationBySession: {},
     refreshGenerationBySession: {},
+    authoritativeBySession: {},
+    observedBySession: {},
+    deletedIdsBySession: {},
   },
   turns: {
     bySession: {},
@@ -322,6 +326,7 @@ function buildMessageActions(set: ImmerSet) {
             message as unknown as Record<string, unknown>,
           );
         }
+        observeLivePrompt(draft, message);
         fanOutTranscriptPrompts(draft, [message]);
       }),
     updateMessage: buildUpdateMessage(set),
@@ -652,6 +657,9 @@ function buildRemoveTaskSessionAction(set: ImmerSet) {
       delete draft.messages.metaBySession[sessionId];
       delete draft.messagePrompts.bySession[sessionId];
       delete draft.messagePrompts.metaBySession[sessionId];
+      delete draft.messagePrompts.authoritativeBySession[sessionId];
+      delete draft.messagePrompts.observedBySession[sessionId];
+      delete draft.messagePrompts.deletedIdsBySession[sessionId];
       const generations = (draft.messagePrompts.generationBySession ??= {});
       generations[sessionId] = (generations[sessionId] ?? 0) + 1;
       delete draft.turns.bySession[sessionId];

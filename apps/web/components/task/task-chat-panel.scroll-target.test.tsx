@@ -628,6 +628,38 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
       behavior: "auto",
     });
   });
+  it("settles a local deleted target while the panel is hidden", async () => {
+    const pending = Promise.withResolvers<LoadMessageWindowResult>();
+    vi.mocked(loadMessageWindowAround).mockReturnValueOnce(pending.promise);
+    mockAppStoreState.messages.bySession["session-1"] = [];
+    const messageListRef = { current: scrollHandle(false) };
+    const onConsumed = vi.fn();
+    const localTarget: PendingMessageScrollTarget = {
+      sessionId: "session-1",
+      messageId: "missing",
+      token: 12,
+      hostPanelId: "pending",
+    };
+    const { rerender } = renderHook(
+      ({ isVisible }) =>
+        usePendingMessageScroll({
+          messageListRef,
+          sessionId: "session-1",
+          messageId: null,
+          target: localTarget,
+          onConsumed,
+          readinessKey: "0",
+          isInitialMessagesLoading: false,
+          isVisible,
+          settlementMode: "identity",
+        }),
+      { initialProps: { isVisible: true } },
+    );
+    await flushFrames();
+    rerender({ isVisible: false });
+    await act(async () => pending.resolve(DELETED_TARGET_RESULT));
+    expect(onConsumed).toHaveBeenCalledExactlyOnceWith("missing");
+  });
   it("defers a pending around request until initial transcript loading settles", async () => {
     mockAppStoreState.messages.bySession["session-1"] = [];
     vi.mocked(loadMessageWindowAround).mockReturnValue(new Promise(() => {}));

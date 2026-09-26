@@ -112,7 +112,7 @@ func TestRetrySnapshotInterpolatesBeforeSafeProjection(t *testing.T) {
 	require.NoError(t, store.CreateTrigger(context.Background(), trigger))
 
 	result, err := svc.FireTrigger(context.Background(), a.ID, trigger.ID, TriggerTypeGitHubPR,
-		json.RawMessage(`{"number":42,"title":"Fix retry safety","repo":"acme/app"}`), "pr-42")
+		json.RawMessage(`{"number":42,"title":"Fix retry safety","repo":"acme/app"}`), DedupKey("pr-42"))
 	require.NoError(t, err)
 	run, err := store.GetRun(context.Background(), result.RunID)
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestFinalizeRetryFailureRefreshesContinuationSnapshot(t *testing.T) {
 		Type: TriggerTypeManual, Enabled: true,
 	}
 	require.NoError(t, store.CreateTrigger(ctx, trigger))
-	result, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, "continuation-retry")
+	result, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, DedupKey("continuation-retry"))
 	require.NoError(t, err)
 	parent, err := store.GetRun(ctx, result.RunID)
 	require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestBindRunTaskRejectsCancelledRetryGeneration(t *testing.T) {
 	require.NoError(t, store.CreateRun(ctx, run))
 	require.NoError(t, store.CancelRetryGroup(ctx, group.ID, 1))
 
-	require.ErrorIs(t, store.BindRunTask(ctx, run.ID, "task-created"), ErrRetryGenerationMismatch)
+	require.ErrorIs(t, store.BindRunTask(ctx, run.ID, "task-created", ""), ErrRetryGenerationMismatch)
 }
 
 func TestBindRunTaskIsIdempotentForAlreadyBoundRun(t *testing.T) {
@@ -214,7 +214,7 @@ func TestBindRunTaskIsIdempotentForAlreadyBoundRun(t *testing.T) {
 	}
 	require.NoError(t, store.CreateRun(ctx, run))
 
-	require.NoError(t, store.BindRunTask(ctx, run.ID, run.TaskID))
+	require.NoError(t, store.BindRunTask(ctx, run.ID, run.TaskID, ""))
 }
 
 func TestReplayPendingRetryEventsRevokesSchedulingFailedRows(t *testing.T) {
@@ -537,7 +537,7 @@ func TestRetryAdmissionPersistsImmutableIntentAndSafeEvent(t *testing.T) {
 	require.NoError(t, store.CreateAutomation(ctx, a))
 	trigger := &AutomationTrigger{ID: "trigger", AutomationID: a.ID, Type: TriggerTypeManual, Enabled: true}
 	require.NoError(t, store.CreateTrigger(ctx, trigger))
-	result, err := svc.FireTrigger(ctx, a.ID, "trigger", TriggerTypeManual, []byte(`{"secret":"do-not-publish"}`), "manual-1")
+	result, err := svc.FireTrigger(ctx, a.ID, "trigger", TriggerTypeManual, []byte(`{"secret":"do-not-publish"}`), DedupKey("manual-1"))
 	if err != nil {
 		t.Fatalf("fire trigger: %v", err)
 	}

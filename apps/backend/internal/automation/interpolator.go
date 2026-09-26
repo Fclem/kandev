@@ -119,7 +119,7 @@ func resolveDataOrWebhookToken(token string, data map[string]interface{}) (strin
 		return "", false
 	}
 	value, ok := lookupPath(data, m[2])
-	if !ok && m[1] == "webhook" {
+	if !ok && m[1] == string(TriggerTypeWebhook) {
 		value, ok = lookupWebhookProjectionPath(data, m[2])
 	}
 	return value, ok

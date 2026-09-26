@@ -165,7 +165,7 @@ func TestAmbiguousRetryIdentityStopsProviderForStopAndDelete(t *testing.T) {
 }
 func TestBindRunTaskMissingRunIsNotDispatchable(t *testing.T) {
 	svc := newTestService(t)
-	require.ErrorIs(t, svc.BindRunTask(context.Background(), "missing-run", "task"), ErrAutomationRunNotDispatchable)
+	require.ErrorIs(t, svc.BindRunTask(context.Background(), "missing-run", "task", ""), ErrAutomationRunNotDispatchable)
 }
 func TestRetrySuccessWinsAgainstDisableAtAutomationLock(t *testing.T) {
 	svc := newTestService(t)

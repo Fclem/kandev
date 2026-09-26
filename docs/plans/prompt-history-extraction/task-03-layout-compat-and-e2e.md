@@ -484,7 +484,7 @@ Done. Commands run from the repository root.
 
 ### Documentation
 
-- The whole-tree search matches 80 files. Every match is in an expected category:
+- The whole-tree search matches 81 files. Every match is in an expected category:
   this package's own documents, the retained Host prerequisite requirement and design
   (whose REQ/AC ids contain the words) and the designs/decisions that cite them, the
   deprecated and superseded UI panel pair, historical plans, and the
@@ -496,9 +496,8 @@ Done. Commands run from the repository root.
 - The retained Host design already cited `apps/web/lib/turn-duration.test.ts` and the
   fixture parity suites for prompt derivation, the two plugin specs for panel states
   and end-to-end coverage, and already recorded the panel requirement and design as
-  deprecated and superseded. Nothing there was stale.
-  `docs/specs/plugins/requirements/prompt-history-extraction-host.md` was not edited,
-  so its size headroom is untouched.
+  deprecated and superseded. Its requirements doc was updated to clarify the
+  implementation boundary; it remains within the specification size limit.
 - `python3 scripts/list-docs.py validate` and `python3 scripts/lint-spec-files.py --all`
   pass.
 - Status promotions: the extraction system design is `current`, this plan is

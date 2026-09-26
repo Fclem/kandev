@@ -244,7 +244,8 @@ func (r *Repository) deleteWorkspaceCascade(
 			return nil, nil, fmt.Errorf("guard cascade task row %s: %w", taskID, err)
 		}
 	}
-	if err := r.purgeWorkspaceTaskQueuesInTx(ctx, tx, tasks); err != nil {
+	sessionIDs, err := r.purgeWorkspaceTaskQueuesInTx(ctx, tx, tasks)
+	if err != nil {
 		return nil, nil, err
 	}
 	if cleanup != nil {
@@ -268,6 +269,9 @@ func (r *Repository) deleteWorkspaceCascade(
 		DELETE FROM tasks
 		WHERE workspace_id = ?
 	`), id); err != nil {
+		return nil, nil, err
+	}
+	if err := r.purgePromptSequencesForSessionsTx(ctx, tx, sessionIDs); err != nil {
 		return nil, nil, err
 	}
 	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
@@ -295,22 +299,27 @@ func (r *Repository) deleteWorkspaceCascade(
 	return tasks, workflows, nil
 }
 
-func (r *Repository) purgeWorkspaceTaskQueuesInTx(ctx context.Context, tx *sqlx.Tx, tasks []*models.Task) error {
+func (r *Repository) purgeWorkspaceTaskQueuesInTx(ctx context.Context, tx *sqlx.Tx, tasks []*models.Task) ([]string, error) {
+	var sessionIDs []string
 	for _, task := range tasks {
 		// The tasks still exist at this point (deletion happens later in the
 		// cascade), so the authoritative session set is discoverable now.
 		sessions, err := r.taskQueueSessionsInTx(ctx, tx, task.ID)
 		if err != nil {
-			return fmt.Errorf("task queue sessions for cascade task %s: %w", task.ID, err)
+			return nil, fmt.Errorf("task queue sessions for cascade task %s: %w", task.ID, err)
+		}
+		sessionIDs = append(sessionIDs, sessions...)
+		if err := r.purgeTaskPromptSequenceTx(ctx, tx, task.ID); err != nil {
+			return nil, err
 		}
 		if err := r.purgeTaskQueueInTx(ctx, tx, task.ID, sessions, true); err != nil {
-			return fmt.Errorf("purge task queue for workspace cascade task %s: %w", task.ID, err)
+			return nil, fmt.Errorf("purge task queue for workspace cascade task %s: %w", task.ID, err)
 		}
 		if err := r.purgeQueueSessionPoliciesInTx(ctx, tx, sessions); err != nil {
-			return fmt.Errorf("purge queue session policies for workspace cascade task %s: %w", task.ID, err)
+			return nil, fmt.Errorf("purge queue session policies for workspace cascade task %s: %w", task.ID, err)
 		}
 	}
-	return nil
+	return sessionIDs, nil
 }
 
 func (r *Repository) deleteWorkspaceCascadeRow(

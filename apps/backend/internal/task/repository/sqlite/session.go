@@ -3700,9 +3700,57 @@ func (r *Repository) CountActiveTaskSessionsByRepository(ctx context.Context, re
 // that are using the specified agent profile. This is used during profile deletion
 // to clean up transient quick chat / config chat tasks.
 func (r *Repository) DeleteEphemeralTasksByAgentProfile(ctx context.Context, agentProfileID string) (int64, error) {
-	// Delete tasks that are ephemeral and have sessions using this profile.
-	// CASCADE will handle session deletion.
-	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var taskIDs []string
+	if err := tx.SelectContext(ctx, &taskIDs, r.db.Rebind(`
+		SELECT DISTINCT t.id
+		FROM tasks t
+		INNER JOIN task_sessions s ON s.task_id = t.id
+		WHERE t.is_ephemeral = 1
+		  AND s.agent_profile_id = ?
+		ORDER BY t.id
+	`), agentProfileID); err != nil {
+		return 0, err
+	}
+
+	var sessionIDs []string
+	for _, taskID := range taskIDs {
+		if err := r.lockTaskRowInTx(ctx, tx, taskID); err != nil {
+			if errors.Is(err, ErrTaskNotFound) {
+				continue
+			}
+			return 0, fmt.Errorf("guard ephemeral task %s: %w", taskID, err)
+		}
+		var stillEligible bool
+		if err := tx.GetContext(ctx, &stillEligible, r.db.Rebind(`
+			SELECT EXISTS (
+				SELECT 1
+				FROM tasks t
+				INNER JOIN task_sessions s ON s.task_id = t.id
+				WHERE t.id = ? AND t.is_ephemeral = 1 AND s.agent_profile_id = ?
+			)
+		`), taskID, agentProfileID); err != nil {
+			return 0, err
+		}
+		if !stillEligible {
+			continue
+		}
+		sessions, err := r.taskQueueSessionsInTx(ctx, tx, taskID)
+		if err != nil {
+			return 0, err
+		}
+		sessionIDs = append(sessionIDs, sessions...)
+		if err := r.purgeTaskPromptSequenceTx(ctx, tx, taskID); err != nil {
+			return 0, err
+		}
+	}
+
+	result, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM tasks
 		WHERE is_ephemeral = 1
 		  AND id IN (
@@ -3712,7 +3760,19 @@ func (r *Repository) DeleteEphemeralTasksByAgentProfile(ctx context.Context, age
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if rows > 0 {
+		if err := r.purgePromptSequencesForSessionsTx(ctx, tx, sessionIDs); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return rows, nil
 }
 
 // scanTaskSessions is a helper to scan multiple agent session rows
@@ -3929,6 +3989,33 @@ func (r *Repository) purgeTaskSessionStateTx(
 		}
 	}
 	return deletedAttachments, nil
+}
+
+func (r *Repository) purgeTaskPromptSequenceTx(ctx context.Context, tx *sqlx.Tx, taskID string) error {
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		DELETE FROM task_session_prompt_seq
+		WHERE task_session_id IN (SELECT id FROM task_sessions WHERE task_id = ?)
+	`), taskID); err != nil {
+		return fmt.Errorf("purge prompt sequences for task %s: %w", taskID, err)
+	}
+	return nil
+}
+
+func (r *Repository) purgePromptSequencesForSessionsTx(ctx context.Context, tx *sqlx.Tx, sessionIDs []string) error {
+	if len(sessionIDs) == 0 {
+		return nil
+	}
+	query, args, err := sqlx.In(
+		`DELETE FROM task_session_prompt_seq WHERE task_session_id IN (?)`,
+		sessionIDs,
+	)
+	if err != nil {
+		return fmt.Errorf("build prompt sequence purge query: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(query), args...); err != nil {
+		return fmt.Errorf("purge prompt sequences for deleted sessions: %w", err)
+	}
+	return nil
 }
 
 //

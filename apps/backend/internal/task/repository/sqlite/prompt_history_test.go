@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/kandev/kandev/internal/task/models"
 )
@@ -185,5 +186,139 @@ func TestDeleteTaskSessionRemovesPromptHistoryClaim(t *testing.T) {
 	}
 	if hasHistory {
 		t.Fatal("reused session inherited prompt history from deleted session")
+	}
+}
+func TestDeleteTaskClearsPromptSequenceBeforeSessionIDReuse(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-reuse-after-delete", "session-reuse-after-delete", "turn-before-delete")
+
+	first := &models.Message{
+		ID: "prompt-before-task-delete", TaskID: "task-reuse-after-delete",
+		TaskSessionID: "session-reuse-after-delete", TurnID: "turn-before-delete",
+		AuthorType: models.MessageAuthorUser, Content: "first prompt",
+	}
+	if err := repo.CreateMessage(ctx, first); err != nil {
+		t.Fatalf("create first prompt: %v", err)
+	}
+	if first.PromptIndex != 1 {
+		t.Fatalf("first prompt ordinal = %d, want 1", first.PromptIndex)
+	}
+	if err := repo.DeleteTask(ctx, "task-reuse-after-delete"); err != nil {
+		t.Fatalf("delete task: %v", err)
+	}
+
+	seedForMsgTest(t, repo, "task-reuse-after-delete", "session-reuse-after-delete", "turn-after-delete")
+	hasHistory, err := repo.HasUserPromptHistory(ctx, "session-reuse-after-delete")
+	if err != nil {
+		t.Fatalf("read recreated session history: %v", err)
+	}
+	if hasHistory {
+		t.Fatal("recreated session inherited prompt history from deleted task")
+	}
+	claimed, err := repo.ClaimInitialPromptFallback(ctx, "session-reuse-after-delete")
+	if err != nil || !claimed {
+		t.Fatalf("initial fallback claim after task delete = %t, %v; want claimed", claimed, err)
+	}
+
+	recreated := &models.Message{
+		ID: "prompt-after-task-delete", TaskID: "task-reuse-after-delete",
+		TaskSessionID: "session-reuse-after-delete", TurnID: "turn-after-delete",
+		AuthorType: models.MessageAuthorUser, Content: "new first prompt",
+	}
+	if err := repo.CreateMessage(ctx, recreated); err != nil {
+		t.Fatalf("create first prompt in recreated session: %v", err)
+	}
+	if recreated.PromptIndex != 1 {
+		t.Fatalf("recreated session first prompt ordinal = %d, want 1", recreated.PromptIndex)
+	}
+}
+
+func TestDeleteEphemeralTaskClearsPromptSequence(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	taskID, sessionID, turnID := "ephemeral-prompt-task", "ephemeral-prompt-session", "ephemeral-prompt-turn"
+	seedForMsgTest(t, repo, taskID, sessionID, turnID)
+	if _, err := repo.db.ExecContext(ctx, repo.db.Rebind(`
+		UPDATE tasks SET is_ephemeral = 1 WHERE id = ?
+	`), taskID); err != nil {
+		t.Fatalf("mark task ephemeral: %v", err)
+	}
+	if _, err := repo.db.ExecContext(ctx, repo.db.Rebind(`
+		UPDATE task_sessions SET agent_profile_id = ? WHERE id = ?
+	`), "profile-to-delete", sessionID); err != nil {
+		t.Fatalf("assign agent profile: %v", err)
+	}
+	if err := repo.CreateMessage(ctx, &models.Message{
+		ID: "ephemeral-prompt", TaskID: taskID, TaskSessionID: sessionID, TurnID: turnID,
+		AuthorType: models.MessageAuthorUser, Content: "prompt",
+	}); err != nil {
+		t.Fatalf("create user prompt: %v", err)
+	}
+	if count, err := repo.DeleteEphemeralTasksByAgentProfile(ctx, "profile-to-delete"); err != nil || count != 1 {
+		t.Fatalf("delete ephemeral task = %d, %v; want one task", count, err)
+	}
+	seedForMsgTest(t, repo, taskID, sessionID, "ephemeral-prompt-turn-new")
+	hasHistory, err := repo.HasUserPromptHistory(ctx, sessionID)
+	if err != nil || hasHistory {
+		t.Fatalf("recreated ephemeral session history = %t, %v; want empty", hasHistory, err)
+	}
+}
+
+func TestDeleteExpiredQuickChatClearsPromptSequence(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	taskID, sessionID, turnID := "expired-prompt-task", "expired-prompt-session", "expired-prompt-turn"
+	seedForMsgTest(t, repo, taskID, sessionID, turnID)
+	cutoff := time.Now().UTC()
+	if _, err := repo.db.ExecContext(ctx, repo.db.Rebind(`
+		UPDATE tasks SET is_ephemeral = 1, updated_at = ? WHERE id = ?
+	`), cutoff.Add(-time.Hour), taskID); err != nil {
+		t.Fatalf("expire task: %v", err)
+	}
+	if err := repo.CreateMessage(ctx, &models.Message{
+		ID: "expired-prompt", TaskID: taskID, TaskSessionID: sessionID, TurnID: turnID,
+		AuthorType: models.MessageAuthorUser, Content: "prompt",
+	}); err != nil {
+		t.Fatalf("create user prompt: %v", err)
+	}
+	deleted, err := repo.DeleteExpiredQuickChatTask(ctx, taskID, cutoff)
+	if err != nil || !deleted {
+		t.Fatalf("delete expired quick chat = %t, %v; want deleted", deleted, err)
+	}
+	seedForMsgTest(t, repo, taskID, sessionID, "expired-prompt-turn-new")
+	hasHistory, err := repo.HasUserPromptHistory(ctx, sessionID)
+	if err != nil || hasHistory {
+		t.Fatalf("recreated quick-chat session history = %t, %v; want empty", hasHistory, err)
+	}
+}
+
+func TestDeleteWorkspaceCascadeClearsPromptSequence(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	const workspaceID = "prompt-delete-workspace"
+	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: workspaceID, Name: "Prompt deletion"}); err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	taskID, sessionID, turnID := "workspace-prompt-task", "workspace-prompt-session", "workspace-prompt-turn"
+	seedForMsgTest(t, repo, taskID, sessionID, turnID)
+	if _, err := repo.db.ExecContext(ctx, repo.db.Rebind(`
+		UPDATE tasks SET workspace_id = ? WHERE id = ?
+	`), workspaceID, taskID); err != nil {
+		t.Fatalf("assign workspace: %v", err)
+	}
+	if err := repo.CreateMessage(ctx, &models.Message{
+		ID: "workspace-prompt", TaskID: taskID, TaskSessionID: sessionID, TurnID: turnID,
+		AuthorType: models.MessageAuthorUser, Content: "prompt",
+	}); err != nil {
+		t.Fatalf("create user prompt: %v", err)
+	}
+	if _, _, err := repo.DeleteWorkspaceCascade(ctx, workspaceID); err != nil {
+		t.Fatalf("delete workspace cascade: %v", err)
+	}
+	seedForMsgTest(t, repo, taskID, sessionID, "workspace-prompt-turn-new")
+	hasHistory, err := repo.HasUserPromptHistory(ctx, sessionID)
+	if err != nil || hasHistory {
+		t.Fatalf("recreated workspace session history = %t, %v; want empty", hasHistory, err)
 	}
 }

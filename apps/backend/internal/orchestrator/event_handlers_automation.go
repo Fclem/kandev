@@ -481,7 +481,12 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 			a = automationFromRetrySnapshot(snapshot)
 		}
 	}
+	retryInitialTriggerData := retryRun != nil && evt.RetryClaimToken == "" && len(evt.TriggerData) > 0
+	initialTriggerData := evt.TriggerData
 	evt.TriggerData = automationExecutionTriggerData(evt, retrySnapshot)
+	if retryInitialTriggerData {
+		evt.TriggerData = initialTriggerData
+	}
 	retryOperation, operationErr := s.beginRetryTaskOperation(ctx, evt, retryRun)
 	if operationErr != nil {
 		if !errors.Is(operationErr, automation.ErrRetryGenerationMismatch) &&
@@ -516,7 +521,7 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 	// Initial deliveries use the quoted agent interpolation path. Retry
 	// attempts use the immutable bounded prompt snapshot.
 	prompt := automation.InterpolateAgentPrompt(a.Prompt, evt.TriggerType, evt.TriggerData)
-	if retrySnapshot != nil {
+	if retrySnapshot != nil && !retryInitialTriggerData {
 		prompt = retrySnapshot.ResolvedPrompt
 	} else if retryRun != nil && !retryInitialTriggerData && retryRun.RetryResolvedPrompt != "" {
 		prompt = retryRun.RetryResolvedPrompt

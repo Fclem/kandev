@@ -306,6 +306,7 @@ func (s *Store) FinalizeRetryFailure(ctx context.Context, runID string, generati
 	child.RetryFailureClass = failure.FailureClass
 	child.ErrorMessage = failure.Message
 	child.TaskID, child.SessionID, child.TurnID = "", "", ""
+	child.DedupKey = ""
 	child.RetryTaskIntentID = uuid.NewString()
 	if child.RetryBaseTitle == "" {
 		child.RetryBaseTitle = parent.DisplayTitle

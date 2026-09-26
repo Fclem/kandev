@@ -391,7 +391,7 @@ func TestDispatchRunFailureSchedulesRetryChild(t *testing.T) {
 	require.NoError(t, svc.store.CreateAutomation(ctx, a))
 	trigger := &AutomationTrigger{ID: "dispatch-trigger", AutomationID: a.ID, Type: TriggerTypeManual, Enabled: true}
 	require.NoError(t, svc.store.CreateTrigger(ctx, trigger))
-	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{"delivery_id":"d1"}`), "dispatch-d1")
+	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{"delivery_id":"d1"}`), DedupKey("dispatch-d1"))
 	require.NoError(t, err)
 
 	originalErr := errors.New("provider rejected dispatch")
@@ -418,7 +418,7 @@ func TestDispatchRunKeepsAmbiguousAcceptedContinuationOpen(t *testing.T) {
 		Type: TriggerTypeManual, Enabled: true,
 	}
 	require.NoError(t, svc.store.CreateTrigger(ctx, trigger))
-	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{}`), "ambiguous-continuation")
+	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{}`), DedupKey("ambiguous-continuation"))
 	require.NoError(t, err)
 	run, err := svc.store.GetRun(ctx, fire.RunID)
 	require.NoError(t, err)
@@ -457,7 +457,7 @@ func TestDispatchRunKeepsCommittedContinuationOpenWhenBindingFails(t *testing.T)
 		Type: TriggerTypeManual, Enabled: true,
 	}
 	require.NoError(t, svc.store.CreateTrigger(ctx, trigger))
-	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{}`), "continuation-bind")
+	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{}`), DedupKey("continuation-bind"))
 	require.NoError(t, err)
 	run, err := svc.store.GetRun(ctx, fire.RunID)
 	require.NoError(t, err)

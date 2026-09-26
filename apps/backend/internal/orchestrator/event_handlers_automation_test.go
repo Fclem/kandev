@@ -335,7 +335,7 @@ func (s *retryAutomationServiceStub) GetRun(context.Context, string) (*automatio
 	return s.run, nil
 }
 
-func (s *retryAutomationServiceStub) BindRunTask(context.Context, string, string) error {
+func (s *retryAutomationServiceStub) BindRunTask(context.Context, string, string, string) error {
 	return nil
 }
 
@@ -852,7 +852,7 @@ type retryBindFailureServiceStub struct {
 	finalized bool
 }
 
-func (s *retryBindFailureServiceStub) BindRunTask(context.Context, string, string) error {
+func (s *retryBindFailureServiceStub) BindRunTask(context.Context, string, string, string) error {
 	s.bindCalls++
 	return s.bindErr
 }

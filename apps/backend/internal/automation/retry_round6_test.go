@@ -34,7 +34,7 @@ func TestRetryAdmissionPersistsCompleteLaunchSnapshot(t *testing.T) {
 	require.NoError(t, store.CreateTrigger(ctx, trigger))
 
 	result, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type,
-		json.RawMessage(`{"number":7,"title":"Snapshot PR","timestamp":"2026-09-12T01:02:03Z"}`), "delivery-7")
+		json.RawMessage(`{"number":7,"title":"Snapshot PR","timestamp":"2026-09-12T01:02:03Z"}`), DedupKey("delivery-7"))
 	require.NoError(t, err)
 	run, err := store.GetRun(ctx, result.RunID)
 	require.NoError(t, err)
@@ -99,9 +99,9 @@ func TestServiceRetryAdmissionDoesNotSupersedeDifferentManualTriggers(t *testing
 	require.NoError(t, store.CreateTrigger(ctx, triggerA))
 	require.NoError(t, store.CreateTrigger(ctx, triggerB))
 
-	first, err := svc.FireTrigger(ctx, automation.ID, triggerA.ID, triggerA.Type, nil, "service-trigger-a")
+	first, err := svc.FireTrigger(ctx, automation.ID, triggerA.ID, triggerA.Type, nil, DedupKey("service-trigger-a"))
 	require.NoError(t, err)
-	second, err := svc.FireTrigger(ctx, automation.ID, triggerB.ID, triggerB.Type, nil, "service-trigger-b")
+	second, err := svc.FireTrigger(ctx, automation.ID, triggerB.ID, triggerB.Type, nil, DedupKey("service-trigger-b"))
 	require.NoError(t, err)
 	require.NotEqual(t, first.RunID, second.RunID)
 
@@ -131,9 +131,9 @@ func TestRetryAdmissionDoesNotSupersedeDistinctDeliveries(t *testing.T) {
 	}
 	require.NoError(t, store.CreateTrigger(ctx, trigger))
 
-	first, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, "delivery-a")
+	first, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, DedupKey("delivery-a"))
 	require.NoError(t, err)
-	second, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, "delivery-b")
+	second, err := svc.FireTrigger(ctx, automation.ID, trigger.ID, trigger.Type, nil, DedupKey("delivery-b"))
 	require.NoError(t, err)
 	require.NotEqual(t, first.RunID, second.RunID)
 
@@ -269,7 +269,7 @@ func TestRetryAdmissionSupersedesCommittedUnboundRunBeforeRecovery(t *testing.T)
 	operation, err := store.GetRetryTaskOperation(ctx, oldRun.ID, 1)
 	require.NoError(t, err)
 	require.Equal(t, retryOperationCommitted, operation.State)
-	require.ErrorIs(t, store.BindRunTask(ctx, oldRun.ID, "committed-task"), ErrRetryGenerationMismatch)
+	require.ErrorIs(t, store.BindRunTask(ctx, oldRun.ID, "committed-task", ""), ErrRetryGenerationMismatch)
 	reloaded, err = store.GetRun(ctx, oldRun.ID)
 	require.NoError(t, err)
 	require.Equal(t, RunStatusFailed, reloaded.Status)
@@ -393,7 +393,7 @@ func TestWebhookRetryAdmissionKeepsRawPayloadEphemeral(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := svc.FireTriggerWithInitialData(
-		ctx, a.ID, trigger.ID, trigger.Type, safe, raw, "webhook:"+a.ID+":delivery-1",
+		ctx, a.ID, trigger.ID, trigger.Type, safe, raw, DedupKey("webhook:"+a.ID+":delivery-1"),
 	)
 	require.NoError(t, err)
 	evt := <-eventsSeen

@@ -812,8 +812,6 @@ func (s *Service) UpdateAutomation(ctx context.Context, id string, req *UpdateAu
 		storeReq = &clone
 	}
 	if req.Enabled != nil && !*req.Enabled {
-		unlock := s.automationRunLock(id)
-		defer unlock()
 		if err := s.store.UpdateAutomation(ctx, id, storeReq); err != nil {
 			return nil, err
 		}
@@ -1058,9 +1056,6 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 			if pending {
 				continue
 			}
-		}
-		if run.RetryGroupID != "" {
-			continue
 		}
 		if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
 			if run.RetryGroupID != "" {
@@ -2138,22 +2133,68 @@ func (s *Service) admitTriggerLocked(
 		run.RetryResolvedTriggerAt = &resolvedAt
 		run.RetryContinuationSnapshot = snapshotJSON
 	}
-	if run.RetryGroupID != "" {
-		encodedTriggerIDs, _ := json.Marshal(matchedTriggerIDs)
-		canonicalTriggerIDs := canonicalRetryTriggerIDs(string(encodedTriggerIDs), triggerID)
-		encodedTriggerIDs, _ = json.Marshal(canonicalTriggerIDs)
-		group := &RetryGroup{
-			ID: run.RetryGroupID, AutomationID: a.ID, TriggerID: triggerID,
-			TriggerIDsJSON: string(encodedTriggerIDs),
-			Generation:     1, State: RetryGroupLive,
-		}
-		if err := s.store.CreateRetryAdmission(ctx, run, group); err != nil {
-			return nil, "", false, fmt.Errorf("record retry admission: %w", err)
-		}
-	} else if err := s.store.CreateRun(ctx, run); err != nil {
-		return nil, "", false, fmt.Errorf("record admitted run: %w", err)
+	duplicate, persistErr := s.persistAdmittedRun(
+		ctx, a, run, matchedTriggerIDs, triggerID, triggerType, triggerData, dedupKey,
+	)
+	if duplicate {
+		return nil, "", true, nil
+	}
+	if persistErr != nil {
+		return nil, "", false, persistErr
 	}
 	return run, "", false, nil
+}
+
+func (s *Service) persistAdmittedRun(
+	ctx context.Context, a *Automation, run *AutomationRun, matchedTriggerIDs []string,
+	triggerID string, triggerType TriggerType, triggerData json.RawMessage, dedupKey string,
+) (bool, error) {
+	if run.RetryGroupID == "" {
+		return s.finishAdmissionWrite(
+			ctx, a, triggerID, triggerType, triggerData, dedupKey,
+			s.store.CreateRun(ctx, run), "record admitted run",
+		)
+	}
+	encodedTriggerIDs, _ := json.Marshal(matchedTriggerIDs)
+	canonicalTriggerIDs := canonicalRetryTriggerIDs(string(encodedTriggerIDs), triggerID)
+	encodedTriggerIDs, _ = json.Marshal(canonicalTriggerIDs)
+	group := &RetryGroup{
+		ID: run.RetryGroupID, AutomationID: a.ID, TriggerID: triggerID,
+		TriggerIDsJSON: string(encodedTriggerIDs),
+		Generation:     1, State: RetryGroupLive,
+	}
+	return s.finishAdmissionWrite(
+		ctx, a, triggerID, triggerType, triggerData, dedupKey,
+		s.store.CreateRetryAdmission(ctx, run, group), "record retry admission",
+	)
+}
+
+func (s *Service) finishAdmissionWrite(
+	ctx context.Context, a *Automation, triggerID string, triggerType TriggerType,
+	triggerData json.RawMessage, dedupKey string, admissionErr error, operation string,
+) (bool, error) {
+	if admissionErr == nil {
+		return false, nil
+	}
+	if s.recordDuplicateAdmissionConflict(ctx, a, triggerID, triggerType, triggerData, dedupKey, admissionErr) {
+		return true, nil
+	}
+	return false, fmt.Errorf("%s: %w", operation, admissionErr)
+}
+
+func (s *Service) recordDuplicateAdmissionConflict(
+	ctx context.Context, a *Automation, triggerID string, triggerType TriggerType,
+	triggerData json.RawMessage, dedupKey string, admissionErr error,
+) bool {
+	if dedupKey == "" || !isUniqueConstraint(admissionErr) {
+		return false
+	}
+	exists, err := s.store.HasRunWithDedupKey(ctx, a.ID, dedupKey)
+	if err != nil || !exists {
+		return false
+	}
+	s.recordDuplicateSkippedTrigger(ctx, a, triggerID, triggerType, triggerData, dedupKey)
+	return true
 }
 
 // PreTaskCreationDedupKey returns the dedup key to persist on an audit row

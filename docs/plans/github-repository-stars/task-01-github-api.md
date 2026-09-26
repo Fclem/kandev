@@ -206,6 +206,18 @@ Verification for these fixes: `go test ./internal/github -count=1`,
 installation lacks `src/runtime/race`. Shared Go and linter cache volumes were full; changed-code
 `golangci-lint` passed with isolated caches (0 issues), and `go vet ./internal/github` passes.
 
+Round-3 review fixes: connection status reads now share the monotonic plugin-star request epoch, so
+a delayed same-user response cannot be accepted after reset and reload. OAuth compensation records
+secret kind and generation, enqueues failed staged-secret deletions in the durable cleanup queue,
+and returns queueing failures to the caller. Regressions cover deferred status responses, access and
+refresh cleanup metadata, and queue-insert failure propagation.
+
+Verification: `go test ./internal/github -count=1`, `go vet ./internal/github`, and
+`pnpm exec vitest run lib/state/slices/plugins/plugins-slice.test.ts
+hooks/domains/plugins/use-plugin-repository-stars.test.tsx` pass; the Vitest command reports 29
+tests passed.
+
+
 Residual gaps (recorded for the reviewer, not hidden):
 - The PostgreSQL star-store lifecycle test (replace/disconnect/claim) is written but skips without
   `KANDEV_TEST_POSTGRES_DSN`, so Postgres remains unexecuted in this environment.

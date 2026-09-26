@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { createPluginsSlice } from "./plugins-slice";
 import type { PluginsSlice } from "./types";
+import type { GitHubStarConnectionStatus } from "@/lib/types/github";
 import type { PluginRecord } from "@/lib/types/plugins";
 import { pluginStarKey } from "@/lib/plugins/plugin-star-connection";
 
@@ -31,6 +32,15 @@ function plugin(id: string, overrides: Partial<PluginRecord> = {}): PluginRecord
     ...overrides,
   };
 }
+
+const connection = (userId: string) => ({
+  user_id: userId,
+  credential_generation: 1,
+  active: true,
+  capable: true,
+  reconnect_required: false,
+  available: true,
+});
 
 describe("plugins slice", () => {
   it("starts empty, not loading, not loaded, no error", () => {
@@ -93,15 +103,6 @@ describe("plugins slice", () => {
 });
 
 describe("plugin star connection identity", () => {
-  const connection = (userId: string) => ({
-    user_id: userId,
-    credential_generation: 1,
-    active: true,
-    capable: true,
-    reconnect_required: false,
-    available: true,
-  });
-
   it("clears the tuple and visible states when the authenticated user changes", () => {
     const store = makeStore();
     const firstEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
@@ -155,6 +156,29 @@ describe("plugin star connection identity", () => {
         .applyPluginStarConnection("ws-1", staleEpoch, connection("user-a"), "user-a"),
     ).toBe(false);
   });
+  it("rejects a deferred connection response after reset and same-user reload", async () => {
+    const store = makeStore();
+    const staleEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    let resolveStaleStatus!: (status: GitHubStarConnectionStatus) => void;
+    const staleStatusResponse = new Promise<GitHubStarConnectionStatus>((resolve) => {
+      resolveStaleStatus = resolve;
+    });
+    const staleApplied = staleStatusResponse.then((status) =>
+      store.getState().applyPluginStarConnection("ws-1", staleEpoch, status, "user-a"),
+    );
+
+    store.getState().resetPluginStarConnection("ws-1");
+    const currentEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");
+    const currentStatus = { ...connection("user-a"), credential_generation: 2 };
+    expect(
+      store.getState().applyPluginStarConnection("ws-1", currentEpoch, currentStatus, "user-a"),
+    ).toBe(true);
+
+    resolveStaleStatus(connection("user-a"));
+    await expect(staleApplied).resolves.toBe(false);
+    expect(store.getState().pluginStars.connections["ws-1"].status?.credential_generation).toBe(2);
+  });
+
   it("rejects star responses after a scoped cache is cleared and recreated", () => {
     const store = makeStore();
     const firstStatusEpoch = store.getState().beginPluginStarConnectionRequest("ws-1", "user-a");

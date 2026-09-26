@@ -289,8 +289,8 @@ func (s *PersonalStarOAuthService) validateClaim(
 }
 
 // commitGrant stages the token secrets, commits the connection, then records
-// superseded generations for cleanup. Any failure before the commit deletes the
-// staged secrets so no orphaned ciphertext survives a rejected replacement.
+// superseded generations for cleanup. Pre-commit failures delete staged secrets
+// or durably queue any deletion that fails.
 func (s *PersonalStarOAuthService) commitGrant(
 	ctx context.Context,
 	flow *PersonalStarFlow,
@@ -321,12 +321,20 @@ func (s *PersonalStarOAuthService) commitGrant(
 	}
 	staged, err := s.stagePersonalStarSecrets(ctx, connection, tokens)
 	if err != nil {
-		return s.finishCallback(ctx, base,
+		cleanupErr := s.discardPersonalStarSecrets(ctx, connection.WorkspaceID, connection.UserID, staged)
+		outcome, finishErr := s.finishCallback(ctx, base,
 			PersonalStarFence{Revision: flow.ExpectedRevision, Generation: flow.ExpectedGeneration},
 			personalStarOutcomeFailed)
+		if cleanupErr != nil {
+			return outcome, errors.Join(finishErr, cleanupErr)
+		}
+		return outcome, finishErr
 	}
 	if err := s.commitPersonalStarConnection(ctx, connection, flow); err != nil {
-		s.discardPersonalStarSecrets(ctx, staged)
+		cleanupErr := s.discardPersonalStarSecrets(ctx, connection.WorkspaceID, connection.UserID, staged)
+		if cleanupErr != nil {
+			return PersonalStarCallbackOutcome{}, errors.Join(err, cleanupErr)
+		}
 		return PersonalStarCallbackOutcome{}, err
 	}
 	return PersonalStarCallbackOutcome{
@@ -406,30 +414,49 @@ func (s *PersonalStarOAuthService) stagePersonalStarSecrets(
 	ctx context.Context,
 	connection *PersonalStarConnection,
 	tokens GitHubOAuthTokens,
-) ([]string, error) {
-	staged := make([]string, 0, 2)
+) ([]personalStarSecretRef, error) {
+	staged := make([]personalStarSecretRef, 0, 2)
 	if err := s.secrets.Set(ctx, connection.AccessSecretID,
 		"github personal star access token", tokens.AccessToken); err != nil {
 		return staged, err
 	}
-	staged = append(staged, connection.AccessSecretID)
+	staged = append(staged, personalStarSecretRef{
+		SecretID: connection.AccessSecretID, Kind: personalStarSecretKindAccess,
+		Generation: connection.AccessSecretGeneration,
+	})
 	if tokens.RefreshToken != "" {
 		if err := s.secrets.Set(ctx, connection.RefreshSecretID,
 			"github personal star refresh token", tokens.RefreshToken); err != nil {
-			s.discardPersonalStarSecrets(ctx, staged)
 			return staged, err
 		}
-		staged = append(staged, connection.RefreshSecretID)
+		staged = append(staged, personalStarSecretRef{
+			SecretID: connection.RefreshSecretID, Kind: personalStarSecretKindRefresh,
+			Generation: connection.RefreshSecretGeneration,
+		})
 	} else {
 		connection.RefreshSecretID = ""
 	}
 	return staged, nil
 }
 
-func (s *PersonalStarOAuthService) discardPersonalStarSecrets(ctx context.Context, secretIDs []string) {
-	for _, secretID := range secretIDs {
-		_ = s.secrets.Delete(ctx, secretID)
+func (s *PersonalStarOAuthService) discardPersonalStarSecrets(
+	ctx context.Context,
+	workspaceID, userID string,
+	refs []personalStarSecretRef,
+) error {
+	var cleanupErr error
+	for _, ref := range refs {
+		if err := s.secrets.Delete(ctx, ref.SecretID); err != nil {
+			if queueErr := s.store.EnqueuePersonalStarSecretCleanup(
+				ctx, workspaceID, userID, ref.SecretID, ref.Kind, ref.Generation,
+			); queueErr != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf(
+					"delete staged personal star secret %q: %w", ref.SecretID, errors.Join(err, queueErr),
+				))
+			}
+		}
 	}
+	return cleanupErr
 }
 
 // RefreshPersonalStarConnection rotates the dedicated access token through the
@@ -457,21 +484,30 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 		replacement.GrantedScopes = strings.Join(tokens.GrantedScopes, " ")
 		replacement.PublicRepo = HasPublicRepoScope(tokens.GrantedScopes)
 	}
-	staged := []string{}
+	staged := make([]personalStarSecretRef, 0, 2)
 	if err := s.secrets.Set(ctx, replacement.AccessSecretID,
 		"github personal star access token", tokens.AccessToken); err != nil {
 		return ErrGitHubPersonalRequired
 	}
-	staged = append(staged, replacement.AccessSecretID)
+	staged = append(staged, personalStarSecretRef{
+		SecretID: replacement.AccessSecretID, Kind: personalStarSecretKindAccess,
+		Generation: replacement.AccessSecretGeneration,
+	})
 	if tokens.RefreshToken != "" {
 		replacement.RefreshSecretID = personalStarRefreshSecretID(workspaceID, userID, generation)
 		replacement.RefreshSecretGeneration = generation
 		if err := s.secrets.Set(ctx, replacement.RefreshSecretID,
 			"github personal star refresh token", tokens.RefreshToken); err != nil {
-			s.discardPersonalStarSecrets(ctx, staged)
+			cleanupErr := s.discardPersonalStarSecrets(ctx, workspaceID, userID, staged)
+			if cleanupErr != nil {
+				return errors.Join(ErrGitHubPersonalRequired, cleanupErr)
+			}
 			return ErrGitHubPersonalRequired
 		}
-		staged = append(staged, replacement.RefreshSecretID)
+		staged = append(staged, personalStarSecretRef{
+			SecretID: replacement.RefreshSecretID, Kind: personalStarSecretKindRefresh,
+			Generation: replacement.RefreshSecretGeneration,
+		})
 	}
 	// The committed row still carries the pre-bump fence, so that is the
 	// expectation the swap must satisfy.
@@ -479,7 +515,10 @@ func (s *PersonalStarOAuthService) RefreshPersonalStarConnection(
 		ctx, &replacement,
 		PersonalStarFence{Revision: connection.LifecycleRevision, Generation: connection.CredentialGeneration},
 		PersonalStarFence{Revision: revision, Generation: generation}); err != nil {
-		s.discardPersonalStarSecrets(ctx, staged)
+		cleanupErr := s.discardPersonalStarSecrets(ctx, workspaceID, userID, staged)
+		if cleanupErr != nil {
+			return errors.Join(err, cleanupErr)
+		}
 		return err
 	}
 	return nil

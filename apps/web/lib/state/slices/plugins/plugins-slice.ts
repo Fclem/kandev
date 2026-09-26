@@ -62,7 +62,7 @@ function createPluginStarActions(
   return {
     beginPluginStarConnectionRequest: (workspaceId, userId) => {
       const entry = get().pluginStars.connections[workspaceId];
-      const epoch = (entry?.epoch ?? 0) + 1;
+      const epoch = allocatePluginStarRequestEpoch();
       // A different authenticated user owns a different connection: drop the
       // previous tuple and its star states before the new read so the surface
       // never shows, or acts on, another account's state.

@@ -13,9 +13,10 @@ import (
 )
 
 type fakePersonalStarSecrets struct {
-	values  map[string]string
-	deleted []string
-	failOn  string
+	values       map[string]string
+	deleted      []string
+	failOn       string
+	failDeleteOn string
 }
 
 func newFakePersonalStarSecrets() *fakePersonalStarSecrets {
@@ -54,7 +55,7 @@ func (f *fakePersonalStarSecrets) Set(_ context.Context, id, _, value string) er
 }
 
 func (f *fakePersonalStarSecrets) Delete(_ context.Context, id string) error {
-	if f.failOn == id {
+	if f.failOn == id || f.failDeleteOn == id {
 		return errors.New("secret store unavailable")
 	}
 	f.deleted = append(f.deleted, id)
@@ -339,6 +340,138 @@ func TestPersonalStarConsentKeepsPriorGrantOnFailedReplacement(t *testing.T) {
 	}
 	if !status.Active || !status.Capable || !status.ReconnectRequired {
 		t.Fatalf("active-with-failed-reconnect status = %+v", status)
+	}
+}
+
+func TestPersonalStarStagedTokenDeletionIsDurablyQueued(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{
+			AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{PersonalStarScope},
+		},
+		user: GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	state := startPersonalStarConsent(t, service, "/settings/plugins")
+	lifecycle, err := store.GetPersonalStarLifecycle(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessID := personalStarAccessSecretID("ws-1", "user-1", lifecycle.CredentialGeneration)
+	refreshID := personalStarRefreshSecretID("ws-1", "user-1", lifecycle.CredentialGeneration)
+	secrets.failOn = refreshID
+	secrets.failDeleteOn = accessID
+
+	outcome, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.Outcome != personalStarOutcomeFailed {
+		t.Fatalf("callback outcome = %+v, want failed", outcome)
+	}
+	if secrets.values[accessID] != "access-1" {
+		t.Fatal("failed compensation did not leave the staged access secret available for retry")
+	}
+	records, err := store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("cleanup records = %d, want one durable retry", len(records))
+	}
+	if records[0].WorkspaceID != "ws-1" || records[0].UserID != "user-1" ||
+		records[0].SecretID != accessID || records[0].SecretKind != personalStarSecretKindAccess ||
+		records[0].CredentialGeneration != lifecycle.CredentialGeneration ||
+		records[0].Status != personalStarCleanupPending {
+		t.Fatalf("staged access cleanup record = %+v", records[0])
+	}
+}
+
+func TestPersonalStarCommitFailureQueuesStagedRefreshSecret(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{
+			AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{PersonalStarScope},
+		},
+		user: GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	state := startPersonalStarConsent(t, service, "/settings/plugins")
+	lifecycle, err := store.GetPersonalStarLifecycle(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessID := personalStarAccessSecretID("ws-1", "user-1", lifecycle.CredentialGeneration)
+	refreshID := personalStarRefreshSecretID("ws-1", "user-1", lifecycle.CredentialGeneration)
+	secrets.failDeleteOn = refreshID
+	if _, err := store.db.Exec(`
+		CREATE TRIGGER reject_personal_star_connection_insert
+		BEFORE INSERT ON github_personal_star_connection
+		BEGIN
+			SELECT RAISE(ABORT, 'connection unavailable');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1"); err == nil {
+		t.Fatal("callback succeeded despite rejected connection insert")
+	}
+	if _, ok := secrets.values[accessID]; ok {
+		t.Fatal("successfully compensated access token remains stored")
+	}
+	if secrets.values[refreshID] != "refresh-1" {
+		t.Fatal("failed refresh-token compensation did not preserve the secret for retry")
+	}
+	records, err := store.ListPersonalStarSecretCleanups(ctx, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].SecretID != refreshID ||
+		records[0].SecretKind != personalStarSecretKindRefresh ||
+		records[0].CredentialGeneration != lifecycle.CredentialGeneration {
+		t.Fatalf("staged refresh cleanup records = %+v", records)
+	}
+}
+
+func TestPersonalStarStagedTokenQueueFailureIsReturned(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	secrets := newFakePersonalStarSecrets()
+	client := &fakePersonalStarOAuth{
+		tokens: GitHubOAuthTokens{
+			AccessToken: "access-1", RefreshToken: "refresh-1", GrantedScopes: []string{PersonalStarScope},
+		},
+		user: GitHubOAuthUser{ID: 42, Login: "octocat"},
+	}
+	service := newPersonalStarTestService(t, store, secrets, client, true)
+	state := startPersonalStarConsent(t, service, "/settings/plugins")
+	lifecycle, err := store.GetPersonalStarLifecycle(ctx, "ws-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessID := personalStarAccessSecretID("ws-1", "user-1", lifecycle.CredentialGeneration)
+	refreshID := personalStarRefreshSecretID("ws-1", "user-1", lifecycle.CredentialGeneration)
+	secrets.failOn = refreshID
+	secrets.failDeleteOn = accessID
+	if _, err := store.db.Exec(`
+		CREATE TRIGGER reject_personal_star_cleanup
+		BEFORE INSERT ON github_personal_star_cleanup
+		BEGIN
+			SELECT RAISE(ABORT, 'cleanup unavailable');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.CompleteCallback(ctx,
+		GitHubStarCallbackQuery{State: state, Code: "code-1"}, "user-1", "session-1")
+	if err == nil || !strings.Contains(err.Error(), "enqueue personal star secret cleanup") {
+		t.Fatalf("callback error = %v, want cleanup queue failure", err)
 	}
 }
 

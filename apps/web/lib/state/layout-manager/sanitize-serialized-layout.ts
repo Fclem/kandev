@@ -185,33 +185,42 @@ export function sanitizeSerializedLayout(
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
- * Remove panels whose component is not renderable from a live `LayoutState`,
- * dropping only the groups and columns that filter empties. A group that was
- * already empty is left alone — empty groups are live state other code
- * preserves — and a dangling `activePanel` introduced by the drop is
- * repointed (or cleared), while `rootOrientation` is carried through so a
- * vertical root is never silently flipped.
+ * Filter a live `LayoutState` to renderable components and, when supplied, the
+ * session IDs that belong to the target environment. Drop only groups and
+ * columns emptied by the filter; preserve pre-existing empty groups and
+ * `rootOrientation`, and repair a dangling `activePanel`.
  */
 export function filterLayoutStateByComponents(
   state: LayoutState,
   validComponents: ReadonlySet<string> = RENDERABLE_COMPONENTS,
+  validSessionIds?: ReadonlySet<string>,
 ): LayoutState {
-  const droppedPanelIds = new Set<string>();
   const columns = state.columns
-    .map((column) => filterColumnByComponents(column, validComponents, droppedPanelIds))
+    .map((column) => filterColumn(column, validComponents, validSessionIds))
     .filter((column): column is LayoutColumn => column !== null);
   return { ...state, columns };
 }
 
-function filterGroupByComponents(
+function keepLivePanel(
+  panel: LayoutPanel,
+  validComponents: ReadonlySet<string>,
+  validSessionIds?: ReadonlySet<string>,
+): boolean {
+  if (!validComponents.has(panel.component)) return false;
+  if (!validSessionIds || !panel.id.startsWith("session:")) return true;
+  return validSessionIds.has(panel.id.slice("session:".length));
+}
+
+function filterGroup(
   group: LayoutGroup,
   validComponents: ReadonlySet<string>,
-  droppedPanelIds: Set<string>,
+  validSessionIds?: ReadonlySet<string>,
 ): LayoutGroup | null {
   const hadPanels = group.panels.length > 0;
   const panels: LayoutPanel[] = [];
+  const droppedPanelIds = new Set<string>();
   for (const panel of group.panels) {
-    if (validComponents.has(panel.component)) panels.push(panel);
+    if (keepLivePanel(panel, validComponents, validSessionIds)) panels.push(panel);
     else droppedPanelIds.add(panel.id);
   }
   // Only a group this filter emptied is dropped; a pre-existing empty group is
@@ -225,34 +234,28 @@ function filterGroupByComponents(
     activePanel: activePanelDropped ? panels[0]?.id : group.activePanel,
   };
 }
-
-function filterTreeNodeByComponents(
+function filterTreeNode(
   node: LayoutNode,
   validComponents: ReadonlySet<string>,
-  droppedPanelIds: Set<string>,
+  validSessionIds?: ReadonlySet<string>,
 ): LayoutNode | null {
   if (node.type === "leaf") {
-    const group = filterGroupByComponents(node.group, validComponents, droppedPanelIds);
+    const group = filterGroup(node.group, validComponents, validSessionIds);
     return group ? { ...node, group } : null;
   }
   const children = node.children
-    .map((child) => filterTreeNodeByComponents(child, validComponents, droppedPanelIds))
+    .map((child) => filterTreeNode(child, validComponents, validSessionIds))
     .filter((child): child is LayoutNode => child !== null);
   if (children.length === 0) return null;
   return { ...node, children };
 }
-
-function groupsInNode(node: LayoutNode): LayoutGroup[] {
-  return node.type === "leaf" ? [node.group] : node.children.flatMap(groupsInNode);
-}
-
-function filterColumnByComponents(
+function filterColumn(
   column: LayoutColumn,
   validComponents: ReadonlySet<string>,
-  droppedPanelIds: Set<string>,
+  validSessionIds?: ReadonlySet<string>,
 ): LayoutColumn | null {
   if (column.tree) {
-    const tree = filterTreeNodeByComponents(column.tree, validComponents, droppedPanelIds);
+    const tree = filterTreeNode(column.tree, validComponents, validSessionIds);
     if (!tree) return null;
     return { ...column, tree, groups: groupsInNode(tree) };
   }
@@ -260,8 +263,12 @@ function filterColumnByComponents(
   if (!Array.isArray(column.groups) || column.groups.length === 0) return column;
 
   const groups = column.groups
-    .map((group) => filterGroupByComponents(group, validComponents, droppedPanelIds))
+    .map((group) => filterGroup(group, validComponents, validSessionIds))
     .filter((group): group is LayoutGroup => group !== null);
   if (groups.length === 0) return null;
   return { ...column, groups };
+}
+
+function groupsInNode(node: LayoutNode): LayoutGroup[] {
+  return node.type === "leaf" ? [node.group] : node.children.flatMap(groupsInNode);
 }

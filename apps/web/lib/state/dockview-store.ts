@@ -912,6 +912,16 @@ function captureReusableLayout(get: StoreGet): Record<string, unknown> {
   return normalizeReusableSessionPanels(filtered) as unknown as Record<string, unknown>;
 }
 
+function filterPreMaximizeLayout(
+  savedLayout: LayoutState,
+  activeSessionId: string | null,
+  currentSessionIds: string[],
+): LayoutState {
+  const validSessionIds = new Set(currentSessionIds);
+  if (activeSessionId) validSessionIds.add(activeSessionId);
+  return filterLayoutStateByComponents(savedLayout, undefined, validSessionIds);
+}
+
 function restorePreMaximizeFallback({
   api,
   envId,
@@ -927,7 +937,11 @@ function restorePreMaximizeFallback({
   activeSessionId: string | null;
   currentSessionIds: string[];
 }): void {
-  const preMaximizeLayout = filterLayoutStateByComponents(savedLayout);
+  const preMaximizeLayout = filterPreMaximizeLayout(
+    savedLayout,
+    activeSessionId,
+    currentSessionIds,
+  );
   const { width, height } = measureDockviewContainer(api);
   const manualRightWidth = getManualRightWidth(envId);
   const pinnedWidths =
@@ -992,7 +1006,11 @@ function restoreMaximizeFromStorage(
     const { width, height } = measureDockviewContainer(api);
     api.layout(width, height);
     const ids = applyLayoutFixups(api, undefined, getManualRightWidth(envId));
-    const preMax = filterLayoutStateByComponents(saved.preMaximizeLayout as unknown as LayoutState);
+    const preMax = filterPreMaximizeLayout(
+      saved.preMaximizeLayout as unknown as LayoutState,
+      activeSessionId,
+      currentSessionIds,
+    );
     // The maximized layout is `[sidebar?, maximized]` — the non-sidebar group
     // is the one being maximized, which `resolveGroupIds` returns as
     // `centerGroupId`. Tracking it keeps the store consistent with what

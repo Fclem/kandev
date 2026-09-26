@@ -88,8 +88,10 @@ shared helpers in a neutral module (a serialized-layout sanitizer and a
 the two behaviors that still need end-to-end evidence: the plugin path on
 desktop and phone, and a saved layout that contains the retired panel.
 
-No database migration is written, and no stored value is rewritten: the
-sanitizers run where a payload is applied. Six routes reach the renderer
+No database migration or bulk browser-storage rewrite is added. Sanitizers run
+when payloads are applied; maximize fallback restoration may save the filtered
+layout to per-environment browser storage before clearing its maximize snapshot,
+self-healing that local value. Six routes reach the renderer
 unfiltered today (the environment-switch slow path, the preset dropdown, the
 custom-default build, the two maximize readers, and the retained
 hidden-right-pane column), so removing the identity

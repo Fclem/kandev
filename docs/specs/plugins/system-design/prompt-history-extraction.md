@@ -32,36 +32,25 @@ Adjacent contracts this design uses but does not own:
 
 ## Requirement mapping
 
-| Requirement | Design section |
-| --- | --- |
+| Requirement                                 | Design section                                                                                                                                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `REQ-PLUGINS-PROMPT-HISTORY-EXTRACTION-001` | [Components and responsibilities](#components-and-responsibilities), [Data and contracts](#data-and-contracts), [Control flow](#control-flow), [Failure and recovery](#failure-and-recovery), [Persistence](#persistence) |
 
 ## Components and responsibilities
 
 ### Removed from core
 
-| Removed | Current responsibility | Replacement |
-| --- | --- | --- |
-| `apps/web/components/task/prompt-history-panel-content.tsx`, `prompt-history-panel-row.tsx`, `prompt-history-panel-host.tsx` and their tests | Renders rows, expansion, floating older-page indicator, passthrough empty state, and binds the arrow to transcript navigation | Plugin panel rendered from `host.conversation.*` and `host.ui.PromptMentionText` |
-| `apps/web/hooks/domains/session/use-session-prompts.ts` | Loads the prompt-only first page from the session message API with `author_type=user`, readiness gating, and refresh generations | Plugin's own paging over `host.conversation.useSessionMessages` |
-| `apps/web/hooks/use-lazy-load-prompts.ts` | Auto-loads older prompt pages into the prompt projection | Plugin's own `loadMore()` loop |
-| `apps/web/lib/state/slices/session/prompt-message-actions.ts` and the session `messagePrompts` slice (its `types.ts` declaration, `session-slice.ts` initial state and `removeTaskSession` cleanup, `default-state.ts` `mergePromptHistoryState`, `app-state-types.ts` `messagePrompts` plus `replacePromptMessages`/`prependPromptMessages`/`setPromptMessagesLoading`/`setPromptMessagesLoadingMore`) | Separate user-message projection with its own cursor, metadata, generations, hydration merge, and live message-event fan-out | Plugin scope cache in `apps/web/lib/plugins/conversation-source-scope.ts`, which already reconciles independently of the store. The settings `PromptsState` re-exported by `lib/state/slices/index.ts` and `lib/state/store-reexports.ts` is the saved-prompt settings type and stays |
-| `apps/web/lib/prompt-history.ts` prompt-entry half (`PromptHistoryEntry`, `buildPromptHistoryEntries`, agent-prompt detection, prompt ordering) and its prompt-entry tests | Derives ordered entries with durations and ordinals | Plugin derivation from the public message DTO (`promptIndex`, author, timestamps) plus `host.conversation.useSessionTurns` |
-| `joinInFlightWhileLoading`, `stickToBottomWhileLoading`, and `lifecycleKey` in `apps/web/hooks/use-lazy-load-sentinel.ts`, plus their option tests | Sentinel re-arm, stick-to-bottom, and observer-lifecycle behavior set in production only by the removed panel | None; the transcript keeps the defaults (never join while loading, never stick without an explicit option, no explicit lifecycle key) |
-| `useScrollPinnedToBottom`, `STICK_BOTTOM_TOLERANCE_PX`, and the `isPinned`/`refreshPinned` plumbing in the same hook, with the pin-listener case | The scroll-pin state that only `stickToBottomWhileLoading`'s stick write reads | None; the option goes, so nothing reads the pin |
-| `minUserPromptsPerLoad` in `apps/web/hooks/use-lazy-load-messages.ts`, with its docblock, cases, and the helpers only it needs (`countUserPrompts` and the `loadedPrompts` accumulator and parameter) | A prompt-count accumulation target with no production caller left after the panel's removal | None; the transcript's callers pass only `minTextPartsPerLoad`, and the orphans would otherwise fail `eslint --max-warnings 0` |
-| `PROMPT_HISTORY_PANEL_ID`, `REUSABLE_PANEL_IDS`/`KNOWN_PANEL_IDS`/`PANEL_REGISTRY` entries and index re-exports in `apps/web/lib/state/layout-manager/`, `addPromptHistoryPanel` in `dockview-extra-panel-actions.ts` and `dockview-store.ts` | Gives the built-in panel a saved-layout identity and an "add panel" action | Plugin task panels use the generic `plugin-panel` component and plugin panel ids |
-| `apps/web/components/task/dockview-add-panel-items.tsx` Prompt history row and its tests | Desktop and Office "+" menu entry | Plugin task-panel entries in the same menu |
-| `dockview-panel-content.tsx`, `dockview-shared.tsx`, `dockview-desktop-layout.tsx` `prompt-history` registrations and their tests | Maps the component name to the panel content and marks it renderable on desktop | Generic `plugin-panel` mapping |
-| `apps/web/components/settings/layouts/layout-editor.tsx` `prompt-history` placeholder | Layout-profile editor placeholder | None |
-| `apps/web/components/task/mobile/plugin-panel-picker.tsx` `showPromptHistory` and its option, `session-mobile-bottom-nav.tsx`, `session-mobile-layout.tsx`, `lib/state/slices/ui/types.ts` `MobileSessionPanel` member, plus their tests | Native-mobile `Panels` entry and full-height surface | Plugin panels already appear in the same picker through the mobile plugin-panel lifecycle |
-| `task:promptHistory*`, `task:expandPrompt`, `task:collapsePrompt` copy in the 7 catalogs, plus their `src/locales/pt-pt/_verbatim.json` declarations | Panel title, row labels, empty state, expand controls | Plugin-owned copy; no core key keeps a panel-only string, and a declaration without a catalog key fails `pnpm run i18n:check` |
-| `formatRelativeCompact` in `apps/web/lib/i18n/formats.ts` and its `common:mShort`, `common:hShort`, `common:dShort` keys in the 7 catalogs | Compact elapsed time for the panel rows, whose docblock named the removed duration affordance | None; the helper had no other caller and no test. The `common:*Short` keys go with it |
-| `apps/web/e2e/tests/task/prompt-history-panel.spec.ts`, `prompt-history-auto-load.spec.ts`, `mobile-prompt-history-panel.spec.ts`, `apps/web/e2e/helpers/prompt-history-long-seed.ts` | Core panel end-to-end coverage and its seed helper | Existing plugin specs (`tests/plugins/prompt-history-plugin.spec.ts`, `mobile-prompt-history-plugin.spec.ts`, `mobile-plugin-task-panel.spec.ts`) |
-| The retired-panel locators in `apps/web/e2e/tests/settings/layout-profiles.spec.ts` and `mobile-layout-profiles.spec.ts` | Layout-editor round-trip for the built-in panel | Rewritten against a surviving reusable panel, plus the retired-panel compatibility case |
+- The built-in panel UI, prompt-only message projection and paging hooks, and
+  panel-only transcript sentinel options.
+- Prompt-entry derivation and compact duration formatting; shared transcript
+  duration rendering remains in core.
+- The retired panel/component identity, desktop and mobile entry points,
+  layout-profile placeholder, locale keys, and core panel E2E fixtures.
+- Generic plugin task-panel registration, conversation APIs, navigation, and
+  mobile placement remain the replacement surface.
 
-`apps/web/components/task/chat/message-list-native-scroll.ts` and other files
-that mention the panel in comments are edited for comments only.
+These are implementation groupings, not new Host contracts. The requirements
+document records the observable removal and retained behavior.
 
 ### Retained in core
 
@@ -96,133 +85,33 @@ public shape and must not gain prompt-history-specific names or branches.
 
 ### Changed at a shared boundary
 
-#### Every stored payload that reaches the renderer
+`apps/web/lib/state/layout-manager/renderable-components.ts` owns a static list
+of registered component names. The static source works on both the task route,
+which dynamically loads Dockview, and the settings route, which validates saved
+profiles without loading the task UI.
 
-The table records the pre-change behavior before this extraction's sanitization
-landed; it is a baseline, not current status. The implementation must sanitize
-every route listed as unfiltered here:
+`apps/web/lib/state/layout-manager/sanitize-serialized-layout.ts` provides two
+forms of the same filter:
 
-| Route | Payload | Filtered before this package |
-| --- | --- | --- |
-| On-ready restore (`tryRestoreEnvLayout`) | per-environment saved layout | yes, `sanitizeLayout` with `DESKTOP_VALID_COMPONENTS` |
-| Environment switch, slow path (`performEnvSwitch` in `apps/web/lib/state/dockview-env-switch.ts`) | per-environment saved layout | **no**: `getHealthyEnvLayout` checks shape health only, then `restoreSerializedDockview` calls `api.fromJSON` |
-| Apply a saved profile from the preset dropdown (`applyCustomLayout` → `restoreCustomLayout` in `apps/web/lib/state/dockview-store.ts`) | raw `SavedLayout.layout`, both the `columns` branch and the legacy serialized branch | **no**: `normalizeReusableSessionPanels` and `materializeReusableChatPanel` pass non-chat panels through |
-| Build the default layout from a custom default profile (`performBuildDefault` and `userDefaultLayout` in `apps/web/lib/state/dockview-store.ts`, fed by `resolveEffectiveDefaultLayout` in `apps/web/lib/layout/layout-profiles.ts`) | the default profile's layout, normalized to a `LayoutState` | **no**: `validateReusableLayout` normalizes session panels only and the retired id is still reusable, so the profile passes and reaches `applyLayoutAndSet`; yes after this package's profile normalization |
-| Retained hidden-right-pane column (`kandevHiddenRightPane` metadata on the per-environment layout, re-inserted by `toggleRightPanels` → `restoreRightPane`) | the metadata's `column: LayoutColumn`, panel definitions included | **no**: `readHiddenRightPane` shape-validates only, both restore paths strip the metadata before sanitizing, and `filterColumn` dedupes by panel id rather than renderability |
-| Maximize restore, on-ready (`applySavedMaximize`) | `maximizedDockviewJson` and `preMaximizeLayout` | **no** |
-| Maximize restore, environment switch (`restoreMaximizeFromStorage`) | same blob | **no** |
-| Layout editor preview | compatibility-normalized profile | yes (`getLayoutProfileCompatibility`) |
+- `sanitizeSerializedLayout` removes serialized panels whose components are
+  unavailable before Dockview receives the payload.
+- `filterLayoutStateByComponents` filters reusable `LayoutState` values,
+  removes a group or column emptied by that filtering, retains pre-existing
+  empty groups, repairs `activePanel`, and preserves `rootOrientation`.
 
-An unfiltered payload cannot be instantiated. `dockview-react` looks the
-component up in its `components` map and builds the panel content part with
-`undefined`; that part's constructor guards the component type and throws
-synchronously while `api.fromJSON` drains its initialization queue, so the throw
-lands inside the existing `fromJSON` rollback. The rollbacks therefore run:
-`restoreSerializedDockview` rethrows; the environment-switch route then applies
-that environment's own saved layout and falls back to the default build only
-when none is healthy; and the maximize readers delete the blob through
-`removeEnvMaximizeState`. The damage is losing the stored layout state, not an
-uncaught render crash, and the self-heal deletes what it cannot repair.
+The same component set is used at all persisted-layout boundaries: on-ready and
+environment-switch restore, maximize restore, saved-profile apply and default
+profile validation. Hidden-right-pane metadata is filtered when read and again
+before a captured pane is restored. The mobile `Panels` entry is derived only
+from canvases and registered plugin panels.
 
-#### Shared primitives
-
-Two helpers in a neutral module
-(`apps/web/lib/state/layout-manager/sanitize-serialized-layout.ts`) replace the
-per-route reasoning:
-
-- `sanitizeSerializedLayout(payload, validComponents)` — the existing
-  `sanitizeLayout`, renamed and moved so the store and the env-switch module can
-  call it without importing a component module that already imports the store.
-  It moves with no re-export shim: `dockview-layout-restore.ts` stops exporting
-  it, and `dockview-layout-restore.test.ts` re-points its import (its 15
-  `sanitizeLayout` cases move with the function).
-- `filterLayoutStateByComponents(state, validComponents)` — the `LayoutState`
-  form: drops panels whose component is not renderable, drops a group or column
-  left empty *by that drop* (a pre-existing empty group is left alone, because
-  empty groups are live state other code preserves), repoints or clears a
-  dangling `activePanel`, and preserves `rootOrientation`. `rewriteReusableChatPanels` models the null-propagation but
-  returns `{ columns }` only, so it is the pattern, not the shape.
-
-A second neutral module
-(`apps/web/lib/state/layout-manager/renderable-components.ts`) owns the
-renderable component names as a static export (`RENDERABLE_COMPONENT_NAMES` plus
-an `isRenderableComponent()` predicate) rather than a runtime registry, and both
-helpers above import it. It has to be static: `dockview-desktop-layout.tsx` is
-loaded through `dynamic(() => import(...), { ssr: false })`, and the settings
-route that validates saved profiles never imports it, so a registry populated at
-that module's load would be empty there and the profile normalizer would behave
-differently depending on whether the user had visited a task first.
-  - `dockview-desktop-layout.tsx` builds its `components` map from the list
-    (every entry is already `PortalSlot`), or at minimum derives
-    `DESKTOP_VALID_COMPONENTS` from the same list, so the set and the real
-    registrations cannot diverge; a test pins that equality.
-  - Every consumer uses the predicate: the serialized sanitizer, the
-    `LayoutState` filter, and the profile normalizer. The on-ready restore path
-    keeps passing the set it already receives from its caller.
-
-#### Call sites
-
-- `apps/web/components/task/dockview-layout-restore.ts`: `applySavedMaximize`
-  and `tryRestoreMaximizeOnly` take the caller's component set, filter the
-  serialized payload with `sanitizeSerializedLayout`, filter `preMaximizeLayout`
-  with `filterLayoutStateByComponents`, and skip the maximize overlay when the
-  maximized group does not survive.
-- `apps/web/lib/state/dockview-store.ts`: `restoreMaximizeFromStorage` does the
-  same through the renderable-component predicate, and `restoreCustomLayout`
-  filters the incoming `SavedLayout.layout` on both branches before applying it.
-- `apps/web/lib/state/dockview-env-switch.ts`: the slow path sanitizes the
-  healthy saved layout before `restoreSerializedDockview` and holds the sanitized
-  payload in `saved` with no storage write, so the active-view replay
-  (`restoreSavedActiveViews`) and the right-column width read
-  (`savedRightColumnWidth`) see the layout that was actually applied.
-  `replaceStaleSessionPanels` takes no payload and is unaffected.
-- `apps/web/components/task/mobile/session-mobile-bottom-nav.tsx`: renders the
-  `Panels` entry from the canvases and plugin panels that can actually populate
-  its sheet, because the term that always kept it visible belonged to the
-  removed panel.
-- `apps/web/lib/state/dockview-right-pane.ts`: the retained hidden-right-pane
-  column is pruned with `filterLayoutStateByComponents` at both boundaries —
-  `readHiddenRightPane` prunes on the way in and returns null when nothing
-  survives, and `restoreRightPane` prunes again before insertion as the guard for
-  callers that hold a captured pane. The read is the funnel for all three readers
-  — `restoreMaximizeFromStorage` (`dockview-store.ts`), the environment-switch
-  handler (`dockview-store.ts`), and `setupReadyDockview` in
-  `apps/web/components/task/dockview-desktop-layout.tsx`, which populates the
-  store on an ordinary page load — so pruning there covers the ordinary route and
-  the control state that `getRightPaneToggleState` derives from the same value.
-  The next capture persists the pruned column. Without it, a user whose retired
-  panel sat in the hidden column keeps `component: "prompt-history"` in that
-  metadata, the pane still reports available and hidden, and clicking "show right
-  panels" applies an unrenderable component: `applyLayout` throws,
-  `applyLayoutAndSet` rolls back, the handler restores the hidden state, and the
-  column's surviving panels stay unreachable — or, when the column held only the
-  retired panel, the control offers an action that cannot
-  act.
-- `apps/web/lib/layout/layout-profiles.ts`: normalizes a saved layout profile
-  before validation by dropping panels whose **component is no longer
-  renderable** — the same static predicate every other route uses, and one that
-  is available on the settings route, not a reusable-id-set rule — then dropping
-  a group or column left empty *by that drop* (pre-existing empty groups are left
-  alone) and repointing or clearing a dangling `activePanel`, next to the
-  existing session-panel normalization. The empty-group clause matters as much as the
-  drop: `validateGroup` rejects a zero-panel group, so a group whose only panel
-  was the retired one would otherwise keep the profile invalid and lose the
-  whole customized default.
-  Keeping the predicate component-based and load-independent is deliberate.
-  `validateGroup`'s
-  `unsupported-panel` check stays reachable and still governs ids that are not
-  reusable but whose component is fine, such as the dynamic `pr-detail|<key>`
-  and `mr-detail|<key>` panels a captured layout can carry; those profiles keep
-  today's `legacy` classification and the existing case that asserts it stays
-  valid evidence. Dropping every non-reusable id instead would make that check
-  unreachable and silently change how those profiles behave. Without it, `validateReusableLayout` reports
-  `unsupported-panel` for the retired id, `resolveEffectiveDefaultLayout` falls
-  back to the built-in default, and a user's customized default layout silently
-  stops applying. That normalization covers the *validation and default
-  resolution* path; the apply path is covered by `restoreCustomLayout` above.
-  Both are generic (the profile drop is driven by the renderable-component
-  predicate, the apply-path filter by the same predicate), never a
-  prompt-history branch.
+When a maximized group survives filtering, its sanitized overlay is restored.
+When it does not, the on-ready readers (`applyFixupsWithMaximize` and
+`tryRestoreMaximizeOnly` in `dockview-layout-restore.ts`) and the environment
+switch reader (`restoreMaximizeFromStorage` in `dockview-store.ts`) use the
+filtered `preMaximizeLayout` rather than a possibly stale environment slot.
+They persist that layout before removing the unusable maximize record, keeping
+both restore routes consistent.
 
 ## Data and contracts
 
@@ -240,7 +129,9 @@ differently depending on whether the user had visited a task first.
   generic `plugin-panel` component.
 - The saved-layout entry shape is unchanged: a `LayoutPanel` keeps `id`,
   `component`, `title`, and optional `params`. The removal invalidates entries
-  whose `component` is `prompt-history`; nothing rewrites stored layouts.
+  whose `component` is `prompt-history`. Saved settings layouts are not migrated
+  in place; failed maximize restoration persists its filtered pre-maximize
+  layout to the environment slot before clearing the unusable maximize record.
 - The message-favorite store keeps its session-scoped shape and storage
   contract; the extracted panel was only one reader of it.
 
@@ -273,77 +164,19 @@ differently depending on whether the user had visited a task first.
 
 ## Failure and recovery
 
-- A stale saved layout, layout profile, or per-environment layout that contains
-  `prompt-history` restores without the panel. On the restore route the existing
-  sanitize step drops the entry, logs the dropped ids through the
-  `dockview:restore` debug logger, and applies the rest of the layout; the
-  profile route drops it during normalization, which is not logged. Either way
-  no error, notice, or empty panel is shown, and the user repeats no action.
-- A saved default layout profile that references `prompt-history` keeps
-  applying. Profile normalization drops the retired entry — and any group or
-  column it leaves empty — instead of failing validation, so the remaining panels
-  still load and the settings surface does not demote the profile to a legacy,
-  ignored record.
-- Browser-side maximized state is the least obvious of the unsanitized paths,
-  and it is reachable: the blob stores a full `api.toJSON()` of the layout, so a single
-  maximize action taken while the retired panel was open captures its identity,
-  and the panel used the default tab, whose double-click maximizes. On restore,
-  `applySavedMaximize` hands `maximizedDockviewJson` straight to `api.fromJSON`
-  and keeps `preMaximizeLayout` raw. Removing the identity from the renderer's
-  `components` map and from `KNOWN_PANEL_IDS` leaves nothing for
-  `dockview-react` to instantiate, so the panel content part is built with an
-  undefined component and its type guard throws synchronously inside
-  `api.fromJSON`. The existing self-heal catches that throw and deletes the
-  blob, so the repair is a discard: the maximum state is gone. On the
-  environment-switch route `performEnvSwitch` then applies the environment's own
-  saved layout and falls back to the default build only when none is healthy;
-  on the maximize-only reader, which runs only when no usable per-environment
-  layout exists, the built-in default layout is what remains if the overlay is
-  skipped. That reader's only recoverable state is the filtered
-  `preMaximizeLayout`, so the hardening below applies it instead of falling
-  through (see below).
-  The two structures need different primitives, because their shapes differ:
-  `maximizedDockviewJson` is a serialized dockview payload (`panels` plus
-  `grid.root`), so `sanitizeSerializedLayout` applies; `preMaximizeLayout` is a
-  `LayoutState` (`columns[].groups[].panels` plus an optional tree), so it is
-  filtered panel by panel against the same component set, with a group or column
-  left empty *by that filter* dropped and a pre-existing empty group left alone
-  (empty groups are live state that other code preserves), a dangling
-  `activePanel` repointed or cleared, and the
-  `rootOrientation` carried through — `rewriteReusableChatPanels` models the
-  null-propagation but returns `{ columns }`, and dropping `rootOrientation`
-  would flip a vertical root on every maximize restore.
-  `filterEphemeral` is deliberately not used there: its set omits `canvas`,
-  `review-detail`, `file-editor`, `diff-viewer`, `commit-detail`, and the legacy
-  aliases, and it preserves empty groups by design, so running it over a live
-  pre-maximize layout would drop panels the user still has.
-  When the maximized group does not survive sanitization, the two readers skip
-  the overlay differently, because only one of them has a saved layout to fall
-  back on:
-  - On the on-ready maximize-only reader (`tryRestoreMaximizeOnly`), which is
-    reached only when there is no usable per-environment layout, skipping the
-    overlay must not return false: that path ends in the built-in default layout
-    and would discard the panels the blob's `preMaximizeLayout` holds. Apply the
-    filtered `preMaximizeLayout` through the normal layout-apply path, leave
-    `preMaximizeLayout` and `maximizedGroupId` null, and return true.
-  - On the environment-switch reader (`restoreMaximizeFromStorage`), returning
-    false is correct: `performEnvSwitch` then applies the environment's
-    sanitized saved layout, which is normally the same pre-maximize layout,
-    because `saveOutgoingEnv` stores it under that environment's key alongside
-    the blob.
-  A blob that still fails after sanitization keeps the existing self-heal
-  deletion, and no saved layout, profile, or favorite is deleted.
-- With no replacement plugin installed, the workbench has no Prompt history
-  entry at all, so there is no loading, empty, error, or passthrough state to
-  render. The panel's former empty and passthrough states become the plugin's
-  responsibility.
-- Deleting the core projection must not disturb transcript behavior. Session
-  slice edits remove only prompt-specific state and actions; mixed-author
-  transcript merging, message signatures, deletion handling, and
-  `removeTaskSession` cleanup stay intact.
-- Deleting the `lib/prompt-history.ts` entry builder must not disturb the
-  transcript turn duration. The duration helpers move unchanged, and
-  `message-actions.tsx` keeps its current rendering and copy.
+- Saved layouts and profiles are filtered before Dockview or profile validation
+  consumes them. Removed components do not instantiate, and a profile that
+  loses its retired-only group continues to apply with its remaining panels.
+- Serialized maximize overlays and `preMaximizeLayout` use their respective
+  filters. A surviving maximized group remains maximized; otherwise both
+  restore paths apply the filtered pre-maximize layout and persist it before
+  clearing the unusable maximize record. If that write fails, the record stays
+  available for recovery on the next restore.
+- No error, notice, empty panel, or user action is needed for stale records.
+  Saved profiles, favorites, transcript state, prompt ordinals, and shared
+  turn-duration rendering remain intact.
+- Without a replacement plugin, there is no Prompt history entry, loading state,
+  or passthrough panel in the workbench.
 
 ## Persistence
 

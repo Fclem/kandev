@@ -932,20 +932,24 @@ function restorePreMaximizeFallback({
   const manualRightWidth = getManualRightWidth(envId);
   const pinnedWidths =
     manualRightWidth === null ? new Map() : new Map([["right", manualRightWidth]]);
-  restoreSerializedDockview(
-    api,
-    toSerializedDockview(preMaximizeLayout, width, height, pinnedWidths),
-  );
+  const serialized = toSerializedDockview(preMaximizeLayout, width, height, pinnedWidths);
+  restoreSerializedDockview(api, serialized);
   replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);
   api.layout(width, height);
   const ids = applyLayoutFixups(api, undefined, manualRightWidth);
-  removeEnvMaximizeState(envId);
+  const hiddenRightPane = readHiddenRightPane(getEnvLayout(envId));
   set({
     ...ids,
     preMaximizeLayout: null,
     maximizedGroupId: null,
-    ...visibilityForLayout(preMaximizeLayout, readHiddenRightPane(getEnvLayout(envId))),
+    ...visibilityForLayout(preMaximizeLayout, hiddenRightPane),
   });
+  try {
+    setEnvLayout(envId, withHiddenRightPaneMetadata(api.toJSON(), hiddenRightPane));
+    removeEnvMaximizeState(envId);
+  } catch {
+    // Keep the maximize snapshot until its replacement layout is durable.
+  }
   requestAnimationFrame(() => set({ isRestoringLayout: false }));
 }
 

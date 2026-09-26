@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { DockviewApi } from "dockview-react";
+import type { DockviewApi, SerializedDockview } from "dockview-react";
 import { useDockviewStore } from "./dockview-store";
 
 vi.mock("@/lib/local-storage", () => ({
@@ -39,7 +39,7 @@ import {
   setEnvLayoutProfile,
 } from "@/lib/local-storage";
 import { panelPortalManager } from "@/lib/layout/panel-portal-manager";
-import { fromDockviewApi } from "./layout-manager";
+import { fromDockviewApi, toSerializedDockview } from "./layout-manager";
 
 function makeMockApi(): DockviewApi {
   return {
@@ -677,6 +677,11 @@ describe("switchEnvLayout — retired panel compatibility", () => {
 
   it("applies the saved pre-maximize layout when the maximized group was only the retired panel", () => {
     const api = makeMockApi();
+    vi.mocked(api.toJSON)
+      .mockImplementationOnce(() => envLayoutWithRetiredPanel() as unknown as SerializedDockview)
+      .mockImplementation(() =>
+        toSerializedDockview(preMaximizeLayout, api.width, api.height, new Map()),
+      );
     vi.mocked(getEnvLayout).mockReturnValue(envLayoutWithRetiredPanel());
     vi.mocked(getEnvMaximizeState).mockReturnValue({
       maximizedDockviewJson: maximizeOverlay([RETIRED_COMPONENT]),
@@ -695,5 +700,12 @@ describe("switchEnvLayout — retired panel compatibility", () => {
     expect(Object.keys(applied.panels)).not.toContain(RETIRED_COMPONENT);
     expect(Object.keys(applied.panels)).not.toContain("files");
     expect(Object.keys(applied.panels)).toContain("chat");
+    const persistedFallback = vi.mocked(setEnvLayout).mock.calls.some(([envId, layout]) => {
+      const panels = (layout as { panels?: Record<string, unknown> }).panels;
+      return envId === "env-a" && panels?.chat !== undefined && panels.files === undefined;
+    });
+    expect(persistedFallback, "persist the filtered pre-maximize layout for the incoming env").toBe(
+      true,
+    );
   });
 });

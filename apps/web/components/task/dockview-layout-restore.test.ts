@@ -432,62 +432,61 @@ describe("collectPhantomSessionIdsForEnv", () => {
  * `components` map and throws inside `api.fromJSON` for a missing one, so the
  * retired entry must be dropped before the payload is applied.
  */
-describe("tryRestoreLayout — retired panel compatibility", () => {
-  const RETIRED_COMPONENT = "prompt-history";
+const RETIRED_COMPONENT = "prompt-history";
 
-  /** A serialized payload whose center group holds a surviving chat tab next
-   *  to a retired panel. */
-  function layoutWithRetiredPanel() {
-    const layout = buildLayout();
-    const panels: Record<string, { id: string; contentComponent: string }> = { ...layout.panels };
-    panels[RETIRED_COMPONENT] = { id: RETIRED_COMPONENT, contentComponent: RETIRED_COMPONENT };
-    layout.grid.root.data[1].data.views = ["chat", RETIRED_COMPONENT];
-    layout.grid.root.data[1].data.activeView = "chat";
-    return { ...layout, panels };
-  }
+/** A serialized payload whose center group holds a surviving chat tab next to a retired panel. */
+function layoutWithRetiredPanel() {
+  const layout = buildLayout();
+  const panels: Record<string, { id: string; contentComponent: string }> = { ...layout.panels };
+  panels[RETIRED_COMPONENT] = { id: RETIRED_COMPONENT, contentComponent: RETIRED_COMPONENT };
+  layout.grid.root.data[1].data.views = ["chat", RETIRED_COMPONENT];
+  layout.grid.root.data[1].data.activeView = "chat";
+  return { ...layout, panels };
+}
 
-  /** A maximize overlay: sidebar column plus the maximized group. */
-  function maximizeOverlay(maximizedViews: string[]) {
-    return {
-      grid: {
-        root: {
-          type: "branch" as const,
-          size: 600,
-          data: [
-            {
-              type: "leaf" as const,
-              size: 300,
-              data: { id: "g-sidebar", views: ["files"], activeView: "files" },
-            },
-            {
-              type: "leaf" as const,
-              size: 1300,
-              data: { id: "g-max", views: maximizedViews, activeView: maximizedViews[0] },
-            },
-          ],
-        },
-        height: 600,
-        width: 1600,
-        orientation: "HORIZONTAL" as const,
+/** A maximize overlay: sidebar column plus the maximized group. */
+function maximizeOverlay(maximizedViews: string[]) {
+  return {
+    grid: {
+      root: {
+        type: "branch" as const,
+        size: 600,
+        data: [
+          {
+            type: "leaf" as const,
+            size: 300,
+            data: { id: "g-sidebar", views: ["files"], activeView: "files" },
+          },
+          {
+            type: "leaf" as const,
+            size: 1300,
+            data: { id: "g-max", views: maximizedViews, activeView: maximizedViews[0] },
+          },
+        ],
       },
-      panels: Object.fromEntries(maximizedViews.map((id) => [id, { id, contentComponent: id }])),
-      activeGroup: "g-max",
-    };
-  }
+      height: 600,
+      width: 1600,
+      orientation: "HORIZONTAL" as const,
+    },
+    panels: Object.fromEntries(maximizedViews.map((id) => [id, { id, contentComponent: id }])),
+    activeGroup: "g-max",
+  };
+}
 
-  /** A pre-maximize LayoutState carrying a root orientation worth preserving. */
-  function preMaximizeState() {
-    return {
-      columns: [
-        {
-          id: "center",
-          groups: [{ id: "g-center", panels: [{ id: "chat", component: "chat", title: "Agent" }] }],
-        },
-      ],
-      rootOrientation: "VERTICAL" as const,
-    };
-  }
+/** A pre-maximize LayoutState carrying a root orientation worth preserving. */
+function preMaximizeState() {
+  return {
+    columns: [
+      {
+        id: "center",
+        groups: [{ id: "g-center", panels: [{ id: "chat", component: "chat", title: "Agent" }] }],
+      },
+    ],
+    rootOrientation: "VERTICAL" as const,
+  };
+}
 
+describe("tryRestoreLayout — retired panel compatibility", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     document.body.replaceChildren();
@@ -544,5 +543,28 @@ describe("tryRestoreLayout — retired panel compatibility", () => {
     const state = useDockviewStore.getState();
     expect(state.preMaximizeLayout).toBeNull();
     expect(state.maximizedGroupId).toBeNull();
+  });
+  it("uses the pre-maximize snapshot when a retired-only group is absent from a stale env layout", () => {
+    vi.spyOn(localStorage, "getEnvLayout").mockReturnValue(layoutWithRetiredPanel());
+    vi.spyOn(localStorage, "getEnvMaximizeState").mockReturnValue({
+      maximizedDockviewJson: maximizeOverlay([RETIRED_COMPONENT]),
+      preMaximizeLayout: preMaximizeState(),
+    });
+    const persistLayout = vi.spyOn(localStorage, "setEnvLayout").mockImplementation(() => {});
+
+    const api = makeFakeRestoreApi();
+
+    expect(tryRestoreLayout(api, "env-stale-before-max", VALID_COMPONENTS)).toBe(true);
+
+    const appliedLayout = vi.mocked(api.fromJSON).mock.calls.at(-1)?.[0];
+    expect(appliedLayout?.panels).toHaveProperty("chat");
+    expect(appliedLayout?.panels).not.toHaveProperty("files");
+    expect(persistLayout).toHaveBeenCalledWith(
+      "env-stale-before-max",
+      expect.objectContaining({
+        panels: expect.not.objectContaining({ files: expect.anything() }),
+      }),
+    );
+    expect(useDockviewStore.getState().maximizedGroupId).toBeNull();
   });
 });

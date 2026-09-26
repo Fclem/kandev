@@ -4,7 +4,12 @@ import { hasRightColumn, useDockviewStore } from "@/lib/state/dockview-store";
 import { applyLayoutFixups } from "@/lib/state/dockview-layout-builders";
 import { measureDockviewContainer } from "@/lib/state/dockview-measure";
 import type { LayoutState } from "@/lib/state/layout-manager";
-import { applyLayout, resolveGroupIds, setPinnedTarget } from "@/lib/state/layout-manager";
+import {
+  applyLayout,
+  resolveGroupIds,
+  setPinnedTarget,
+  toSerializedDockview,
+} from "@/lib/state/layout-manager";
 import {
   filterLayoutStateByComponents,
   maximizedGroupIdOf,
@@ -17,9 +22,15 @@ import {
   getEnvMaximizeState,
   getManualRightWidth,
   removeEnvMaximizeState,
+  setEnvLayout,
 } from "@/lib/local-storage";
 import { createDebugLogger, isDebug } from "@/lib/debug/log";
-import { stripHiddenRightPaneMetadata } from "@/lib/state/dockview-right-pane";
+import {
+  getRightPaneToggleState,
+  readHiddenRightPane,
+  stripHiddenRightPaneMetadata,
+  withHiddenRightPaneMetadata,
+} from "@/lib/state/dockview-right-pane";
 
 const debug = createDebugLogger("dockview:restore");
 
@@ -79,8 +90,8 @@ function applySavedMaximize(
   return true;
 }
 
-/** Layout fixups for a restored env layout, with the maximize overlay applied
- *  when it survived sanitization and plain measurement otherwise. */
+/** Apply layout fixups, preferring a surviving maximize overlay over a
+ *  filtered pre-maximize fallback. */
 function applyFixupsWithMaximize(
   api: DockviewReadyEvent["api"],
   envId: string | null,
@@ -88,7 +99,18 @@ function applyFixupsWithMaximize(
 ): void {
   const manualRightWidth = getManualRightWidth(envId);
   const savedMax = envId ? getEnvMaximizeState(envId) : null;
-  if (savedMax && applySavedMaximize(api, savedMax, validComponents, manualRightWidth)) return;
+  if (envId && savedMax) {
+    if (applySavedMaximize(api, savedMax, validComponents, manualRightWidth)) return;
+    applyPreMaximizeLayout(
+      api,
+      envId,
+      filterLayoutStateByComponents(
+        savedMax.preMaximizeLayout as unknown as LayoutState,
+        validComponents,
+      ),
+    );
+    return;
+  }
   const { width, height } = measureDockviewContainer(api);
   api.layout(width, height);
   // Anchor the right column to its per-env manual width when one exists;
@@ -97,19 +119,35 @@ function applyFixupsWithMaximize(
   useDockviewStore.setState(ids);
 }
 
-/** Apply the filtered pre-maximize layout without maximize state. */
+/** Apply and persist the filtered pre-maximize layout without maximize state. */
 function applyPreMaximizeLayout(
   api: DockviewReadyEvent["api"],
+  envId: string,
   preMaximizeLayout: LayoutState,
 ): void {
   const { width, height } = measureDockviewContainer(api);
-  applyLayout(api, preMaximizeLayout, new Map(), width, height);
+  const manualRightWidth = getManualRightWidth(envId);
+  const pinnedWidths =
+    manualRightWidth === null ? new Map() : new Map([["right", manualRightWidth]]);
+  const serialized = toSerializedDockview(preMaximizeLayout, width, height, pinnedWidths);
+  applyLayout(api, preMaximizeLayout, pinnedWidths, width, height);
+  const hiddenRightPane = readHiddenRightPane(getEnvLayout(envId));
+  const paneState = getRightPaneToggleState(preMaximizeLayout, hiddenRightPane);
   useDockviewStore.setState({
     ...resolveGroupIds(api),
     preMaximizeLayout: null,
     maximizedGroupId: null,
     rightPanelsVisible: hasRightColumn(preMaximizeLayout),
+    rightPaneVisible: paneState.visible,
+    rightPaneAvailable: paneState.available,
+    hiddenRightPane,
   });
+  try {
+    setEnvLayout(envId, withHiddenRightPaneMetadata(serialized, hiddenRightPane));
+    removeEnvMaximizeState(envId);
+  } catch {
+    // Keep the maximize snapshot until its replacement layout is durable.
+  }
 }
 
 function tryRestoreMaximizeOnly(
@@ -126,6 +164,7 @@ function tryRestoreMaximizeOnly(
     // the panels the blob still holds. Apply what survived instead.
     applyPreMaximizeLayout(
       api,
+      envId,
       filterLayoutStateByComponents(
         savedMax.preMaximizeLayout as unknown as LayoutState,
         validComponents,

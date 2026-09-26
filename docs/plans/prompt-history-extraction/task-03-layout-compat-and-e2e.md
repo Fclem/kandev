@@ -183,15 +183,13 @@ contracts on desktop and phone.
   - `apps/web/lib/state/dockview-env-switch.ts`: `getHealthyEnvLayout` only
     checks shape health, and the slow path in `performEnvSwitch` hands the
     stored per-environment layout straight to `restoreSerializedDockview` →
-    `api.fromJSON`. Sanitize the serialized payload before restoring and hold it
-    in `saved` — the local is declared `const` and becomes `let` — with no
-    storage write, so the active-view replay and the right-column width read see
-    what was applied;
+    `api.fromJSON`. Sanitize the serialized payload before restoring, using the
+    same immutable local for the active-view replay and right-column width read;
     `replaceStaleSessionPanels` takes no payload and is unaffected. The fast path
-    does not cover
-    this: its fingerprint comparison only inspects structural components, so any
-    structural difference (an extra Plan, terminal, or PR group, a pinned file
-    editor) routes through the slow path even when the layouts otherwise match.
+    does not cover this: its fingerprint comparison only inspects structural
+    components, so any structural difference (an extra Plan, terminal, or PR
+    group, a pinned file editor) routes through the slow path even when the
+    layouts otherwise match.
   - `apps/web/lib/state/dockview-store.ts` (`restoreCustomLayout`, both
     branches): `applyCustomLayout` receives the raw stored profile from
     `components/task/layout-preset-selector.tsx`, and

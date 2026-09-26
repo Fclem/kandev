@@ -98,15 +98,16 @@ public shape and must not gain prompt-history-specific names or branches.
 
 #### Every stored payload that reaches the renderer
 
-A stored layout can reach `api.fromJSON` through several routes, and only some
-are filtered today. The removal is safe only when all of them are:
+The table records the pre-change behavior before this extraction's sanitization
+landed; it is a baseline, not current status. The implementation must sanitize
+every route listed as unfiltered here:
 
-| Route | Payload | Filtered today |
+| Route | Payload | Filtered before this package |
 | --- | --- | --- |
 | On-ready restore (`tryRestoreEnvLayout`) | per-environment saved layout | yes, `sanitizeLayout` with `DESKTOP_VALID_COMPONENTS` |
 | Environment switch, slow path (`performEnvSwitch` in `apps/web/lib/state/dockview-env-switch.ts`) | per-environment saved layout | **no**: `getHealthyEnvLayout` checks shape health only, then `restoreSerializedDockview` calls `api.fromJSON` |
 | Apply a saved profile from the preset dropdown (`applyCustomLayout` → `restoreCustomLayout` in `apps/web/lib/state/dockview-store.ts`) | raw `SavedLayout.layout`, both the `columns` branch and the legacy serialized branch | **no**: `normalizeReusableSessionPanels` and `materializeReusableChatPanel` pass non-chat panels through |
-| Build the default layout from a custom default profile (`performBuildDefault` and `userDefaultLayout` in `apps/web/lib/state/dockview-store.ts`, fed by `resolveEffectiveDefaultLayout` in `apps/web/lib/layout/layout-profiles.ts`) | the default profile's layout, normalized to a `LayoutState` | **no** today: `validateReusableLayout` normalizes session panels only and the retired id is still reusable, so the profile passes and reaches `applyLayoutAndSet`; yes after this package's profile normalization |
+| Build the default layout from a custom default profile (`performBuildDefault` and `userDefaultLayout` in `apps/web/lib/state/dockview-store.ts`, fed by `resolveEffectiveDefaultLayout` in `apps/web/lib/layout/layout-profiles.ts`) | the default profile's layout, normalized to a `LayoutState` | **no**: `validateReusableLayout` normalizes session panels only and the retired id is still reusable, so the profile passes and reaches `applyLayoutAndSet`; yes after this package's profile normalization |
 | Retained hidden-right-pane column (`kandevHiddenRightPane` metadata on the per-environment layout, re-inserted by `toggleRightPanels` → `restoreRightPane`) | the metadata's `column: LayoutColumn`, panel definitions included | **no**: `readHiddenRightPane` shape-validates only, both restore paths strip the metadata before sanitizing, and `filterColumn` dedupes by panel id rather than renderability |
 | Maximize restore, on-ready (`applySavedMaximize`) | `maximizedDockviewJson` and `preMaximizeLayout` | **no** |
 | Maximize restore, environment switch (`restoreMaximizeFromStorage`) | same blob | **no** |

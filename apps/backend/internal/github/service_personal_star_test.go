@@ -4,14 +4,27 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type personalStarClientStub struct {
-	starred bool
-	calls   int
+	starred             bool
+	calls               int
+	statusCalls         int
+	cancelStatus        context.CancelFunc
+	statusDeadlines     []time.Time
+	statusDeadlineIsSet []bool
 }
 
-func (c *personalStarClientStub) IsStarred(context.Context, GitHubRepositoryRef) (bool, error) {
+func (c *personalStarClientStub) IsStarred(ctx context.Context, _ GitHubRepositoryRef) (bool, error) {
+	c.statusCalls++
+	deadline, ok := ctx.Deadline()
+	c.statusDeadlines = append(c.statusDeadlines, deadline)
+	c.statusDeadlineIsSet = append(c.statusDeadlineIsSet, ok)
+	if c.cancelStatus != nil && c.statusCalls == 1 {
+		c.cancelStatus()
+		return false, ctx.Err()
+	}
 	return c.starred, nil
 }
 
@@ -82,5 +95,62 @@ func TestServiceRepositoryStarStatusDeduplicatesCanonicalURLs(t *testing.T) {
 	}
 	if resolver.calls != 1 {
 		t.Fatalf("resolver calls = %d, want 1", resolver.calls)
+	}
+}
+
+func TestServiceRepositoryStarStatusSharesOneBoundedDeadlineAcrossProviderCalls(t *testing.T) {
+	client := &personalStarClientStub{}
+	resolver := &personalStarResolverStub{
+		status: PersonalStarConnectionStatus{Available: true, Active: true, Capable: true},
+		client: client,
+	}
+	service := NewService(nil, AuthMethodNone, nil, nil, nil, nil)
+	service.SetPersonalStarResolver(resolver)
+
+	started := time.Now()
+	_, err := service.RepositoryStarStatus(context.Background(), "workspace-1", "user-1", []string{
+		"https://github.com/owner/first", "https://github.com/owner/second",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.statusDeadlines) != 2 || len(client.statusDeadlineIsSet) != 2 {
+		t.Fatalf("provider calls = %d, deadline flags = %d; want two calls with deadlines",
+			len(client.statusDeadlines), len(client.statusDeadlineIsSet))
+	}
+	if !client.statusDeadlineIsSet[0] || !client.statusDeadlineIsSet[1] {
+		t.Fatal("provider calls did not receive a bounded batch deadline")
+	}
+	if client.statusDeadlines[0] != client.statusDeadlines[1] {
+		t.Fatalf("provider deadlines differ: %v and %v", client.statusDeadlines[0], client.statusDeadlines[1])
+	}
+	maxBudget := personalStarStatusBatchTimeout + time.Second
+	if remaining := client.statusDeadlines[0].Sub(started); remaining <= 0 || remaining > maxBudget {
+		t.Fatalf("batch deadline budget = %s, want (0, %s] including setup", remaining, maxBudget)
+	}
+}
+
+func TestServiceRepositoryStarStatusStopsAfterContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client := &personalStarClientStub{cancelStatus: cancel}
+	resolver := &personalStarResolverStub{
+		status: PersonalStarConnectionStatus{Available: true, Active: true, Capable: true},
+		client: client,
+	}
+	service := NewService(nil, AuthMethodNone, nil, nil, nil, nil)
+	service.SetPersonalStarResolver(resolver)
+
+	states, err := service.RepositoryStarStatus(ctx, "workspace-1", "user-1", []string{
+		"https://github.com/owner/first", "https://github.com/owner/second",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.statusCalls != 1 || resolver.calls != 1 {
+		t.Fatalf("provider calls = %d, resolver calls = %d; want one of each", client.statusCalls, resolver.calls)
+	}
+	if len(states) != 2 || states["owner/first"] != nil || states["owner/second"] != nil {
+		t.Fatalf("states = %#v, want both requested repositories unknown", states)
 	}
 }

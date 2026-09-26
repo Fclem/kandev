@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
-const maxRepositoryStarStatusURLs = 100
+const (
+	maxRepositoryStarStatusURLs    = 100
+	personalStarStatusBatchTimeout = 30 * time.Second
+)
 
 // PersonalStarConnectionStatus is non-secret state for the current user's
 // dedicated personal GitHub star connection.
@@ -73,14 +77,22 @@ func (s *Service) RepositoryStarStatus(
 		return nil, err
 	}
 	states := make(map[string]*bool, len(repositories))
+	for key := range repositories {
+		states[key] = nil
+	}
+	batchCtx, cancel := context.WithTimeout(ctx, personalStarStatusBatchTimeout)
+	defer cancel()
 	for key, repository := range repositories {
-		starred, statusErr := s.withPersonalStarRefresh(ctx, workspaceID, userID,
-			func(client PersonalStarClient) (bool, error) { return client.IsStarred(ctx, repository) })
-		if statusErr != nil {
-			states[key] = nil
-			continue
+		if batchCtx.Err() != nil {
+			break
 		}
-		states[key] = &starred
+		starred, statusErr := s.withPersonalStarRefresh(batchCtx, workspaceID, userID,
+			func(client PersonalStarClient) (bool, error) {
+				return client.IsStarred(batchCtx, repository)
+			})
+		if statusErr == nil {
+			states[key] = &starred
+		}
 	}
 	return states, nil
 }

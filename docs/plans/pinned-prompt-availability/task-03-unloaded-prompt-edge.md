@@ -1,7 +1,7 @@
 ---
 id: "03-unloaded-prompt-edge"
 title: "Classify the pinned prompt edge without a rendered row"
-status: pending
+status: done
 wave: 3
 depends_on:
   - "01-resolve-last-prompt-outside-window"
@@ -234,4 +234,5 @@ in `apps/web/components/task/chat/message-list-native.test.tsx`.
 
 ## Results
 
-Pending.
+Verified: prompt-edge, rendered tracker, and panel tests passed in the 23-file
+focused suite (360 tests total); web typecheck passed.

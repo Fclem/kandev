@@ -1,7 +1,7 @@
 ---
 id: "02-load-unloaded-last-prompt"
 title: "Load and align an unloaded last prompt"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "01-resolve-last-prompt-outside-window"
@@ -351,4 +351,5 @@ phone project.
 
 ## Results
 
-Pending.
+Verified: unloaded-target, window-merge, and panel tests passed in the 23-file
+focused suite (360 tests total); web typecheck passed.

@@ -1,6 +1,6 @@
 ---
 created: 2026-09-22
-status: draft
+status: implemented
 requirements:
   - REQ-UI-PINNED-PROMPT-AVAILABILITY-001
 system_design:
@@ -494,14 +494,17 @@ bar's own scroll button is asserted alongside the status-bar control.
 
 ## Work orders
 
-- [ ] [Task 01: Resolve the last prompt outside the loaded window](task-01-resolve-last-prompt-outside-window.md)
-- [ ] [Task 02: Load and align an unloaded last prompt](task-02-load-unloaded-last-prompt.md)
-- [ ] [Task 03: Classify the pinned prompt edge without a rendered row](task-03-unloaded-prompt-edge.md)
-- [ ] [Task 04: Prove unloaded prompt availability in a browser](task-04-browser-evidence.md)
+- [x] [Task 01: Resolve the last prompt outside the loaded window](task-01-resolve-last-prompt-outside-window.md)
+- [x] [Task 02: Load and align an unloaded last prompt](task-02-load-unloaded-last-prompt.md)
+- [x] [Task 03: Classify the pinned prompt edge without a rendered row](task-03-unloaded-prompt-edge.md)
+- [x] [Task 04: Prove unloaded prompt availability in a browser](task-04-browser-evidence.md)
 
 ## Verification results
 
-Pending.
+Verified after merging current main: 360 focused web tests across 23 files,
+web typecheck, task-panel ESLint and Prettier, desktop prompt E2E (12/12),
+phone prompt E2E (2/2), capture scenarios (1/1 per viewport), and public-doc
+validation (62 tests, 47 published pages) passed.
 
 ## Risks
 

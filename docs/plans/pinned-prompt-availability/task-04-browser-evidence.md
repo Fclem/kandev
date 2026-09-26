@@ -1,7 +1,7 @@
 ---
 id: "04-browser-evidence"
 title: "Prove unloaded prompt availability in a browser"
-status: pending
+status: done
 wave: 4
 depends_on:
   - "01-resolve-last-prompt-outside-window"
@@ -271,4 +271,6 @@ fail-before docs verification and the heading check is its rewrite guard.
 
 ## Results
 
-Pending.
+Verified: desktop prompt E2E passed 12/12, phone prompt E2E passed 2/2,
+capture scenarios passed 1/1 per viewport, and public-doc validation passed
+(62 tests, 47 published pages).

@@ -1,7 +1,7 @@
 ---
 id: "01-resolve-last-prompt-outside-window"
 title: "Resolve the last prompt outside the loaded window"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -502,4 +502,5 @@ None.
 
 ## Results
 
-Pending.
+Verified: resolver, session-store, and panel tests passed in the 23-file
+focused suite (360 tests total); web typecheck passed.

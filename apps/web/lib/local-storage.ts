@@ -316,13 +316,15 @@ export function getEnvLayout(envId: string): object | null {
   }
 }
 
-/** Save the dockview layout for a task environment. */
-export function setEnvLayout(envId: string, layout: object): void {
-  if (typeof window === "undefined") return;
+/** Save the dockview layout and report whether session storage accepted it. */
+export function setEnvLayout(envId: string, layout: object): boolean {
+  if (typeof window === "undefined") return false;
   try {
     window.sessionStorage.setItem(`${DOCKVIEW_ENV_LAYOUT_PREFIX}${envId}`, JSON.stringify(layout));
+    return true;
   } catch {
     // Ignore write failures (storage full, blocked, etc.)
+    return false;
   }
 }
 

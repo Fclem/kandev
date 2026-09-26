@@ -5,7 +5,7 @@ import { useDockviewStore } from "./dockview-store";
 vi.mock("@/lib/local-storage", () => ({
   getEnvLayout: vi.fn(() => null),
   getEnvLayoutProfile: vi.fn(() => null),
-  setEnvLayout: vi.fn(),
+  setEnvLayout: vi.fn(() => true),
   setEnvLayoutProfile: vi.fn(),
   getEnvMaximizeState: vi.fn(() => null),
   setEnvMaximizeState: vi.fn(),
@@ -35,6 +35,7 @@ import {
   getEnvLayout,
   getEnvLayoutProfile,
   getEnvMaximizeState,
+  removeEnvMaximizeState,
   setEnvLayout,
   setEnvLayoutProfile,
 } from "@/lib/local-storage";
@@ -675,7 +676,7 @@ describe("switchEnvLayout — retired panel compatibility", () => {
     expect(state.maximizedGroupId).toBeTruthy();
   });
 
-  it("applies the saved pre-maximize layout when the maximized group was only the retired panel", () => {
+  it("applies a pre-maximize fallback and retains its record after a failed write", () => {
     const api = makeMockApi();
     vi.mocked(api.toJSON)
       .mockImplementationOnce(() => envLayoutWithRetiredPanel() as unknown as SerializedDockview)
@@ -687,6 +688,7 @@ describe("switchEnvLayout — retired panel compatibility", () => {
       maximizedDockviewJson: maximizeOverlay([RETIRED_COMPONENT]),
       preMaximizeLayout,
     });
+    vi.mocked(setEnvLayout).mockReturnValue(false);
     useDockviewStore.setState({ api, currentLayoutEnvId: "env-b" });
 
     useDockviewStore.getState().switchEnvLayout("env-b", "env-a", "session-a");
@@ -700,12 +702,11 @@ describe("switchEnvLayout — retired panel compatibility", () => {
     expect(Object.keys(applied.panels)).not.toContain(RETIRED_COMPONENT);
     expect(Object.keys(applied.panels)).not.toContain("files");
     expect(Object.keys(applied.panels)).toContain("chat");
-    const persistedFallback = vi.mocked(setEnvLayout).mock.calls.some(([envId, layout]) => {
+    const attemptedFallback = vi.mocked(setEnvLayout).mock.calls.some(([envId, layout]) => {
       const panels = (layout as { panels?: Record<string, unknown> }).panels;
       return envId === "env-a" && panels?.chat !== undefined && panels.files === undefined;
     });
-    expect(persistedFallback, "persist the filtered pre-maximize layout for the incoming env").toBe(
-      true,
-    );
+    expect(attemptedFallback).toBe(true);
+    expect(removeEnvMaximizeState).not.toHaveBeenCalledWith("env-a");
   });
 });

@@ -106,12 +106,14 @@ before a captured pane is restored. The mobile `Panels` entry is derived only
 from canvases and registered plugin panels.
 
 When a maximized group survives filtering, its sanitized overlay is restored.
-When it does not, the on-ready readers (`applyFixupsWithMaximize` and
-`tryRestoreMaximizeOnly` in `dockview-layout-restore.ts`) and the environment
-switch reader (`restoreMaximizeFromStorage` in `dockview-store.ts`) use the
-filtered `preMaximizeLayout` rather than a possibly stale environment slot.
-They persist that layout before removing the unusable maximize record, keeping
-both restore routes consistent.
+On-ready overlay and pre-maximize layouts also exclude session panels known to
+belong to another environment. When the group does not survive, the on-ready
+readers (`applyFixupsWithMaximize` and `tryRestoreMaximizeOnly` in
+`dockview-layout-restore.ts`) and the environment switch reader
+(`restoreMaximizeFromStorage` in `dockview-store.ts`) use the filtered
+`preMaximizeLayout` rather than a possibly stale environment slot. They persist
+that layout before removing the unusable maximize record, keeping both restore
+routes consistent.
 
 ## Data and contracts
 

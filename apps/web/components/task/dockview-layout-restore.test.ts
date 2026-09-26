@@ -485,6 +485,34 @@ function preMaximizeState() {
     rootOrientation: "VERTICAL" as const,
   };
 }
+function preMaximizeStateWithSessions() {
+  return {
+    columns: [
+      {
+        id: "center",
+        groups: [
+          {
+            id: "g-center",
+            activePanel: PHANTOM_PANEL_ID,
+            panels: [
+              { id: PHANTOM_PANEL_ID, component: "chat", title: "Phantom" },
+              { id: ALIVE_PANEL_ID, component: "chat", title: "Agent" },
+            ],
+          },
+        ],
+      },
+    ],
+    rootOrientation: "VERTICAL" as const,
+  };
+}
+
+function maximizeOverlayWithSessions() {
+  const overlay = maximizeOverlay([PHANTOM_PANEL_ID, ALIVE_PANEL_ID]);
+  for (const id of [PHANTOM_PANEL_ID, ALIVE_PANEL_ID]) {
+    overlay.panels[id].contentComponent = "chat";
+  }
+  return overlay;
+}
 
 describe("tryRestoreLayout — retired panel compatibility", () => {
   beforeEach(() => {
@@ -550,7 +578,7 @@ describe("tryRestoreLayout — retired panel compatibility", () => {
       maximizedDockviewJson: maximizeOverlay([RETIRED_COMPONENT]),
       preMaximizeLayout: preMaximizeState(),
     });
-    const persistLayout = vi.spyOn(localStorage, "setEnvLayout").mockImplementation(() => {});
+    const persistLayout = vi.spyOn(localStorage, "setEnvLayout").mockReturnValue(true);
 
     const api = makeFakeRestoreApi();
 
@@ -566,5 +594,97 @@ describe("tryRestoreLayout — retired panel compatibility", () => {
       }),
     );
     expect(useDockviewStore.getState().maximizedGroupId).toBeNull();
+  });
+});
+
+describe("tryRestoreLayout — phantom sessions and fallback durability", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+    window.sessionStorage.clear();
+    useDockviewStore.setState({ preMaximizeLayout: null, maximizedGroupId: null });
+  });
+  it("filters known phantom sessions from a maximized overlay", () => {
+    vi.spyOn(localStorage, "getEnvLayout").mockReturnValue(null);
+    vi.spyOn(localStorage, "getEnvMaximizeState").mockReturnValue({
+      maximizedDockviewJson: maximizeOverlayWithSessions(),
+      preMaximizeLayout: preMaximizeStateWithSessions(),
+    });
+    const api = makeFakeRestoreApi();
+
+    expect(tryRestoreLayout(api, "env-live", VALID_COMPONENTS, new Set(["phantom"]))).toBe(true);
+
+    const applied = vi.mocked(api.fromJSON).mock.calls[0][0];
+    expect(applied.panels).not.toHaveProperty(PHANTOM_PANEL_ID);
+    expect(applied.panels).toHaveProperty(ALIVE_PANEL_ID);
+  });
+
+  it("filters known phantom sessions from the pre-maximize fallback", () => {
+    vi.spyOn(localStorage, "getEnvLayout").mockReturnValue(null);
+    vi.spyOn(localStorage, "getEnvMaximizeState").mockReturnValue({
+      maximizedDockviewJson: maximizeOverlay([RETIRED_COMPONENT]),
+      preMaximizeLayout: preMaximizeStateWithSessions(),
+    });
+    const persistLayout = vi.spyOn(localStorage, "setEnvLayout");
+    const api = makeFakeRestoreApi();
+
+    expect(tryRestoreLayout(api, "env-live", VALID_COMPONENTS, new Set(["phantom"]))).toBe(true);
+
+    const applied = vi.mocked(api.fromJSON).mock.calls.at(-1)?.[0];
+    expect(applied?.panels).not.toHaveProperty(PHANTOM_PANEL_ID);
+    expect(applied?.panels).toHaveProperty(ALIVE_PANEL_ID);
+    const persisted = vi.mocked(persistLayout).mock.calls.at(-1)?.[1] as {
+      panels: Record<string, unknown>;
+    };
+    expect(persisted.panels).not.toHaveProperty(PHANTOM_PANEL_ID);
+    expect(persisted.panels).toHaveProperty(ALIVE_PANEL_ID);
+  });
+  it("filters known phantom sessions from a maximize overlay after env restore", () => {
+    vi.spyOn(localStorage, "getEnvLayout").mockReturnValue(buildLayout());
+    vi.spyOn(localStorage, "getEnvMaximizeState").mockReturnValue({
+      maximizedDockviewJson: maximizeOverlayWithSessions(),
+      preMaximizeLayout: preMaximizeStateWithSessions(),
+    });
+    const api = makeFakeRestoreApi();
+
+    expect(tryRestoreLayout(api, "env-live", VALID_COMPONENTS, new Set(["phantom"]))).toBe(true);
+
+    const applied = vi.mocked(api.fromJSON).mock.calls.at(-1)?.[0];
+    expect(applied?.panels).not.toHaveProperty(PHANTOM_PANEL_ID);
+    expect(applied?.panels).toHaveProperty(ALIVE_PANEL_ID);
+    expect(useDockviewStore.getState().preMaximizeLayout?.columns[0].groups[0].panels).toEqual([
+      expect.objectContaining({ id: ALIVE_PANEL_ID }),
+    ]);
+  });
+
+  it("filters known phantom sessions from an env-restored pre-maximize fallback", () => {
+    vi.spyOn(localStorage, "getEnvLayout").mockReturnValue(layoutWithRetiredPanel());
+    vi.spyOn(localStorage, "getEnvMaximizeState").mockReturnValue({
+      maximizedDockviewJson: maximizeOverlay([RETIRED_COMPONENT]),
+      preMaximizeLayout: preMaximizeStateWithSessions(),
+    });
+    vi.spyOn(localStorage, "setEnvLayout").mockReturnValue(true);
+    const api = makeFakeRestoreApi();
+
+    expect(tryRestoreLayout(api, "env-live", VALID_COMPONENTS, new Set(["phantom"]))).toBe(true);
+
+    const applied = vi.mocked(api.fromJSON).mock.calls.at(-1)?.[0];
+    expect(applied?.panels).not.toHaveProperty(PHANTOM_PANEL_ID);
+    expect(applied?.panels).toHaveProperty(ALIVE_PANEL_ID);
+  });
+
+  it("keeps the maximize record when the filtered fallback cannot be persisted", () => {
+    vi.spyOn(localStorage, "getEnvLayout").mockReturnValue(null);
+    vi.spyOn(localStorage, "getEnvMaximizeState").mockReturnValue({
+      maximizedDockviewJson: maximizeOverlay([RETIRED_COMPONENT]),
+      preMaximizeLayout: preMaximizeState(),
+    });
+    vi.spyOn(localStorage, "setEnvLayout").mockReturnValue(false);
+    const removeMaximizeState = vi.spyOn(localStorage, "removeEnvMaximizeState");
+    const api = makeFakeRestoreApi();
+
+    expect(tryRestoreLayout(api, "env-write-fails", VALID_COMPONENTS)).toBe(true);
+
+    expect(removeMaximizeState).not.toHaveBeenCalled();
   });
 });

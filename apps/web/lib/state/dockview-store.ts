@@ -945,8 +945,9 @@ function restorePreMaximizeFallback({
     ...visibilityForLayout(preMaximizeLayout, hiddenRightPane),
   });
   try {
-    setEnvLayout(envId, withHiddenRightPaneMetadata(api.toJSON(), hiddenRightPane));
-    removeEnvMaximizeState(envId);
+    if (setEnvLayout(envId, withHiddenRightPaneMetadata(api.toJSON(), hiddenRightPane))) {
+      removeEnvMaximizeState(envId);
+    }
   } catch {
     // Keep the maximize snapshot until its replacement layout is durable.
   }

@@ -3,7 +3,7 @@ import type { StoreApi } from "zustand";
 import { hasRightColumn, useDockviewStore } from "@/lib/state/dockview-store";
 import { applyLayoutFixups } from "@/lib/state/dockview-layout-builders";
 import { measureDockviewContainer } from "@/lib/state/dockview-measure";
-import type { LayoutState } from "@/lib/state/layout-manager";
+import type { LayoutGroup, LayoutNode, LayoutState } from "@/lib/state/layout-manager";
 import {
   applyLayout,
   resolveGroupIds,
@@ -36,6 +36,38 @@ const debug = createDebugLogger("dockview:restore");
 
 type SavedMax = ReturnType<typeof getEnvMaximizeState>;
 
+function filterLayoutForRestore(
+  state: LayoutState,
+  validComponents: ReadonlySet<string>,
+  phantomSessionIds?: Set<string>,
+): LayoutState {
+  if (!phantomSessionIds?.size) return filterLayoutStateByComponents(state, validComponents);
+
+  // Mark phantoms non-renderable so the shared filter prunes groups and repairs active panels.
+  const filterGroup = (group: LayoutGroup): LayoutGroup => ({
+    ...group,
+    panels: group.panels.map((panel) =>
+      panel.id.startsWith("session:") && phantomSessionIds.has(panel.id.slice("session:".length))
+        ? { ...panel, component: "" }
+        : panel,
+    ),
+  });
+  const filterNode = (node: LayoutNode): LayoutNode =>
+    node.type === "leaf"
+      ? { ...node, group: filterGroup(node.group) }
+      : { ...node, children: node.children.map(filterNode) };
+
+  const markedState: LayoutState = {
+    ...state,
+    columns: state.columns.map((column) => ({
+      ...column,
+      groups: column.groups.map(filterGroup),
+      ...(column.tree ? { tree: filterNode(column.tree) } : {}),
+    })),
+  };
+  return filterLayoutStateByComponents(markedState, validComponents);
+}
+
 /**
  * Apply a saved maximize blob onto the live dockview api and mirror the full
  * maximize state into the store. Single source of truth for both restore
@@ -51,11 +83,14 @@ function applySavedMaximize(
   api: DockviewReadyEvent["api"],
   savedMax: NonNullable<SavedMax>,
   validComponents: ReadonlySet<string>,
+  phantomSessionIds?: Set<string>,
   manualRightWidth?: number | null,
 ): boolean {
   const rawMaximized = savedMax.maximizedDockviewJson;
   const maximizedGroupId = maximizedGroupIdOf(rawMaximized);
-  const sanitizedMaximized = sanitizeSerializedLayout(rawMaximized, validComponents);
+  const sanitizedMaximized = sanitizeSerializedLayout(rawMaximized, validComponents, {
+    excludeSessionIds: phantomSessionIds,
+  });
   if (!sanitizedMaximized) {
     debug("applySavedMaximize: maximized payload unusable after sanitize");
     return false;
@@ -67,9 +102,10 @@ function applySavedMaximize(
     debug("applySavedMaximize: maximized group did not survive sanitize", { maximizedGroupId });
     return false;
   }
-  const preMaximizeLayout = filterLayoutStateByComponents(
+  const preMaximizeLayout = filterLayoutForRestore(
     savedMax.preMaximizeLayout as unknown as LayoutState,
     validComponents,
+    phantomSessionIds,
   );
   api.fromJSON(sanitizedMaximized as SerializedDockview);
   const { width, height } = measureDockviewContainer(api);
@@ -96,17 +132,20 @@ function applyFixupsWithMaximize(
   api: DockviewReadyEvent["api"],
   envId: string | null,
   validComponents: ReadonlySet<string>,
+  phantomSessionIds?: Set<string>,
 ): void {
   const manualRightWidth = getManualRightWidth(envId);
   const savedMax = envId ? getEnvMaximizeState(envId) : null;
   if (envId && savedMax) {
-    if (applySavedMaximize(api, savedMax, validComponents, manualRightWidth)) return;
+    if (applySavedMaximize(api, savedMax, validComponents, phantomSessionIds, manualRightWidth))
+      return;
     applyPreMaximizeLayout(
       api,
       envId,
-      filterLayoutStateByComponents(
+      filterLayoutForRestore(
         savedMax.preMaximizeLayout as unknown as LayoutState,
         validComponents,
+        phantomSessionIds,
       ),
     );
     return;
@@ -143,8 +182,9 @@ function applyPreMaximizeLayout(
     hiddenRightPane,
   });
   try {
-    setEnvLayout(envId, withHiddenRightPaneMetadata(serialized, hiddenRightPane));
-    removeEnvMaximizeState(envId);
+    if (setEnvLayout(envId, withHiddenRightPaneMetadata(serialized, hiddenRightPane))) {
+      removeEnvMaximizeState(envId);
+    }
   } catch {
     // Keep the maximize snapshot until its replacement layout is durable.
   }
@@ -154,20 +194,22 @@ function tryRestoreMaximizeOnly(
   api: DockviewReadyEvent["api"],
   envId: string,
   validComponents: ReadonlySet<string>,
+  phantomSessionIds?: Set<string>,
 ): boolean {
   const savedMax = getEnvMaximizeState(envId);
   if (!savedMax) return false;
   try {
-    if (applySavedMaximize(api, savedMax, validComponents)) return true;
+    if (applySavedMaximize(api, savedMax, validComponents, phantomSessionIds)) return true;
     // This reader is reached only when there is no usable per-environment
     // layout, so falling through would end in the built-in default and discard
     // the panels the blob still holds. Apply what survived instead.
     applyPreMaximizeLayout(
       api,
       envId,
-      filterLayoutStateByComponents(
+      filterLayoutForRestore(
         savedMax.preMaximizeLayout as unknown as LayoutState,
         validComponents,
+        phantomSessionIds,
       ),
     );
     return true;
@@ -224,7 +266,7 @@ function tryRestoreEnvLayout(
     });
   }
   api.fromJSON(sanitized as SerializedDockview);
-  applyFixupsWithMaximize(api, envId, validComponents);
+  applyFixupsWithMaximize(api, envId, validComponents, phantomSessionIds);
   return true;
 }
 
@@ -246,7 +288,7 @@ export function tryRestoreLayout(
   } catch {
     // fall through to maximize-only
   }
-  return tryRestoreMaximizeOnly(api, currentEnvId, validComponents);
+  return tryRestoreMaximizeOnly(api, currentEnvId, validComponents, phantomSessionIds);
 }
 
 /**

@@ -994,8 +994,11 @@ function replaceStaleSessionPanelWithActive(
 export function filterPreMaximizeLayout(
   savedLayout: LayoutState,
   activeSessionId: string | null,
-  currentSessionIds: string[],
+  currentSessionIds: string[] | null,
 ): LayoutState {
+  if (currentSessionIds === null) {
+    return filterLayoutStateByComponents(savedLayout);
+  }
   const validSessionIds = new Set(currentSessionIds);
   if (activeSessionId) validSessionIds.add(activeSessionId);
   const layout =

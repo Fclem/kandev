@@ -42,7 +42,8 @@ type SavedMax = ReturnType<typeof getEnvMaximizeState>;
 
 export type SessionRestoreContext = {
   activeSessionId: string | null;
-  currentSessionIds: string[];
+  // null means the task session list has not completed hydration yet.
+  currentSessionIds: string[] | null;
 };
 
 type SavedMaximizeOptions = {
@@ -382,11 +383,15 @@ export function restoreEnvLayout(
   const phantoms = envId ? collectPhantomSessionIdsForEnv(state, envId) : undefined;
   const { tasks, taskSessionsByTask } = state;
   const activeTaskId = tasks.activeTaskId;
+  const sessionListLoaded = activeTaskId
+    ? (taskSessionsByTask.loadedByTaskId?.[activeTaskId] ?? false)
+    : false;
   const sessionContext: SessionRestoreContext = {
     activeSessionId: tasks.activeSessionId,
-    currentSessionIds: activeTaskId
-      ? (taskSessionsByTask.itemsByTaskId[activeTaskId] ?? []).map((session) => session.id)
-      : [],
+    currentSessionIds:
+      activeTaskId && sessionListLoaded
+        ? (taskSessionsByTask.itemsByTaskId[activeTaskId] ?? []).map((session) => session.id)
+        : null,
   };
   if (isDebug()) {
     debug("restoreEnvLayout: entry", {

@@ -152,7 +152,10 @@ describe("on-ready maximize restore", () => {
           [staleSessionId]: "env-other",
         },
         tasks: { activeTaskId: "task-live", activeSessionId },
-        taskSessionsByTask: { itemsByTaskId: { "task-live": [{ id: activeSessionId }] } },
+        taskSessionsByTask: {
+          itemsByTaskId: { "task-live": [{ id: activeSessionId }] },
+          loadedByTaskId: { "task-live": true },
+        },
       }),
     };
     useDockviewStore.setState({ api, currentLayoutEnvId: "env-live" });
@@ -186,5 +189,107 @@ describe("on-ready maximize restore", () => {
       keep: "value",
       sessionId: activeSessionId,
     });
+  });
+});
+
+describe("on-ready maximize restore with an incomplete session list", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useDockviewStore.setState({
+      api: null,
+      currentLayoutEnvId: null,
+      preMaximizeLayout: null,
+      maximizedGroupId: null,
+      isRestoringLayout: false,
+    });
+  });
+  it("keeps unknown sibling sessions while the task session list is loading", async () => {
+    const activeSessionId = "alive";
+    const siblingSessionId = "loading-sibling";
+    const knownPhantomSessionId = "known-phantom";
+    const siblingPanelId = `session:${siblingSessionId}`;
+    const phantomPanelId = `session:${knownPhantomSessionId}`;
+    vi.spyOn(localStorage, "getEnvLayout").mockReturnValue(makeSavedLayout());
+    vi.spyOn(localStorage, "getEnvMaximizeState").mockReturnValue({
+      maximizedDockviewJson: makeMaximizeOverlay(`session:${activeSessionId}`),
+      preMaximizeLayout: {
+        columns: [
+          {
+            id: "center",
+            groups: [],
+            tree: {
+              type: "leaf",
+              size: 600,
+              group: {
+                id: "g-center",
+                panels: [
+                  {
+                    id: siblingPanelId,
+                    component: "chat",
+                    title: "Sibling session",
+                    params: { sessionId: siblingSessionId },
+                  },
+                  {
+                    id: phantomPanelId,
+                    component: "chat",
+                    title: "Known phantom",
+                    params: { sessionId: knownPhantomSessionId },
+                  },
+                ],
+                activePanel: siblingPanelId,
+              },
+            },
+          },
+        ],
+      },
+    });
+    let appliedLayout = {} as SerializedDockview;
+    const api = makeRestoreApi();
+    vi.mocked(api.fromJSON).mockImplementation((layout) => {
+      appliedLayout = layout;
+    });
+    vi.mocked(api.toJSON).mockImplementation(() => appliedLayout);
+    const persistLayout = vi.spyOn(localStorage, "setEnvLayout").mockReturnValue(true);
+    const appStore = {
+      getState: () => ({
+        environmentIdBySessionId: {
+          [activeSessionId]: "env-live",
+          [knownPhantomSessionId]: "env-other",
+        },
+        tasks: { activeTaskId: "task-live", activeSessionId },
+        taskSessionsByTask: {
+          itemsByTaskId: { "task-live": [{ id: activeSessionId }] },
+          loadedByTaskId: { "task-live": false },
+        },
+      }),
+    };
+    useDockviewStore.setState({ api, currentLayoutEnvId: "env-live" });
+
+    expect(
+      restoreEnvLayout(
+        api,
+        "env-live",
+        appStore as unknown as Parameters<typeof restoreEnvLayout>[2],
+        VALID_COMPONENTS,
+      ),
+    ).toBe(true);
+
+    expect(useDockviewStore.getState().preMaximizeLayout?.columns[0]?.tree).toMatchObject({
+      type: "leaf",
+      group: {
+        id: "g-center",
+        panels: [{ id: siblingPanelId, params: { sessionId: siblingSessionId } }],
+        activePanel: siblingPanelId,
+      },
+    });
+
+    useDockviewStore.getState().exitMaximizedLayout();
+    await flushRaf();
+
+    const persistedLayout = vi.mocked(persistLayout).mock.calls.at(-1)?.[1] as {
+      panels?: Record<string, unknown>;
+    };
+    expect(persistedLayout.panels).toHaveProperty(siblingPanelId);
+    expect(persistedLayout.panels).not.toHaveProperty(phantomPanelId);
   });
 });

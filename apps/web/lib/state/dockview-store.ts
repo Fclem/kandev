@@ -1520,9 +1520,14 @@ function buildMaximizeActions(set: StoreSet, get: StoreGet) {
       applyLayoutAndSet(api, maximizedLayout, liveWidths, set);
       requestAnimationFrame(() => {
         api.layout(safeWidth, safeHeight);
-        if (currentLayoutEnvId) {
+        const latest = get();
+        if (
+          currentLayoutEnvId &&
+          latest.currentLayoutEnvId === currentLayoutEnvId &&
+          latest.preMaximizeLayout
+        ) {
           setEnvMaximizeState(currentLayoutEnvId, {
-            preMaximizeLayout: current as unknown as object,
+            preMaximizeLayout: latest.preMaximizeLayout as unknown as object,
             maximizedDockviewJson: api.toJSON(),
           });
         }

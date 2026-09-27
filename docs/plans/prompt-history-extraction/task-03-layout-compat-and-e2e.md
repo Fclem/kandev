@@ -549,9 +549,12 @@ Done. Commands run from the repository root.
   session IDs are unchanged. The pass removes stale session panels from the
   saved pre-maximize layout and updates its environment maximize blob, while
   retaining active and listed sibling sessions.
-- Eight focused dockview suites pass: 138 tests, including the unchanged-ID
-  hydration regression and persisted maximize-blob cleanup. `pnpm run typecheck`,
-  targeted ESLint, and Prettier checks pass.
+- Maximize-state persistence is deferred to the next animation frame. The
+  writer now reads the latest pre-maximize snapshot for the same environment,
+  so session hydration before that frame cannot re-persist stale panels.
+- Nine focused dockview suites pass: 151 tests, including unchanged-ID
+  hydration, persisted cleanup, and deferred maximize-write regressions.
+  `pnpm run typecheck`, targeted ESLint, and Prettier checks pass.
 - The seven focused dockview restore suites pass: 134 tests across
   `dockview-env-switch-maximize-session-filter.test.ts`,
   `dockview-env-switch-action.test.ts`, `dockview-right-pane.test.ts`,

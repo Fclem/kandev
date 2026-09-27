@@ -337,6 +337,61 @@ function persistAuthoritativeSessionCleanup(): void {
   expect(savedPanelIds).not.toContain(stalePanelId);
 }
 
+function persistSessionReconciliationBeforeMaximizeSave(): void {
+  const api = makeMockApi();
+  const activeSessionId = "session-a";
+  const siblingSessionId = "session-b";
+  const activePanelId = `session:${activeSessionId}`;
+  const siblingPanelId = `session:${siblingSessionId}`;
+  const stalePanelId = "session:saved-stale";
+  vi.mocked(fromDockviewApi).mockReturnValue({
+    columns: [
+      {
+        id: "center",
+        groups: [
+          {
+            id: CENTER_GROUP_ID,
+            panels: [
+              { id: activePanelId, component: "chat", title: "Agent" },
+              { id: siblingPanelId, component: "chat", title: "Sibling" },
+              { id: stalePanelId, component: "chat", title: "Stale" },
+            ],
+            activePanel: activePanelId,
+          },
+        ],
+      },
+    ],
+  });
+  useDockviewStore.setState({ api, currentLayoutEnvId: "env-b" });
+
+  const pendingFrames: FrameRequestCallback[] = [];
+  const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    pendingFrames.push(callback);
+    return pendingFrames.length;
+  });
+  try {
+    useDockviewStore.getState().maximizeGroup(CENTER_GROUP_ID);
+    useDockviewStore
+      .getState()
+      .reconcileMaximizeSessionList(activeSessionId, [activeSessionId, siblingSessionId]);
+    expect(getEnvMaximizeState).toHaveBeenCalledWith("env-b");
+
+    const persistFrame = pendingFrames.shift();
+    expect(persistFrame).toBeDefined();
+    persistFrame?.(0);
+
+    const savedState = vi.mocked(setEnvMaximizeState).mock.calls[0]?.[1];
+    expect(savedState).toBeDefined();
+    const savedPanelIds = (
+      (savedState?.preMaximizeLayout as unknown as LayoutState).columns[0]?.groups[0]?.panels ?? []
+    ).map((panel) => panel.id);
+    expect(savedPanelIds).toEqual(expect.arrayContaining([activePanelId, siblingPanelId]));
+    expect(savedPanelIds).not.toContain(stalePanelId);
+  } finally {
+    requestFrame.mockRestore();
+  }
+}
+
 describe("environment-switch maximize session filtering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -350,6 +405,10 @@ describe("environment-switch maximize session filtering", () => {
       maximizedGroupId: null,
       isRestoringLayout: false,
     });
+  });
+
+  it("persists session reconciliation that occurs before maximize state is saved", () => {
+    persistSessionReconciliationBeforeMaximizeSave();
   });
 
   it("filters phantom sessions from the pre-maximize snapshot before persisting after exit", async () => {

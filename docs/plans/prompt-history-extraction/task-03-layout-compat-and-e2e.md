@@ -549,11 +549,15 @@ Done. Commands run from the repository root.
   session IDs are unchanged. The pass removes stale session panels from the
   saved pre-maximize layout and updates its environment maximize blob, while
   retaining active and listed sibling sessions.
+- Restore can already filter the in-memory snapshot before the hydration effect
+  runs. Reconciliation also checks the saved blob and rewrites its stale
+  pre-maximize layout, so a reload while maximized does not restore the retired
+  session again.
 - Maximize-state persistence is deferred to the next animation frame. The
-  writer now reads the latest pre-maximize snapshot for the same environment,
-  so session hydration before that frame cannot re-persist stale panels.
-- Nine focused dockview suites pass: 151 tests, including unchanged-ID
-  hydration, persisted cleanup, and deferred maximize-write regressions.
+  writer reads the latest pre-maximize snapshot for the same environment, so
+  hydration before that frame cannot re-persist stale panels.
+- Nine focused dockview suites pass: 152 tests, including unchanged-ID
+  hydration, restore-time blob cleanup, and deferred maximize-write regressions.
   `pnpm run typecheck`, targeted ESLint, and Prettier checks pass.
 - The seven focused dockview restore suites pass: 134 tests across
   `dockview-env-switch-maximize-session-filter.test.ts`,

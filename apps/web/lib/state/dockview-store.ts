@@ -1444,18 +1444,23 @@ function reconcileMaximizeSessionList(
 
   const validSessionIds = new Set(currentSessionIds);
   if (activeSessionId) validSessionIds.add(activeSessionId);
-  if (!hasStaleSessionPanels(preMaximizeLayout, validSessionIds)) return;
 
-  const filteredLayout = filterPreMaximizeLayout(
-    preMaximizeLayout,
-    activeSessionId,
-    currentSessionIds,
-  );
-  set({ preMaximizeLayout: filteredLayout });
+  const memoryNeedsFiltering = hasStaleSessionPanels(preMaximizeLayout, validSessionIds);
+  const filteredLayout = memoryNeedsFiltering
+    ? filterPreMaximizeLayout(preMaximizeLayout, activeSessionId, currentSessionIds)
+    : preMaximizeLayout;
+  if (memoryNeedsFiltering) set({ preMaximizeLayout: filteredLayout });
 
   if (!currentLayoutEnvId) return;
   const savedMaximizeState = getEnvMaximizeState(currentLayoutEnvId);
   if (!savedMaximizeState) return;
+  const savedPreMaximizeLayout = savedMaximizeState.preMaximizeLayout as unknown as LayoutState;
+  if (!hasStaleSessionPanels(savedPreMaximizeLayout, validSessionIds)) return;
+  const filteredSavedLayout = filterPreMaximizeLayout(
+    savedPreMaximizeLayout,
+    activeSessionId,
+    currentSessionIds,
+  );
 
   let maximizedDockviewJson = savedMaximizeState.maximizedDockviewJson;
   try {
@@ -1465,7 +1470,7 @@ function reconcileMaximizeSessionList(
   }
   setEnvMaximizeState(currentLayoutEnvId, {
     ...savedMaximizeState,
-    preMaximizeLayout: filteredLayout as unknown as object,
+    preMaximizeLayout: filteredSavedLayout as unknown as object,
     maximizedDockviewJson,
   });
 }

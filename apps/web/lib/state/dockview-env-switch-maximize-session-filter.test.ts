@@ -392,6 +392,54 @@ function persistSessionReconciliationBeforeMaximizeSave(): void {
   }
 }
 
+function persistFilteredRestoreSnapshot(): void {
+  const api = makeMockApi();
+  const activeSessionId = "session-a";
+  const siblingSessionId = "session-b";
+  const activePanelId = `session:${activeSessionId}`;
+  const siblingPanelId = `session:${siblingSessionId}`;
+  const stalePanelId = "session:saved-stale";
+  const makeLayout = (panelIds: string[]): LayoutState => ({
+    columns: [
+      {
+        id: "center",
+        groups: [
+          {
+            id: CENTER_GROUP_ID,
+            panels: panelIds.map((id) => ({ id, component: "chat", title: id })),
+            activePanel: activePanelId,
+          },
+        ],
+      },
+    ],
+  });
+  const preMaximizeLayout = makeLayout([activePanelId, siblingPanelId]);
+  const savedPreMaximizeLayout = makeLayout([activePanelId, siblingPanelId, stalePanelId]);
+  const maximizedDockviewJson = maximizeOverlay() as SerializedDockview;
+  vi.mocked(api.toJSON).mockReturnValue(maximizedDockviewJson);
+  vi.mocked(getEnvMaximizeState).mockReturnValue({
+    preMaximizeLayout: savedPreMaximizeLayout,
+    maximizedDockviewJson,
+  });
+  useDockviewStore.setState({
+    api,
+    currentLayoutEnvId: "env-b",
+    preMaximizeLayout,
+  });
+
+  useDockviewStore
+    .getState()
+    .reconcileMaximizeSessionList(activeSessionId, [activeSessionId, siblingSessionId]);
+
+  const savedState = vi.mocked(setEnvMaximizeState).mock.calls[0]?.[1];
+  expect(savedState).toBeDefined();
+  const savedPanelIds = (
+    (savedState?.preMaximizeLayout as unknown as LayoutState).columns[0]?.groups[0]?.panels ?? []
+  ).map((panel) => panel.id);
+  expect(savedPanelIds).toEqual(expect.arrayContaining([activePanelId, siblingPanelId]));
+  expect(savedPanelIds).not.toContain(stalePanelId);
+}
+
 describe("environment-switch maximize session filtering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -409,6 +457,10 @@ describe("environment-switch maximize session filtering", () => {
 
   it("persists session reconciliation that occurs before maximize state is saved", () => {
     persistSessionReconciliationBeforeMaximizeSave();
+  });
+
+  it("persists stale panels removed during authoritative maximize restore", () => {
+    persistFilteredRestoreSnapshot();
   });
 
   it("filters phantom sessions from the pre-maximize snapshot before persisting after exit", async () => {

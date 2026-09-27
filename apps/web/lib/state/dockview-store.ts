@@ -991,7 +991,7 @@ function replaceStaleSessionPanelWithActive(
   };
 }
 
-function filterPreMaximizeLayout(
+export function filterPreMaximizeLayout(
   savedLayout: LayoutState,
   activeSessionId: string | null,
   currentSessionIds: string[],

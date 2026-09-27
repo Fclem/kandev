@@ -1,6 +1,10 @@
 import type { DockviewReadyEvent, SerializedDockview } from "dockview-react";
 import type { StoreApi } from "zustand";
-import { hasRightColumn, useDockviewStore } from "@/lib/state/dockview-store";
+import {
+  filterPreMaximizeLayout,
+  hasRightColumn,
+  useDockviewStore,
+} from "@/lib/state/dockview-store";
 import { applyLayoutFixups } from "@/lib/state/dockview-layout-builders";
 import { measureDockviewContainer } from "@/lib/state/dockview-measure";
 import type { LayoutGroup, LayoutNode, LayoutState } from "@/lib/state/layout-manager";
@@ -36,12 +40,33 @@ const debug = createDebugLogger("dockview:restore");
 
 type SavedMax = ReturnType<typeof getEnvMaximizeState>;
 
+export type SessionRestoreContext = {
+  activeSessionId: string | null;
+  currentSessionIds: string[];
+};
+
+type SavedMaximizeOptions = {
+  phantomSessionIds?: Set<string>;
+  manualRightWidth?: number | null;
+  sessionContext?: SessionRestoreContext;
+};
+
 function filterLayoutForRestore(
   state: LayoutState,
   validComponents: ReadonlySet<string>,
   phantomSessionIds?: Set<string>,
+  sessionContext?: SessionRestoreContext,
 ): LayoutState {
-  if (!phantomSessionIds?.size) return filterLayoutStateByComponents(state, validComponents);
+  const preparedState =
+    sessionContext?.activeSessionId === null || !sessionContext
+      ? state
+      : filterPreMaximizeLayout(
+          state,
+          sessionContext.activeSessionId,
+          sessionContext.currentSessionIds,
+        );
+  if (!phantomSessionIds?.size)
+    return filterLayoutStateByComponents(preparedState, validComponents);
 
   // Mark phantoms non-renderable so the shared filter prunes groups and repairs active panels.
   const filterGroup = (group: LayoutGroup): LayoutGroup => ({
@@ -58,8 +83,8 @@ function filterLayoutForRestore(
       : { ...node, children: node.children.map(filterNode) };
 
   const markedState: LayoutState = {
-    ...state,
-    columns: state.columns.map((column) => ({
+    ...preparedState,
+    columns: preparedState.columns.map((column) => ({
       ...column,
       groups: column.groups.map(filterGroup),
       ...(column.tree ? { tree: filterNode(column.tree) } : {}),
@@ -83,8 +108,7 @@ function applySavedMaximize(
   api: DockviewReadyEvent["api"],
   savedMax: NonNullable<SavedMax>,
   validComponents: ReadonlySet<string>,
-  phantomSessionIds?: Set<string>,
-  manualRightWidth?: number | null,
+  { phantomSessionIds, manualRightWidth, sessionContext }: SavedMaximizeOptions,
 ): boolean {
   const rawMaximized = savedMax.maximizedDockviewJson;
   const maximizedGroupId = maximizedGroupIdOf(rawMaximized);
@@ -106,6 +130,7 @@ function applySavedMaximize(
     savedMax.preMaximizeLayout as unknown as LayoutState,
     validComponents,
     phantomSessionIds,
+    sessionContext,
   );
   api.fromJSON(sanitizedMaximized as SerializedDockview);
   const { width, height } = measureDockviewContainer(api);
@@ -133,12 +158,20 @@ function applyFixupsWithMaximize(
   envId: string | null,
   validComponents: ReadonlySet<string>,
   phantomSessionIds?: Set<string>,
+  sessionContext?: SessionRestoreContext,
 ): void {
   const manualRightWidth = getManualRightWidth(envId);
   const savedMax = envId ? getEnvMaximizeState(envId) : null;
   if (envId && savedMax) {
-    if (applySavedMaximize(api, savedMax, validComponents, phantomSessionIds, manualRightWidth))
+    if (
+      applySavedMaximize(api, savedMax, validComponents, {
+        phantomSessionIds,
+        manualRightWidth,
+        sessionContext,
+      })
+    ) {
       return;
+    }
     applyPreMaximizeLayout(
       api,
       envId,
@@ -146,6 +179,7 @@ function applyFixupsWithMaximize(
         savedMax.preMaximizeLayout as unknown as LayoutState,
         validComponents,
         phantomSessionIds,
+        sessionContext,
       ),
     );
     return;
@@ -195,11 +229,19 @@ function tryRestoreMaximizeOnly(
   envId: string,
   validComponents: ReadonlySet<string>,
   phantomSessionIds?: Set<string>,
+  sessionContext?: SessionRestoreContext,
 ): boolean {
   const savedMax = getEnvMaximizeState(envId);
   if (!savedMax) return false;
   try {
-    if (applySavedMaximize(api, savedMax, validComponents, phantomSessionIds)) return true;
+    if (
+      applySavedMaximize(api, savedMax, validComponents, {
+        phantomSessionIds,
+        sessionContext,
+      })
+    ) {
+      return true;
+    }
     // This reader is reached only when there is no usable per-environment
     // layout, so falling through would end in the built-in default and discard
     // the panels the blob still holds. Apply what survived instead.
@@ -210,6 +252,7 @@ function tryRestoreMaximizeOnly(
         savedMax.preMaximizeLayout as unknown as LayoutState,
         validComponents,
         phantomSessionIds,
+        sessionContext,
       ),
     );
     return true;
@@ -232,6 +275,7 @@ function tryRestoreEnvLayout(
   envId: string,
   validComponents: Set<string>,
   phantomSessionIds: Set<string> | undefined,
+  sessionContext?: SessionRestoreContext,
 ): boolean {
   const envLayout = getEnvLayout(envId);
   if (!envLayout) {
@@ -266,7 +310,7 @@ function tryRestoreEnvLayout(
     });
   }
   api.fromJSON(sanitized as SerializedDockview);
-  applyFixupsWithMaximize(api, envId, validComponents, phantomSessionIds);
+  applyFixupsWithMaximize(api, envId, validComponents, phantomSessionIds, sessionContext);
   return true;
 }
 
@@ -275,6 +319,7 @@ export function tryRestoreLayout(
   currentEnvId: string | null,
   validComponents: Set<string>,
   phantomSessionIds?: Set<string>,
+  sessionContext?: SessionRestoreContext,
 ): boolean {
   // No env yet — the task is still preparing or its session→env mapping hasn't
   // hydrated. Return false so `onReady` builds the DEFAULT layout instead of
@@ -284,11 +329,21 @@ export function tryRestoreLayout(
   // `switchEnvLayout` once the env hydrates.
   if (!currentEnvId) return false;
   try {
-    if (tryRestoreEnvLayout(api, currentEnvId, validComponents, phantomSessionIds)) return true;
+    if (
+      tryRestoreEnvLayout(api, currentEnvId, validComponents, phantomSessionIds, sessionContext)
+    ) {
+      return true;
+    }
   } catch {
     // fall through to maximize-only
   }
-  return tryRestoreMaximizeOnly(api, currentEnvId, validComponents, phantomSessionIds);
+  return tryRestoreMaximizeOnly(
+    api,
+    currentEnvId,
+    validComponents,
+    phantomSessionIds,
+    sessionContext,
+  );
 }
 
 /**
@@ -323,7 +378,16 @@ export function restoreEnvLayout(
   appStore: StoreApi<AppState>,
   validComponents: Set<string>,
 ): boolean {
-  const phantoms = envId ? collectPhantomSessionIdsForEnv(appStore.getState(), envId) : undefined;
+  const state = appStore.getState();
+  const phantoms = envId ? collectPhantomSessionIdsForEnv(state, envId) : undefined;
+  const { tasks, taskSessionsByTask } = state;
+  const activeTaskId = tasks.activeTaskId;
+  const sessionContext: SessionRestoreContext = {
+    activeSessionId: tasks.activeSessionId,
+    currentSessionIds: activeTaskId
+      ? (taskSessionsByTask.itemsByTaskId[activeTaskId] ?? []).map((session) => session.id)
+      : [],
+  };
   if (isDebug()) {
     debug("restoreEnvLayout: entry", {
       envId,
@@ -332,7 +396,7 @@ export function restoreEnvLayout(
       livePanelIdsBefore: api.panels.map((p) => p.id),
     });
   }
-  const result = tryRestoreLayout(api, envId, validComponents, phantoms);
+  const result = tryRestoreLayout(api, envId, validComponents, phantoms, sessionContext);
   if (isDebug()) {
     debug("restoreEnvLayout: result", {
       envId,

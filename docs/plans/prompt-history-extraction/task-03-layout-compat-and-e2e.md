@@ -458,8 +458,10 @@ Done. Commands run from the repository root.
   lib/state/dockview-right-pane.test.ts \
   lib/state/dockview-env-switch-action.test.ts \
   lib/state/dockview-preset-persistence.test.ts \
-  lib/layout/layout-profiles.test.ts)
-# 6 files passed, 125 tests passed
+  lib/layout/layout-profiles.test.ts \
+  lib/state/dockview-env-switch-maximize-session-filter.test.ts \
+  components/task/dockview-layout-restore-maximize-session.test.ts)
+# 8 files passed, 134 tests passed
 (cd apps/web && pnpm run typecheck)   # tsc --noEmit clean
 (cd apps/web && pnpm run lint)        # eslint --max-warnings 0 clean
 ```

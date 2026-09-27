@@ -347,6 +347,10 @@ type DockviewStore = {
   maximizedGroupId: string | null;
   maximizeGroup: (groupId: string) => void;
   exitMaximizedLayout: () => void;
+  reconcileMaximizeSessionList: (
+    activeSessionId: string | null,
+    currentSessionIds: string[],
+  ) => void;
 };
 
 type StoreGet = () => DockviewStore;
@@ -1422,6 +1426,50 @@ function buildEnvSwitchAction(set: StoreSet, get: StoreGet) {
   };
 }
 
+function hasStaleSessionPanels(layout: LayoutState, validSessionIds: ReadonlySet<string>): boolean {
+  for (const sessionId of collectSessionIdsFromLayout(layout)) {
+    if (!validSessionIds.has(sessionId)) return true;
+  }
+  return false;
+}
+
+function reconcileMaximizeSessionList(
+  set: StoreSet,
+  get: StoreGet,
+  activeSessionId: string | null,
+  currentSessionIds: string[],
+): void {
+  const { api, currentLayoutEnvId, preMaximizeLayout } = get();
+  if (!api || !preMaximizeLayout) return;
+
+  const validSessionIds = new Set(currentSessionIds);
+  if (activeSessionId) validSessionIds.add(activeSessionId);
+  if (!hasStaleSessionPanels(preMaximizeLayout, validSessionIds)) return;
+
+  const filteredLayout = filterPreMaximizeLayout(
+    preMaximizeLayout,
+    activeSessionId,
+    currentSessionIds,
+  );
+  set({ preMaximizeLayout: filteredLayout });
+
+  if (!currentLayoutEnvId) return;
+  const savedMaximizeState = getEnvMaximizeState(currentLayoutEnvId);
+  if (!savedMaximizeState) return;
+
+  let maximizedDockviewJson = savedMaximizeState.maximizedDockviewJson;
+  try {
+    maximizedDockviewJson = api.toJSON();
+  } catch {
+    // Keep the previously persisted overlay when serialization fails.
+  }
+  setEnvMaximizeState(currentLayoutEnvId, {
+    ...savedMaximizeState,
+    preMaximizeLayout: filteredLayout as unknown as object,
+    maximizedDockviewJson,
+  });
+}
+
 /**
  * Build the maximize actions. `maximizeGroup` collapses the layout to the
  * sidebar plus the requested group, persisting the pre-maximize layout (and
@@ -1507,6 +1555,8 @@ function buildMaximizeActions(set: StoreSet, get: StoreGet) {
         persistEnvLayoutNow(api, currentLayoutEnvId, null);
       });
     },
+    reconcileMaximizeSessionList: (activeSessionId: string | null, currentSessionIds: string[]) =>
+      reconcileMaximizeSessionList(set, get, activeSessionId, currentSessionIds),
   };
 }
 

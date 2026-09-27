@@ -62,7 +62,7 @@ contracts on desktop and phone.
   presence by role and label, and only for rows that exist in the seeded state:
   the built-in default preset opens Chat, Files, Changes, and the default
   terminal (`presets.ts`), and the Changes and Files rows render only while
-  those panels are *closed* (`dockview-add-panel-items.tsx`), so a default task
+  those panels are _closed_ (`dockview-add-panel-items.tsx`), so a default task
   shows neither. Either close them first, seed a per-environment layout without
   them, or assert presence for the rows that do render (Plan, VS Code, Browser,
   Todos, terminals) and use test ids only where they exist
@@ -129,8 +129,8 @@ contracts on desktop and phone.
     import with its cases.
   - `preMaximizeLayout` `LayoutState`: a filter over
     `columns[].groups[].panels` (and the optional tree) that removes panels whose
-    component is not in the set, drops a group or column left empty *by that
-    filter*, and repoints or clears a dangling `activePanel`. Do not drop
+    component is not in the set, drops a group or column left empty _by that
+    filter_, and repoints or clears a dangling `activePanel`. Do not drop
     pre-existing empty groups: they are live state that the current restore
     preserves, and an existing environment-switch case asserts a layout in that
     shape stays valid. `rewriteReusableChatPanels` in
@@ -147,16 +147,16 @@ contracts on desktop and phone.
     legacy aliases, and it deliberately preserves empty groups for split
     preservation. Filtering a live pre-maximize layout with it would drop
     panels the user still has, which AC 001.7 forbids.
-  Skip the overlay per reader when the maximized group does not survive, and
-  make the two different outcomes explicit: the on-ready maximize-only reader
-  (`tryRestoreMaximizeOnly`, reached only when no usable per-environment layout
-  exists) must apply the filtered `preMaximizeLayout` and return true with
-  `preMaximizeLayout`/`maximizedGroupId` cleared — returning false there ends in
-  the built-in default layout and discards the panels the blob holds; the
-  environment-switch reader returns false so `performEnvSwitch` applies the
-  environment's sanitized saved layout, which is normally the same pre-maximize
-  layout. Keep the existing self-heal deletion only for a blob that still fails
-  after sanitization.
+    Skip the overlay per reader when the maximized group does not survive, and
+    make the two different outcomes explicit: the on-ready maximize-only reader
+    (`tryRestoreMaximizeOnly`, reached only when no usable per-environment layout
+    exists) must apply the filtered `preMaximizeLayout` and return true with
+    `preMaximizeLayout`/`maximizedGroupId` cleared — returning false there ends in
+    the built-in default layout and discards the panels the blob holds; the
+    environment-switch reader returns false so `performEnvSwitch` applies the
+    environment's sanitized saved layout, which is normally the same pre-maximize
+    layout. Keep the existing self-heal deletion only for a blob that still fails
+    after sanitization.
 - Prune the retained hidden-right-pane column. `HiddenRightPane.column` is a
   whole `LayoutColumn` with panel definitions, written with the per-environment
   layout and read back shape-validated only; without pruning, the retired
@@ -264,7 +264,7 @@ contracts on desktop and phone.
   - `apps/web/lib/layout/layout-profiles.test.ts`: a default profile whose
     layout contains the retired reusable id still validates, keeps its other
     panels, and resolves as the effective custom default rather than falling
-    back to the built-in one. Seed the retired id as the *only* panel of its
+    back to the built-in one. Seed the retired id as the _only_ panel of its
     group in one case, so the emptied-group clause is exercised; a seed that
     co-locates it with `chat` leaves no empty group and passes either way. Build
     that panel as a literal object
@@ -285,7 +285,7 @@ contracts on desktop and phone.
   record that the panel requirement and design are deprecated and superseded.
   They already read that way; correct them only if the implementation leaves them
   stale or if they still cite the files Tasks 01 and 02 delete. That file has
-  headroom; the Host prerequisite *requirement* does not (see below).
+  headroom; the Host prerequisite _requirement_ does not (see below).
 - Keep `docs/specs/plugins/requirements/prompt-history-extraction-host.md`
   length-neutral: it has about 65 bytes of headroom against the 20 KiB
   requirement limit and no size-exception path, so any correction there must be
@@ -544,6 +544,14 @@ Done. Commands run from the repository root.
   `performLayoutSwitch`. Maximize overlay and pre-maximize restore preserve
   unknown sibling sessions until the list is authoritative, while filtering
   known foreign sessions.
+
+- Authoritative session-list completion also triggers reconciliation when the
+  session IDs are unchanged. The pass removes stale session panels from the
+  saved pre-maximize layout and updates its environment maximize blob, while
+  retaining active and listed sibling sessions.
+- Eight focused dockview suites pass: 138 tests, including the unchanged-ID
+  hydration regression and persisted maximize-blob cleanup. `pnpm run typecheck`,
+  targeted ESLint, and Prettier checks pass.
 - The seven focused dockview restore suites pass: 134 tests across
   `dockview-env-switch-maximize-session-filter.test.ts`,
   `dockview-env-switch-action.test.ts`, `dockview-right-pane.test.ts`,
@@ -554,6 +562,6 @@ Done. Commands run from the repository root.
   TypeScript files.
 - The managed browser smoke was attempted with
   `pnpm e2e:run --project chromium
-  tests/layout/saved-layout-session-isolation.spec.ts`; backend compilation
+tests/layout/saved-layout-session-isolation.spec.ts`; backend compilation
   stopped before the browser launched because the worktree hit `disk quota
-  exceeded`.
+exceeded`.

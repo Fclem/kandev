@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { DockviewApi, SerializedDockview } from "dockview-react";
+import type { LayoutState } from "./layout-manager";
 import { performLayoutSwitch, useDockviewStore } from "./dockview-store";
 
 vi.mock("@/lib/local-storage", () => ({
@@ -31,7 +32,12 @@ vi.mock("./layout-manager", async (importOriginal) => {
   };
 });
 
-import { getEnvLayout, getEnvMaximizeState, setEnvLayout } from "@/lib/local-storage";
+import {
+  getEnvLayout,
+  getEnvMaximizeState,
+  setEnvLayout,
+  setEnvMaximizeState,
+} from "@/lib/local-storage";
 import { fromDockviewApi } from "./layout-manager";
 const CENTER_GROUP_ID = "group-center";
 
@@ -281,6 +287,56 @@ async function preservesSiblingSessionsDuringIncompleteAdoption(): Promise<void>
   expect(Object.keys(persistedLayout.panels ?? {})).not.toContain(foreignPanelId);
 }
 
+function persistAuthoritativeSessionCleanup(): void {
+  const api = makeMockApi();
+  const activeSessionId = "session-b";
+  const activePanelId = `session:${activeSessionId}`;
+  const siblingSessionId = "session-sibling";
+  const siblingPanelId = `session:${siblingSessionId}`;
+  const stalePanelId = "session:saved-stale";
+  const preMaximizeLayout: LayoutState = {
+    columns: [
+      {
+        id: "center",
+        groups: [
+          {
+            id: CENTER_GROUP_ID,
+            panels: [
+              { id: activePanelId, component: "chat", title: "Agent" },
+              { id: siblingPanelId, component: "chat", title: "Sibling" },
+              { id: stalePanelId, component: "chat", title: "Stale" },
+            ],
+            activePanel: activePanelId,
+          },
+        ],
+      },
+    ],
+  };
+  const maximizedDockviewJson = maximizeOverlay() as SerializedDockview;
+  vi.mocked(api.toJSON).mockReturnValue(maximizedDockviewJson);
+  vi.mocked(getEnvMaximizeState).mockReturnValue({
+    preMaximizeLayout,
+    maximizedDockviewJson,
+  });
+  useDockviewStore.setState({
+    api,
+    currentLayoutEnvId: "env-b",
+    preMaximizeLayout,
+  });
+
+  useDockviewStore
+    .getState()
+    .reconcileMaximizeSessionList(activeSessionId, [activeSessionId, siblingSessionId]);
+
+  const savedState = vi.mocked(setEnvMaximizeState).mock.calls[0]?.[1];
+  expect(savedState).toBeDefined();
+  const savedPanelIds = (
+    (savedState?.preMaximizeLayout as unknown as LayoutState).columns[0]?.groups[0]?.panels ?? []
+  ).map((panel) => panel.id);
+  expect(savedPanelIds).toEqual(expect.arrayContaining([activePanelId, siblingPanelId]));
+  expect(savedPanelIds).not.toContain(stalePanelId);
+}
+
 describe("environment-switch maximize session filtering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -353,6 +409,10 @@ describe("environment-switch maximize session filtering", () => {
     expect(persistedLayout).toBeDefined();
     expect(Object.keys(persistedLayout.panels ?? {})).not.toContain(staleSessionId);
     expect(Object.keys(persistedLayout.panels ?? {})).toContain(incomingSessionId);
+  });
+
+  it("persists authoritative session cleanup in the maximize restore blob", () => {
+    persistAuthoritativeSessionCleanup();
   });
 
   it("preserves sibling sessions while the first environment adopts before session hydration", async () => {

@@ -538,6 +538,12 @@ export function runAutoSessionTabEffect(
     currentSessionIds,
     effectiveSessionId ?? "",
   );
+  const sessionListLoaded = tid
+    ? (appStore.getState().taskSessionsByTask.loadedByTaskId[tid] ?? false)
+    : false;
+  if (sessionListLoaded) {
+    useDockviewStore.getState().reconcileMaximizeSessionList(effectiveSessionId, currentSessionIds);
+  }
 
   if (!effectiveSessionId) {
     if (isDebug()) debug("useAutoSessionTab: no effectiveSessionId, returning");
@@ -654,6 +660,10 @@ export function useAutoSessionTab(effectiveSessionId: string | null) {
     if (!list || list.length === 0) return EMPTY_SESSION_IDS_KEY;
     return list.map((ss) => ss.id).join(",");
   });
+  const sessionListLoaded = useAppStore((s) => {
+    const tid = s.tasks.activeTaskId;
+    return tid ? (s.taskSessionsByTask.loadedByTaskId[tid] ?? false) : false;
+  });
   const workflowFocusRequestId = useAppStore((s) => {
     const request = s.workflowSessionFocus.request;
     return request?.taskId === s.tasks.activeTaskId && request.sessionId === effectiveSessionId
@@ -667,5 +677,12 @@ export function useAutoSessionTab(effectiveSessionId: string | null) {
       prevTaskIdRef,
       prevSessionIdRef,
     });
-  }, [appStore, dockviewApi, effectiveSessionId, sessionIdsKey, workflowFocusRequestId]);
+  }, [
+    appStore,
+    dockviewApi,
+    effectiveSessionId,
+    sessionIdsKey,
+    sessionListLoaded,
+    workflowFocusRequestId,
+  ]);
 }

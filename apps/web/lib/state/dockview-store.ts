@@ -45,7 +45,12 @@ import type {
 } from "./layout-manager";
 import type { CommitDetailTarget } from "@/components/task/changes-diff-target";
 import type { ReviewItemSummary } from "@/lib/plugins/types";
-import { performEnvSwitch, replaceStaleSessionPanels } from "./dockview-env-switch";
+import {
+  performEnvSwitch,
+  replaceStaleSessionPanels,
+  type EnvSwitchOptions,
+  type SessionListRestoreState,
+} from "./dockview-env-switch";
 import {
   captureRightPane,
   getRightPaneToggleState,
@@ -320,7 +325,7 @@ type DockviewStore = {
     newEnvId: string,
     activeSessionId: string | null,
     currentSessionIds?: string[],
-    initialLayout?: string | null,
+    options?: EnvSwitchOptions,
   ) => void;
   deferredPanelActions: DeferredPanelAction[];
   queuePanelAction: (action: DeferredPanelAction) => void;
@@ -991,15 +996,42 @@ function replaceStaleSessionPanelWithActive(
   };
 }
 
+function collectSessionIdsFromLayout(layout: LayoutState): Set<string> {
+  const sessionIds = new Set<string>();
+  const collectGroup = (group: LayoutGroup) => {
+    for (const panel of group.panels) {
+      if (panel.id.startsWith("session:")) {
+        sessionIds.add(panel.id.slice("session:".length));
+      }
+    }
+  };
+  const collectNode = (node: LayoutNode) => {
+    if (node.type === "leaf") {
+      collectGroup(node.group);
+      return;
+    }
+    node.children.forEach(collectNode);
+  };
+  for (const column of layout.columns) {
+    column.groups.forEach(collectGroup);
+    if (column.tree) collectNode(column.tree);
+  }
+  return sessionIds;
+}
+
 export function filterPreMaximizeLayout(
   savedLayout: LayoutState,
   activeSessionId: string | null,
   currentSessionIds: string[] | null,
+  sessionListRestoreState?: SessionListRestoreState,
 ): LayoutState {
-  if (currentSessionIds === null) {
-    return filterLayoutStateByComponents(savedLayout);
+  const sessionListLoaded = sessionListRestoreState?.loaded ?? currentSessionIds !== null;
+  const validSessionIds = sessionListLoaded
+    ? new Set(currentSessionIds ?? [])
+    : collectSessionIdsFromLayout(savedLayout);
+  for (const foreignSessionId of sessionListRestoreState?.knownForeignSessionIds ?? []) {
+    if (foreignSessionId !== activeSessionId) validSessionIds.delete(foreignSessionId);
   }
-  const validSessionIds = new Set(currentSessionIds);
   if (activeSessionId) validSessionIds.add(activeSessionId);
   const layout =
     activeSessionId === null
@@ -1015,6 +1047,7 @@ function restorePreMaximizeFallback({
   savedLayout,
   activeSessionId,
   currentSessionIds,
+  sessionListRestoreState,
 }: {
   api: DockviewApi;
   envId: string;
@@ -1022,11 +1055,13 @@ function restorePreMaximizeFallback({
   savedLayout: LayoutState;
   activeSessionId: string | null;
   currentSessionIds: string[];
+  sessionListRestoreState?: SessionListRestoreState;
 }): void {
   const preMaximizeLayout = filterPreMaximizeLayout(
     savedLayout,
     activeSessionId,
-    currentSessionIds,
+    sessionListRestoreState?.loaded === false ? null : currentSessionIds,
+    sessionListRestoreState,
   );
   const { width, height } = measureDockviewContainer(api);
   const manualRightWidth = getManualRightWidth(envId);
@@ -1034,7 +1069,7 @@ function restorePreMaximizeFallback({
     manualRightWidth === null ? new Map() : new Map([["right", manualRightWidth]]);
   const serialized = toSerializedDockview(preMaximizeLayout, width, height, pinnedWidths);
   restoreSerializedDockview(api, serialized);
-  replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);
+  replaceStaleSessionPanels(api, activeSessionId, currentSessionIds, sessionListRestoreState);
   api.layout(width, height);
   const ids = applyLayoutFixups(api, undefined, manualRightWidth);
   const hiddenRightPane = readHiddenRightPane(getEnvLayout(envId));
@@ -1055,18 +1090,28 @@ function restorePreMaximizeFallback({
 }
 
 /** Restore a saved maximize state from sessionStorage onto the dockview API. */
+type MaximizeRestoreOptions = {
+  currentSessionIds?: string[];
+  sessionListRestoreState?: SessionListRestoreState;
+};
+
 function restoreMaximizeFromStorage(
   api: DockviewApi,
   envId: string,
   set: StoreSet,
   activeSessionId: string | null,
-  currentSessionIds: string[] = [],
+  options: MaximizeRestoreOptions = {},
 ): boolean {
+  const currentSessionIds = options.currentSessionIds ?? [];
+  const sessionListRestoreState = options.sessionListRestoreState;
   const saved = getEnvMaximizeState(envId);
   if (!saved) return false;
   try {
     const rawMaximized = saved.maximizedDockviewJson;
-    const sanitizedMaximized = sanitizeSerializedLayout(rawMaximized);
+    const sanitizeOptions = sessionListRestoreState?.knownForeignSessionIds.size
+      ? { excludeSessionIds: sessionListRestoreState.knownForeignSessionIds }
+      : {};
+    const sanitizedMaximized = sanitizeSerializedLayout(rawMaximized, undefined, sanitizeOptions);
     const maximizedGroupId = maximizedGroupIdOf(rawMaximized);
     if (
       !sanitizedMaximized ||
@@ -1080,11 +1125,12 @@ function restoreMaximizeFromStorage(
         savedLayout: saved.preMaximizeLayout as unknown as LayoutState,
         activeSessionId,
         currentSessionIds,
+        sessionListRestoreState,
       });
       return true;
     }
     restoreSerializedDockview(api, sanitizedMaximized as SerializedDockview);
-    replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);
+    replaceStaleSessionPanels(api, activeSessionId, currentSessionIds, sessionListRestoreState);
     // After fromJSON, `api.width/height` reflect the JSON's recorded grid
     // dims, which may not match the live container. Always lay out against
     // the measured DOM size so a stale value can't pin the dockview at the
@@ -1095,7 +1141,8 @@ function restoreMaximizeFromStorage(
     const preMax = filterPreMaximizeLayout(
       saved.preMaximizeLayout as unknown as LayoutState,
       activeSessionId,
-      currentSessionIds,
+      sessionListRestoreState?.loaded === false ? null : currentSessionIds,
+      sessionListRestoreState,
     );
     // The maximized layout is `[sidebar?, maximized]` — the non-sidebar group
     // is the one being maximized, which `resolveGroupIds` returns as
@@ -1126,18 +1173,16 @@ function restoreIncomingMaximize(args: {
   set: StoreSet;
   activeSessionId: string | null;
   currentSessionIds: string[];
+  sessionListRestoreState?: SessionListRestoreState;
   hasFirstAdoptionRouteLayout: boolean;
   savedLayoutProfile: LayoutProfileIdentity | null;
 }): boolean {
   if (args.hasFirstAdoptionRouteLayout) return false;
   if (
-    !restoreMaximizeFromStorage(
-      args.api,
-      args.envId,
-      args.set,
-      args.activeSessionId,
-      args.currentSessionIds,
-    )
+    !restoreMaximizeFromStorage(args.api, args.envId, args.set, args.activeSessionId, {
+      currentSessionIds: args.currentSessionIds,
+      sessionListRestoreState: args.sessionListRestoreState,
+    })
   ) {
     return false;
   }
@@ -1264,8 +1309,10 @@ function buildEnvSwitchAction(set: StoreSet, get: StoreGet) {
     newEnvId: string,
     activeSessionId: string | null,
     currentSessionIds: string[] = [],
-    initialLayout?: string | null,
+    options?: EnvSwitchOptions,
   ) => {
+    const initialLayout = options?.initialLayout;
+    const sessionListRestoreState = options?.sessionListRestoreState;
     const { api, currentLayoutEnvId, preMaximizeLayout } = get();
     if (!api) {
       debugSwitch("envSwitch: skip (no api)", { oldEnvId, newEnvId, activeSessionId });
@@ -1327,6 +1374,7 @@ function buildEnvSwitchAction(set: StoreSet, get: StoreGet) {
           set,
           activeSessionId,
           currentSessionIds,
+          sessionListRestoreState,
           hasFirstAdoptionRouteLayout,
           savedLayoutProfile,
         })
@@ -1339,6 +1387,7 @@ function buildEnvSwitchAction(set: StoreSet, get: StoreGet) {
         newEnvId,
         activeSessionId,
         currentSessionIds,
+        sessionListRestoreState,
         safeWidth: measured.width,
         safeHeight: measured.height,
         buildDefault: (a, intentName) => get().buildDefaultLayout(a, intentName),
@@ -1763,11 +1812,11 @@ export function performLayoutSwitch(
   newEnvId: string,
   activeSessionId: string | null,
   currentSessionIds: string[] = [],
-  initialLayout?: string | null,
+  options?: EnvSwitchOptions,
 ): void {
   useDockviewStore
     .getState()
-    .switchEnvLayout(oldEnvId, newEnvId, activeSessionId, currentSessionIds, initialLayout);
+    .switchEnvLayout(oldEnvId, newEnvId, activeSessionId, currentSessionIds, options);
 }
 
 /**

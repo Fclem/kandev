@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { DockviewApi, SerializedDockview } from "dockview-react";
-import { useDockviewStore } from "./dockview-store";
+import { performLayoutSwitch, useDockviewStore } from "./dockview-store";
 
 vi.mock("@/lib/local-storage", () => ({
   getEnvLayout: vi.fn(() => null),
@@ -33,6 +33,7 @@ vi.mock("./layout-manager", async (importOriginal) => {
 
 import { getEnvLayout, getEnvMaximizeState, setEnvLayout } from "@/lib/local-storage";
 import { fromDockviewApi } from "./layout-manager";
+const CENTER_GROUP_ID = "group-center";
 
 function makeMockApi(): DockviewApi {
   return {
@@ -116,7 +117,7 @@ async function keepsActiveSessionAfterMaximizeExit(): Promise<void> {
           id: "center",
           groups: [
             {
-              id: "group-center",
+              id: CENTER_GROUP_ID,
               panels: [{ id: staleSessionId, component: "chat", title: "Agent" }],
               activePanel: staleSessionId,
             },
@@ -131,7 +132,7 @@ async function keepsActiveSessionAfterMaximizeExit(): Promise<void> {
 
   const restoredPreMaximizeLayout = useDockviewStore.getState().preMaximizeLayout;
   expect(restoredPreMaximizeLayout?.columns[0]?.groups[0]).toMatchObject({
-    id: "group-center",
+    id: CENTER_GROUP_ID,
     panels: [{ id: activeSessionPanelId, params: { sessionId: "session-b" } }],
     activePanel: activeSessionPanelId,
   });
@@ -146,6 +147,138 @@ async function keepsActiveSessionAfterMaximizeExit(): Promise<void> {
   };
   expect(Object.keys(persistedLayout.panels ?? {})).toContain(activeSessionPanelId);
   expect(Object.keys(persistedLayout.panels ?? {})).not.toContain(staleSessionId);
+}
+
+function seedIncompleteAdoption(): {
+  activeSessionId: string;
+  activePanelId: string;
+  siblingPanelId: string;
+  foreignSessionId: string;
+  foreignPanelId: string;
+} {
+  const activeSessionId = "session-b";
+  const activePanelId = `session:${activeSessionId}`;
+  const siblingSessionId = "session-sibling";
+  const siblingPanelId = `session:${siblingSessionId}`;
+  const foreignSessionId = "session-foreign";
+  const foreignPanelId = `session:${foreignSessionId}`;
+  const baseOverlay = maximizeOverlay();
+  vi.mocked(getEnvMaximizeState).mockReturnValue({
+    maximizedDockviewJson: {
+      ...baseOverlay,
+      grid: {
+        ...baseOverlay.grid,
+        root: {
+          type: "branch",
+          size: 600,
+          data: [
+            {
+              type: "leaf",
+              size: 200,
+              data: { id: "g-sidebar", views: ["files"], activeView: "files" },
+            },
+            {
+              type: "leaf",
+              size: 600,
+              data: {
+                id: "g-max",
+                views: [activePanelId, foreignPanelId],
+                activeView: activePanelId,
+              },
+            },
+          ],
+        },
+      },
+      panels: {
+        [activePanelId]: {
+          id: activePanelId,
+          contentComponent: "chat",
+          params: { sessionId: activeSessionId },
+        },
+        [foreignPanelId]: {
+          id: foreignPanelId,
+          contentComponent: "chat",
+          params: { sessionId: foreignSessionId },
+        },
+      },
+    },
+    preMaximizeLayout: {
+      columns: [
+        {
+          id: "center",
+          groups: [
+            {
+              id: CENTER_GROUP_ID,
+              panels: [
+                {
+                  id: activePanelId,
+                  component: "chat",
+                  title: "Agent",
+                  params: { sessionId: activeSessionId },
+                },
+                {
+                  id: siblingPanelId,
+                  component: "chat",
+                  title: "Sibling",
+                  params: { sessionId: siblingSessionId },
+                },
+                {
+                  id: foreignPanelId,
+                  component: "chat",
+                  title: "Foreign",
+                  params: { sessionId: foreignSessionId },
+                },
+              ],
+              activePanel: activePanelId,
+            },
+          ],
+        },
+      ],
+    },
+  });
+  return { activeSessionId, activePanelId, siblingPanelId, foreignSessionId, foreignPanelId };
+}
+
+async function preservesSiblingSessionsDuringIncompleteAdoption(): Promise<void> {
+  const api = makeMockApi();
+  let appliedLayout = {} as SerializedDockview;
+  vi.mocked(api.fromJSON).mockImplementation((layout) => {
+    appliedLayout = layout;
+  });
+  vi.mocked(api.toJSON).mockImplementation(() => appliedLayout);
+  const { activeSessionId, activePanelId, siblingPanelId, foreignSessionId, foreignPanelId } =
+    seedIncompleteAdoption();
+  useDockviewStore.setState({ api, currentLayoutEnvId: null });
+
+  performLayoutSwitch(null, "env-b", activeSessionId, [activeSessionId], {
+    sessionListRestoreState: {
+      loaded: false,
+      knownForeignSessionIds: new Set([foreignSessionId]),
+    },
+  });
+  expect(appliedLayout.panels).not.toHaveProperty(foreignPanelId);
+
+  const restoredPreMaximizeLayout = useDockviewStore.getState().preMaximizeLayout;
+  expect(restoredPreMaximizeLayout?.columns[0]?.groups[0]?.panels).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: activePanelId }),
+      expect.objectContaining({ id: siblingPanelId }),
+    ]),
+  );
+  expect(restoredPreMaximizeLayout?.columns[0]?.groups[0]?.panels).not.toContainEqual(
+    expect.objectContaining({ id: foreignPanelId }),
+  );
+
+  useDockviewStore.getState().exitMaximizedLayout();
+  await flushRaf();
+
+  const persistedLayout = vi
+    .mocked(setEnvLayout)
+    .mock.calls.find(([envId]) => envId === "env-b")?.[1] as {
+    panels?: Record<string, unknown>;
+  };
+  expect(Object.keys(persistedLayout.panels ?? {})).toContain(siblingPanelId);
+  expect(Object.keys(persistedLayout.panels ?? {})).not.toContain(foreignPanelId);
 }
 
 describe("environment-switch maximize session filtering", () => {
@@ -180,7 +313,7 @@ describe("environment-switch maximize session filtering", () => {
           tree: {
             type: "leaf",
             group: {
-              id: "group-center",
+              id: CENTER_GROUP_ID,
               panels: [
                 { id: staleSessionId, component: "chat", title: "Old session" },
                 { id: incomingSessionId, component: "chat", title: "Current session" },
@@ -220,6 +353,10 @@ describe("environment-switch maximize session filtering", () => {
     expect(persistedLayout).toBeDefined();
     expect(Object.keys(persistedLayout.panels ?? {})).not.toContain(staleSessionId);
     expect(Object.keys(persistedLayout.panels ?? {})).toContain(incomingSessionId);
+  });
+
+  it("preserves sibling sessions while the first environment adopts before session hydration", async () => {
+    await preservesSiblingSessionsDuringIncompleteAdoption();
   });
 
   it("keeps the active session in a stale-only pre-maximize group on exit", async () => {

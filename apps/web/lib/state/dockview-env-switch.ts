@@ -100,6 +100,15 @@ function savedLayoutHasEphemeralPanels(serialized: SerializedDockview): boolean 
   return Object.values(panels).some((p) => EPHEMERAL_COMPONENTS.has(p.contentComponent ?? ""));
 }
 
+export type SessionListRestoreState = {
+  loaded: boolean;
+  knownForeignSessionIds: Set<string>;
+};
+export type EnvSwitchOptions = {
+  initialLayout?: string | null;
+  sessionListRestoreState?: SessionListRestoreState;
+};
+
 export type EnvSwitchParams = {
   api: DockviewApi;
   oldEnvId: string | null;
@@ -108,6 +117,8 @@ export type EnvSwitchParams = {
   activeSessionId: string | null;
   /** All sessions for the active task, so slow-path restores keep sibling chat tabs. */
   currentSessionIds?: string[];
+  /** Readiness and known foreign sessions for a partially hydrated task list. */
+  sessionListRestoreState?: SessionListRestoreState;
   safeWidth: number;
   safeHeight: number;
   /** Build the effective default, optionally honoring a route layout intent. */
@@ -154,15 +165,20 @@ export function replaceStaleSessionPanels(
   api: DockviewApi,
   keepSessionId: string | null,
   currentSessionIds: string[] = [],
+  sessionListRestoreState?: SessionListRestoreState,
 ): void {
   const keepId = keepSessionId ? `session:${keepSessionId}` : null;
-  // keepId=null (sessionless task) → strips all session panels. In practice
-  // sessionless tasks should have no session panels; useAutoSessionTab re-adds
-  // the panel when a session arrives.
-  const stale = api.panels.filter(
-    (p) => p.api.component === "chat" && p.id.startsWith("session:") && p.id !== keepId,
-  );
-
+  const sessionListLoaded = sessionListRestoreState?.loaded ?? true;
+  const knownForeignSessionIds = sessionListRestoreState?.knownForeignSessionIds;
+  // Until the task list is authoritative, only remove sessions proven to
+  // belong to another environment.
+  const stale = api.panels.filter((panel) => {
+    if (panel.api.component !== "chat" || !panel.id.startsWith("session:") || panel.id === keepId) {
+      return false;
+    }
+    const sessionId = panel.id.slice("session:".length);
+    return sessionListLoaded || knownForeignSessionIds?.has(sessionId) === true;
+  });
   // Anchor the active session to the first stale's (group, index) so co-tabbed
   // siblings (pr-detail etc.) stay grouped with the agent tab. Skipped when:
   //   - no keepSessionId (sessionless task)
@@ -337,7 +353,12 @@ function tryFastEnvSwitch(params: EnvSwitchParams): LayoutGroupIds | null {
     addIncomingSessionPanel(api, activeSessionId, outgoingGroupId, outgoingIndex);
   }
   removeEphemeralPanels(api);
-  replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);
+  replaceStaleSessionPanels(
+    api,
+    activeSessionId,
+    currentSessionIds,
+    params.sessionListRestoreState,
+  );
 
   // The fast path skips `fromJSON`, so per-group active tabs from the
   // outgoing env would otherwise persist into the incoming env. Reapply
@@ -624,7 +645,12 @@ export function performEnvSwitch(params: EnvSwitchParams): LayoutGroupIds {
       // editors, etc.). File editors/diffs/etc. on their own are legitimately
       // part of this env's saved state and must NOT be touched.
       // useAutoSessionTab will still no-op if the panel was just added here.
-      replaceStaleSessionPanels(api, activeSessionId, currentSessionIds);
+      replaceStaleSessionPanels(
+        api,
+        activeSessionId,
+        currentSessionIds,
+        params.sessionListRestoreState,
+      );
       if (activeSessionId) restoreMissingSessionPanel(api, activeSessionId);
       restoreSavedActiveViews(api, saved as SerializedDockview, activeSessionId);
       api.layout(safeWidth, safeHeight);

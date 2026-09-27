@@ -15,6 +15,7 @@ import {
   performLayoutSwitch,
   hasRightColumn,
 } from "@/lib/state/dockview-store";
+import type { SessionListRestoreState } from "@/lib/state/dockview-env-switch";
 import { restoreEnvLayout } from "./dockview-layout-restore";
 import {
   setupContainerResizeSync,
@@ -222,6 +223,7 @@ function useEnvSwitchCleanup(
 ) {
   const prevEnvRef = useRef<string | null | undefined>(undefined);
   const prevTaskRef = useRef<string | null | undefined>(undefined);
+  const appStore = useAppStoreApi();
   const currentSessionIdsKey = useAppStore((state) => {
     if (!activeTaskId) return "";
     return (state.taskSessionsByTask.itemsByTaskId[activeTaskId] ?? [])
@@ -267,13 +269,38 @@ function useEnvSwitchCleanup(
     // through the sidebar/dropdown switch helpers. Same-env switches return
     // early above (no-op).
     if (newEnvId) {
-      const currentSessionIds = currentSessionIdsKey ? currentSessionIdsKey.split(",") : [];
+      const state = appStore.getState();
+      const currentSessionIds: string[] = activeTaskId
+        ? (state.taskSessionsByTask.itemsByTaskId[activeTaskId] ?? []).map((session) =>
+            String(session.id),
+          )
+        : [];
       if (effectiveSessionId && !currentSessionIds.includes(effectiveSessionId)) {
         currentSessionIds.unshift(effectiveSessionId);
       }
-      performLayoutSwitch(oldEnvId, newEnvId, effectiveSessionId, currentSessionIds, initialLayout);
+      const sessionListRestoreState: SessionListRestoreState = {
+        loaded: activeTaskId
+          ? (state.taskSessionsByTask.loadedByTaskId[activeTaskId] ?? false)
+          : false,
+        knownForeignSessionIds: new Set(
+          Object.entries(state.environmentIdBySessionId)
+            .filter(([, envId]) => envId !== newEnvId)
+            .map(([sessionId]) => sessionId),
+        ),
+      };
+      performLayoutSwitch(oldEnvId, newEnvId, effectiveSessionId, currentSessionIds, {
+        initialLayout,
+        sessionListRestoreState,
+      });
     }
-  }, [effectiveEnvId, effectiveSessionId, activeTaskId, currentSessionIdsKey, initialLayout]);
+  }, [
+    effectiveEnvId,
+    effectiveSessionId,
+    activeTaskId,
+    currentSessionIdsKey,
+    initialLayout,
+    appStore,
+  ]);
 }
 
 // ---------------------------------------------------------------------------

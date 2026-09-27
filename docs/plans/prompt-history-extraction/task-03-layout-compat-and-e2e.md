@@ -535,3 +535,25 @@ Done. Commands run from the repository root.
   - `dockview-preset-persistence.test.ts`'s existing "does not persist when legacy
     fromJSON restore throws" case now seeds a shape-healthy legacy payload so it keeps
     exercising the `fromJSON` throw path rather than the sanitizer's null path.
+
+### Environment-switch hydration follow-up
+
+- The first environment adoption can run before the task's session list has
+  hydrated. `useEnvSwitchCleanup` now passes the list's loaded state and
+  sessions already known to belong to another environment through
+  `performLayoutSwitch`. Maximize overlay and pre-maximize restore preserve
+  unknown sibling sessions until the list is authoritative, while filtering
+  known foreign sessions.
+- The seven focused dockview restore suites pass: 134 tests across
+  `dockview-env-switch-maximize-session-filter.test.ts`,
+  `dockview-env-switch-action.test.ts`, `dockview-right-pane.test.ts`,
+  `dockview-preset-persistence.test.ts`, `dockview-layout-restore.test.ts`,
+  `dockview-desktop-layout.test.ts`, and `layout-profiles.test.ts`. This
+  includes delayed-adoption preservation and maximize-exit persistence.
+- `pnpm run typecheck`, targeted ESLint, and Prettier checks pass on the changed
+  TypeScript files.
+- The managed browser smoke was attempted with
+  `pnpm e2e:run --project chromium
+  tests/layout/saved-layout-session-isolation.spec.ts`; backend compilation
+  stopped before the browser launched because the worktree hit `disk quota
+  exceeded`.

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { DockviewApi, SerializedDockview } from "dockview-react";
-import { useDockviewStore } from "./dockview-store";
+import { performLayoutSwitch, useDockviewStore } from "./dockview-store";
 
 vi.mock("@/lib/local-storage", () => ({
   getEnvLayout: vi.fn(() => null),
@@ -340,7 +340,7 @@ describe("switchEnvLayout — root fix for terminal/layout swapping", () => {
     });
     useDockviewStore.setState({ api, currentLayoutEnvId: null, buildDefaultLayout });
 
-    useDockviewStore.getState().switchEnvLayout(null, "env-first", "session-Y", [], "plan");
+    performLayoutSwitch(null, "env-first", "session-Y", [], { initialLayout: "plan" });
 
     expect(api.fromJSON).not.toHaveBeenCalled();
     expect(buildDefaultLayout).toHaveBeenCalledWith(api, "plan");

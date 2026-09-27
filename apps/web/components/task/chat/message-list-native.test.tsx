@@ -10,6 +10,7 @@ const sharedSentinelUserGesture = vi.hoisted(() => vi.fn());
 const sharedSentinelRetry = vi.hoisted(() => vi.fn());
 const sharedSentinelRecheck = vi.hoisted(() => vi.fn());
 const transcriptScrollTopBySessionId = vi.hoisted(() => new Map<string, number>());
+const sharedLatestVisibilityChange = vi.hoisted(() => vi.fn());
 const transcriptScrollTopWrites = vi.hoisted(() =>
   vi.fn((sessionId: string, scrollTop: number) => {
     transcriptScrollTopBySessionId.set(sessionId, scrollTop);
@@ -3022,6 +3023,8 @@ function EdgeHarness({
     prompt,
     unloaded,
     items,
+    hasContent: items.length > 0,
+    onLatestVisibilityChange: sharedLatestVisibilityChange,
   });
   return (
     <div data-testid="edge-root" ref={ref}>

@@ -133,7 +133,7 @@ vi.mock("@/components/task/chat/message-list", () => ({
     anchoredBarHeight?: number;
     stickyPromptBar?: ReactNode;
   }) => {
-    useImperativeHandle(ref, () => ({ scrollToMessage }), []);
+    useImperativeHandle(ref, () => ({ scrollToMessage, scrollToLatest: vi.fn(() => true) }), []);
     return (
       <div
         data-testid={MESSAGE_LIST_ID}

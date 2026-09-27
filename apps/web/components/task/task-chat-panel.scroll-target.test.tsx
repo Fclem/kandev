@@ -877,7 +877,9 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
     });
     mockAppStoreState.messages.bySession["session-1"] = [];
     const scrollToMessage = vi.fn(() => false);
-    const messageListRef = { current: { scrollToMessage } };
+    const messageListRef = {
+      current: { scrollToMessage, scrollToLatest: vi.fn(() => true) },
+    };
     const onConsumed = vi.fn();
     const guardedAtHostChange: boolean[] = [];
     const localTarget: PendingMessageScrollTarget = {
@@ -928,7 +930,9 @@ describe("usePendingMessageScroll — non-Dockview target loading", () => {
     });
     mockAppStoreState.messages.bySession["session-1"] = [];
     const scrollToMessage = vi.fn(() => false);
-    const messageListRef = { current: { scrollToMessage } };
+    const messageListRef = {
+      current: { scrollToMessage, scrollToLatest: vi.fn(() => true) },
+    };
     const onConsumed = vi.fn();
     const guardedAtGenerationChange: boolean[] = [];
     const localTarget: PendingMessageScrollTarget = {

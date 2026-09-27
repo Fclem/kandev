@@ -150,7 +150,7 @@ export function fanOutTranscriptPrompts(state: SessionSliceState, messages: Mess
   for (const message of messages) upsertPromptMessage(state, message);
 }
 
-/** Removes a prompt and repairs the cached oldest cursor. */
+/** Removes a prompt and repairs its cursor without discarding unloaded history. */
 export function removePromptMessage(
   state: SessionSliceState,
   sessionId: string,
@@ -169,8 +169,7 @@ export function removePromptMessage(
   if (meta?.oldestCursor === messageId) {
     meta.oldestCursor = nextPrompts[0]?.id ?? null;
   }
-  if (nextPrompts.length === 0 && meta) {
-    meta.hasMore = false;
+  if (nextPrompts.length === 0 && meta && !meta.hasMore) {
     meta.oldestCursor = null;
   }
 }
@@ -195,7 +194,12 @@ export function buildPromptMessageActions(set: ImmerSet) {
           }),
         );
         ensurePromptMeta(draft.messagePrompts.metaBySession, sessionId);
-        if (meta) applyPromptMeta(draft.messagePrompts.metaBySession, sessionId, meta);
+        if (meta) {
+          applyPromptMeta(draft.messagePrompts.metaBySession, sessionId, {
+            ...meta,
+            historyInitialized: true,
+          });
+        }
         repairPromptCursor(draft, sessionId, messages.length);
       }),
     prependPromptMessages: (
@@ -222,7 +226,6 @@ export function buildPromptMessageActions(set: ImmerSet) {
       meta: { hasMore: boolean; oldestCursor: string | null },
     ) =>
       set((draft) => {
-        const hadCache = Object.hasOwn(draft.messagePrompts.bySession, sessionId);
         const byID = new Map(
           (draft.messagePrompts.bySession[sessionId] ?? []).map((message) => [message.id, message]),
         );
@@ -232,7 +235,16 @@ export function buildPromptMessageActions(set: ImmerSet) {
           byID.set(message.id, current ? mergePromptMessage(current, message) : message);
         }
         draft.messagePrompts.bySession[sessionId] = sortPromptMessages([...byID.values()]);
-        if (!hadCache) applyPromptMeta(draft.messagePrompts.metaBySession, sessionId, meta);
+        const cursorWasDeleted =
+          meta.oldestCursor !== null &&
+          draft.messagePrompts.deletedIdsBySession[sessionId]?.[meta.oldestCursor];
+        if (!draft.messagePrompts.metaBySession[sessionId]?.historyInitialized) {
+          applyPromptMeta(draft.messagePrompts.metaBySession, sessionId, {
+            ...meta,
+            oldestCursor: cursorWasDeleted ? null : meta.oldestCursor,
+            historyInitialized: true,
+          });
+        }
         draft.messagePrompts.authoritativeBySession[sessionId] = true;
         const observed = (draft.messagePrompts.observedBySession[sessionId] ??= {
           ids: {},

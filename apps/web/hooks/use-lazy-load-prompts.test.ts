@@ -29,6 +29,7 @@ const { listTaskSessionMessages, state, storeApi } = vi.hoisted(() => {
     },
     setPromptMessagesLoadingMore: vi.fn(),
     prependPromptMessages: vi.fn(),
+    replacePromptMessages: vi.fn(),
   };
   return { listTaskSessionMessages: vi.fn(), state, storeApi: { getState: () => state } };
 });
@@ -45,6 +46,7 @@ import { useLazyLoadPrompts } from "./use-lazy-load-prompts";
 describe("useLazyLoadPrompts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listTaskSessionMessages.mockReset();
     state.messagePrompts.bySession.session = [{ id: "existing" } as Message];
     state.messagePrompts.metaBySession.session = {
       isLoading: false,
@@ -54,6 +56,47 @@ describe("useLazyLoadPrompts", () => {
     };
     state.messagePrompts.refreshGenerationBySession.session = 0;
     state.messagePrompts.generationBySession.session = 0;
+  });
+
+  it("reloads the newest prompt page when deletion leaves no usable cursor", async () => {
+    const restored = { id: "restored" } as Message;
+    state.messagePrompts.bySession.session = [];
+    state.messagePrompts.metaBySession.session.oldestCursor = null;
+    listTaskSessionMessages.mockResolvedValueOnce({
+      messages: [restored],
+      has_more: true,
+      cursor: "restored",
+    });
+    const { result } = renderHook(() => useLazyLoadPrompts("session"));
+
+    await result.current.loadMore();
+
+    expect(listTaskSessionMessages).toHaveBeenCalledWith("session", {
+      author_type: "user",
+      limit: 20,
+      sort: "desc",
+    });
+    expect(state.replacePromptMessages).toHaveBeenCalledWith("session", [restored], {
+      hasMore: true,
+      oldestCursor: "restored",
+    });
+    expect(state.prependPromptMessages).not.toHaveBeenCalled();
+  });
+
+  it("adopts exhausted older-page metadata when a page returns no cursor", async () => {
+    listTaskSessionMessages.mockResolvedValueOnce({
+      messages: [],
+      has_more: false,
+      cursor: null,
+    });
+    const { result } = renderHook(() => useLazyLoadPrompts("session"));
+
+    await result.current.loadMore();
+
+    expect(state.prependPromptMessages).toHaveBeenCalledWith("session", [], {
+      hasMore: false,
+      oldestCursor: null,
+    });
   });
 
   it("does not resurrect prompt state after session removal during an older-page request", async () => {

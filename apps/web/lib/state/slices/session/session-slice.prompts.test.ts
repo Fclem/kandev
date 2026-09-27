@@ -81,8 +81,14 @@ it("unions user rows from transcript snapshots without dropping deep prompt page
 
 it("installs an authoritative page without resetting an older-page cursor", () => {
   const store = makeStore();
-  const older = message("older", "user");
-  store.getState().prependPromptMessages(SESSION, [older], {
+  store
+    .getState()
+    .replacePromptMessages(
+      SESSION,
+      [{ ...message("current", "user"), created_at: SECOND_PROMPT_TIME }],
+      { hasMore: true, oldestCursor: "current" },
+    );
+  store.getState().prependPromptMessages(SESSION, [message("older", "user")], {
     hasMore: true,
     oldestCursor: "older",
   });
@@ -90,12 +96,13 @@ it("installs an authoritative page without resetting an older-page cursor", () =
     .getState()
     .installAuthoritativePromptMessages(
       SESSION,
-      [{ ...message("new", "user"), created_at: SECOND_PROMPT_TIME }],
+      [{ ...message("new", "user"), created_at: "2026-08-22T00:00:02Z" }],
       { hasMore: false, oldestCursor: "new" },
     );
 
   expect(store.getState().messagePrompts.bySession[SESSION].map((row) => row.id)).toEqual([
     "older",
+    "current",
     "new",
   ]);
   expect(store.getState().messagePrompts.metaBySession[SESSION].oldestCursor).toBe("older");
@@ -144,7 +151,7 @@ it("does not admit foreign projection rows or promote fan-out cache entries on a
   });
 });
 
-it("keeps cleared pagination metadata when a held authority response settles after deletion", () => {
+it("keeps older history available without reviving a deleted cursor from a held read", () => {
   const store = makeStore();
   store.getState().replacePromptMessages(SESSION, [message("removed", "user")], {
     hasMore: true,
@@ -158,7 +165,8 @@ it("keeps cleared pagination metadata when a held authority response settles aft
 
   expect(store.getState().messagePrompts.bySession[SESSION]).toEqual([]);
   expect(store.getState().messagePrompts.metaBySession[SESSION]).toMatchObject({
-    hasMore: false,
+    historyInitialized: true,
+    hasMore: true,
     oldestCursor: null,
   });
 });
@@ -177,6 +185,59 @@ it("repairs the prompt cursor after deleting the oldest cached prompt", () => {
   store.getState().removeMessage(SESSION, "oldest");
 
   expect(store.getState().messagePrompts.metaBySession[SESSION].oldestCursor).toBe("newest");
+});
+
+it("keeps older prompt history available after deleting its only cached cursor", () => {
+  const store = makeStore();
+  store.getState().replacePromptMessages(SESSION, [message("newest", "user")], {
+    hasMore: true,
+    oldestCursor: "newest",
+  });
+
+  store.getState().removeMessage(SESSION, "newest");
+
+  expect(store.getState().messagePrompts.bySession[SESSION]).toEqual([]);
+  expect(store.getState().messagePrompts.metaBySession[SESSION]).toMatchObject({
+    hasMore: true,
+    oldestCursor: null,
+  });
+});
+
+it("installs authoritative pagination metadata over a live prompt cache", () => {
+  const store = makeStore();
+  store.getState().addMessage(message("live", "user"));
+
+  store
+    .getState()
+    .installAuthoritativePromptMessages(
+      SESSION,
+      [{ ...message("newest", "user"), created_at: SECOND_PROMPT_TIME }],
+      { hasMore: true, oldestCursor: "newest" },
+    );
+
+  expect(store.getState().messagePrompts.metaBySession[SESSION]).toMatchObject({
+    historyInitialized: true,
+    hasMore: true,
+    oldestCursor: "newest",
+  });
+});
+
+it("does not install a deleted live prompt as the pagination cursor", () => {
+  const store = makeStore();
+  const deleted = message("deleted-live", "user");
+  store.getState().addMessage(deleted);
+  store.getState().removeMessage(SESSION, deleted.id);
+  store.getState().installAuthoritativePromptMessages(SESSION, [deleted], {
+    hasMore: true,
+    oldestCursor: deleted.id,
+  });
+
+  expect(store.getState().messagePrompts.bySession[SESSION]).toEqual([]);
+  expect(store.getState().messagePrompts.metaBySession[SESSION]).toMatchObject({
+    historyInitialized: true,
+    hasMore: true,
+    oldestCursor: null,
+  });
 });
 
 it("replaces the authoritative prompt window instead of retaining deleted rows", () => {

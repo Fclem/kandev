@@ -46,7 +46,8 @@ export function useLazyLoadPrompts(sessionId: string | null) {
   const loadMore = useCallback(async () => {
     if (!sessionId) return 0;
     const { hasMore, oldestCursor, isLoading, isLoadingMore } = stateRef.current;
-    if (!hasMore || !oldestCursor || isLoading || isLoadingMore) return 0;
+    if (!hasMore || isLoading || isLoadingMore) return 0;
+    const reloadNewestPage = !oldestCursor;
     const generation = store.getState().messagePrompts.generationBySession?.[sessionId] ?? 0;
     const refreshGeneration =
       store.getState().messagePrompts.refreshGenerationBySession?.[sessionId] ?? 0;
@@ -55,7 +56,7 @@ export function useLazyLoadPrompts(sessionId: string | null) {
     try {
       const response = await listTaskSessionMessages(sessionId, {
         author_type: "user",
-        before: oldestCursor,
+        ...(oldestCursor ? { before: oldestCursor } : {}),
         limit: OLDER_PROMPT_PAGE_LIMIT,
         sort: "desc",
       });
@@ -66,10 +67,12 @@ export function useLazyLoadPrompts(sessionId: string | null) {
         (current.refreshGenerationBySession?.[sessionId] ?? 0) === refreshGeneration &&
         !current.metaBySession[sessionId]?.isLoading
       ) {
-        store.getState().prependPromptMessages(sessionId, rows, {
+        const pageMetadata = {
           hasMore: response.has_more ?? false,
-          oldestCursor: response.cursor ?? oldestCursor,
-        });
+          oldestCursor: response.cursor ?? null,
+        };
+        if (reloadNewestPage) store.getState().replacePromptMessages(sessionId, rows, pageMetadata);
+        else store.getState().prependPromptMessages(sessionId, rows, pageMetadata);
       }
       return rows.length;
     } finally {

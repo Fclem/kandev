@@ -81,6 +81,73 @@ function maximizeOverlay() {
   };
 }
 
+async function keepsActiveSessionAfterMaximizeExit(): Promise<void> {
+  const api = makeMockApi();
+  let appliedLayout = {} as SerializedDockview;
+  vi.mocked(api.fromJSON).mockImplementation((layout) => {
+    appliedLayout = layout;
+  });
+  vi.mocked(api.toJSON).mockImplementation(() => appliedLayout);
+  const staleSessionId = "session:removed";
+  const activeSessionPanelId = "session:session-b";
+  const maximizedLayout = {
+    ...maximizeOverlay(),
+    grid: {
+      ...maximizeOverlay().grid,
+      root: {
+        type: "leaf",
+        size: 600,
+        data: {
+          id: "g-max",
+          views: [activeSessionPanelId],
+          activeView: activeSessionPanelId,
+        },
+      },
+    },
+    panels: {
+      [activeSessionPanelId]: { id: activeSessionPanelId, contentComponent: "chat" },
+    },
+  };
+  vi.mocked(getEnvMaximizeState).mockReturnValue({
+    maximizedDockviewJson: maximizedLayout,
+    preMaximizeLayout: {
+      columns: [
+        {
+          id: "center",
+          groups: [
+            {
+              id: "group-center",
+              panels: [{ id: staleSessionId, component: "chat", title: "Agent" }],
+              activePanel: staleSessionId,
+            },
+          ],
+        },
+      ],
+    },
+  });
+  useDockviewStore.setState({ api, currentLayoutEnvId: "env-a" });
+
+  useDockviewStore.getState().switchEnvLayout("env-a", "env-b", "session-b", ["session-b"]);
+
+  const restoredPreMaximizeLayout = useDockviewStore.getState().preMaximizeLayout;
+  expect(restoredPreMaximizeLayout?.columns[0]?.groups[0]).toMatchObject({
+    id: "group-center",
+    panels: [{ id: activeSessionPanelId, params: { sessionId: "session-b" } }],
+    activePanel: activeSessionPanelId,
+  });
+  expect(Object.keys(appliedLayout.panels)).toContain(activeSessionPanelId);
+  useDockviewStore.getState().exitMaximizedLayout();
+  await flushRaf();
+
+  const persistedLayout = vi
+    .mocked(setEnvLayout)
+    .mock.calls.find(([envId]) => envId === "env-b")?.[1] as {
+    panels?: Record<string, unknown>;
+  };
+  expect(Object.keys(persistedLayout.panels ?? {})).toContain(activeSessionPanelId);
+  expect(Object.keys(persistedLayout.panels ?? {})).not.toContain(staleSessionId);
+}
+
 describe("environment-switch maximize session filtering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -153,5 +220,9 @@ describe("environment-switch maximize session filtering", () => {
     expect(persistedLayout).toBeDefined();
     expect(Object.keys(persistedLayout.panels ?? {})).not.toContain(staleSessionId);
     expect(Object.keys(persistedLayout.panels ?? {})).toContain(incomingSessionId);
+  });
+
+  it("keeps the active session in a stale-only pre-maximize group on exit", async () => {
+    await keepsActiveSessionAfterMaximizeExit();
   });
 });

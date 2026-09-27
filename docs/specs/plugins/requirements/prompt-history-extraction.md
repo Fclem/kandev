@@ -25,10 +25,11 @@ and two places to fix the same review workflow.
 This document owns the extraction outcome: what core stops owning, which Host
 contracts must stay, and what an existing installation observes. The Host
 prerequisite boundary stays owned by
-[Prompt History Plugin Host Prerequisites](prompt-history-extraction-host.md),
-and the removed panel's product behavior stays documented by
+[Prompt History Plugin Host Prerequisites](prompt-history-extraction-host.md).
+The deprecated
 [Prompt History Panel Requirements](../../ui/requirements/prompt-history-panel.md)
-until the implementation work orders are done.
+remains the historical record of shipped behavior; this document owns the
+post-removal contract.
 
 ## Terminology
 

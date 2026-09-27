@@ -35,7 +35,14 @@ import {
   normalizeReusableSessionPanels,
   materializeReusableChatPanel,
 } from "./layout-manager";
-import type { BuiltInPreset, LayoutState, LayoutGroupIds } from "./layout-manager";
+import type {
+  BuiltInPreset,
+  LayoutGroup,
+  LayoutGroupIds,
+  LayoutNode,
+  LayoutPanel,
+  LayoutState,
+} from "./layout-manager";
 import type { CommitDetailTarget } from "@/components/task/changes-diff-target";
 import type { ReviewItemSummary } from "@/lib/plugins/types";
 import { performEnvSwitch, replaceStaleSessionPanels } from "./dockview-env-switch";
@@ -912,6 +919,78 @@ function captureReusableLayout(get: StoreGet): Record<string, unknown> {
   return normalizeReusableSessionPanels(filtered) as unknown as Record<string, unknown>;
 }
 
+// Preserve the active session's slot when the saved group contains a stale session panel.
+function replaceStaleSessionPanelWithActive(
+  layout: LayoutState,
+  activeSessionId: string,
+  validSessionIds: ReadonlySet<string>,
+): LayoutState {
+  const activePanelId = `session:${activeSessionId}`;
+  const findPanel = (predicate: (panel: LayoutPanel) => boolean): LayoutPanel | null => {
+    const findInGroup = (group: LayoutGroup): LayoutPanel | null =>
+      group.panels.find(predicate) ?? null;
+    const findInNode = (node: LayoutNode): LayoutPanel | null => {
+      if (node.type === "leaf") return findInGroup(node.group);
+      for (const child of node.children) {
+        const panel = findInNode(child);
+        if (panel) return panel;
+      }
+      return null;
+    };
+
+    for (const column of layout.columns) {
+      if (column.tree) {
+        const panel = findInNode(column.tree);
+        if (panel) return panel;
+        continue;
+      }
+      for (const group of column.groups) {
+        const panel = findInGroup(group);
+        if (panel) return panel;
+      }
+    }
+    return null;
+  };
+
+  if (findPanel((panel) => panel.id === activePanelId && panel.component === "chat")) {
+    return layout;
+  }
+  const stalePanel = findPanel(
+    (panel) =>
+      panel.component === "chat" &&
+      panel.id.startsWith("session:") &&
+      !validSessionIds.has(panel.id.slice("session:".length)),
+  );
+  if (!stalePanel) return layout;
+
+  const replaceGroup = (group: LayoutGroup): LayoutGroup => ({
+    ...group,
+    panels: group.panels.map((panel) =>
+      panel === stalePanel
+        ? {
+            ...panel,
+            id: activePanelId,
+            params: { ...panel.params, sessionId: activeSessionId },
+          }
+        : panel,
+    ),
+    ...(group.activePanel === stalePanel.id ? { activePanel: activePanelId } : {}),
+  });
+  const replaceNode = (node: LayoutNode): LayoutNode =>
+    node.type === "leaf"
+      ? { ...node, group: replaceGroup(node.group) }
+      : { ...node, children: node.children.map(replaceNode) };
+
+  return {
+    ...layout,
+    columns: layout.columns.map((column) =>
+      column.tree
+        ? { ...column, tree: replaceNode(column.tree) }
+        : { ...column, groups: column.groups.map(replaceGroup) },
+    ),
+  };
+}
+
 function filterPreMaximizeLayout(
   savedLayout: LayoutState,
   activeSessionId: string | null,
@@ -919,7 +998,11 @@ function filterPreMaximizeLayout(
 ): LayoutState {
   const validSessionIds = new Set(currentSessionIds);
   if (activeSessionId) validSessionIds.add(activeSessionId);
-  return filterLayoutStateByComponents(savedLayout, undefined, validSessionIds);
+  const layout =
+    activeSessionId === null
+      ? savedLayout
+      : replaceStaleSessionPanelWithActive(savedLayout, activeSessionId, validSessionIds);
+  return filterLayoutStateByComponents(layout, undefined, validSessionIds);
 }
 
 function restorePreMaximizeFallback({

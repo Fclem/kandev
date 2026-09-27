@@ -1526,17 +1526,15 @@ function buildMaximizeActions(set: StoreSet, get: StoreGet) {
       requestAnimationFrame(() => {
         api.layout(safeWidth, safeHeight);
         const latest = get();
-        if (
-          currentLayoutEnvId &&
-          latest.currentLayoutEnvId === currentLayoutEnvId &&
-          latest.preMaximizeLayout
-        ) {
-          setEnvMaximizeState(currentLayoutEnvId, {
-            preMaximizeLayout: latest.preMaximizeLayout as unknown as object,
-            maximizedDockviewJson: api.toJSON(),
-          });
+        if (latest.currentLayoutEnvId === currentLayoutEnvId && latest.preMaximizeLayout) {
+          if (currentLayoutEnvId) {
+            setEnvMaximizeState(currentLayoutEnvId, {
+              preMaximizeLayout: latest.preMaximizeLayout as unknown as object,
+              maximizedDockviewJson: api.toJSON(),
+            });
+          }
+          set({ isRestoringLayout: false });
         }
-        set({ isRestoringLayout: false });
       });
     },
     exitMaximizedLayout: () => {

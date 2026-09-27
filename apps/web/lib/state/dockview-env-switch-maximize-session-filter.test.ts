@@ -440,6 +440,50 @@ function persistFilteredRestoreSnapshot(): void {
   expect(savedPanelIds).not.toContain(stalePanelId);
 }
 
+function preserveRestoringStateAfterEnvironmentSwitch(): void {
+  const api = makeMockApi();
+  const activePanelId = "session:session-a";
+  vi.mocked(fromDockviewApi).mockReturnValue({
+    columns: [
+      {
+        id: "center",
+        groups: [
+          {
+            id: CENTER_GROUP_ID,
+            panels: [{ id: activePanelId, component: "chat", title: "Agent" }],
+            activePanel: activePanelId,
+          },
+        ],
+      },
+    ],
+  });
+  useDockviewStore.setState({ api, currentLayoutEnvId: "env-a" });
+
+  const pendingFrames: FrameRequestCallback[] = [];
+  const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    pendingFrames.push(callback);
+    return pendingFrames.length;
+  });
+  try {
+    useDockviewStore.getState().maximizeGroup(CENTER_GROUP_ID);
+    useDockviewStore.setState({
+      currentLayoutEnvId: "env-b",
+      preMaximizeLayout: null,
+      maximizedGroupId: null,
+      isRestoringLayout: true,
+    });
+
+    const persistFrame = pendingFrames.shift();
+    expect(persistFrame).toBeDefined();
+    persistFrame?.(0);
+
+    expect(useDockviewStore.getState().isRestoringLayout).toBe(true);
+    expect(setEnvMaximizeState).not.toHaveBeenCalled();
+  } finally {
+    requestFrame.mockRestore();
+  }
+}
+
 describe("environment-switch maximize session filtering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -461,6 +505,10 @@ describe("environment-switch maximize session filtering", () => {
 
   it("persists stale panels removed during authoritative maximize restore", () => {
     persistFilteredRestoreSnapshot();
+  });
+
+  it("does not clear a newer environment restore from a deferred maximize frame", () => {
+    preserveRestoringStateAfterEnvironmentSwitch();
   });
 
   it("filters phantom sessions from the pre-maximize snapshot before persisting after exit", async () => {

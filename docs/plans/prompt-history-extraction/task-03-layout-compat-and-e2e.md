@@ -554,11 +554,13 @@ Done. Commands run from the repository root.
   pre-maximize layout, so a reload while maximized does not restore the retired
   session again.
 - Maximize-state persistence is deferred to the next animation frame. The
-  writer reads the latest pre-maximize snapshot for the same environment, so
-  hydration before that frame cannot re-persist stale panels.
-- Nine focused dockview suites pass: 152 tests, including unchanged-ID
-  hydration, restore-time blob cleanup, and deferred maximize-write regressions.
-  `pnpm run typecheck`, targeted ESLint, and Prettier checks pass.
+  writer reads the latest pre-maximize snapshot and releases
+  `isRestoringLayout` only while the same environment remains maximized; a
+  stale frame cannot re-persist panels or clear a newer environment's restore
+  guard.
+- Nine focused dockview suites pass: 153 tests, including unchanged-ID
+  hydration, restore-time blob cleanup, deferred writes, and stale-frame
+  ownership. `pnpm run typecheck`, targeted ESLint, and Prettier checks pass.
 - The seven focused dockview restore suites pass: 134 tests across
   `dockview-env-switch-maximize-session-filter.test.ts`,
   `dockview-env-switch-action.test.ts`, `dockview-right-pane.test.ts`,

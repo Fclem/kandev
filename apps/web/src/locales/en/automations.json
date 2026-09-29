@@ -333,8 +333,7 @@
   "importingSchedule": "Importing schedule",
   "importStatusImported": "Imported",
   "importCreated": "Imported {{name}}.",
-  "importFailed": "Could not import {{name}}."
-,
+  "importFailed": "Could not import {{name}}.",
   "retryTitle": "Automatic retries",
   "retryDescription": "Retry failed automation runs without changing the original trigger or prompt.",
   "retryDisabledTitle": "Do not retry",

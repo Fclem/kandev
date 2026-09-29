@@ -333,8 +333,7 @@
   "importingSchedule": "正在匯入計劃",
   "importStatusImported": "已匯入",
   "importCreated": "已匯入 {{name}}。",
-  "importFailed": "無法匯入 {{name}}。"
-,
+  "importFailed": "無法匯入 {{name}}。",
   "retryTitle": "自動重試",
   "retryDescription": "重試失敗的自動化執行，不改變原始觸發器或提示詞。",
   "retryDisabledTitle": "不重試",

@@ -333,8 +333,7 @@
   "importingSchedule": "正在导入计划",
   "importStatusImported": "已导入",
   "importCreated": "已导入 {{name}}。",
-  "importFailed": "无法导入 {{name}}。"
-,
+  "importFailed": "无法导入 {{name}}。",
   "retryTitle": "自动重试",
   "retryDescription": "重试失败的自动化运行，不改变原始触发器或提示词。",
   "retryDisabledTitle": "不重试",

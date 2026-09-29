@@ -333,8 +333,7 @@
   "importingSchedule": "スケジュールをインポート中",
   "importStatusImported": "インポート済み",
   "importCreated": "{{name}} をインポートしました。",
-  "importFailed": "{{name}} をインポートできませんでした。"
-,
+  "importFailed": "{{name}} をインポートできませんでした。",
   "retryTitle": "自動再試行",
   "retryDescription": "元のトリガーやプロンプトを変更せず、失敗した自動化の実行を再試行します。",
   "retryDisabledTitle": "再試行しない",

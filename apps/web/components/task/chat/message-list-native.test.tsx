@@ -2612,6 +2612,77 @@ describe("useScrollToMessage — root-scoped row lookup", () => {
 
 // eslint-disable-next-line max-lines-per-function -- keeps both canceled-scroll regressions together.
 describe("useScrollToMessage — canceled-scroll landing", () => {
+  it("rechecks start alignment when the anchored-bar margin grows during the jump", () => {
+    const frames: Array<() => void> = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    let margin = 17;
+    vi.spyOn(window, "getComputedStyle").mockImplementation(
+      () => ({ scrollMarginTop: `${margin}px` }) as CSSStyleDeclaration,
+    );
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      // The jump begins before the measured anchored-bar height is applied.
+      const root = this.parentElement;
+      if (root) root.scrollTop = 120 - 17;
+    });
+    try {
+      const boxedHandle: { current: ScrollToMessageHandle | null } = { current: null };
+      const { container } = render(
+        <ScrollToMessageHarness
+          rows={[TARGET_MESSAGE_ID]}
+          onHandle={(next) => {
+            boxedHandle.current = next;
+          }}
+        />,
+      );
+      const handle = boxedHandle.current;
+      if (!handle) throw new Error(HANDLE_RENDER_ERROR);
+      const root = container.querySelector<HTMLElement>(
+        `[data-testid="${SCROLL_TO_MESSAGE_ROOT}"]`,
+      );
+      const target = container.querySelector(`#msg-${TARGET_MESSAGE_ID}`);
+      if (!root || !target) throw new Error(HARNESS_RENDER_ERROR);
+      Object.defineProperty(root, "scrollTop", {
+        configurable: true,
+        writable: true,
+        value: 0,
+      });
+      Object.defineProperty(root, "scrollHeight", { configurable: true, value: 1000 });
+      Object.defineProperty(root, "clientHeight", { configurable: true, value: 400 });
+      Object.defineProperty(root, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(0, 400),
+      });
+      Object.defineProperty(target, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(120 - root.scrollTop, 20),
+      });
+
+      expect(handle(TARGET_MESSAGE_ID, { align: "start" })).toBe(true);
+      act(() => {
+        const firstFrame = frames.shift();
+        if (firstFrame) firstFrame();
+      });
+      margin = 92;
+      for (let i = 0; i < 10; i += 1) {
+        act(() => {
+          const pending = frames.splice(0);
+          for (const frame of pending) frame();
+        });
+      }
+
+      expect(root.scrollTop).toBe(28);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
+  });
+
   it("force-lands the alignment when the smooth scroll is canceled without moving", () => {
     // Round-12 regression: the verifier must NOT exit on the first frame of
     // movement (or no movement). A dockview restore that cancels the smooth

@@ -1307,7 +1307,6 @@ export function useScrollToMessage(
         });
         const container = scrollRef.current;
         if (!container) return;
-        const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
         // A dockview panel re-show (the prompt-history jump activates the
         // chat) makes SessionPanelContent restore its saved scrollTop in a
         // rAF that can cancel the scroll, and some runtimes no-op a smooth
@@ -1318,6 +1317,7 @@ export function useScrollToMessage(
         // scroll request superseded this one.
         let frames = 0;
         let lastAbsDelta = Infinity;
+        let alignedFrames = 0;
         /** Frame-watch verifier: follows an in-progress animation toward the
          * target and force-lands the alignment once the container settles
          * misaligned; bails when superseded or the nodes disconnect. */
@@ -1326,6 +1326,8 @@ export function useScrollToMessage(
           if (frames > 30 || !container.isConnected || !el.isConnected) return;
           if (generationRef.current !== generation) return; // superseded
           const elementRect = el.getBoundingClientRect();
+          // The anchored bar can resize during this jump, changing scroll-margin-top.
+          const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
           const containerRect = container.getBoundingClientRect();
           const delta = alignStart
             ? elementRect.top - containerRect.top - margin
@@ -1334,7 +1336,13 @@ export function useScrollToMessage(
               (containerRect.top + containerRect.height / 2) -
               margin / 2;
           const absDelta = Math.abs(delta);
-          if (absDelta <= 2) return; // aligned
+          if (absDelta <= 2) {
+            if (alignedFrames > 0) return; // aligned across consecutive frames
+            alignedFrames = 1;
+            requestAnimationFrame(verify);
+            return;
+          }
+          alignedFrames = 0;
           if (absDelta < lastAbsDelta) {
             // Animation still moving toward the target — keep watching.
             lastAbsDelta = absDelta;

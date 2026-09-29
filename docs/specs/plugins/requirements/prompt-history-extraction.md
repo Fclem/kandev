@@ -11,10 +11,10 @@ owners:
 ## Overview
 
 Prompt History is a per-task review surface: what was asked of the agent, in
-which order, when it was sent, and how long the agent worked on it. Core ships
-it today as a built-in workbench panel with its own dockview identity, a
-user-message projection in the web store, pagination hooks, layout-profile
-membership, locale copy, and end-to-end coverage.
+which order, when it was sent, and how long the agent worked on it. Core
+previously shipped it as a built-in workbench panel with its own dockview
+identity, a user-message projection in the web store, pagination hooks,
+layout-profile membership, locale copy, and end-to-end coverage.
 
 The plugin system already owns the Host contracts that let a plugin provide the
 same surface through published browser APIs, and a replacement plugin exists.

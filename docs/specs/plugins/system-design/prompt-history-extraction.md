@@ -161,8 +161,10 @@ routes consistent.
 5. **Restore a saved layout.** `sanitizeSerializedLayout(layout, DESKTOP_VALID_COMPONENTS)`
    runs before `fromJSON`; with `prompt-history` no longer a known component or
    known panel id, the entry is dropped and the remaining panels restore
-   unchanged. `filterEphemeral` and the canonical-title normalization apply the
-   same rule when a layout is captured or saved.
+   unchanged. Layout capture uses `filterEphemeral`, which applies its own
+   `KNOWN_PANEL_IDS` and `STRUCTURAL_COMPONENTS` rules. It can omit renderable
+   panels and preserves empty groups for split layout state. Canonical-title
+   normalization is a separate capture step for known panel ids.
 
 ## Failure and recovery
 

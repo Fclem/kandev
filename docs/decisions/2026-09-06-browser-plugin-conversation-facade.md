@@ -65,10 +65,11 @@ saved layouts.
   (`applySavedMaximize` and `restoreMaximizeFromStorage`): the serialized payload
   is sanitized and its `LayoutState` is filtered, so a maximized group with a
   surviving panel keeps its maximized state. A blob whose maximized group does
-  not survive sanitization loses that group's maximize state on either reader;
-  the blob itself stays in place and is deleted only when it still fails after
-  sanitization. That lost maximize state is the one residual this extraction
-  removes, and it carries no user content.
+  not survive sanitization falls back to the filtered `preMaximizeLayout` as
+  the regular layout. Both readers remove the maximize blob only after that
+  layout is saved successfully. If the save fails, the blob stays for a later
+  restore attempt. This can discard the maximize state, but it carries no user
+  content.
 - The durable prompt ordinal (`prompt_index`) and the user-message filter stay in
   the message contract, because the facade's public DTOs expose the ordinal and
   the plugin pages prompts with the filter.

@@ -16,7 +16,7 @@ import {
   hasRightColumn,
 } from "@/lib/state/dockview-store";
 import type { SessionListRestoreState } from "@/lib/state/dockview-env-switch";
-import { restoreEnvLayout } from "./dockview-layout-restore";
+import { collectPhantomSessionIdsForEnv, restoreEnvLayout } from "./dockview-layout-restore";
 import {
   setupContainerResizeSync,
   setupGroupTracking,
@@ -215,7 +215,7 @@ export const DESKTOP_VALID_COMPONENTS = new Set(Object.keys(components));
  * that launch races can produce), performs a layout switch to the new env;
  * same-env session switches are a no-op.
  */
-function useEnvSwitchCleanup(
+export function useEnvSwitchCleanup(
   effectiveSessionId: string | null,
   effectiveEnvId: string | null,
   activeTaskId: string | null,
@@ -282,11 +282,7 @@ function useEnvSwitchCleanup(
         loaded: activeTaskId
           ? (state.taskSessionsByTask.loadedByTaskId[activeTaskId] ?? false)
           : false,
-        knownForeignSessionIds: new Set(
-          Object.entries(state.environmentIdBySessionId)
-            .filter(([, envId]) => envId !== newEnvId)
-            .map(([sessionId]) => sessionId),
-        ),
+        knownForeignSessionIds: collectPhantomSessionIdsForEnv(state, newEnvId),
       };
       performLayoutSwitch(oldEnvId, newEnvId, effectiveSessionId, currentSessionIds, {
         initialLayout,

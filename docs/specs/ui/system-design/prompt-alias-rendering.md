@@ -42,11 +42,12 @@ Agent-facing prompt expansion and persistence are unchanged.
   `MemoizedMarkdown` after stripping system tags, preserving the existing
   Markdown renderer and height/overflow behavior.
 - `host.ui.PromptMentionText` routes plugin text through the shared segment
-  renderer so a plugin's prompt rows use the same chips. Content-bearing chips
-  remain keyboard-focusable and intercept activation when the plugin's row
-  provides navigation. Chips rendered inside Markdown links are visual-only,
-  avoiding nested interactive semantics while preserving link activation. The
-  built-in panel that previously used this renderer is removed by
+  renderer so a plugin's prompt rows use the same chips. When `interactive` is
+  enabled, content-bearing chips remain keyboard-focusable and handle their own
+  preview activation. Plugin row navigation remains a separate row control.
+  Chips rendered inside Markdown links are visual-only, avoiding nested
+  interactive semantics while preserving link activation. The built-in panel
+  that previously used this renderer is removed by
   [Prompt History Extraction](../../plugins/system-design/prompt-history-extraction.md).
 - `MemoizedMarkdown` remains the common Markdown renderer and continues to
   normalize content through its existing cache. The change does not add raw HTML

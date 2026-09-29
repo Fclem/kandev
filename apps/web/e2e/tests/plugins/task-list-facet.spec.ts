@@ -81,6 +81,10 @@ test.describe("Plugin task-list facet", () => {
     expect(groupLabels.at(-1)).toBe("Fixture tag");
     expect(groupLabels.indexOf("State")).toBeLessThan(groupLabels.length - 1);
     await testPage.getByRole("listbox").getByRole("option", { name: "Fixture tag" }).click();
+    await expect(testPage).toHaveURL((url) => url.searchParams.get("group") === FACET);
+    await expect
+      .poll(async () => (await apiClient.getUserSettings()).settings.tasks_list_group)
+      .toBe(FACET);
     const sections = testPage.getByTestId("tasks-list-section");
     await expect(sections).toHaveCount(3);
     await expect(sections.nth(0)).toContainText("Alpha");

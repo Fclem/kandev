@@ -82,4 +82,22 @@ describe("facet value sections", () => {
     expect(flattenTaskTree(result[0].nodes).map((node) => node.task.id)).toEqual([a.id]);
     expect(flattenTaskTree(result[1].nodes).map((node) => node.task.id)).toEqual([b.id]);
   });
+
+  // AC-PLUGINS-TASKLIST-FACETS-002.4: a child without its parent in a value bucket is a root.
+  it("renders a child at the section root when its parent carries another value", () => {
+    const parent = task("parent");
+    const child = task("child", "parent");
+    const result = sections([parent, child], {
+      [`${FACET}:parent`]: [{ value: "alpha", label: "Alpha" }],
+      [`${FACET}:child`]: [{ value: "beta", label: "Beta" }],
+    });
+
+    expect(result.map((section) => section.title)).toEqual(["Alpha", "Beta"]);
+    expect(flattenTaskTree(result[0].nodes).map((node) => [node.task.id, node.level])).toEqual([
+      [parent.id, 0],
+    ]);
+    expect(flattenTaskTree(result[1].nodes).map((node) => [node.task.id, node.level])).toEqual([
+      [child.id, 0],
+    ]);
+  });
 });

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { StateProvider } from "@/components/state-provider";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StateProvider, useAppStoreApi } from "@/components/state-provider";
+import type { AppState } from "@/lib/state/store";
+import type { StoreApi } from "zustand";
 import { defaultSettingsState } from "@/lib/state/slices/settings/settings-slice";
 import { pluginRegistry } from "@/lib/plugins/registry";
 import type { Task } from "@/lib/types/http";
@@ -46,11 +48,13 @@ vi.mock("./tasks-page-content", () => ({
     sort,
     group,
     onSortChange,
+    onGroupChange,
   }: {
     tasks: Task[];
     sort: string;
     group: string;
     onSortChange: (value: string) => void;
+    onGroupChange: (value: string) => void;
   }) => (
     <div>
       <output data-testid="sort">{sort}</output>
@@ -61,10 +65,17 @@ vi.mock("./tasks-page-content", () => ({
         ))}
       </ol>
       <button onClick={() => onSortChange("facet:plugin:tags")}>Choose facet</button>
+      <button onClick={() => onGroupChange("facet:plugin:tags")}>Choose facet group</button>
     </div>
   ),
 }));
 import { TasksPageClient } from "./tasks-page-client";
+let capturedStore: StoreApi<AppState>;
+
+function StoreCapture() {
+  capturedStore = useAppStoreApi();
+  return null;
+}
 
 const key = "facet:plugin:tags";
 const tasks = [
@@ -98,6 +109,7 @@ function renderPage(
         },
       }}
     >
+      <StoreCapture />
       <TasksPageClient
         workspaces={[]}
         initialWorkflows={[]}
@@ -155,5 +167,81 @@ describe("TasksPageClient facet preference", () => {
       expect.anything(),
     );
     expect(new URLSearchParams(window.location.search).get("sort")).toBe(key);
+  });
+
+  // AC-PLUGINS-TASKLIST-FACETS-003.1: selecting Group persists and deep-links the facet.
+  it("persists a chosen facet group in settings and the route", async () => {
+    pluginRegistry.forPlugin("plugin").registerTaskListFacet({
+      id: "tags",
+      label: "Tag",
+      getValues: () => [{ value: "same", label: "Same" }],
+    });
+    window.history.replaceState({}, "", "/tasks");
+    renderPage();
+    updateUserSettings.mockClear();
+    replace.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose facet group" }));
+
+    expect(screen.getByTestId("group").textContent).toBe(key);
+    await waitFor(() =>
+      expect(updateUserSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ tasks_list_group: key }),
+        { cache: "no-store" },
+      ),
+    );
+    expect(replace).toHaveBeenCalledWith(
+      expect.stringContaining(`group=${encodeURIComponent(key)}`),
+      {
+        scroll: false,
+      },
+    );
+  });
+
+  // AC-PLUGINS-TASKLIST-FACETS-003.3: mounted registry changes preserve and restore the request.
+  it("falls back and restores when the facet unregisters and registers without reload", async () => {
+    pluginRegistry.forPlugin("plugin").registerTaskListFacet({
+      id: "tags",
+      label: "Tag",
+      getValues: () => [{ value: "alpha", label: "Alpha" }],
+    });
+    window.history.replaceState({}, "", `/tasks?sort=${key}&group=${key}`);
+    renderPage(key, key);
+    expect(screen.getByTestId("sort").textContent).toBe(key);
+    expect(screen.getByTestId("group").textContent).toBe(key);
+    updateUserSettings.mockClear();
+    replace.mockClear();
+
+    act(() => pluginRegistry.unregisterPlugin("plugin"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sort").textContent).toBe("updated_desc");
+      expect(screen.getByTestId("group").textContent).toBe("state");
+    });
+    expect(new URLSearchParams(window.location.search).get("sort")).toBe(key);
+    expect(new URLSearchParams(window.location.search).get("group")).toBe(key);
+    expect(capturedStore.getState().userSettings.tasksListSort).toBe(key);
+    expect(capturedStore.getState().userSettings.tasksListGroup).toBe(key);
+    expect(updateUserSettings).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+
+    act(() => {
+      pluginRegistry.forPlugin("plugin").registerTaskListFacet({
+        id: "tags",
+        label: "Tag",
+        getValues: () => [{ value: "alpha", label: "Alpha" }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sort").textContent).toBe(key);
+      expect(screen.getByTestId("group").textContent).toBe(key);
+    });
+    expect(new URLSearchParams(window.location.search).get("sort")).toBe(key);
+    expect(new URLSearchParams(window.location.search).get("group")).toBe(key);
+    expect(capturedStore.getState().userSettings.tasksListSort).toBe(key);
+    expect(capturedStore.getState().userSettings.tasksListGroup).toBe(key);
+    expect(updateUserSettings).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 });

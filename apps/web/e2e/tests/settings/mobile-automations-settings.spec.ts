@@ -92,8 +92,9 @@ test.describe("Automation deletion confirmation on mobile", () => {
     expect(finiteCardBox!.height).toBeGreaterThanOrEqual(44);
 
     await testPage.locator("#automation-retry-max").fill("2");
-    await testPage.locator("#automation-retry-history").selectOption("timeline");
-    await expect(testPage.locator("#automation-retry-history")).toHaveValue("timeline");
+    await testPage.locator("#automation-retry-history").tap();
+    await testPage.getByRole("option", { name: "Retry timeline", exact: true }).tap();
+    await expect(testPage.locator("#automation-retry-history")).toContainText("Retry timeline");
     await assertNoDocumentHorizontalOverflow(testPage, "mobile retry settings");
   });
 });

@@ -333,8 +333,7 @@
   "importingSchedule": "Ĩḿƥōŕţĩńĝ śćĥēďũĺē",
   "importStatusImported": "Ĩḿƥōŕţēď",
   "importCreated": "Ĩḿƥōŕţēď {{name}}.",
-  "importFailed": "Ćōũĺď ńōţ ĩḿƥōŕţ {{name}}."
-,
+  "importFailed": "Ćōũĺď ńōţ ĩḿƥōŕţ {{name}}.",
   "retryTitle": "Àũţōḿàţĩć ŕēţŕĩēś",
   "retryDescription": "Ŕēţŕŷ ƒàĩĺēď àũţōḿàţĩōń ŕũńś ŵĩţĥōũţ ćĥàńĝĩńĝ ţĥē ōŕĩĝĩńàĺ ţŕĩĝĝēŕ ōŕ ƥŕōḿƥţ.",
   "retryDisabledTitle": "Ďō ńōţ ŕēţŕŷ",

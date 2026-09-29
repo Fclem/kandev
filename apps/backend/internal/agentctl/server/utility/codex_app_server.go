@@ -53,12 +53,15 @@ func (e *CodexAppServerInferenceExecutor) Probe(ctx context.Context, req *ProbeR
 		return &ProbeResponse{Error: err.Error()}, nil
 	}
 	start := time.Now()
-	client, cleanup, stderr, err := e.start(ctx, command, args, req.InferenceConfig)
+	client, cleanupCommand, stderr, err := e.start(ctx, command, args, req.InferenceConfig)
 	if err != nil {
 		return &ProbeResponse{Error: fmt.Sprintf("start Codex app-server: %v", err), DurationMs: int(time.Since(start).Milliseconds())}, nil
 	}
+	var cleanupOnce sync.Once
+	cleanup := func() { cleanupOnce.Do(cleanupCommand) }
 	defer cleanup()
 	if err := initializeCodexAppServer(ctx, client); err != nil {
+		cleanup()
 		stderrTail := stderr.tail()
 		e.logger.Error("Codex app-server probe failed",
 			zap.String("agent_id", req.AgentID),
@@ -73,6 +76,7 @@ func (e *CodexAppServerInferenceExecutor) Probe(ctx context.Context, req *ProbeR
 	}
 	var listed protocol.ModelListResponse
 	if err := client.Call(ctx, protocol.MethodModelList, protocol.ModelListParams{}, &listed); err != nil {
+		cleanup()
 		stderrTail := stderr.tail()
 		e.logger.Error("Codex app-server probe failed to list models",
 			zap.String("agent_id", req.AgentID),

@@ -28,8 +28,8 @@ export async function expectPromptAlignedAtStart(row: Locator): Promise<void> {
   await expect(row).toBeAttached();
   await expect
     .poll(
-      () =>
-        row.evaluate((element) => {
+      async () => {
+        const metrics = await row.evaluate((element) => {
           const scrollport = element.closest<HTMLElement>(".chat-message-list");
           if (!scrollport) return { aligned: false, reason: "missing-scrollport" };
           const rowRect = element.getBoundingClientRect();
@@ -52,10 +52,12 @@ export async function expectPromptAlignedAtStart(row: Locator): Promise<void> {
             clientHeight: scrollport.clientHeight,
             margin,
           };
-        }),
+        });
+        return metrics.aligned ? "aligned" : `misaligned: ${JSON.stringify(metrics)}`;
+      },
       { timeout: 5_000 },
     )
-    .toMatchObject({ aligned: true });
+    .toBe("aligned");
 }
 
 /**

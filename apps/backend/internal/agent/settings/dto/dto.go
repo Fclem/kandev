@@ -45,6 +45,7 @@ type AgentProfileDTO struct {
 	// ProviderAPIKeySecretID references the Kandev global secret holding the
 	// bearer key. The value is never returned.
 	ProviderAPIKeySecretID string `json:"provider_api_key_secret_id,omitempty"`
+	CursorMCPAuthEnabled   bool   `json:"cursor_mcp_auth_enabled"`
 	// ProviderSupported is computed at read time: true when the profile's
 	// agent advertises OpenAI-compatible provider support. Not persisted.
 	ProviderSupported bool `json:"provider_supported"`
@@ -74,9 +75,15 @@ type DynamicAgentProfileDTO struct {
 // for one dynamic candidate. The two classes are deliberately explicit so a
 // missing class can never silently inherit another class's behavior.
 type DynamicAgentPolicyDTO struct {
-	Version   int64                 `json:"version"`
-	Transient DynamicErrorPolicyDTO `json:"transient"`
-	Hard      DynamicErrorPolicyDTO `json:"hard"`
+	Version      int64                         `json:"version"`
+	Transient    DynamicErrorPolicyDTO         `json:"transient"`
+	Hard         DynamicErrorPolicyDTO         `json:"hard"`
+	Unclassified *DynamicUnclassifiedPolicyDTO `json:"unclassified,omitempty"`
+}
+
+type DynamicUnclassifiedPolicyDTO struct {
+	Enabled                     bool  `json:"enabled"`
+	ConsecutiveFailureThreshold int64 `json:"consecutive_failure_threshold"`
 }
 
 type DynamicErrorPolicyDTO struct {
@@ -146,6 +153,9 @@ type TUIConfigDTO struct {
 	// Protocol is the runtime kandev drives the command with ("" = terminal
 	// passthrough, "acp" = ACP on stdin/stdout).
 	Protocol string `json:"protocol,omitempty"`
+	// DisableBracketedPaste selects paced unframed delivery for terminal TUIs
+	// that do not accept bracketed-paste delimiters.
+	DisableBracketedPaste bool `json:"disable_bracketed_paste,omitempty"`
 }
 
 type AgentDTO struct {
@@ -461,11 +471,25 @@ type CommandPreviewRequest struct {
 	CommandPrefix      string          `json:"command_prefix,omitempty"`
 }
 
+// Flag destinations reported by CommandPreviewResponse.
+const (
+	// FlagDestinationAgentCLI means the flags reach the agent CLI itself.
+	FlagDestinationAgentCLI = "agent_cli"
+	// FlagDestinationACPBridge means the flags are appended to the launched ACP
+	// bridge process, which forwards no unrecognized argument to the agent CLI.
+	FlagDestinationACPBridge = "acp_bridge"
+)
+
 // CommandPreviewResponse is the response for the command preview endpoint
 type CommandPreviewResponse struct {
 	Supported     bool     `json:"supported"`
 	Command       []string `json:"command"`
 	CommandString string   `json:"command_string"`
+	// FlagDestination names the process the profile's CLI flags are appended
+	// to. Over ACP that is the bridge, not the agent CLI it wraps, and the
+	// difference is the whole reason a flag can look enabled and change
+	// nothing. Values: "agent_cli" or "acp_bridge".
+	FlagDestination string `json:"flag_destination,omitempty"`
 }
 
 // DynamicModelsResponse is the response for the /agent-models/:agentName endpoint.

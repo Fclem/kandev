@@ -532,6 +532,19 @@ func (s *Service) beginResumeAttempt(
 	ctx context.Context,
 	taskID, sessionID string,
 ) (*resumeAttempt, bool, error) {
+	if cancelInFlightGuardHeld(ctx) {
+		if s.currentCancellation(sessionID) != nil {
+			return nil, false, ErrResumeAttemptCancelled
+		}
+		// The guard marker is only valid for this registration call. Do not
+		// carry it into lifecycle work that can outlive the guard owner.
+		attemptCtx := context.WithValue(ctx, cancelInFlightGuardHeldContextKey{}, false)
+		attempt, owner := s.resumeAttemptStore().begin(attemptCtx, taskID, sessionID)
+		if owner {
+			s.captureInterruptedMarkerForResumeAttempt(attemptCtx, attempt)
+		}
+		return attempt, owner, nil
+	}
 	for {
 		lock, release := s.acquireCancelInFlightGuard(sessionID)
 		lock.Lock()
@@ -778,6 +791,9 @@ func (s *Service) cleanupCancelledResumeAttempt(attempt *resumeAttempt) {
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), cancellationOperationTTL)
 	defer cancel()
+	if s.lspLeases != nil {
+		s.lspLeases.StopLSPLeasesForExecution(executionID)
+	}
 	if err := s.executor.StopExecution(cleanupCtx, executionID, "cancelled resume startup", true); err != nil && s.logger != nil {
 		s.logger.Debug("failed to clean up cancelled resume execution",
 			zap.String("task_id", attempt.taskID),

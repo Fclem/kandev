@@ -311,6 +311,7 @@ export type StepPayload = {
   agent_profile_id?: string;
   profile_session_start_policy?: WorkflowProfileSessionStartPolicy;
   profile_session_end_policy?: WorkflowProfileSessionEndPolicy;
+  disable_unclassified_fallback?: boolean;
   wip_limit?: number;
   pull_from_step_id?: string | null;
   /** Phase 2 (ADR-0004) UX hint — frontend-only. */
@@ -377,6 +378,7 @@ export type AgentProfilePayload = {
   dangerously_skip_permissions: boolean;
   allow_indexing: boolean;
   cli_passthrough?: boolean;
+  cursor_mcp_auth_enabled?: boolean;
   plan: string;
   created_at?: string;
   updated_at?: string;

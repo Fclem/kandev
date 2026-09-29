@@ -583,6 +583,9 @@ func (s *Service) retryTransientPrompt(ctx context.Context, taskID, sessionID, e
 func (s *Service) stopTransientRetryExecution(ctx context.Context, executionID string) error {
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), transientRetryStopTimeout)
 	defer cancel()
+	if s.lspLeases != nil {
+		s.lspLeases.StopLSPLeasesForExecution(executionID)
+	}
 	return s.executor.StopExecution(stopCtx, executionID, "transient retry: relaunching agent", true)
 }
 
@@ -791,12 +794,32 @@ func classifyKanbanFailure(data watcher.AgentEventData) *routingerr.Error {
 			phase = routingerr.PhaseStreaming
 		}
 	}
-	return routingerr.Classify(routingerr.Input{
+	classified := routingerr.Classify(routingerr.Input{
 		Phase:      phase,
 		ProviderID: providerID,
 		ResetHint:  resetHint,
 		Stderr:     message,
 	})
+	if data.DynamicRouteAttempt && data.EvidenceKnown && !data.OutputObserved && !data.EffectObserved &&
+		data.ProviderError != nil && data.ProviderError.Valid() &&
+		data.ProviderError.DiagnosticIdentityComplete && completeProviderDiagnosticSource(data.ProviderError.Source) &&
+		classified.Code == routingerr.CodeAgentRuntime && classified.Class == routingerr.ClassUnclassified &&
+		classified.ClassifierRule == "phase.poststart.unknown" {
+		// An exact terminal provider diagnostic can identify the unknown result
+		// shape without changing the global post-start classifier contract.
+		classified = cloneRoutingErrorWithCode(classified, routingerr.CodeUnknownProvider)
+	}
+	return classified
+}
+
+func cloneRoutingErrorWithCode(classified *routingerr.Error, code routingerr.Code) *routingerr.Error {
+	if classified == nil {
+		return nil
+	}
+	clone := *classified
+	clone.Code = code
+	clone.Class = routingerr.ClassForCode(code)
+	return &clone
 }
 
 func transientFailureLabel(classified *routingerr.Error) string {

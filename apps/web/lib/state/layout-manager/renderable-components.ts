@@ -24,6 +24,7 @@ export const RENDERABLE_COMPONENT_NAMES = [
   "vscode",
   "plan",
   "todos",
+  "background-work",
   "pr-detail",
   "mr-detail",
   "review-detail",

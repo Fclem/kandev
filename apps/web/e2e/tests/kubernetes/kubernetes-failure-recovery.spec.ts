@@ -158,7 +158,7 @@ for (const restart of [false, true]) {
       await runWithBackendRecovery(backend, () =>
         apiClient.saveUserSettings({ prevent_auto_start_agent_on_open: false }),
       );
-      await apiClient.deleteExecutorProfile(profile.id);
+      await runWithBackendRecovery(backend, () => apiClient.deleteExecutorProfile(profile.id));
     }
   });
 }

@@ -153,7 +153,6 @@ test.describe("@chat last prompt scroll affordance", () => {
     const promptId = await persistedLastPromptId(apiClient, sessionId);
     const chat = session.activeChat();
     const row = chat.locator(`#msg-${promptId}`);
-    const list = chat.locator(".chat-message-list").first();
     const bar = chat.getByTestId("anchored-last-prompt-bar");
     const control = chat.getByTestId("chat-status-bar").getByTestId("scroll-to-last-prompt-button");
     const newestRow = chat.locator("[id^='msg-']").filter({
@@ -174,13 +173,13 @@ test.describe("@chat last prompt scroll affordance", () => {
     await reloadUnloadedWindow();
     await bar.getByTestId("scroll-to-last-prompt-button").click();
     await expect(row).toHaveCount(1);
-    await expectPromptAlignedAtStart(row, list);
+    await expectPromptAlignedAtStart(row);
     await expect(newestRow).toHaveCount(1);
 
     await reloadUnloadedWindow();
     await control.click();
     await expect(row).toHaveCount(1);
-    await expectPromptAlignedAtStart(row, list);
+    await expectPromptAlignedAtStart(row);
     await expect(newestRow).toHaveCount(1);
   });
 

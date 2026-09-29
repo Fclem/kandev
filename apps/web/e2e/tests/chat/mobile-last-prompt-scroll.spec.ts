@@ -88,5 +88,5 @@ test("phone reaches an unloaded last prompt without rendering the desktop bar", 
   await expect(control).toBeVisible({ timeout: 15_000 });
   await control.click();
   await expect(row).toHaveCount(1);
-  await expectPromptAlignedAtStart(row, chat.locator(".chat-message-list").first());
+  await expectPromptAlignedAtStart(row);
 });

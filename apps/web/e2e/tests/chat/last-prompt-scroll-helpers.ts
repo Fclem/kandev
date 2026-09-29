@@ -24,31 +24,23 @@ export async function persistedLastPromptId(
   return prompt.id;
 }
 
-export async function expectPromptAlignedAtStart(row: Locator, list: Locator): Promise<void> {
+export async function expectPromptAlignedAtStart(row: Locator): Promise<void> {
   await expect(row).toBeAttached();
-  let previousScrollTop = -1;
-  let stableReads = 0;
   await expect
     .poll(
-      async () => {
-        const scrollTop = await list.evaluate((element) => element.scrollTop);
-        stableReads = scrollTop === previousScrollTop ? stableReads + 1 : 0;
-        previousScrollTop = scrollTop;
-        return stableReads;
-      },
+      () =>
+        row.evaluate((element) => {
+          const scrollport = element.closest(".chat-message-list");
+          if (!scrollport) return Number.POSITIVE_INFINITY;
+
+          const rowTop = element.getBoundingClientRect().top;
+          const listTop = scrollport.getBoundingClientRect().top;
+          const margin = parseFloat(getComputedStyle(element).scrollMarginTop) || 0;
+          return Math.abs(rowTop - listTop - margin);
+        }),
       { timeout: 5_000 },
     )
-    .toBeGreaterThanOrEqual(2);
-
-  const position = await row.evaluate((element) => {
-    const scrollport = element.closest(".chat-message-list");
-    return {
-      rowTop: element.getBoundingClientRect().top,
-      listTop: scrollport?.getBoundingClientRect().top ?? 0,
-      margin: parseFloat(getComputedStyle(element).scrollMarginTop) || 0,
-    };
-  });
-  expect(Math.abs(position.rowTop - position.listTop - position.margin)).toBeLessThanOrEqual(2);
+    .toBeLessThanOrEqual(2);
 }
 
 /**

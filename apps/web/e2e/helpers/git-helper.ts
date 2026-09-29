@@ -100,9 +100,9 @@ export async function openTaskSession(page: Page, title: string): Promise<Sessio
 
 export async function createStandardProfile(apiClient: ApiClient, name: string) {
   const { agents } = await apiClient.listAgents();
-  const agentId = agents[0]?.id;
-  if (!agentId) throw new Error("No agent available");
-  return apiClient.createAgentProfile(agentId, name, {
+  const mockAgent = agents.find((agent) => agent.name === "mock-agent");
+  if (!mockAgent) throw new Error("No mock agent available");
+  return apiClient.createAgentProfile(mockAgent.id, name, {
     model: "mock-fast",
     auto_approve: true,
     cli_passthrough: false,

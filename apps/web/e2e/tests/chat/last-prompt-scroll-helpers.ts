@@ -31,23 +31,31 @@ export async function expectPromptAlignedAtStart(row: Locator): Promise<void> {
       () =>
         row.evaluate((element) => {
           const scrollport = element.closest<HTMLElement>(".chat-message-list");
-          if (!scrollport) return false;
-
+          if (!scrollport) return { aligned: false, reason: "missing-scrollport" };
           const rowRect = element.getBoundingClientRect();
           const listRect = scrollport.getBoundingClientRect();
           const margin = parseFloat(getComputedStyle(element).scrollMarginTop) || 0;
           const delta = rowRect.top - listRect.top - margin;
           const aligned = Math.abs(delta) <= 2;
-          // Around-window loads can make the target the first row. At
-          // scrollTop 0, positive scroll-margin cannot be satisfied; accept
-          // that nearest position only when the row is not clipped above.
+          // Around-window loads can make the target the first row. At scrollTop 0,
+          // positive scroll-margin cannot be satisfied; accept that nearest
+          // position only when the row is not clipped above.
           const atTopBoundary =
             scrollport.scrollTop <= 2 && delta < -2 && rowRect.top >= listRect.top - 2;
-          return aligned || atTopBoundary;
+          return {
+            aligned: aligned || atTopBoundary,
+            delta,
+            rowTop: rowRect.top,
+            listTop: listRect.top,
+            scrollTop: scrollport.scrollTop,
+            scrollHeight: scrollport.scrollHeight,
+            clientHeight: scrollport.clientHeight,
+            margin,
+          };
         }),
       { timeout: 5_000 },
     )
-    .toBe(true);
+    .toMatchObject({ aligned: true });
 }
 
 /**

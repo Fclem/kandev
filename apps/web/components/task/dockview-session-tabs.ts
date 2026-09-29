@@ -532,16 +532,16 @@ export function runAutoSessionTabEffect(
     return;
   }
 
-  reconcileRemovedSessionPanels(
-    api,
-    refs.sessionTabCreatedRef.current,
-    currentSessionIds,
-    effectiveSessionId ?? "",
-  );
   const sessionListLoaded = tid
     ? (appStore.getState().taskSessionsByTask.loadedByTaskId[tid] ?? false)
     : false;
   if (sessionListLoaded) {
+    reconcileRemovedSessionPanels(
+      api,
+      refs.sessionTabCreatedRef.current,
+      currentSessionIds,
+      effectiveSessionId ?? "",
+    );
     useDockviewStore.getState().reconcileMaximizeSessionList(effectiveSessionId, currentSessionIds);
   }
 

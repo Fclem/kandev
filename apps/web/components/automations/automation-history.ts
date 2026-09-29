@@ -20,3 +20,19 @@ export function projectAutomationHistory(
     right.created_at.localeCompare(left.created_at),
   );
 }
+
+export function expandRetryGroupRunIDs(
+  allRuns: AutomationRun[],
+  visibleRuns: AutomationRun[],
+): string[] {
+  const visibleIDs = new Set(visibleRuns.map((run) => run.id));
+  const visibleGroups = new Set(
+    visibleRuns.flatMap((run) => (run.retry_group_id ? [run.retry_group_id] : [])),
+  );
+  return allRuns
+    .filter(
+      (run) =>
+        visibleIDs.has(run.id) || (run.retry_group_id && visibleGroups.has(run.retry_group_id)),
+    )
+    .map((run) => run.id);
+}

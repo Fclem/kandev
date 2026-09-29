@@ -20,6 +20,7 @@ import (
 	"github.com/kandev/kandev/internal/orchestrator/executor"
 	"github.com/kandev/kandev/internal/task/models"
 
+	"github.com/kandev/kandev/internal/orchestrator/watcher"
 	"github.com/kandev/kandev/internal/task/repository"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	taskservice "github.com/kandev/kandev/internal/task/service"
@@ -406,7 +407,7 @@ func (s *retryAutomationServiceStub) MarkRetryOperationAmbiguous(
 func (s *retryAutomationServiceStub) VerifyRetryTaskOperation(context.Context, string, int64, string) error {
 	return s.verifyErr
 }
-func (s *retryAutomationServiceStub) AcknowledgeRetryEvent(context.Context, string, int64) error {
+func (s *retryAutomationServiceStub) AcknowledgeRetryEvent(context.Context, string, string, string, int64) error {
 	s.acknowledged = true
 	return nil
 }
@@ -1271,9 +1272,10 @@ func TestDispatchAutomationContinuationCommitsAtAcceptanceBeforeCompletionError(
 	require.Equal(t, "retry-run", persisted.Metadata["automation_run_id"])
 
 	replayEvent := &automation.AutomationTriggeredEvent{
-		RunID: "retry-run", RetryGroupGeneration: 1,
-		RetryExternalID: automation.RetryTaskExternalID("retry-run", 1),
-		TriggerType:     automation.TriggerTypeManual,
+		RunID: "retry-run", RetryGroupGeneration: 1, SnapshotVersion: 1,
+		RetryExternalID:    automation.RetryTaskExternalID("retry-run", 1),
+		RetryOutboxEventID: "retry-run:1", RetryOutboxLeaseToken: "lease-token",
+		TriggerType: automation.TriggerTypeManual,
 	}
 	adopted, err := svc.adoptCommittedRetryTask(ctx, base.automation, replayEvent, base.operation)
 	require.NoError(t, err)
@@ -1283,7 +1285,7 @@ func TestDispatchAutomationContinuationCommitsAtAcceptanceBeforeCompletionError(
 	require.True(t, bound)
 	receipt, ok := svc.automationService.(automationRetryReceipt)
 	require.True(t, ok)
-	require.NoError(t, receipt.AcknowledgeRetryEvent(ctx, replayEvent.RunID, replayEvent.RetryGroupGeneration))
+	require.NoError(t, receipt.AcknowledgeRetryEvent(ctx, replayEvent.RetryOutboxEventID, replayEvent.RetryOutboxLeaseToken, replayEvent.RunID, replayEvent.SnapshotVersion))
 	require.Equal(t, "retry-task", base.boundTaskID)
 	require.Equal(t, "retry-session", base.boundSessionID)
 	require.Equal(t, base.operation.ExternalTurnID, base.boundTurnID)
@@ -1656,6 +1658,25 @@ func TestFinalizeAutomationRun_NonEphemeralTaskReachesTerminalStatus(t *testing.
 
 	svc.finalizeAutomationRun(context.Background(), "t-auto", false, "agent failed")
 	require.Equal(t, "agent failed", autoSvc.failed["t-auto"])
+}
+
+// Permission-blocked automation runs must settle even when there is no active
+// agent turn to match.
+func TestFailAutomationRunOnPermissionWithoutActiveTurn(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedAutomationTask(t, repo, "t-permission", models.TaskOriginAutomationRun, false)
+	autoSvc := &stubAutomationService{}
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.SetAutomationService(autoSvc)
+
+	svc.failAutomationRunOnPermission(ctx, watcher.PermissionRequestData{
+		TaskID: "t-permission",
+		Title:  "run command",
+	})
+
+	require.Equal(t, "permission required: run command; automation runs cannot answer prompts",
+		autoSvc.failed["t-permission"])
 }
 
 // Only automation-origin tasks are finalized; an ordinary task must not have

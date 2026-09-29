@@ -32,6 +32,40 @@ func TestSafeWebhookProjectionInterpolatesNestedPath(t *testing.T) {
 	))
 }
 
+func TestSafeWebhookTriggerDataPreservesLegacyPayloadWithoutPointers(t *testing.T) {
+	data, err := safeWebhookTriggerData(
+		[]byte(`{"pull_request":{"number":7},"token":"legacy-token"}`),
+		nil, "webhook-trigger", "delivery-7",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "PR #7", InterpolatePrompt(
+		"PR #{{webhook.pull_request.number}}", TriggerTypeWebhook, data,
+	))
+	require.Contains(t, string(data), "legacy-token")
+}
+
+func TestResolvePayloadPathReadsLegacyAndProjectedWebhookValues(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		pointers []string
+	}{
+		{name: "legacy body"},
+		{name: "configured pointer", pointers: []string{"/service"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data, err := safeWebhookTriggerData(
+				[]byte(`{"service":"acme/unconfigured-webapp"}`),
+				test.pointers, "webhook-trigger", "delivery-7",
+			)
+			require.NoError(t, err)
+
+			value, ok := ResolvePayloadPath(data, "service")
+			require.True(t, ok)
+			require.Equal(t, "acme/unconfigured-webapp", value)
+		})
+	}
+}
+
 func TestSafeWebhookTriggerDataRejectsUnboundedPointers(t *testing.T) {
 	_, err := safeWebhookTriggerData([]byte(`{"value":1}`), []string{"/value", "bad"}, "trigger", "delivery")
 	require.Error(t, err)

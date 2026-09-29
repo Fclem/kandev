@@ -226,6 +226,15 @@ func wsListRuns(svc *Service, log *logger.Logger) func(ctx context.Context, msg 
 		if l, ok := payload["limit"].(float64); ok && l > 0 {
 			limit = int(l)
 		}
+		if pageRequested, _ := payload["page"].(bool); pageRequested {
+			cursor, _ := payload["cursor"].(string)
+			page, err := svc.ListRunPage(ctx, automationID, cursor, limit)
+			if err != nil {
+				return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, err.Error(), nil)
+			}
+			return ws.NewResponse(msg.ID, msg.Action, page)
+		}
+
 		if history, _ := payload["history"].(bool); history {
 			cursor, _ := payload["cursor"].(string)
 			page, err := svc.ListRetryHistory(ctx, automationID, cursor, limit)

@@ -12,6 +12,7 @@ import {
   resolveNormalizedRepositoryIds,
   resolveRepositoryIdsForMode,
   resolveRepositoryIds,
+  retryPolicyAfterModeChange,
 } from "./automation-payload";
 import type { FormState } from "./automation-payload";
 
@@ -204,7 +205,9 @@ describe("buildCreatePayload / buildUpdatePayload", () => {
       repository_mode: "selected",
     });
   });
+});
 
+describe("managed destination and retry payloads", () => {
   it("persists only the portable managed destination identity", () => {
     const form = baseForm({
       taskMode: "managed_conversation",
@@ -257,5 +260,18 @@ describe("buildCreatePayload / buildUpdatePayload", () => {
     const form = baseForm({ retryPolicy: policy });
     expect(buildCreatePayload("ws-1", form, [], []).retry_policy).toEqual(policy);
     expect(buildUpdatePayload(form, []).retry_policy).toEqual(policy);
+  });
+});
+
+describe("retryPolicyAfterModeChange", () => {
+  it("sets a valid finite retry count after disabled mode", () => {
+    const disabled = { ...baseForm().retryPolicy, mode: "disabled" as const, max_retries: "0" };
+    expect(retryPolicyAfterModeChange(disabled, "finite")).toMatchObject({
+      mode: "finite",
+      max_retries: "1",
+    });
+    expect(retryPolicyAfterModeChange({ ...disabled, max_retries: "00" }, "finite")).toMatchObject({
+      max_retries: "1",
+    });
   });
 });

@@ -23,6 +23,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 vi.mock("@/lib/api/domains/automation-api", () => ({
   listAutomationRuns: vi.fn(),
+  listAutomationRunPage: vi.fn(),
   listAutomationRetryHistory: vi.fn(),
   deleteAutomationRun: vi.fn(),
   deleteAllAutomationRuns: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@/lib/api/domains/automation-api", () => ({
 import { toast } from "sonner";
 import {
   listAutomationRuns,
+  listAutomationRunPage,
   listAutomationRetryHistory,
   deleteAutomationRun,
   deleteAllAutomationRuns,
@@ -40,6 +42,7 @@ import { useAutomationRuns } from "./use-automation-runs";
 beforeEach(() => {
   runsStore.reset();
   vi.mocked(listAutomationRuns).mockReset();
+  vi.mocked(listAutomationRunPage).mockReset();
   vi.mocked(listAutomationRetryHistory).mockReset();
   vi.mocked(deleteAutomationRun).mockReset();
   vi.mocked(deleteAllAutomationRuns).mockReset();
@@ -148,7 +151,7 @@ describe("timeline mode", () => {
   it("merges singleton runs and consumes every retry-history page in timeline mode", async () => {
     const singleton = mkRun("singleton");
     const attempt = mkRun("attempt");
-    vi.mocked(listAutomationRuns).mockResolvedValue([singleton]);
+    vi.mocked(listAutomationRunPage).mockResolvedValue({ items: [singleton] });
     vi.mocked(listAutomationRetryHistory)
       .mockResolvedValueOnce({
         scope: AUTOMATION_ID,
@@ -175,12 +178,14 @@ describe("timeline mode", () => {
     await act(async () => {});
     rerender();
 
+    expect(listAutomationRunPage).toHaveBeenCalledWith(AUTOMATION_ID, undefined, 200);
     expect(listAutomationRetryHistory).toHaveBeenNthCalledWith(1, AUTOMATION_ID, undefined, 50);
     expect(listAutomationRetryHistory).toHaveBeenNthCalledWith(2, AUTOMATION_ID, "cursor-1", 50);
     expect(result.current.runs.map((run) => run.id)).toEqual(["singleton", "attempt"]);
   });
   it("reloads retry history when the selected history mode changes", async () => {
     vi.mocked(listAutomationRuns).mockResolvedValue([]);
+    vi.mocked(listAutomationRunPage).mockResolvedValue({ items: [] });
     vi.mocked(listAutomationRetryHistory).mockResolvedValue({
       scope: AUTOMATION_ID,
       items: [],

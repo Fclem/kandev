@@ -154,6 +154,11 @@ export type AutomationRun = {
   repository_reason?: string;
 };
 
+export type AutomationRunsPage = {
+  items: AutomationRun[];
+  next_cursor?: string;
+};
+
 /**
  * A run as it appears in the workspace-wide feed. A per-automation run log can
  * take the automation for granted; a mixed feed cannot, so the server

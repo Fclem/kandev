@@ -292,6 +292,33 @@ const (
 	migrateTriggerRevisionSQL                   = `ALTER TABLE automation_triggers ADD COLUMN trigger_revision BIGINT NOT NULL DEFAULT 0`
 )
 
+const (
+	migrateRunRetryGroupIDSQL            = `ALTER TABLE automation_runs ADD COLUMN retry_group_id TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryParentIDSQL           = `ALTER TABLE automation_runs ADD COLUMN retry_parent_run_id TEXT NOT NULL DEFAULT ''`
+	migrateRunAttemptNumberSQL           = `ALTER TABLE automation_runs ADD COLUMN attempt_number BIGINT NOT NULL DEFAULT 1`
+	migrateRunRetryStateSQL              = `ALTER TABLE automation_runs ADD COLUMN retry_state TEXT NOT NULL DEFAULT 'none'`
+	migrateRunRetryScheduledAtSQL        = `ALTER TABLE automation_runs ADD COLUMN retry_scheduled_at {{timestamp}}`
+	migrateRunRetryClaimedAtSQL          = `ALTER TABLE automation_runs ADD COLUMN retry_claimed_at {{timestamp}}`
+	migrateRunRetryClaimExpiresAtSQL     = `ALTER TABLE automation_runs ADD COLUMN retry_claim_expires_at {{timestamp}}`
+	migrateRunRetryClaimTokenSQL         = `ALTER TABLE automation_runs ADD COLUMN retry_claim_token TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryGenerationSQL         = `ALTER TABLE automation_runs ADD COLUMN retry_group_generation BIGINT NOT NULL DEFAULT 0`
+	migrateRunRetryCancelledAtSQL        = `ALTER TABLE automation_runs ADD COLUMN retry_cancelled_at {{timestamp}}`
+	migrateRunRetryBaseTitleSQL          = `ALTER TABLE automation_runs ADD COLUMN retry_base_title TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryFailurePhaseSQL       = `ALTER TABLE automation_runs ADD COLUMN retry_failure_phase TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryFailureClassSQL       = `ALTER TABLE automation_runs ADD COLUMN retry_failure_class TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryIntentIDSQL           = `ALTER TABLE automation_runs ADD COLUMN retry_task_intent_id TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryPolicySnapshotSQL     = `ALTER TABLE automation_runs ADD COLUMN retry_policy_snapshot TEXT NOT NULL DEFAULT '{}'`
+	migrateRunRetryTriggerSnapshotSQL    = `ALTER TABLE automation_runs ADD COLUMN retry_trigger_snapshot TEXT NOT NULL DEFAULT '{}'`
+	migrateRunRetryLaunchSnapshotSQL     = `ALTER TABLE automation_runs ADD COLUMN retry_launch_config_snapshot TEXT NOT NULL DEFAULT '{}'`
+	migrateRunRetryLaunchVersionSQL      = `ALTER TABLE automation_runs ADD COLUMN retry_launch_config_version BIGINT NOT NULL DEFAULT 1`
+	migrateRunRetryPromptSQL             = `ALTER TABLE automation_runs ADD COLUMN retry_resolved_prompt TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryTitleSQL              = `ALTER TABLE automation_runs ADD COLUMN retry_resolved_title TEXT NOT NULL DEFAULT ''`
+	migrateRunRetryTriggerTimestampSQL   = `ALTER TABLE automation_runs ADD COLUMN retry_resolved_trigger_timestamp {{timestamp}}`
+	migrateRunRetryContinuationSQL       = `ALTER TABLE automation_runs ADD COLUMN retry_continuation_snapshot TEXT NOT NULL DEFAULT '{}'`
+	migrateRunRetryAutomationRevisionSQL = `ALTER TABLE automation_runs ADD COLUMN automation_revision BIGINT NOT NULL DEFAULT 0`
+	migrateRunRetryTriggerRevisionSQL    = `ALTER TABLE automation_runs ADD COLUMN trigger_revision BIGINT NOT NULL DEFAULT 0`
+)
+
 // migrateRunDedupUniqueIndexSQL backstops admitTriggerLocked's check-then-insert
 // admission with a real constraint: idx_automation_runs_dedup (above) is a
 // plain index, so two instances racing the same dedup key can both pass
@@ -632,7 +659,7 @@ func (s *Store) CreateAutomation(ctx context.Context, a *Automation) error {
 			repository_mode, prompt, task_title_template, execution_mode,
 			enabled, max_concurrent_runs, continuation_policy, continuation_task_id,
 			retry_policy, automation_revision, webhook_secret, last_triggered_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		a.ID, a.WorkspaceID, a.Name, a.Description, a.WorkflowID, a.WorkflowStepID,
 		a.AgentProfileID, a.ExecutorProfileID,
 		string(a.TaskMode), a.ManagedOwnerInstallationID, a.ManagedDestinationInstallationID,
@@ -1559,7 +1586,7 @@ func (s *Store) CreateRun(ctx context.Context, r *AutomationRun) error {
 		r.RetryTaskIntentID, r.RetryPolicySnapshot, r.RetryTriggerSnapshot,
 		r.RetryLaunchConfigSnapshot, r.RetryLaunchConfigVersion, r.RetryResolvedPrompt,
 		r.RetryResolvedTitle, r.RetryResolvedTriggerAt, r.RetryContinuationSnapshot,
-		r.AutomationRevision, r.TriggerRevision, r.CreatedAt
+		r.AutomationRevision, r.TriggerRevision, r.CreatedAt)
 	return err
 }
 
@@ -1616,12 +1643,12 @@ func (s *Store) BindRunTask(ctx context.Context, runID, taskID, repositoryReason
 			Status RunStatus `db:"status"`
 			TaskID string    `db:"task_id"`
 		}
-		if lookupErr := s.db.Get(&existing, `SELECT status, task_id FROM automation_runs WHERE id = ?`, runID); lookupErr == nil &&
+		if lookupErr := s.db.GetContext(ctx, &existing, s.db.Rebind(`SELECT status, task_id FROM automation_runs WHERE id = ?`), runID); lookupErr == nil &&
 			existing.Status == RunStatusTaskCreated && existing.TaskID == taskID {
 			return nil
 		}
 		var groupID string
-		if lookupErr := s.db.Get(&groupID, `SELECT retry_group_id FROM automation_runs WHERE id = ?`, runID); lookupErr == nil && groupID != "" {
+		if lookupErr := s.db.GetContext(ctx, &groupID, s.db.Rebind(`SELECT retry_group_id FROM automation_runs WHERE id = ?`), runID); lookupErr == nil && groupID != "" {
 			return ErrRetryGenerationMismatch
 		}
 		return fmt.Errorf("automation run %s is not an admitted triggered run", runID)
@@ -1910,6 +1937,61 @@ func (s *Store) ListRuns(ctx context.Context, automationID string, limit int) ([
 		return nil, err
 	}
 	return runs, nil
+}
+func (s *Store) ListRunPage(ctx context.Context, automationID, cursor string, limit int) (*AutomationRunsPage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > maxRunsLimit {
+		limit = maxRunsLimit
+	}
+	after, afterID, err := decodeRetryHistoryCursor(cursor)
+	if err != nil {
+		return nil, err
+	}
+	query := `SELECT` + runTaskStateColumnsSQL + `
+		FROM automation_runs ar
+		LEFT JOIN tasks t ON t.id = ar.task_id
+		WHERE ar.automation_id = ?`
+	args := append(runTaskStateArgs(), automationID)
+	if cursor != "" {
+		query += ` AND (ar.created_at < ? OR (ar.created_at = ? AND ar.id < ?))`
+		args = append(args, after, after, afterID)
+	}
+	query += ` ORDER BY ` + runOrderSQL("ar") + ` LIMIT ?`
+	args = append(args, limit+1)
+	var runs []*AutomationRun
+	err = s.ro.SelectContext(ctx, &runs, s.ro.Rebind(query), args...)
+	if db.IsMissingTableError(err) {
+		query = `SELECT * FROM automation_runs WHERE automation_id = ?`
+		args = []any{automationID}
+		if cursor != "" {
+			query += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
+			args = append(args, after, after, afterID)
+		}
+		query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
+		args = append(args, limit+1)
+		err = s.ro.SelectContext(ctx, &runs, s.ro.Rebind(query), args...)
+	}
+	if err != nil {
+		return nil, err
+	}
+	page := &AutomationRunsPage{Items: runs}
+	if len(runs) > limit {
+		last := runs[limit-1]
+		page.NextCursor = encodeRetryHistoryCursor(last.CreatedAt, last.ID)
+		page.Items = runs[:limit]
+	}
+	for _, run := range page.Items {
+		if run.RetryState == RetryStateCancelled {
+			run.Status = RunStatusCancelled
+		}
+		run.TriggerData = json.RawMessage(run.TriggerDataJSON)
+	}
+	if err := s.hydrateRunSummaries(ctx, page.Items); err != nil {
+		return nil, err
+	}
+	return page, nil
 }
 
 // maxRunsLimit caps the per-automation run history for the same reason the
@@ -2233,20 +2315,23 @@ func (s *Store) listSummaries(ctx context.Context, scope string, arg any) ([]*Au
 		return nil, err
 	}
 	boundRuns := make([]*AutomationRun, len(rows))
+	automationIDs := make([]string, len(rows))
 	for i := range rows {
 		boundRuns[i] = &rows[i].AutomationRun
+		automationIDs[i] = rows[i].AutomationID
 	}
 	if err := s.hydrateRunSummaries(ctx, boundRuns); err != nil {
+		return nil, err
+	}
+	pendingByAutomation, err := s.PendingRetrySummaries(ctx, automationIDs)
+	if err != nil {
 		return nil, err
 	}
 	summaries := make([]*AutomationSummary, 0, len(rows))
 	for _, row := range rows {
 		run := row.AutomationRun
 		run.TriggerData = json.RawMessage(run.TriggerDataJSON)
-		pending, pendingErr := s.PendingRetrySummary(ctx, run.AutomationID)
-		if pendingErr != nil {
-			return nil, pendingErr
-		}
+		pending := pendingByAutomation[run.AutomationID]
 		summaries = append(summaries, &AutomationSummary{
 			AutomationID:   run.AutomationID,
 			OpenRuns:       row.OpenRuns,

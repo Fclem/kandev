@@ -47,6 +47,11 @@ type exportAutomation struct {
 	Triggers           []exportTrigger                       `yaml:"triggers"`
 }
 
+type exportManagedConversationDestination struct {
+	PluginID    string `yaml:"plugin_id"`
+	InstanceKey string `yaml:"instance_key"`
+}
+
 type exportRetryPolicy struct {
 	Mode         RetryMode        `yaml:"mode"`
 	MaxRetries   string           `yaml:"max_retries"`

@@ -11,22 +11,17 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
-
-	"github.com/kandev/kandev/internal/common/logger"
-	"github.com/kandev/kandev/internal/events"
-	"github.com/kandev/kandev/internal/events/bus"
 )
 
 var (
 	ErrRetryDelayOverflow      = errors.New("automation retry delay overflow")
 	ErrNoDueRetry              = errors.New("no due automation retry")
 	ErrRetryGenerationMismatch = errors.New("automation retry generation mismatch")
+	ErrRetryOutboxLeaseHeld    = errors.New("automation retry outbox lease is held")
 )
 
 const (
@@ -665,179 +660,63 @@ func (s *Store) CreateRetryOutbox(ctx context.Context, outbox *RetryOutbox) erro
 	return err
 }
 
-func (s *Store) AcknowledgeRetryEvent(ctx context.Context, eventID, runID string, version int64) error {
+func (s *Store) AcknowledgeRetryEvent(ctx context.Context, eventID, leaseToken, runID string, version int64) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 	now := time.Now().UTC()
-	if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO automation_retry_event_receipts (event_id, run_id, snapshot_version, accepted_at) VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`), eventID, nullableString(runID), version, now); err != nil {
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, acknowledged_at = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
+		WHERE event_id = ? AND state = ? AND lease_token = ?
+			AND run_id = ? AND snapshot_version = ?`),
+		"published", now, now, eventID, retryOutboxLeased, leaseToken, runID, version)
+	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_outbox SET state = ?, acknowledged_at = ?, updated_at = ? WHERE event_id = ?`), "published", now, now, eventID); err != nil {
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		var receipt struct {
+			RunID           string `db:"run_id"`
+			SnapshotVersion int64  `db:"snapshot_version"`
+		}
+		if err := tx.GetContext(ctx, &receipt, tx.Rebind(
+			`SELECT run_id, snapshot_version FROM automation_retry_event_receipts WHERE event_id = ?`),
+			eventID); err == nil && receipt.RunID == runID && receipt.SnapshotVersion == version {
+			return nil
+		}
+		return ErrRetryOutboxLeaseHeld
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		INSERT INTO automation_retry_event_receipts (event_id, run_id, snapshot_version, accepted_at)
+		VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`),
+		eventID, nullableString(runID), version, now); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func (s *Store) FailRetryOutbox(ctx context.Context, eventID string, raw error) error {
+func (s *Store) FailRetryOutbox(ctx context.Context, eventID, leaseToken string, raw error) error {
 	failure := SanitizeAutomationFailure(raw, "launch", nil)
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE automation_retry_outbox SET state = ?, safe_error = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ? AND state IN (?, ?)`), retryOutboxRevoked, failure.Message, eventID, retryOutboxPending, retryOutboxLeased)
+	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, safe_error = ?, lease_token = '', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE event_id = ? AND state = ? AND lease_token = ?`),
+		retryOutboxRevoked, failure.Message, eventID, retryOutboxLeased, leaseToken)
+	return err
+}
+func (s *Store) RevokePendingRetryOutbox(ctx context.Context, eventID string, raw error) error {
+	failure := SanitizeAutomationFailure(raw, "launch", nil)
+	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, safe_error = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE event_id = ? AND state = ? AND lease_token = ''`),
+		retryOutboxRevoked, failure.Message, eventID, retryOutboxPending)
 	return err
 }
 
 func retryPayloadHash(payload []byte) string {
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])
-}
-
-// RetryScheduler promotes leased rows asynchronously and never runs inline.
-type RetryScheduler struct {
-	svc                *Service
-	logger             *logger.Logger
-	cancel             context.CancelFunc
-	wg                 sync.WaitGroup
-	mu                 sync.Mutex
-	started            bool
-	cursorAutomationID string
-}
-
-const retrySchedulerBatchBudget = 32
-
-const retryOutboxReplayInterval = time.Second
-
-func NewRetryScheduler(svc *Service, log *logger.Logger) *RetryScheduler {
-	return &RetryScheduler{svc: svc, logger: log}
-}
-
-func (rs *RetryScheduler) Start(ctx context.Context) {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	if rs.started {
-		return
-	}
-	rs.started = true
-	ctx, rs.cancel = context.WithCancel(ctx)
-	rs.wg.Add(1)
-	go rs.loop(ctx)
-}
-
-func (rs *RetryScheduler) Stop() {
-	rs.mu.Lock()
-	if !rs.started {
-		rs.mu.Unlock()
-		return
-	}
-	cancel := rs.cancel
-	rs.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-	rs.wg.Wait()
-	rs.mu.Lock()
-	rs.started = false
-	rs.mu.Unlock()
-}
-
-func (rs *RetryScheduler) loop(ctx context.Context) {
-	if rs.svc == nil {
-		return
-	}
-	defer rs.wg.Done()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	var lastOutboxReplay time.Time
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case now := <-ticker.C:
-			now = now.UTC()
-			rs.replayPendingOutbox(ctx, now, &lastOutboxReplay)
-			if err := rs.svc.Store().RecoverRetryClaims(ctx, now); err != nil {
-				rs.logClaimError("retry claim recovery failed", err)
-				continue
-			}
-			automationIDs, err := rs.svc.Store().ListDueRetryAutomationIDs(ctx, now)
-			if err != nil {
-				rs.logClaimError("retry automation selection failed", err)
-				continue
-			}
-			orderedAutomationIDs := rs.roundRobinAutomationIDs(automationIDs)
-			if len(orderedAutomationIDs) > retrySchedulerBatchBudget {
-				orderedAutomationIDs = orderedAutomationIDs[:retrySchedulerBatchBudget]
-			}
-			for _, automationID := range orderedAutomationIDs {
-				if err := ctx.Err(); err != nil {
-					return
-				}
-				run, token, claimErr := rs.svc.Store().ClaimDueRetryForAutomation(ctx, now, time.Second, automationID)
-				if errors.Is(claimErr, ErrNoDueRetry) {
-					continue
-				}
-				if claimErr != nil {
-					rs.logClaimError("retry claim failed", claimErr)
-					continue
-				}
-				rs.cursorAutomationID = automationID
-				rs.publishClaim(ctx, run, token)
-			}
-		}
-	}
-}
-
-func (rs *RetryScheduler) replayPendingOutbox(ctx context.Context, now time.Time, lastReplay *time.Time) {
-	if !lastReplay.IsZero() && now.Sub(*lastReplay) < retryOutboxReplayInterval {
-		return
-	}
-	*lastReplay = now
-	if err := rs.svc.ReplayPendingRetryEvents(ctx); err != nil {
-		rs.logClaimError("retry outbox replay failed", err)
-	}
-}
-
-func (rs *RetryScheduler) roundRobinAutomationIDs(ids []string) []string {
-	if len(ids) < 2 || rs.cursorAutomationID == "" {
-		return ids
-	}
-	start := 0
-	for i, id := range ids {
-		if id > rs.cursorAutomationID {
-			start = i
-			break
-		}
-		start = (i + 1) % len(ids)
-	}
-	return append(append([]string(nil), ids[start:]...), ids[:start]...)
-}
-
-func (rs *RetryScheduler) publishClaim(ctx context.Context, run *AutomationRun, token string) {
-	run.RetryClaimToken = token
-	evt := &AutomationTriggeredEvent{
-		RunID: run.ID, AutomationID: run.AutomationID, TriggerID: run.TriggerID,
-		TriggerType: run.TriggerType, RetryClaimToken: token,
-		RetryGroupGeneration: run.RetryGroupGeneration,
-		SnapshotVersion:      run.RetryLaunchConfigVersion,
-	}
-	if rs.svc.eventBus == nil {
-		_ = rs.svc.Store().ReleaseRetryClaim(context.Background(), run.ID, token, run.RetryGroupGeneration)
-		return
-	}
-	if err := rs.svc.eventBus.Publish(ctx, events.AutomationTriggered,
-		bus.NewEvent(events.AutomationTriggered, "automation_retry_scheduler", evt)); err != nil {
-		_ = rs.svc.Store().ReleaseRetryClaim(context.Background(), run.ID, token, run.RetryGroupGeneration)
-	}
-}
-
-func (rs *RetryScheduler) logClaimError(message string, err error) {
-	if rs.logger != nil {
-		rs.logger.Warn(message, zap.Error(err))
-	}
-}
-
-// RecoverRetryClaims requeues expired claims without creating a new attempt.
-func (s *Store) RecoverRetryClaims(ctx context.Context, now time.Time) error {
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE automation_runs SET retry_state = ?, retry_claimed_at = NULL, retry_claim_expires_at = NULL, retry_claim_token = '' WHERE retry_state = ? AND retry_claim_expires_at IS NOT NULL AND retry_claim_expires_at <= ?`), RetryStateScheduled, RetryStateClaimed, now)
-	return err
 }

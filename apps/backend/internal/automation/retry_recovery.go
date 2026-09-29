@@ -6,13 +6,15 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 )
 
 // RecoverRetryLedger restores replayable durable work after an unclean stop.
-// Noncommitted operation leases are reclaimed because they belong to the
-// stopped process; committed identities and group tombstones remain
+// Unexpired operation leases remain owned; expired or lease-less malformed
+// claims are reclaimable. Committed identities and group tombstones stay
 // authoritative and are never replaced by a fresh task identity.
 func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
@@ -23,21 +25,21 @@ func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_runs
 		SET retry_state = ?, retry_claimed_at = NULL, retry_claim_expires_at = NULL, retry_claim_token = ''
-		WHERE retry_state = ? AND retry_claim_expires_at IS NOT NULL AND retry_claim_expires_at <= ?`),
+		WHERE retry_state = ? AND (retry_claim_expires_at IS NULL OR retry_claim_expires_at <= ?)`),
 		RetryStateScheduled, RetryStateClaimed, now); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_run_operations
 		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
-		WHERE state = ?`),
-		retryOperationRequested, now, retryOperationLeased); err != nil {
+		WHERE state = ? AND (lease_expires_at IS NULL OR lease_expires_at <= ?)`),
+		retryOperationRequested, now, retryOperationLeased, now); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_retry_outbox
 		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
-		WHERE state = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`),
+		WHERE state = ? AND (lease_expires_at IS NULL OR lease_expires_at <= ?)`),
 		retryOutboxPending, now, retryOutboxLeased, now); err != nil {
 		return err
 	}
@@ -85,10 +87,56 @@ func (s *Store) ListPendingRetryOutbox(ctx context.Context, now time.Time) ([]Re
 		ORDER BY o.created_at ASC`), retryOutboxPending, retryOutboxLeased, now)
 	return rows, err
 }
+func (s *Store) ClaimRetryOutbox(ctx context.Context, eventID string, now time.Time, lease time.Duration) (*RetryOutbox, error) {
+	token := uuid.NewString()
+	expiresAt := now.Add(lease)
+	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, lease_token = ?, lease_expires_at = ?,
+			attempts = attempts + 1, updated_at = ?
+		WHERE event_id = ? AND state IN (?, ?)
+			AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+			AND NOT EXISTS (
+				SELECT 1 FROM automation_retry_event_receipts
+				WHERE event_id = automation_retry_outbox.event_id
+			)`),
+		retryOutboxLeased, token, expiresAt, now, eventID,
+		retryOutboxPending, retryOutboxLeased, now)
+	if err != nil {
+		return nil, err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		var exists int
+		if err := s.ro.GetContext(ctx, &exists, s.ro.Rebind(
+			`SELECT COUNT(*) FROM automation_retry_outbox WHERE event_id = ?`), eventID); err != nil {
+			return nil, err
+		}
+		if exists == 0 {
+			return nil, sql.ErrNoRows
+		}
+		return nil, ErrRetryOutboxLeaseHeld
+	}
+	var claimed RetryOutbox
+	if err := s.db.GetContext(ctx, &claimed, s.db.Rebind(
+		`SELECT * FROM automation_retry_outbox WHERE event_id = ? AND lease_token = ?`),
+		eventID, token); err != nil {
+		return nil, err
+	}
+	return &claimed, nil
+}
+
+func (s *Store) ReleaseRetryOutbox(ctx context.Context, eventID, token string) error {
+	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE automation_retry_outbox
+		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE event_id = ? AND state = ? AND lease_token = ?`),
+		retryOutboxPending, eventID, retryOutboxLeased, token)
+	return err
+}
 
 // RetryRunHasReplayableOutbox reports whether an unbound retry run still has
-// durable dispatch work that startup replay is responsible for delivering.
-func (s *Store) RetryRunHasReplayableOutbox(ctx context.Context, runID string, generation int64, now time.Time) (bool, error) {
+// durable dispatch work in the pending outbox or under an active lease.
+func (s *Store) RetryRunHasReplayableOutbox(ctx context.Context, runID string, generation int64) (bool, error) {
 	var count int
 	err := s.ro.GetContext(ctx, &count, s.ro.Rebind(`
 		SELECT COUNT(*) FROM automation_retry_outbox o
@@ -98,9 +146,8 @@ func (s *Store) RetryRunHasReplayableOutbox(ctx context.Context, runID string, g
 			AND op.operation_kind = ?
 		WHERE o.run_id = ? AND r.event_id IS NULL
 			AND o.state IN (?, ?)
-			AND (o.lease_expires_at IS NULL OR o.lease_expires_at <= ?)
 			AND op.state IN (?, ?, ?, ?)`),
-		generation, retryTaskOperationKind, runID, retryOutboxPending, retryOutboxLeased, now,
+		generation, retryTaskOperationKind, runID, retryOutboxPending, retryOutboxLeased,
 		retryOperationRequested, retryOperationLeased, retryOperationCommitted, retryOperationAmbiguous)
 	return count > 0, err
 }
@@ -117,21 +164,33 @@ func (s *Service) ReplayPendingRetryEvents(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
-		run, skip, recoveryErr := s.prepareRetryRecoveryRun(ctx, row)
+	for _, candidate := range rows {
+		now := time.Now().UTC()
+		row, claimErr := s.store.ClaimRetryOutbox(ctx, candidate.EventID, now, 30*time.Second)
+		if errors.Is(claimErr, sql.ErrNoRows) || errors.Is(claimErr, ErrRetryOutboxLeaseHeld) {
+			continue
+		}
+		if claimErr != nil {
+			return claimErr
+		}
+		run, skip, recoveryErr := s.prepareRetryRecoveryRun(ctx, *row)
 		if recoveryErr != nil {
+			_ = s.store.ReleaseRetryOutbox(ctx, row.EventID, row.LeaseToken)
 			return recoveryErr
 		}
 		if skip {
+			_ = s.store.ReleaseRetryOutbox(ctx, row.EventID, row.LeaseToken)
 			continue
 		}
 		operation, operationErr := s.store.GetRetryTaskOperation(ctx, run.ID, run.RetryGroupGeneration)
 		if operationErr != nil {
+			_ = s.store.ReleaseRetryOutbox(ctx, row.EventID, row.LeaseToken)
 			return operationErr
 		}
-		event := retryRecoveryEvent(run, row.SnapshotVersion, operation.State == retryOperationAmbiguous)
+		event := retryRecoveryEvent(run, row, operation.State == retryOperationAmbiguous)
 		if err := s.eventBus.Publish(ctx, events.AutomationTriggered,
 			bus.NewEvent(events.AutomationTriggered, "automation_retry_recovery", event)); err != nil {
+			_ = s.store.ReleaseRetryOutbox(ctx, row.EventID, row.LeaseToken)
 			return err
 		}
 	}
@@ -141,20 +200,20 @@ func (s *Service) ReplayPendingRetryEvents(ctx context.Context) error {
 func (s *Service) prepareRetryRecoveryRun(ctx context.Context, row RetryOutbox) (*AutomationRun, bool, error) {
 	run, err := s.store.GetRun(ctx, row.RunID)
 	if errors.Is(err, sql.ErrNoRows) || run == nil {
-		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry run is missing"))
+		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, row.LeaseToken, errors.New("retry run is missing"))
 	}
 	if err != nil {
 		return nil, false, err
 	}
 	if retryRunIsTerminal(run) {
-		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry run is no longer dispatchable"))
+		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, row.LeaseToken, errors.New("retry run is no longer dispatchable"))
 	}
 	if run.Status == RunStatusScheduledRetry && run.RetryState == RetryStateScheduled {
 		return nil, true, nil
 	}
 	operation, err := s.store.GetRetryTaskOperation(ctx, run.ID, run.RetryGroupGeneration)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry task operation is no longer dispatchable"))
+		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, row.LeaseToken, errors.New("retry task operation is no longer dispatchable"))
 	}
 	if err != nil {
 		return nil, false, err
@@ -164,12 +223,12 @@ func (s *Service) prepareRetryRecoveryRun(ctx context.Context, row RetryOutbox) 
 	}
 	if operation.State == retryOperationAmbiguous {
 		if operation.ExternalTaskID == "" || operation.ExternalSessionID == "" || operation.ExternalTurnID == "" {
-			return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, errors.New("retry continuation identity is incomplete"))
+			return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, row.LeaseToken, errors.New("retry continuation identity is incomplete"))
 		}
 		return run, false, nil
 	}
 	if !retryOperationIsDispatchable(operation) {
-		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, ErrRetryOperationUndispatchable)
+		return nil, true, s.store.FailRetryOutbox(ctx, row.EventID, row.LeaseToken, ErrRetryOperationUndispatchable)
 	}
 	return run, false, nil
 }
@@ -192,10 +251,11 @@ func retryOperationIsDispatchable(operation *RetryOperation) bool {
 		operation.State == retryOperationLeased || operation.State == retryOperationCommitted)
 }
 
-func retryRecoveryEvent(run *AutomationRun, snapshotVersion int64, ambiguous bool) *AutomationTriggeredEvent {
+func retryRecoveryEvent(run *AutomationRun, outbox *RetryOutbox, ambiguous bool) *AutomationTriggeredEvent {
 	event := &AutomationTriggeredEvent{
 		RunID: run.ID, RetryExternalID: RetryTaskExternalID(run.ID, run.RetryGroupGeneration),
-		SnapshotVersion: snapshotVersion, RetryAmbiguousRecovery: ambiguous,
+		SnapshotVersion: outbox.SnapshotVersion, RetryAmbiguousRecovery: ambiguous,
+		RetryOutboxEventID: outbox.EventID, RetryOutboxLeaseToken: outbox.LeaseToken,
 	}
 	if run.RetryState == RetryStateClaimed {
 		event.AutomationID = run.AutomationID

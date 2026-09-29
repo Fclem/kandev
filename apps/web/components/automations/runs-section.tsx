@@ -28,7 +28,7 @@ import {
 import { useAutomationRuns } from "@/hooks/domains/settings/use-automation-runs";
 import { buildRunOutcomeReasonSuffix } from "@/lib/automation-run-reason";
 import { linkToTask } from "@/lib/links";
-import { projectAutomationHistory } from "./automation-history";
+import { expandRetryGroupRunIDs, projectAutomationHistory } from "./automation-history";
 import type { AutomationRun, RetryHistoryMode, RunStatus } from "@/lib/types/automation";
 import { formatRelativeTime } from "@/lib/utils";
 
@@ -70,14 +70,10 @@ type RunRowProps = {
   onStop: (id: string) => void;
   onNavigate: (taskId: string) => void;
 };
-function RunRow({ run, deleting, stopping, onDelete, onStop, onNavigate }: RunRowProps) {
+function RunDetailsCells({ run }: { run: AutomationRun }) {
   const { t } = useTranslation();
   const badge = STATUS_BADGE[run.status] ?? STATUS_BADGE.triggered;
   const reasonSuffix = buildRunOutcomeReasonSuffix(t, run);
-  // Any run that produced a task links to it, run-mode included. Run mode
-  // keeps the task off the board, which is not a reason to withhold the only
-  // route to what the run actually said.
-  const rowClickable = !!run.task_id;
   const deliveryLabelKey = run.delivery_status
     ? `automations:deliveryStatus${run.delivery_status
         .split("_")
@@ -85,19 +81,7 @@ function RunRow({ run, deleting, stopping, onDelete, onStop, onNavigate }: RunRo
         .join("")}`
     : null;
   return (
-    <TableRow
-      className={
-        rowClickable
-          ? "group cursor-pointer hover:bg-muted/50"
-          : "group hover:bg-transparent focus-within:bg-transparent"
-      }
-      onClick={rowClickable ? () => onNavigate(run.task_id) : undefined}
-      data-testid={`run-row-${run.id}`}
-      // The truncated task id used to be a column, and tooling identified a row
-      // by reading it. That column collapsed into Outcome, so the association
-      // lives here instead of being inferred from rendered copy.
-      data-task-id={run.task_id || undefined}
-    >
+    <>
       <TableCell className="text-sm">
         <div>{run.trigger_type}</div>
         {(run.attempt_number ?? 1) > 1 && (
@@ -136,40 +120,78 @@ function RunRow({ run, deleting, stopping, onDelete, onStop, onNavigate }: RunRo
           ? t("automations:retryDue", { when: formatRelativeTime(run.retry_scheduled_at) })
           : formatRelativeTime(run.created_at)}
       </TableCell>
-      <TableCell>
-        {(run.status === "scheduled_retry" || run.retry_state === "claimed") && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="cursor-pointer text-muted-foreground hover:text-destructive [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
-            onClick={(event) => {
-              event.stopPropagation();
-              onStop(run.id);
-            }}
-            disabled={stopping}
-            title={t("automations:stopRetry")}
-            aria-label={t("automations:stopRetry")}
-            data-testid="stop-retry"
-          >
-            <IconPlayerStop className="h-3.5 w-3.5" />
-          </Button>
-        )}
+    </>
+  );
+}
+
+function RunActions({
+  run,
+  deleting,
+  stopping,
+  onDelete,
+  onStop,
+}: Pick<RunRowProps, "run" | "deleting" | "stopping" | "onDelete" | "onStop">) {
+  const { t } = useTranslation();
+  return (
+    <TableCell>
+      {(run.status === "scheduled_retry" || run.retry_state === "claimed") && (
         <Button
           variant="ghost"
           size="icon-sm"
-          className="cursor-pointer text-muted-foreground hover:text-destructive opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto"
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            onDelete(run.id);
+          className="cursor-pointer text-muted-foreground hover:text-destructive [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
+          onClick={(event) => {
+            event.stopPropagation();
+            onStop(run.id);
           }}
-          disabled={deleting}
-          title={t("automations:deleteRun")}
-          data-testid="delete-run"
+          disabled={stopping}
+          title={t("automations:stopRetry")}
+          aria-label={t("automations:stopRetry")}
+          data-testid="stop-retry"
         >
-          <IconTrash className="h-3.5 w-3.5" />
+          <IconPlayerStop className="h-3.5 w-3.5" />
         </Button>
-      </TableCell>
+      )}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="cursor-pointer text-muted-foreground hover:text-destructive opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto"
+        onClick={(event) => {
+          event.stopPropagation();
+          event.preventDefault();
+          onDelete(run.id);
+        }}
+        disabled={deleting}
+        title={t("automations:deleteRun")}
+        data-testid="delete-run"
+      >
+        <IconTrash className="h-3.5 w-3.5" />
+      </Button>
+    </TableCell>
+  );
+}
+
+function RunRow({ run, deleting, stopping, onDelete, onStop, onNavigate }: RunRowProps) {
+  const taskId = run.task_id;
+  const rowClickable = !!taskId;
+  return (
+    <TableRow
+      className={
+        rowClickable
+          ? "group cursor-pointer hover:bg-muted/50"
+          : "group hover:bg-transparent focus-within:bg-transparent"
+      }
+      onClick={taskId ? () => onNavigate(taskId) : undefined}
+      data-testid={`run-row-${run.id}`}
+      data-task-id={taskId || undefined}
+    >
+      <RunDetailsCells run={run} />
+      <RunActions
+        run={run}
+        deleting={deleting}
+        stopping={stopping}
+        onDelete={onDelete}
+        onStop={onStop}
+      />
     </TableRow>
   );
 }
@@ -312,9 +334,11 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
     historyMode,
   );
   const router = useRouter();
-  const filteredRuns =
-    statusFilter === "all" ? runs : runs.filter((run) => matchesStatusFilter(run, statusFilter));
-  const visibleRuns = projectAutomationHistory(filteredRuns, historyMode);
+  const projectedRuns = projectAutomationHistory(runs, historyMode);
+  const visibleRuns =
+    statusFilter === "all"
+      ? projectedRuns
+      : projectedRuns.filter((run) => matchesStatusFilter(run, statusFilter));
 
   const emptyMessage = runs.length === 0 ? "No runs yet" : "No runs match this filter";
 
@@ -326,7 +350,7 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
           onClick={() => setExpanded(!expanded)}
         >
           <Label className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer">
-            {t("automations:recentRuns", { count: runs.length })}
+            {t("automations:recentRuns", { count: projectedRuns.length })}
           </Label>
           {expanded ? (
             <IconChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
@@ -350,7 +374,7 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
         )}
       </div>
       {expanded && runs.length > 0 && (
-        <StatusFilter runs={runs} value={statusFilter} onChange={setStatusFilter} />
+        <StatusFilter runs={projectedRuns} value={statusFilter} onChange={setStatusFilter} />
       )}
       {expanded && (
         <div className="rounded-md border">
@@ -370,7 +394,7 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
                         if (statusFilter === "all") {
                           deleteAllRuns();
                         } else {
-                          deleteAllRuns(visibleRuns.map((run) => run.id));
+                          deleteAllRuns(expandRetryGroupRunIDs(runs, visibleRuns));
                         }
                       }}
                     />

@@ -2,12 +2,14 @@ package automation
 
 import (
 	"context"
-	"strconv"
 )
 
-func (s *Service) AcknowledgeRetryEvent(ctx context.Context, runID string, version int64) error {
+func (s *Service) AcknowledgeRetryEvent(ctx context.Context, eventID, leaseToken, runID string, version int64) error {
+	if eventID == "" || leaseToken == "" {
+		return nil
+	}
 	if version == 0 {
 		version = 1
 	}
-	return s.store.AcknowledgeRetryEvent(ctx, runID+":"+strconv.FormatInt(version, 10), runID, version)
+	return s.store.AcknowledgeRetryEvent(ctx, eventID, leaseToken, runID, version)
 }

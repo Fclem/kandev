@@ -7,7 +7,7 @@ import (
 
 func (s *Store) DeferRetryClaimForCapacity(ctx context.Context, runID, token string, generation int64) error {
 	now := time.Now().UTC()
-	due := now.Add(time.Second)
+	due := now.Add(15 * time.Second)
 	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE automation_runs
 		SET retry_state = ?, retry_scheduled_at = ?, retry_claimed_at = NULL,

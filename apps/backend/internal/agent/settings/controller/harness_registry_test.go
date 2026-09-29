@@ -2,10 +2,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 type harnessRegistryTransport func(*http.Request) (*http.Response, error)
@@ -28,5 +30,45 @@ func TestHarnessStableLatestUsesTrustedHTTPSRegistryWithoutNPM(t *testing.T) {
 	}
 	if got != "1.2.3" {
 		t.Errorf("stable latest = %q", got)
+	}
+}
+
+func TestHarnessLatestLookupDeadlineAndCallerCancellation(t *testing.T) {
+	requests := make(chan *http.Request, 1)
+	client := &http.Client{Transport: harnessRegistryTransport(func(req *http.Request) (*http.Response, error) {
+		requests <- req
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	})}
+	ctrl := &Controller{runtimeUpdater: &hostRuntimeUpdater{httpClient: client}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := ctrl.resolveHarnessLatest(ctx, "@oh-my-pi/pi-coding-agent")
+		result <- err
+	}()
+	var req *http.Request
+	select {
+	case req = <-requests:
+	case <-time.After(time.Second):
+		t.Fatal("registry request did not start")
+	}
+	deadline, ok := req.Context().Deadline()
+	if !ok {
+		t.Fatal("registry request has no deadline")
+	}
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > runtimeUpdateMetadataLookupTimeout {
+		t.Fatalf("registry deadline remaining = %v, want within %v", remaining, runtimeUpdateMetadataLookupTimeout)
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("lookup error = %v, want caller cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("blocked registry request did not terminate on caller cancellation")
 	}
 }

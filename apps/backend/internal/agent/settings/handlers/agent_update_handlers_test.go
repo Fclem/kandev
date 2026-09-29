@@ -427,11 +427,14 @@ func TestHarnessUpdateHTTPNoJobAndRejectedTargets(t *testing.T) {
 		t.Errorf("no-job approval broadcast finished event %+v", event)
 	default:
 	}
-	for _, body := range []string{`{\"target_version\":\"1.2.0\"}`, `{\"use_default\":true}`, `{\"command\":[\"sh\",\"-c\",\"exit 0\"],\"target_version\":\"1.2.0\"}`} {
+	for _, body := range []string{`{"target_version":"1.2.0"}`, `{"use_default":true}`, `{"command":["sh","-c","exit 0"],"target_version":"1.2.0"}`} {
 		rejected := httptest.NewRecorder()
 		router.ServeHTTP(rejected, updateJSONRequest(http.MethodPost, "/api/v1/agent-update/omp-acp", body))
 		if rejected.Code != http.StatusBadRequest {
 			t.Errorf("body %s status = %d: %s", body, rejected.Code, rejected.Body.String())
+		}
+		if jobs := ctrl.ListAgentUpdateJobs(); len(jobs) != 0 {
+			t.Errorf("rejected body %s created %d update jobs", body, len(jobs))
 		}
 	}
 }

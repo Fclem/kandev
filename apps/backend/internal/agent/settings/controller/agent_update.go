@@ -401,7 +401,9 @@ func (u *hostRuntimeUpdater) ResolveTarget(ctx context.Context, packageName stri
 // ResolveHarnessLatest reads the stable dist-tag from the fixed public HTTPS
 // registry. Unlike pinned runtimes, this lookup never starts an npm process.
 func (u *hostRuntimeUpdater) ResolveHarnessLatest(ctx context.Context, pkg string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+	lookupCtx, cancel := context.WithTimeout(ctx, runtimeUpdateMetadataLookupTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(lookupCtx, http.MethodGet,
 		"https://registry.npmjs.org/"+url.PathEscape(pkg), nil)
 	if err != nil {
 		return "", err

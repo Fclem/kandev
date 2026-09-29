@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	runtimeUpdateStatusSuccessTTL    = 6 * time.Hour
-	runtimeUpdateStatusFailureTTL    = 15 * time.Minute
-	runtimeUpdateStatusMaxConcurrent = 5
-	runtimeUpdateStatusLookupTimeout = 10 * time.Second
+	runtimeUpdateStatusSuccessTTL      = 6 * time.Hour
+	runtimeUpdateStatusFailureTTL      = 15 * time.Minute
+	runtimeUpdateStatusMaxConcurrent   = 5
+	runtimeUpdateMetadataLookupTimeout = 10 * time.Second
 )
 
 // RuntimeUpdateStatusResolver is the latest-version lookup seam used by the
@@ -236,7 +236,7 @@ func (c *Controller) runtimeUpdateStatusEntry(
 	}
 	c.runtimeUpdateStatusMu.Unlock()
 
-	lookupCtx, cancel := context.WithTimeout(ctx, runtimeUpdateStatusLookupTimeout)
+	lookupCtx, cancel := context.WithTimeout(ctx, runtimeUpdateMetadataLookupTimeout)
 	defer cancel()
 	latest, err := c.resolveRuntimeUpdateLatest(lookupCtx, packageName, mode)
 	entry := runtimeUpdateStatusCacheEntry{}
@@ -245,8 +245,10 @@ func (c *Controller) runtimeUpdateStatusEntry(
 		entry.ok = true
 		entry.checkedAt = now
 		entry.expiresAt = now.Add(runtimeUpdateStatusSuccessTTL)
-	} else {
+	} else if ctx.Err() == nil {
 		entry.expiresAt = now.Add(runtimeUpdateStatusFailureTTL)
+	} else {
+		return entry
 	}
 	c.runtimeUpdateStatusMu.Lock()
 	if c.runtimeUpdateStatusCache == nil {

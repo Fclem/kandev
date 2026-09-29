@@ -147,13 +147,13 @@ In the current backend, the schedule and GitHub PR condition are independent tri
 Send `POST /api/v1/automations/webhook/<automation-id>` with the
 `X-Webhook-Secret` and `X-Kandev-Delivery-ID` headers. Delivery IDs are required
 and deduplicate a delivery per automation, so a provider can safely retry the
-same request. The endpoint accepts bodies up to 1 MiB and never stores the raw
-body or request headers in automation history.
-
-Webhook trigger configuration may list up to 32 bounded RFC 6901 JSON pointers
-in `safe_json_pointers`. Only those selected values are retained in retry
-history. Invalid pointers, pointers deeper than eight segments, and projected
-values over the configured bounds are rejected.
+same request. The endpoint accepts bodies up to 1 MiB and never stores request
+headers. With no `safe_json_pointers` configured, the validated bounded JSON
+body is retained for legacy webhook interpolation, dedup-key, and repository
+selector paths. When pointers are configured, only selected values are retained
+in retry history; path-based features can resolve only those retained values.
+Invalid pointers, pointers deeper than eight segments, and projected values
+over the configured bounds are rejected.
 
 Automation retry history groups all attempts under the original trigger
 identity. The history view returns a bounded page, an opaque continuation
@@ -235,14 +235,14 @@ Content-Type: application/json
 
 Webhook requests must include `X-Kandev-Delivery-ID`, limited to 256 characters. If a configured deduplication path resolves to a supported, non-empty value, that value deduplicates deliveries. If the path is not configured or does not resolve to a supported value, Kandev uses the delivery ID instead. Kandev accepts an empty body, rejects invalid JSON or invalid JSON-pointer projections with `400`, and rejects bodies larger than 1 MiB with `413`.
 
-Webhook trigger configuration can retain selected payload values with up to 32 bounded RFC 6901 pointers. Only selected values are stored in retry history. A delivery whose configured deduplication key resolves to a value seen on an earlier firing is recorded as a duplicate and creates no new task.
+Webhook trigger configuration can retain selected payload values with up to 32 bounded RFC 6901 pointers. When pointers are configured, only selected values are stored in retry history. Without pointers, the validated payload is retained up to the 1 MiB request limit to preserve legacy `{{webhook.<path>}}` interpolation. A delivery whose configured deduplication key resolves to a value seen on an earlier firing is recorded as a duplicate and creates no new task.
 
 A webhook trigger's configuration can optionally set a deduplication key, a list of filters, a repository selector, and safe JSON pointers:
 
 - **Deduplication key**: a dot path into the payload, for example `issue.id`. A delivery whose resolved value repeats an earlier firing's is recorded as a duplicate and creates no new task. If the path is blank or does not resolve to a supported value, Kandev deduplicates by delivery ID.
 - **Filters**: an ordered list of `{path, op, values}` predicates, evaluated before deduplication and before the run's concurrency slot is claimed. Every filter must pass for the delivery to fire; a rejected delivery still returns the uniform 200 response, creates no task, and is recorded as skipped. Supported operators are `eq`, `ne`, `in`, `not_in`, `exists`, `not_exists`, and `contains`; the five comparison operators other than `exists`/`not_exists` trim and lowercase both sides before comparing, so filter values are case-insensitive. A path that does not resolve fails every operator except `not_exists`.
 - **Repository selector**: a dot path whose resolved value is matched, exactly and case-sensitively, against one of the automation's already-configured repositories by name. Exactly one match binds that repository to the run; no match, or more than one, binds none. This is deliberately not the same resolution GitHub pull request triggers use, because the webhook route is exempt from session authentication and authorized by its shared secret alone, so a payload must never be able to name an arbitrary repository.
-- **Safe JSON pointers**: up to 32 RFC 6901 pointers select payload fields retained in retry history. Selected values have per-value, total-size, and pointer-depth limits. Unselected fields are not persisted in retry snapshots.
+- **Safe JSON pointers**: up to 32 RFC 6901 pointers select payload fields retained in retry history. Selected values have per-value, total-size, and pointer-depth limits. When configured, unselected fields are not persisted in retry snapshots; when omitted, the bounded validated payload is retained for legacy interpolation.
 
 Make downstream actions idempotent regardless: a sender can still retry a delivery that Kandev has already deduplicated or filtered. The secret is stored with the automation rather than in Kandev's encrypted provider-secret store, and anyone with Kandev settings access can reveal it. Treat it as a credential, use TLS, keep it out of URLs/logs, and replace the automation if rotation is required.
 
@@ -1130,7 +1130,7 @@ workspace. Unknown and unauthorized task/session IDs return the same not-found r
 - **No GitHub PR runs:** connect GitHub and select explicit repositories; **All repos** currently evaluates none.
 - **Run fails before a task starts:** select valid non-passthrough agent and non-local executor profiles, and add/select a repository.
 - **Run fails on permission:** an automation run cannot answer prompts. Use a safely constrained profile that does not require one, or reply to the run afterward and let the agent continue.
-- **Webhook rejected or data is incomplete:** check the exact automation ID, `X-Webhook-Secret` header, and enabled automation/trigger. Bodies over 1 MiB are not rejected; the suffix is silently discarded, so inspect the retained trigger data.
+- **Webhook rejected or data is incomplete:** check the exact automation ID, `X-Webhook-Secret` header, and enabled automation/trigger. Bodies over 1 MiB are rejected with `413`; inspect the configured JSON pointers and retained trigger data for missing fields.
 - **Missing template data:** inspect run trigger data and the dot path; unresolved placeholders are intentionally removed.
 - **Task MCP tool missing:** confirm this is a Kandev task session, the agent supports the injection strategy, and the operation belongs to task rather than external mode.
 - **One agent did not load MCP tools:** inspect that session's toolbar report. A delivered/unverified row is evidence that ACP or passthrough configuration reached the agent, not proof that the agent contacted the server. For deeper developer investigation, run `acpdbg mcp-probe` against the agent and inspect its JSONL.

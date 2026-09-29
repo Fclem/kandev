@@ -84,7 +84,7 @@ type automationRetrySuccess interface {
 	MarkAutomationRetrySucceeded(ctx context.Context, runID string, generation int64) error
 }
 type automationRetryReceipt interface {
-	AcknowledgeRetryEvent(ctx context.Context, runID string, version int64) error
+	AcknowledgeRetryEvent(ctx context.Context, eventID, leaseToken, runID string, version int64) error
 }
 type automationRetryOperation interface {
 	BeginRetryTaskOperation(ctx context.Context, runID string, generation int64) (*automation.RetryOperation, error)
@@ -1505,7 +1505,7 @@ func (s *Service) acknowledgeRetryEventAfterBinding(ctx context.Context, evt *au
 			zap.String("run_id", evt.RunID))
 		return
 	}
-	if err := receipt.AcknowledgeRetryEvent(ctx, evt.RunID, evt.SnapshotVersion); err != nil {
+	if err := receipt.AcknowledgeRetryEvent(ctx, evt.RetryOutboxEventID, evt.RetryOutboxLeaseToken, evt.RunID, evt.SnapshotVersion); err != nil {
 		s.logger.Warn("failed to acknowledge automation retry event", zap.Error(err))
 	}
 }

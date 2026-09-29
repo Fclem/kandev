@@ -2,6 +2,7 @@ import { getWebSocketClient } from "@/lib/ws/connection";
 import type {
   Automation,
   AutomationRun,
+  AutomationRunsPage,
   AutomationSummary,
   CreateAutomationRequest,
   CreateAutomationResponse,
@@ -90,6 +91,19 @@ export async function listAutomationRuns(
   return requireClient().request<AutomationRun[]>("automation.runs.list", {
     automation_id: automationId,
     ...(limit ? { limit } : {}),
+  });
+}
+
+export async function listAutomationRunPage(
+  automationId: string,
+  cursor?: string,
+  limit = 200,
+): Promise<AutomationRunsPage> {
+  return requireClient().request<AutomationRunsPage>("automation.runs.list", {
+    automation_id: automationId,
+    page: true,
+    ...(cursor ? { cursor } : {}),
+    limit,
   });
 }
 

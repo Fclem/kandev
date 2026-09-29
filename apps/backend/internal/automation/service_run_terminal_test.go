@@ -263,7 +263,7 @@ func TestUpdateAutomationDisableCancelsRetryGroups(t *testing.T) {
 	require.Equal(t, RetryStateCancelled, storedRun.RetryState)
 }
 
-func TestDisableAutomationCancelsRetriesWhenStoppingRunFails(t *testing.T) {
+func TestDisableAutomationPreservesRetriesWhenStoppingRunFails(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	a := &Automation{WorkspaceID: "workspace-disable-error", Name: "disable error", Enabled: true}
@@ -282,10 +282,13 @@ func TestDisableAutomationCancelsRetriesWhenStoppingRunFails(t *testing.T) {
 	require.ErrorIs(t, svc.DisableAutomation(ctx, a.ID), stopErr)
 	stored, err := svc.store.GetRun(ctx, run.ID)
 	require.NoError(t, err)
-	require.Equal(t, RetryStateCancelled, stored.RetryState)
+	require.Equal(t, RetryStateTriggered, stored.RetryState)
+	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryGroupLive, storedGroup.State)
 }
 
-func TestUpdateAutomationDisableCancelsRetriesWhenStoppingRunFails(t *testing.T) {
+func TestUpdateAutomationDisablePreservesRetriesWhenStoppingRunFails(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	a := &Automation{WorkspaceID: "workspace-update-disable-error", Name: "update disable error", Enabled: true}
@@ -306,7 +309,7 @@ func TestUpdateAutomationDisableCancelsRetriesWhenStoppingRunFails(t *testing.T)
 	require.ErrorIs(t, err, stopErr)
 	stored, getErr := svc.store.GetRun(ctx, run.ID)
 	require.NoError(t, getErr)
-	require.Equal(t, RetryStateCancelled, stored.RetryState)
+	require.Equal(t, RetryStateTriggered, stored.RetryState)
 }
 
 func TestDeleteRunCancelsLiveRetryGroupBeforeDeletingRun(t *testing.T) {

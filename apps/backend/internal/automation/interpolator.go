@@ -184,17 +184,15 @@ func lookupWebhookProjectionPath(data map[string]interface{}, path string) (stri
 	}
 	parts := strings.Split(path, ".")
 	pointer := "/" + strings.Join(parts, "/")
-	value, ok := payload[pointer]
-	if !ok || value == nil {
-		return "", false
+	if value, ok := payload[pointer]; ok && value != nil {
+		return toString(value), true
 	}
-	return toString(value), true
+	return lookupPath(payload, path)
 }
 
-// ResolvePayloadPath resolves a dot path against a raw JSON payload,
-// trimming the result and treating a present-but-empty value as unresolved.
-// This is the shared trim-then-test semantics used by dedup key resolution
-// (webhook.go) and repository selector resolution (orchestrator package).
+// ResolvePayloadPath resolves a path in top-level trigger data or its webhook
+// payload projection, trimming the result and treating empty values as unresolved.
+// It is shared by webhook deduplication and repository selector resolution.
 func ResolvePayloadPath(triggerData json.RawMessage, path string) (value string, ok bool) {
 	if path == "" {
 		return "", false
@@ -204,6 +202,9 @@ func ResolvePayloadPath(triggerData json.RawMessage, path string) (value string,
 		return "", false
 	}
 	raw, found := lookupPath(data, path)
+	if !found {
+		raw, found = lookupWebhookProjectionPath(data, path)
+	}
 	if !found {
 		return "", false
 	}

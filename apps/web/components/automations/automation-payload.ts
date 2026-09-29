@@ -39,6 +39,20 @@ export type FormState = {
   retryPolicy: RetryPolicy;
 };
 
+export function retryPolicyAfterModeChange(
+  policy: RetryPolicy,
+  mode: RetryPolicy["mode"],
+): RetryPolicy {
+  const maxRetries = Number(policy.max_retries);
+  return {
+    ...policy,
+    mode,
+    ...(mode === "finite" && (!Number.isSafeInteger(maxRetries) || maxRetries < 1)
+      ? { max_retries: "1" }
+      : {}),
+  };
+}
+
 export type PendingTrigger = {
   tempId: string;
   type: TriggerType;

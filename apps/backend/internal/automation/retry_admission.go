@@ -74,7 +74,7 @@ func (s *Store) bindRetryIntentTask(ctx context.Context, runID, taskID, state st
 	}
 	if affected, _ := result.RowsAffected(); affected == 0 {
 		var groupID string
-		if lookupErr := s.db.Get(&groupID, `SELECT retry_group_id FROM automation_runs WHERE id = ?`, runID); lookupErr == nil && groupID != "" {
+		if lookupErr := s.db.GetContext(ctx, &groupID, s.db.Rebind(`SELECT retry_group_id FROM automation_runs WHERE id = ?`), runID); lookupErr == nil && groupID != "" {
 			return ErrRetryGenerationMismatch
 		}
 	}

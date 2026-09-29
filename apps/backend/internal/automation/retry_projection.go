@@ -92,3 +92,59 @@ func (s *Store) PendingRetrySummary(ctx context.Context, automationID string) (P
 	}
 	return PendingRetrySummary{Count: count, Items: items, Limit: limit}, nil
 }
+
+type pendingRetrySummaryRow struct {
+	AutomationRun
+	PendingCount int `db:"pending_count"`
+	RowNumber    int `db:"pending_row_number"`
+}
+
+func (s *Store) PendingRetrySummaries(ctx context.Context, automationIDs []string) (map[string]PendingRetrySummary, error) {
+	summaries := make(map[string]PendingRetrySummary, len(automationIDs))
+	if len(automationIDs) == 0 {
+		return summaries, nil
+	}
+	const limit = 32
+	for _, automationID := range automationIDs {
+		summaries[automationID] = PendingRetrySummary{Items: []*AutomationRun{}, Limit: limit}
+	}
+	const batchSize = 500
+	for start := 0; start < len(automationIDs); start += batchSize {
+		end := min(start+batchSize, len(automationIDs))
+		batch := automationIDs[start:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		args := []any{RetryGroupLive, RetryStateScheduled, RetryStateClaimed}
+		for _, automationID := range batch {
+			args = append(args, automationID)
+		}
+		args = append(args, limit)
+		var rows []pendingRetrySummaryRow
+		query := `
+			SELECT * FROM (
+				SELECT ar.*,
+					COUNT(*) OVER (PARTITION BY ar.automation_id) AS pending_count,
+					ROW_NUMBER() OVER (
+						PARTITION BY ar.automation_id
+						ORDER BY COALESCE(ar.retry_scheduled_at, ar.created_at), ar.id
+					) AS pending_row_number
+				FROM automation_runs ar
+				JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
+				WHERE rg.state = ? AND ar.retry_state IN (?, ?)
+					AND ar.automation_id IN (` + placeholders + `)
+			) pending
+			WHERE pending_row_number <= ?
+			ORDER BY automation_id, pending_row_number`
+		if err := s.ro.SelectContext(ctx, &rows, s.ro.Rebind(query), args...); err != nil {
+			return nil, err
+		}
+		for i := range rows {
+			row := &rows[i]
+			row.TriggerData = json.RawMessage(row.TriggerDataJSON)
+			summary := summaries[row.AutomationID]
+			summary.Count = row.PendingCount
+			summary.Items = append(summary.Items, &row.AutomationRun)
+			summaries[row.AutomationID] = summary
+		}
+	}
+	return summaries, nil
+}

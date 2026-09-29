@@ -70,6 +70,9 @@ func safeWebhookTriggerData(body []byte, pointers []string, triggerID, deliveryI
 		retryTriggerIDKey:   triggerID,
 		"delivery_id":       deliveryID,
 	}
+	if len(body) > maxWebhookBodyBytes {
+		return nil, errors.New("webhook body is too large")
+	}
 	if len(pointers) > 32 {
 		return nil, errors.New("too many webhook JSON pointers")
 	}
@@ -84,15 +87,27 @@ func safeWebhookTriggerData(body []byte, pointers []string, triggerID, deliveryI
 			return nil, err
 		}
 	}
-	selected, err := projectWebhookPayload(body, pointers)
+	payload, err := safeWebhookPayload(body, pointers)
 	if err != nil {
 		return nil, err
 	}
-	if selected != nil {
-		projection["payload"] = selected
+	if payload != nil {
+		projection["payload"] = payload
 	}
 	encoded, err := json.Marshal(projection)
 	return encoded, err
+}
+func safeWebhookPayload(body []byte, pointers []string) (any, error) {
+	if len(pointers) > 0 {
+		return projectWebhookPayload(body, pointers)
+	}
+	if len(body) == 0 {
+		return nil, nil
+	}
+	if !json.Valid(body) {
+		return nil, errors.New("invalid webhook JSON")
+	}
+	return json.RawMessage(body), nil
 }
 
 func projectWebhookPayload(body []byte, pointers []string) (map[string]json.RawMessage, error) {

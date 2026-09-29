@@ -224,7 +224,7 @@ func TestPostgresRetryConcurrencyContracts(t *testing.T) {
 
 	leaseRun := &AutomationRun{ID: "pg-retry-lease-run", AutomationID: a.ID,
 		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
-		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered}
+		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered, AttemptNumber: 3}
 	if err := store.CreateRun(ctx, leaseRun); err != nil {
 		t.Fatalf("create lease run: %v", err)
 	}

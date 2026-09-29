@@ -441,6 +441,11 @@ type RetryHistoryPage struct {
 	HighWaterMark string                 `json:"high_water_mark"`
 }
 
+type AutomationRunsPage struct {
+	Items      []*AutomationRun `json:"items"`
+	NextCursor string           `json:"next_cursor,omitempty"`
+}
+
 // AutomationSummary is one automation's health, answered per automation rather
 // than inferred from a capped feed: what it last said, and whether anything of
 // its own is still running.
@@ -699,6 +704,8 @@ type AutomationTriggeredEvent struct {
 	RetryExternalID        string          `json:"retry_external_id,omitempty"`
 	SnapshotVersion        int64           `json:"snapshot_version,omitempty"`
 	RetryAmbiguousRecovery bool            `json:"retry_ambiguous_recovery,omitempty"`
+	RetryOutboxEventID     string          `json:"retry_outbox_event_id,omitempty"`
+	RetryOutboxLeaseToken  string          `json:"retry_outbox_lease_token,omitempty"`
 }
 
 // RepositoryLookup resolves a repository's workspace ownership for

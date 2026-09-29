@@ -5,13 +5,16 @@ import { t } from "@/lib/i18n";
 import { toast } from "@/lib/toast/sonner";
 import {
   listAutomationRuns,
+  listAutomationRunPage,
   listAutomationRetryHistory,
   deleteAutomationRun,
   deleteAllAutomationRuns,
   stopAutomationRun,
 } from "@/lib/api/domains/automation-api";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
-import type { AutomationRun, RetryHistoryMode, RetryHistoryPage } from "@/lib/types/automation";
+import type { AutomationRun, RetryHistoryMode } from "@/lib/types/automation";
+import { retryPollDelay } from "./automation-run-polling";
+import { collectCursorPages } from "./automation-run-history";
 
 const EMPTY_RUNS: AutomationRun[] = [];
 const RETRY_HISTORY_PAGE_SIZE = 50;
@@ -19,21 +22,15 @@ const RETRY_PENDING_STATUSES: Record<string, true> = {
   scheduled_retry: true,
 };
 
+function listAllAutomationRuns(automationId: string): Promise<AutomationRun[]> {
+  return collectCursorPages((cursor) => listAutomationRunPage(automationId, cursor, 200));
+}
+
 async function listAllAutomationRetryHistory(automationId: string): Promise<AutomationRun[]> {
-  const runs: AutomationRun[] = [];
-  let cursor: string | undefined;
-  for (;;) {
-    const page: RetryHistoryPage = await listAutomationRetryHistory(
-      automationId,
-      cursor,
-      RETRY_HISTORY_PAGE_SIZE,
-    );
-    for (const item of page.items ?? []) {
-      runs.push(...(item.attempts ?? []));
-    }
-    if (!page.next_cursor || page.next_cursor === cursor) return runs;
-    cursor = page.next_cursor;
-  }
+  const groups = await collectCursorPages((cursor) =>
+    listAutomationRetryHistory(automationId, cursor, RETRY_HISTORY_PAGE_SIZE),
+  );
+  return groups.flatMap((group) => group.attempts ?? []);
 }
 
 function mergeAutomationRuns(
@@ -98,7 +95,7 @@ function fetchRuns(storeApi: object, automationId: string, options: FetchRunsOpt
   const request =
     historyMode === "timeline"
       ? Promise.all([
-          listAutomationRuns(automationId),
+          listAllAutomationRuns(automationId),
           listAllAutomationRetryHistory(automationId),
         ]).then(([regularRuns, retryHistoryRuns]) =>
           mergeAutomationRuns(regularRuns ?? [], retryHistoryRuns),
@@ -365,14 +362,21 @@ export function useAutomationRuns(
 
   useEffect(() => {
     if (!automationId) return;
-    const interval = window.setInterval(() => {
+    let timeout = 0;
+    let poll = () => {};
+    const scheduleNextPoll = () => {
+      const currentRuns =
+        storeApi.getState().automationRuns.byAutomationId[automationId] ?? EMPTY_RUNS;
+      if (!currentRuns.some((run) => RETRY_PENDING_STATUSES[run.status])) return;
+      timeout = window.setTimeout(poll, retryPollDelay(currentRuns));
+    };
+    poll = () => {
       const state = storeApi.getState().automationRuns;
-      const currentRuns = state.byAutomationId[automationId] ?? EMPTY_RUNS;
       if (
-        !currentRuns.some((run) => RETRY_PENDING_STATUSES[run.status]) ||
         state.loading[automationId] ||
         (state.deleting[automationId] !== false && state.deleting[automationId] !== undefined)
       ) {
+        scheduleNextPoll();
         return;
       }
       fetchRuns(storeApi, automationId, {
@@ -381,9 +385,11 @@ export function useAutomationRuns(
         setRuns,
         historyMode,
       });
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [automationId, historyMode, setRuns, setRunsLoading, storeApi]);
+      scheduleNextPoll();
+    };
+    scheduleNextPoll();
+    return () => window.clearTimeout(timeout);
+  }, [automationId, historyMode, runs, setRuns, setRunsLoading, storeApi]);
 
   const refresh = useCallback(() => {
     if (!automationId) return;

@@ -9,6 +9,7 @@
  */
 import type { DockviewApi, SerializedDockview } from "dockview-react";
 import { getEnvLayout, getManualRightWidth } from "@/lib/local-storage";
+import { getEnvHiddenSessions, resolveVisibleSessionId } from "@/lib/env-hidden-sessions";
 import { applyLayoutFixups } from "./dockview-layout-builders";
 import { isLayoutShapeHealthy } from "./dockview-layout-health";
 import {
@@ -166,7 +167,13 @@ export function replaceStaleSessionPanels(
   keepSessionId: string | null,
   currentSessionIds: string[] = [],
   sessionListRestoreState?: SessionListRestoreState,
+  envId: string | null = null,
 ): void {
+  keepSessionId = resolveVisibleSessionId(
+    keepSessionId,
+    currentSessionIds,
+    envId ? getEnvHiddenSessions(envId) : [],
+  );
   const keepId = keepSessionId ? `session:${keepSessionId}` : null;
   const sessionListLoaded = sessionListRestoreState?.loaded ?? true;
   const knownForeignSessionIds = sessionListRestoreState?.knownForeignSessionIds;
@@ -214,7 +221,7 @@ export function replaceStaleSessionPanels(
     }
   }
 
-  addCurrentSessionSiblings(api, keepSessionId, currentSessionIds);
+  addCurrentSessionSiblings(api, keepSessionId, currentSessionIds, envId);
 }
 
 const RESTORED_SESSION_ANCHOR_IDS = ["plan"];
@@ -246,6 +253,7 @@ function addCurrentSessionSiblings(
   api: DockviewApi,
   keepSessionId: string | null,
   currentSessionIds: string[],
+  envId: string | null,
 ): void {
   if (!keepSessionId) return;
   const activePanel = api.getPanel(`session:${keepSessionId}`);
@@ -255,7 +263,9 @@ function addCurrentSessionSiblings(
     (sessionId, index, sessionIds) =>
       sessionId && sessionId !== keepSessionId && sessionIds.indexOf(sessionId) === index,
   );
+  const hiddenSessionIds = new Set(envId ? getEnvHiddenSessions(envId) : []);
   for (const sessionId of uniqueSessionIds) {
+    if (hiddenSessionIds.has(sessionId)) continue;
     if (api.getPanel(`session:${sessionId}`)) continue;
     addIncomingSessionPanel(api, sessionId, activePanel.group.id, activePanel.group.panels.length, {
       inactive: true,
@@ -358,6 +368,7 @@ function tryFastEnvSwitch(params: EnvSwitchParams): LayoutGroupIds | null {
     activeSessionId,
     currentSessionIds,
     params.sessionListRestoreState,
+    newEnvId,
   );
 
   // The fast path skips `fromJSON`, so per-group active tabs from the
@@ -580,17 +591,20 @@ function applyInitialRouteLayout(params: EnvSwitchParams): LayoutGroupIds | null
  * The caller is responsible for saving the old env's layout and releasing
  * env-scoped portals before calling this function.
  */
-export function performEnvSwitch(params: EnvSwitchParams): LayoutGroupIds {
-  const {
-    api,
-    oldEnvId,
-    newEnvId,
-    activeSessionId,
-    currentSessionIds = [],
-    safeWidth,
-    safeHeight,
-    buildDefault,
-  } = params;
+export function performEnvSwitch({
+  currentSessionIds = [],
+  ...input
+}: EnvSwitchParams): LayoutGroupIds {
+  const params = {
+    ...input,
+    currentSessionIds,
+    activeSessionId: resolveVisibleSessionId(
+      input.activeSessionId,
+      currentSessionIds,
+      getEnvHiddenSessions(input.newEnvId),
+    ),
+  };
+  const { api, oldEnvId, newEnvId, activeSessionId, safeWidth, safeHeight, buildDefault } = params;
   if (isDebug()) {
     debug("performEnvSwitch: entry", {
       oldEnvId,
@@ -650,6 +664,7 @@ export function performEnvSwitch(params: EnvSwitchParams): LayoutGroupIds {
         activeSessionId,
         currentSessionIds,
         params.sessionListRestoreState,
+        params.newEnvId,
       );
       if (activeSessionId) restoreMissingSessionPanel(api, activeSessionId);
       restoreSavedActiveViews(api, saved as SerializedDockview, activeSessionId);

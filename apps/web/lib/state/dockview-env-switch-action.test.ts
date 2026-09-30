@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Integration coverage shares one Dockview fixture. */
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { DockviewApi, SerializedDockview } from "dockview-react";
 import { performLayoutSwitch, useDockviewStore } from "./dockview-store";
@@ -12,7 +14,9 @@ vi.mock("@/lib/local-storage", () => ({
   removeEnvMaximizeState: vi.fn(),
   getGlobalSidebarWidth: vi.fn(() => null),
   getManualRightWidth: vi.fn(() => null),
+  getSessionStorage: vi.fn((_key: string, fallback: string[]) => fallback),
   setGlobalSidebarWidth: vi.fn(),
+  setSessionStorage: vi.fn(),
   clearGlobalSidebarWidth: vi.fn(),
 }));
 
@@ -675,7 +679,6 @@ describe("switchEnvLayout — retired panel compatibility", () => {
     expect(state.preMaximizeLayout).not.toBeNull();
     expect(state.maximizedGroupId).toBeTruthy();
   });
-
   it("applies a pre-maximize fallback and retains its record after a failed write", () => {
     const api = makeMockApi();
     vi.mocked(api.toJSON)

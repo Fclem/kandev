@@ -20,7 +20,9 @@ import {
   shouldPreserveActivePanel,
 } from "./dockview-session-tab-activation";
 import { anchorIncomingSessionPanel, ensureSessionPanel } from "./dockview-session-handoff";
+import { hiddenSessionIdsFor, pruneHiddenSessionIds } from "./dockview-hidden-session-panels";
 import { t } from "@/lib/i18n";
+import { resolveVisibleSessionId } from "@/lib/env-hidden-sessions";
 
 const debug = createDebugLogger("dockview:session-tabs");
 
@@ -370,8 +372,10 @@ function ensureSiblingPanels(
   createdSet: Set<string>,
 ): string[] {
   const created: string[] = [];
+  const hiddenSessionIds = hiddenSessionIdsFor(api);
   for (const sid of currentSessionIds) {
     if (sid === effectiveSessionId) continue;
+    if (hiddenSessionIds.has(sid)) continue;
     if (isDebug() && !api.getPanel(`session:${sid}`)) created.push(sid);
     ensureSessionPanel(api, sid, siblingAnchor, true, createdSet);
   }
@@ -382,12 +386,16 @@ function ensureSiblingPanels(
 function resolveCurrentSessionIds(appStore: ReturnType<typeof useAppStoreApi>): {
   tid: string | null;
   currentSessionIds: string[];
+  sessionListLoaded: boolean;
 } {
-  const tid = appStore.getState().tasks.activeTaskId;
-  const currentSessions = tid
-    ? (appStore.getState().taskSessionsByTask.itemsByTaskId[tid] ?? [])
-    : [];
-  return { tid: tid ?? null, currentSessionIds: currentSessions.map((s) => s.id) };
+  const state = appStore.getState();
+  const tid = state.tasks.activeTaskId;
+  const currentSessions = tid ? (state.taskSessionsByTask.itemsByTaskId[tid] ?? []) : [];
+  return {
+    tid: tid ?? null,
+    currentSessionIds: currentSessions.map((session) => session.id),
+    sessionListLoaded: tid ? (state.taskSessionsByTask.loadedByTaskId[tid] ?? false) : false,
+  };
 }
 
 /**
@@ -499,6 +507,22 @@ function updateAutoSessionTabRefs(
   refs.prevTaskIdRef.current = tid;
   refs.prevSessionIdRef.current = effectiveSessionId;
 }
+function reconcileLoadedSessionPanels(
+  api: DockviewApi,
+  refs: AutoSessionTabRefs,
+  currentSessionIds: string[],
+  effectiveSessionId: string | null,
+  sessionListLoaded: boolean,
+): void {
+  if (!sessionListLoaded) return;
+  reconcileRemovedSessionPanels(
+    api,
+    refs.sessionTabCreatedRef.current,
+    currentSessionIds,
+    effectiveSessionId ?? "",
+  );
+  useDockviewStore.getState().reconcileMaximizeSessionList(effectiveSessionId, currentSessionIds);
+}
 
 function workflowFocusRequestIdForSession(
   appStore: ReturnType<typeof useAppStoreApi>,
@@ -521,7 +545,7 @@ export function runAutoSessionTabEffect(
   const api = useDockviewStore.getState().api;
   if (!api) return;
 
-  const { tid, currentSessionIds } = resolveCurrentSessionIds(appStore);
+  const { tid, currentSessionIds, sessionListLoaded } = resolveCurrentSessionIds(appStore);
 
   logAutoSessionTabEffectEntry(api, effectiveSessionId, tid, currentSessionIds, refs);
 
@@ -532,21 +556,22 @@ export function runAutoSessionTabEffect(
     return;
   }
 
-  const sessionListLoaded = tid
-    ? (appStore.getState().taskSessionsByTask.loadedByTaskId[tid] ?? false)
-    : false;
-  if (sessionListLoaded) {
-    reconcileRemovedSessionPanels(
-      api,
-      refs.sessionTabCreatedRef.current,
-      currentSessionIds,
-      effectiveSessionId ?? "",
-    );
-    useDockviewStore.getState().reconcileMaximizeSessionList(effectiveSessionId, currentSessionIds);
-  }
+  reconcileLoadedSessionPanels(api, refs, currentSessionIds, effectiveSessionId, sessionListLoaded);
+  pruneHiddenSessionIds(api, appStore.getState);
 
   if (!effectiveSessionId) {
     if (isDebug()) debug("useAutoSessionTab: no effectiveSessionId, returning");
+    updateAutoSessionTabRefs(refs, tid, effectiveSessionId);
+    return;
+  }
+
+  if (hiddenSessionIdsFor(api).has(effectiveSessionId)) {
+    const visibleSessionId = resolveVisibleSessionId(
+      effectiveSessionId,
+      currentSessionIds,
+      hiddenSessionIdsFor(api),
+    );
+    if (tid && visibleSessionId) appStore.getState().setActiveSessionAuto(tid, visibleSessionId);
     updateAutoSessionTabRefs(refs, tid, effectiveSessionId);
     return;
   }

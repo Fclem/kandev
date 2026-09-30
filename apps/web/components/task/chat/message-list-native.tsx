@@ -708,7 +708,6 @@ function NativeMessageListBody({
       <MessageListFooter
         sessionState={sessionState}
         sessionId={sessionId}
-        taskId={taskId}
         messages={messages}
         isWorking={isWorking}
         footerActionMessages={footerActionMessages}

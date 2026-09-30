@@ -403,11 +403,12 @@ var (
 	// Workspace-source sentinels are the service boundary consumed by the HTTP
 	// and MCP adapters. Keep categories stable rather than making callers parse
 	// a validation or runtime error string.
-	ErrInvalidWorkspaceSource     = errors.New("invalid workspace source")
-	ErrWorkspaceSourceConflict    = errors.New("workspace source conflict")
-	ErrWorkspaceSourceActive      = errors.New("workspace source task is active")
-	ErrUnsupportedWorkspaceSource = errors.New("unsupported workspace source")
-	ErrWorkspaceSourceMaterialize = errors.New("workspace source materialization failed")
+	ErrInvalidWorkspaceSource      = errors.New("invalid workspace source")
+	ErrWorkspaceSourceConflict     = errors.New("workspace source conflict")
+	ErrWorkspaceSourceActive       = errors.New("workspace source task is active")
+	ErrUnsupportedWorkspaceSource  = errors.New("unsupported workspace source")
+	ErrWorkspaceSourceMaterialize  = errors.New("workspace source materialization failed")
+	ErrWorkspaceIdleTimeoutInvalid = errors.New("workspace ACP idle timeout must be a positive number of minutes")
 )
 
 func validateExecutorConfig(config map[string]string) error {
@@ -646,6 +647,8 @@ type Service struct {
 	pendingActionProjectionMu       sync.Mutex
 	pendingActionProjectionEpoch    string
 	pendingActionProjectionSequence uint64
+	pendingActionProjectionObserved map[string]pendingActionProjectionState
+	pendingActionSnapshotValues     map[string]pendingActionProjectionState
 	lastPendingActionProjections    map[string]pendingActionProjectionState
 }
 
@@ -826,8 +829,10 @@ func NewService(repos Repos, eventBus bus.EventBus, log *logger.Logger, discover
 		managementClaimLocks:          parentMutex{locks: make(map[string]*sync.Mutex)},
 		// Focused service tests do not run backend composition. Production
 		// replaces this fallback with a database-allocated generation.
-		pendingActionProjectionEpoch: "1",
-		lastPendingActionProjections: make(map[string]pendingActionProjectionState),
+		pendingActionProjectionEpoch:    "1",
+		pendingActionProjectionObserved: make(map[string]pendingActionProjectionState),
+		pendingActionSnapshotValues:     make(map[string]pendingActionProjectionState),
+		lastPendingActionProjections:    make(map[string]pendingActionProjectionState),
 	}
 }
 

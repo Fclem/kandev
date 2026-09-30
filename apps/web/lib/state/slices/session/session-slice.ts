@@ -16,6 +16,7 @@ import {
   mergeOrphanPendingActionProjection,
 } from "./task-session-projection-actions";
 import { reconcileMessages } from "./message-signature";
+import { resolveRunningNotices } from "./running-notice-activity";
 import { purgeSessionRuntimeState } from "@/lib/state/slices/session-runtime/session-runtime-slice";
 import { mergeTaskSession } from "./session-merge";
 import { syncEnvironmentMapping, syncPrepareProgress } from "./session-environment-sync";
@@ -74,6 +75,7 @@ function applyMessageMeta(
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mergeMessageFields(target: Record<string, unknown>, source: Record<string, any>) {
+  const noticeResolved = (target.metadata as Message["metadata"])?.running_notice_resolved === true;
   for (const key of Object.keys(source)) {
     if (
       key === "metadata" &&
@@ -84,6 +86,12 @@ function mergeMessageFields(target: Record<string, unknown>, source: Record<stri
     if (source[key] !== undefined) {
       target[key] = source[key];
     }
+  }
+  if (noticeResolved && target.metadata) {
+    target.metadata = {
+      ...(target.metadata as Message["metadata"]),
+      running_notice_resolved: true,
+    };
   }
 }
 
@@ -296,6 +304,7 @@ function buildUpdateMessage(set: ImmerSet) {
     set((draft) => {
       const messages = draft.messages.bySession[message.session_id];
       if (messages) {
+        resolveRunningNotices(messages, message);
         const index = messages.findIndex((entry) => entry.id === message.id);
         if (index !== -1) {
           const merged = { ...messages[index] };
@@ -328,6 +337,7 @@ function buildMessageActions(set: ImmerSet) {
       set((draft) => {
         const sessionId = message.session_id;
         if (!draft.messages.bySession[sessionId]) draft.messages.bySession[sessionId] = [];
+        resolveRunningNotices(draft.messages.bySession[sessionId], message);
         const existingIndex = draft.messages.bySession[sessionId].findIndex(
           (entry) => entry.id === message.id,
         );
@@ -352,6 +362,7 @@ function buildMessageActions(set: ImmerSet) {
             sessionMessages = draft.messages.bySession[message.session_id] = [];
           }
           if (sessionMessages) {
+            resolveRunningNotices(sessionMessages, message);
             const hasMessage = sessionMessages.some((entry) => entry.id === message.id);
             if (hasMessage) mergeMessageAtIndex(sessionMessages, message);
             else if (isTransientRetryNotice(message)) sessionMessages.push(message);

@@ -1033,6 +1033,10 @@ export const createSessionSlice: StateCreator<
     set((draft) => {
       draft.activeModel.bySessionId[sessionId] = modelId;
     }),
+  clearActiveModel: (sessionId) =>
+    set((draft) => {
+      delete draft.activeModel.bySessionId[sessionId];
+    }),
   ...buildTaskPlanActions(set, get),
   ...buildWalkthroughActions(set, get),
   ...buildQueueActions(set),

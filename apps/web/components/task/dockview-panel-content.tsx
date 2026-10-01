@@ -9,11 +9,11 @@ import { useFeature } from "@/hooks/domains/features/use-feature";
 import { useSessionChangesCount } from "@/hooks/domains/session/use-session-changes-count";
 import type { ReviewSource } from "@/hooks/domains/session/use-review-sources";
 import { useEnvironmentSessionId } from "@/hooks/use-environment-session-id";
+import { useSessionGitRefresh } from "@/hooks/domains/session/use-session-git-refresh";
 import { useFileEditors } from "@/hooks/use-file-editors";
 import { usePanelActive } from "@/hooks/use-panel-active";
 import { t } from "@/lib/i18n";
-import { getWebSocketClient } from "@/lib/ws/connection";
-import { panelPortalManager, setPanelTitle } from "@/lib/layout/panel-portal-manager";
+import { setPanelTitle } from "@/lib/layout/panel-portal-manager";
 import { useDockviewStore } from "@/lib/state/dockview-store";
 import { BrowserPanel } from "./browser-panel";
 import type {
@@ -115,20 +115,7 @@ function ChatContent({ panelId, params }: { panelId: string; params: Record<stri
  * after the target becomes reachable again.
  */
 function useResyncGitStatusOnTabActivate(panelId: string, sessionId: string | null) {
-  useEffect(() => {
-    if (!sessionId) return;
-    const entry = panelPortalManager.get(panelId);
-    if (!entry?.api) return;
-
-    const refreshNow = () => {
-      getWebSocketClient()?.refreshSessionData(sessionId);
-    };
-    if (entry.api.isActive) refreshNow();
-    const disposable = entry.api.onDidActiveChange((event) => {
-      if (event.isActive) refreshNow();
-    });
-    return () => disposable.dispose();
-  }, [panelId, sessionId]);
+  return useSessionGitRefresh(sessionId, usePanelActive(panelId));
 }
 
 /** Render the changes/diff viewer for the panel's params (`kind` "all" or
@@ -188,7 +175,7 @@ function ChangesContent({ panelId }: { panelId: string }) {
   // Dynamic title with file count - use environment-stable sessionId so the
   // tab title doesn't re-fetch on same-environment session tab switches.
   const activeSessionId = useEnvironmentSessionId();
-  useResyncGitStatusOnTabActivate(panelId, activeSessionId);
+  const retryGitStatus = useResyncGitStatusOnTabActivate(panelId, activeSessionId);
   const totalCount = useSessionChangesCount(activeSessionId);
 
   useEffect(() => {
@@ -223,6 +210,7 @@ function ChangesContent({ panelId }: { panelId: string }) {
 
   return (
     <ChangesPanel
+      onRetryGitStatus={retryGitStatus}
       onOpenDiffFile={handleOpenDiffFile}
       onEditFile={handleEditFile}
       onOpenCommitDetail={handleOpenCommitDetail}

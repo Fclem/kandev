@@ -176,7 +176,7 @@ func (wt *WorkspaceTracker) GetGitStatusReplay(ctx context.Context) (types.GitSt
 // fresh=true.
 func (wt *WorkspaceTracker) GetGitStatus(ctx context.Context, fresh bool) (types.GitStatusUpdate, error) {
 	if fresh {
-		return wt.getBasicGitStatusClass(ctx, subproc.GitInteractive)
+		return wt.getBasicGitStatusRetryClass(ctx, subproc.GitInteractive)
 	}
 
 	wt.mu.RLock()

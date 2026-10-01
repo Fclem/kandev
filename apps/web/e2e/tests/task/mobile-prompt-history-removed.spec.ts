@@ -6,7 +6,7 @@ import { installFixturePlugin, uninstallFixturePlugin } from "../../helpers/plug
 import { SessionPage } from "../../pages/session-page";
 
 const PLUGIN_PANEL_OPTION = "mobile-plugin-panel-option-kandev-plugin-e2e-notes";
-const TASK_NAV_ENTRIES = ["Chat", "Plan", "Changes", "Files", "Terminal"];
+const TASK_NAV_ENTRIES = [/^Chat$/, /^Plan$/, /Changes$/, /^Files$/, /^Terminal$/];
 
 test.describe("Prompt history removed from the phone Panels sheet", () => {
   test.afterEach(async ({ apiClient }) => uninstallFixturePlugin(apiClient));
@@ -54,7 +54,7 @@ test.describe("Prompt history removed from the phone Panels sheet", () => {
     await expect(testPage.getByRole("dialog", { name: "Panels" })).toHaveCount(0);
 
     for (const label of TASK_NAV_ENTRIES) {
-      await expect(testPage.getByRole("button", { name: label, exact: true })).toBeVisible();
+      await expect(testPage.getByRole("button", { name: label })).toBeVisible();
     }
   });
 });

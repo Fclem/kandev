@@ -78,7 +78,9 @@ import type {
   KanbanSlice,
   NeedsYouInboxBootSeed,
 } from "./slices";
+import type { TaskOverviewSlice } from "./slices/task-overview-types";
 import type { AppStateExtraActions } from "./app-state-extra-actions";
+import type { GitStatusRefreshState } from "./slices/session-runtime/types";
 import type {
   AvailableCommand,
   SessionModeEntry,
@@ -518,6 +520,11 @@ export type AppState = KanbanSlice & {
   setWorktree: (worktree: Worktree) => void;
   setSessionWorktrees: (sessionId: string, worktreeIds: string[]) => void;
   setGitStatus: (sessionId: string, gitStatus: GitStatusEntry) => boolean;
+  setGitStatusRefresh: (
+    taskEnvironmentId: string,
+    repositoryName: string | undefined,
+    refresh: GitStatusRefreshState | null,
+  ) => void;
   clearGitStatus: (sessionId: string) => void;
   clearLegacyGitStatusEntry: (sessionId: string) => void;
   registerSessionEnvironment: (sessionId: string, environmentId: string) => void;
@@ -537,6 +544,7 @@ export type AppState = KanbanSlice & {
   setPendingModel: (sessionId: string, modelId: string) => void;
   clearPendingModel: (sessionId: string) => void;
   setActiveModel: (sessionId: string, modelId: string) => void;
+  clearActiveModel: (sessionId: string) => void;
   // Task plan actions
   setTaskPlan: (taskId: string, plan: TaskPlan | null) => void;
   setTaskPlanLoading: (taskId: string, loading: boolean) => void;
@@ -586,6 +594,7 @@ export type AppState = KanbanSlice & {
     modeId: string,
     availableModes?: SessionModeEntry[],
     requestedModeId?: string,
+    settingsPolicy?: "provider_restored" | "strict",
   ) => void;
   clearSessionMode: (sessionId: string) => void;
   // Agent capabilities actions
@@ -598,6 +607,7 @@ export type AppState = KanbanSlice & {
       models: SessionModelEntry[];
       configOptions: ConfigOptionEntry[];
       configBaseline?: Record<string, string>;
+      settingsPolicy?: "provider_restored";
       /** Set when the session started on the profile's fallback model. */
       fallbackModel?: string;
     },
@@ -690,7 +700,8 @@ export type AppState = KanbanSlice & {
   restoreChatAnimations: UIA["restoreChatAnimations"];
   acknowledgeAgentErrors: UIA["acknowledgeAgentErrors"];
   dismissAgentError: UIA["dismissAgentError"];
-} & AppStateExtraActions &
+} & TaskOverviewSlice &
+  AppStateExtraActions &
   Pick<UIA, "setQuickChatInitialPrompt" | "requestQuickChatOpen" | "setQuickChatSelectionIdentity">;
 
 // Most callers hydrate a fully-shaped slice per top-level key (see

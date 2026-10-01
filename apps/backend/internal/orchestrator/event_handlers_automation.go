@@ -47,6 +47,10 @@ type automationOpenRunLookup interface {
 	ListOpenRunsByTaskID(ctx context.Context, taskID string) ([]*automation.AutomationRun, error)
 }
 
+type deferredAutomationRunCloser interface {
+	MarkDeferredRunFailedByTaskID(ctx context.Context, taskID, errMsg string) error
+}
+
 type automationDispatchReader interface {
 	GetAutomationForDispatch(ctx context.Context, id string) (*automation.Automation, error)
 }
@@ -1236,6 +1240,13 @@ func (s *Service) dispatchAutomationRun(
 	}
 	if err := dispatcher.DispatchRun(ctx, runID, action, reason, dispatch); err == nil {
 		return true
+	} else if errors.Is(err, automation.ErrRunDeferred) {
+		// The run stays open and owns its task; the ceiling sweep replays the
+		// queued start, so the task and the queued record must both remain.
+		s.logger.Info("automation run start queued by the session ceiling",
+			zap.String("operation", operation), zap.String("automation_id", automationID),
+			zap.String("task_id", taskID), zap.String("run_id", runID))
+		return true
 	} else {
 		if onFailure != nil {
 			onFailure()
@@ -1523,8 +1534,12 @@ func (s *Service) autoStartAutomationTaskForRun(
 	preserveTaskOnFailure bool,
 	operation *automation.RetryOperation,
 ) bool {
+	var run *automationRunLaunch
+	if runID != "" {
+		run = &automationRunLaunch{RunID: runID, ThreadAction: action, ThreadReason: reason}
+	}
 	if s.dispatchAutomationRun(ctx, a.ID, task.ID, "", runID, action, reason, "auto-start", func() (automation.RunDispatch, error) {
-		dispatch, err := s.startAutomationTask(ctx, a, task, workflowStepID)
+		dispatch, err := s.startAutomationTask(ctx, a, task, workflowStepID, run)
 		if err != nil {
 			return automation.RunDispatch{}, err
 		}
@@ -1538,7 +1553,7 @@ func (s *Service) autoStartAutomationTaskForRun(
 		return s.retryRunHasExactBinding(ctx, runID)
 	}
 
-	dispatch, err := s.startAutomationTask(ctx, a, task, workflowStepID)
+	dispatch, err := s.startAutomationTask(ctx, a, task, workflowStepID, run)
 	if err != nil {
 		s.logger.Error("failed to auto-start automation task",
 			zap.String("task_id", task.ID), zap.Error(err))
@@ -1556,13 +1571,16 @@ func (s *Service) autoStartAutomationTaskForRun(
 	return s.retryRunHasExactBinding(ctx, runID)
 }
 
+// startAutomationTask starts the task an automation run created. run names
+// that run so a start queued by the session ceiling keeps it for the replay.
 func (s *Service) startAutomationTask(
 	ctx context.Context,
 	a *automation.Automation,
 	task *models.Task,
 	workflowStepID string,
+	run *automationRunLaunch,
 ) (automation.RunDispatch, error) {
-	execution, err := s.StartTask(
+	execution, err := s.startTask(
 		ctx,
 		task.ID,
 		a.AgentProfileID,
@@ -1574,14 +1592,9 @@ func (s *Service) startAutomationTask(
 		false,
 		true,
 		nil,
+		startTaskOptions{AutomationRun: run},
 	)
-	if err != nil {
-		return automation.RunDispatch{}, err
-	}
-	if execution == nil || execution.SessionID == "" || execution.TurnID == "" {
-		return automation.RunDispatch{}, errors.New("automation task start returned no session or turn identity")
-	}
-	return automation.RunDispatch{TaskID: task.ID, SessionID: execution.SessionID, TurnID: execution.TurnID}, nil
+	return automationRunDispatchFor(task.ID, execution, err)
 }
 
 // Repository-selector disposition tokens (A5's wire format). A bare token is

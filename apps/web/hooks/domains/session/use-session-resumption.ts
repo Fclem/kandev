@@ -264,6 +264,39 @@ function recordResumeSkipIfStopped(setters: ResumeStateSetter, sessionId: string
   }
 }
 
+function isSettledLiveSession(status: SessionStatus): boolean {
+  return (
+    status.is_agent_running &&
+    (status.state === "WAITING_FOR_INPUT" ||
+      status.state === "IDLE" ||
+      status.state === "COMPLETED")
+  );
+}
+
+function sendSessionFocus(
+  client: ReturnType<typeof getWebSocketClient>,
+  taskId: string,
+  sessionId: string,
+): void {
+  if (!client) return;
+  try {
+    void Promise.resolve(
+      client.request(
+        "session.launch",
+        {
+          task_id: taskId,
+          session_id: sessionId,
+          intent: "resume",
+          activation_source: "session_focus",
+        },
+        SESSION_ENTRY_REQUEST_TIMEOUT_MS,
+      ),
+    ).catch(() => undefined);
+  } catch {
+    // Focus is a best-effort signal. It must not replace session recovery UI.
+  }
+}
+
 type ResumeActionParams = {
   status: SessionStatus;
   taskId: string;
@@ -283,6 +316,16 @@ async function performResumeAction({
   preventAutoStart,
   canContinue,
 }: ResumeActionParams): Promise<boolean> {
+  if (status.is_idle_suspended && !status.is_agent_running) {
+    if (status.auto_resume_allowed === false || document.visibilityState !== "visible") {
+      setters.setResumptionState("idle");
+      return false;
+    }
+    return resumeWithSilentFallback(taskId, sessionId, session, setters, {
+      canContinue,
+      activationSource: "session_focus",
+    });
+  }
   switch (decideResumeAction(status, preventAutoStart)) {
     case "running":
       setters.setResumptionState("running");
@@ -293,7 +336,7 @@ async function performResumeAction({
       setters.setResumptionState("idle");
       return false;
     case "resume":
-      return resumeWithSilentFallback(taskId, sessionId, session, setters, canContinue);
+      return resumeWithSilentFallback(taskId, sessionId, session, setters, { canContinue });
     case "restore":
       return resumeViaLaunch(buildRestoreWorkspaceRequest, {
         taskId,
@@ -404,6 +447,14 @@ async function checkAndResume({
         canContinue,
       });
     }
+    if (
+      !status.is_idle_suspended &&
+      isSettledLiveSession(status) &&
+      document.visibilityState === "visible" &&
+      canContinue()
+    ) {
+      sendSessionFocus(client, taskId, sessionId);
+    }
   } catch (err) {
     if (isTaskArchivedConflict(err) || !canContinue()) {
       clearArchiveRecovery(setters);
@@ -417,6 +468,7 @@ async function checkAndResume({
 }
 
 interface UseSessionResumptionReturn {
+  requestIdentity: import("@/lib/session-recovery-presentation").SessionRecoveryOwner["requestIdentity"];
   resumptionState: ResumptionState;
   sessionStatus: SessionStatus | null;
   error: string | null;
@@ -437,6 +489,7 @@ interface UseSessionResumptionReturn {
  * and automatically resumes if needed.
  */
 type SessionResetAndCheckResult = {
+  committedRequest: SessionRequestIdentity;
   sessionStatus: SessionStatus | null;
   captureRequest: () => SessionRequestIdentity;
   buildGuardedSettersFor: (capturedRequest: SessionRequestIdentity) => ResumeStateSetter;
@@ -480,7 +533,14 @@ function useSessionResetAndCheck({
   const hasAttemptedResume = useRef(false);
   const remoteStatusRetryCount = useRef(0);
   const requestGenerationRef = useRef(0);
-  const activeRequestRef = useRef<SessionRequestIdentity>({ key: requestKey, generation: 0 });
+  const startupRecoveryInFlightRef = useRef(new Map<string, Promise<void>>());
+  const focusRequestInFlightRef = useRef(false);
+  const lastFocusRequestAtRef = useRef(0);
+  const [committedRequest, setCommittedRequest] = useState<SessionRequestIdentity>({
+    key: requestKey,
+    generation: 0,
+  });
+  const activeRequestRef = useRef<SessionRequestIdentity>(committedRequest);
 
   // Publish the new identity during commit so callbacks from the previous
   // request are rejected before passive effects or queued promise handlers run.
@@ -490,6 +550,7 @@ function useSessionResetAndCheck({
       key: requestKey,
       generation: requestGenerationRef.current,
     };
+    setCommittedRequest(activeRequestRef.current);
   }, [requestKey]);
 
   // Reset all local state when session or task changes to prevent stale data
@@ -519,7 +580,8 @@ function useSessionResetAndCheck({
     const capturedRequest = activeRequestRef.current;
     const guardedSetters = buildGuardedSetters(activeRequestRef, capturedRequest, setters);
     const canContinue = () => isCurrentRequest(activeRequestRef.current, capturedRequest);
-    checkAndResume({
+    const recoveryKey = JSON.stringify([capturedRequest.key, capturedRequest.generation]);
+    const promise = checkAndResume({
       taskId,
       sessionId,
       session,
@@ -533,7 +595,83 @@ function useSessionResetAndCheck({
       },
       setters: guardedSetters,
     });
+    startupRecoveryInFlightRef.current.set(recoveryKey, promise);
+    const clearIfCurrent = () => {
+      if (startupRecoveryInFlightRef.current.get(recoveryKey) === promise) {
+        startupRecoveryInFlightRef.current.delete(recoveryKey);
+      }
+    };
+    void promise.then(clearIfCurrent, clearIfCurrent);
   }, [taskId, sessionId, connectionStatus, session, preventAutoStart, taskArchiveState]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!taskId || !sessionId || connectionStatus !== "connected" || taskArchiveState !== false) {
+      return;
+    }
+    const capturedRequest = activeRequestRef.current;
+    const guardedSetters = buildGuardedSetters(activeRequestRef, capturedRequest, setters);
+    const canContinue = () => isCurrentRequest(activeRequestRef.current, capturedRequest);
+    const handleVisibleFocus = async () => {
+      if (
+        document.visibilityState !== "visible" ||
+        focusRequestInFlightRef.current ||
+        !canContinue()
+      ) {
+        return;
+      }
+      const now = Date.now();
+      if (now - lastFocusRequestAtRef.current < 500) return;
+      lastFocusRequestAtRef.current = now;
+      focusRequestInFlightRef.current = true;
+      try {
+        const recoveryKey = JSON.stringify([capturedRequest.key, capturedRequest.generation]);
+        const startupRecovery = startupRecoveryInFlightRef.current.get(recoveryKey);
+        if (startupRecovery) {
+          await startupRecovery;
+          return;
+        }
+        const client = getWebSocketClient();
+        if (!client) return;
+        const status = await requestSessionStatusWithRetry({
+          client,
+          taskId,
+          sessionId,
+          canContinue,
+        });
+        if (!status || !canContinue() || applyStatusResponseOutcome(status, guardedSetters)) return;
+        setSessionStatus({ requestKey: capturedRequest.key, status });
+        applyStatusToState(status, taskId, sessionId, session, guardedSetters);
+        if (status.is_idle_suspended) {
+          await performResumeAction({
+            status,
+            taskId,
+            sessionId,
+            session,
+            setters: guardedSetters,
+            preventAutoStart,
+            canContinue,
+          });
+          return;
+        }
+        if (isSettledLiveSession(status)) sendSessionFocus(client, taskId, sessionId);
+      } catch {
+        // Browser focus is a best-effort recovery signal; explicit retry keeps
+        // using the existing session recovery UI.
+      } finally {
+        focusRequestInFlightRef.current = false;
+      }
+    };
+    const onWindowFocus = () => void handleVisibleFocus();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void handleVisibleFocus();
+    };
+    window.addEventListener("focus", onWindowFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [connectionStatus, preventAutoStart, session, sessionId, setters, taskArchiveState, taskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Freshly created remote sessions may return status before runtime metadata is available.
   // Retry a few times so topbar/tooltips can show remote details without manual refresh.
@@ -607,6 +745,7 @@ function useSessionResetAndCheck({
 
   return {
     sessionStatus,
+    committedRequest,
     captureRequest: () => activeRequestRef.current,
     buildGuardedSettersFor: (capturedRequest) =>
       buildGuardedSetters(activeRequestRef, capturedRequest, setters),
@@ -806,7 +945,7 @@ export function useSessionResumption(
 
   useSessionRecoveryFeedback(sessionId, session?.state, error, notice, setters);
 
-  const { sessionStatus, captureRequest, buildGuardedSettersFor, retryStatus } =
+  const { sessionStatus, committedRequest, captureRequest, buildGuardedSettersFor, retryStatus } =
     useSessionResetAndCheck({
       taskId,
       sessionId,
@@ -826,7 +965,18 @@ export function useSessionResumption(
     buildGuardedSettersFor,
   });
 
+  const request = committedRequest;
+  const ownsFeedback = request.key === getSessionRequestKey(taskId, sessionId, taskArchiveState);
   return {
+    requestIdentity:
+      ownsFeedback && taskId && sessionId
+        ? {
+            taskId,
+            sessionId,
+            generation: request.generation,
+            attemptId: recoveryAttemptIdRef.current,
+          }
+        : null,
     resumptionState,
     sessionStatus,
     error,

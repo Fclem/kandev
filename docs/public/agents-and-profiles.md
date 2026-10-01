@@ -24,7 +24,7 @@ Open **Settings > Agents** (`/settings/agents`). Kandev scans the host on which 
 
 ![Settings > Agents showing detected agent CLIs, profiles, configured status, unavailable status, update indicators, and New profile controls.](../screenshots/settings-agents.png)
 
-The production registry currently shows Auggie, Claude, Codex, Copilot, Gemini, OpenCode, Amp, Qwen, iFlow (beta), Droid, Kilocode, Pi, Cursor, Kimi, Kiro, Qoder, Trae, `omp`, Devin, Grok, Hermes, Goose, Muse, and Antigravity. An entry is usable only when its executable is supported on the current platform and available to the Kandev process. Development and E2E profiles can add mock agents that are not product integrations.
+The production registry currently shows Auggie, Claude, Codex, Copilot, Gemini, OpenCode, Amp, Qwen, iFlow (beta), Droid, Kilocode, Pi, Cursor, Kimi, Kiro, Qoder, Trae, `omp`, Devin, Grok, Hermes, Goose, Muse, Antigravity, and MiniMax. An entry is usable only when its executable is supported on the current platform and available to the Kandev process. Development and E2E profiles can add mock agents that are not product integrations.
 
 Hermes launches with `hermes acp`. Install the required `hermes` executable from its **Settings > Agents** card, which runs the official Hermes installer. Hermes currently supports task and workspace sessions. Office-assigned skill injection is not yet supported.
 
@@ -45,6 +45,72 @@ Native sessions show response and turn token usage in the chat footer. A provide
 After a completed turn, use **Fork conversation** to create another session through that turn. The new session keeps the task and executor, and files remain shared in the workspace. It does not create a branch or worktree. Native Codex subagents and background commands stay within the session; they do not become separate Kandev tasks.
 
 Codex questions sent through Kandev's `ask_user_question_kandev` MCP tool or through the native app-server `item/tool/requestUserInput` method use the normal clarification UI. Native options and permitted free-text answers map back to Codex's answer format. Secret questions fail closed because Kandev's clarification flow stores answers in the conversation. If Codex resolves a pending request, Kandev closes the corresponding clarification.
+
+### MiniMax Code
+
+MiniMax uses the official [MiniMax Code](https://github.com/MiniMax-AI/minimax-code)
+CLI directly through `mcode acp`. Install it from **Settings > Agents > Browse**,
+or install the tested release with npm:
+
+```bash
+npm install -g @minimax-ai/code@0.5.10 --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3
+mcode --version
+```
+
+Use a supported Node.js version (22.19+ in the 22 series, 24.2+ in the 24 series,
+or 25/26). The optional SQLite dependency and its installation scripts must be
+allowed. Kandev reports MiniMax installed only when `mcode` is on its PATH and
+responds to `--version`; npm alone does not count as an installation.
+
+Sign in as the operating-system user running Kandev. For a mainland China
+account use `mcode login --no-browser`; for a Global account use:
+
+```bash
+env -u MINIMAX_DATA_DIR -u MAVIS_DATA_DIR \
+  -u __MAVIS_RUNTIME_DATA_DIR -u __MAVIS_RUNTIME_PROFILE \
+  mcode login --region global --no-browser
+```
+
+Choose **Mainland China** or **Global** when Kandev opens the login setup.
+The selected login terminal prints a browser authorization link. Close an existing
+sign-in terminal before choosing a different region in another tab. After login,
+click **Done** to refresh
+capabilities, create a MiniMax profile, and choose a model from the native
+catalog. Subscription access stays with MiniMax Code; no OpenCode wrapper or
+static API key is required.
+
+Native catalog entries currently include MiniMax-M3, M3.1-Flash-Preview,
+MiniMax-M2.7-highspeed and MiniMax-M2.7. Available models and thinking variants
+come from your CLI/account and may change. The native defaults for the two M3
+models are 512k context, with an optional 1M window; M2.7 models use 200k.
+These are upstream catalog values, not guaranteed account entitlements.
+MiniMax's ACP interface currently accepts text prompts and does not advertise
+image, audio or video inputs, even when the underlying model supports media.
+
+Kandev retains the native ACP provider/model/variant identifiers in profiles.
+CLI passthrough translates them into `--model provider/model#variant` and uses
+`--session <id>` or `--continue` for resume. Structured sessions use ACP model
+selection, permission requests, MCP configuration, cancellation and session load.
+Kandev does not add a MiniMax permission bypass flag.
+
+MiniMax owns its config, subscription credentials and sessions under
+`~/.minimax`. Kandev's native integration targets that default directory and
+removes `MINIMAX_DATA_DIR`, `MAVIS_DATA_DIR`, `__MAVIS_RUNTIME_DATA_DIR` and
+`__MAVIS_RUNTIME_PROFILE` from agent launches and POSIX login. If you already use a named
+MiniMax profile or a custom data directory, sign in to the default directory
+for this integration. MiniMax's installation directory `~/.minimax-code` is
+separate from its data directory.
+
+The login terminal requires a POSIX host shell. On native Windows, sign in with
+`mcode login --no-browser` outside Kandev after clearing the four data/profile
+override variables above from that shell. Otherwise login can target a
+directory that Kandev's ACP runtime does not use.
+
+Containers persist an isolated `.minimax` directory at `/root/.minimax`.
+Remote/container executors need their own installation and native login inside
+that environment. Kandev does not copy host OAuth tokens: native credential
+records include the absolute auth-directory identity and cannot be treated as
+portable credentials. No provider or account fallback is injected on failure.
 
 ### Muse command surfaces
 
@@ -240,6 +306,7 @@ Select an agent, create a profile, then open **Settings > Agents > _Agent_ > _Pr
 | Auto-approve all permissions | Answers automatically: the first `allow_once`/`allow_always` option, otherwise the first option supplied by the agent; no options cancels. It is off by default. |
 | MCP servers                  | Adds profile-specific external MCP servers when the agent supports MCP.                                                                                          |
 | Share local Cursor MCP credentials | Enabled by default for Cursor ACP and Cursor-strategy terminal profiles. It applies only to local executions that share the backend home directory. |
+| Import local Cursor plugin MCP servers | Enabled by default for Cursor ACP and Cursor-strategy terminal profiles. Imports supported local plugin and user MCP definitions into task worktrees. On supported macOS installations, enabled marketplace plugins are discovered from Cursor’s account service and matched to their exact cached revision. |
 
 Agents can inspect and update declared profile settings through the compact
 `search_settings_kandev`, `describe_setting_kandev`, `get_settings_kandev`,
@@ -249,7 +316,7 @@ preserve profile validation and save replacement lists atomically. They never
 return environment values or MCP credentials; use references or the existing
 interactive credential flow when a secret is required.
 
-Model, mode, command, and configuration choices are probed from the locally installed CLI and cached. The managed **Update agent** action refreshes them automatically; after other CLI changes, refresh the profile manually. Probe status can report **auth required**, **not installed**, **not configured**, or **failed**; a saved model name does not prove that the current provider account can use it.
+Model and mode choices are probed from the locally installed CLI. Opening a saved concrete profile probes its saved environment, CLI flags, and command prefix. If you edit any of these launch settings, select **Refresh models** before you choose a model. Kandev probes the current draft without saving it or sending a prompt. A secret reference is resolved on the Kandev host and its value is not sent back to the browser. Probe status can report **auth required**, **not installed**, **not configured**, **unsupported**, or **failed**; a saved model name does not prove that the current provider account can use it.
 
 ### Use an OpenAI-compatible provider
 
@@ -301,10 +368,53 @@ the final **Skip candidate** or **Stop for manual recovery** outcome. Kandev
 uses a trusted future reset date at most once for a candidate and class when it
 fits the configured maximum. It then applies the retry schedule and outcome.
 Unclassified, task, repository, permission, tool, and ambiguous mid-turn
-failures stop for manual recovery so Kandev does not repeat work. The error
-catalogue is versioned and can grow as provider signals become known; an
-ambiguous new signal fails closed. A future classifier may improve catalogue
-coverage, but no model is called to classify errors today.
+failures stop for manual recovery by default. The optional repeated-failure
+policy below is a narrow exception for eligible, current, effect-safe
+unclassified failures. The error catalogue is versioned and can grow as
+provider signals become known; an ambiguous new signal fails closed. A future
+classifier may improve catalogue coverage, but no model is called to classify
+errors today.
+
+Dynamic profiles also have an API-only option for repeated, safe unclassified
+failures. It is off by default and is not exposed in the profile editor. In a
+candidate's `policies` object, set `unclassified` to:
+
+```json
+{
+  "enabled": true,
+  "consecutive_failure_threshold": 3
+}
+```
+
+When enabled, the threshold must be an integer from `2` to `10`. Configure the
+field through `POST /api/v1/agents/dynamic/profiles` or
+`PATCH /api/v1/agent-profiles/:id`, along with the candidate's existing
+transient and hard policies. An omitted or disabled policy does not count
+failures; a disabled policy must use a threshold of `0`.
+
+Kandev counts only a current task-session failure that has complete trusted
+evidence and no output or tool activity. Eligible errors are a terminal
+`unknown_provider_error` before output, or a typed agent process-start or
+session-initialization `agent_runtime_error`. For provider errors, each counted
+failure must have the same code, origin, phase, provider, and complete
+diagnostic. Kandev normalizes whitespace only; case and punctuation remain
+significant. Diagnostics that need redaction or truncation stay on manual
+recovery. Task, repository, permission, tool, cancellation, ambiguous
+mid-turn, stale, and other unclassified failures also remain manual.
+
+Below the threshold, each failure stops for manual recovery. Use **Retry** to
+make the next attempt; there is no automatic retry timer. On the threshold
+failure, Kandev tries the next enabled candidate in order, without wrapping to
+an earlier candidate. If no next candidate is eligible, recovery remains
+manual. The count resets when a failure is unsafe or different, when the
+candidate, profile, policy, or workflow step changes, or after a successful
+turn. This extension applies to task sessions. Office runs and utility calls
+remain outside its scope.
+
+Any workflow step can veto this policy with
+`disable_unclassified_fallback: true`. The field is available through the
+workflow-step API and is included in workflow import/export. The veto applies
+to the step's task session even when the candidate policy is enabled.
 
 After a provider switch, the failed provider is paused for the route health
 backoff, or until its trusted reset time when one is available. Kandev runs an
@@ -351,6 +461,13 @@ executor must advertise and accept that model before the first prompt. An empty
 or unsupported catalog, an unavailable model, or a failed apply stops the
 session before inference. Kandev never sends an unadvertised model and never
 rewrites the saved profile model.
+
+For Auggie ACP task sessions, Kandev also requires the selected model and mode
+to take effect before it sends the first prompt. If a failed session offers the
+explicit recovery **Resume** action, it keeps the same conversation and skips
+saved mode and model overrides for that attempt only. Saved profile and session
+settings remain unchanged, and later ordinary starts or resumes enforce them
+again.
 
 The host model list is only an editing hint. A missing host-probe model keeps a
 profile selectable and shows an advisory warning; the executor catalog decides
@@ -478,15 +595,47 @@ Terminal custom profiles use passthrough and preserve the CLI's native PTY inter
 
 > **MCP credential exposure:** MCP headers and environment values are stored in profile configuration. Codex may place them in process arguments, and Cursor or Pi may leave them in project files after teardown. Use short-lived, narrowly scoped credentials and review persisted files.
 
+### Choose and prepare local Cursor MCP servers
+
+On a saved Cursor agent profile, enable importing local MCP servers and choose
+whether to inherit enabled servers or use only your selected servers. Refresh
+discovery to see available server names grouped by plugin and whether reusable
+credentials exist. A credential badge means data is available, not that a
+connection has been verified. Selecting no servers in selected-only mode imports
+none. Saved selections remain visible if discovery is temporarily unavailable.
+
+The task's workspace preparation shows discovery, selection, credential reuse,
+server approval and connection verification. Kandev applies the source
+repository and task workspace disables before approving imported connections.
+A profile selection cannot override those disables or executor policy. Host
+imports are limited to eligible local/worktree executions using the backend's
+home directory.
+
+When verification requires provider consent, choose **Authenticate** on the
+preparation step. Kandev opens Cursor's native login flow in the task terminal;
+complete its browser consent and choose **Retry connection**. For Cursor ACP,
+recovery reloads the same task conversation. Automatic reload of a running
+Cursor terminal session is currently unavailable because Kandev does not own
+its native chat ID; Kandev never resumes an arbitrary latest chat. Preparation commands do not create agent chat
+turns, and automatic server approval does not bypass tool-call permissions.
+The login-terminal action currently requires a POSIX host shell; native Windows
+login recovery is unavailable.
+
 ### Share local Cursor MCP credentials
 
 The **Share local Cursor MCP credentials** profile option is enabled by default for Cursor ACP and custom terminal profiles that use Cursor's MCP strategy. It applies only to local and worktree executions that use the same home directory as the Kandev backend. Remote and container executors, and profiles that set a different `HOME`, do not share the backend user's credentials.
 
-On launch, Kandev combines valid `mcp-auth.json` files from other local Cursor projects into `~/.cursor/kandev-mcp-auth-unified.json`. For duplicate server names, the newest source file wins. Equal timestamps use project path order. Kandev links the current project's auth path to this private shared file. It preserves an existing regular `mcp-auth.json` file. While sharing is enabled, it replaces an existing symlink at that path when it points elsewhere. Disabling sharing does not restore the replaced target. On a disabled launch, Kandev removes only its own project auth link and leaves unrelated symlinks unchanged.
+On launch, Kandev combines valid `mcp-auth.json` files from other local Cursor projects into `~/.cursor/kandev-mcp-auth-unified.json`. For duplicate server names, an object containing an access or refresh token takes precedence over registration-only data. Within each group, the newest source file wins; equal timestamps use project path order. Kandev selects the entire object, preserving its matching client registration, without combining credentials from different sources.
+
+Kandev links the current project's auth path to this private shared file. It preserves an existing regular `mcp-auth.json` file. While sharing is enabled, it replaces an existing symlink at that path when it points elsewhere. Disabling sharing does not restore the replaced target. On a disabled launch, Kandev removes only its own project auth link and leaves unrelated symlinks unchanged.
+
+Imported plugin definitions retain Cursor's `plugin-<plugin-name>-<server-name>` identity so existing workspace credentials match. Credential sharing and server import are separate preferences. Importing servers authorizes Kandev to approve only the eligible imported connections through Cursor's native CLI before starting the agent. This does not grant permission to invoke their tools. Automatic imports honor disabled-server preferences from the task's primary source repository and its own workspace. Other workspaces can supply credentials, but their disabled settings are not inherited.
+
+For marketplace plugins, Kandev reads Cursor's enabled-plugin inventory and uses only the exact cached revision it identifies. This currently supports the observed macOS keychain installation. If the inventory cannot be read, local plugin and global MCP definitions remain eligible. If the selected workspace disable state cannot be read safely, automatic imports are skipped. Explicit profile and user-owned project entries are preserved. Kandev does not sign you in automatically, refresh Cursor account tokens, install plugins, or automatically approve tools. Provider consent starts only when you choose Authenticate.
 
 The shared auth file is keyed by MCP server name. Kandev does not compare server URLs or OAuth issuers between projects. A project with a matching server name can therefore use a copied credential even when its MCP configuration points to a different endpoint. Enable sharing only for trusted local project configurations. If a credential may have reached an unintended endpoint, revoke it through that provider.
 
-To stop sharing, clear the option and launch that profile again. That launch removes only the Kandev-created link for its project. Running processes keep credentials they already loaded. Cursor may refresh credentials through the link, but Kandev does not copy refreshed credentials back to source projects. A later launch rebuilds the shared file from those source projects.
+To stop sharing, clear the option and launch that profile again. That launch removes only the Kandev-created link for its project. Running processes keep credentials they already loaded. Cursor may refresh credentials through the link, but Kandev does not copy refreshed credentials back to source projects. A later launch rebuilds the shared file from those source projects. Kandev preserves a native-refreshed credential while its original source remains unchanged. Changed or removed source credentials invalidate that preservation; Kandev does not treat an old shared snapshot as an independent source.
 
 <details>
 <summary>Configure external MCP servers</summary>

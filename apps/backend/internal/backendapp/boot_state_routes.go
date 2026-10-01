@@ -19,6 +19,11 @@ import (
 	"github.com/kandev/kandev/internal/webapp"
 )
 
+const (
+	taskOriginFieldKey   = defaultGitRemote
+	taskMetadataFieldKey = "metadata"
+)
+
 // tasksPageBootData builds the tasks page boot payload: workspaces, repositories, workflows, steps, tasks, and the user's settings.
 func (b bootStateBuilder) tasksPageBootData(ctx context.Context, req *http.Request) (map[string]any, map[string]any) {
 	if b.p.taskSvc == nil {
@@ -730,6 +735,7 @@ func mapUserSettingsState(response userdto.UserSettingsResponse, workspaceID str
 		"terminalFontSize":                  nullInt(settings.TerminalFontSize),
 		"changesPanelLayout":                changesPanelLayout(settings.ChangesPanelLayout),
 		"lastSeenDisplay":                   lastSeenDisplay(settings.LastSeenDisplay),
+		"agentTabCloseBehavior":             usermodels.NormalizeAgentTabCloseBehavior(settings.AgentTabCloseBehavior),
 		"azureDevOpsBrowsePreferences":      settings.AzureDevOpsBrowsePreferences,
 		"systemMetricsDisplay": map[string]any{
 			"showInTopbar": settings.SystemMetricsDisplay.ShowInTopbar,
@@ -771,6 +777,8 @@ func mapWorkspaceItemState(workspace taskdto.WorkspaceDTO) map[string]any {
 		"default_environment_id":          workspace.DefaultEnvironmentID,
 		"default_agent_profile_id":        workspace.DefaultAgentProfileID,
 		"default_config_agent_profile_id": workspace.DefaultConfigAgentProfileID,
+		"acp_idle_suspension_enabled":     workspace.ACPIdleSuspensionEnabled,
+		"acp_idle_timeout_minutes":        workspace.ACPIdleTimeoutMinutes,
 		"office_workflow_id":              nullString(workspace.OfficeWorkflowID),
 		"created_at":                      workspace.CreatedAt,
 		"updated_at":                      workspace.UpdatedAt,
@@ -833,6 +841,18 @@ func mapKanbanTaskState(task taskdto.TaskDTO) map[string]any {
 	}
 	return map[string]any{
 		"id":                          task.ID,
+		"workspaceId":                 task.WorkspaceID,
+		"workflowId":                  task.WorkflowID,
+		taskOriginFieldKey:            task.Origin,
+		taskMetadataFieldKey:          task.Metadata,
+		"isArchived":                  task.ArchivedAt != nil,
+		"isFromOffice":                task.IsFromOffice,
+		"primaryExecutorId":           task.PrimaryExecutorID,
+		"primaryExecutorProfileId":    task.PrimaryExecutorProfileID,
+		"primaryExecutorType":         task.PrimaryExecutorType,
+		"primaryExecutorName":         task.PrimaryExecutorName,
+		"isRemoteExecutor":            task.IsRemoteExecutor,
+		"foregroundActivity":          task.ForegroundActivity,
 		"workflowStepId":              task.WorkflowStepID,
 		"title":                       task.Title,
 		"description":                 task.Description,

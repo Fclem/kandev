@@ -7,22 +7,29 @@ import { formatDateTime } from "@/lib/i18n/formats";
 import type { TaskLaunchErrorContextValue } from "../task-launch-error-context";
 import {
   buildRecoveryCardModel,
+  automaticRecoveryCauses,
   causeLabel,
   operationLabel,
 } from "./session-bootstrap-recovery-model";
 import {
   isSessionRecoveryBusy,
+  matchingAutomaticRecovery,
   type SessionRecoveryOwner,
 } from "@/lib/session-recovery-presentation";
 import { sessionRecoveryAction } from "./messages/action-message-recovery";
 
 function recoveryCopy(model: ActiveSessionRecovery, t: ReturnType<typeof useTranslation>["t"]) {
   if (model.kind === "managed_runtime_npm_resolution")
-    return { title: t("chat:managedRuntimeNpmTitle"), summary: t("chat:managedRuntimeNpmBody") };
+    return {
+      title: t("chat:managedRuntimeNpmTitle"),
+      summary: t("chat:managedRuntimeNpmBody"),
+      showSummary: true,
+    };
   if (model.kind === "managed_runtime_npm_policy")
     return {
       title: t("chat:managedRuntimeNpmPolicyTitle"),
       summary: t("chat:managedRuntimeNpmPolicyBody"),
+      showSummary: true,
     };
   if (model.kind === "provider_quota_limited") {
     const reset = model.metadata?.reset_at ? new Date(model.metadata.reset_at) : null;
@@ -34,18 +41,21 @@ function recoveryCopy(model: ActiveSessionRecovery, t: ReturnType<typeof useTran
         reset && !Number.isNaN(reset.getTime())
           ? t("chat:providerQuotaReset", { resetAt: formatDateTime(reset) })
           : t("chat:providerQuotaResetUnknown"),
+      showSummary: true,
     };
   }
   if (model.kind === "managed_clone_relocation_required")
     return {
       title: t("task:managedCloneRelocationTitle"),
       summary: t("task:managedCloneRelocationBody"),
+      showSummary: true,
     };
   const summary = model.summary?.trim();
   const safe = summary && summary.length <= 240 && sanitizeSessionErrorDetails(summary) === summary;
   return {
     title: t("task:sessionRecoveryFailed"),
     summary: safe ? summary : t("task:agentHasStopped"),
+    showSummary: true,
   };
 }
 
@@ -145,6 +155,10 @@ function createRecoveryChoice({
     kind,
     label: copy.label,
     testId: copy.testId,
+    disclosure:
+      kind === "resume" && actions.providerRestoredResumeEligible
+        ? t("task:providerRestoredResumeDisclosure")
+        : undefined,
     disabled: kind === "resume" && !profileExists,
     tooltip: model.metadata?.actions?.find((action) => sessionRecoveryAction(action) === kind)
       ?.tooltip,
@@ -168,7 +182,11 @@ export function useRecoveryPresentation(
   context: TaskLaunchErrorContextValue | null,
 ) {
   const { t } = useTranslation();
-  const automatic = matchingAutomaticRecovery(context, model.sessionId);
+  const automatic = matchingAutomaticRecovery(
+    context?.automaticRecovery,
+    context?.taskId,
+    model.sessionId,
+  );
   const managedCloneRelocation =
     model.kind === "managed_clone_relocation_required" ||
     Boolean(actions.managedCloneRecoveryStamp);
@@ -181,9 +199,26 @@ export function useRecoveryPresentation(
     isSessionRecoveryBusy(automatic?.resumptionState ?? "idle") ||
     actions.busyAction !== null;
   const busyAction = automatic?.resumptionState === "resuming" ? "resume" : actions.busyAction;
-  const details = recoveryPresentationDetails(model, bootstrap?.causes ?? [], actions, t);
+  const causes = bootstrap?.causes ?? automaticRecoveryCauses(automatic, t);
+  const details = recoveryPresentationDetails(model, causes, actions, t);
   const failure = recoveryFailureCopy(actions, t);
-  return { copy, busy, busyAction, details, failure };
+  return {
+    copy: withAutomaticNotice(copy, automatic, actions),
+    busy,
+    busyAction,
+    details,
+    failure,
+  };
+}
+
+function withAutomaticNotice(
+  copy: ReturnType<typeof recoveryPresentationCopy>,
+  automatic: SessionRecoveryOwner | null,
+  actions: SessionRecoveryActions,
+) {
+  return automatic?.notice && !actions.recoveryError
+    ? { ...copy, summary: automatic.notice }
+    : copy;
 }
 
 function buildBootstrapRecoveryModel(
@@ -217,7 +252,12 @@ function recoveryPresentationCopy(
 ) {
   if (managedCloneRelocation)
     return recoveryCopy({ ...model, kind: "managed_clone_relocation_required" }, t);
-  if (bootstrap) return { title: t(bootstrap.titleKey), summary: bootstrap.summary };
+  if (bootstrap)
+    return {
+      title: t(bootstrap.titleKey),
+      summary: bootstrap.summary,
+      showSummary: bootstrap.showSummary,
+    };
   return recoveryCopy(model, t);
 }
 
@@ -261,12 +301,6 @@ function isBootstrapRecovery(model: ActiveSessionRecovery) {
     model.kind !== "provider_quota_limited" &&
     model.kind !== "managed_clone_relocation_required"
   );
-}
-
-function matchingAutomaticRecovery(context: TaskLaunchErrorContextValue | null, sessionId: string) {
-  return context?.statusSummary?.active_error?.session_id === sessionId
-    ? context.automaticRecovery
-    : null;
 }
 
 function isManagedRuntimeFailure(kind: string) {

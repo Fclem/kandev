@@ -39,6 +39,23 @@ func isConfigModeSession(session *models.TaskSession) bool {
 	return ok && cm
 }
 
+func (e *Executor) resolveTaskLaunchScope(ctx context.Context, taskID string) (lifecycle.TaskLaunchScope, error) {
+	if taskID == "" {
+		return lifecycle.TaskLaunchScopeUnknown, nil
+	}
+	task, err := e.repo.GetTask(ctx, taskID)
+	if err != nil {
+		return lifecycle.TaskLaunchScopeUnknown, fmt.Errorf("load task launch scope: %w", err)
+	}
+	if task == nil {
+		return lifecycle.TaskLaunchScopeUnknown, nil
+	}
+	if task.IsFromOffice {
+		return lifecycle.TaskLaunchScopeOffice, nil
+	}
+	return lifecycle.TaskLaunchScopeTask, nil
+}
+
 // resolveTaskSessionMCPMode derives restricted MCP access from canonical task
 // ownership and session purpose. Config mode wins because those sessions need
 // config tools even if their backing task is Office-owned.
@@ -1390,7 +1407,7 @@ func (e *Executor) prepareSessionAttempt(ctx context.Context, task *v1.Task, age
 		if envErr != nil {
 			return "", envErr
 		}
-		recoveryAdmission, envErr = e.admitSelectedWorktreeRecovery(ctx, task.ID, session, selectedEnv, execConfig.ExecutorType)
+		recoveryAdmission, envErr = e.admitSelectedWorktreeRecovery(ctx, task.ID, session, selectedEnv, execConfig.ExecutorType, false)
 		if envErr != nil {
 			return "", envErr
 		}
@@ -1773,6 +1790,10 @@ func (e *Executor) LaunchPreparedSession(ctx context.Context, task *v1.Task, ses
 	if err != nil {
 		return nil, err
 	}
+	req.TaskScope, err = e.resolveTaskLaunchScope(ctx, task.ID)
+	if err != nil {
+		return nil, err
+	}
 	// An inherited policy keeps the child bound to its canonical environment and
 	// group membership. Do not detach across executor types without an explicit
 	// policy transition that updates both records.
@@ -1869,7 +1890,7 @@ func (e *Executor) LaunchPreparedSession(ctx context.Context, task *v1.Task, ses
 	}
 
 	var recoveryAdmission *worktree.RecoveryAdmission
-	recoveryAdmission, err = e.admitSelectedWorktreeRecovery(ctx, task.ID, session, existingEnv, req.ExecutorType)
+	recoveryAdmission, err = e.admitSelectedWorktreeRecovery(ctx, task.ID, session, existingEnv, req.ExecutorType, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1903,7 +1924,8 @@ func (e *Executor) LaunchPreparedSession(ctx context.Context, task *v1.Task, ses
 	if hasRunning {
 		result, existingErr := e.startAgentOnExistingWorkspaceWithRequest(
 			launchCtx, task, session, prompt, startAgent, opts.McpMode, req,
-			opts.OnExecutionAdmitted, opts.RefuseIfAgentRunning, opts.TurnID,
+			opts.OnExecutionAdmitted, opts.OnInitialPromptAccepted, opts.OnInitialPromptFailed,
+			opts.RefuseIfAgentRunning, opts.TurnID,
 		)
 		if !errors.Is(existingErr, ErrStaleExecution) && !errors.Is(existingErr, ErrAgentCommandMissing) {
 			if releaseErr := releaseSelectedWorktreeRecovery(ctx, &recoveryAdmission); releaseErr != nil {
@@ -1941,6 +1963,14 @@ func (e *Executor) LaunchPreparedSession(ctx context.Context, task *v1.Task, ses
 		e.markTaskEnvironmentMaterializationFailed(launchCtx, existingEnv, session.ID)
 		repositoryID, taskRepositoryID := failingLaunchRepositoryIdentity(req, err)
 		return nil, e.handleLaunchFailure(launchCtx, task.ID, sessionID, repositoryID, taskRepositoryID, err)
+	}
+	if startAgent && (prompt != "" || len(opts.Attachments) > 0) {
+		if err := e.registerInitialPromptDispatchCallbacks(
+			resp.AgentExecutionID, opts.OnInitialPromptAccepted, opts.OnInitialPromptFailed,
+		); err != nil {
+			e.cleanupUnstartedExecutionAfterPersistError(launchCtx, sessionID, resp.AgentExecutionID, err)
+			return nil, fmt.Errorf("register initial prompt dispatch callbacks: %w", err)
+		}
 	}
 	if startAgent && opts.OnExecutionAdmitted != nil {
 		opts.OnExecutionAdmitted(resp.AgentExecutionID)
@@ -2610,7 +2640,9 @@ func (e *Executor) startAgentOnExistingWorkspace(ctx context.Context, task *v1.T
 		SessionID:   session.ID,
 		Env:         cloneStringMap(env),
 	}
-	return e.startAgentOnExistingWorkspaceWithRequest(ctx, task, session, prompt, startAgent, mcpMode, request, nil, false, turnIDs...)
+	return e.startAgentOnExistingWorkspaceWithRequest(
+		ctx, task, session, prompt, startAgent, mcpMode, request, nil, nil, nil, false, turnIDs...,
+	)
 }
 
 func (e *Executor) startAgentOnExistingWorkspaceWithRequest(
@@ -2622,6 +2654,8 @@ func (e *Executor) startAgentOnExistingWorkspaceWithRequest(
 	mcpMode string,
 	request *LaunchAgentRequest,
 	onExecutionAdmitted func(string),
+	onInitialPromptAccepted func(string),
+	onInitialPromptFailed func(),
 	refuseIfAgentRunning bool,
 	turnIDs ...string,
 ) (*TaskExecution, error) {
@@ -2701,6 +2735,13 @@ func (e *Executor) startAgentOnExistingWorkspaceWithRequest(
 			zap.String("session_id", session.ID),
 			zap.Error(err))
 		return nil, err
+	}
+	if prompt != "" || len(request.Attachments) > 0 {
+		if err := e.registerInitialPromptDispatchCallbacks(
+			executionID, onInitialPromptAccepted, onInitialPromptFailed,
+		); err != nil {
+			return nil, fmt.Errorf("register initial prompt dispatch callbacks: %w", err)
+		}
 	}
 
 	execution := &TaskExecution{
@@ -2872,7 +2913,7 @@ func (e *Executor) captureBaseCommit(ctx context.Context, sessionID string) {
 		return
 	}
 
-	status, err := e.agentManager.GetGitStatus(ctx, sessionID)
+	status, err := getGitStatusWithDetails(ctx, e.agentManager, sessionID)
 	if err != nil {
 		e.logger.Warn("failed to get git status for base commit capture",
 			zap.String("session_id", sessionID),

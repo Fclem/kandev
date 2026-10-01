@@ -439,6 +439,17 @@ type AgentManagerClient interface {
 	WaitForAgentctlReady(ctx context.Context, sessionID string) error
 }
 
+type gitStatusDetailsReader interface {
+	GetGitStatusWithDetails(context.Context, string) (*client.GitStatusResult, error)
+}
+
+func getGitStatusWithDetails(ctx context.Context, manager AgentManagerClient, sessionID string) (*client.GitStatusResult, error) {
+	if reader, ok := manager.(gitStatusDetailsReader); ok {
+		return reader.GetGitStatusWithDetails(ctx, sessionID)
+	}
+	return manager.GetGitStatusFresh(ctx, sessionID)
+}
+
 // PromptTurnIDSetter is an optional lifecycle capability. Keeping it out of
 // AgentManagerClient lets test and legacy adapters continue to work while the
 // production lifecycle carries durable turn identity with completion events.
@@ -491,10 +502,12 @@ type AgentProfileInfo struct {
 
 // LaunchAgentRequest contains parameters for launching an agent
 type LaunchAgentRequest struct {
-	TaskID            string
-	WorkspaceID       string // Kandev workspace ID — used to build scratch dir for repo-less tasks
-	SessionID         string
-	TaskEnvironmentID string // Env owning this session (shared across sessions in the same task)
+	TaskID                string
+	TaskScope             lifecycle.TaskLaunchScope
+	SessionSettingsPolicy ResumeSettingsPolicy
+	WorkspaceID           string // Kandev workspace ID — used to build scratch dir for repo-less tasks
+	SessionID             string
+	TaskEnvironmentID     string // Env owning this session (shared across sessions in the same task)
 	// WorkspaceReuseRequired selects attach-only preparation of an already-ready
 	// task environment. It must never be inferred from a sibling execution ID.
 	WorkspaceReuseRequired bool
@@ -686,10 +699,15 @@ type LaunchOptions struct {
 	// process is started. Callers use this boundary to bind turn-scoped
 	// evidence to the execution that actually won admission.
 	OnExecutionAdmitted func(executionID string)
-	Prompt              string
-	PriorACPSession     string // ACP session ID to resume for the same concrete profile
-	WorkflowStepID      string
-	StartAgent          bool
+	// OnInitialPromptAccepted transfers startup ownership after lifecycle reports
+	// that the initial prompt was accepted by the provider. OnInitialPromptFailed
+	// closes that ownership when delivery fails before acceptance.
+	OnInitialPromptAccepted func(executionID string)
+	OnInitialPromptFailed   func()
+	Prompt                  string
+	PriorACPSession         string // ACP session ID to resume for the same concrete profile
+	WorkflowStepID          string
+	StartAgent              bool
 	// RefuseIfAgentRunning makes peer-message admission fail closed when the
 	// selected session already has an active agent. Other internal launch paths
 	// retain their existing workspace reuse behavior.

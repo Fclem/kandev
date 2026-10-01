@@ -137,6 +137,10 @@ export type MockReview = {
 };
 
 export type MockCheckRun = {
+  id?: number;
+  app_id?: number;
+  app_slug?: string;
+  check_suite_id?: number;
   name: string;
   source?: string;
   status: string;
@@ -208,6 +212,7 @@ type WorkflowStepCreateOpts = {
   is_start_step?: boolean;
   agent_profile_id?: string;
   session_target?: WorkflowSessionTarget | null;
+  disable_unclassified_fallback?: boolean;
   profile_session_start_policy?: WorkflowProfileSessionStartPolicy;
   profile_session_end_policy?: WorkflowProfileSessionEndPolicy;
   auto_advance_requires_signal?: boolean;
@@ -226,23 +231,42 @@ function buildWorkflowStepCreateBody(
   opts?: WorkflowStepCreateOpts,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = { workflow_id: workflowId, name, position };
+  setWorkflowStepCreateFields(body, opts);
+  return body;
+}
+
+function setWorkflowStepCreateFields(body: Record<string, unknown>, opts?: WorkflowStepCreateOpts) {
+  if (!opts) return;
   if (opts?.is_start_step !== undefined) body.is_start_step = opts.is_start_step;
   setIf(body, "agent_profile_id", opts?.agent_profile_id);
   if (opts?.session_target !== undefined) body.session_target = opts.session_target;
+  if (opts?.disable_unclassified_fallback !== undefined) {
+    body.disable_unclassified_fallback = opts.disable_unclassified_fallback;
+  }
+  setWorkflowStepCreatePolicies(body, opts);
+  setWorkflowStepCreateSignals(body, opts);
+  setIf(body, "events", opts.events);
+}
+
+function setWorkflowStepCreatePolicies(
+  body: Record<string, unknown>,
+  opts: WorkflowStepCreateOpts,
+) {
   if (opts?.profile_session_start_policy) {
     body.profile_session_start_policy = opts.profile_session_start_policy;
   }
   if (opts?.profile_session_end_policy) {
     body.profile_session_end_policy = opts.profile_session_end_policy;
   }
+}
+
+function setWorkflowStepCreateSignals(body: Record<string, unknown>, opts: WorkflowStepCreateOpts) {
   if (opts?.auto_advance_requires_signal !== undefined) {
     body.auto_advance_requires_signal = opts.auto_advance_requires_signal;
   }
   if (opts?.complete_task_on_enter !== undefined) {
     body.complete_task_on_enter = opts.complete_task_on_enter;
   }
-  setIf(body, "events", opts?.events);
-  return body;
 }
 
 type CreateRepositoryOpts = {
@@ -690,7 +714,7 @@ export class ApiClient {
   /**
    * Delete kanban-only agent profiles except the ones in keepIds.
    *
-   * Office-scoped profiles (those with a non-empty `workspace_id`) are
+   * Office-scoped profiles (those with a non-empty `workspaceId`) are
    * always preserved — they belong to onboarded office workspaces and
    * are managed via the office agent endpoints, not by this helper.
    * Without this guard the per-test cleanup deletes the seeded CEO and
@@ -700,8 +724,7 @@ export class ApiClient {
     const { agents } = await this.listAgents();
     for (const agent of agents) {
       for (const profile of agent.profiles ?? []) {
-        const wsId = (profile as unknown as { workspace_id?: string }).workspace_id;
-        if (wsId) continue;
+        if (profile.workspaceId) continue;
         if (!keepIds.includes(profile.id)) {
           await this.deleteTestProfile(profile.id);
         }
@@ -784,6 +807,46 @@ export class ApiClient {
       cli_flags: opts.cli_flags,
       command_prefix: opts.command_prefix,
       env_vars: opts.env_vars,
+    });
+    return normalizeAgentProfile(response);
+  }
+
+  async createDynamicAgentProfile(
+    name: string,
+    candidates: Array<{
+      executionProfileId: string;
+      enabled: boolean;
+      unclassifiedEnabled: boolean;
+      consecutiveFailureThreshold: number;
+    }>,
+  ): Promise<AgentProfile> {
+    const errorPolicy = {
+      retry: { enabled: false, max_retries: 0, initial_interval_seconds: 0 },
+      wait_for_reset: { enabled: false, max_wait_seconds: 0 },
+      on_exhausted: "stop",
+    };
+    const response = await this.request<unknown>("POST", "/api/v1/agents/dynamic/profiles", {
+      name,
+      model: "",
+      dynamic: {
+        version: 1,
+        candidates: candidates.map((candidate, position) => ({
+          position,
+          execution_profile_id: candidate.executionProfileId,
+          enabled: candidate.enabled,
+          policies: {
+            version: 1,
+            transient: errorPolicy,
+            hard: errorPolicy,
+            unclassified: {
+              enabled: candidate.unclassifiedEnabled,
+              consecutive_failure_threshold: candidate.unclassifiedEnabled
+                ? candidate.consecutiveFailureThreshold
+                : 0,
+            },
+          },
+        })),
+      },
     });
     return normalizeAgentProfile(response);
   }
@@ -1298,6 +1361,7 @@ export class ApiClient {
     auto_focus_new_tasks?: boolean;
     unread_divider?: boolean;
     agent_generated_task_titles?: boolean;
+    agent_tab_close_behavior?: "delete_session" | "hide_panel";
     mcp_task_agent_profile_default?: MCPTaskAgentProfileDefault;
     show_anchored_prompt_bar?: boolean;
     show_scroll_to_last_prompt?: boolean;
@@ -1414,6 +1478,7 @@ export class ApiClient {
       profile_session_start_policy?: WorkflowProfileSessionStartPolicy;
       profile_session_end_policy?: WorkflowProfileSessionEndPolicy;
       session_target?: WorkflowSessionTarget | null;
+      disable_unclassified_fallback?: boolean;
     },
   ): Promise<void> {
     await this.request("PUT", `/api/v1/workflow/steps/${stepId}`, { id: stepId, ...updates });
@@ -1949,6 +2014,18 @@ export class ApiClient {
     merge_queue_last_removal_reason?: string;
     merge_queue_last_removal_before_sha?: string;
     checks?: Array<{
+      id?: number;
+      app_id?: number;
+      app_slug?: string;
+      check_suite_id?: number;
+      workflow_id?: number;
+      workflow_name?: string;
+      workflow_run_id?: number;
+      workflow_event?: string;
+      head_repo_id?: number;
+      head_repo_owner?: string;
+      head_repo_name?: string;
+      head_branch?: string;
       name: string;
       source?: string;
       status?: string;
@@ -2255,6 +2332,10 @@ export class ApiClient {
     repo: string;
     pr_number: number;
     checks?: Array<{
+      id?: number;
+      app_id?: number;
+      app_slug?: string;
+      check_suite_id?: number;
       name: string;
       source?: string;
       status?: string;
@@ -2289,6 +2370,7 @@ export class ApiClient {
     }>;
     workflow_runs?: Array<{
       id: number;
+      check_suite_id?: number;
       run_attempt?: number;
       workflow_id?: number;
       name: string;
@@ -2715,6 +2797,10 @@ export class ApiClient {
       agent_profile_id?: string;
       executor_id?: string;
       executor_profile_id?: string;
+      execution_profile_id?: string;
+      route_generation?: number;
+      route_state?: string;
+      route_reason?: string;
       state: string;
       is_primary: boolean;
       started_at: string;

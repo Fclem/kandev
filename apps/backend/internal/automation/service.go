@@ -72,6 +72,11 @@ var (
 // launch work for this run.
 var ErrAutomationRunNotDispatchable = errors.New("automation: run is not dispatchable")
 
+// ErrRunDeferred is returned by a DispatchRun callback whose launch was queued
+// for a later replay instead of started. The run stays triggered and bound to
+// its task; the replay dispatches it through DispatchRun again.
+var ErrRunDeferred = errors.New("automation: run launch deferred")
+
 // RunStopper cancels one exact task/session/turn binding. The bool is false
 // when the binding is already terminal or stale; that is not an internal
 // failure and must not cancel a successor turn.
@@ -1539,7 +1544,10 @@ func (s *Service) automationRunLock(automationID string) func() {
 // DispatchRun serializes the fallible agent dispatch with exact-run stop and
 // deletion. The callback is invoked only while the admitted run is still
 // open; its exact task/session/turn identity is bound before the lock is
-// released, so a stop can never settle a different firing.
+// released, so a stop can never settle a different firing. A callback that
+// returns ErrRunDeferred leaves the run open for a later dispatch; any other
+// callback error fails the run and is returned unchanged once that failure is
+// recorded, or wrapped when recording it fails.
 func (s *Service) DispatchRun(
 	ctx context.Context,
 	runID string,
@@ -1572,6 +1580,9 @@ func (s *Service) DispatchRun(
 		return ErrAutomationRunNotDispatchable
 	}
 	dispatchResult, err := dispatch()
+	if errors.Is(err, ErrRunDeferred) {
+		return err
+	}
 	if err != nil {
 		return s.markDispatchFailed(lockedCtx, runID, err)
 	}
@@ -2399,6 +2410,11 @@ func (s *Service) ListWorkspaceRetryHistory(ctx context.Context, workspaceID, cu
 // the run, e.g. a permission prompt an automation run can't answer.
 func (s *Service) MarkRunFailedByTaskID(ctx context.Context, taskID, errMsg string) error {
 	return s.store.MarkRunFailedByTaskID(ctx, taskID, errMsg)
+}
+
+// MarkDeferredRunFailedByTaskID closes an unbound run after its queued task is deleted.
+func (s *Service) MarkDeferredRunFailedByTaskID(ctx context.Context, taskID, errMsg string) error {
+	return s.store.MarkDeferredRunFailedByTaskID(ctx, taskID, errMsg)
 }
 
 // MarkRunSucceededByTaskID transitions a still-pending run (task_created)

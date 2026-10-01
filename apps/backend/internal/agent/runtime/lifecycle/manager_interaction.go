@@ -289,6 +289,7 @@ func (m *Manager) cancelAgentExecution(ctx context.Context, execution *AgentExec
 		zap.String("task_id", execution.TaskID),
 		zap.String("session_id", execution.SessionID))
 
+	snapshot := m.captureCancelPromptSnapshot(execution)
 	cancelErr := client.Cancel(ctx)
 	streamDisconnected := errors.Is(cancelErr, agentctlclient.ErrAgentStreamNotConnected)
 	if cancelErr != nil &&
@@ -305,19 +306,29 @@ func (m *Manager) cancelAgentExecution(ctx context.Context, execution *AgentExec
 	// which triggers handleCompleteEvent() to properly flush buffers and mark state.
 	// Clearing here would race with in-flight notifications and lose content.
 
-	execution.promptFinishedMu.Lock()
-	ch := execution.promptFinished
-	execution.promptFinishedMu.Unlock()
-
-	if ch == nil {
-		if execution.dispatchedPromptPending.Load() {
-			return m.escalateStuckCancel(ctx, execution, nil)
-		}
+	if snapshot.ownershipConflict {
+		return ErrPromptActivityNotOwned
+	}
+	if snapshot.finished == nil && !snapshot.dispatchOnly {
 		if streamDisconnected {
 			m.logger.Info("agent stream already disconnected; cancel is complete",
 				zap.String("execution_id", executionID))
 		}
 		return nil
+	}
+	if snapshot.dispatchOnly {
+		immediate := streamDisconnected || errors.Is(cancelErr, agentctlclient.ErrTurnCancelNotAcknowledged)
+		if streamDisconnected {
+			m.logger.Warn("agent stream disconnected before cancel; escalating locally",
+				zap.String("execution_id", executionID),
+				zap.Error(cancelErr))
+		}
+		if errors.Is(cancelErr, agentctlclient.ErrTurnCancelNotAcknowledged) {
+			m.logger.Warn("agent cancel not acknowledged; escalating immediately",
+				zap.String("execution_id", executionID),
+				zap.Error(cancelErr))
+		}
+		return m.cancelDispatchOnlyPrompt(ctx, execution, snapshot, immediate)
 	}
 
 	// Teardown may close the stream immediately before an explicit cancel (for
@@ -328,7 +339,7 @@ func (m *Manager) cancelAgentExecution(ctx context.Context, execution *AgentExec
 		m.logger.Warn("agent stream disconnected before cancel; escalating locally",
 			zap.String("execution_id", executionID),
 			zap.Error(cancelErr))
-		return m.escalateStuckCancel(ctx, execution, ch)
+		return m.escalateStuckCancel(ctx, execution, snapshot.finished)
 	}
 
 	// The agent did not end the in-flight session/prompt RPC after cancel (e.g. it
@@ -338,27 +349,13 @@ func (m *Manager) cancelAgentExecution(ctx context.Context, execution *AgentExec
 		m.logger.Warn("agent cancel not acknowledged; escalating immediately",
 			zap.String("execution_id", executionID),
 			zap.Error(cancelErr))
-		return m.escalateStuckCancel(ctx, execution, ch)
+		return m.escalateStuckCancel(ctx, execution, snapshot.finished)
 	}
 
 	m.logger.Info("agent cancel sent, waiting for turn completion",
 		zap.String("execution_id", executionID))
 
-	// Wait for the in-flight SendPrompt to finish processing the cancel completion.
-	// Without this, a follow-up PromptAgent races on promptDoneCh with two readers.
-	select {
-	case <-ch:
-		if execution.dispatchedPromptPending.Load() {
-			return m.escalateStuckCancel(ctx, execution, ch)
-		}
-		m.logger.Debug("in-flight prompt finished after cancel",
-			zap.String("execution_id", executionID))
-		return nil
-	case <-time.After(cancelWaitTimeout):
-		return m.escalateStuckCancel(ctx, execution, ch)
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return m.waitForPromptFinishedAfterCancel(ctx, execution, snapshot)
 }
 
 // escalateStuckCancel unblocks a SendPrompt that is stuck waiting for a completion
@@ -1499,6 +1496,7 @@ func (m *Manager) restartAgentProcess(
 			return err
 		}
 	}
+	execution.beginStartupAttemptPreservingIdentity()
 
 	// 1. Close WebSocket streams (updates + workspace). Use per-stream Close
 	// methods rather than client.Close — the latter is a terminal drain
@@ -2197,13 +2195,40 @@ func (m *Manager) markBootReadyForStartup(
 		ctx, executionID, events.AgentBootReady, false, startupGeneration,
 		func(execution *AgentExecution) {
 			m.finalWorkspaceRefresh(execution, "startup_grace")
+			execution.markLifecycleActivity()
 		},
 		func(execution *AgentExecution) {
 			m.setRuntimeInterest(execution.SessionID, false)
 			m.releaseActivity(executionActivityKey(execution.ID))
+			if err := m.clearIdleSuspensionAfterReady(ctx, execution); err != nil {
+				m.logger.Warn("failed to clear idle suspension provenance after agent readiness",
+					zap.String("execution_id", execution.ID), zap.String("session_id", execution.SessionID), zap.Error(err))
+			}
 		},
 	)
 	return err
+}
+
+func (m *Manager) clearIdleSuspensionAfterReady(ctx context.Context, execution *AgentExecution) error {
+	store, ok := m.runningWriter.(idleSuspensionInventory)
+	if !ok || execution == nil {
+		return nil
+	}
+	running, err := store.GetExecutorRunningBySessionID(ctx, execution.SessionID)
+	if err != nil {
+		return err
+	}
+	if running.AgentExecutionID != execution.ID || running.IdleSuspensionState == models.ExecutorIdleSuspensionNone {
+		return nil
+	}
+	if err := store.CompareAndSetExecutorRunningIdleSuspension(
+		ctx, execution.SessionID, execution.ID, time.Time{},
+		running.IdleSuspensionState, models.ExecutorIdleSuspensionNone,
+	); err != nil {
+		return err
+	}
+	execution.idleSuspensionAgentStopped.Store(false)
+	return nil
 }
 
 // markReadyEvent is the shared body of MarkReady / MarkBootReady — both flip
@@ -2228,9 +2253,14 @@ func (m *Manager) markBootReadyFromFailed(ctx context.Context, executionID strin
 			return fmt.Errorf("execution %q has no startup generation for resume attempt %q", executionID, attemptID)
 		}
 	}
-	return m.markReadyEventWithStartupGeneration(
-		ctx, executionID, events.AgentBootReady, false, startupGeneration, nil, nil,
+	err := m.markReadyEventWithStartupGeneration(
+		ctx, executionID, events.AgentBootReady, false, startupGeneration,
+		func(current *AgentExecution) { current.markLifecycleActivity() }, nil,
 	)
+	if err != nil {
+		return err
+	}
+	return m.clearIdleSuspensionAfterReady(ctx, execution)
 }
 
 // markReadyEventWithContext flips executionID to Ready and publishes

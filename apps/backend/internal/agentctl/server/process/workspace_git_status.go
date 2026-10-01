@@ -286,7 +286,7 @@ func (wt *WorkspaceTracker) getBasicGitStatusFreshClass(ctx context.Context, cla
 	if observer == nil {
 		observer = wt.gitStatusObserver
 	}
-	return wt.observeGitStatusClass(ctx, class, "basic_fresh_retry", observer, true)
+	return wt.observeGitStatusClass(ctx, class, "basic_fresh", observer, true)
 }
 
 func (wt *WorkspaceTracker) getBasicGitStatusRetryClass(ctx context.Context, class subproc.GitWorkClass) (types.GitStatusUpdate, error) {
@@ -351,14 +351,14 @@ func (wt *WorkspaceTracker) computeGitStatusObservation(
 	observer func(context.Context) (types.GitStatusUpdate, error),
 	correctionPermitted bool,
 ) (types.GitStatusUpdate, string, *gitStatusEnrichmentJob, error) {
-	if observer == nil && (observation == "basic" || observation == "basic_fresh" || observation == "basic_retry" || observation == "basic_fresh_retry") {
+	if observer == nil && (observation == "basic" || observation == "basic_fresh" || observation == "basic_retry") {
 		capture, err := wt.captureBasicGitStatus(ctx)
 		if err != nil {
 			return types.GitStatusUpdate{}, "", nil, err
 		}
 		if capture.job != nil {
 			capture.job.correctionPermitted = correctionPermitted
-			capture.job.explicitRetry = observation == "basic_retry" || observation == "basic_fresh_retry"
+			capture.job.explicitRetry = observation == "basic_retry"
 		}
 		return capture.status, capture.fingerprint, capture.job, nil
 	}

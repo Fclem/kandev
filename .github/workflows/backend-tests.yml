@@ -800,10 +800,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     runs-on: windows-latest
-    # Dependency hydration, build, vet, and the race-sensitive package suite
-    # can consume 30 minutes on a cold hosted runner. Keep the cap finite while
-    # leaving the final targeted regression checks time to run.
-    timeout-minutes: 40
+    # The full Windows suite can approach 40 minutes on a cold hosted runner.
+    # Keep a finite cap with time for the remaining checks and post-job cleanup.
+    timeout-minutes: 50
     # Least-privilege: this job only reads source and runs tests, no PR/issue
     # writes or release operations. Flagged by CodeQL workflow audit + matching
     # CodeRabbit nitpick.
@@ -853,7 +852,7 @@ jobs:
       - name: Test windows-sensitive packages
         # The process package is large and the race detector is slow on
         # windows-latest. Go's default package timeout is 10 minutes, which can
-        # terminate a healthy suite before the workflow's 30-minute job cap.
+        # terminate a healthy suite before the job timeout.
         run: go test -race -v -json -timeout 25m ./internal/agentctl/server/process/... ./internal/agent/runtime/agentctl/launcher/... ./internal/common/ptyexec/... ./internal/backendapp/ownershiplock/... ./internal/system/storage/workspaces/...
 
       # Keep this targeted: these packages have broader tests, while these

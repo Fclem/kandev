@@ -1,10 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentUpdateJob } from "@/lib/api";
 
 const startUpdateMock = vi.fn();
 const refreshStatusesMock = vi.fn();
+let updatePromise: Promise<AgentUpdateJob> | undefined;
+let onUpdateCallback:
+  | ((
+      name: string,
+      target: string,
+      useDefault: boolean,
+      mode: "self_update",
+    ) => Promise<AgentUpdateJob>)
+  | undefined;
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (select: (state: unknown) => unknown) =>
@@ -63,11 +72,10 @@ vi.mock("@/components/settings/installed-agent-card", () => ({
       useDefault: boolean,
       mode: "self_update",
     ) => Promise<AgentUpdateJob>;
-  }) => (
-    <button type="button" onClick={() => void onUpdate?.("omp-acp", "", false, "self_update")}>
-      Approve self-update
-    </button>
-  ),
+  }) => {
+    onUpdateCallback = onUpdate;
+    return null;
+  },
 }));
 vi.mock("@/components/settings/agents/agent-profiles-section", () => ({
   AgentProfilesSubList: () => null,
@@ -82,7 +90,11 @@ vi.mock("./hide-disabled-agent-profiles-setting", () => ({
 
 import AgentsSettingsPage from "./page";
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  updatePromise = undefined;
+  onUpdateCallback = undefined;
+});
 
 describe("Agents settings self-update approval", () => {
   it("starts one status refresh per terminal no-job response without awaiting a slow or failed read", async () => {
@@ -101,11 +113,36 @@ describe("Agents settings self-update approval", () => {
     startUpdateMock.mockResolvedValue(terminal);
     render(<AgentsSettingsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve self-update" }));
+    if (!onUpdateCallback) throw new Error("installed agent update callback was not rendered");
+    updatePromise = onUpdateCallback("omp-acp", "", false, "self_update");
     await waitFor(() => expect(refreshStatusesMock).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Approve self-update" }));
+    const firstUpdate = updatePromise;
+    if (!firstUpdate) throw new Error("update callback did not return a promise");
+    await expect(firstUpdate).resolves.toEqual(terminal);
+    if (!onUpdateCallback) throw new Error("installed agent update callback was not rendered");
+    updatePromise = onUpdateCallback("omp-acp", "", false, "self_update");
     await waitFor(() => expect(refreshStatusesMock).toHaveBeenCalledTimes(2));
+    const secondUpdate = updatePromise;
+    if (!secondUpdate) throw new Error("second update callback did not return a promise");
+    await expect(secondUpdate).resolves.toEqual(terminal);
     expect(startUpdateMock).toHaveBeenCalledTimes(2);
     pending.resolve();
+  });
+
+  it("does not refresh statuses for an accepted job with a job ID", async () => {
+    startUpdateMock.mockResolvedValue({
+      update_mode: "self_update",
+      job_id: "job-1",
+      agent_name: "omp-acp",
+      status: "queued",
+      started_at: "2026-09-26T12:00:00Z",
+    } satisfies AgentUpdateJob);
+    render(<AgentsSettingsPage />);
+
+    if (!onUpdateCallback) throw new Error("installed agent update callback was not rendered");
+    updatePromise = onUpdateCallback("omp-acp", "", false, "self_update");
+    await waitFor(() => expect(startUpdateMock).toHaveBeenCalledOnce());
+
+    expect(refreshStatusesMock).not.toHaveBeenCalled();
   });
 });

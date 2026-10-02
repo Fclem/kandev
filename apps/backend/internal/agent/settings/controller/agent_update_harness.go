@@ -14,7 +14,7 @@ import (
 )
 
 func (s *AgentUpdateJobStore) EnqueueHarness(
-	agentName string, spec agents.HarnessUpdateSpec, stableLatest string, probe agents.Command,
+	agentName string, spec agents.HarnessUpdateSpec, probe agents.Command,
 ) (*AgentUpdateJob, error) {
 	s.mu.Lock()
 	if existing := s.activeByAgt[agentName]; existing != nil {
@@ -40,12 +40,12 @@ func (s *AgentUpdateJobStore) EnqueueHarness(
 	s.activeByAgt[agentName] = job
 	s.mu.Unlock()
 	s.broadcast(ws.ActionAgentUpdateStarted, job.snapshot())
-	go s.runHarness(job, spec, stableLatest, probe, ref)
+	go s.runHarness(job, spec, probe, ref)
 	return job, nil
 }
 
 func (s *AgentUpdateJobStore) runHarness(
-	job *AgentUpdateJob, spec agents.HarnessUpdateSpec, stableLatest string, probe agents.Command, ref MaintenanceJobRef,
+	job *AgentUpdateJob, spec agents.HarnessUpdateSpec, probe agents.Command, ref MaintenanceJobRef,
 ) {
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
@@ -59,12 +59,8 @@ func (s *AgentUpdateJobStore) runHarness(
 	s.mu.Lock()
 	job.CurrentVersion = current
 	job.EffectiveVersion = current
-	job.Operation = managedruntime.Operation(harnessUpdateOperation(current, stableLatest))
+	job.Operation = managedruntime.Operation(harnessUpdateOperation(current))
 	s.mu.Unlock()
-	if job.Operation == managedruntime.OperationUpToDate {
-		s.finishAlreadyUpToDate(job, ref)
-		return
-	}
 	candidate, ok := s.updater.(RuntimeCandidateUpdater)
 	if !ok {
 		s.finishFailed(job, ctx, fmt.Errorf("probe unavailable for harness-owned update"), ref)
@@ -87,6 +83,10 @@ func (s *AgentUpdateJobStore) runHarness(
 	}
 	if caps.Status != hostutility.StatusOK {
 		s.finishFailed(job, ctx, fmt.Errorf("probe updated harness: %s", capabilityRefreshError(caps)), ref)
+		return
+	}
+	if caps.AgentVersion == current {
+		s.finishFailed(job, ctx, fmt.Errorf("harness update did not change the ACP-reported version; check the updater output and installation channel"), ref)
 		return
 	}
 	candidate.PublishCapabilities(job.AgentName, caps)

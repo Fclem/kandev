@@ -63,7 +63,7 @@ export function resolveRuntimeOperation(
   preview: AgentUpdatePreview | null,
   job?: AgentUpdateJob,
 ): AgentUpdateOperation | undefined {
-  return job?.operation ?? preview?.operation;
+  return job?.operation || preview?.operation;
 }
 
 export function runtimeOperationLabelKey(operation: AgentUpdateOperation | undefined): string {

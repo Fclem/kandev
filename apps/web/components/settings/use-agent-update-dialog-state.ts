@@ -168,12 +168,14 @@ type PreviewLoader = (targetVersion?: string, useDefault?: boolean) => Promise<v
 function useRuntimeTargetSelectors(
   loadPreview: PreviewLoader,
   setActiveJobID: (value: string | null) => void,
+  setTerminalJob: (value: AgentUpdateJob | null) => void,
   setSelectedTarget: (value: string) => void,
   setSelectedUseDefault: (value: boolean) => void,
 ) {
   const selectTarget = useCallback(
     (targetVersion: string) => {
       setActiveJobID(null);
+      setTerminalJob(null);
       setSelectedTarget(targetVersion);
       setSelectedUseDefault(false);
       void loadPreview(targetVersion);
@@ -182,6 +184,7 @@ function useRuntimeTargetSelectors(
   );
   const selectDefault = useCallback(() => {
     setActiveJobID(null);
+    setTerminalJob(null);
     setSelectedTarget(DEFAULT_RUNTIME_TARGET);
     setSelectedUseDefault(true);
     void loadPreview(undefined, true);
@@ -206,7 +209,6 @@ export function useAgentUpdateDialogState({
   const [activeJobID, setActiveJobID] = useState<string | null>(null);
   const [terminalJob, setTerminalJob] = useState<AgentUpdateJob | null>(null);
   const previewRequestID = useRef(0);
-  const activeJob = terminalJob ?? (activeJobID === job?.job_id ? job : undefined);
 
   const reset = useCallback(() => {
     resetDialogState({
@@ -250,6 +252,7 @@ export function useAgentUpdateDialogState({
   const { selectTarget, selectDefault } = useRuntimeTargetSelectors(
     loadPreview,
     setActiveJobID,
+    setTerminalJob,
     setSelectedTarget,
     setSelectedUseDefault,
   );
@@ -280,7 +283,7 @@ export function useAgentUpdateDialogState({
   );
 
   return {
-    activeJob,
+    activeJob: terminalJob ?? (activeJobID === job?.job_id ? job : undefined),
     approve,
     approveError,
     handleOpenChange,

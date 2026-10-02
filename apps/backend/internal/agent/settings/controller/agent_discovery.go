@@ -172,16 +172,13 @@ func (c *Controller) buildRuntimeUpdateDTO(ctx context.Context, ag agents.Agent,
 		item.EffectiveVersion = item.CurrentVersion
 		return item
 	}
-	managed, ok := ag.(agents.ManagedNPMRuntimeAgent)
-	if !ok {
-		return nil
-	}
-	spec := managed.ManagedNPMRuntime()
-	if spec.Package == "" {
+	spec, fallback, err := c.managedRuntimeUpdateSpec(ag)
+	if err != nil {
 		return nil
 	}
 	defaultVersion := spec.DefaultVersionOrPinned()
 	item := &dto.RuntimeUpdateDTO{
+		ManagedFallback:  fallback,
 		Supported:        true,
 		UpdateMode:       dto.AgentUpdateModePinned,
 		Package:          spec.Package,
@@ -194,6 +191,9 @@ func (c *Controller) buildRuntimeUpdateDTO(ctx context.Context, ag agents.Agent,
 			item.ActiveVersion = selection.Version
 			item.EffectiveVersion = selection.Version
 		}
+	}
+	if fallback {
+		return item
 	}
 	if c.runtimeUpdater != nil {
 		if caps, found := c.runtimeUpdater.CurrentCapabilities(ag.ID()); found {

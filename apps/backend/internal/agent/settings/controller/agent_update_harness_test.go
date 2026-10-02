@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kandev/kandev/internal/agent/agents"
@@ -79,10 +80,11 @@ func TestHarnessUpdateStatusRegistryFailureKeepsOtherAgent(t *testing.T) {
 
 type harnessTestUpdater struct {
 	fakeRuntimeUpdater
-	latest    string
-	latestErr error
-	published hostutility.AgentCapabilities
-	probeErr  error
+	latest       string
+	latestErr    error
+	published    hostutility.AgentCapabilities
+	publishCalls int
+	probeErr     error
 }
 
 func (u *harnessTestUpdater) ResolveHarnessLatest(context.Context, string) (string, error) {
@@ -106,13 +108,14 @@ func (u *harnessTestUpdater) CurrentCapabilities(string) (hostutility.AgentCapab
 func (u *harnessTestUpdater) PublishCapabilities(_ string, caps hostutility.AgentCapabilities) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	u.publishCalls++
 	u.published = caps
 	u.current = caps
 }
 
 // AC-AGENTS-RUNTIME-UPDATES-003.2, .11, .13.
 func TestHarnessUpdatePreviewReferenceAndRepair(t *testing.T) {
-	for _, tc := range []struct{ current, operation string }{{"1.0.0", "update"}, {"", "repair"}, {"1.1.0", "up_to_date"}} {
+	for _, tc := range []struct{ current, operation string }{{"1.0.0", "update"}, {"", "repair"}, {"1.1.0", "update"}} {
 		t.Run(tc.operation, func(t *testing.T) {
 			updater := &harnessTestUpdater{latest: "1.1.0"}
 			updater.current = hostutility.AgentCapabilities{AgentVersion: tc.current}
@@ -136,13 +139,16 @@ func TestHarnessUpdatePreviewReferenceAndRepair(t *testing.T) {
 	}
 }
 
-func TestHarnessUpdatePreviewRegistryFailureNoJob(t *testing.T) {
+func TestHarnessUpdatePreviewKeepsActionAvailableWhenRegistryFails(t *testing.T) {
 	updater := &harnessTestUpdater{latestErr: errors.New("registry unavailable")}
 	ctrl := newTestController(map[string]agents.Agent{"omp-acp": agents.NewOmpACP()})
 	ctrl.SetRuntimeUpdater(updater)
-	_, err := ctrl.PreviewAgentUpdate(context.Background(), "omp-acp")
-	if !errors.Is(err, ErrRuntimeUpdatePreviewFailed) {
-		t.Errorf("preview error = %v", err)
+	preview, err := ctrl.PreviewAgentUpdate(context.Background(), "omp-acp")
+	if err != nil {
+		t.Fatalf("preview error = %v", err)
+	}
+	if preview.StableLatestVersion != "" || preview.Operation != "repair" {
+		t.Errorf("preview with unknown reference = %+v", preview)
 	}
 	if jobs := ctrl.ListAgentUpdateJobs(); len(jobs) != 0 {
 		t.Errorf("preview created jobs: %v", jobs)
@@ -165,28 +171,33 @@ func TestHarnessUpdateStatusUsesDirectResolver(t *testing.T) {
 	}
 }
 
-// AC-AGENTS-RUNTIME-UPDATES-003.6: preflight returns a terminal result without a job.
-func TestHarnessUpdateApprovalUpToDateHasNoJob(t *testing.T) {
+// A stable reference must not suppress the harness's configured update channel.
+func TestHarnessUpdateApprovalAtStableVersionRunsTrustedUpdater(t *testing.T) {
 	updater := &harnessTestUpdater{latest: "1.1.0"}
 	updater.current = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.1.0"}
 	updater.currentFound = true
+	updater.refreshCaps = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.2.0-canary.1"}
+	updater.updateOutput = "updated to canary channel version 1.2.0-canary.1\n"
 	ctrl := newTestController(map[string]agents.Agent{"omp-acp": agents.NewOmpACP()})
 	ctrl.SetRuntimeUpdater(updater)
-	ctrl.SetJobBroadcaster(newUpdateTerminalBroadcaster())
+	hub := newUpdateTerminalBroadcaster()
+	ctrl.SetJobBroadcaster(hub)
+	ctrl.updateJobStore.onRefresh = nil
 	job, err := ctrl.EnqueueAgentUpdate(context.Background(), "omp-acp", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if job.JobID != "" || job.Status != dto.AgentUpdateJobStatusSucceeded || job.Operation != "up_to_date" || job.CurrentVersion != "1.1.0" || job.UpdateMode != dto.AgentUpdateModeSelfUpdate {
-		t.Errorf("no-job result = %+v", job)
+	if job.JobID == "" {
+		t.Fatal("stable version reference suppressed the configured updater")
 	}
-	if len(ctrl.ListAgentUpdateJobs()) != 0 {
-		t.Fatal("preflight created a retained job")
+	result := waitForUpdateStatus(t, hub.completed, job.JobID, dto.AgentUpdateJobStatusSucceeded)
+	if result.CurrentVersion != "1.2.0-canary.1" || result.UpdateMode != dto.AgentUpdateModeSelfUpdate {
+		t.Errorf("canary update result = %+v", result)
 	}
 	updater.mu.Lock()
 	defer updater.mu.Unlock()
-	if updater.runCalls != 0 || updater.refreshCalls != 0 {
-		t.Errorf("preflight invoked update/probe: %d/%d", updater.runCalls, updater.refreshCalls)
+	if updater.runCalls != 1 || updater.refreshCalls != 1 {
+		t.Errorf("trusted updater/probe calls = %d/%d", updater.runCalls, updater.refreshCalls)
 	}
 }
 
@@ -241,8 +252,8 @@ func TestHarnessUpdateJobRunsTrustedCommandAndPublishesProbedChannelVersion(t *t
 	}
 	updater.mu.Lock()
 	defer updater.mu.Unlock()
-	if !reflect.DeepEqual(updater.runCommand, []string{"omp", "update"}) || updater.runCalls != 1 || !reflect.DeepEqual(updater.refreshCommand, []string{"omp", "acp"}) || updater.published.AgentVersion != "1.2.0" || updater.invalidateCalls != 0 {
-		t.Errorf("update/probe/publication = command %v calls %d probe %v published %+v cache %d", updater.runCommand, updater.runCalls, updater.refreshCommand, updater.published, updater.invalidateCalls)
+	if !reflect.DeepEqual(updater.runCommand, []string{"omp", "update"}) || updater.runCalls != 1 || !reflect.DeepEqual(updater.refreshCommand, []string{"omp", "acp"}) || updater.publishCalls != 1 || updater.published.AgentVersion != "1.2.0" || updater.invalidateCalls != 0 {
+		t.Errorf("update/probe/publication = command %v calls %d probe %v publish calls %d caps %+v cache %d", updater.runCommand, updater.runCalls, updater.refreshCommand, updater.publishCalls, updater.published, updater.invalidateCalls)
 	}
 }
 
@@ -277,8 +288,8 @@ func TestHarnessUpdateJobFailuresDoNotPublishOrFallback(t *testing.T) {
 			}
 			updater.mu.Lock()
 			defer updater.mu.Unlock()
-			if updater.runCalls != 1 || updater.invalidateCalls != 0 || updater.published.AgentVersion != "" || !reflect.DeepEqual(updater.runCommand, []string{"omp", "update"}) {
-				t.Errorf("failure mutated beyond trusted updater: %d/%d published %+v argv %v", updater.runCalls, updater.invalidateCalls, updater.published, updater.runCommand)
+			if updater.runCalls != 1 || updater.invalidateCalls != 0 || updater.publishCalls != 0 || updater.published.AgentVersion != "" || !reflect.DeepEqual(updater.runCommand, []string{"omp", "update"}) {
+				t.Errorf("failure mutated beyond trusted updater: run=%d invalidate=%d publish=%d caps=%+v argv=%v", updater.runCalls, updater.invalidateCalls, updater.publishCalls, updater.published, updater.runCommand)
 			}
 			if tc.updateErr != nil && updater.refreshCalls != 0 {
 				t.Error("probe ran after failed updater")
@@ -287,11 +298,13 @@ func TestHarnessUpdateJobFailuresDoNotPublishOrFallback(t *testing.T) {
 	}
 }
 
-// AC-AGENTS-RUNTIME-UPDATES-003.6: worker observation keeps the accepted job.
-func TestHarnessUpdateWorkerUpToDateRetainsJobWithoutCommands(t *testing.T) {
+// A stable update observed after enqueue does not suppress the configured channel.
+func TestHarnessUpdateWorkerRunsAfterStableVersionChangesWhileQueued(t *testing.T) {
 	updater := &harnessTestUpdater{latest: "1.1.0"}
 	updater.current = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.0.0"}
 	updater.currentFound = true
+	updater.refreshCaps = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.2.0-canary.1"}
+	updater.updateOutput = "updated to canary channel version 1.2.0-canary.1\n"
 	ctrl := newTestController(map[string]agents.Agent{"omp-acp": agents.NewOmpACP()})
 	ctrl.SetRuntimeUpdater(updater)
 	hub := newUpdateTerminalBroadcaster()
@@ -299,6 +312,7 @@ func TestHarnessUpdateWorkerUpToDateRetainsJobWithoutCommands(t *testing.T) {
 	for range cap(ctrl.updateJobStore.semaphore) {
 		ctrl.updateJobStore.semaphore <- struct{}{}
 	}
+	ctrl.updateJobStore.onRefresh = nil
 	job, err := ctrl.EnqueueAgentUpdate(context.Background(), "omp-acp", "")
 	if err != nil {
 		t.Fatal(err)
@@ -311,32 +325,41 @@ func TestHarnessUpdateWorkerUpToDateRetainsJobWithoutCommands(t *testing.T) {
 	updater.mu.Unlock()
 	<-ctrl.updateJobStore.semaphore
 	result := waitForUpdateStatus(t, hub.completed, job.JobID, dto.AgentUpdateJobStatusSucceeded)
-	if result.Operation != "up_to_date" || result.CurrentVersion != "1.1.0" || len(ctrl.ListAgentUpdateJobs()) != 1 {
-		t.Errorf("retained no-op job = %+v", result)
+	if result.Operation != "update" || result.CurrentVersion != "1.2.0-canary.1" || len(ctrl.ListAgentUpdateJobs()) != 1 {
+		t.Errorf("retained update job = %+v", result)
 	}
 	updater.mu.Lock()
 	defer updater.mu.Unlock()
-	if updater.runCalls != 0 || updater.refreshCalls != 0 {
-		t.Errorf("worker ran updater/probe: %d/%d", updater.runCalls, updater.refreshCalls)
+	if updater.runCalls != 1 || updater.refreshCalls != 1 {
+		t.Errorf("worker updater/probe calls = %d/%d", updater.runCalls, updater.refreshCalls)
 	}
 }
 
-func TestHarnessUpdateApprovalRegistryFailureDoesNotEnqueue(t *testing.T) {
+func TestHarnessUpdateApprovalDoesNotDependOnStableRegistryMetadata(t *testing.T) {
 	updater := &harnessTestUpdater{latestErr: errors.New("registry unavailable")}
+	updater.current = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.0.0"}
+	updater.currentFound = true
+	updater.refreshCaps = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.2.0"}
 	ctrl := newTestController(map[string]agents.Agent{"omp-acp": agents.NewOmpACP()})
 	ctrl.SetRuntimeUpdater(updater)
-	ctrl.SetJobBroadcaster(newUpdateTerminalBroadcaster())
-	_, err := ctrl.EnqueueAgentUpdate(context.Background(), "omp-acp", "")
-	if !errors.Is(err, ErrRuntimeUpdatePreviewFailed) {
-		t.Errorf("approval failure = %v", err)
+	hub := newUpdateTerminalBroadcaster()
+	ctrl.SetJobBroadcaster(hub)
+	ctrl.updateJobStore.onRefresh = nil
+	job, err := ctrl.EnqueueAgentUpdate(context.Background(), "omp-acp", "")
+	if err != nil {
+		t.Fatalf("approval error = %v", err)
 	}
-	if len(ctrl.ListAgentUpdateJobs()) != 0 {
-		t.Fatal("registry failure created a job")
+	if job.JobID == "" {
+		t.Fatal("stable metadata failure blocked the trusted updater")
+	}
+	result := waitForUpdateStatus(t, hub.completed, job.JobID, dto.AgentUpdateJobStatusSucceeded)
+	if result.CurrentVersion != "1.2.0" {
+		t.Errorf("update result = %+v", result)
 	}
 }
 
-// AC-AGENTS-RUNTIME-UPDATES-003.14: a faster configured channel is not downgraded.
-func TestHarnessUpdatePreviewTreatsNewerCanaryAsUpToDate(t *testing.T) {
+// Stable metadata cannot classify a faster configured channel as up to date.
+func TestHarnessUpdatePreviewKeepsNewerCanaryActionable(t *testing.T) {
 	updater := &harnessTestUpdater{latest: "1.1.0"}
 	updater.current = hostutility.AgentCapabilities{AgentVersion: "1.2.0-canary.1"}
 	updater.currentFound = true
@@ -346,12 +369,12 @@ func TestHarnessUpdatePreviewTreatsNewerCanaryAsUpToDate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Operation != "up_to_date" {
+	if preview.Operation != "update" {
 		t.Errorf("configured channel operation = %q", preview.Operation)
 	}
 }
 
-func TestHarnessUpdateStatusTreatsNewerCanaryAsUpToDate(t *testing.T) {
+func TestHarnessUpdateStatusDoesNotCallNewerCanaryUpToDate(t *testing.T) {
 	updater := &harnessTestUpdater{latest: "1.1.0"}
 	updater.current = hostutility.AgentCapabilities{AgentVersion: "1.2.0-canary.1"}
 	updater.currentFound = true
@@ -361,7 +384,33 @@ func TestHarnessUpdateStatusTreatsNewerCanaryAsUpToDate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Statuses) != 1 || result.Statuses[0].CheckState != dto.AgentUpdateCheckStateUpToDate {
+	if len(result.Statuses) != 1 || result.Statuses[0].CheckState != dto.AgentUpdateCheckStateUnknown {
 		t.Errorf("configured-channel status = %+v", result.Statuses)
+	}
+}
+
+func TestHarnessUpdateZeroExitWithoutVersionChangeFailsHonestly(t *testing.T) {
+	updater := &harnessTestUpdater{latest: "1.1.0"}
+	updater.current = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.2.0-canary.1"}
+	updater.currentFound = true
+	updater.refreshCaps = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.2.0-canary.1"}
+	updater.updateOutput = "installation is managed by Nix; update the flake instead\n"
+	ctrl := newTestController(map[string]agents.Agent{"omp-acp": agents.NewOmpACP()})
+	ctrl.SetRuntimeUpdater(updater)
+	hub := newUpdateTerminalBroadcaster()
+	ctrl.SetJobBroadcaster(hub)
+	ctrl.updateJobStore.onRefresh = nil
+	job, err := ctrl.EnqueueAgentUpdate(context.Background(), "omp-acp", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := waitForUpdateStatus(t, hub.completed, job.JobID, dto.AgentUpdateJobStatusFailed)
+	if result.Output != updater.updateOutput || !strings.Contains(result.Error, "did not change") {
+		t.Errorf("unchanged update result = %+v", result)
+	}
+	updater.mu.Lock()
+	defer updater.mu.Unlock()
+	if updater.runCalls != 1 || updater.refreshCalls != 1 || updater.publishCalls != 0 || updater.published.AgentVersion != "" {
+		t.Errorf("unchanged update was published: run=%d probe=%d publish=%d caps=%+v", updater.runCalls, updater.refreshCalls, updater.publishCalls, updater.published)
 	}
 }

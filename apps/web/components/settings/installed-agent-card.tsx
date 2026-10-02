@@ -267,21 +267,16 @@ function AgentProfileActionButton({
  * `auth_required`. Clicking the lock opens a PTY login dialog if the agent
  * type has a registered LoginCommand.
  */
-export function InstalledAgentCard({
-  agent,
-  savedAgent,
-  displayName,
-  profileCreationDisabled = false,
-  capabilityStatus,
-  runtimeUpdate,
-  runtimeUpdateStatus,
-  updateJob,
-  installJob,
-  onPreview,
-  onUpdate,
-  onAuthComplete,
-  children,
-}: Props) {
+export function InstalledAgentCard(props: Props) {
+  const {
+    agent,
+    savedAgent,
+    displayName,
+    profileCreationDisabled = false,
+    capabilityStatus,
+    onAuthComplete,
+    children,
+  } = props;
   const { collapsed, setCollapsed } = useCollapsedAgentBlocks();
   const isCollapsed = collapsed(agent.name);
   const configured = Boolean(savedAgent && savedAgent.profiles.length > 0);
@@ -315,7 +310,11 @@ export function InstalledAgentCard({
   };
 
   return (
-    <Card className="min-w-0 gap-0 py-0" data-testid={`agent-group-${agent.name}`}>
+    <Card
+      id={`installed-agent-${agent.name}`}
+      className="min-w-0 scroll-mt-4 gap-0 py-0"
+      data-testid={`agent-group-${agent.name}`}
+    >
       {/* Header section: identity + agent-level actions. */}
       <div
         className="flex min-w-0 flex-wrap items-start justify-between gap-3 px-3 py-2.5"
@@ -334,18 +333,7 @@ export function InstalledAgentCard({
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {isCollapsed && <CollapsedCountLabel agentName={agent.name} count={profileCount} />}
-          {runtimeUpdate?.supported && onPreview && onUpdate && (
-            <AgentRuntimeUpdateControl
-              agentName={agent.name}
-              displayName={displayName}
-              runtimeUpdate={runtimeUpdate}
-              runtimeUpdateStatus={runtimeUpdateStatus}
-              job={updateJob}
-              installJob={installJob}
-              onPreview={onPreview}
-              onUpdate={onUpdate}
-            />
-          )}
+          <RuntimeVersionControl {...props} />
           <AgentCollapseControl
             agentName={agent.name}
             displayName={displayName}
@@ -376,6 +364,41 @@ export function InstalledAgentCard({
         onAuthComplete={onAuthComplete}
       />
     </Card>
+  );
+}
+
+function RuntimeVersionControl({
+  agent,
+  displayName,
+  runtimeUpdate,
+  runtimeUpdateStatus,
+  updateJob,
+  installJob,
+  onPreview,
+  onUpdate,
+}: Pick<
+  Props,
+  | "agent"
+  | "displayName"
+  | "runtimeUpdate"
+  | "runtimeUpdateStatus"
+  | "updateJob"
+  | "installJob"
+  | "onPreview"
+  | "onUpdate"
+>) {
+  if (!runtimeUpdate?.supported || !onPreview || !onUpdate) return null;
+  return (
+    <AgentRuntimeUpdateControl
+      agentName={agent.name}
+      displayName={displayName}
+      runtimeUpdate={runtimeUpdate}
+      runtimeUpdateStatus={runtimeUpdateStatus}
+      job={updateJob}
+      installJob={installJob}
+      onPreview={onPreview}
+      onUpdate={onUpdate}
+    />
   );
 }
 

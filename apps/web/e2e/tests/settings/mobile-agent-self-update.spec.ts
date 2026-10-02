@@ -1,5 +1,6 @@
 import { test, expect } from "../../fixtures/test-base";
 import { settledBoundingBox } from "../../helpers/settled-box";
+import { waitForHttp } from "../../helpers/causal-waits";
 import { installRuntimeUpdateFixture, updateJob } from "./agent-runtime-update-helpers";
 
 test.describe("OMP harness-owned updates on phones", () => {
@@ -34,7 +35,9 @@ test.describe("OMP harness-owned updates on phones", () => {
     await prCapture.screenshot("mobile-omp-update-preview", {
       caption: "OMP reference-only update drawer",
     });
+    const approvalResponse = waitForHttp(testPage, "POST", /\/api\/v1\/agent-update\/omp-acp$/);
     await confirm.tap();
+    await approvalResponse;
     expect(runtime.postBodies()).toEqual(["{}"]);
 
     await runtime.emitUpdate(
@@ -47,9 +50,9 @@ test.describe("OMP harness-owned updates on phones", () => {
       }),
     );
     const body = drawer.getByTestId(`agent-update-dialog-body-${runtime.agentName}`);
-    await expect(
-      body.evaluate((element) => element.scrollHeight > element.clientHeight),
-    ).resolves.toBe(true);
+    await expect
+      .poll(() => body.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
     const footerAction = drawer.getByRole("button", { name: "Cancel" });
     await expect(footerAction).toBeVisible();
     const footerBox = await settledBoundingBox(footerAction);
@@ -74,6 +77,9 @@ test.describe("OMP harness-owned updates on phones", () => {
     const baselineJobReads = runtime.jobsRequestCount();
     const statusGate = Promise.withResolvers<void>();
     runtime.failNextStatusAfter(statusGate.promise);
+    const failedStatusResponse = waitForHttp(testPage, "GET", /\/api\/v1\/agent-update\/status$/, {
+      predicate: (response) => response.status() === 503,
+    });
     runtime.setPostResponse(
       updateJob({
         update_mode: "self_update",
@@ -85,7 +91,9 @@ test.describe("OMP harness-owned updates on phones", () => {
         target_version: "",
       }),
     );
+    const approvalResponse = waitForHttp(testPage, "POST", /\/api\/v1\/agent-update\/omp-acp$/);
     await confirm.tap();
+    await approvalResponse;
     await expect(drawer.getByTestId(`agent-update-result-${runtime.agentName}`)).toContainText(
       "already up to date",
     );
@@ -93,6 +101,7 @@ test.describe("OMP harness-owned updates on phones", () => {
     expect(runtime.postBodies()).toEqual(["{}"]);
     expect(runtime.jobsRequestCount()).toBe(baselineJobReads);
     statusGate.resolve();
+    await failedStatusResponse;
     await expect(drawer.getByTestId(`agent-update-result-${runtime.agentName}`)).toContainText(
       "already up to date",
     );

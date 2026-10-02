@@ -225,18 +225,18 @@ func TestListAgentUpdateStatusesBoundsConcurrentLookups(t *testing.T) {
 	}
 }
 
-func TestListAgentUpdateStatusesDoesNotCacheCallerCancellation(t *testing.T) {
+func TestListAgentUpdateStatusesCallerCancellationKeepsSharedLookup(t *testing.T) {
 	controller := newTestController(map[string]agents.Agent{
 		"claude-acp": agents.NewClaudeACP(),
 	})
 	firstLookupStarted := make(chan struct{})
+	releaseFirstLookup := make(chan struct{})
 	var calls int
 	controller.SetRuntimeUpdateStatusResolver(func(ctx context.Context, _ string) (string, error) {
 		calls++
 		if calls == 1 {
 			close(firstLookupStarted)
-			<-ctx.Done()
-			return "", ctx.Err()
+			<-releaseFirstLookup
 		}
 		return "0.71.0", nil
 	})
@@ -267,14 +267,20 @@ func TestListAgentUpdateStatusesDoesNotCacheCallerCancellation(t *testing.T) {
 		t.Fatalf("canceled status state = %q, want unknown", got)
 	}
 
-	retry, err := controller.ListAgentUpdateStatuses(context.Background())
-	if err != nil {
-		t.Fatalf("retry ListAgentUpdateStatuses: %v", err)
+	retryDone := make(chan response, 1)
+	go func() {
+		statuses, err := controller.ListAgentUpdateStatuses(context.Background())
+		retryDone <- response{statuses: statuses, err: err}
+	}()
+	close(releaseFirstLookup)
+	retry := <-retryDone
+	if retry.err != nil {
+		t.Fatalf("retry ListAgentUpdateStatuses: %v", retry.err)
 	}
-	if got := retry.Statuses[0].LatestVersion; got != "0.71.0" {
+	if got := retry.statuses.Statuses[0].LatestVersion; got != "0.71.0" {
 		t.Fatalf("retry latest version = %q, want 0.71.0", got)
 	}
-	if calls != 2 {
-		t.Fatalf("resolver calls = %d, want retry after caller cancellation", calls)
+	if calls != 1 {
+		t.Fatalf("resolver calls = %d, want one shared lookup", calls)
 	}
 }

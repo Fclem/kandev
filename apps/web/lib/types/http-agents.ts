@@ -265,6 +265,7 @@ export type LoginCommand = {
 };
 
 export type RuntimeUpdate = {
+  managed_fallback?: boolean;
   supported: boolean;
   update_mode: "pinned" | "self_update";
   package: string;

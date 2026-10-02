@@ -33,6 +33,17 @@ func TestHarnessStableLatestUsesTrustedHTTPSRegistryWithoutNPM(t *testing.T) {
 	}
 }
 
+func TestHarnessLatestRejectsOversizedPackument(t *testing.T) {
+	client := &http.Client{Transport: harnessRegistryTransport(func(*http.Request) (*http.Response, error) {
+		body := strings.NewReader(strings.Repeat(" ", harnessPackumentMaxBytes+1))
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(body), Header: make(http.Header)}, nil
+	})}
+	updater := &hostRuntimeUpdater{httpClient: client}
+	if _, err := updater.ResolveHarnessLatest(context.Background(), "@oh-my-pi/pi-coding-agent"); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized metadata error = %v", err)
+	}
+}
+
 func TestHarnessLatestLookupDeadlineAndCallerCancellation(t *testing.T) {
 	requests := make(chan *http.Request, 1)
 	client := &http.Client{Transport: harnessRegistryTransport(func(req *http.Request) (*http.Response, error) {
@@ -59,8 +70,8 @@ func TestHarnessLatestLookupDeadlineAndCallerCancellation(t *testing.T) {
 	if !ok {
 		t.Fatal("registry request has no deadline")
 	}
-	if remaining := time.Until(deadline); remaining <= 0 || remaining > runtimeUpdateMetadataLookupTimeout {
-		t.Fatalf("registry deadline remaining = %v, want within %v", remaining, runtimeUpdateMetadataLookupTimeout)
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > runtimeUpdateStatusLookupTimeout {
+		t.Fatalf("registry deadline remaining = %v, want within %v", remaining, runtimeUpdateStatusLookupTimeout)
 	}
 	cancel()
 	select {

@@ -198,6 +198,22 @@ export type AgentInstallOutputPayload = {
   chunk: string;
 };
 
+export type AgentUpdateJobPayload = {
+  automatic?: boolean;
+  runtime_id?: string;
+  previous_version?: string;
+  job_id: string;
+  agent_name: string;
+  status: "queued" | "resolving" | "updating" | "refreshing" | "succeeded" | "failed";
+  current_version?: string;
+  target_version?: string;
+  output?: string;
+  error?: string;
+  refresh_error?: string;
+  started_at: string;
+  finished_at?: string;
+};
+
 export type AgentUpdateOutputPayload = {
   job_id: string;
   agent_name: string;
@@ -221,6 +237,11 @@ export type DiffUpdatePayload = {
 };
 
 export type UpdateAvailablePayload = {
+  agent_name?: string;
+  runtime_id?: string;
+  display_name?: string;
+  previous_version?: string;
+  runtime_update_status?: "available" | "succeeded" | "failed" | "interrupted";
   version: string;
   url?: string;
   title: string;

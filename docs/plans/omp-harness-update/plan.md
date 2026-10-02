@@ -36,23 +36,23 @@ Add the package-manager-independent OMP self-update command to the existing Agen
 
 - Add `HarnessUpdateSpec` and `HarnessUpdateAgent` in the agents capability area. Use a trusted package only for stable release metadata and direct argv for the self-update command.
 - Implement the capability on `OmpACP` with `@oh-my-pi/pi-coding-agent` and `omp update`. Do not implement `ManagedNPMRuntimeAgent`; keep `BuildCommand`, `Runtime().Cmd`, `InferenceConfig`, and `InstallScript` unchanged.
-- Adapt `agent/settings/controller` discovery, status, preview, and enqueue paths to distinguish `pinned` and `self_update` modes. Fetch OMP stable metadata directly over HTTPS from the trusted npm registry without invoking `npm`; compare the harness-reported ACP version against stable latest. The preview exposes stable latest as `stable_latest_version` reference only, not `target_version`. Infer mode from built-in capability metadata and accept a target-free approval body only for self-update, rejecting a non-empty target or `use_default: true`.
+- Adapt `agent/settings/controller` discovery, status, preview, and enqueue paths to distinguish `pinned` and `self_update` modes. Fetch OMP stable metadata directly over HTTPS from the trusted npm registry without invoking `npm`; report update available only when stable latest is newer, and report unknown when it is equal to or older than the ACP-reported version because the configured channel is unknown. The preview exposes stable latest as `stable_latest_version` reference only, not `target_version`. Infer mode from built-in capability metadata and accept a target-free approval body only for self-update, rejecting a non-empty target or `use_default: true`.
 - Reuse the existing job lifecycle/output stream; run the trusted `omp update` argv without selecting a version or channel, then ACP-probe the existing `omp acp` command. The installed version follows OMP's configured channel and may differ from the stable reference. Publish the actual ACP-reported version and capabilities only after probe success. Do not write a managed version selection or run npm cache repair.
-- Add backend coverage for available/up-to-date/unknown status, direct metadata resolution with `npm` unavailable, target-free self-update approval, rejected target/default requests, command failure, probe failure without capability publication, successful publication, actual post-update version differing from stable reference, and protection against request-supplied commands/packages.
+- Add backend coverage for available/unknown status, direct metadata resolution with `npm` unavailable, target-free self-update approval, rejected target/default requests, command failure, unchanged-version failure, probe failure without capability publication, successful publication, actual post-update version differing from stable reference, and protection against request-supplied commands/packages.
 
 ### Settings UI
 
 - Add `update_mode` to runtime-update/status/preview/job wire types and use a closed discriminant (`pinned`, `self_update`).
-- Reuse the existing trigger and dialog/drawer. For `self_update`, show current ACP version and stable latest as a reference, hide `RuntimeVersionPicker`, and state that updates follow OMP's configured channel and may install a different version.
+- Reuse the existing trigger and dialog/drawer. For `self_update`, show current ACP version and stable latest as a reference, hide `RuntimeVersionPicker`, and state that updates follow OMP's configured channel and may install a different version. Equal or newer stable metadata does not disable the trusted update action.
 - Update the API client and approval hook to send `{}` for `self_update` approval and the existing target/default payload for pinned runtimes. Add focused client/hook tests for both request shapes.
-- For terminal `up_to_date` approval responses with an empty `job_id`, return the DTO without shared job-store insertion, start runtime-update status refresh without awaiting it, and show/reset the result in dialog-local state.
+- For any terminal `up_to_date` response with an empty `job_id`, return the DTO without shared job-store insertion, start runtime-update status refresh without awaiting it, and show/reset the result in dialog-local state. Stable metadata does not produce this result for self-update mode.
 - A refresh failure must not delay or hide the terminal result and must keep the last good status map; only the latest-started status refresh may replace the map. Cover failed and out-of-order refreshes in status-hook tests.
 - Coalesce pending successful-job refreshes; each request snapshots covered IDs at start, later job successes stay pending, and late/superseded IDs share one successor. Only an applied response marks the IDs in its snapshot observed.
 - Add localized copy only where existing copy cannot express the self-update state. Add the new keys in all six complete locales and maintain the pseudo-locale/i18n checks.
 
 ### OMP updater behavior verified for this design
 
-`omp update` detects Homebrew, mise, Bun, npm, or standalone-binary installation and updates through that installation method; Nix-managed installs are declined. It selects the harness's existing stable/canary channel latest, verifies the installed launcher version, and does not accept an arbitrary target version. The `stable_latest_version` from npm metadata is a display/comparison reference only; it is not passed to OMP, and an update may produce a version different from that reference. Kandev does not change OMP's channel. Keep the existing remote install script unchanged per the user's choice.
+`omp update` detects Homebrew, mise, Bun, npm, or standalone-binary installation and updates through that installation method; Nix-managed installs are declined. It selects the harness's existing stable/canary channel latest, verifies the installed launcher version, and does not accept an arbitrary target version. The `stable_latest_version` from npm metadata is a display/advisory reference only; it is not passed to OMP and does not block an update when the current version is equal or newer. Kandev does not change OMP's channel. Keep the existing remote install script unchanged per the user's choice.
 
 ## ASCII UI preview
 
@@ -80,7 +80,7 @@ Entry: Settings > Agents > OMP update control. Structural choices required by AC
 +-------------------------------------------------------------+
 ```
 
-Dialog header/footer stay fixed; the existing bounded body owns scrolling. The output region appears during/after a job. When up to date, show the current/latest state and no runnable update action. After an approval-time no-job result, show UI-03's local terminal result and refresh status without creating or polling a job. Exact copy and spacing are illustrative and must use existing primitives and localized strings.
+Dialog header/footer stay fixed; the existing bounded body owns scrolling. The output region appears during/after a job. Stable latest remains reference-only and does not disable the self-update action. A generic terminal no-job result uses UI-03's local terminal state and refreshes status without creating or polling a job. Exact copy and spacing are illustrative and must use existing primitives and localized strings.
 
 ### UI-02: Phone self-update drawer
 
@@ -110,7 +110,12 @@ Entry and state: same as UI-01 at the responsive phone breakpoint. Distinct comp
 
 The drawer header and action footer remain fixed; the center content scrolls. Touch action uses existing mobile sizing. No version picker is rendered; the local no-op result in UI-03 uses the same drawer composition.
 
-### UI-03: Approval revalidates as up to date
+### UI-03: Shared terminal no-job result
+
+The shared update dialog can display a terminal `up_to_date` response with an
+empty `job_id`. This result does not come from stable-version comparison in
+self-update mode; the trusted updater decides whether its configured channel
+has an update.
 
 Entry: the operator approves a targetless update or repair preview, but the
 backend's pre-enqueue check now reports the runtime is current.
@@ -134,8 +139,8 @@ polling appears. Refresh runtime-update status for each no-job approval.
 ## Tests
 
 - `apps/backend/internal/agent/agents/harness_update_test.go`: trusted OMP update capability command and package contract.
-- `apps/backend/internal/agent/settings/controller/agent_update_harness_test.go`: status classification, registry resolution without `npm`, mixed-agent status isolation, preview and approval metadata-failure/no-enqueue behavior, repair preview classification, updater-failure output/no-fallback assertions, probe-failure preservation, configured-channel version recording, approval-time no-job behavior, and a race where worker-up-to-date observation completes the same retained job without invoking the update or ACP probe command.
-- `apps/backend/internal/agent/settings/handlers/agent_update_handlers_test.go`: self-update DTO and target-free request acceptance/rejected target/default requests, plus POST `{}` returning HTTP 202 with terminal `up_to_date`, empty `job_id`, the compared current version, and no retained job, events, or update/probe command invocation when current ACP version is at least stable latest.
+- `apps/backend/internal/agent/settings/controller/agent_update_harness_test.go`: status classification, registry resolution without `npm`, mixed-agent status isolation, preview and approval despite metadata failure, repair preview classification, updater-failure output/no-fallback assertions, unchanged-version failure, probe-failure preservation, configured-channel version recording, and a queued update that still runs after the ACP version reaches stable latest.
+- `apps/backend/internal/agent/settings/handlers/agent_update_handlers_test.go`: self-update DTO and target-free request acceptance/rejected target/default requests, plus proof that stable-version equality does not suppress the configured updater.
 - `apps/web/lib/agent-runtime-update.test.ts`, `apps/web/lib/api/domains/agent-update-api.test.ts`, `apps/web/components/settings/use-agent-update-dialog-state.test.ts`, and `apps/web/components/settings/agent-runtime-update-control.test.tsx`: targetless `update`/`repair` self-update actions enabled by structural operation, `up_to_date` disabled, pinned target guard, user-click approval reaching API with exact `{}`, metadata-unknown/repair states, and local display/reset of an empty-ID `up_to_date` response without job tracking.
 - `apps/web/hooks/domains/settings/use-agent-runtime-updates.test.tsx` and `apps/web/app/settings/agents/page.test.tsx`: the empty-ID `up_to_date` response is returned without a shared job-store entry and every no-op approval refreshes runtime-update status.
 - `apps/web/hooks/domains/settings/use-agent-runtime-update-statuses.test.tsx` and `apps/web/app/settings/agents/page.test.tsx`: failed refresh preserves the last good map; out-of-order refreshes reject stale writes; the mixed A-job/B-late-joiner/no-job-approval failure schedule launches one successor for both pending IDs, observes both only after apply, and starts no extra request on jobs-map rerender.
@@ -155,8 +160,8 @@ pnpm run typecheck
 
 ## E2E tests
 
-- Desktop Chromium flow: OMP shows current version and stable latest as a reference, explains configured-channel behavior, approves with an exact `{}` request body, and displays a post-update version that differs from the stable reference. It also covers approval revalidation returning empty-ID `up_to_date`: show the local terminal result despite a failed status refresh, make no job request, and refresh status. Map to AC-AGENTS-RUNTIME-UPDATES-003.2, .15, and .16; backend configured-channel behavior is covered by Task 02.
-- Phone `mobile-chrome` flow: same reference-only stable version and configured-channel explanation in the drawer, no picker, exact target-free body, reachable action, and empty-ID `up_to_date` result with status refresh and no job polling. Map to AC-AGENTS-RUNTIME-UPDATES-003.2 and .15.
+- Desktop Chromium flow: OMP shows current version and stable latest as a reference, explains configured-channel behavior, approves with an exact `{}` request body, and displays a post-update version that differs from the stable reference. The shared dialog also covers a generic empty-ID `up_to_date` response: show the local result despite a failed status refresh, make no job request, and refresh status. Map to AC-AGENTS-RUNTIME-UPDATES-003.2, .15, and .16; backend configured-channel behavior is covered by Task 02.
+- Phone `mobile-chrome` flow: same reference-only stable version and configured-channel explanation in the drawer, no picker, exact target-free body, reachable action, and a generic empty-ID `up_to_date` result with status refresh and no job polling. Map to AC-AGENTS-RUNTIME-UPDATES-003.2 and .15.
 
 Keep the desktop and mobile flows in separate spec files: `chromium` excludes `mobile-*.spec.ts`, and `mobile-chrome` selects only those files.
 
@@ -187,6 +192,8 @@ The repository-wide `make test` did not pass: unrelated backend suites failed in
 ## Risks
 
 - `omp update` modifies the installed harness before Kandev's ACP probe. If that probe fails, Kandev preserves the prior capability catalogue but cannot restore the previous executable.
-- The OMP updater selects its configured channel latest; an OMP installation ahead of stable latest is classified as up to date. Kandev does not change OMP's channel.
+- Stable metadata does not identify OMP's configured channel. Kandev does not
+  change OMP's channel, and it reports an unchanged ACP version after a
+  successful updater exit as a failed job.
 - OMP's updater declines Nix-managed installations. The Settings job must surface this failure rather than substituting another installer.
 - The update targets the Kandev host installation only; it does not prepare remote/container copies.

@@ -287,7 +287,7 @@ func TestAgentUpdateEndpointDoesNotCreateAlreadyActiveHealthyJob(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode no-op response: %v", err)
 	}
-	if result.JobID != "" || result.Operation != string(managedruntime.OperationUpToDate) {
+	if result.JobID != "" || result.Operation != string(managedruntime.OperationUpToDate) || result.UpdateMode != dto.AgentUpdateModePinned {
 		t.Fatalf("no-op response = %#v, want terminal up_to_date without job ID", result)
 	}
 
@@ -404,8 +404,8 @@ func (u *handlerHarnessUpdater) ResolveHarnessLatest(context.Context, string) (s
 	return "1.1.0", nil
 }
 
-// AC-AGENTS-RUNTIME-UPDATES-003.6, .13: empty approval is self-update only.
-func TestHarnessUpdateHTTPNoJobAndRejectedTargets(t *testing.T) {
+// A stable reference does not suppress the harness updater; target fields remain rejected.
+func TestHarnessUpdateHTTPApprovalAndRejectedTargets(t *testing.T) {
 	router, ctrl, completed := newAgentUpdateRouter(t, &handlerHarnessUpdater{current: "1.1.0"})
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, updateJSONRequest(http.MethodPost, "/api/v1/agent-update/omp-acp", `{}`))
@@ -416,16 +416,16 @@ func TestHarnessUpdateHTTPNoJobAndRejectedTargets(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
 		t.Fatal(err)
 	}
-	if job.JobID != "" || job.Operation != "up_to_date" || job.UpdateMode != dto.AgentUpdateModeSelfUpdate || job.CurrentVersion != "1.1.0" || job.Status != dto.AgentUpdateJobStatusSucceeded {
-		t.Errorf("no-job HTTP response = %+v", job)
+	if job.JobID == "" || job.UpdateMode != dto.AgentUpdateModeSelfUpdate {
+		t.Fatalf("stable version suppressed update job: %+v", job)
 	}
-	if len(ctrl.ListAgentUpdateJobs()) != 0 {
-		t.Error("no-job approval was retained")
+	finished := waitForTerminalUpdate(t, completed, job.JobID)
+	if finished.Status != dto.AgentUpdateJobStatusFailed || !strings.Contains(finished.Error, "probe unavailable") {
+		t.Errorf("harness without candidate probe result = %+v", finished)
 	}
-	select {
-	case event := <-completed:
-		t.Errorf("no-job approval broadcast finished event %+v", event)
-	default:
+	jobCount := len(ctrl.ListAgentUpdateJobs())
+	if jobCount != 1 {
+		t.Fatalf("retained jobs = %d, want accepted job", jobCount)
 	}
 	for _, body := range []string{`{"target_version":"1.2.0"}`, `{"use_default":true}`, `{"command":["sh","-c","exit 0"],"target_version":"1.2.0"}`} {
 		rejected := httptest.NewRecorder()
@@ -433,8 +433,8 @@ func TestHarnessUpdateHTTPNoJobAndRejectedTargets(t *testing.T) {
 		if rejected.Code != http.StatusBadRequest {
 			t.Errorf("body %s status = %d: %s", body, rejected.Code, rejected.Body.String())
 		}
-		if jobs := ctrl.ListAgentUpdateJobs(); len(jobs) != 0 {
-			t.Errorf("rejected body %s created %d update jobs", body, len(jobs))
+		if jobs := ctrl.ListAgentUpdateJobs(); len(jobs) != jobCount {
+			t.Errorf("rejected body %s changed retained jobs to %d", body, len(jobs))
 		}
 	}
 }

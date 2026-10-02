@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/test-base";
+import { waitForHttp } from "../../helpers/causal-waits";
 import { installRuntimeUpdateFixture, updateJob } from "./agent-runtime-update-helpers";
 
 test.describe("OMP harness-owned updates", () => {
@@ -28,7 +29,9 @@ test.describe("OMP harness-owned updates", () => {
       caption: "OMP stable latest is reference-only",
     });
 
+    const approvalResponse = waitForHttp(testPage, "POST", /\/api\/v1\/agent-update\/omp-acp$/);
     await dialog.getByTestId(`agent-update-confirm-${runtime.agentName}`).click();
+    await approvalResponse;
     expect(runtime.postBodies()).toEqual(["{}"]);
     await runtime.emitOutput("Updated to 18.3.4 on canary channel\n");
     await expect(dialog.getByTestId(`agent-update-log-${runtime.agentName}`)).toContainText(
@@ -105,6 +108,9 @@ test.describe("OMP harness-owned updates", () => {
     const baselineJobReads = runtime.jobsRequestCount();
     const statusGate = Promise.withResolvers<void>();
     runtime.failNextStatusAfter(statusGate.promise);
+    const failedStatusResponse = waitForHttp(testPage, "GET", /\/api\/v1\/agent-update\/status$/, {
+      predicate: (response) => response.status() === 503,
+    });
     runtime.setPostResponse(
       updateJob({
         update_mode: "self_update",
@@ -116,7 +122,9 @@ test.describe("OMP harness-owned updates", () => {
         target_version: "",
       }),
     );
+    const approvalResponse = waitForHttp(testPage, "POST", /\/api\/v1\/agent-update\/omp-acp$/);
     await dialog.getByTestId(`agent-update-confirm-${runtime.agentName}`).click();
+    await approvalResponse;
     await expect(dialog.getByTestId(`agent-update-result-${runtime.agentName}`)).toContainText(
       "already up to date",
     );
@@ -124,6 +132,7 @@ test.describe("OMP harness-owned updates", () => {
     expect(runtime.jobsRequestCount()).toBe(baselineJobReads);
     expect(runtime.postBodies()).toEqual(["{}"]);
     statusGate.resolve();
+    await failedStatusResponse;
     await expect(dialog.getByTestId(`agent-update-result-${runtime.agentName}`)).toContainText(
       "already up to date",
     );

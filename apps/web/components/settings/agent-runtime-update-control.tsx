@@ -51,6 +51,12 @@ function updatePhase(t: TFunction, status: AgentUpdateJob["status"] | undefined)
   return key ? t(key) : null;
 }
 
+function updateExplainerKey(preview: AgentUpdatePreview): string {
+  if (preview.update_mode === "self_update") return "agents:harnessUpdateChannelNotice";
+  if (preview.managed_fallback) return "agents:runtimeFallbackExplainer";
+  return "agents:runtimeUpdateExplainer";
+}
+
 function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdateJob }) {
   const { t } = useTranslation();
   if (!job) return null;
@@ -128,7 +134,9 @@ function RuntimeVersionSummary({
             {t("agents:installedRuntimeVersion", { version: current })}
           </p>
           <p data-testid={`agent-update-stable-reference-${agentName}`}>
-            {t("agents:stableLatestReference", { version: preview.stable_latest_version })}
+            {t("agents:stableLatestReference", {
+              version: preview.stable_latest_version || t("common:unknown"),
+            })}
           </p>
         </div>
       </div>
@@ -198,9 +206,7 @@ function RuntimeUpdatePreviewDetails({
         />
       )}
       <div className="space-y-0.5 text-xs text-muted-foreground">
-        {preview.update_mode === "self_update"
-          ? t("agents:harnessUpdateChannelNotice")
-          : t("agents:runtimeUpdateExplainer")}
+        <p>{t(updateExplainerKey(preview))}</p>
         <p>{t("agents:runtimeUpdateSessionsNote")}</p>
       </div>
       <div className="space-y-0.5">
@@ -355,7 +361,7 @@ function UpdateFooter({
           {starting && <IconLoader2 className="mr-2 size-4 animate-spin" />}
           {canRetry
             ? t("agents:retryUpdate")
-            : t(runtimeOperationLabelKey(job?.operation ?? preview?.operation))}
+            : t(runtimeOperationLabelKey(resolveRuntimeOperation(preview, job)))}
         </Button>
       )}
     </>
@@ -438,16 +444,7 @@ function runtimeUpdateStatusLabel(
   return t(UPDATE_AGENT_KEY, { name: displayName });
 }
 
-export function AgentRuntimeUpdateControl({
-  agentName,
-  displayName,
-  runtimeUpdate,
-  runtimeUpdateStatus,
-  job,
-  installJob,
-  onPreview,
-  onUpdate,
-}: {
+type AgentRuntimeUpdateControlProps = {
   agentName: string;
   displayName: string;
   runtimeUpdate: RuntimeUpdate;
@@ -465,7 +462,18 @@ export function AgentRuntimeUpdateControl({
     useDefault?: boolean,
     updateMode?: AgentUpdateMode,
   ) => Promise<AgentUpdateJob>;
-}) {
+};
+
+export function AgentRuntimeUpdateControl({
+  agentName,
+  displayName,
+  runtimeUpdate,
+  runtimeUpdateStatus,
+  job,
+  installJob,
+  onPreview,
+  onUpdate,
+}: AgentRuntimeUpdateControlProps) {
   const { isMobile } = useResponsiveBreakpoint();
   const {
     activeJob,
@@ -531,6 +539,7 @@ export function AgentRuntimeUpdateControl({
         onOpen={() => handleOpenChange(true)}
       />
       <AgentRuntimeUpdateSurface
+        managedFallback={runtimeUpdate.managed_fallback}
         agentName={agentName}
         displayName={displayName}
         isMobile={isMobile}

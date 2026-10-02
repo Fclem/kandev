@@ -8,6 +8,7 @@ depends_on:
 plan: "plan.md"
 requirements:
   - REQ-AGENTS-RUNTIME-UPDATES-003
+acceptance_criteria:
   - AC-AGENTS-RUNTIME-UPDATES-003.1
   - AC-AGENTS-RUNTIME-UPDATES-003.2
   - AC-AGENTS-RUNTIME-UPDATES-003.3
@@ -17,7 +18,6 @@ requirements:
   - AC-AGENTS-RUNTIME-UPDATES-003.14
   - AC-AGENTS-RUNTIME-UPDATES-003.15
   - AC-AGENTS-RUNTIME-UPDATES-003.16
-  - AC-AGENTS-RUNTIME-UPDATES-003.17
 system_design:
   - ../../specs/agents/system-design/harness-self-update.md
 ---
@@ -33,13 +33,12 @@ Extend the existing Agents update control to render harness-owned updates withou
 - Add typed `update_mode` handling for runtime update, status, preview, and job data.
 - Hide `RuntimeVersionPicker` for `self_update` mode and display installed/current plus `stable_latest_version` as a reference, never as an update target.
 - Update the API client and approval hook so `self_update` uses `update_mode` to call the approval API without a target and serializes exactly `{}`; keep target-required and default-reset requests/guards for pinned updates.
-- Use structural operation state for approval availability; self-update `update` and `repair` remain actionable with no target, while `up_to_date` is disabled. Distinguish metadata-unknown status from a repair preview when current ACP version is unknown, and keep the preview control available when metadata status is unknown.
+- Use structural operation state for approval availability; self-update `update` and `repair` remain actionable with no target. Show an unknown stable reference when registry metadata is unavailable. Keep preview available and classify repair only when the current ACP version is unknown or invalid.
 - Explain in localized UI copy that `omp update` follows the configured OMP channel and may install a version different from the stable reference.
-- Update the Agents settings approval path so `useAgentRuntimeUpdates` returns an empty-ID `up_to_date` result without calling `upsertAgentUpdateJob`; start runtime-update status refresh for every such response without awaiting it.
-- Add component/helper tests for reference labeling, channel explanation, metadata-unknown resolution errors, no-target self-update approval with exact `{}`, structural `repair` actionability, and the pinned target-required guard. Approval coverage clicks the enabled self-update action from a targetless `update`/`repair` preview and verifies the self-update API call.
-- When approval returns terminal `up_to_date` with an empty `job_id`, preserve it as dialog-local result state, render it without registering or polling a job, and clear it on reset or a new approval. Test repeated no-op approvals for no shared job entry and one status refresh each; keep the result visible while refresh is pending or rejected.
-- Test status-map behavior with rejected refresh and with overlapping refreshes completed out of order: failure keeps the last good map, and an older completion cannot overwrite the latest-started request's status.
-- Test the mixed page/status-hook race with deferred responses: resolve initial status load; let successful job A start a status request; make job B successful while A is pending; then approve and return empty-ID `up_to_date`, causing a newer page-triggered status request that fails. Resolve A's response successfully but stale and assert neither response observes A or B; exactly one successor covers both pending IDs. Apply that successor, assert both jobs are observed, then rerender with a new jobs-map object and assert no extra request.
+- Update the Agents settings approval path so any empty-ID terminal response is returned without calling `upsertAgentUpdateJob`; start runtime-update status refresh without awaiting it.
+- Add component/helper tests for reference labeling, channel explanation, unknown stable metadata, no-target self-update approval with exact `{}`, structural `repair` actionability, and the pinned target-required guard. Approval coverage clicks the enabled self-update action from a targetless `update`/`repair` preview and verifies the self-update API call.
+- When approval returns terminal `up_to_date` with an empty `job_id`, preserve it as dialog-local result state, render it without registering or polling a job, and clear it on reset or a new approval. This is a shared UI contract; stable metadata does not produce this result for self-update mode. Test repeated no-op responses for no shared job entry and one status refresh each; keep the result visible while refresh is pending or rejected.
+- Test status-map behavior when a refresh fails and when several terminal jobs complete close together. The last good map remains visible, and a terminal job causes a status refresh.
 
 ## Out of scope
 
@@ -49,10 +48,11 @@ Extend the existing Agents update control to render harness-owned updates withou
 ## Acceptance
 
 - OMP's trigger and update dialog show the current version and `stable_latest_version` as a reference, clearly explain that updates follow OMP's configured channel and may install a different version, and offer no target picker or rollback/default controls.
-- Approval submits neither a target version nor `use_default`; `update_mode` and structural `operation` enable targetless self-update `update`/`repair` actions and disable `up_to_date`, while pinned mode retains its target/default contract. Metadata-unknown status keeps the update control enabled and opens preview, where the resolution error appears without presenting a job as created. Repair remains actionable. If approval revalidation returns `up_to_date` with an empty `job_id`, show the no-op result from local dialog state without registering or polling a job, clearing it on reset/new approval.
+- Approval submits neither a target version nor `use_default`; `update_mode` and structural `operation` enable targetless self-update `update`/`repair` actions, while pinned mode retains its target/default contract. Equal or newer stable metadata does not disable self-update. Registry metadata failure displays an unknown stable reference and does not block preview. Repair remains actionable when the current ACP version is unknown or invalid.
+- A generic terminal `up_to_date` response with an empty `job_id` uses local dialog state without registering or polling a job. Clear this result on reset or new approval. It is not produced by comparing OMP's current version with the stable reference.
 - A user click on a targetless self-update preview reaches the approval API with exact `{}`; the same empty-target action remains blocked for pinned mode.
-- Empty-ID terminal `up_to_date` responses are not upserted into the shared update-job store; each starts a status refresh. The result renders while refresh is pending or rejected. Failed reads preserve the last good status, and a delayed older read cannot overwrite the latest-started refresh.
-- Each status request snapshots pending successful job IDs at start and can observe only those IDs after an applied response. Late successful jobs and superseded batches share one queued successor; never retry independently per job.
+- Empty-ID terminal `up_to_date` responses are not upserted into the shared update-job store; each starts a status refresh. The result renders while refresh is pending or rejected. Failed reads preserve the last good status.
+- A terminal update job causes a status refresh. Concurrent job completions share the store-owned refresh path and do not leave old status displayed.
 - Desktop dialog and phone drawer match UI-01/UI-02/UI-03 in the [plan preview](plan.md#ascii-ui-preview), use translated copy, and preserve existing job output/progress behavior.
 
 ## ASCII UI preview
@@ -72,7 +72,12 @@ See UI-01 and UI-02 plus terminal no-op state UI-03 in the [plan](plan.md#ascii-
 +--------------------------------------+
 ```
 
-### UI-03: Approval revalidates as up to date
+### UI-03: Shared terminal no-job result
+
+The shared update dialog can display a terminal `up_to_date` response with an
+empty `job_id`. This result does not come from stable-version comparison in
+self-update mode; the trusted updater decides whether its configured channel
+has an update.
 
 ```text
 +--------------------------------------+
@@ -122,8 +127,8 @@ pnpm run i18n:check
 
 ## Dependencies
 
-Task 02 defines the `update_mode` wire contract and terminal no-job
-`up_to_date` approval response.
+Task 02 defines the `update_mode` wire contract. The shared update dialog also
+supports generic terminal no-job `up_to_date` responses.
 
 ## Risks
 
@@ -141,4 +146,4 @@ Task 02 defines the `update_mode` wire contract and terminal no-job
 
 ## Results
 
-Implemented mode-aware targetless approval, localized reference/channel UI, dialog-local terminal no-job state, page-triggered advisory refresh, and generation-fenced single-flight job-status observation. Seven focused web test files passed (69 tests); store and WebSocket update tests passed; `pnpm run typecheck` and `pnpm run i18n:check` passed.
+Implemented mode-aware targetless approval, localized reference/channel UI, dialog-local terminal no-job state, and page-triggered advisory refresh. The shared Settings store owns status reads and coalesces refresh requests; the UI hook observes terminal jobs through that shared path.

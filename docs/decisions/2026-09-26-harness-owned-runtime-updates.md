@@ -53,12 +53,15 @@ set of endpoints, and one job pipeline:
    staged candidate, ACP probe before activation, persisted selection.
 2. **Harness-owned updater.** A built-in agent that declares a trusted
    self-update command. Kandev resolves the upstream stable latest version from
-   the trusted package's registry metadata for display and classification only;
-   this value is a reference, not an update target. It runs the agent's own
-   command on the Kandev host, which follows the harness's existing channel and
-   may install a different version, streams its output, and then probes the
-   agent over ACP. It publishes capabilities only after a successful probe and
-   never persists a version selection.
+   the trusted package's registry metadata for display and as an advisory status
+   reference. If stable latest is newer than the ACP version, Kandev reports an
+   update hint. If it is equal to or older than the ACP version, Kandev reports
+   unknown because the configured channel is not known. The reference never
+   gates approval. Kandev runs the agent's own command on the host, which
+   follows the harness's existing channel and may install a different version,
+   streams its output, and then probes the agent over ACP. It publishes
+   capabilities only after a successful probe that reports a changed version,
+   and never persists a version selection.
 
 The harness's own installer is the integrity boundary for a harness-owned
 updater. Kandev does not stage, copy, or verify the artifact itself, and it does
@@ -81,11 +84,14 @@ Operators get the same Settings update control for a harness-owned updater as
 for a pinned runtime, without Kandev assuming an installer for that harness.
 
 Kandev cannot offer version selection, rollback, or candidate validation for
-these harnesses, and the UI must not imply that it can. The stable latest is
-only a comparison reference; an update follows the harness's existing channel
-and may install a different version. The recorded current version is whatever
-the post-update ACP probe reports, so it reflects the harness's channel choice
-rather than a Kandev-reviewed pin.
+these harnesses, and the UI must not imply that it can. Stable latest is only
+an advisory reference; it cannot establish whether a configured canary channel
+is current and it never disables the update action. An update follows the
+harness's existing channel and may install a different version. The recorded
+current version is whatever the post-update ACP probe reports, so it reflects
+the harness's channel choice rather than a Kandev-reviewed pin. A successful
+updater exit with no ACP-reported version change fails the job and retains the
+updater output.
 
 A failed post-update probe fails the job after the harness has already replaced
 its installation. Kandev keeps the previous capability catalogue and does not

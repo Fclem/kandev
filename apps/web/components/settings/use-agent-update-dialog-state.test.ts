@@ -339,6 +339,38 @@ describe("useAgentUpdateDialogState self-update", () => {
   });
 });
 
+describe("useAgentUpdateDialogState no-op selection", () => {
+  it("clears a terminal no-op when the user selects a different target", async () => {
+    const noOp: AgentUpdateJob = {
+      job_id: "",
+      update_mode: "pinned",
+      agent_name: AGENT_NAME,
+      status: "succeeded",
+      operation: "up_to_date",
+      current_version: "0.61.0",
+      started_at: "2026-09-26T12:00:00Z",
+    };
+    const { result } = renderHook(() =>
+      useAgentUpdateDialogState({
+        agentName: AGENT_NAME,
+        onPreview: vi.fn().mockResolvedValue(FIRST_PREVIEW),
+        onUpdate: vi.fn().mockResolvedValue(noOp),
+      }),
+    );
+    await act(async () => {
+      await result.current.loadPreview();
+    });
+    await act(async () => {
+      await result.current.approve();
+    });
+    expect(result.current.activeJob).toEqual(noOp);
+
+    act(() => result.current.selectTarget("0.60.0"));
+
+    expect(result.current.activeJob).toBeUndefined();
+  });
+});
+
 describe("useAgentUpdateDialogState failed target selection", () => {
   it("clears a failed active job when selecting a new target", async () => {
     const failedJob: AgentUpdateJob = {

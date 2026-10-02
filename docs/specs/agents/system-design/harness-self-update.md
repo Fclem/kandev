@@ -54,6 +54,9 @@ failure. See [ADR-2026-09-26](../../../decisions/2026-09-26-harness-owned-runtim
   internal update target. Existing HTTP handlers and the
   `RuntimeUpdater`/`AgentUpdateJobStore` maintenance boundary remain shared.
   The harness target has no version-selection store or npm cache repair path.
+- Runtime metadata cache and singleflight keys include both update mode and
+  package. This keeps the same package from sharing status semantics between
+  pinned and self-update targets.
 - `RuntimeUpdateDTO`, status, preview, and job DTOs carry the closed
   `update_mode` values `pinned` and `self_update`. The self-update mode exposes
   the trusted package as informational metadata, the ACP-reported current
@@ -65,30 +68,19 @@ failure. See [ADR-2026-09-26](../../../decisions/2026-09-26-harness-owned-runtim
   calling `upsertAgentUpdateJob`; the page starts a status refresh for every
   such response without awaiting it. Normal job responses remain in the shared
   job store and refresh status through the existing successful-job path.
-- `useAgentRuntimeUpdateStatuses` preserves the last successful status map when
-  a current refresh fails. Refresh outcomes distinguish `applied`,
-  `superseded`, and `failed`; each request has a generation, and only the
-  most recently started response may replace the map.
-- The single-flight successful-job observer snapshots pending job IDs when each
-  refresh request starts. Only an `applied` response may mark IDs in that
-  snapshot observed. Jobs becoming successful after the request starts remain
-  pending for the next batch and cannot be acknowledged by the earlier
-  response.
-- New late job IDs and IDs from superseded attempts share at most one queued
-  successor for the whole pending set; never start independent retries per
-  job. Failed attempts preserve the map and leave their snapshot IDs pending
-  for a later refresh unless late IDs already require the shared successor.
+- `refreshRuntimeUpdateStatuses` owns status reads at the shared Settings store.
+  It shares an active request, queues one forced refresh behind it, and keeps
+  the last successful status map when a request fails. Terminal update jobs
+  trigger this shared refresh path.
 - `AgentRuntimeUpdateControl` reuses the existing update trigger, responsive
   dialog/drawer, job phases, output stream, and result states. The self-update
-  mode hides `RuntimeVersionPicker` and shows the stable reference with copy
-  that explains the updater follows its configured channel and may install a
-  different version. Approval availability follows `update_mode` and
-  structural `operation`: self-update `update` and `repair` are actionable
-  without a target, while `up_to_date` is not; pinned updates retain the
-  target-required guard. An empty-ID terminal `up_to_date` response is
-  rendered from dialog-local state without registering or polling it as a job;
-  its display does not wait for status refresh success or completion. Reset
-  that state when the dialog resets or a new approval begins.
+  mode hides `RuntimeVersionPicker` and shows the stable reference, or an
+  unknown value, with copy that explains the updater follows its configured
+  channel and may install a different version. Self-update `update` and
+  `repair` operations are actionable without a target. An empty-ID terminal
+  `up_to_date` response is rendered from dialog-local state without registering
+  or polling it as a job. Clear that state when the dialog resets or the user
+  selects another target or default.
 
 ## Data and contracts
 
@@ -109,12 +101,14 @@ and job representations. `pinned` retains all existing exact-version behavior.
 default-generation identity. Its stable latest metadata comes from the
 `dist-tags.latest` field of the trusted package's packument fetched directly
 over HTTPS from the fixed npm registry endpoint, then validated as a stable
-version. This lookup does not depend on the `npm` CLI. For status comparison,
-the effective version is the latest ACP capability version reported for the
-local installation. If that version is unknown, check state is `unknown`; if it
-is older than the registry stable latest, check state is `update_available`; if
-it is equal to or newer than stable latest, check state is `up_to_date`. A
-harness on a faster channel is not changed to stable by Kandev.
+version. This lookup does not depend on the `npm` CLI. The response body is
+limited to 16 MiB. For status comparison, the effective version is the latest
+ACP capability version reported for the local installation. If that version
+is unknown, check state is `unknown`; if it is older than the registry stable
+latest, check state is `update_available`; if it is equal to or newer than
+stable latest, check state remains `unknown` because the configured channel is
+not known. Stable latest is a reference, not a source of truth for whether the
+trusted updater can update the installed channel.
 
 The self-update preview returns the resolved stable latest in
 `stable_latest_version` as reference-only metadata and leaves `target_version`
@@ -122,8 +116,7 @@ unset; `stable_latest_version` is never an approval input or update-command
 argument. It includes the trusted update argv for review and an empty
 `available_versions` list. An explicit target-version request or `use_default`
 request is rejected for this mode. For an enqueued job, `current_version`
-is the post-update ACP-reported `AgentVersion`; the no-job response uses the
-ACP capability version from the approval check. Kandev does not persist a
+is the post-update ACP-reported `AgentVersion`. Kandev does not persist a
 version selection.
 
 The existing `POST /api/v1/agent-update/{agent}` route keeps its pinned-runtime
@@ -132,19 +125,11 @@ backend derives update mode from the built-in agent capability, not request
 input. A target-free request is accepted only for a self-update agent. For that
 mode, a non-empty `target_version` or `use_default: true` is rejected.
 
-For self-update approval, before claiming maintenance or creating a job, the
-backend resolves trusted stable metadata and compares it with the latest ACP
-capability version known to Kandev. If the current version is equal to or newer
-than stable latest, POST returns HTTP 202 with the existing terminal
-`AgentUpdateJobDTO` shape: `status: succeeded`, `operation: up_to_date`, and an
-empty `job_id`. This typed no-job result is not retained or broadcast; no
-maintenance claim or job-start/finish notification is created, and neither the
-trusted update command nor the ACP probe command is run. This comparison is the
-approval decision point. An external installation change observed only after
-the check does not cancel the accepted job; if the worker observes that change,
-it shall complete the existing job as a no-op `up_to_date` result without
-running the updater or probe while retaining the job ID, record, and lifecycle
-notifications.
+Self-update approval does not compare the current version with the stable
+reference. It revalidates the built-in agent capability, then creates a job so
+the trusted updater can decide whether its configured channel has a new
+version. A registry metadata failure does not block approval. Stable latest is
+never an approval input.
 
 ## Control flow
 
@@ -154,40 +139,28 @@ notifications.
    trusted metadata package, and current ACP-reported version.
 2. The status endpoint collects both target flavors. For a harness-owned
    updater, it fetches trusted package metadata directly from the fixed HTTPS
-   npm registry endpoint, without invoking the `npm` executable, and compares
-   the stable latest version against its current ACP capability version rather
-   than a persisted Kandev selection. One package lookup failure yields an
-   `unknown` entry and does not fail the other entries.
-3. Preview resolves the stable latest version and classifies the harness as
-   `update`, `up_to_date`, or `repair` (the running version is unknown). The
-   response carries `stable_latest_version` as reference-only metadata and
-   leaves `target_version` unset. A current version equal to or newer than
-   stable latest is `up_to_date`; Kandev does not offer a channel switch or
-   downgrade. It includes the trusted update argv for review.
-4. Approval revalidates the built-in agent capability. For self-update it
-   resolves trusted stable metadata and compares it with the latest ACP
-   capability version known to Kandev before claiming maintenance or enqueuing.
-   If already up to date, it returns the typed no-job result defined above; a
-   metadata-resolution failure also returns before enqueue. Otherwise it
-   enqueues the update or repair action. This pre-enqueue comparison is the
-   decision point: a later external update does not cancel the accepted job. If
-   the worker observes that update after enqueue, it completes the existing
-   job as a no-op without running the updater or probe, while retaining the job
-   ID and lifecycle. Otherwise the job runs the trusted command without
-   selecting a version or channel, streams its output, then invokes the agent's
-   ACP probe command. The command follows the harness's existing configured
-   channel, so the probed version may differ from `stable_latest_version`.
-   For a pre-enqueue no-job result, the frontend returns the response without
-   inserting it into the shared job store, starts a status refresh without
-   awaiting it, and renders the terminal result from dialog-local state.
-   A refresh snapshots pending successful job IDs at request start. Only an
-   applied response marks IDs in that snapshot observed; late IDs and IDs from
-   superseded requests share one queued successor. Failed attempts preserve the
-   last good map and leave their snapshot IDs pending for a later refresh.
-5. A successful probe publishes the new capability catalogue and records the
-   reported current version in the job/status projection, even when it differs
-   from the stable latest reference. A failed command or probe fails the job;
-   no capability publication or Kandev selection write occurs.
+   npm registry endpoint, without invoking the `npm` executable. One package
+   lookup failure yields an `unknown` entry and does not fail the other entries.
+   Stable latest newer than the ACP version is an update hint. An equal or
+   older stable version produces `unknown`, because the installed channel may
+   have a newer release.
+3. Preview resolves the stable latest version for display when available and
+   classifies the harness as `update` or `repair` (the current version is
+   unknown or invalid). A registry failure leaves the stable reference unknown
+   but does not block preview. The response leaves `target_version` unset and
+   includes the trusted update argv for review.
+4. Approval revalidates the built-in agent capability, then enqueues an update
+   or repair job without comparing stable metadata. The job runs the trusted
+   command without selecting a version or channel, streams its output, and
+   invokes the agent's ACP probe command. The command follows the harness's
+   configured channel, so the probed version may differ from
+   `stable_latest_version`. If a successful command leaves the ACP-reported
+   version unchanged, the job fails, retains the updater's output, and does
+   not publish the probe result.
+5. A changed successful probe publishes the new capability catalogue and
+   records the reported current version in the job/status projection. A failed
+   command, failed probe, or unchanged probe version fails the job and does not
+   publish capabilities or write a Kandev selection.
 
 The maintenance target is the Kandev host installation, matching the existing
 Update agent boundary. It does not install or prepare a copy in a task's Docker,
@@ -195,12 +168,14 @@ Sprite, SSH, or Kubernetes environment.
 
 ## Failure and recovery
 
-- Registry metadata failure returns an unknown status for OMP while leaving its
-  update control available; preview reports the resolution failure and starts
-  no job.
+- Registry metadata failure returns an unknown status for OMP and an unknown
+  stable reference in preview. The trusted update action remains available.
 - An `omp update` failure, including the harness refusing a Nix-owned
   installation, fails the job and retains the updater's output. Kandev does not
   substitute npm, Bun, Homebrew, mise, or a binary-download recipe.
+- A zero exit code with an unchanged ACP-reported version fails the job and
+  retains the updater's output. This includes an updater that declines an
+  unsupported installation but exits normally.
 - A successful harness update followed by an ACP probe failure fails the job
   and retains the prior advertised capability catalogue. The harness has
   already replaced its installation; Kandev does not claim rollback. Recovery

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { useState, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentUpdateJob, AgentUpdatePreview } from "@/lib/api";
+import type { AgentUpdateJob, AgentUpdatePreview, AgentUpdateStatus } from "@/lib/api";
 import { AgentRuntimeUpdateControl } from "./agent-runtime-update-control";
 
 vi.mock("@/hooks/use-responsive-breakpoint", () => ({
@@ -41,6 +41,20 @@ const AGENT_NAME = "claude-acp";
 const PACKAGE_NAME = "@agentclientprotocol/claude-agent-acp";
 const ACTIVE_VERSION = "0.70.0";
 const OMP_PACKAGE = "@oh-my-pi/pi-coding-agent";
+const RUNTIME_STATUS_META = {
+  display_name: "Claude",
+  runtime_id: "npm:" + PACKAGE_NAME,
+  owner: "kandev",
+  mechanism: "npm_candidate",
+  management: "managed",
+  source: PACKAGE_NAME,
+  guidance_url: "",
+  current_version: ACTIVE_VERSION,
+  available: true,
+  enabled: true,
+  auto_update_supported: true,
+  auto_update: false,
+} as const;
 
 function preview(overrides: Partial<AgentUpdatePreview> = {}): AgentUpdatePreview {
   return {
@@ -59,6 +73,23 @@ function preview(overrides: Partial<AgentUpdatePreview> = {}): AgentUpdatePrevie
     ],
     command: ["npm", "exec"],
     command_string: "npm exec",
+    ...overrides,
+  };
+}
+
+function ompStatus(overrides: Partial<AgentUpdateStatus> = {}): AgentUpdateStatus {
+  return {
+    ...RUNTIME_STATUS_META,
+    display_name: "omp",
+    runtime_id: "omp-acp",
+    current_version: "1.0.0",
+    auto_update_supported: false,
+    update_mode: "self_update",
+    agent_name: "omp-acp",
+    package: OMP_PACKAGE,
+    default_version: "",
+    effective_version: "",
+    check_state: "unknown",
     ...overrides,
   };
 }
@@ -170,6 +201,7 @@ describe("AgentRuntimeUpdateControl", () => {
           effective_version: ACTIVE_VERSION,
         }}
         runtimeUpdateStatus={{
+          ...RUNTIME_STATUS_META,
           agent_name: AGENT_NAME,
           update_mode: "pinned",
           package: PACKAGE_NAME,
@@ -204,6 +236,7 @@ describe("AgentRuntimeUpdateControl", () => {
           effective_version: ACTIVE_VERSION,
         }}
         runtimeUpdateStatus={{
+          ...RUNTIME_STATUS_META,
           agent_name: AGENT_NAME,
           update_mode: "pinned",
           package: PACKAGE_NAME,
@@ -245,6 +278,7 @@ describe("AgentRuntimeUpdateControl unknown active version", () => {
           effective_version: ACTIVE_VERSION,
         }}
         runtimeUpdateStatus={{
+          ...RUNTIME_STATUS_META,
           agent_name: AGENT_NAME,
           update_mode: "pinned",
           package: PACKAGE_NAME,
@@ -354,14 +388,7 @@ describe("AgentRuntimeUpdateControl self-update", () => {
             update_mode: "self_update",
             package: OMP_PACKAGE,
           }}
-          runtimeUpdateStatus={{
-            update_mode: "self_update",
-            agent_name: agentName,
-            package: OMP_PACKAGE,
-            default_version: "",
-            effective_version: "",
-            check_state: "unknown",
-          }}
+          runtimeUpdateStatus={ompStatus({ agent_name: agentName })}
           onPreview={vi.fn().mockResolvedValue({
             update_mode: "self_update",
             agent_name: agentName,
@@ -404,15 +431,10 @@ describe("AgentRuntimeUpdateControl self-update trigger", () => {
           update_mode: "self_update",
           package: OMP_PACKAGE,
         }}
-        runtimeUpdateStatus={{
-          agent_name: "omp-acp",
-          update_mode: "self_update",
-          package: OMP_PACKAGE,
-          effective_version: "",
-          default_version: "",
+        runtimeUpdateStatus={ompStatus({
           latest_version: "1.1.0",
           check_state: "update_available",
-        }}
+        })}
         onPreview={vi.fn()}
         onUpdate={vi.fn()}
       />,
@@ -436,14 +458,7 @@ describe("AgentRuntimeUpdateControl self-update results", () => {
           update_mode: "self_update",
           package: OMP_PACKAGE,
         }}
-        runtimeUpdateStatus={{
-          agent_name: "omp-acp",
-          update_mode: "self_update",
-          package: OMP_PACKAGE,
-          effective_version: "",
-          default_version: "",
-          check_state: "unknown",
-        }}
+        runtimeUpdateStatus={ompStatus()}
         onPreview={onPreview}
         onUpdate={onUpdate}
       />,
@@ -490,7 +505,9 @@ describe("AgentRuntimeUpdateControl self-update results", () => {
       />,
     );
     fireEvent.click(screen.getByTestId("agent-update-trigger-omp-acp"));
-    fireEvent.click(await screen.findByTestId("agent-update-confirm-omp-acp"));
+    const confirm = await screen.findByTestId("agent-update-confirm-omp-acp");
+    await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(confirm);
     expect((await screen.findByTestId("agent-update-result-omp-acp")).textContent).toContain(
       "already up to date",
     );

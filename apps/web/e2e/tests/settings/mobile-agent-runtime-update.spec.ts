@@ -49,9 +49,9 @@ test.describe("managed agent runtime updates on mobile", () => {
       "Updating runtime",
     );
     await body.scrollIntoViewIfNeeded();
-    await expect(
-      body.evaluate((element) => element.scrollHeight > element.clientHeight),
-    ).resolves.toBe(true);
+    await expect
+      .poll(() => body.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
     await expect(testPage.locator("html")).toHaveJSProperty(
       "scrollWidth",
       await testPage.locator("html").evaluate((element) => element.clientWidth),

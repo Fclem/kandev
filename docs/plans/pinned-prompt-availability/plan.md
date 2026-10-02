@@ -428,8 +428,11 @@ Existing suites that must stay green: `message-list-shared.test.tsx`,
 `message-signature.test.ts`, `session-slice.merge-messages.test.ts`,
 `default-state.test.ts`, `hydration/hydrator.test.ts`, `store.test.ts`,
 `dockview-panel-actions.prompt-history-panel.test.ts`,
-`message-list-native-scroll.test.ts`, `use-lazy-load-prompts.test.ts`,
-`remove-task-session.test.ts`.
+`message-list-native-scroll.test.ts`, `remove-task-session.test.ts`.
+
+The main integration removes `useLazyLoadPrompts` and its test because the
+built-in Prompt History panel no longer consumes older prompt pages. The pinned
+feature retains the bounded latest-prompt read and its session projection.
 
 Supporting evidence that does not key to an acceptance criterion:
 `apps/web/hooks/use-processed-messages-fallback.test.ts` new coverage (rendering the hook, since the split lives in its `useMemo` and the pure-builder suite cannot observe it) of the derivation

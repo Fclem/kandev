@@ -16,10 +16,10 @@ whose row is not in the loaded window.
 Adjacent contracts it uses without changing:
 
 - [Transcript history visibility](task-prompt-transcript-visibility.md) owns the
-  bounded newest window, the prompt-only projection request
-  (`message.list` with `author_type=user`), and around-window navigation.
-- [Prompt history panel](prompt-history-panel.md) owns the surface that first
-  consumed the projection.
+  bounded newest window, shared message API, and around-window navigation.
+- [Prompt History Extraction](../../plugins/system-design/prompt-history-extraction.md)
+  owns the plugin's full-history surface. This design owns the separate
+  latest-prompt projection for pinned transcript affordances.
 - [Last-prompt pinning](../requirements/last-prompt-pinning-regressions.md) owns
   the pinned prompt's rendered appearance and its directional threshold.
 - [Bounded user-message rendering](bounded-user-message-rendering.md) owns the
@@ -74,50 +74,24 @@ projection and around-window query.
   `findMessageRow` helper (now exported from `message-list-native-scroll.ts`).
 - `components/task/task-chat-panel.tsx`: resolves the last prompt, decides control
   availability and direction, and owns the local pending-scroll request.
-- `hooks/domains/session/use-session-prompts.ts`: the prompt projection read.
-  `TaskChatPanel` consumes it with a first-load-only policy keyed on an explicit
-  authoritative-projection marker, not on cache presence: transcript fan-out and
-  older-prompt pagination can populate `messagePrompts.bySession` with a partial,
-  older-only projection, so presence cannot decide whether the newest prompts were ever
-  fetched. The marker is a per-session map on the prompt slice, purged with the session
-  and set by a dedicated authority-carrying install only the transcript panel's read
-  performs, so neither the shared `replacePromptMessages` nor the prompt-history panel's
-  read can make its cache authoritative; `fanOutTranscriptPrompts`, `prependPromptMessages`,
-  and that read never set it. The marker and the observed-prompt set are client-only.
-- `lib/state/slices/session/prompt-message-actions.ts` (`messagePrompts`): the
-  session-scoped prompt cache, independent of transcript pagination. The marker and the
-  observed-prompt record ride on the slice: a per-session, per-generation map holding the
-  observed ids and the newest key they reached, written by the authority install and the
-  live create path, its ids pruned by `removePromptMessage` beside the removed row, and
-  cleared with the marker and the deleted-id set by the purge. Resolution and the authority
-  install touch only their own generation's record. The live create path carries no
-  generation, so an event delivered after a purge records its id in whatever incarnation is
-  then current: accepted, because that same call also writes `messages.bySession` and this
-  cache, and the never-lowered key means an older delayed row cannot lower it.
-  `removePromptMessage` records the removed id (whose reconciliation stays owned by the
-  prompt-history contract) before its cache-presence and not-present returns, mirroring the
-  revision bump beside them, and every row-writing action skips such an id. The authority install — its named
-  action — filters and sorts the fetched rows, drops any for another session, merges them under the strict rule, sets the marker,
-  records the accepted rows' ids and the newest accepted row's key (never the raw response's,
-  which a same-id row can leave behind), keeps the newer of that key and the recorded one, and
-  applies the response's metadata only when the session has no cache entry at all, so a stale
-  response can neither resurrect a cursor nor re-enable `hasMore`. The page writers drop foreign rows, apply the metadata, and
-  repair a filtered cursor — incoming or current — to the oldest retained row, clearing it
-  with `hasMore` false only when a non-empty page retains no row; a zero-row page keeps
-  its own metadata. Row events skip tombstoned ids, insert when the id is absent,
-  never touch pagination metadata, and record an observed id only through the create path. Every merge — row events, the install,
-  and the around window — uses the strict rule, not the store's `>=`: an incoming row
-  replaces a cached one only when its version is strictly newer; an equal or unparseable
-  incoming version keeps the cached row and still adopts a `prompt_index` the incoming row
-  newly supplies, mirroring the transcript cache's own ordinal carve-out, while a cached row
-  whose own version is unparseable is replaced ahead of those clauses. The transcript cache's
-  signature reconciliation must not undo it; their refresh-generation bump
-  invalidates an in-flight prompt-history page.
-  `removePromptMessage` repairs a cursor naming the removed id and, when no row remains,
-  clears it with `hasMore` false. Boot hydration is a writer too: the payload's
-  `messagePrompts` is spread into the merge and then replaced by the slice default, which
-  hydrates only the cache and meta fields and forces the marker, the observation record, and
-  the deleted-id map empty.
+- `hooks/domains/session/use-session-prompts.ts`: reads the bounded latest
+  user-message window after the session subscription is ready. `TaskChatPanel`
+  uses the first-load-only policy, keyed by session generation; concurrent reads
+  join only when they share the same readiness identity. Only a successful
+  authority install establishes the projection marker. A failed read leaves the
+  loaded-window fallback available, and a connection-status change or remount
+  can retry while the marker remains unset.
+- `lib/state/slices/session/prompt-message-actions.ts` (`messagePrompts`):
+  keeps a session-scoped cache separate from transcript pagination. The
+  authority install accepts only valid, same-session, non-tombstoned prompts,
+  merges rows by strict freshness, and records observed ids and their newest
+  key. Live creates are observed immediately; transcript fan-out can populate
+  the cache but cannot establish authority. Updates preserve freshness, and
+  removal tombstones an id before cache checks and removes it from the observed
+  set. Session removal clears these maps and increments the generation so a
+  late response cannot cross an incarnation. The API response cursor metadata
+  is not consumed by a core older-page loader; full Prompt History pagination
+  remains plugin-owned.
 - `lib/state/slices/session/message-timestamp.ts`: `isIncomingMessageAtLeastAsFresh` becomes the
   three-case rule (Task 01); the around window inherits it.
 - `lib/state/slices/session/message-signature.ts`: the signature falls back to the content hash
@@ -135,19 +109,13 @@ The panel derives one `lastPromptMessage` per render:
    empty), the source introduced by this design. A reconciled fetched window can drop a live
    user row from `messages.bySession` (it reaches `message-window-reconciliation` below the
    fetched boundary), so the projection has to resolve it.
-2. `projectionLast` is the newest cache row the client observed, with a parseable
-   `created_at`: a row the panel's own successful authority read returned, or a prompt the
-   live create path observed (`addMessage`, which records a valid stored user
-   prompt's id in the session's observed-prompt set and the newest key the set has seen). Until an id is
-   observed nothing is admitted, so before the first read and after a successful empty one
-   a cache filled by a fetch — a fetched window's fan-out, older-prompt pagination, the
-   prompt-history panel's read — cannot present a stale older prompt as the last prompt,
-   as `AC-UI-PINNED-PROMPT-AVAILABILITY-001.6` requires. Once one has, the newest cache
-   row is admitted when it orders strictly newer than that key, which outlives the row it
-   was taken from; the whole record is per-generation and cleared by the purge, so no
-   observation, id, or floor crosses a session incarnation. The key is never lowered: the
-   authority install unions ids and keeps the newer key, so a response that raced a newer
-   live observation cannot re-open the guard.
+2. `projectionLast` is the newest valid cached prompt the client observed,
+   either from the successful latest-prompt read or a live create event. Cache
+   rows populated only by transcript fan-out do not become candidates until
+   the read establishes authority or a live create event observes them. The
+   observation record is scoped to the session generation; its newest key is
+   never lowered and survives removal of the row that established it, so a
+   stale response cannot admit an older prompt after a newer live prompt.
 3. The result is the newer of the two by `comparePromptOrder`, or `null` when neither
    exists. An order tie keeps the loaded-window row unless the projection row's `updated_at`
    is strictly newer.
@@ -431,26 +399,11 @@ is added.
   short-circuits, an unparseable one falls back.
 - `hooks/use-processed-messages-fallback.test.ts`: the rendering derivation (a plain user
   message renders, an action-carrying one moves to the footer list).
-- `hooks/domains/session/use-session-prompts*.test.ts(x)`: the marker-keyed
-  first-load-only policy — reads without the marker, skips with it, leaves an
-  authoritative cache and its `oldestCursor` untouched, retries after a failure, issues
-  no request once the marker is set, leaves it unset for the prompt-history read, plus a held request whose readiness is released and re-subscribed inside one replay,
-  asserting one request,
-  and — with a held
-  request whose refresh generation advances via fan-out mid-flight — resolves and rejects it with exactly one request
-  each, the live row preserved and the marker set on success but never on rejection,
-  where the next status change still retries, plus unmount before either
-  settles: no cache write, no marker, no loading write, no further request; and a
-  session generation that advances while the request is held — success and rejection
-  each install nothing, set no marker, write no failure or loading state, and issue
-  no further request. The held older-page race is asserted in
-  `hooks/use-lazy-load-prompts.test.ts`: the page's rows land and its cursor is
-  unchanged. A held authority response whose prompt id was deleted after the request
-  started — cached at deletion or not — installs without that row and still sets the
-  marker, with the prompt-history panel's replacing read covered the same way so
-  neither installer can reinstate it. A successful empty authority response over a
-  non-authoritative older-only cache records no id and never promotes a merged page row,
-  nor the newest cache row before any id is observed.
+- `hooks/domains/session/use-session-prompts.test.ts` covers the bounded user
+  prompt read, authority marker, connection readiness, failure/retry, request
+  joining, and stale session-generation responses. The store suite covers
+  prompt fan-out, observed live prompts, freshness, deleted-id tombstones, and
+  the authority install. Core has no prompt-history older-page hook.
 - `hooks/domains/session/load-message-window.test.ts`: the loader's branches —
   a target-containing response whose guard turns false before it resolves returning
   `stale` with no merge, and a current response omitting the target returning

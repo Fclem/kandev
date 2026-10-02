@@ -314,7 +314,7 @@ function buildSetMessagesMetadata(set: ImmerSet) {
     });
 }
 
-/** Builds the transcript update action and keeps the prompt cache in sync. */
+/** Builds the transcript update action. */
 function buildUpdateMessage(set: ImmerSet) {
   return (message: Parameters<SessionSlice["updateMessage"]>[0]) =>
     set((draft) => {
@@ -369,6 +369,7 @@ function buildMessageActions(set: ImmerSet) {
         );
         ensureMessageMeta(draft.messages.metaBySession, sessionId);
         if (meta) applyMessageMeta(draft.messages.metaBySession, sessionId, meta);
+        fanOutTranscriptPrompts(draft, messages);
       }),
     addMessage: (message: Parameters<SessionSlice["addMessage"]>[0]) =>
       set((draft) => {
@@ -441,6 +442,7 @@ function buildMessageActions(set: ImmerSet) {
       }),
     setMessagesMetadata: buildSetMessagesMetadata(set),
     setMessagesLoading: buildSetMessagesLoading(set),
+    ...buildPromptMessageActions(set),
   };
 }
 
@@ -1051,7 +1053,6 @@ export const createSessionSlice: StateCreator<
 > = (set, get) => ({
   ...defaultSessionState,
   ...buildMessageActions(set),
-  ...buildPromptMessageActions(set),
   ...buildTurnActions(set),
   ...buildTaskSessionActions(set),
   ...buildTaskSessionReconciliationActions(set),

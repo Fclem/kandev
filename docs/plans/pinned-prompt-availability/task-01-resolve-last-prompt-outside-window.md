@@ -337,7 +337,7 @@ loaded.
 
 ```bash
 (cd apps && pnpm install --frozen-lockfile)
-(cd apps/web && pnpm exec vitest run lib/state/default-state.test.ts lib/state/hydration/hydrator.test.ts lib/state/store.test.ts lib/session-last-prompt.test.ts components/task/chat/message-list-shared.test.tsx components/task/task-chat-panel.last-prompt.test.tsx components/task/task-chat-panel.launch-error.test.tsx hooks/use-processed-messages-fallback.test.ts hooks/domains/session/use-session-prompts.test.ts hooks/domains/session/use-session-prompts.stability.test.tsx hooks/use-lazy-load-prompts.test.ts lib/state/slices/session/session-slice.prompts.test.ts lib/state/slices/session/remove-task-session.test.ts)
+(cd apps/web && pnpm exec vitest run lib/state/default-state.test.ts lib/state/hydration/hydrator.test.ts lib/state/store.test.ts lib/session-last-prompt.test.ts components/task/chat/message-list-shared.test.tsx components/task/task-chat-panel.last-prompt.test.tsx components/task/task-chat-panel.launch-error.test.tsx hooks/use-processed-messages-fallback.test.ts hooks/domains/session/use-session-prompts.test.ts hooks/domains/session/use-session-prompts.stability.test.tsx lib/state/slices/session/session-slice.prompts.test.ts lib/state/slices/session/remove-task-session.test.ts)
 (cd apps/web && pnpm run typecheck)
 (cd apps/web && pnpm exec eslint components/task/task-chat-panel.tsx components/task/chat/message-list-shared.tsx lib/session-last-prompt.ts lib/session-last-prompt.test.ts lib/state/slices/session/prompt-message-actions.ts lib/state/slices/session/message-timestamp.ts lib/state/default-state.ts lib/state/default-state.test.ts lib/state/hydration/hydrator.test.ts components/task/task-chat-panel.last-prompt.test.tsx)
 ```
@@ -504,3 +504,7 @@ None.
 
 Verified: resolver, session-store, and panel tests passed in the 23-file
 focused suite (360 tests total); web typecheck passed.
+
+Post-merge integration removes the core older-prompt page hook and its test;
+the bounded latest-prompt read and projection remain for pinned transcript
+availability. Prompt History older-page loading remains plugin-owned.

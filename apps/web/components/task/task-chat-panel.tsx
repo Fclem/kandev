@@ -84,7 +84,7 @@ function useClarificationKey(agentMessageCount: number) {
   return { clarificationKey, handleClarificationResolved };
 }
 
-/** Identity for a prompt-history target owned by a non-Dockview host. */
+/** Identity for a transcript scroll target owned by a non-Dockview host. */
 export type PendingMessageScrollTarget = {
   sessionId: string;
   messageId: string;
@@ -1108,7 +1108,7 @@ function useDockviewTargetEffect(options: DockviewTargetEffectOptions) {
 }
 
 /**
- * Consumes Dockview prompt-history targets. Around-window targets stay owned
+ * Consumes Dockview transcript scroll targets. Around-window targets stay owned
  * through their first rendered placement and one delayed reassertion.
  */
 export function useScrollTargetConsumption({

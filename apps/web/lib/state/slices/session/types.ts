@@ -40,7 +40,6 @@ export type PromptsState = MessagesState & {
   observedBySession: Record<string, ObservedPrompts>;
   deletedIdsBySession: Record<string, Record<string, true>>;
 };
-
 export type TurnsState = {
   bySession: Record<string, Turn[]>;
   activeBySession: Record<string, string | null>; // sessionId -> active turnId

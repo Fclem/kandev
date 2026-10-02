@@ -72,6 +72,7 @@ export const defaultState = {
   userSettings: defaultSettingsState.userSettings,
   agentProfileRecentUse: defaultSettingsState.agentProfileRecentUse,
   messages: defaultSessionState.messages,
+  messagePrompts: defaultSessionState.messagePrompts,
   turns: defaultSessionState.turns,
   taskSessions: defaultSessionState.taskSessions,
   taskSessionsByTask: defaultSessionState.taskSessionsByTask,
@@ -81,7 +82,6 @@ export const defaultState = {
   sessionWorktreesBySessionId: defaultSessionState.sessionWorktreesBySessionId,
   pendingModel: defaultSessionState.pendingModel,
   activeModel: defaultSessionState.activeModel,
-  messagePrompts: defaultSessionState.messagePrompts,
   taskPlans: defaultSessionState.taskPlans,
   walkthroughs: defaultSessionState.walkthroughs,
   taskReview: defaultReviewState.taskReview,
@@ -325,7 +325,7 @@ function mergeAgentReviewArtifacts(initialState: HydrationState) {
   };
 }
 
-/** Merges the independently hydrated Prompt History projection. */
+/** Merges the latest-prompt projection and resets its client-only authority. */
 function mergePromptHistoryState(initialState: HydrationState) {
   return {
     ...defaultState.messagePrompts,
@@ -345,7 +345,6 @@ function mergePromptHistoryState(initialState: HydrationState) {
     deletedIdsBySession: {},
   };
 }
-
 /** Merges the GitHub slices for initial (SSR/boot) hydration. */
 /** Merges the GitHub slices for initial (SSR/boot) hydration. */
 function mergeGitHubState(initialState: HydrationState) {

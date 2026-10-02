@@ -434,6 +434,12 @@ A fan-out can partially succeed. The UI continues after a failure and reports pe
 
 The Changes panel's session history is calculated relative to the session's recorded base commit or current merge base, so it focuses on commits created on the task branch. Kandev refreshes status and emits session Git updates after mutations, but the underlying Git repository remains authoritative.
 
+The Changes toolbar shows a spinner while Git status or inline commit details load.
+If a read fails, it shows a warning and retries automatically with increasing
+delays. The panel keeps the last available file and history data visible while
+it retries. Diff viewers continue to show their own loading state until their
+details arrive.
+
 Two similarly named actions have very different semantics:
 
 - **Revert latest commit** (`worktree.revert_commit`) is not `git revert`. It accepts only the exact current `HEAD` SHA and runs `git reset --soft HEAD~1`, moving the branch back one commit while leaving its changes staged. It creates no inverse commit.
@@ -526,6 +532,8 @@ Example request and normal operation result:
 ```
 
 Read-only Git actions used by the Changes panel include `session.commit_diff`, `session.git.commits`, `session.cumulative_diff`, and `session.git.snapshots`. See [WebSocket API](websocket-api.md) for transport and subscription behavior.
+
+Commit details and cumulative Review take each file's added, deleted, renamed, or modified status from Git change metadata; matching words in a filename or patch content do not change its status.
 
 `agentctl` also implements `/api/v1/git/*` HTTP routes inside the execution runtime. Those routes are an internal backend-to-runtime control surface, not the public Kandev backend API. External clients should not discover or expose executor-local agentctl ports; use the registered Kandev WebSocket actions.
 

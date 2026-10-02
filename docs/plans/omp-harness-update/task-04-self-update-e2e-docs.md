@@ -8,6 +8,7 @@ depends_on:
 plan: "plan.md"
 requirements:
   - REQ-AGENTS-RUNTIME-UPDATES-003
+acceptance_criteria:
   - AC-AGENTS-RUNTIME-UPDATES-003.1
   - AC-AGENTS-RUNTIME-UPDATES-003.2
   - AC-AGENTS-RUNTIME-UPDATES-003.3

@@ -30,6 +30,7 @@ vi.mock("@/lib/api/domains/settings-api", async (importOriginal) => ({
   listExecutors: (...args: unknown[]) => listExecutorsMock(...args),
 }));
 
+import { ACTIVE_WORKSPACE_COOKIE, scopedCookieName } from "@/lib/routing/route-bootstrap";
 import { SettingsRouteBootstrap } from "./settings-routes";
 
 const SETTINGS_WORKSPACE_ID = "ws-settings-1";
@@ -101,5 +102,28 @@ describe("SettingsRouteBootstrap", () => {
     });
     expect(getStore()?.getState().workspaces.activeId).toBe(SETTINGS_WORKSPACE_ID);
     expect(getStore()?.getState().workspaces.activeIdRevision ?? 0).toBe(0);
+  });
+
+  // The active-workspace cookie is shared by every tab on the origin, so a
+  // sibling tab on another workspace rewrites it. Opening Settings must keep
+  // the workspace this tab already had, or "Kandev" home lands elsewhere.
+  it("keeps this tab's active workspace when the shared cookie names another one", async () => {
+    stubApis();
+    const otherWorkspace = { ...SETTINGS_WORKSPACES_RESPONSE.workspaces[0], id: "ws-other" };
+    listWorkspacesMock.mockResolvedValue({
+      workspaces: [otherWorkspace, ...SETTINGS_WORKSPACES_RESPONSE.workspaces],
+      total: 2,
+    });
+    document.cookie = `${scopedCookieName(ACTIVE_WORKSPACE_COOKIE)}=ws-other; path=/`;
+
+    const { Wrapper, getStore } = makeWrapper(SETTINGS_WORKSPACE_ID);
+    render(<SettingsRouteBootstrap pathname="/settings" />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(getStore()?.getState().workspaces.items).toHaveLength(2);
+    });
+    expect(getStore()?.getState().workspaces.activeId).toBe(SETTINGS_WORKSPACE_ID);
+    expect(getStore()?.getState().workspaces.activeIdRevision ?? 0).toBe(0);
+    document.cookie = `${scopedCookieName(ACTIVE_WORKSPACE_COOKIE)}=; path=/; max-age=0`;
   });
 });

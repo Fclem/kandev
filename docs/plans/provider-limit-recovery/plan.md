@@ -208,7 +208,7 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 | 003.1-003.6 | `orchestrator/provider_limit_failure_test.go`, including no fallback on durable mark-write failure |
 | 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (same-task independent waits across restart/cancel/replay; exact lease A acquire, restart, matching completion release, sibling lift, and stale A cannot release B; failed owner persistence does not replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
 | 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict and unknown/>7-day proceed cases; launch probe lease persists and transfers to the session/turn owner before prompt, then survives restart and releases only on matching completion), manual notice integration tests for `StartTask`, `StartCreatedSession`, `ensureSessionRunning`, `ResumeTaskSessionWithOptions`, and `promptTask`, plus `status-message.test.tsx` |
-| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` eligible fallback; unadvertised fallback fails before inference without trying another model, then parks only for resume-on + trusted reset; Office `AgentCompleted` clear failure retains marks/owner/waits and does not release, clean up, or wake; release/cleanup failures after clear keep due siblings blocked across ticks and restart, then reconciliation allows one lift; `office/repository/sqlite/run_routing_test.go` and `office/routing/provider_test.go` prove health retry and routing disable preserve keyed limit waits; `office/scheduler/routing_lifecycle_test.go` proves each due lift honors the same-mark owner across restart; `app/office/agents/[id]/runs/components/run-header.test.tsx` covers the reused capacity badge; failed/stopped probes remain parked until expiry, and limit failures renew the mark. |
+| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` eligible fallback; unadvertised fallback fails before inference without trying another model, then parks only for resume-on + trusted reset; Office `AgentCompleted` clear failure retains marks/owner/waits and does not release, clean up, or wake; release/cleanup failures after clear keep due siblings blocked across ticks and restart; routed and unrouted dispatch do not start siblings while a same-mark owner remains after mark closure, including after restart; `office/repository/sqlite/run_routing_test.go` and `office/routing/provider_test.go` prove health retry and routing disable preserve keyed limit waits; `office/scheduler/routing_lifecycle_test.go` proves each due lift honors the same-mark owner across restart; `app/office/agents/[id]/runs/components/run-header.test.tsx` covers the reused capacity badge; failed/stopped probes remain parked until expiry, and limit failures renew the mark. |
 | Observability | Task 10 metric tests for mark recording, each fallback outcome, and Kanban/Office wait transitions; closed labels, structured logs, and no-op/duplicate boundaries. |
 
 ## E2E tests
@@ -269,9 +269,9 @@ Design checks on 2026-10-03:
 - **Circuit-store availability.** A failed mark write uses the existing failure
   surface; a failed clear keeps marks and siblings blocked; a failed lease
   acquire/release or owner write does not replay or wake siblings. A retained
-  Office owner blocks due-run lifts even after marks close; every tick checks
-  the barrier and startup reconciliation retries before lift. Recovery resumes
-  only after the required durable operation succeeds.
+  Office owner blocks due-run lifts and both dispatch paths after mark closure;
+  each enforces the barrier, and startup reconciliation retries before lift or
+  dispatch. Recovery resumes only after the required durable operation succeeds.
 - **Continuation semantics.** For a harness that does not keep the user turn
   after a provider rejection, a continuation instruction loses the request.
   The no-turn-event rule resends the input in that case.

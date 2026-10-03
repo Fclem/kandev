@@ -485,12 +485,11 @@ each path continues with the requested model (AC 005.4).
     fallback alone never creates a wait.
 - **Lifting:** Persist the opaque `provider_limit_wait_key` on each wait run
   and reuse the existing status and badge. `redispatchWaitingRuns`,
-  workspace-disable clearing, and `LiftParkedRuns` preserve keyed waits;
-  routed/unrouted dispatch still applies the limit gate. Before clearing a
-  due sibling, `LiftParkedRuns` checks for a retained same-key successful
-  `provider_limit_probe` owner, even after mark closure. Remove the barrier
-  only after exact lease release and owner/wait cleanup persist. Startup
-  reconciliation precedes lift; failed/stopped owners unblock at expiry.
+  workspace-disable clearing, and `LiftParkedRuns` preserve keyed waits. Due
+  lifts and both dispatch paths block on a retained same-key successful owner,
+  independent of mark state. Remove the barrier only after exact lease release
+  and owner/wait cleanup persist. Startup reconciliation precedes lifts and
+  dispatch; failed/stopped owners unblock at expiry.
 - **Successful turn:** Only successful `AgentCompleted` clears marks. Resolve
   binding from `resolved_execution_profile_id` or the concrete profile, and
   model from `effective_model`. If `ClearOnSuccess` fails, stop before release,
@@ -504,8 +503,9 @@ each path continues with the requested model (AC 005.4).
   parked until success or the 10-minute lease expiry allows another probe
   (AC 002.5, AC 002.6).
 - **Dispatch gate:** Before candidate launch, `DispatchWithRouting` and
-  unrouted dispatch apply the same three outcomes as the Kanban gate. A park
-  replaces a defer.
+  unrouted dispatch block on retained same-key successful owners, even after
+  `ClearOnSuccess` closes a mark; then apply the three active-mark outcomes as
+  the Kanban gate. A park replaces a defer.
 - **Separation:** `office_provider_health`, its retry endpoint, and inbox
   entries stay independent of marks (AC 006.5). A redispatched run rebuilds
   its prompt under the existing Office contract.

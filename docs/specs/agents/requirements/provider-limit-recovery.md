@@ -122,14 +122,13 @@ that would use the same account and model.
   account-scope mark. If the durable clear fails, the marks remain active and
   waiting siblings stay blocked until a later clear succeeds.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.6:** When a mark's reset passes and
-  automatic work is waiting on it, only one waiting session or run shall
-  resume first as a probe. The others shall resume after the probe completes a
-  turn successfully. If the probe hits the limit again, the mark shall be
-  renewed and the others shall keep waiting. If the probe produces no result
-  within 10 minutes, another waiter may probe. The active probe owner's exact
-  lease identity shall survive a backend restart. A successful completion
-  releases siblings; an expired or stale owner shall not release a later
-  probe's lease.
+  automatic work is waiting on it, only one waiting session or run shall resume
+  first as a probe. The others shall resume after the probe completes a turn
+  successfully. If the probe hits the limit again, the mark shall be renewed
+  and the others shall keep waiting. If the probe produces no result within 10
+  minutes, another waiter may probe. The active probe owner's exact lease
+  identity shall survive a backend restart. A successful completion releases
+  siblings; an expired or stale owner shall not release a later probe's lease.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.7:** Marks shall survive a backend
   restart. A mark shall persist only the opaque binding key, the scope, the
   model identifier, the error code, whether the reset is known, the reset or
@@ -278,7 +277,10 @@ same profile policy and shared marks, while keeping Office ownership of runs.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-006.3:** When no fallback applies, Resume
   after reset is on, and the mark has a trusted reset, the run shall park until
   that reset. The scheduler shall then dispatch it automatically, subject to
-  the probe rule in AC 002.6.
+  the probe rule in AC 002.6. A sibling shall stay blocked from due lifting and
+  routed or unrouted dispatch until the successful Office probe's exact lease
+  release and owner/wait cleanup are durable, even after mark closure and
+  backend restart.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-006.4:** Office dispatch for an opted-in
   profile whose model is limited shall follow AC 005.1 and AC 005.2. Runs on
   profiles that are not opted in shall keep existing Office routing, health,

@@ -40,10 +40,10 @@ for every other case.
 - Park limit waits with the existing `waiting_for_provider_capacity` status
   and `provider_limit_wait_key`, preserving the current due query and run-header
   badge. The opaque key distinguishes them from provider-health waits.
-- Store the exact `ProbeLease` on its owner run. `LiftParkedRuns` blocks due
-  siblings while a same-mark successful owner remains; health retry and
-  workspace-routing disable preserve keyed limit waits. Routed and unrouted
-  dispatch both recheck the provider-limit gate.
+- Store the exact `ProbeLease` on its owner run. `LiftParkedRuns` and routed
+  and unrouted dispatch block a retained same-mark successful owner even after
+  mark closure. Health retry and workspace-routing disable preserve keyed waits;
+  dispatch applies the active-mark gate when no owner remains.
 - On successful `AgentCompleted`, resolve the run's execution binding and
   actual `effective_model`, atomically persist `providerlimit.ClearOnSuccess`,
   then durably release the attached probe lease. Reconcile finished successful
@@ -69,15 +69,17 @@ for every other case.
    release and owner/wait cleanup persist, it wakes siblings once. If clear,
    release, or cleanup fails, the owner and sibling waits remain durable and
    no sibling wakes. `LiftParkedRuns`, provider-health retry, and workspace
-   routing disable preserve keyed limit waits while an owner remains; routed
-   and unrouted dispatch continue to enforce the limit gate.
+   routing disable preserve keyed limit waits while an owner remains. Routed
+   and unrouted dispatch block on a retained same-mark successful owner even
+   after mark closure, then enforce the active-mark gate.
 3. Inject `ClearOnSuccess` persistence failure in the Office `AgentCompleted`
    path. Verify the lease is not released, owner/waits remain, and health retry,
    routing disable, ordinary ticks, and restart do not lift due siblings.
    Restore persistence and retry; verify one lift. Also inject release and
    owner-cleanup failures after clear succeeds; verify due siblings remain
-   blocked across ordinary ticks and restart reconciliation, then lift exactly
-   once after cleanup persists.
+   blocked across ticks and restart, and direct routed and unrouted dispatch do
+   not start a sibling while the mark is clear. After cleanup persists, verify
+   one lift.
 4. `AgentFailed` and `AgentStopped` do not clear marks; limit failure renews
    the mark. Independently test non-limit failed and stopped probes staying
    parked until their 10-minute lease expires, then a different waiter probes.

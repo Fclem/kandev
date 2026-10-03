@@ -246,6 +246,7 @@ function buildResourceState(p: BuildSessionPageStateParams) {
           agent.profiles.map((profile) => toAgentProfileOption(agent, profile)),
         ),
         version: 0,
+        orderByAgent: {},
       },
     })),
   };

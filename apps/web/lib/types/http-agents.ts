@@ -67,6 +67,7 @@ export type Agent = {
   mcp_config_path?: string | null;
   tui_config?: TUIConfig | null;
   profiles: AgentProfile[];
+  profile_order_revision?: number;
   /**
    * Host utility probe status for this agent type — mirrors
    * `ModelConfig.status`. Populated by the backend from the host utility

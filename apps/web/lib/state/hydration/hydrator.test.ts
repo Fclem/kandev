@@ -513,6 +513,7 @@ describe("hydrateState — agent profile revisions", () => {
     const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
       draft.agentProfiles = {
         version: 1,
+        orderByAgent: {},
         items: [
           {
             id: "live-profile",
@@ -535,6 +536,7 @@ describe("hydrateState — agent profile revisions", () => {
         settingsAgents: { items: [] },
         agentProfiles: {
           version: 0,
+          orderByAgent: {},
           items: [],
         },
         settingsData: { agentsLoaded: true },
@@ -553,6 +555,7 @@ describe("hydrateState — agent profile revisions", () => {
     const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
       draft.agentProfiles = {
         version: 1,
+        orderByAgent: {},
         items: [
           {
             id: "stale-profile",
@@ -575,13 +578,14 @@ describe("hydrateState — agent profile revisions", () => {
         settingsAgents: { items: [] },
         agentProfiles: {
           version: 1,
+          orderByAgent: {},
           items: [],
         },
         settingsData: { agentsLoaded: true },
       } as unknown as Partial<AppState>);
     });
 
-    expect(result.agentProfiles).toEqual({ version: 1, items: [] });
+    expect(result.agentProfiles).toEqual({ version: 1, items: [], orderByAgent: {} });
     expect(result.settingsAgents.items).toEqual([]);
     expect(result.settingsData.agentsLoaded).toBe(true);
   });

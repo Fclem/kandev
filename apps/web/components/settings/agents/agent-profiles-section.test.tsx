@@ -56,7 +56,10 @@ const selectors = {
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (s: unknown) => unknown) => selector({ ...storeState, ...selectors }),
-  useAppStoreApi: () => ({ getState: () => storeState, setState: vi.fn() }),
+  useAppStoreApi: () => ({
+    getState: () => ({ ...storeState, bumpAgentProfilesVersion: vi.fn() }),
+    setState: vi.fn(),
+  }),
 }));
 
 vi.mock("@/app/actions/agents", () => ({
@@ -452,7 +455,14 @@ describe("AgentProfilesSubList layout", () => {
   afterEach(() => cleanup());
 
   it("renders profile rows without the count or create action", () => {
-    renderWithTooltipProvider(<AgentProfilesSubList savedAgent={AGENT} agentName="claude" />);
+    renderWithTooltipProvider(
+      <AgentProfilesSubList
+        savedAgent={AGENT}
+        agentName="claude"
+        canManage={false}
+        onReorder={() => {}}
+      />,
+    );
 
     expect(screen.queryByText("2 profiles", { exact: true })).toBeNull();
     expect(screen.getAllByTestId(PROFILE_ROW_TEST_ID)).toHaveLength(2);
@@ -460,13 +470,27 @@ describe("AgentProfilesSubList layout", () => {
   });
 
   it("omits the profile body when no agent record exists", () => {
-    renderWithTooltipProvider(<AgentProfilesSubList savedAgent={undefined} agentName="claude" />);
+    renderWithTooltipProvider(
+      <AgentProfilesSubList
+        savedAgent={undefined}
+        agentName="claude"
+        canManage={false}
+        onReorder={() => {}}
+      />,
+    );
 
     expect(screen.queryByTestId("agent-profiles-claude")).toBeNull();
   });
 
   it("omits the profile body when the saved agent has no profiles", () => {
-    renderWithTooltipProvider(<AgentProfilesSubList savedAgent={EMPTY_AGENT} agentName="claude" />);
+    renderWithTooltipProvider(
+      <AgentProfilesSubList
+        savedAgent={EMPTY_AGENT}
+        agentName="claude"
+        canManage={false}
+        onReorder={() => {}}
+      />,
+    );
 
     expect(screen.queryByTestId("agent-profiles-claude")).toBeNull();
   });

@@ -414,6 +414,11 @@ export type AgentProfileChangedPayload = {
   /** Sessionless-inference capability for profile events received before agent hydration. */
   inference_capable?: boolean;
 };
+export type AgentProfilesReorderedPayload = {
+  agent_id: string;
+  profile_ids: string[];
+  revision: number;
+};
 
 export type UserSettingsUpdatedPayload = Omit<
   Partial<UserSettings>,
@@ -597,6 +602,10 @@ export type BackendMessageMap = SessionBackendMessageMap &
     "agent.profile.deleted": BackendMessage<"agent.profile.deleted", AgentProfileDeletedPayload>;
     "agent.profile.created": BackendMessage<"agent.profile.created", AgentProfileChangedPayload>;
     "agent.profile.updated": BackendMessage<"agent.profile.updated", AgentProfileChangedPayload>;
+    "agent.profiles.reordered": BackendMessage<
+      "agent.profiles.reordered",
+      AgentProfilesReorderedPayload
+    >;
     "user.settings.updated": BackendMessage<"user.settings.updated", UserSettingsUpdatedPayload>;
     "user.agent_profile_recent_use.updated": BackendMessage<
       "user.agent_profile_recent_use.updated",

@@ -14,6 +14,7 @@ import {
 } from "@/lib/state/slices/settings/types";
 import type { AppState } from "@/lib/state/store";
 import type { Agent, AgentProfile } from "@/lib/types/http";
+import { insertFirstInAgentGroup, reorderFlatOptions } from "@/lib/settings/agent-profile-order";
 
 type ProfileState = Pick<AppState, "settingsAgents" | "agentProfiles">;
 
@@ -48,7 +49,7 @@ export function applyProfileDuplicated(
               : created;
           return {
             ...item,
-            profiles: [...item.profiles.filter((p) => p.id !== created.id), latest],
+            profiles: [latest, ...item.profiles.filter((p) => p.id !== created.id)],
           };
         })()
       : item,
@@ -79,10 +80,29 @@ export function applyProfileDuplicated(
   } else {
     agentProfilesItems = merged.map((option) => (option.id === created.id ? copyOption : option));
   }
+  const latestCopy = agentProfilesItems.find((option) => option.id === created.id);
+
+  if (latestCopy) {
+    const latestAgent = nextAgents.find((item) => item.id === agent.id);
+    agentProfilesItems = latestAgent
+      ? reorderFlatOptions(
+          agentProfilesItems,
+          agent.id,
+          latestAgent.profiles.map((profile) => profile.id),
+        )
+      : insertFirstInAgentGroup(agentProfilesItems, agent.id, {
+          ...latestCopy,
+          agent_id: agent.id,
+        });
+  }
 
   return {
     settingsAgents: { ...state.settingsAgents, items: nextAgents },
-    agentProfiles: { ...state.agentProfiles, items: agentProfilesItems },
+    agentProfiles: {
+      ...state.agentProfiles,
+      items: agentProfilesItems,
+      version: state.agentProfiles.version + 1,
+    },
   };
 }
 

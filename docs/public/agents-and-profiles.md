@@ -334,6 +334,8 @@ An **ACP** agent is driven over the Agent Client Protocol instead, so it does ge
 
 Select an agent, create a profile, then open **Settings > Agents > _Agent_ > _Profile_**. The page shows the resolved command preview and only the settings supported by that agent.
 
+On **Settings > Agents**, administrators can reorder an agent's profiles by dragging its handle or choose **Sort by name**. The order is saved for that agent and shared with other open Settings pages. Creating or duplicating a profile places it first in that agent's list.
+
 | Setting                      | Runtime behavior                                                                                                                                                 |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Name                         | Label shown in workflow, session, and automation selectors.                                                                                                      |

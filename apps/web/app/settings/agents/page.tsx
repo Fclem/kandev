@@ -11,12 +11,13 @@ import {
   IconLoader2,
   IconPlus,
   IconRefresh,
+  IconSortAscending,
   IconTerminal2,
 } from "@tabler/icons-react";
-import { Button } from "@kandev/ui/button";
 import { Card, CardContent } from "@kandev/ui/card";
+import { Button } from "@kandev/ui/button";
 import { Separator } from "@kandev/ui/separator";
-import { useAppStore } from "@/components/state-provider";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import {
   createCustomTUIAgent,
   listAgentDiscovery,
@@ -43,10 +44,12 @@ import {
   orphanedAgents,
   type DiscoveredAgent,
 } from "@/lib/settings/agent-display-order";
-import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
 import { AgentRuntimePolicies } from "@/components/settings/agent-runtime-policies";
 import { HideDisabledAgentProfilesSetting } from "@/app/settings/agents/hide-disabled-agent-profiles-setting";
 import type { AgentDiscovery, Agent, AvailableAgent, RuntimeUpdate } from "@/lib/types/http";
+import { useProfileOrder } from "@/hooks/domains/settings/use-profile-order";
+import { sortProfileIdsByName } from "@/lib/settings/agent-profile-order";
+import { getAgentListResourceScope } from "@/hooks/domains/settings/agent-list-resource";
 
 const installedAgentsActionClassName = settingsActionClassName("cursor-pointer");
 
@@ -78,19 +81,19 @@ type InstalledAgentsSectionProps = {
   handleRescan: () => Promise<void>;
   canManage: boolean;
 };
-
 function InstalledAgentsHeader({
   rescanning,
+  canManage,
   onOpenShell,
   onOpenTuiDialog,
+  onSortByName,
   onRescan,
 }: {
   rescanning: boolean;
+  canManage: boolean;
   onOpenShell: () => void;
-  /** Absent for a caller without org.config.manage: creating a TUI agent is
-   *  a write this page must not offer them. Rescan and the host shell stay:
-   *  discovery is a read. */
   onOpenTuiDialog?: () => void;
+  onSortByName: () => void;
   onRescan: () => void;
 }) {
   const { t } = useTranslation();
@@ -105,6 +108,17 @@ function InstalledAgentsHeader({
         <IconTerminal2 className="h-4 w-4 mr-2" />
         {t("agents:terminal")}
       </Button>
+      {canManage && (
+        <Button
+          variant="outline"
+          onClick={onSortByName}
+          className={installedAgentsActionClassName}
+          data-testid="sort-profiles-by-name-button"
+        >
+          <IconSortAscending className="h-4 w-4 mr-2" />
+          {t("agents:sortProfilesByName")}
+        </Button>
+      )}
       <Button
         variant="outline"
         onClick={onRescan}
@@ -174,6 +188,90 @@ function agentCards(
   return ordered.map((entry) => entry.card);
 }
 
+function sortAgentProfilesByName(
+  cards: AgentCard[],
+  savedAgentsByName: Map<string, Agent>,
+  locale: string,
+  requestProfileOrder: (agentId: string, profileIds: string[]) => void,
+): void {
+  for (const { agent } of cards) {
+    const saved = savedAgentsByName.get(agent.name);
+    if (!saved || saved.profiles.length < 2) continue;
+    const ids = sortProfileIdsByName(saved.profiles, locale);
+    if (ids.some((id, index) => id !== saved.profiles[index].id)) {
+      requestProfileOrder(saved.id, ids);
+    }
+  }
+}
+
+function renderInstalledAgentCards({
+  cards,
+  savedAgentsByName,
+  resolveDisplayName,
+  nativeCodexAvailable,
+  resolveCapabilityStatus,
+  resolveRuntimeUpdate,
+  resolveRuntimeUpdateStatus,
+  installJobs,
+  updateJobs,
+  canManage,
+  previewUpdate,
+  startUpdate,
+  handleRescan,
+  requestProfileOrder,
+}: Pick<
+  InstalledAgentsSectionProps,
+  | "savedAgentsByName"
+  | "resolveDisplayName"
+  | "resolveCapabilityStatus"
+  | "resolveRuntimeUpdate"
+  | "resolveRuntimeUpdateStatus"
+  | "installJobs"
+  | "updateJobs"
+  | "canManage"
+  | "previewUpdate"
+  | "startUpdate"
+  | "handleRescan"
+> & {
+  cards: AgentCard[];
+  nativeCodexAvailable: boolean;
+  requestProfileOrder: (agentId: string, profileIds: string[]) => void;
+}) {
+  return (
+    <div className="grid gap-3">
+      {cards.map(({ key, agent, detected }) => (
+        <InstalledAgentCard
+          key={key}
+          agent={agent}
+          savedAgent={savedAgentsByName.get(agent.name)}
+          displayName={resolveDisplayName(agent.name)}
+          profileCreationDisabled={agent.name === "codex-app-server" && !nativeCodexAvailable}
+          {...(detected
+            ? {
+                capabilityStatus: resolveCapabilityStatus(agent.name),
+                runtimeUpdate: resolveRuntimeUpdate(agent.name),
+                runtimeUpdateStatus: resolveRuntimeUpdateStatus(agent.name),
+                installJob: installJobs[agent.name],
+                updateJob: updateJobs[agent.name],
+                onPreview: canManage ? previewUpdate : undefined,
+                onUpdate: canManage ? startUpdate : undefined,
+                onAuthComplete: () => void handleRescan(),
+              }
+            : {})}
+        >
+          <AgentProfilesSubList
+            savedAgent={savedAgentsByName.get(agent.name)}
+            agentName={agent.name}
+            canManage={canManage}
+            onReorder={requestProfileOrder}
+          />
+          <CustomTUIMcpCard agent={savedAgentsByName.get(agent.name)} />
+        </InstalledAgentCard>
+      ))}
+    </div>
+  );
+}
+
 function InstalledAgentsSection({
   installedAgents,
   discoveryOrder,
@@ -193,9 +291,10 @@ function InstalledAgentsSection({
   handleRescan,
   canManage,
 }: InstalledAgentsSectionProps) {
-  const { t } = useTranslation();
-  const [shellOpen, setShellOpen] = useState(false);
+  const { t, i18n } = useTranslation();
   const nativeCodexAvailable = useAppStore((state) => state.features?.codexAppServer ?? false);
+  const [shellOpen, setShellOpen] = useState(false);
+  const requestProfileOrder = useProfileOrder();
 
   // One ranked list rather than "detected, then the rest". Two groups meant an
   // agent the scan misses always sorted below every detected one — which put
@@ -213,8 +312,12 @@ function InstalledAgentsSection({
       action={
         <InstalledAgentsHeader
           rescanning={rescanning}
+          canManage={canManage}
           onOpenShell={() => setShellOpen(true)}
           onOpenTuiDialog={canManage ? () => setTuiDialogOpen(true) : undefined}
+          onSortByName={() =>
+            sortAgentProfilesByName(cards, savedAgentsByName, i18n.language, requestProfileOrder)
+          }
           onRescan={() => void handleRescan()}
         />
       }
@@ -250,35 +353,22 @@ function InstalledAgentsSection({
         </Card>
       )}
 
-      <div className="grid gap-3">
-        {cards.map(({ key, agent, detected }) => (
-          <InstalledAgentCard
-            key={key}
-            agent={agent}
-            savedAgent={savedAgentsByName.get(agent.name)}
-            displayName={resolveDisplayName(agent.name)}
-            profileCreationDisabled={agent.name === "codex-app-server" && !nativeCodexAvailable}
-            {...(detected
-              ? {
-                  capabilityStatus: resolveCapabilityStatus(agent.name),
-                  runtimeUpdate: resolveRuntimeUpdate(agent.name),
-                  runtimeUpdateStatus: resolveRuntimeUpdateStatus(agent.name),
-                  installJob: installJobs[agent.name],
-                  updateJob: updateJobs[agent.name],
-                  onPreview: canManage ? previewUpdate : undefined,
-                  onUpdate: canManage ? startUpdate : undefined,
-                  onAuthComplete: () => void handleRescan(),
-                }
-              : {})}
-          >
-            <AgentProfilesSubList
-              savedAgent={savedAgentsByName.get(agent.name)}
-              agentName={agent.name}
-            />
-            <CustomTUIMcpCard agent={savedAgentsByName.get(agent.name)} />
-          </InstalledAgentCard>
-        ))}
-      </div>
+      {renderInstalledAgentCards({
+        cards,
+        savedAgentsByName,
+        resolveDisplayName,
+        nativeCodexAvailable,
+        resolveCapabilityStatus,
+        resolveRuntimeUpdate,
+        resolveRuntimeUpdateStatus,
+        installJobs,
+        updateJobs,
+        canManage,
+        previewUpdate,
+        startUpdate,
+        handleRescan,
+        requestProfileOrder,
+      })}
     </SettingsGroup>
   );
 }
@@ -287,9 +377,8 @@ function useAgentPageState() {
   const { items: discoveryAgents, loading: discoveryLoading } = useAgentDiscovery();
   const savedAgents = useAppStore((state) => state.settingsAgents.items);
   const setAgentDiscovery = useAppStore((state) => state.setAgentDiscovery);
-  const setSettingsAgents = useAppStore((state) => state.setSettingsAgents);
   const setAvailableAgents = useAppStore((state) => state.setAvailableAgents);
-  const setAgentProfiles = useAppStore((state) => state.setAgentProfiles);
+  const storeApi = useAppStoreApi();
   const installJobs = useAppStore((state) => state.installJobs.byAgent);
   const { items: availableAgents } = useAvailableAgents();
   const [rescanning, setRescanning] = useState(false);
@@ -340,18 +429,16 @@ function useAgentPageState() {
     protocol?: string;
   }) => {
     await createCustomTUIAgent(data);
+    const profileVersion = storeApi.getState().agentProfiles.version;
     const [discoveryResp, agentsResp, availableResp] = await Promise.all([
       listAgentDiscovery({ cache: "no-store" }),
       listAgents({ cache: "no-store" }),
       listAvailableAgents({ cache: "no-store" }),
     ]);
     setAgentDiscovery(discoveryResp.agents);
-    setSettingsAgents(agentsResp.agents);
-    setAgentProfiles(
-      agentsResp.agents.flatMap((agent) =>
-        agent.profiles.map((profile) => toAgentProfileOption(agent, profile)),
-      ),
-    );
+    if (!storeApi.getState().applyAgentListSnapshot(agentsResp.agents, profileVersion)) {
+      await getAgentListResourceScope(storeApi).ensure();
+    }
     setAvailableAgents(availableResp.agents, availableResp.tools ?? []);
   };
 

@@ -11,6 +11,9 @@ const AGENT_ID = "agent";
 const LIVE_PROFILE_ID = "live";
 const CREATED_PROFILE_ID = "created";
 const DELETED_PROFILE_ID = "deleted";
+const ORPHAN_AGENT_ID = "office-agent";
+const ORPHAN_PROFILE_ID = "office-profile";
+const SAVED_AGENT_NAME = "saved-agent-name";
 
 function Capture({ onStore }: { onStore: (store: StoreApi<AppState>) => void }) {
   onStore(useAppStoreApi());
@@ -21,11 +24,11 @@ function profile(id: string, name = id) {
   return { id, name, model: "mock-fast", enabled: true } as Agent["profiles"][number];
 }
 
-function option(id: string) {
+function option(id: string, agentId = AGENT_ID) {
   return {
     id,
     label: id,
-    agent_id: AGENT_ID,
+    agent_id: agentId,
     agent_name: "mock-agent",
     cli_passthrough: false,
   };
@@ -51,7 +54,7 @@ function profileEvent(id: string, name: string, timestamp: string) {
   };
 }
 
-describe("saved agent store synchronization", () => {
+describe("agent save response membership", () => {
   it("keeps profile create/delete events that arrive while the save response is pending", async () => {
     let store!: StoreApi<AppState>;
     render(
@@ -102,14 +105,14 @@ describe("saved agent store synchronization", () => {
     await act(async () => {
       resolveSave({
         ...existing,
-        name: "saved-agent-name",
+        name: SAVED_AGENT_NAME,
         profiles: [profile(LIVE_PROFILE_ID), profile(DELETED_PROFILE_ID)],
       });
       await save;
     });
 
     const savedAgent = store.getState().settingsAgents.items[0];
-    expect(savedAgent.name).toBe("saved-agent-name");
+    expect(savedAgent.name).toBe(SAVED_AGENT_NAME);
     expect(savedAgent.profiles.map((item) => item.id)).toEqual([
       CREATED_PROFILE_ID,
       LIVE_PROFILE_ID,
@@ -118,5 +121,53 @@ describe("saved agent store synchronization", () => {
       CREATED_PROFILE_ID,
       LIVE_PROFILE_ID,
     ]);
+  });
+});
+
+describe("agent save profile option retention", () => {
+  it("preserves flat profile options whose agents are absent from the settings list", () => {
+    let store!: StoreApi<AppState>;
+    render(
+      <StateProvider>
+        <Capture onStore={(value) => (store = value)} />
+      </StateProvider>,
+    );
+    const existing = {
+      id: AGENT_ID,
+      name: "mock-agent",
+      profiles: [profile(LIVE_PROFILE_ID)],
+    } as Agent;
+    act(() => {
+      store.getState().setSettingsAgents([existing]);
+      store
+        .getState()
+        .setAgentProfiles([option(LIVE_PROFILE_ID), option(ORPHAN_PROFILE_ID, ORPHAN_AGENT_ID)]);
+    });
+
+    act(() => {
+      syncSavedAgentToStore(
+        store,
+        {
+          ...existing,
+          name: SAVED_AGENT_NAME,
+          profiles: [
+            { ...profile(LIVE_PROFILE_ID, "Saved profile"), agentDisplayName: "Saved agent" },
+          ],
+        },
+        store.getState().agentProfiles.version,
+      );
+    });
+
+    const options = store.getState().agentProfiles.items;
+    expect(options.map((item) => item.id)).toEqual([LIVE_PROFILE_ID, ORPHAN_PROFILE_ID]);
+    expect(options[0]).toMatchObject({
+      label: "Saved agent • Saved profile",
+      agent_name: SAVED_AGENT_NAME,
+    });
+    expect(options[1]).toMatchObject({
+      id: ORPHAN_PROFILE_ID,
+      agent_id: ORPHAN_AGENT_ID,
+      label: ORPHAN_PROFILE_ID,
+    });
   });
 });

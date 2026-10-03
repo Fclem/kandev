@@ -35,10 +35,20 @@ export function syncSavedAgentToStore(
     ? settingsAgents.map((item) => (item.id === agent.id ? reconciled : item))
     : [...settingsAgents, reconciled];
   state.setSettingsAgents(nextAgents);
-  state.setAgentProfiles(
-    nextAgents.flatMap((item) =>
-      item.profiles.map((profile) => toAgentProfileOption(item, profile)),
-    ),
-  );
+  const savedProfileOptions = profiles.map((profile) => toAgentProfileOption(reconciled, profile));
+  const nextProfileOptions: typeof state.agentProfiles.items = [];
+  let savedGroupInserted = false;
+  for (const option of state.agentProfiles.items) {
+    if (option.agent_id === reconciled.id) {
+      if (!savedGroupInserted) {
+        nextProfileOptions.push(...savedProfileOptions);
+        savedGroupInserted = true;
+      }
+      continue;
+    }
+    nextProfileOptions.push(option);
+  }
+  if (!savedGroupInserted) nextProfileOptions.push(...savedProfileOptions);
+  state.setAgentProfiles(nextProfileOptions);
   if (membershipChanged) state.bumpAgentProfilesVersion();
 }

@@ -260,10 +260,12 @@ relative place at the front, matching the backend's sort for new profiles.
   `saveExistingProfiles`, `reconcilePartialProfileSave`) place a created profile
   first within its own agent: in `settingsAgents` and, with
   `insertFirstInAgentGroup`, before the agent's first entry of the flat list (or
-  at the end when the agent has none). The agent-save reconcile keeps the store's
-  current order for existing profiles instead of the draft's order. The Office
-  setup writer `app/office/setup/agent-profile-setup-controls.tsx`, which upserts
-  only the flat list, uses `insertFirstInAgentGroup` on the flat list (and
+  at the end when the agent has none). The agent-save reconcile updates only the
+  saved agent's flat-list group and keeps the store's current order for existing
+  profiles instead of the draft's order. This preserves Office options whose
+  agents are absent from `settingsAgents`. The Office setup writer
+  `app/office/setup/agent-profile-setup-controls.tsx`, which upserts only the
+  flat list, uses `insertFirstInAgentGroup` on the flat list (and
   `settingsAgents` when that agent exists), so the wizard pickers still contain
   the profile it just created. `components/agent/cli-profile-editor.tsx` returns
   the profile to its caller and writes no store.

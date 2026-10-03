@@ -75,11 +75,13 @@ for every other case.
 3. Inject `ClearOnSuccess` persistence failure in the Office `AgentCompleted`
    path. Verify the lease is not released, owner/waits remain, and health retry,
    routing disable, ordinary ticks, and restart do not lift due siblings.
-   Restore persistence and retry; verify one lift. Also inject release and
-   owner-cleanup failures after clear succeeds; verify due siblings remain
-   blocked across ticks and restart, and direct routed and unrouted dispatch do
-   not start a sibling while the mark is clear. After cleanup persists, verify
-   one lift.
+   Restore persistence and retry; verify one lift. Test release failure and
+   owner/wait-cleanup failure separately after clear succeeds. For each case,
+   keep the failed write failing during restart reconciliation. After restart,
+   with the mark clear and owner retained, verify due lifts remain blocked and
+   direct routed and unrouted dispatch each refuse to start a sibling. Restore
+   persistence, then verify exact release and owner/wait cleanup persist before
+   one lift and one dispatch.
 4. `AgentFailed` and `AgentStopped` do not clear marks; limit failure renews
    the mark. Independently test non-limit failed and stopped probes staying
    parked until their 10-minute lease expires, then a different waiter probes.

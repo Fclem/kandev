@@ -22,8 +22,8 @@ import { seedDefaultCLIFlags } from "@/lib/cli-flags";
 import { generateUUID } from "@/lib/utils";
 import { agentProfileId as toAgentProfileId } from "@/lib/types/ids";
 import type { AgentProfileKind } from "@/lib/types/agent-profile";
-import { useAppStore } from "@/components/state-provider";
-import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
+import { syncSavedAgentToStore } from "./agent-save-store-sync";
 import { useAvailableAgents } from "@/hooks/domains/settings/use-available-agents";
 import { useSecrets } from "@/hooks/domains/settings/use-secrets";
 import { deleteAgentAction } from "@/app/actions/agents";
@@ -167,45 +167,12 @@ function useAgentFormState(
 }
 
 function useAgentStoreSync() {
-  const settingsAgents = useAppStore((state) => state.settingsAgents.items);
-  const setSettingsAgents = useAppStore((state) => state.setSettingsAgents);
-  const setAgentProfiles = useAppStore((state) => state.setAgentProfiles);
-  const bumpAgentProfilesVersion = useAppStore((state) => state.bumpAgentProfilesVersion);
+  const store = useAppStoreApi();
+  const getAgentProfilesVersion = () => store.getState().agentProfiles.version;
+  const upsertAgent = (agent: Agent, profileVersionAtSaveStart: number) =>
+    syncSavedAgentToStore(store, agent, profileVersionAtSaveStart);
 
-  const syncAgentsToStore = (nextAgents: Agent[]) => {
-    setSettingsAgents(nextAgents);
-    setAgentProfiles(
-      nextAgents.flatMap((agent) =>
-        agent.profiles.map((profile) => toAgentProfileOption(agent, profile)),
-      ),
-    );
-  };
-
-  const upsertAgent = (agent: Agent) => {
-    const existing = settingsAgents.find((item) => item.id === agent.id);
-    const incomingById = new Map(agent.profiles.map((profile) => [profile.id, profile]));
-    const existingIds = new Set(existing?.profiles.map((profile) => profile.id) ?? []);
-    const newProfiles = agent.profiles.filter((profile) => !existingIds.has(profile.id));
-    const existingProfiles = (existing?.profiles ?? [])
-      .map((profile) => incomingById.get(profile.id))
-      .filter((profile): profile is Agent["profiles"][number] => profile !== undefined);
-    const membershipChanged =
-      newProfiles.length > 0 ||
-      (existing !== undefined &&
-        existing.profiles.some((profile) => !incomingById.has(profile.id)));
-    const reconciled = {
-      ...agent,
-      profiles: [...newProfiles, ...existingProfiles],
-    };
-    syncAgentsToStore(
-      existing
-        ? settingsAgents.map((item) => (item.id === agent.id ? reconciled : item))
-        : [...settingsAgents, reconciled],
-    );
-    if (membershipChanged) bumpAgentProfilesVersion();
-  };
-
-  return { upsertAgent };
+  return { getAgentProfilesVersion, upsertAgent };
 }
 
 type AgentSaveHandlersProps = {
@@ -218,7 +185,8 @@ type AgentSaveHandlersProps = {
   resolveDisplayName: (name: string) => string;
   setDraftAgent: (agent: DraftAgent | ((current: DraftAgent) => DraftAgent)) => void;
   setSaveStatus: (status: "idle" | "loading" | "success" | "error") => void;
-  upsertAgent: (agent: Agent) => void;
+  upsertAgent: (agent: Agent, profileVersionAtSaveStart: number) => void;
+  getAgentProfilesVersion: () => number;
   onToastError: (error: unknown) => void;
   replaceRoute: (path: string) => void;
 };
@@ -234,6 +202,7 @@ function useAgentSaveHandlers({
   setDraftAgent,
   setSaveStatus,
   upsertAgent,
+  getAgentProfilesVersion,
   onToastError,
   replaceRoute,
 }: AgentSaveHandlersProps) {
@@ -251,13 +220,14 @@ function useAgentSaveHandlers({
       onToastError(new Error(t("agents:fixInvalidMcpJson")));
       return;
     }
+    const profileVersionAtSaveStart = getAgentProfilesVersion();
     setSaveStatus("loading");
     const callbacks = {
       onToastError,
       currentAgentModelConfig,
       permissionSettings,
       resolveDisplayName,
-      upsertAgent,
+      upsertAgent: (agent: Agent) => upsertAgent(agent, profileVersionAtSaveStart),
       setDraftAgent,
       ensureProfiles,
       cloneAgent,
@@ -393,7 +363,7 @@ function AgentSetupForm({
   const router = useRouter();
   const availableAgents = useAvailableAgents().items;
   const { items: secrets } = useSecrets();
-  const { upsertAgent } = useAgentStoreSync();
+  const { getAgentProfilesVersion, upsertAgent } = useAgentStoreSync();
 
   const {
     draftAgent,
@@ -430,6 +400,7 @@ function AgentSetupForm({
     resolveDisplayName,
     setDraftAgent,
     setSaveStatus,
+    getAgentProfilesVersion,
     upsertAgent,
     onToastError,
     replaceRoute: (path: string) => router.replace(path),

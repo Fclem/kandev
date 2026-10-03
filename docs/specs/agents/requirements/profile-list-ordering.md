@@ -134,10 +134,11 @@ I can tidy a long list without dragging every row.
   `profile_order_revision` from one consistent database snapshot. A concurrent
   reorder may produce the preceding order with its preceding revision or the
   committed order with its committed revision, never a mixed pair.
-- **AC-AGENTS-PROFILE-LIST-ORDERING-003.13:** A full agent-list snapshot
-  captured before a profile create or delete event shall not replace the
-  client's newer membership state. A created profile remains visible first and
-  a deleted profile remains absent until a snapshot captured after the event is
+- **AC-AGENTS-PROFILE-LIST-ORDERING-003.13:** When the client applies a profile
+  create or delete event, a full agent-list snapshot captured earlier or an
+  existing-agent save response still in flight shall not replace the newer
+  membership state. A created profile remains visible first and a deleted
+  profile remains absent until a full snapshot captured after the event is
   applied; equal `profile_order_revision` values do not establish membership
   freshness.
 

@@ -56,6 +56,25 @@ func TestCatalog(t *testing.T) {
 	}
 }
 
+func TestAgentSettingsRequiresProfileOrderTables(t *testing.T) {
+	for _, descriptor := range Catalog() {
+		if descriptor.ID != "agent-settings" {
+			continue
+		}
+		required := map[string]bool{}
+		for _, table := range descriptor.RequiredTables {
+			required[table] = true
+		}
+		for _, table := range []string{"agents", "agent_profiles", "agent_profile_orders"} {
+			if !required[table] {
+				t.Errorf("agent-settings required tables omit %q", table)
+			}
+		}
+		return
+	}
+	t.Fatal("agent-settings descriptor not found")
+}
+
 func TestValidateCatalogRejectsInvalidDescriptors(t *testing.T) {
 	tests := []struct {
 		name    string

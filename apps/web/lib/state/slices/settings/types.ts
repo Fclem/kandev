@@ -321,9 +321,17 @@ export function toAgentProfileOption(
   };
 }
 
+export type ProfileOrderSync = {
+  revision: number;
+  order: string[] | null;
+  inFlight: string[] | null;
+  queued: string[] | null;
+};
+
 export type AgentProfilesState = {
   items: AgentProfileOption[];
   version: number;
+  orderByAgent: Record<string, ProfileOrderSync>;
 };
 
 export type InstallJobStatus = "queued" | "running" | "succeeded" | "failed";
@@ -557,6 +565,17 @@ export type SettingsSliceActions = {
     tools?: AvailableAgentsState["tools"],
   ) => void;
   setAvailableAgentsLoading: (loading: boolean) => void;
+  applyAgentListSnapshot: (
+    agents: SettingsAgentsState["items"],
+    expectedProfileVersion: number,
+  ) => boolean;
+  acceptAgentProfileOrder: (agentId: string, profileIds: string[], revision: number) => boolean;
+  setAgentProfileOrder: (agentId: string, profileIds: string[]) => void;
+  setAgentProfileOrderIntent: (
+    agentId: string,
+    inFlight: string[] | null,
+    queued: string[] | null,
+  ) => void;
   setAgentProfiles: (profiles: AgentProfilesState["items"]) => void;
   setInstallJobs: (jobs: InstallJob[]) => void;
   upsertInstallJob: (job: InstallJob) => void;

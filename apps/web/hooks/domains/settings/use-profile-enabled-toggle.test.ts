@@ -51,7 +51,7 @@ function stateWith(...profiles: AgentProfile[]) {
   }
   return {
     settingsAgents: { items: [...agents.values()] },
-    agentProfiles: { items: [], version: 0 },
+    agentProfiles: { items: [], version: 0, orderByAgent: {} },
   };
 }
 

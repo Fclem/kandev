@@ -1,8 +1,25 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useRef, useState, type RefObject, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { IconCopy, IconDotsVertical, IconTrash } from "@tabler/icons-react";
+import { IconCopy, IconDotsVertical, IconGripVertical, IconTrash } from "@tabler/icons-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { reorderIds } from "@/lib/settings/agent-profile-order";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent } from "@kandev/ui/card";
@@ -42,22 +59,95 @@ function profileHref(agentName: string, profileId: string): string {
 export function AgentProfilesSubList({
   savedAgent,
   agentName,
+  canManage,
+  onReorder,
 }: {
   savedAgent: Agent | undefined;
   agentName: string;
+  canManage: boolean;
+  onReorder: (agentId: string, profileIds: string[]) => void;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   if (!savedAgent || savedAgent.profiles.length === 0) return null;
-
+  const rows = savedAgent.profiles.map((profile) => (
+    <ProfileRow key={profile.id} agent={savedAgent} profile={profile} />
+  ));
   return (
     <div
       className="border-t border-border/70 bg-background p-3"
       data-testid={`agent-profiles-${agentName}`}
     >
-      <div className="grid gap-2">
-        {savedAgent.profiles.map((profile) => (
-          <ProfileRow key={profile.id} agent={savedAgent} profile={profile} />
-        ))}
-      </div>
+      {canManage && savedAgent.profiles.length > 1 ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={(event: DragEndEvent) => {
+            if (!event.over || event.active.id === event.over.id) return;
+            onReorder(
+              savedAgent.id,
+              reorderIds(
+                savedAgent.profiles.map((profile) => profile.id),
+                String(event.active.id),
+                String(event.over.id),
+              ),
+            );
+          }}
+        >
+          <SortableContext
+            items={savedAgent.profiles.map((profile) => profile.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="grid gap-2">
+              {savedAgent.profiles.map((profile) => (
+                <SortableProfileRow key={profile.id} agent={savedAgent} profile={profile} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
+        <div className="grid gap-2">{rows}</div>
+      )}
+    </div>
+  );
+}
+function SortableProfileRow({ agent, profile }: { agent: Agent; profile: AgentProfile }) {
+  const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: profile.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "z-20 opacity-70" : undefined}
+    >
+      <ProfileRow
+        agent={agent}
+        profile={profile}
+        dragHandle={
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="relative z-10 flex h-11 w-11 touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+            data-testid="agent-profile-drag-handle"
+            {...attributes}
+            {...listeners}
+            aria-label={t("agents:dragProfile", { name: profile.name })}
+            aria-roledescription={t("agents:profileSortable")}
+          >
+            <IconGripVertical className="h-4 w-4" aria-hidden="true" />
+          </button>
+        }
+      />
     </div>
   );
 }
@@ -258,6 +348,7 @@ type ProfileRowCardProps = {
   onConfirmDelete: () => void;
   confirmationProps: ProfileRowDeleteConfirmationBaseProps;
   duplicateDisabled: boolean;
+  dragHandle?: ReactNode;
 };
 
 function ProfileRowCard({
@@ -272,6 +363,7 @@ function ProfileRowCard({
   onConfirmDelete,
   confirmationProps,
   duplicateDisabled,
+  dragHandle,
 }: ProfileRowCardProps) {
   const { isMobile } = useResponsiveBreakpoint();
   const { t } = useTranslation();
@@ -316,6 +408,7 @@ function ProfileRowCard({
           </div>
         </div>
         <div className="relative z-10 flex shrink-0 items-center gap-1">
+          {dragHandle}
           {canManage &&
             (isMobile || !(confirmOpen && !isFinePointer)) &&
             (isFullDesktop ? (
@@ -344,7 +437,15 @@ function ProfileRowCard({
 }
 
 /** One saved profile as a fully clickable row — shared by the Agents index and the agent page. */
-export function ProfileRow({ agent, profile }: { agent: Agent; profile: AgentProfile }) {
+export function ProfileRow({
+  agent,
+  profile,
+  dragHandle,
+}: {
+  agent: Agent;
+  profile: AgentProfile;
+  dragHandle?: ReactNode;
+}) {
   const canManage = useIsAdmin();
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -382,6 +483,7 @@ export function ProfileRow({ agent, profile }: { agent: Agent; profile: AgentPro
       setAgentProfiles(
         nextAgents.flatMap((item) => item.profiles.map((p) => toAgentProfileOption(item, p))),
       );
+      store.getState().bumpAgentProfilesVersion();
       return;
     }
     // Conflicts (active sessions, watchers, routing tiers) carry a guided
@@ -425,6 +527,7 @@ export function ProfileRow({ agent, profile }: { agent: Agent; profile: AgentPro
       onConfirmDelete={() => setConfirmOpen(true)}
       confirmationProps={confirmationProps}
       duplicateDisabled={agent.name === "codex-app-server" && !nativeCodexAvailable}
+      dragHandle={dragHandle}
     />
   );
 }

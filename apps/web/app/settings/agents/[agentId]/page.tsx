@@ -170,6 +170,7 @@ function useAgentStoreSync() {
   const settingsAgents = useAppStore((state) => state.settingsAgents.items);
   const setSettingsAgents = useAppStore((state) => state.setSettingsAgents);
   const setAgentProfiles = useAppStore((state) => state.setAgentProfiles);
+  const bumpAgentProfilesVersion = useAppStore((state) => state.bumpAgentProfilesVersion);
 
   const syncAgentsToStore = (nextAgents: Agent[]) => {
     setSettingsAgents(nextAgents);
@@ -181,12 +182,27 @@ function useAgentStoreSync() {
   };
 
   const upsertAgent = (agent: Agent) => {
-    const exists = settingsAgents.some((item: Agent) => item.id === agent.id);
+    const existing = settingsAgents.find((item) => item.id === agent.id);
+    const incomingById = new Map(agent.profiles.map((profile) => [profile.id, profile]));
+    const existingIds = new Set(existing?.profiles.map((profile) => profile.id) ?? []);
+    const newProfiles = agent.profiles.filter((profile) => !existingIds.has(profile.id));
+    const existingProfiles = (existing?.profiles ?? [])
+      .map((profile) => incomingById.get(profile.id))
+      .filter((profile): profile is Agent["profiles"][number] => profile !== undefined);
+    const membershipChanged =
+      newProfiles.length > 0 ||
+      (existing !== undefined &&
+        existing.profiles.some((profile) => !incomingById.has(profile.id)));
+    const reconciled = {
+      ...agent,
+      profiles: [...newProfiles, ...existingProfiles],
+    };
     syncAgentsToStore(
-      exists
-        ? settingsAgents.map((item: Agent) => (item.id === agent.id ? agent : item))
-        : [...settingsAgents, agent],
+      existing
+        ? settingsAgents.map((item) => (item.id === agent.id ? reconciled : item))
+        : [...settingsAgents, reconciled],
     );
+    if (membershipChanged) bumpAgentProfilesVersion();
   };
 
   return { upsertAgent };

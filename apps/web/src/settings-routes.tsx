@@ -68,6 +68,7 @@ import {
   TASK_BEHAVIOR_SETTINGS_HREF,
   TERMINAL_EDITORS_SETTINGS_HREF,
 } from "@/lib/settings-discovery/catalog/preferences";
+import { acceptAgentOrdersFromSnapshot } from "@/lib/settings/agent-profile-order";
 import {
   EXECUTORS_SETTINGS_HREF,
   SECRETS_SETTINGS_HREF,
@@ -125,6 +126,7 @@ type SettingsInitialStateData = {
 };
 
 const licenseEntries = licenses as LicenseEntry[];
+const agentProfilePath = /^\/settings\/agents\/([^/]+)\/profiles\/([^/]+)$/;
 
 const SETTINGS_ROUTES: Record<string, RouteRenderer> = {
   // The index resolves per surface: the tree as a page on a phone, a handoff to
@@ -332,10 +334,7 @@ function renderDynamicSettingsRoute(pathname: string) {
     );
   }
 
-  const agentProfile = matchDouble(pathname, /^\/settings\/agents\/([^/]+)\/profiles\/([^/]+)$/);
-  if (agentProfile) {
-    return <AgentProfileRoute />;
-  }
+  if (matchDouble(pathname, agentProfilePath)) return <AgentProfileRoute />;
 
   const agentId = matchSingle(pathname, /^\/settings\/agents\/([^/]+)$/);
   // "browse" is the static install-catalogue route, not an agent name — same
@@ -658,6 +657,7 @@ export function buildSettingsInitialStateForRoute({
         agent.profiles.map((profile) => toAgentProfileOption(agent, profile)),
       ),
       version: agentProfilesVersion,
+      orderByAgent: acceptAgentOrdersFromSnapshot({}, agents),
     },
     settingsAgents: { items: agents },
     agentDiscovery: { items: discoveryAgents, loading: false, loaded: true },

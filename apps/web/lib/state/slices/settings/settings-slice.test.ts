@@ -511,3 +511,70 @@ describe("folder opener discovery", () => {
     expect(store.getState().editors.folderOpeningAvailable).toBe(false);
   });
 });
+describe("agent profile ordering snapshots", () => {
+  it("applies agent snapshots atomically only at the captured membership epoch", () => {
+    const store = makeStore();
+    const snapshot = [
+      {
+        id: "agent-a",
+        name: "Agent A",
+        profiles: [
+          { id: "p1", name: "First" },
+          { id: "p2", name: "Second" },
+        ],
+        profile_order_revision: 2,
+      },
+    ] as never;
+    expect(store.getState().applyAgentListSnapshot(snapshot, 1)).toBe(false);
+    expect(store.getState().settingsAgents.items).toEqual([]);
+    expect(store.getState().applyAgentListSnapshot(snapshot, 0)).toBe(true);
+    expect(store.getState().agentProfiles.orderByAgent["agent-a"]).toMatchObject({
+      revision: 2,
+      order: ["p1", "p2"],
+    });
+    store.getState().bumpAgentProfilesVersion();
+    expect(store.getState().applyAgentListSnapshot([], 0)).toBe(false);
+    expect(store.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      "p1",
+      "p2",
+    ]);
+  });
+
+  it("keeps newer server orders and optimistic intents over older list writers", () => {
+    const store = makeStore();
+    const actions = store.getState();
+    actions.setSettingsAgents([
+      {
+        id: "agent-a",
+        name: "Agent A",
+        profiles: [
+          { id: "p1", name: "One" },
+          { id: "p2", name: "Two" },
+        ],
+        profile_order_revision: 4,
+      },
+    ] as never);
+    actions.acceptAgentProfileOrder("agent-a", ["p2", "p1"], 5);
+    actions.setAgentProfileOrder("agent-a", ["p1", "p2"]);
+    actions.setSettingsAgents([
+      {
+        id: "agent-a",
+        name: "Agent A",
+        profiles: [
+          { id: "p1", name: "One" },
+          { id: "p2", name: "Two" },
+        ],
+        profile_order_revision: 4,
+      },
+    ] as never);
+    expect(store.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      "p1",
+      "p2",
+    ]);
+    expect(store.getState().agentProfiles.orderByAgent["agent-a"]).toMatchObject({
+      revision: 5,
+      order: ["p2", "p1"],
+      queued: ["p1", "p2"],
+    });
+  });
+});

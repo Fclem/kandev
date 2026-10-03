@@ -1,0 +1,125 @@
+---
+id: "03-shared-limit-marks"
+title: "Shared limit marks"
+status: pending
+wave: 2
+depends_on:
+  - "01-classify-limit-timing-and-scope"
+  - "02-profile-limit-settings"
+plan: "plan.md"
+requirements:
+  - REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-002
+acceptance_criteria:
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.1
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.2
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.3
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.4
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.5
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.6
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.7
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.8
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.9
+system_design:
+  - ../../specs/agents/system-design/provider-limit-recovery.md
+---
+
+# Task 03: Shared Limit Marks
+
+## Summary
+
+Add `providerlimit`, a durable store of binding-scoped limit marks on the
+existing circuit registry. Record a mark for every concrete Kanban limit
+failure, and clear it on success. Expose marks through an API and WebSocket
+notification that feed a `limited until` pill on profile rows.
+
+## In scope
+
+- Move and export `profileCredentialBindingDescriptor` into package `dynamic`.
+- Circuit registry `Close`, `List(prefix)`, and `CircuitSnapshot.ResetKnown`,
+  with an additive `dynamic_resource_circuits.reset_known` column.
+- `providerlimit.Service`: `Record`, `Lookup`, `ClearOnSuccess`,
+  `AcquireProbe`/`ReleaseProbe` (10-minute lease), and `List`. Expiry follows
+  AC 002.3. Provider-qualified account keys follow AC 002.9, through a
+  provider-qualified-model capability on `omp-acp` and `opencode-acp` in
+  `internal/agent/agents`.
+- Wire the service in `backendapp/services.go`, independent of
+  `features.dynamicAgentRouting`.
+- Kanban recording in the failure path for all concrete profiles, and
+  clearing on successful turn completion. No other behavior change.
+- `GET /api/v1/agent-profiles/limits`, the `agent.profile.limits_updated`
+  broadcast, a web store slice, and the profile-row pill.
+
+## Out of scope
+
+- Fallback, waits, gates, and Office recording (Tasks 04-07).
+
+## Acceptance
+
+1. An account-scope mark limits every model on its binding. For OMP, it
+   limits only the failed provider's models: an `anthropic/...` spend mark
+   leaves `openai-codex/...` eligible. A model-scope mark limits only its
+   model. Unprovable bindings isolate to the profile, and marks survive
+   restart.
+2. A later expiry extends a mark and an earlier one never shortens it. Success
+   clears both keys. Only one probe lease is held at a time, and the lease
+   expires after 10 minutes.
+3. A profile row shows a localized `limited until <time>` pill while a mark is
+   active, on desktop and phone. The pill disappears after expiry or clear.
+
+## ASCII UI preview
+
+`UI-02: Profile row limit indicator` from the [plan](plan.md#ascii-ui-preview)
+(AC 002.8):
+
+```text
+| Claude  Opus profile  [model: opus] [fallback: sonnet] [limited until 11:10] |
+```
+
+## Verification
+
+Run this complete block from the repository root:
+
+```bash
+(cd apps/backend && go test -tags fts5 ./internal/agent/runtime/providerlimit ./internal/agent/runtime/dynamic -count=1)
+(cd apps/backend && go test -tags fts5 ./internal/task/repository/sqlite -run 'Circuit' -count=1)
+(cd apps/backend && go test -tags fts5 ./internal/orchestrator -run 'TestProviderLimitMark' -count=1)
+(cd apps/web && pnpm exec vitest run components/settings/agents/agent-profiles-section.test.tsx)
+(cd apps/web && pnpm run typecheck && pnpm run i18n:check && pnpm run i18n:ratchet)
+git diff --check
+```
+
+## Files likely touched
+
+- `apps/backend/internal/agent/runtime/providerlimit/` (new)
+- `apps/backend/internal/agent/runtime/dynamic/{circuit.go,fingerprint.go}`
+- `apps/backend/internal/agent/runtime/dynamic_resolver.go`
+- `apps/backend/internal/task/repository/sqlite/{base_schema.go,dynamic_route.go}`
+- `apps/backend/internal/backendapp/services.go`
+- `apps/backend/internal/orchestrator/event_handlers_agent.go`
+- `apps/web/components/settings/agents/agent-profiles-section.tsx`
+- `apps/web/lib/api/domains/` and the agents store slice
+
+## Dependencies
+
+Task 01 (`LimitScope`, `RetryAfter`) and Task 02 (profile fields for the
+endpoint).
+
+## Risks
+
+- Dynamic routing must keep ignoring `limit|` keys. Add a regression test in
+  `dynamic/engine_test.go`.
+- The mark write must not block the failure path. Use the registry's pending
+  flush.
+
+## Parallelism
+
+`sequential`
+
+## Inputs
+
+- System design: Limit marks.
+- `dynamic/circuit.go` and `fingerprint.go` tests.
+
+## Results
+
+Pending.

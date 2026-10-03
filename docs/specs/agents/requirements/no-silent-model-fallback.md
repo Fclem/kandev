@@ -19,6 +19,8 @@ PR #3473 and is implemented by the profile policy and recovery designs.
 
 The scoped [Auggie task recovery amendment](explicit-resume-settings.md) takes precedence for Auggie task start/resume and explicit recovery. Other consumers retain the policy below.
 
+[Provider limit recovery](provider-limit-recovery.md) adds an opt-in, visible fallback after a provider limit failure. It never applies to strict profiles or profiles with automatic fallback, and it never changes a running turn.
+
 ## Terminology
 
 - **Strict profile:** a profile with Require exact model explicitly enabled.

@@ -45,14 +45,14 @@ Recognizing this notice lets existing policies distinguish exhausted quota from 
 - **AC-AGENTS-CLAUDE-SESSION-LIMIT-001.5:** A supplied structured reset hint shall take precedence over notice text.
   Existing dated Codex reset formats and structured HTTP precedence shall retain their behavior.
 - **AC-AGENTS-CLAUDE-SESSION-LIMIT-001.6:** Classification shall retain existing recovery policy and replay-safety boundaries.
-  A fixed-profile Kanban quota failure shall remain manual recovery.
+  A fixed-profile Kanban quota failure shall remain manual recovery unless its profile opts into [provider limit recovery](provider-limit-recovery.md).
   An eligible dynamic route shall apply its saved hard-error policy and credential circuit rules.
 - **AC-AGENTS-CLAUDE-SESSION-LIMIT-001.7:** Unrelated limit text and other providers shall not acquire Claude's session-limit classification.
   A rate-limit notice shall retain its rate classification.
 
 ## Out of scope
 
-- Automatic resume or workflow deferral for fixed profiles after reset.
+- Automatic resume or workflow deferral for fixed profiles after reset, owned by [provider limit recovery](provider-limit-recovery.md).
 - Additional Claude limit-period signatures without observed evidence.
 - Changes to rendered recovery cards, candidate order, or replay authorization.
 - Reconstruction of timing text removed by upstream sanitization.

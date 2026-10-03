@@ -123,7 +123,8 @@ event, without an accepted explicit completion signal, remains advisory.
   explains when capacity resets, and keeps sanitized technical details
   collapsed by default.
 - Kanban interactive recovery treats `quota_limited` as user-actionable. A reset
-  time is informative and never schedules a Kanban retry. Office may consume the
+  time schedules a Kanban retry only under opt-in
+  [limit recovery](provider-limit-recovery.md). Office may consume the
   same classification for configured provider fallback and durable scheduler
   recovery under its separate routing policy.
 - The user-facing provider-limit copy is localized. Desktop and phone layouts

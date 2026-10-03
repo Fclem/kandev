@@ -13,9 +13,9 @@ Expose successful task creation to plugin contributions rendered by that same cr
 
 ## Design
 
-`TaskCreateDialog` owns a registry of task-created handlers and provides its registration function through a scoped React context. Only create-mode `task-create-input-actions` receive the registration function. A slot registers its handler for the lifetime of its contribution and unregisters it on cleanup.
+`TaskCreateDialog` owns a registry of task-created handlers and provides its registration function through a scoped React context. The public `PluginComposerSlotProps` type declares this optional capability, but the host supplies it only to create-mode `task-create-input-actions`. A registration returns its cleanup function; unmounting the slot unregisters its handler. Handlers may be synchronous or return a promise.
 
-After the dialog's create operation succeeds, the dialog notifies its registered handlers once with the created task's identity (`id` and `workspace_id`). The registry is not connected to the application-wide task event stream. Failed or canceled requests do not notify; edit and new-session surfaces do not receive the create-only capability.
+After the dialog's create operation succeeds, the dialog notifies each registered handler once with a frozen copy of the created task identity (`id` and `workspace_id`). The registry is not connected to the application-wide task event stream. Failed or canceled requests do not notify; edit and new-session surfaces do not receive the create-only capability. Synchronous throws and asynchronous rejections are logged per handler, and dispatch continues without changing the completed creation.
 
 Handlers are scoped to the owning dialog instance. Closing or replacing a dialog unmounts its contributions and removes their handlers, preventing late work from using another dialog's draft.
 

@@ -12,7 +12,9 @@ legacy_specs: []
 
 ## Overview
 
-Provide a create-dialog-scoped completion callback to plugin contributions, so a plugin can act on the task created by its own dialog without correlating unrelated global task events.
+Provide a typed, create-dialog-scoped completion callback to plugin contributions,
+so a plugin can act on the task created by its own dialog without correlating
+unrelated global task events. The host isolates handler failures after creation.
 
 ## Scope
 

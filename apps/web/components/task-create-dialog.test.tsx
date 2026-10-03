@@ -2,6 +2,7 @@ import {
   createRef,
   type ComponentProps,
   type ReactNode,
+  useContext,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -11,6 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TaskCreateDialog } from "./task-create-dialog";
 import type { DialogFormState, TaskFormInputsHandle } from "./task-create-dialog-types";
+import {
+  TaskCreateDialogTaskCreatedContext,
+  type RegisterTaskCreatedHandler,
+} from "./task-create-dialog-task-created";
 
 const enhancePromptMock = vi.fn();
 const toastMock = vi.fn();
@@ -21,7 +26,21 @@ const IMPROVED_PROMPT = "Improved prompt";
 const USER_EDIT = "User edit";
 const PROMPT_RESULT_RECOVERY_TEST_ID = "prompt-result-recovery";
 const ENHANCE_PROMPT_BUTTON_TEST_ID = "enhance-prompt-button";
+const DEFAULT_WORKSPACE_ID = "workspace-1";
+const SECOND_WORKSPACE_ID = "workspace-second";
 
+const taskCreatedHandlerByWorkspace = new Map<
+  string,
+  (task: { id: string; workspace_id: string }) => void
+>();
+const taskCreatedRegistrationByWorkspace = new Map<string, RegisterTaskCreatedHandler | null>();
+const taskSubmitHarness = {
+  succeeds: false,
+  onSuccessByWorkspace: new Map<
+    string,
+    (task: { id: string; workspace_id: string }, mode: "create" | "edit" | "session") => void
+  >(),
+};
 type EscapeEvent = { preventDefault: () => void };
 
 type CloseAutoFocusEvent = { preventDefault: () => void };
@@ -148,14 +167,31 @@ vi.mock("@/components/state-provider", () => ({
 }));
 
 vi.mock("@/components/task-create-dialog-submit", () => ({
-  useTaskSubmitHandlers: () => ({
-    handleSubmit: () => undefined,
-    handleCancel: () => undefined,
-    handleUpdateWithoutAgent: () => undefined,
-    handleCreateWithoutAgent: () => undefined,
-    handleCreateWithPlanMode: () => undefined,
-    pendingDiscard: null,
-  }),
+  useTaskSubmitHandlers: (deps: {
+    isEditMode: boolean;
+    isSessionMode: boolean;
+    workspaceId: string;
+    onSuccess: (
+      task: { id: string; workspace_id: string },
+      mode: "create" | "edit" | "session",
+    ) => void;
+  }) => {
+    taskSubmitHarness.onSuccessByWorkspace.set(deps.workspaceId, deps.onSuccess);
+    return {
+      handleSubmit: () => {
+        if (!taskSubmitHarness.succeeds) return;
+        let mode: "create" | "edit" | "session" = "create";
+        if (deps.isSessionMode) mode = "session";
+        else if (deps.isEditMode) mode = "edit";
+        deps.onSuccess({ id: `task-${deps.workspaceId}`, workspace_id: deps.workspaceId }, mode);
+      },
+      handleCancel: () => undefined,
+      handleUpdateWithoutAgent: () => undefined,
+      handleCreateWithoutAgent: () => undefined,
+      handleCreateWithPlanMode: () => undefined,
+      pendingDiscard: null,
+    };
+  },
 }));
 
 vi.mock("@/components/task-create-dialog-selectors", () => ({
@@ -163,16 +199,25 @@ vi.mock("@/components/task-create-dialog-selectors", () => ({
   AgentSelector: () => null,
   ExecutorProfileSelector: () => null,
   TaskFormInputs: ({
+    workspaceId,
     initialDescription,
     descriptionValueRef,
     onDescriptionChange,
     onEnhancePrompt,
   }: {
+    workspaceId: string;
     initialDescription: string;
     descriptionValueRef: React.RefObject<TaskFormInputsHandle | null>;
     onDescriptionChange: (hasDescription: boolean) => void;
     onEnhancePrompt?: () => void;
   }) => {
+    const registerTaskCreatedHandler = useContext(TaskCreateDialogTaskCreatedContext);
+    const handler = taskCreatedHandlerByWorkspace.get(workspaceId);
+    taskCreatedRegistrationByWorkspace.set(workspaceId, registerTaskCreatedHandler);
+    useEffect(() => {
+      if (!handler || !registerTaskCreatedHandler) return;
+      return registerTaskCreatedHandler(handler);
+    }, [handler, registerTaskCreatedHandler]);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const latestValueRef = useRef(initialDescription);
 
@@ -382,7 +427,7 @@ function renderDialog(
       open
       mode={mode}
       onOpenChange={() => undefined}
-      workspaceId="workspace-1"
+      workspaceId={DEFAULT_WORKSPACE_ID}
       workflowId={null}
       defaultStepId={null}
       steps={[]}
@@ -405,13 +450,17 @@ beforeEach(() => {
   dialogCloseAutoFocusHandler = undefined;
   autoFocusNewTasks = true;
   mockFs = buildMockFs();
+  taskCreatedHandlerByWorkspace.clear();
+  taskSubmitHarness.succeeds = false;
+  taskSubmitHarness.onSuccessByWorkspace.clear();
+  taskCreatedRegistrationByWorkspace.clear();
 });
 
 it("defers form initialization until first opening and retains the close lifecycle", () => {
   const props = {
     mode: "create" as const,
     onOpenChange: () => undefined,
-    workspaceId: "workspace-1",
+    workspaceId: DEFAULT_WORKSPACE_ID,
     workflowId: null,
     defaultStepId: null,
     steps: [],
@@ -600,4 +649,30 @@ it("returns to the opening control after background task creation", () => {
   } finally {
     target.remove();
   }
+});
+
+describe("TaskCreateDialog task-created plugin callback", () => {
+  it("scopes callbacks to a successful create dialog", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    taskCreatedHandlerByWorkspace.set(DEFAULT_WORKSPACE_ID, first);
+    taskCreatedHandlerByWorkspace.set(SECOND_WORKSPACE_ID, second);
+    taskSubmitHarness.succeeds = true;
+    const firstDialog = renderDialog();
+    const secondDialog = renderDialog("create", { workspaceId: SECOND_WORKSPACE_ID });
+    fireEvent.submit(firstDialog.container.querySelector("form")!);
+    fireEvent.submit(secondDialog.container.querySelector("form")!);
+    expect(second).toHaveBeenCalledTimes(1);
+
+    taskSubmitHarness.succeeds = false;
+    fireEvent.submit(firstDialog.container.querySelector("form")!);
+    expect(first).toHaveBeenCalledTimes(1);
+    renderDialog("edit", { workspaceId: "workspace-edit" });
+    expect(taskCreatedRegistrationByWorkspace.get("workspace-edit")).toBeNull();
+
+    cleanup();
+    const notifyAfterUnmount = taskSubmitHarness.onSuccessByWorkspace.get(DEFAULT_WORKSPACE_ID);
+    notifyAfterUnmount?.({ id: "late-task", workspace_id: DEFAULT_WORKSPACE_ID }, "create");
+    expect(first).toHaveBeenCalledTimes(1);
+  });
 });

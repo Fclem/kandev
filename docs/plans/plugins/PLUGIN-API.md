@@ -1259,6 +1259,8 @@ interface PluginRegistry {
   // "new-session-input-actions" render composer actions for task/Quick Chat,
   // task creation, and new-session creation. Each forwards the typed
   // `PluginComposerSlotProps`, including native insert/focus/submit capabilities.
+  // Only create-mode "task-create-input-actions" receives
+  // `registerTaskCreatedHandler`; it is absent from edit and new-session slots.
   // These composer slots, both topbars, sidebar workspace actions, and both
   // status-bar slots support host.ui.Action and ActionGroup. Existing raw
   // components remain valid and retain their current appearance.
@@ -1326,9 +1328,11 @@ interface PluginRegistry {
   // registered by the plugin currently being viewed, so your card appears on
   // your own settings page and never on another plugin's — no per-id gating
   // needed in your component.
-  registerComponent(
+  // `Props` can provide an imported SDK slot contract such as
+  // `PluginComposerSlotProps` instead of narrowing `slotProps` from `unknown`.
+  registerComponent<Props = { slotProps?: unknown }>(
     slot: string,
-    Component: React.ComponentType<{ slotProps?: unknown }>,
+    Component: React.ComponentType<Props>,
   ): void;
 
   // WS action handler. Bridged into the existing lib/ws dispatch; called with the
@@ -1614,6 +1618,17 @@ interface PluginReviewPanelProps {
 
 type PluginPresentation = "desktop" | "mobile";
 
+interface PluginTaskCreatedIdentity {
+  readonly id: string;
+  readonly workspace_id: string;
+}
+type PluginTaskCreatedHandler = (
+  task: PluginTaskCreatedIdentity,
+) => void | Promise<void>;
+type RegisterPluginTaskCreatedHandler = (
+  handler: PluginTaskCreatedHandler,
+) => () => void;
+
 type PluginComposerSurface =
   | "task-chat"
   | "quick-chat"
@@ -1638,7 +1653,15 @@ interface PluginComposerSlotProps {
   submittable: boolean;
   disabledReason?: string;
   composer: PluginComposerCapability;
+  registerTaskCreatedHandler?: RegisterPluginTaskCreatedHandler;
 }
+
+The optional `registerTaskCreatedHandler` is present only for create-mode
+`task-create-input-actions`. It registers a handler for that dialog's successful
+task creation and returns an unregister function. Handlers receive the readonly
+`{ id, workspace_id }` task identity and may return a promise; each thrown or
+rejected handler is logged without blocking other handlers or changing task
+creation.
 type PluginOpenMessageResult = { status: "accepted" | "unavailable" };
 interface PluginTaskPanelConversationCapability {
   openMessage(messageId: string): PluginOpenMessageResult;

@@ -1,22 +1,42 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTaskCreatedHandlerRegistry, notifyTaskCreatedHandlers } from "./task-create-dialog-task-created";
+import { createTaskCreatedHandlerRegistry } from "./task-create-dialog-task-created";
 
 describe("task-create completion handlers", () => {
-  it("routes only successful create-mode tasks to handlers registered by that dialog", () => {
-    const firstDialog = createTaskCreatedHandlerRegistry();
-    const secondDialog = createTaskCreatedHandlerRegistry();
-    const firstHandler = vi.fn();
+  it("logs rejected async handlers and continues notifying other handlers", async () => {
+    const registry = createTaskCreatedHandlerRegistry();
+    const failure = new Error("plugin rejected");
+    const firstHandler = vi.fn().mockRejectedValue(failure);
     const secondHandler = vi.fn();
-    firstDialog.register(firstHandler);
-    secondDialog.register(secondHandler);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    registry.register(firstHandler);
+    registry.register(secondHandler);
+
+    registry.notify({ id: "async-task", workspace_id: "async-workspace" });
+    await Promise.resolve();
+
+    expect(error).toHaveBeenCalledExactlyOnceWith(
+      "[plugins] Task-create completion handler failed",
+      failure,
+    );
+    expect(secondHandler).toHaveBeenCalledExactlyOnceWith({
+      id: "async-task",
+      workspace_id: "async-workspace",
+    });
+  });
+
+  it("passes a copied, immutable task identity", () => {
+    const registry = createTaskCreatedHandlerRegistry();
+    const handler = vi.fn();
     const task = { id: "task-1", workspace_id: "workspace-1" };
+    registry.register(handler);
 
-    notifyTaskCreatedHandlers(firstDialog, task, "edit");
-    expect(firstHandler).not.toHaveBeenCalled();
-    expect(secondHandler).not.toHaveBeenCalled();
+    registry.notify(task);
+    task.id = "mutated";
 
-    notifyTaskCreatedHandlers(firstDialog, task, "create");
-    expect(firstHandler).toHaveBeenCalledExactlyOnceWith(task);
-    expect(secondHandler).not.toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledExactlyOnceWith({
+      id: "task-1",
+      workspace_id: "workspace-1",
+    });
+    expect(Object.isFrozen(handler.mock.calls[0]?.[0])).toBe(true);
   });
 });

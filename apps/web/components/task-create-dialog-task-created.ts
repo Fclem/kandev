@@ -1,15 +1,21 @@
 import { createContext } from "react";
-import type { Task } from "@/lib/types/http";
+import type {
+  PluginTaskCreatedHandler,
+  PluginTaskCreatedIdentity,
+  RegisterPluginTaskCreatedHandler,
+} from "@kandev/plugin-sdk";
 
-type CreatedTaskIdentity = Pick<Task, "id" | "workspace_id">;
-export type TaskCreatedHandler = (task: CreatedTaskIdentity) => void;
-export type RegisterTaskCreatedHandler = (handler: TaskCreatedHandler) => () => void;
+type CreatedTaskIdentity = PluginTaskCreatedIdentity;
+export type TaskCreatedHandler = PluginTaskCreatedHandler;
+export type RegisterTaskCreatedHandler = RegisterPluginTaskCreatedHandler;
 export interface TaskCreatedHandlerRegistry {
   register: RegisterTaskCreatedHandler;
   notify(task: CreatedTaskIdentity): void;
 }
 
-export const TaskCreateDialogTaskCreatedContext = createContext<RegisterTaskCreatedHandler | null>(null);
+export const TaskCreateDialogTaskCreatedContext = createContext<RegisterTaskCreatedHandler | null>(
+  null,
+);
 
 export function createTaskCreatedHandlerRegistry(): TaskCreatedHandlerRegistry {
   const handlers = new Set<TaskCreatedHandler>();
@@ -19,11 +25,15 @@ export function createTaskCreatedHandlerRegistry(): TaskCreatedHandlerRegistry {
       return () => handlers.delete(handler);
     },
     notify(task: CreatedTaskIdentity) {
+      const identity = Object.freeze({ id: task.id, workspace_id: task.workspace_id });
+      const logFailure = (error: unknown) => {
+        console.error("[plugins] Task-create completion handler failed", error);
+      };
       for (const handler of handlers) {
         try {
-          handler(task);
+          void Promise.resolve(handler(identity)).catch(logFailure);
         } catch (error) {
-          console.error("[plugins] Task-create completion handler failed", error);
+          logFailure(error);
         }
       }
     },

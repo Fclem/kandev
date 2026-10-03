@@ -273,6 +273,38 @@ export function TaskCreateDialog(props: TaskCreateDialogProps) {
   return <TaskCreateDialogContent {...props} />;
 }
 
+function useTaskCreateDialogTaskCreatedHandlers(onSuccess: TaskCreateDialogProps["onSuccess"]) {
+  const [registry] = useState(createTaskCreatedHandlerRegistry);
+  const notifyOnSuccess = useCallback<NonNullable<TaskCreateDialogProps["onSuccess"]>>(
+    (task, mode, meta) => {
+      notifyTaskCreatedHandlers(registry, task, mode);
+      onSuccess?.(task, mode, meta);
+    },
+    [onSuccess, registry],
+  );
+  return { registry, onSuccess: notifyOnSuccess };
+}
+
+function useTaskCreateDialogQueuedSettingsCloseReset(
+  open: boolean,
+  preserveRef: { current: { syncedSettings: TaskCreateLastUsedState | null | undefined } | null },
+  resetHandledRef: { current: boolean },
+  reset: () => void,
+) {
+  useEffect(() => {
+    if (open) {
+      preserveRef.current = null;
+      resetHandledRef.current = false;
+      return reset;
+    }
+    if (resetHandledRef.current) {
+      resetHandledRef.current = false;
+      return;
+    }
+    reset();
+  }, [open, preserveRef, resetHandledRef, reset]);
+}
+
 function TaskCreateDialogContent(props: TaskCreateDialogProps) {
   const { t } = useTranslation("chat");
   const syncedTaskCreateLastUsed = useAppStore((state) => state.userSettings.taskCreateLastUsed);
@@ -292,30 +324,22 @@ function TaskCreateDialogContent(props: TaskCreateDialogProps) {
     preserveQueuedLastUsedOnCloseRef.current = null;
     queuedLastUsedResetHandledRef.current = true;
   }, []);
-  const [taskCreatedHandlers] = useState(createTaskCreatedHandlerRegistry);
-  const onSuccess = useCallback<NonNullable<TaskCreateDialogProps["onSuccess"]>>(
-    (task, mode, meta) => {
-      notifyTaskCreatedHandlers(taskCreatedHandlers, task, mode);
-      props.onSuccess?.(task, mode, meta);
-    },
-    [props.onSuccess, taskCreatedHandlers],
+  const { registry: taskCreatedHandlers, onSuccess } = useTaskCreateDialogTaskCreatedHandlers(
+    props.onSuccess,
   );
-  const setup = useTaskCreateDialogSetup({ ...props, onSuccess }, { preserveQueuedLastUsedOnClose });
+  const setup = useTaskCreateDialogSetup(
+    { ...props, onSuccess },
+    { preserveQueuedLastUsedOnClose },
+  );
   const { guardedHandleSubmit } = setup;
   const focusReturn = useTaskCreateFocusReturn(props, setup.isCreateMode);
   const [popoverContainer, setPopoverContainer] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (props.open) {
-      preserveQueuedLastUsedOnCloseRef.current = null;
-      queuedLastUsedResetHandledRef.current = false;
-      return resetQueuedLastUsedOnClose;
-    }
-    if (queuedLastUsedResetHandledRef.current) {
-      queuedLastUsedResetHandledRef.current = false;
-      return;
-    }
-    resetQueuedLastUsedOnClose();
-  }, [props.open, resetQueuedLastUsedOnClose]);
+  useTaskCreateDialogQueuedSettingsCloseReset(
+    props.open,
+    preserveQueuedLastUsedOnCloseRef,
+    queuedLastUsedResetHandledRef,
+    resetQueuedLastUsedOnClose,
+  );
   // Programmatic submissions use the native control's preflight before
   // entering the same guarded submit handler as the form button.
   const pendingAttachmentReason = setup.fs.hasPendingAttachmentUploads
@@ -344,7 +368,9 @@ function TaskCreateDialogContent(props: TaskCreateDialogProps) {
         className="w-full h-full min-w-0 max-w-full max-h-full overflow-visible rounded-none pt-0 sm:w-[900px] sm:h-auto sm:max-w-none sm:max-h-[85vh] sm:rounded-lg flex flex-col"
       >
         <TaskCreateDialogPopoverContainerProvider container={popoverContainer}>
-          <TaskCreateDialogTaskCreatedContext.Provider value={taskCreatedHandlers.register}>
+          <TaskCreateDialogTaskCreatedContext.Provider
+            value={setup.isCreateMode ? taskCreatedHandlers.register : null}
+          >
             <DialogHeader>
               <DialogHeaderContent
                 isCreateMode={setup.isCreateMode}

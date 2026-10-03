@@ -55,22 +55,27 @@ for every other case.
 
 ## Acceptance
 
-1. An opted-in Office run that hits a limit relaunches once on the fallback
-   before provider advancement. The route attempt records both models and the
-   reason. An unadvertised fallback parks instead of drifting to another
-   model.
-2. Without a fallback, a trusted reset parks the run until the reset. Exactly
-   one parked run per mark lifts first, and the rest follow after success.
-3. A successful Office turn clears the mark for the resolved execution
+1. An opted-in Office run that hits a limit relaunches once on an eligible
+   fallback before provider advancement. The route attempt records both models
+   and the reason. An unadvertised fallback fails before inference and does not
+   drift to another model.
+2. After an unadvertised fallback, park only when Resume after reset is on
+   and the mark has a trusted reset. With resume off or an unknown or
+   more-than-seven-day reset, keep the existing routing and escalation; do not
+   create a wait. Test each boundary explicitly.
+3. Without an applicable fallback, a trusted reset with resume on parks the
+   run until the reset. Exactly one parked run per mark lifts first, and the
+   rest follow after success.
+4. A successful Office turn clears the mark for the resolved execution
    binding and effective model. A successful probe releases a parked sibling.
    Persist and recover the exact acquired `ProbeLease` identity on the lifted
    run; its matching `AgentCompleted` releases that lease and wakes the sibling,
    while an unrelated or stale lease remains untouched.
-4. `AgentFailed` and `AgentStopped` do not clear marks. A limit failure renews
-   the mark and leaves siblings parked. A non-limit failed or stopped probe
-   leaves siblings parked until the 10-minute lease expires and another waiter
-   may probe.
-5. Runs on profiles that are not opted in keep their current Office test
+5. `AgentFailed` and `AgentStopped` do not clear marks. A limit failure renews
+   the mark and leaves siblings parked. Separately test a non-limit failed
+   probe and a non-limit stopped probe: siblings stay parked until each
+   10-minute lease expires, then a different waiter may probe.
+6. Runs on profiles that are not opted in keep their current Office test
    outcomes. Health retry and mark clearing do not affect each other.
 
 ## Verification

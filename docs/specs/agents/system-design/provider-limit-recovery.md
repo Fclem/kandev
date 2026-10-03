@@ -408,17 +408,22 @@ each path continues with the requested model (AC 005.4).
   shared input and records the mark for the run's concrete execution profile:
   `resolved_execution_profile_id`, or the agent's `execution_agent_profile_id`
   for unrouted runs. For an opted-in profile:
-  - Fallback eligible and unmarked, and the run has no limit fallback in the
-    current cycle: requeue through `RequeueRunForNextCandidate` semantics on
-    the same candidate. Store `limit_fallback_model` on the run. The next
-    dispatch launches the same execution profile with that model under the
-    launch-scoped exact policy. `errLimitFallbackUnavailable` takes the park
-    branch. The route attempt records `requested_model`, `effective_model`, and
+  - When the fallback is eligible and unmarked, and the run has no limit
+    fallback in the current cycle, requeue through
+    `RequeueRunForNextCandidate` semantics on the same candidate. Store
+    `limit_fallback_model` on the run and launch the same execution profile
+    with that model under the launch-scoped exact policy. The route attempt
+    records `requested_model`, `effective_model`, and
     `override_reason=provider_limit` (AC 006.1, AC 006.2).
-  - Otherwise, when resume is on and the reset is trusted: park with
-    `ParkRunForProviderCapacity`, with the new blocked status
-    `waiting_for_limit_reset` and `earliest_retry_at = reset` (AC 006.3).
-  - Otherwise, the existing routing and escalation apply unchanged.
+  - If the executor does not advertise the fallback,
+    `errLimitFallbackUnavailable` fails the launch before inference and does
+    not try another model. Treat the fallback as unavailable, then apply the
+    no-fallback decision below (AC 006.2).
+  - When no fallback applies, park with `ParkRunForProviderCapacity`,
+    `waiting_for_limit_reset`, and `earliest_retry_at = reset` only when
+    resume is on and the reset is trusted (AC 006.3).
+  - Otherwise, preserve existing routing and escalation. An unavailable
+    fallback alone never creates a wait.
 - **Lifting:** For `waiting_for_limit_reset` rows,
   `SchedulerIntegration.liftParkedRoutingRuns` lifts one run per mark through
   the probe. Siblings stay parked until the mark closes. The lifted run retains
@@ -468,14 +473,26 @@ The new delay field carries a number, never header text.
 
 ## Observability
 
-Counters published through expvar, with structured `provider_limit.*` zap logs:
+Counters are published through expvar with structured `provider_limit.*` zap
+logs.
+
+Count each accepted mark mutation once, each final fallback decision once, and
+each wait transition or probe outcome once. Do not count read-only lookups or
+duplicate and stale events.
 
 - `provider_limit_marks_total`, labelled `scope` (`account`, `model`) and
-  `code`.
+  `code` (`quota_limited`, `rate_limited`), increments after an accepted mark
+  create or renewal.
 - `provider_limit_fallback_total`, labelled `context` (`kanban`, `office`) and
-  `outcome` (`switched`, `not_advertised`, `marked`, `failed`).
+  `outcome` (`switched`, `not_advertised`, `marked`, `failed`), increments at
+  the final fallback decision, including early rejection and terminal launch
+  failure paths.
 - `provider_limit_waits_total`, labelled `context` and `outcome` (`armed`,
-  `resumed`, `cancelled`, `exhausted`, `probe_failed`).
+  `resumed`, `cancelled`, `exhausted`, `probe_failed`), increments on the
+  corresponding durable wait transition or probe outcome. `exhausted` means
+  the existing wait budget rejects another wait; an unknown or untrusted reset
+  with no wait is not exhausted. `probe_failed` means the probe does not
+  complete successfully, including when a limit failure renews the mark.
 
 All label sets are closed. No profile, binding, task, session, or run
 identifier is ever a label.

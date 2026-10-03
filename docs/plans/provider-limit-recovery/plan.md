@@ -34,7 +34,8 @@ The work orders run in this order:
 4. Kanban reset waits.
 5. The automatic launch gate.
 6. Office.
-7. Documentation and lifecycle promotion.
+7. Provider-limit metrics after all instrumented paths are delivered.
+8. Documentation and lifecycle promotion.
 
 Every step leaves a working product, and nothing changes until a profile opts
 in. Marks come before any consumer because both Kanban and Office read them.
@@ -206,7 +207,8 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 | 003.1-003.6 | `orchestrator/provider_limit_failure_test.go` |
 | 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (including same-task independent waits across restart/cancel/replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
 | 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict and unknown/>7-day proceed cases), manual notice integration tests for `StartTask`, `StartCreatedSession`, `ensureSessionRunning`, `ResumeTaskSessionWithOptions`, and `promptTask`, plus `status-message.test.tsx` |
-| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` success clears the resolved mark and wakes a sibling; persist/recover exact lease A and prove matching completion releases A while unrelated/stale lease B is untouched; `AgentFailed` and `AgentStopped` preserve marks/sibling wait, and a non-limit failed probe allows another waiter only after lease expiry; limit failure renews the mark. |
+| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` eligible fallback; unadvertised fallback fails before inference without trying another model, then parks only for resume-on + trusted reset (including tests for resume-off, unknown, and >7-day reset); success clears the resolved mark and wakes a sibling; persist/recover exact lease A and prove matching completion releases A while unrelated/stale lease B is untouched; `AgentFailed` and `AgentStopped` preserve marks/sibling wait, with independent non-limit failed/stopped probe tests proving siblings stay parked before expiry and a different waiter may probe after the exact 10-minute lease expiry; limit failure renews the mark. |
+| Observability | Task 10 metric tests for mark recording, each fallback outcome, and Kanban/Office wait transitions; closed labels, structured logs, and no-op/duplicate boundaries. |
 
 ## E2E tests
 
@@ -230,12 +232,13 @@ reset is the given number of seconds after the error. Other models succeed.
 - [ ] [Task 05: Kanban reset waits](task-05-kanban-reset-waits.md)
 - [ ] [Task 06: Automatic launch gate](task-06-automatic-launch-gate.md)
 - [ ] [Task 07: Office limit recovery](task-07-office-limit-recovery.md)
-- [ ] [Task 08: Documentation and promotion](task-08-docs-and-promotion.md)
 - [ ] [Task 09: OMP prompt-end limit failure](task-09-omp-prompt-end-limit-failure.md)
+- [ ] [Task 10: Provider limit metrics](task-10-provider-limit-metrics.md)
+- [ ] [Task 08: Documentation and promotion](task-08-docs-and-promotion.md)
 
 Dependency order: tasks 01 and 02 can run in parallel. Task 09 follows 01 and
 can run in parallel with 02 and 03. Then 03, 04, 05, 06, and 07 run in
-sequence, and 08 runs last.
+sequence. Task 10 depends on 07 and 09; Task 08 runs last.
 
 Delivery note: Tasks 01 and 09 can ship as their own PR. That PR fixes OMP
 turns that are recorded as "completed" when the provider rejected the

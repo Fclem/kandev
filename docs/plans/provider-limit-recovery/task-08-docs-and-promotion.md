@@ -2,9 +2,9 @@
 id: "08-docs-and-promotion"
 title: "Documentation and promotion"
 status: pending
-wave: 7
+wave: 9
 depends_on:
-  - "07-office-limit-recovery"
+  - "10-provider-limit-metrics"
 plan: "plan.md"
 requirements:
   - REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-001

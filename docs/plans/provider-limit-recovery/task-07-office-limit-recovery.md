@@ -62,10 +62,15 @@ for every other case.
 2. Without a fallback, a trusted reset parks the run until the reset. Exactly
    one parked run per mark lifts first, and the rest follow after success.
 3. A successful Office turn clears the mark for the resolved execution
-   binding and effective model. A successful probe releases a parked sibling;
-   a limit failure renews the mark and leaves siblings parked. `AgentStopped`
-   does not clear a mark.
-4. Runs on profiles that are not opted in keep their current Office test
+   binding and effective model. A successful probe releases a parked sibling.
+   Persist and recover the exact acquired `ProbeLease` identity on the lifted
+   run; its matching `AgentCompleted` releases that lease and wakes the sibling,
+   while an unrelated or stale lease remains untouched.
+4. `AgentFailed` and `AgentStopped` do not clear marks. A limit failure renews
+   the mark and leaves siblings parked. A non-limit failed or stopped probe
+   leaves siblings parked until the 10-minute lease expires and another waiter
+   may probe.
+5. Runs on profiles that are not opted in keep their current Office test
    outcomes. Health retry and mark clearing do not affect each other.
 
 ## Verification

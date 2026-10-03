@@ -429,9 +429,15 @@ each path continues with the requested model (AC 005.4).
   `resolved_execution_profile_id`, or its concrete execution profile for an
   unrouted run, and the actual `effective_model`. Call
   `providerlimit.ClearOnSuccess` for that binding and model. For a run lifted
-  as a probe, call `ReleaseProbe(lease, true, 0)` after clearing. Releasing a
-  lease already invalidated by `ClearOnSuccess` is a no-op. The closed mark
-  releases parked siblings (AC 002.5, AC 002.6).
+  as a probe, the handler reads the exact persisted `ProbeLease` identity and
+  calls `ReleaseProbe(lease, true, 0)` after clearing. Releasing a lease
+  already invalidated by `ClearOnSuccess` is a no-op. An unrelated or stale
+  lease is not released.
+- **Unsuccessful turn:** `AgentStopped` and `AgentFailed` leave marks active.
+  A classified limit failure records the renewed mark; a non-limit
+  unsuccessful probe does not release its lease as a success. Siblings remain
+  parked until success or the 10-minute lease expiry allows another probe
+  (AC 002.5, AC 002.6).
 - **Dispatch gate:** Before candidate launch, `DispatchWithRouting` and
   unrouted dispatch apply the same three outcomes as the Kanban gate. A park
   replaces a defer.

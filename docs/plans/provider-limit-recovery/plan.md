@@ -206,7 +206,7 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 | 003.1-003.6 | `orchestrator/provider_limit_failure_test.go` |
 | 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (including same-task independent waits across restart/cancel/replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
 | 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict and unknown/>7-day proceed cases), manual notice integration tests for `StartTask`, `StartCreatedSession`, `ensureSessionRunning`, `ResumeTaskSessionWithOptions`, and `promptTask`, plus `status-message.test.tsx` |
-| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` `TestProviderLimitOfficeProbeSuccessClearsMarkAndLiftsSibling` (plus failed-probe retention), `office/scheduler/routing_lifecycle_limit_test.go`, `scheduler_integration_routing_test.go` lift probe |
+| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` success clears the resolved mark and wakes a sibling; persist/recover exact lease A and prove matching completion releases A while unrelated/stale lease B is untouched; `AgentFailed` and `AgentStopped` preserve marks/sibling wait, and a non-limit failed probe allows another waiter only after lease expiry; limit failure renews the mark. |
 
 ## E2E tests
 

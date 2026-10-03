@@ -202,12 +202,12 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 | 007.5 | `transport/acp/adapter_prompt_test.go` `TestOMPPromptEnd*`; `orchestrator/event_handlers_transient_omp_test.go` `TestClassifyKanbanFailureOMP` |
 | 001.1, 001.3, 001.4, 001.6 | `agent/settings/store/sqlite_limit_recovery_test.go`, `handlers/profile_handlers_limit_test.go`, `lifecycle/limit_policy_test.go` `TestLimitPolicyFor` |
 | 001.2, 001.3, 001.5 | `cli-profile-fallback-fields.test.tsx`, `model-fallback-settings-shell.test.tsx`, `agent-profile-dirty.test.ts` |
-| 002.1-002.7, 002.9 | `providerlimit/service_test.go` (including OMP provider-prefix scope and eight-day mark expiry), `dynamic/circuit_test.go` `TestCircuitCloseAndList`, `task/repository/sqlite/dynamic_route_test.go` reset_known round trip |
+| 002.1-002.7, 002.9 | `providerlimit/service_test.go` (including OMP provider-prefix scope and eight-day mark expiry); `dynamic/circuit_test.go` `TestCircuitCloseAndList`, failed write/missing adapter publish no state, successful retry survives registry restore, failed atomic dual-key clear preserves both marks, exact probe lease restore/stale release; `task/repository/sqlite/dynamic_route_test.go` reset_known round trip |
 | 002.8 | `agent-profiles-section.test.tsx` limited pill |
-| 003.1-003.6 | `orchestrator/provider_limit_failure_test.go` |
-| 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (including same-task independent waits across restart/cancel/replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
-| 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict and unknown/>7-day proceed cases), manual notice integration tests for `StartTask`, `StartCreatedSession`, `ensureSessionRunning`, `ResumeTaskSessionWithOptions`, and `promptTask`, plus `status-message.test.tsx` |
-| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` eligible fallback; unadvertised fallback fails before inference without trying another model, then parks only for resume-on + trusted reset (including tests for resume-off, unknown, and >7-day reset); success clears the resolved mark and wakes a sibling; persist/recover exact lease A and prove matching completion releases A while unrelated/stale lease B is untouched; `AgentFailed` and `AgentStopped` preserve marks/sibling wait, with independent non-limit failed/stopped probe tests proving siblings stay parked before expiry and a different waiter may probe after the exact 10-minute lease expiry; limit failure renews the mark. |
+| 003.1-003.6 | `orchestrator/provider_limit_failure_test.go`, including no fallback on durable mark-write failure |
+| 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (same-task independent waits across restart/cancel/replay; exact lease A acquire, restart, matching completion release, sibling lift, and stale A cannot release B; failed owner persistence does not replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
+| 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict and unknown/>7-day proceed cases; launch probe lease persists and transfers to the session/turn owner before prompt, then survives restart and releases only on matching completion), manual notice integration tests for `StartTask`, `StartCreatedSession`, `ensureSessionRunning`, `ResumeTaskSessionWithOptions`, and `promptTask`, plus `status-message.test.tsx` |
+| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` eligible fallback; unadvertised fallback fails before inference without trying another model, then parks only for resume-on + trusted reset (including tests for resume-off, unknown, and >7-day reset); failed mark write keeps existing routing and does not trigger limit fallback/parking; success clears both resolved marks only after durable write and wakes a sibling; persist/recover exact lease A and prove matching completion releases A while unrelated/stale lease B is untouched; `AgentFailed` and `AgentStopped` preserve marks/sibling wait, with independent non-limit failed/stopped probe tests proving siblings stay parked before expiry and a different waiter may probe after the exact 10-minute lease expiry; limit failure renews the mark. |
 | Observability | Task 10 metric tests for mark recording, each fallback outcome, and Kanban/Office wait transitions; closed labels, structured logs, and no-op/duplicate boundaries. |
 
 ## E2E tests
@@ -264,6 +264,10 @@ Design checks on 2026-10-03:
 - **Deferral record coupling.** The provider-limit half shares
   `deferred_launch` with the ceiling half. Merge and compare-and-swap rules
   must be tested against the existing ceiling replay tests.
+- **Circuit-store availability.** A failed mark write uses the existing failure
+  surface; a failed clear keeps marks and siblings blocked; a failed lease or
+  owner write does not replay. Recovery resumes only after a durable operation
+  succeeds.
 - **Continuation semantics.** For a harness that does not keep the user turn
   after a provider rejection, a continuation instruction loses the request.
   The no-turn-event rule resends the input in that case.

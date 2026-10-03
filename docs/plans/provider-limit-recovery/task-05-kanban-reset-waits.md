@@ -44,8 +44,11 @@ and resumes once in the same session.
   message metadata.
 - `provider_limit_waker.go`: startup listing, an earliest-deadline timer,
   safety calls from the one-minute reconciliation sweep, grouping by mark,
-  probe acquire and release, and replay through the existing kind replay
+  durable probe acquisition, and replay through the existing kind replay
   functions.
+- Persist the exact acquired `ProbeLease` on the selected wait before replay.
+  Restore that token after restart and use it on the matching terminal event;
+  never reconstruct it from the circuit's current expiry.
 - Cancellation hooks: `cancel_retry`, manual prompt, stop, step move, archive,
   and delete. Session actions clear only that session's matching wait;
   task-level invalidation clears all task-owned waits.
@@ -62,19 +65,18 @@ and resumes once in the same session.
 
 ## Acceptance
 
-1. A trusted reset shows the waiting card and resumes at the exact reset
-   instant, with no millisecond drift. It never resumes earlier. A restart
-   during the wait still resumes once.
-2. Two sessions on one task waiting on the same or different marks survive
-   restart as separate entries. Cancelling or replaying one leaves the other
-   intact; both can resume independently.
-3. With three sessions sharing one account mark, exactly one probes first. The
-   other two resume only after the probe succeeds. A failed probe renews the
-   wait.
-4. An eight-day known reset remains the mark expiry and appears on the
-   recovery card, but creates no automatic wait. The fourth consecutive wait,
-   an unknown reset, or a reset beyond the trusted bound shows the existing
-   card and does not resume automatically.
+1. Trusted-reset waits show the exact reset and never resume early. Distinct
+   session waits on one task survive restart independently; cancelling or
+   replaying one leaves the other intact.
+2. With three sessions sharing one mark, exactly one probes. Persist its exact
+   lease before replay; after restart, resume the same wait identity if its
+   turn was not dispatched, and never duplicate an active turn. Matching
+   completion releases that lease and wakes siblings; a stale token cannot
+   release a later lease. A failed durable wait/owner write does not replay;
+   a failed probe renews the wait.
+3. An eight-day reset remains visible but creates no wait. The fourth
+   consecutive wait, an unknown reset, or a reset beyond the trusted bound
+   shows the existing card without automatic resume.
 
 ## ASCII UI preview
 
@@ -95,7 +97,7 @@ Run this complete block from the repository root:
 
 ```bash
 (cd apps/backend && go test -tags fts5 ./internal/task/models -run 'ProviderLimitDeferral|Ceiling' -count=1)
-(cd apps/backend && go test -tags fts5 ./internal/orchestrator -run 'TestProviderLimitWait|TestProviderLimitWaker|TestProviderLimitDeferral|Ceiling' -count=1)
+(cd apps/backend && go test -tags fts5 ./internal/orchestrator -run 'TestProviderLimitWait|TestProviderLimitWaker|TestProviderLimitDeferral|TestProviderLimitProbeLease|Ceiling' -count=1)
 (cd apps/web && pnpm exec vitest run components/task/chat/messages/action-message.test.tsx)
 (cd apps/web && pnpm run typecheck && pnpm run i18n:check && pnpm run i18n:ratchet)
 (cd apps/web && pnpm e2e:run --project chromium tests/task/provider-limit-recovery.spec.ts)

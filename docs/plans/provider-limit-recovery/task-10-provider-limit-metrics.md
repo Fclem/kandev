@@ -55,18 +55,16 @@ in the system design.
 ## Acceptance
 
 1. All three expvar counters and structured log events use the documented
-   names, closed label values, and counting points.
-2. Accepted mark creation and renewal increment once with the resolved scope
-   and classified code. Lookups, ignored failures, duplicate no-ops, and failed
-   persistence do not increment the mark counter.
-3. Each final fallback decision increments once with its context and outcome,
-   including early `not_advertised` and `marked` results and terminal `failed`
-   paths. No fallback decision metric changes the selected route.
-4. Each durable wait transition or probe outcome increments once with its
-   context and outcome. Kanban and Office cancellation, exhaustion, successful
-   resume, and probe failure are covered; no-op or stale events do not count.
-5. Tests assert that labels never contain profile, binding, task, session, or
-   run identifiers.
+   names, closed label values, and counting points. Tests assert no profile,
+   binding, task, session, or run identifiers appear as metric labels.
+2. Accepted mark creation and renewal increment once with resolved scope/code;
+   lookups, ignored failures, duplicate no-ops, and failed persistence do not
+   increment marks. Each final fallback decision increments once with its
+   context/outcome, including early `not_advertised` and `marked` results and
+   terminal `failed` paths. Counters do not change recovery decisions.
+3. Each durable wait transition/probe outcome increments once. Test every
+   outcome in Kanban and Office, including cancellation, exhaustion, successful
+   resume, probe failure, expiry, and no-op/stale events.
 
 ## Verification
 

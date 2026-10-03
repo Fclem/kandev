@@ -117,18 +117,27 @@ that would use the same account and model.
   A different credential binding shall never inherit the mark. If a profile's
   binding cannot be proven, the mark shall apply only to that profile.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.5:** When a Kanban or Office turn
-  on a binding and model completes successfully, Kandev shall clear that
-  model-scope mark and the binding's applicable account-scope mark.
+  on a binding and model completes successfully, Kandev shall atomically
+  persist clearing that model-scope mark and the binding's applicable
+  account-scope mark. If the durable clear fails, the marks remain active and
+  waiting siblings stay blocked until a later clear succeeds.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.6:** When a mark's reset passes and
   automatic work is waiting on it, only one waiting session or run shall
   resume first as a probe. The others shall resume after the probe completes a
   turn successfully. If the probe hits the limit again, the mark shall be
   renewed and the others shall keep waiting. If the probe produces no result
-  within 10 minutes, another waiter may probe.
+  within 10 minutes, another waiter may probe. The active probe owner's exact
+  lease identity shall survive a backend restart. A successful completion
+  releases siblings; an expired or stale owner shall not release a later
+  probe's lease.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.7:** Marks shall survive a backend
   restart. A mark shall persist only the opaque binding key, the scope, the
-  model identifier, the error code, the reset or expiry instant, and
-  timestamps. It shall not persist provider text, credentials, or prompts.
+  model identifier, the error code, whether the reset is known, the reset or
+  expiry instant, and timestamps. It shall not persist provider text,
+  credentials, or prompts. A mark is active for recovery only after its durable
+  write succeeds. If a write fails, the existing durable mark, if any, remains
+  authoritative; otherwise the existing failure surface applies. No
+  unpersisted mark update may trigger fallback, waiting, or probe behavior.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.8:** On Settings > Agents, a profile
   row whose model is limited shall show a localized `limited until <time>`
   indicator. Desktop and phone shall both show it, and it shall disappear

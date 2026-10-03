@@ -35,6 +35,8 @@ work proceeds with a one-time notice.
   with gate re-evaluation that excludes the fallback.
 - A deferral write with task `SCHEDULING` and a status note, reusing the
   Task 05 record and waker.
+- A launch deferral probe persists the exact `ProbeLease` through replay and
+  transfers it to the newly created session/turn owner before its prompt.
 - A `provider_limit_notice` status message for manual prompts and launches,
   once per session and mark. Manual launch seams 1-4 call the notice helper
   after a session exists; `promptTask` calls it before dispatch.
@@ -45,21 +47,23 @@ work proceeds with a one-time notice.
 
 ## Acceptance
 
-1. A workflow auto-start, queued drain, or deferred replay on an opted-in
-   profile with a limited model starts on the fallback with one warning.
-   Without a fallback, it defers to the reset and replays exactly once.
-2. An unadvertised fallback fails before inference, and the launch then
-   defers or proceeds under the remaining rules. No third model is used.
-3. Manual `StartTask`, `StartCreatedSession`, cold resume, resumed-session
+1. Workflow auto-starts, queued drains, and deferred replays use an eligible
+   fallback or wait only with Resume after reset on and a trusted reset. A
+   launch conflict preserves the existing payload. Persist and transfer the
+   exact launch probe lease to the started session/turn before its prompt;
+   after restart resume the same launch identity if it has not started, and
+   never duplicate an active turn. Matching completion releases the exact
+   lease. A failed owner handoff sends no prompt, and a stale token cannot
+   release a later lease.
+2. Manual `StartTask`, `StartCreatedSession`, cold resume, resumed-session
    launch, and prompt paths use the requested model without deferral or model
    switching. Each shows one notice for an active mark; profiles that are not
    opted in keep their existing automatic behavior.
-4. When one automatic launch already owns the task's deferred-launch slot, a
-   distinct limit-deferred launch receives an explicit conflict. The existing
-   launch payload remains intact, and the later caller retains ownership.
-5. With no eligible fallback and no trusted reset (including an unknown or
-   more-than-seven-day reset), an opted-in automatic launch proceeds under
-   existing admission rules and does not create a wait.
+3. An unadvertised fallback fails before inference and is excluded from the
+   next gate decision; no third model is used. Park only when Resume after
+   reset is on and the reset is trusted. With resume off, an unknown reset, or
+   a reset beyond seven days, proceed under existing admission rules without a
+   wait.
 
 ## ASCII UI preview
 
@@ -76,7 +80,7 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 Run this complete block from the repository root:
 
 ```bash
-(cd apps/backend && go test -tags fts5 ./internal/orchestrator -run 'TestProviderLimitGate|ManualProviderLimitNotice|CeilingSeam|Seam1|Seam2|Seam3|Seam4' -count=1)
+(cd apps/backend && go test -tags fts5 ./internal/orchestrator -run 'TestProviderLimitGate|ProviderLimitProbeLease|ManualProviderLimitNotice|CeilingSeam|Seam1|Seam2|Seam3|Seam4' -count=1)
 (cd apps/web && pnpm exec vitest run components/chat/messages/status-message.test.tsx)
 (cd apps/web && pnpm run typecheck && pnpm run i18n:check && pnpm run i18n:ratchet)
 (cd apps/web && pnpm e2e:run --project chromium tests/task/provider-limit-recovery.spec.ts -- --grep "auto-start")

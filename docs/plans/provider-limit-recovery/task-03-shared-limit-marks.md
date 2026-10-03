@@ -28,17 +28,22 @@ system_design:
 ## Summary
 
 Add `providerlimit`, a durable store of binding-scoped limit marks on the
-existing circuit registry. Record a mark for every concrete Kanban limit
-failure, and clear it on success. Expose marks through an API and WebSocket
-notification that feed a `limited until` pill on profile rows.
+existing circuit registry. Attempt to persist a mark for every concrete
+Kanban limit failure; use it for recovery only after the write succeeds.
+Atomically clear it on success. Expose active marks through an API and
+WebSocket notification that feed a `limited until` pill on profile rows.
 
 ## In scope
 
 - Move and export `profileCredentialBindingDescriptor` into package `dynamic`.
 - Circuit registry `Close`, `List(prefix)`, and `CircuitSnapshot.ResetKnown`,
   with an additive `dynamic_resource_circuits.reset_known` column.
-- `providerlimit.Service`: `Record`, `Lookup`, `ClearOnSuccess`,
-  `AcquireProbe`/`ReleaseProbe` (10-minute lease), and `List`. Expiry follows
+- Add provider-limit-only `OpenDurable`, `CloseManyDurable`,
+  `AcquireProbeDurable`, and `ReleaseProbeDurable` operations. They persist
+  proposed state before publishing it in memory and return save errors;
+  existing dynamic-routing mutations keep their current behavior.
+- `providerlimit.Service`: `Record`, `Lookup`, atomic `ClearOnSuccess`,
+  durable probe acquire/release (10-minute lease), and `List`. Expiry follows
   AC 002.3. Provider-qualified account keys follow AC 002.9, through a
   provider-qualified-model capability on `omp-acp` and `opencode-acp` in
   `internal/agent/agents`.
@@ -58,12 +63,17 @@ notification that feed a `limited until` pill on profile rows.
 1. An account-scope mark limits every model on its binding. For OMP, it
    limits only the failed provider's models: an `anthropic/...` spend mark
    leaves `openai-codex/...` eligible. A model-scope mark limits only its
-   model. Unprovable bindings isolate to the profile, and marks survive
-   restart.
+   model. Unprovable bindings isolate to the profile, and accepted marks
+   restore after restart.
 2. A later expiry extends a mark and an earlier one never shortens it. A
    known eight-day reset sets expiry to that instant; a reset beyond seven
-   days does not permit automatic resumption. Success clears both keys. Only
-   one probe lease is held at a time, and the lease expires after 10 minutes.
+   days does not permit automatic resumption. Success atomically clears both
+   keys. Probe leases persist and restore with the exact expiry token; a stale
+   token cannot release a later lease. Failed writes or a missing persistence
+   adapter publish no new state: current recovery stays on its existing
+   surface until a later durable write succeeds. Tests cover failed mark write,
+   missing adapter, retry and restart restore, failed atomic clear, and failed
+   lease writes.
 3. A profile row shows a localized `limited until <time>` pill while a mark is
    active, on desktop and phone. The pill disappears after expiry or clear.
 
@@ -81,6 +91,7 @@ notification that feed a `limited until` pill on profile rows.
 Run this complete block from the repository root:
 
 ```bash
+(cd apps/backend && go test -tags fts5 ./internal/agent/runtime/providerlimit ./internal/agent/runtime/dynamic -run 'TestDurable|TestProviderLimitPersistence' -count=1)
 (cd apps/backend && go test -tags fts5 ./internal/agent/runtime/providerlimit ./internal/agent/runtime/dynamic -count=1)
 (cd apps/backend && go test -tags fts5 ./internal/task/repository/sqlite -run 'Circuit' -count=1)
 (cd apps/backend && go test -tags fts5 ./internal/orchestrator -run 'TestProviderLimitMark' -count=1)
@@ -109,8 +120,9 @@ endpoint).
 
 - Dynamic routing must keep ignoring `limit|` keys. Add a regression test in
   `dynamic/engine_test.go`.
-- The mark write must not block the failure path. Use the registry's pending
-  flush.
+- The existing circuit pending flush is not a durable commit for providerlimit
+  state. A failed provider-limit mutation leaves prior durable state unchanged
+  and cannot enable fallback, waiting, or probe recovery.
 
 ## Parallelism
 

@@ -32,7 +32,8 @@ model-switch prompt path and records one durable warning per decision.
 
 - `orchestrator/provider_limit_failure.go`: the decision tree up to the
   fallback branch. A non-fallback outcome returns `false`, so the existing card
-  stays in place until Task 05.
+  stays in place until Task 05. A failed durable mark write exits to that card
+  without switching.
 - The advertised check through the lifecycle `CachedModelState`.
 - Choosing between the original input and the continuation instruction.
 - The per-turn `provider_limit_fallback_turn` marker.
@@ -50,8 +51,9 @@ model-switch prompt path and records one durable warning per decision.
 1. A limit on the primary model of an opted-in compatible profile continues the
    same session on the fallback. The UI shows exactly one warning row, and a
    reload does not duplicate it.
-2. Strict, automatic-fallback, unadvertised, or marked fallbacks, and a second
-   limit in the same turn, never switch. They show the existing card.
+2. Strict, automatic-fallback, unadvertised, or marked fallbacks, a second
+   limit in the same turn, and a failed durable mark write never switch. They
+   show the existing card.
 3. A never-started turn resends its input once. A turn with prior turn events
    receives only the continuation instruction.
 

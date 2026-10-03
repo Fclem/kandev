@@ -220,25 +220,36 @@ created and restored in `backendapp/services.go`.
   are product identifiers.
 - **Record(subject, err, observedAt):** For a limit failure, the code selects
   the key. Expiry is the classified reset (whether or not it is trusted), or
-  `observedAt + 30m` when no reset is known. The mark is written through
-  `CircuitRegistry.Open(key, until, code)`. A later expiry extends a mark; an
-  earlier one never shortens it.
-- **Lookup(subject, model):** Returns the latest active mark among the
+  `observedAt + 30m` when no reset is known. Write through
+  `CircuitRegistry.OpenDurable(key, until, code)`. The mark is visible to
+  `Lookup` and recovery only after the durable write succeeds. A later expiry
+  extends a mark; an earlier one never shortens it.
+- **Lookup(subject, model):** Returns the latest active durable mark among the
   account key that applies to the model (provider-qualified when the agent
   declares it) and the model key. It also returns `ResetKnown` and `Until`.
-- **ClearOnSuccess(subject, model):** Closes the applicable account key and
-  the model key (AC 002.5).
-- **Probe:** `AcquireProbe(key, 10*time.Minute)` and `ReleaseProbe(lease,
-  success, 0)` (AC 002.6). When the probe fails with a new limit, `Record`
-  reopens the circuit with the new reset.
-- **List():** Returns active marks for the API.
+- **ClearOnSuccess(subject, model):** Atomically persists closure of the
+  applicable account key and model key with `CircuitRegistry.CloseManyDurable`
+  (AC 002.5). A failed write leaves both keys unchanged.
+- **Probe:** `AcquireProbeDurable(key, 10*time.Minute)` and
+  `ReleaseProbeDurable(lease, success, 0)` (AC 002.6). A failed acquisition
+  does not replay a waiter. When a probe fails with a new limit, `Record`
+  durably reopens the circuit with the new reset.
+- **List():** Returns active durable marks for the API.
+
+The provider-limit service uses only the durable registry mutations. A mutation
+writes the proposed snapshot before publishing it to the shared in-memory
+registry; a missing persistence adapter or failed write leaves the previous
+state unchanged. The best-effort circuit APIs remain unchanged for dynamic
+routing.
 
 Registry additions:
 
 - `CircuitSnapshot.ResetKnown bool`, persisted in a new
   `dynamic_resource_circuits.reset_known` column (additive, default 0).
-- `Close(key)`.
-- `List(prefix)`.
+- `OpenDurable`, `CloseManyDurable`, `AcquireProbeDurable`, and
+  `ReleaseProbeDurable`, with persistence errors returned to callers.
+- `Close(key)` and `List(prefix)`.
+
 
 Dynamic routing does not read `limit|` keys, so the two uses do not interact.
 
@@ -261,12 +272,14 @@ flowchart TD
   F[agent.failed, concrete profile] --> C{classifyKanbanFailure: limit failure?}
   C -- no --> R[existing recovery card]
   C -- yes --> M[providerlimit.Record]
-  M --> O{profile opted in?}
+  M --> D{durable mark write succeeded?}
+  D -- no --> R[existing recovery card]
+  D -- yes --> O{profile opted in?}
   O -- no --> R
   O -- yes --> FB{eligible fallback advertised, unmarked, not used this turn?}
   FB -- yes --> S[PromptTask with model=fallback, continuation input, warning]
   FB -- no --> W{ResumeAfterReset and trusted reset and waits < 3?}
-  W -- yes --> D[write provider-limit deferral, waiting card]
+  W -- yes --> WAIT[write provider-limit deferral, waiting card]
   W -- no --> R
 ```
 
@@ -290,9 +303,11 @@ flowchart TD
   ID, failed turn ID, requested model, the reason, and the effective model.
   The existing idempotent warning persistence deduplicates replays.
 - **Wait counter:** Session metadata `provider_limit_waits` counts consecutive
-  automatic waits. The success path in `event_handlers_agent.go`, which also
-  resets the transient budget, zeroes it, calls `ClearOnSuccess` for the
-  effective model, and releases a held probe with success.
+  automatic waits. On successful completion, first atomically persist
+  `ClearOnSuccess`. Only after that succeeds does `event_handlers_agent.go`
+  reset the transient budget and wait counter, release the exact held probe
+  lease, and wake siblings. A clear-write error keeps the mark, wait, lease,
+  and counters active, logs the error, and does not wake siblings.
 - **Waiting card:** The card reuses the transient retry status message
   metadata (`variant=warning`, `retrying`, `retry_at` as RFC 3339 with
   nanoseconds, `actions:[cancel_retry]`, `failure_code`). It adds
@@ -305,63 +320,98 @@ flowchart TD
 The task `deferred_launch` metadata keeps its existing single automatic-launch
 slot, shared with the session ceiling, and adds independent session waits:
 
-```go
 type ProviderLimitWait struct {
+    SessionID  string
+    TurnID     string
+    MarkKey    string
+    Model      string
+    Payload    map[string]interface{}
+    NotBefore  time.Time // exact reset, nanosecond precision
+    QueuedAt   time.Time
+    ProbeLease *dynamic.ProbeLease // set for the resumed probe owner
+}
+
+type ProviderLimitLaunchDeferral struct {
+    LaunchID   string
+    Kind       CeilingLaunchKind
+    Payload    map[string]interface{}
+    Origin     string
+    MarkKey    string
+    Model      string
+    NotBefore  time.Time
+    QueuedAt   time.Time
+    ProbeLease *dynamic.ProbeLease // held until a started session owns it
+}
+
+type ProviderLimitProbeOwner struct {
     SessionID string
     TurnID    string
     MarkKey   string
     Model     string
-    Payload   map[string]interface{}
-    NotBefore time.Time // exact reset, nanosecond precision
-    QueuedAt  time.Time
-}
-
-type ProviderLimitLaunchDeferral struct {
-    LaunchID  string
-    Kind      CeilingLaunchKind
-    Payload   map[string]interface{}
-    Origin    string
-    MarkKey   string
-    Model     string
-    NotBefore time.Time
-    QueuedAt  time.Time
+    Lease     dynamic.ProbeLease
 }
 
 type ProviderLimitDeferrals struct {
     SessionWaits map[string]ProviderLimitWait // stable session + turn identity
     Launch       *ProviderLimitLaunchDeferral // one task-owned automatic launch
+    ProbeOwners  map[string]ProviderLimitProbeOwner // started launch probes
 }
 ```
 
 - **Turn waits:** Each wait is keyed by the session ID and failed-turn ID.
   Duplicate delivery for the same turn is idempotent. Distinct sessions on
-  the same task occupy distinct entries and do not replace one another.
+  the same task occupy distinct entries and do not replace one another. When
+  a waiter is selected, persist its exact `ProbeLease` on the wait before
+  replay; keep that wait as the probe owner until terminal handling.
 - **Launch deferrals:** The launch entry contains the kind, complete replay
-  payload, origin, stable launch identity, mark key, model, and timing. It
-  extends the existing task-owned launch slot rather than adding another one.
-  The same launch identity survives transitions between limit and ceiling
-  admission. A later distinct launch gets the existing explicit conflict and
-  retains ownership at its caller.
-- **Coexistence:** Merge and clear operations update one wait entry or the
-  shared launch intent with compare-and-swap. They preserve sibling session
-  waits, the existing ceiling fields, and dependency intent. A replayed launch
-  continues through every admission gate; a ceiling refusal updates the same
-  launch identity rather than replacing a session wait or another launch.
+  payload, origin, stable launch identity, mark key, model, timing, and its
+  exact `ProbeLease` while the launch probe is pending. It extends the existing
+  task-owned launch slot rather than adding another one. The same launch
+  identity survives transitions between limit and ceiling admission. A later
+  distinct launch gets the existing explicit conflict and retains ownership
+  at its caller.
+- **Coexistence:** Merge and clear operations update one wait entry, probe
+  owner, or shared launch intent with compare-and-swap. They preserve sibling
+  session waits, the existing ceiling fields, and dependency intent. A replayed
+  launch continues through every admission gate; a ceiling refusal updates the
+  same launch identity rather than replacing a session wait or another launch.
 - **Waker:** `providerLimitWaker` lists tasks with pending provider-limit
   entries on startup. It arms one timer for the earliest `NotBefore` across all
   entries and re-arms after every write. The one-minute session reconciliation
   sweep also calls it as a safety net. At a due time it groups session waits by
-  `MarkKey` and acquires the probe for each group. It replays one wait through
-  the existing replay functions. Siblings wait until the probe succeeds, then
-  replay in `QueuedAt` order. When a probe lease expires, the next waiter may
-  probe (AC 002.6). Launch deferrals use the same mark probe and remain
-  independently addressable.
+  `MarkKey` and calls `AcquireProbeDurable`. It persists the returned lease
+  token on the selected wait before replaying it. If the owner write fails, it
+  does not replay; the durable lease expires. If a selected wait already has
+  an unexpired lease after restart, inspect that session/turn: wait for an
+  active execution, or resume the same persisted wait identity if its turn
+  was not dispatched. Never acquire another lease or duplicate an active turn.
+  At expiry, choose a different waiting identity when one exists; persist its
+  new lease before replay. Siblings wait until success, then replay in
+  `QueuedAt` order. A stale owner retains only its old token and cannot release
+  a later lease (AC 002.6).
+- **Launch probe handoff:** Persist the exact lease on the launch deferral
+  before replay. Resume a pending launch using the same launch identity and
+  lease after restart. Once the launched session and first turn identity
+  exist, atomically transfer the token to `ProbeOwners[session+turn]` before
+  sending the prompt and clearing the launch slot. If owner persistence fails,
+  do not send the prompt; retain the launch identity so the existing session
+  can complete the handoff on retry. The terminal handler reads the matching
+  owner record; it never reconstructs a token from current circuit state. A
+  restart restores the wait/owner token and does not create a duplicate probe.
+- **Probe completion:** For a matching successful `AgentCompleted`, durably
+  clear the mark, release the persisted token with
+  `ReleaseProbeDurable(lease, true, 0)`, remove that wait/owner, and wake
+  siblings. A clear-write error leaves ownership and siblings parked. A limit
+  failure durably renews the mark and requeues that wait under its new turn
+  identity. A non-limit failure or stop never success-releases the token;
+  siblings remain parked until the lease expires.
 - **Cancellation (AC 004.5):** Cancel, manual prompt, and session stop clear
   only the matching session/turn wait by identity. Step transition, archive,
   and delete clear every wait and launch intent invalidated by that task
   transition. Replay of an already-cleared identity is a no-op.
-- **Restart:** Waits, launch deferrals, and marks are durable. The waker
-  re-arms on startup, and a past-due entry fires immediately (AC 004.4).
+- **Restart:** Waits, launch deferrals, probe-owner tokens, and marks are
+  durable. The waker re-arms on startup, and a past-due entry fires
+  immediately (AC 004.4).
 
 ## Automatic launch gate
 
@@ -407,7 +457,9 @@ each path continues with the requested model (AC 005.4).
   `tryPostStartFallback` in `event_subscribers.go`. It classifies with the
   shared input and records the mark for the run's concrete execution profile:
   `resolved_execution_profile_id`, or the agent's `execution_agent_profile_id`
-  for unrouted runs. For an opted-in profile:
+  for unrouted runs. If durable `Record` fails, log it and continue with
+  existing Office routing/escalation; do not trigger provider-limit fallback
+  or parking. For an opted-in profile with a durable mark:
   - When the fallback is eligible and unmarked, and the run has no limit
     fallback in the current cycle, requeue through
     `RequeueRunForNextCandidate` semantics on the same candidate. Store
@@ -452,10 +504,15 @@ each path continues with the requested model (AC 005.4).
 
 ## Failure and recovery
 
-- **Persistence failures:** If a mark write fails, Kandev logs it. Recovery
-  proceeds on the in-memory registry, using the circuit registry's pending
-  flush. If a deferral write fails, the surface falls back to the existing
-  recovery card. A wait is never armed without its durable record.
+- **Persistence failures:** Provider-limit state changes use durable registry
+  mutations that return write errors and publish no unpersisted state. A failed
+  mark write logs the error; the current Kanban failure uses its existing
+  recovery card, and Office uses existing routing/escalation. Neither path
+  starts fallback, wait, or probe recovery from the failed update. Any previous
+  durable mark remains authoritative. A failed success-clear leaves its marks
+  active and siblings parked. A failed probe acquisition does not replay the
+  waiter. A failed deferral or probe-owner write does not launch or resume work;
+  an acquired lease without a durable owner record is left to expire.
 - **Unsafe input:** A missing catalog, an unknown binding, or a malformed
   delay causes no switch and no trusted reset. The failure takes the existing
   manual surface.

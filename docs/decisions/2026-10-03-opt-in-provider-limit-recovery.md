@@ -34,16 +34,18 @@ default:
 - **Resume after reset.** This resumes the same session, or requeues the same
   Office run, after a trusted reset no more than seven days away.
 
-Every limit failure on a concrete profile records a shared limit mark, whether
-or not the profile opted in. The mark is keyed by the existing credential
-binding fingerprint, with `account` or `model` scope, and is stored in the
-existing resource circuit table. Recording does not depend on
-`features.dynamicAgentRouting`. Only opted-in profiles change automatic
-behavior because of a mark. Automatic launches use an eligible fallback when
-available, wait only when Resume after reset is on and a reset is trusted, and
-otherwise follow existing admission rules with the mark retained. Manual
-launches and prompts on any profile always keep the requested model and show a
-notice without deferral.
+Every limit failure on a concrete profile attempts to record a shared limit
+mark; it becomes active for recovery only after the durable circuit-store write
+succeeds. The mark is keyed by the existing credential binding fingerprint,
+with `account` or `model` scope, and is stored in the existing resource circuit
+table. Recording does not depend on `features.dynamicAgentRouting`. If the
+write fails, do not act on that unpersisted update: preserve the existing
+failure surface and any prior durable mark. Only opted-in profiles change
+automatic behavior because of a durable mark. Automatic launches use an
+eligible fallback when available, wait only when Resume after reset is on and
+a reset is trusted, and otherwise follow existing admission rules with the
+mark retained. Manual launches and prompts on any profile always keep the
+requested model and show a notice without deferral.
 
 Kanban session waits use independently keyed entries in the task's
 `deferred_launch` metadata, so several sessions on one task can wait
@@ -51,6 +53,10 @@ concurrently. Automatic launch deferral keeps the existing single task-owned
 launch slot and explicit conflict behavior. Office waits reuse run parking and
 `earliest_retry_at`. Dynamic profiles keep their conductor policies, and
 concrete candidates ignore the new switches.
+
+The exact probe lease is persisted with its waiting session or launch and
+transferred to the started session's turn owner. A restart restores that token;
+a stale owner cannot release a later probe's lease.
 
 ## Consequences
 

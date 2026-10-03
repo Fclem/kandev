@@ -44,8 +44,9 @@ for every other case.
 - Store the acquired `ProbeLease` identity with the lifted run and release it
   from the matching terminal handler.
 - On successful `AgentCompleted`, resolve the run's execution binding and
-  actual `effective_model`, call `providerlimit.ClearOnSuccess`, and release an
-  attached probe lease after clearing. Stops and failures do not clear marks.
+  actual `effective_model`, atomically persist `providerlimit.ClearOnSuccess`,
+  and release the attached probe lease only after the clear succeeds. A clear
+  write failure leaves marks active and siblings parked.
 - The dispatch gate in `DispatchWithRouting` and unrouted dispatch.
 
 ## Out of scope
@@ -55,27 +56,20 @@ for every other case.
 
 ## Acceptance
 
-1. An opted-in Office run that hits a limit relaunches once on an eligible
-   fallback before provider advancement. The route attempt records both models
-   and the reason. An unadvertised fallback fails before inference and does not
-   drift to another model.
-2. After an unadvertised fallback, park only when Resume after reset is on
-   and the mark has a trusted reset. With resume off or an unknown or
-   more-than-seven-day reset, keep the existing routing and escalation; do not
-   create a wait. Test each boundary explicitly.
-3. Without an applicable fallback, a trusted reset with resume on parks the
-   run until the reset. Exactly one parked run per mark lifts first, and the
-   rest follow after success.
-4. A successful Office turn clears the mark for the resolved execution
-   binding and effective model. A successful probe releases a parked sibling.
-   Persist and recover the exact acquired `ProbeLease` identity on the lifted
-   run; its matching `AgentCompleted` releases that lease and wakes the sibling,
-   while an unrelated or stale lease remains untouched.
-5. `AgentFailed` and `AgentStopped` do not clear marks. A limit failure renews
-   the mark and leaves siblings parked. Separately test a non-limit failed
-   probe and a non-limit stopped probe: siblings stay parked until each
-   10-minute lease expires, then a different waiter may probe.
-6. Runs on profiles that are not opted in keep their current Office test
+1. An opted-in Office limit failure uses an eligible fallback once before
+   provider advancement. An unadvertised fallback fails before inference and
+   follows the no-fallback decision: park only with Resume after reset on and a
+   trusted reset; otherwise keep existing routing/escalation. A failed durable
+   mark write also keeps existing routing/escalation without limit fallback or
+   parking. Test resume-off, unknown, and >7-day reset boundaries.
+2. `AgentCompleted` atomically clears both resolved marks, then releases only
+   the exact persisted `ProbeLease` and wakes siblings. If clear persistence
+   fails, marks and siblings remain blocked. `AgentFailed` and `AgentStopped`
+   do not clear marks; limit failure renews the mark. Independently test
+   non-limit failed and stopped probes staying parked until their 10-minute
+   lease expires, then a different waiter probes. Stale/unrelated leases remain
+   untouched.
+3. Runs on profiles that are not opted in keep their current Office test
    outcomes. Health retry and mark clearing do not affect each other.
 
 ## Verification

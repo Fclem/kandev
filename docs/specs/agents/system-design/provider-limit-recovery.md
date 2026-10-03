@@ -249,6 +249,15 @@ Registry additions:
 - `OpenDurable`, `CloseManyDurable`, `AcquireProbeDurable`, and
   `ReleaseProbeDurable`, with persistence errors returned to callers.
 - `Close(key)` and `List(prefix)`.
+- `CircuitPersistence.SaveCircuits(ctx, snapshots)` is an all-or-nothing
+  batch operation. The SQLite adapter writes the batch in one database
+  transaction and returns only after commit; any row or commit error rolls
+  back the entire batch. `CloseManyDurable` submits both proposed closed
+  snapshots in one call and publishes neither in-memory change unless that
+  call succeeds. `SaveCircuit` remains available for existing best-effort
+  mutations; every `CircuitPersistence` implementation, including test
+  fakes, implements the batch operation.
+
 
 
 Dynamic routing does not read `limit|` keys, so the two uses do not interact.

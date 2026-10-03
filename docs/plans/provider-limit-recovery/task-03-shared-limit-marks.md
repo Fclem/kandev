@@ -42,6 +42,11 @@ WebSocket notification that feed a `limited until` pill on profile rows.
   `AcquireProbeDurable`, and `ReleaseProbeDurable` operations. They persist
   proposed state before publishing it in memory and return save errors;
   existing dynamic-routing mutations keep their current behavior.
+- Extend `CircuitPersistence` with an all-or-nothing `SaveCircuits` batch.
+  Implement the SQLite adapter with one transaction covering every snapshot
+  upsert; a row or commit error rolls back the full batch. Update every
+  persistence implementation and test fake. `CloseManyDurable` writes both
+  closed snapshots in one batch and changes neither in-memory mark on failure.
 - `providerlimit.Service`: `Record`, `Lookup`, atomic `ClearOnSuccess`,
   durable probe acquire/release (10-minute lease), and `List`. Expiry follows
   AC 002.3. Provider-qualified account keys follow AC 002.9, through a
@@ -68,12 +73,16 @@ WebSocket notification that feed a `limited until` pill on profile rows.
 2. A later expiry extends a mark and an earlier one never shortens it. A
    known eight-day reset sets expiry to that instant; a reset beyond seven
    days does not permit automatic resumption. Success atomically clears both
-   keys. Probe leases persist and restore with the exact expiry token; a stale
-   token cannot release a later lease. Failed writes or a missing persistence
+   keys through one `SaveCircuits` transaction. If the second SQLite snapshot
+   write fails after the first row operation, the transaction rolls back and
+   both marks remain active in memory and after repository reopen/restore.
+   Probe leases persist and restore with the exact expiry token; a stale token
+   cannot release a later lease. Failed writes or a missing persistence
    adapter publish no new state: current recovery stays on its existing
-   surface until a later durable write succeeds. Tests cover failed mark write,
-   missing adapter, retry and restart restore, failed atomic clear, and failed
-   lease writes.
+   surface until a later durable write succeeds. Tests cover failed mark
+   writes, missing adapter, retry and restart restore, atomic-clear registry
+   failure, SQLite rollback after the first row operation plus reopen/restore,
+   and failed lease writes.
 3. A profile row shows a localized `limited until <time>` pill while a mark is
    active, on desktop and phone. The pill disappears after expiry or clear.
 

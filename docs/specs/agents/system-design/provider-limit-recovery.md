@@ -477,28 +477,27 @@ each path continues with the requested model (AC 005.4).
     `errLimitFallbackUnavailable` fails the launch before inference and does
     not try another model. Treat the fallback as unavailable, then apply the
     no-fallback decision below (AC 006.2).
-  - When no fallback applies, park with `ParkRunForProviderCapacity`,
-    `waiting_for_limit_reset`, and `earliest_retry_at = reset` only when
+  - When no fallback applies, park with `ParkRunForProviderCapacity`, the
+    existing `waiting_for_provider_capacity` status, and opaque
+    `provider_limit_wait_key`; set `earliest_retry_at = reset` only when
     resume is on and the reset is trusted (AC 006.3).
   - Otherwise, preserve existing routing and escalation. An unavailable
     fallback alone never creates a wait.
-- **Lifting:** Before `LiftParkedRuns` clears a due sibling's routing block,
-  check for a retained `provider_limit_probe` owner on the same mark key. A
-  successful owner remains a barrier after mark closure until exact lease
-  release and owner cleanup persist; every tick keeps due siblings blocked.
-  Startup reconciliation retries before lift; failed/stopped owners stop
-  blocking at lease expiry. The lifted run retains its exact token.
-- **Successful turn:** Only a successful `AgentCompleted` event clears marks;
-  `AgentStopped` and `AgentFailed` do not. Resolve the binding from the run's
-  `resolved_execution_profile_id`, or its concrete execution profile for an
-  unrouted run, and the actual `effective_model`. Call
-  `providerlimit.ClearOnSuccess` for that binding and model. For a run lifted
-  as a probe, the handler reads the exact persisted `ProbeLease` identity and
-  calls `ReleaseProbeDurable(lease, true, 0)` after clearing. A lease already
-  invalidated by `ClearOnSuccess` is a successful no-op; unrelated or stale
-  tokens never release a later lease.
-- **Release failure:** Keep the exact owner/waits parked; startup reconciliation
-  retries release and cleanup before sibling dispatch.
+- **Lifting:** Persist the opaque `provider_limit_wait_key` on each wait run
+  and reuse the existing status and badge. `redispatchWaitingRuns`,
+  workspace-disable clearing, and `LiftParkedRuns` preserve keyed waits;
+  routed/unrouted dispatch still applies the limit gate. Before clearing a
+  due sibling, `LiftParkedRuns` checks for a retained same-key successful
+  `provider_limit_probe` owner, even after mark closure. Remove the barrier
+  only after exact lease release and owner/wait cleanup persist. Startup
+  reconciliation precedes lift; failed/stopped owners unblock at expiry.
+- **Successful turn:** Only successful `AgentCompleted` clears marks. Resolve
+  binding from `resolved_execution_profile_id` or the concrete profile, and
+  model from `effective_model`. If `ClearOnSuccess` fails, stop before release,
+  owner cleanup, or wake. Otherwise release the exact probe token with
+  `ReleaseProbeDurable`; an invalidated or stale token is a no-op. Persist
+  owner/wait-key cleanup before waking. Any clear/release/cleanup error retains
+  owner and waits; startup reconciliation retries before dispatch.
 - **Unsuccessful turn:** `AgentStopped` and `AgentFailed` leave marks active.
   A classified limit failure records the renewed mark; a non-limit
   unsuccessful probe does not release its lease as a success. Siblings remain
@@ -513,15 +512,11 @@ each path continues with the requested model (AC 005.4).
 
 ## Failure and recovery
 
-- **Persistence failures:** Provider-limit state changes use durable registry
-  mutations that return write errors and publish no unpersisted state. A failed
-  mark write logs the error; the current Kanban failure uses its existing
-  recovery card, and Office uses existing routing/escalation. Neither path
-  starts fallback, wait, or probe recovery from the failed update. Any previous
-  durable mark remains authoritative. A failed success-clear leaves its marks
-  active and siblings parked. A failed probe acquisition does not replay the
-  waiter. A failed deferral or probe-owner write does not launch or resume work;
-  an acquired lease without a durable owner record is left to expire.
+- **Persistence failures:** Publish provider-limit mutations only after durable
+  commit. Log failed mark writes, preserve prior marks, and use existing
+  Kanban/Office surfaces instead of limit fallback/waits/probes. Failed clears
+  keep siblings blocked. Failed probe, deferral, or owner writes do not replay
+  or launch work; unowned leases expire.
 - **Unsafe input:** A missing catalog, an unknown binding, or a malformed
   delay causes no switch and no trusted reset. The failure takes the existing
   manual surface.
@@ -536,6 +531,8 @@ Marks hold opaque keys, model IDs, codes, and instants. Deferral payloads keep
 the ceiling contract, which already persists prompts for replay. Provider text
 stays in the existing sanitized, bounded diagnostic of the recovery message.
 The new delay field carries a number, never header text.
+The internal `provider_limit_wait_key` and `provider_limit_probe` run fields are
+excluded from JSON; the API retains the existing routing status and retry time.
 
 ## Observability
 

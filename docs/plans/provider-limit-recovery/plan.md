@@ -37,11 +37,12 @@ The work orders run in this order:
 7. Provider-limit metrics after all instrumented paths are delivered.
 8. Documentation and lifecycle promotion.
 
-Every step leaves a working product, and nothing changes until a profile opts
-in. Marks come before any consumer because both Kanban and Office read them.
-Fallback comes before waits because a wait is the branch taken after a
-fallback is not possible. The launch gate introduces the launch-scoped exact
-fallback policy that Office reuses.
+Automatic fallback and reset-wait recovery are opt-in. Mark recording and
+limited status apply regardless of opt-in; Task 09's OMP prompt-end conversion
+also applies to every OMP profile. Marks come before any consumer because both
+Kanban and Office read them. Fallback comes before waits because a wait is the
+branch taken after fallback is not possible. The launch gate introduces the
+launch-scoped exact fallback policy that Office reuses.
 
 ### Settled decisions
 
@@ -207,7 +208,7 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 | 003.1-003.6 | `orchestrator/provider_limit_failure_test.go`, including no fallback on durable mark-write failure |
 | 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (same-task independent waits across restart/cancel/replay; exact lease A acquire, restart, matching completion release, sibling lift, and stale A cannot release B; failed owner persistence does not replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
 | 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict and unknown/>7-day proceed cases; launch probe lease persists and transfers to the session/turn owner before prompt, then survives restart and releases only on matching completion), manual notice integration tests for `StartTask`, `StartCreatedSession`, `ensureSessionRunning`, `ResumeTaskSessionWithOptions`, and `promptTask`, plus `status-message.test.tsx` |
-| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` eligible fallback; unadvertised fallback fails before inference without trying another model, then parks only for resume-on + trusted reset (including tests for resume-off, unknown, and >7-day reset); failed mark write keeps existing routing and does not trigger limit fallback/parking; success clears both resolved marks only after durable write and wakes a sibling; persist/recover exact lease A and prove matching completion releases A while unrelated/stale lease B is untouched; Office success uses `ReleaseProbeDurable`; injected release/cleanup failure keeps the exact owner and due siblings blocked across ordinary scheduler ticks and restart, despite cleared marks; reconciliation retries before a single sibling lift; `AgentFailed` and `AgentStopped` preserve marks/sibling wait, with independent non-limit failed/stopped probe tests proving siblings stay parked before expiry and a different waiter may probe after the exact 10-minute lease expiry; limit failure renews the mark. |
+| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` eligible fallback; unadvertised fallback fails before inference without trying another model, then parks only for resume-on + trusted reset; Office `AgentCompleted` clear failure retains marks/owner/waits and does not release, clean up, or wake; release/cleanup failures after clear keep due siblings blocked across ticks and restart, then reconciliation allows one lift; `office/repository/sqlite/run_routing_test.go` and `office/routing/provider_test.go` prove health retry and routing disable preserve keyed limit waits; `office/scheduler/routing_lifecycle_test.go` proves each due lift honors the same-mark owner across restart; `app/office/agents/[id]/runs/components/run-header.test.tsx` covers the reused capacity badge; failed/stopped probes remain parked until expiry, and limit failures renew the mark. |
 | Observability | Task 10 metric tests for mark recording, each fallback outcome, and Kanban/Office wait transitions; closed labels, structured logs, and no-op/duplicate boundaries. |
 
 ## E2E tests
@@ -222,6 +223,7 @@ reset is the given number of seconds after the error. Other models succeed.
 | Limit leads to a fallback switch and a warning | 003.1, 003.3 | `tests/task/provider-limit-recovery.spec.ts` (chromium) |
 | Limit without fallback: wait card, cancel, auto resume | 004.1, 004.5 | same file; mobile cancel in `tests/task/mobile-provider-limit-recovery.spec.ts` |
 | Profile-row limited pill | 002.8 | `tests/settings/agent-limit-recovery-settings.spec.ts` |
+| Office limit wait, shared capacity badge, and probe resume | 006.3-006.4 | extend `tests/office/office-routing-recovery.spec.ts` (chromium) |
 
 ## Work orders
 

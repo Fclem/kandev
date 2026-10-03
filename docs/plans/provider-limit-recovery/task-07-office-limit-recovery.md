@@ -34,26 +34,22 @@ for every other case.
 
 ## In scope
 
-- The `limit_fallback_model` and `provider_limit_probe` run fields (additive
-  migration), dispatch of the same execution profile under the launch-scoped
-  exact policy, and route attempt `requested_model`/`effective_model`/
-  `override_reason`.
-- Blocked status `waiting_for_limit_reset` through
-  `ParkRunForProviderCapacity`, a probe-gated lift in
-  `SchedulerIntegration.liftParkedRoutingRuns`, and its localized Office label.
-- Store the acquired `ProbeLease` identity with the lifted run and release it
-  from the matching terminal handler using `ReleaseProbeDurable`.
+- Add `limit_fallback_model`, `provider_limit_wait_key`, and
+  `provider_limit_probe` to shared `internal/runs/models.Run`; keep the two
+  internal ownership fields out of JSON and add Office SQLite persistence.
+- Park limit waits with the existing `waiting_for_provider_capacity` status
+  and `provider_limit_wait_key`, preserving the current due query and run-header
+  badge. The opaque key distinguishes them from provider-health waits.
+- Store the exact `ProbeLease` on its owner run. `LiftParkedRuns` blocks due
+  siblings while a same-mark successful owner remains; health retry and
+  workspace-routing disable preserve keyed limit waits. Routed and unrouted
+  dispatch both recheck the provider-limit gate.
 - On successful `AgentCompleted`, resolve the run's execution binding and
   actual `effective_model`, atomically persist `providerlimit.ClearOnSuccess`,
   then durably release the attached probe lease. Reconcile finished successful
   runs that retain probe ownership on startup before dispatching their siblings.
-  A clear or release write failure retains the exact owner and parked siblings.
-- Every `LiftParkedRuns` due-row path checks for a retained same-mark
-  `provider_limit_probe` owner before clearing a routing block. Successful
-  completion keeps that barrier until durable lease release and owner cleanup
-  both persist, including across startup reconciliation.
-
-- The dispatch gate in `DispatchWithRouting` and unrouted dispatch.
+  A clear, release, or owner-cleanup write failure retains the exact owner and
+  parked siblings.
 
 ## Out of scope
 
@@ -70,19 +66,23 @@ for every other case.
    parking. Test resume-off, unknown, and >7-day reset boundaries.
 2. `AgentCompleted` atomically clears both resolved marks, then calls
    `ReleaseProbeDurable` for only the exact persisted `ProbeLease`. After
-   release and owner/wait cleanup both persist, the handler wakes siblings
-   exactly once. If mark clear, lease release, or owner cleanup fails, the owner
-   and sibling waits remain durable and no sibling wakes. Every scheduler tick's
-   due-run lift checks the retained same-mark owner; due siblings stay routing-
-   blocked even after mark closure, before and after restart reconciliation.
-   Inject release and owner-cleanup persistence failures after clear succeeds,
-   run normal ticks and restart reconciliation, then verify the sibling remains
-   blocked until cleanup persists and is lifted exactly once afterward.
-   `AgentFailed` and `AgentStopped` do not clear marks; limit failure renews
+   release and owner/wait cleanup persist, it wakes siblings once. If clear,
+   release, or cleanup fails, the owner and sibling waits remain durable and
+   no sibling wakes. `LiftParkedRuns`, provider-health retry, and workspace
+   routing disable preserve keyed limit waits while an owner remains; routed
+   and unrouted dispatch continue to enforce the limit gate.
+3. Inject `ClearOnSuccess` persistence failure in the Office `AgentCompleted`
+   path. Verify the lease is not released, owner/waits remain, and health retry,
+   routing disable, ordinary ticks, and restart do not lift due siblings.
+   Restore persistence and retry; verify one lift. Also inject release and
+   owner-cleanup failures after clear succeeds; verify due siblings remain
+   blocked across ordinary ticks and restart reconciliation, then lift exactly
+   once after cleanup persists.
+4. `AgentFailed` and `AgentStopped` do not clear marks; limit failure renews
    the mark. Independently test non-limit failed and stopped probes staying
    parked until their 10-minute lease expires, then a different waiter probes.
    Stale or unrelated leases remain untouched.
-3. Runs on profiles that are not opted in keep their current Office test
+5. Runs on profiles that are not opted in keep their current Office test
    outcomes. Health retry and mark clearing do not affect each other.
 
 ## Verification
@@ -99,11 +99,14 @@ git diff --check
 
 ## Files likely touched
 
+- `apps/backend/internal/runs/models/run.go`
 - `apps/backend/internal/office/service/{event_subscribers.go,scheduler_integration.go}`
 - `apps/backend/internal/office/scheduler/{routing_lifecycle.go,dispatch_routing.go}`
-- `apps/backend/internal/office/repository/sqlite/{run_routing.go,base_migrations.go,route_attempts.go}`
-- `apps/backend/internal/office/models/models.go`
-- `apps/web/locales/*/office.json`
+- `apps/backend/internal/office/repository/sqlite/{run_routing.go,run_routing_test.go,base_migrations.go,route_attempts.go}`
+- `apps/backend/internal/office/routing/{provider.go,provider_test.go}`
+- `apps/backend/internal/office/service/provider_limit_test.go`
+- `apps/backend/internal/office/scheduler/routing_lifecycle_test.go`
+- `apps/web/e2e/tests/office/office-routing-recovery.spec.ts`
 
 ## Dependencies
 

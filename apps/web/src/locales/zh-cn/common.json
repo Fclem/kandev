@@ -224,7 +224,7 @@
   "improveKandevBugPlaceholder": "例如：打开看板时，在宽度小于 1200px 的屏幕上，列标题文字会与任务数量徽章重叠…",
   "improveKandevFeaturePlaceholder": "例如：添加键盘快捷键，以便从任务详情视图将任务标记为完成，并在任务操作菜单中显示该快捷键…",
   "improveKandevIssuePlaceholder": "描述你想发布的问题或请求。智能体会按匹配的 GitHub 议题模板询问所需细节…",
-  "includeRecentBackendAndBrowserLogs": "将最近的后端与浏览器日志作为上下文提供给智能体",
+  "includeRecentLogs": "包含近期日志",
   "installed": "已安装",
   "integrations": "集成",
   "interruptedByRestart": "因重启而中断",

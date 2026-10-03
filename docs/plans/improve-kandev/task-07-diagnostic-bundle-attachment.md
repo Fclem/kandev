@@ -1,7 +1,7 @@
 ---
 id: "07-diagnostic-bundle-attachment"
 title: "Align Improve Kandev diagnostic bundle attachment"
-status: pending
+status: completed
 wave: 5
 depends_on: ["03-frontend-dialog-and-mobile", "04-e2e-coverage", "06-workspace-target-choice-e2e"]
 plan: "plan.md"
@@ -134,4 +134,17 @@ Tasks 03, 04, and 06. Task 06 edits the same Improve Kandev browser E2E file, so
 
 ## Results
 
-Pending implementation.
+`buildImproveKandevDescription` now requests only backend, frontend, and
+runtime logs; it waits for ready/partial, leases with the bootstrap directory
+and terminal job ID, and appends the lease-returned path. The shared task-create
+submit wiring now forwards its description transformer, so Improve Kandev
+actually attaches the context before task creation. Collection and lease
+failures remain best-effort. The renamed localized **Include recent logs** key
+is present in every shipped locale and pseudo catalog; the obsolete key is
+removed.
+
+Helper tests passed (ready, partial polling, failed, expired, and rejected
+lease). Desktop E2E passed for partial archive path submission and expired
+collection without blocking task creation. Mobile E2E passed for the localized
+toggle. `i18n:check`, `i18n:ratchet`, frontend typecheck, and targeted ESLint
+passed.

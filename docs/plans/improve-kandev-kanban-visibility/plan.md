@@ -1,6 +1,6 @@
 ---
 created: 2026-09-26
-status: draft
+status: done
 requirements:
   - REQ-WORKSPACES-IMPROVE-KANDEV-001
 system_design:
@@ -106,11 +106,11 @@ Structural requirement: the unfiltered desktop board presents cards from both ta
 
 ## Work orders
 
-- [ ] [Task 01: Show Improve Kandev cards on Kanban](task-01-show-improve-kandev-cards.md)
+- [x] [Task 01: Show Improve Kandev cards on Kanban](task-01-show-improve-kandev-cards.md) (`done`)
 
 ## Verification results
 
-Pending implementation.
+Task 01 complete. Focused backend regression tests passed; frontend selector and WebSocket tests passed (30 tests), web typecheck and targeted ESLint passed, Chromium E2E passed (2 tests), and mobile-chrome E2E passed (2 tests).
 
 ## Risks
 

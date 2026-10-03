@@ -1,4 +1,14 @@
-export type WorkflowLike = { id: string; name: string; hidden?: boolean };
+export type WorkflowLike = {
+  id: string;
+  name: string;
+  hidden?: boolean;
+  workflowTemplateId?: string | null;
+};
+
+const IMPROVE_WORKFLOW_TEMPLATE_IDS: Record<string, true> = {
+  "improve-kandev": true,
+  "report-kandev-issue": true,
+};
 
 /**
  * Selects the workflow swimlanes the board renders.
@@ -20,17 +30,19 @@ export function selectWorkflowSwimlanes(
     const workflow = workflows.find((item) => item.id === workflowFilter && snapshots[item.id]);
     return workflow ? [workflow] : [];
   }
-  return workflows.filter((workflow) => !workflow.hidden && snapshots[workflow.id]);
+  return workflows.filter(
+    (workflow) =>
+      Boolean(snapshots[workflow.id]) &&
+      (!workflow.hidden ||
+        Boolean(IMPROVE_WORKFLOW_TEMPLATE_IDS[workflow.workflowTemplateId ?? ""])),
+  );
 }
 
 /**
- * Selects the workflows the mobile board navigator offers. The navigator is
- * the only workflow switcher on the mobile kanban page (the display menu hides
- * its workflow select there), so hidden workflows with tasks — e.g. Improve
- * Kandev, whose tasks land in a hidden workflow — must be reachable, mirroring
- * the sidebar which already aggregates their snapshots. A hidden workflow with
- * live hidden columns must also stay reachable so its columns can be restored.
- * Empty hidden system workflows stay out.
+ * Selects the workflows the mobile board navigator offers. Both Improve
+ * Kandev workflows stay reachable even when filters remove every task.
+ * Other hidden workflows remain eligible only when they have tasks or live
+ * hidden columns.
  */
 export function selectMobileNavigatorWorkflows(
   visibleOrdered: WorkflowLike[],
@@ -46,7 +58,11 @@ export function selectMobileNavigatorWorkflows(
   for (const workflow of workflows) {
     if (!workflow.hidden || visibleIds.has(workflow.id)) continue;
     const tasks = getFilteredTasks(workflow.id);
-    if (tasks.length > 0 || hasLiveHiddenSteps(workflow.id)) {
+    if (
+      tasks.length > 0 ||
+      hasLiveHiddenSteps(workflow.id) ||
+      Boolean(IMPROVE_WORKFLOW_TEMPLATE_IDS[workflow.workflowTemplateId ?? ""])
+    ) {
       entries.push({ workflow, tasks });
     }
   }

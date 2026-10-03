@@ -284,6 +284,7 @@ export type WorkflowsState = {
     sortOrder?: number;
     agent_profile_id?: string;
     hidden?: boolean;
+    workflowTemplateId?: string | null;
     /**
      * Phase 2 (ADR-0004) UX hint. Read by `<TaskMetaRail>` to choose the
      * right meta surface (kanban / office / multi-agent). Backend never

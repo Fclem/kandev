@@ -8,7 +8,7 @@ import { createDiagnosticBundle, fetchDiagnosticBundle } from "@/lib/api/domains
 import type { DiagnosticBundleJob } from "@/lib/types/system";
 
 /**
- * Creates the same owner-scoped frontend+backend ZIP used by System Logs,
+ * Creates the standard backend, frontend, and runtime ZIP used by System Logs,
  * leases it into the Improve Kandev task context, and appends that single path
  * to the task description. Diagnostics stay best-effort.
  */
@@ -21,14 +21,14 @@ export async function buildImproveKandevDescription(
   if (!captureLogs) return description;
 
   try {
-    const created = await createDiagnosticBundle(["backend", "frontend"]);
+    const created = await createDiagnosticBundle(["backend", "frontend", "runtime"]);
     const completed = await waitForDiagnosticBundle(created);
     const lease = await leaseDiagnosticBundle(bootstrap.bundle_dir, completed.id);
     return [
       description,
       "",
       "---",
-      "Diagnostic bundle for the agent (frontend + backend logs):",
+      "Diagnostic bundle for the agent (backend, frontend, and runtime logs):",
       `- ${lease.path}`,
     ].join("\n");
   } catch {

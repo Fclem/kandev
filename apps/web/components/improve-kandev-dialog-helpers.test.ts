@@ -1,7 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { buildImproveKandevDescription } from "./improve-kandev-dialog-helpers";
+import type { DiagnosticBundleJob } from "@/lib/types/system";
 import type { ImproveKandevBootstrapResponse } from "@/lib/api/domains/improve-kandev-api";
+
+const bundleJob = (id: string, status: DiagnosticBundleJob["status"]): DiagnosticBundleJob =>
+  ({
+    id,
+    status,
+    sources: ["backend", "frontend", "runtime"],
+    build_deadline: "",
+    expires_at: null,
+    browser_profiles: 0,
+    frontend_entry_count: 0,
+    frontend_bytes: 0,
+    warnings: [],
+  }) as DiagnosticBundleJob;
 
 const leaseDiagnosticBundle = vi.fn();
 const createDiagnosticBundle = vi.fn();
@@ -37,11 +51,11 @@ describe("buildImproveKandevDescription", () => {
     leaseDiagnosticBundle.mockReset();
     createDiagnosticBundle.mockReset();
     fetchDiagnosticBundle.mockReset();
-    createDiagnosticBundle.mockResolvedValue({ id: "bundle-1", status: "ready" });
+    createDiagnosticBundle.mockResolvedValue(bundleJob("bundle-1", "ready"));
     leaseDiagnosticBundle.mockResolvedValue({
-      path: bootstrap.bundle_file,
+      path: "/leased/task-context/diagnostic-bundle.zip",
       status: "ready",
-      sources: ["backend", "frontend"],
+      sources: ["backend", "frontend", "runtime"],
     });
   });
 
@@ -57,18 +71,41 @@ describe("buildImproveKandevDescription", () => {
     expect(createDiagnosticBundle).not.toHaveBeenCalled();
   });
 
-  it("creates and leases an all-source diagnostic ZIP when captureLogs=true", async () => {
+  it("leases the ready standard-source bundle path into the description", async () => {
     const out = await buildImproveKandevDescription("Original prompt", bootstrap, true);
     expect(out).toContain("Original prompt");
-    expect(out).toContain("frontend + backend logs");
-    expect(out).toContain(bootstrap.bundle_file);
-    expect(createDiagnosticBundle).toHaveBeenCalledWith(["backend", "frontend"]);
+    expect(out).toContain("/leased/task-context/diagnostic-bundle.zip");
+    expect(out).not.toContain(bootstrap.bundle_file);
+    expect(createDiagnosticBundle).toHaveBeenCalledWith(["backend", "frontend", "runtime"]);
     expect(leaseDiagnosticBundle).toHaveBeenCalledWith(bootstrap.bundle_dir, "bundle-1");
+    expect(fetchDiagnosticBundle).not.toHaveBeenCalled();
   });
 
-  it("does not abort or reference a missing bundle when collection fails", async () => {
-    createDiagnosticBundle.mockRejectedValueOnce(new Error("network down"));
+  it("polls a building job to partial before leasing its archive", async () => {
+    createDiagnosticBundle.mockResolvedValueOnce(bundleJob("bundle-2", "building"));
+    fetchDiagnosticBundle.mockResolvedValueOnce(bundleJob("bundle-2", "partial"));
+
     const out = await buildImproveKandevDescription("desc", bootstrap, true);
+
+    expect(fetchDiagnosticBundle).toHaveBeenCalledWith("bundle-2");
+    expect(leaseDiagnosticBundle).toHaveBeenCalledWith(bootstrap.bundle_dir, "bundle-2");
+    expect(out).toContain("/leased/task-context/diagnostic-bundle.zip");
+  });
+
+  it.each(["failed", "expired"] as const)("does not attach a %s bundle", async (status) => {
+    createDiagnosticBundle.mockResolvedValueOnce(bundleJob("bundle-3", status));
+
+    const out = await buildImproveKandevDescription("desc", bootstrap, true);
+
+    expect(out).toBe("desc");
+    expect(leaseDiagnosticBundle).not.toHaveBeenCalled();
+  });
+
+  it("does not attach a path when leasing is rejected", async () => {
+    leaseDiagnosticBundle.mockRejectedValueOnce(new Error("lease rejected"));
+
+    const out = await buildImproveKandevDescription("desc", bootstrap, true);
+
     expect(out).toBe("desc");
     expect(out).not.toContain(bootstrap.bundle_file);
   });

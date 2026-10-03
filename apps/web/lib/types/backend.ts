@@ -317,6 +317,7 @@ export type WorkflowPayload = {
   description?: string;
   prompt?: string;
   agent_profile_id?: string;
+  workflow_template_id?: string | null;
   hidden?: boolean;
   /** Phase 2 (ADR-0004) UX hint — frontend-only. */
   style?: "kanban" | "office" | "custom";

@@ -2,6 +2,7 @@ package backendapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http/httptest"
 	"path/filepath"
@@ -493,5 +494,36 @@ func TestE2EResetDeletionRejectsHierarchyCycleBeforeDeleting(t *testing.T) {
 	})
 	if err == nil || len(ordered) != 0 {
 		t.Fatalf("cyclic deletion plan = %v, %v; want no deletions and an error", ordered, err)
+	}
+}
+
+func TestE2ECreateHiddenWorkflowIncludesTemplateID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	taskSvc, _ := newBootStateTestServices(t)
+	workspace, err := taskSvc.CreateWorkspace(context.Background(), &taskservice.CreateWorkspaceRequest{
+		Name: "Hidden workflow template fixture",
+	})
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+
+	router := gin.New()
+	router.POST("/hidden-workflow", handleE2ECreateHiddenWorkflow(taskSvc, testLogger(t)))
+	request := httptest.NewRequest("POST", "/hidden-workflow", strings.NewReader(
+		`{"workspace_id":"`+workspace.ID+`","name":"Improve","workflow_template_id":"improve-kandev"}`,
+	))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != 201 {
+		t.Fatalf("status = %d, want 201: %s", response.Code, response.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["workflow_template_id"] != "improve-kandev" || payload["hidden"] != true {
+		t.Fatalf("workflow fixture response = %#v, want hidden template workflow", payload)
 	}
 }

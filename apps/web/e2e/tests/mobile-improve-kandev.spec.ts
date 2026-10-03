@@ -71,4 +71,46 @@ test.describe("Improve Kandev on mobile", () => {
       ),
     ).toBe(true);
   });
+
+  test("phone task creation includes recent logs", async ({ testPage, apiClient, seedData }) => {
+    await apiClient.createWorkspace("Improve Kandev");
+    await apiClient.saveUserSettings({ agent_generated_task_titles: false });
+    await testPage.route(HEALTH_URL, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ healthy: true, issues: [] }),
+      }),
+    );
+    await testPage.route(BOOTSTRAP_URL, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          workspace_id: seedData.workspaceId,
+          repository_id: seedData.repositoryId,
+          workflow_id: seedData.workflowId,
+          issue_workflow_id: seedData.workflowId,
+          branch: "main",
+          bundle_dir: "/tmp/kandev-improve-mobile-e2e",
+          bundle_file: "/tmp/kandev-improve-mobile-e2e/diagnostic-bundle.zip",
+          github_login: "octocat",
+          has_write_access: true,
+          fork_status: "writable",
+        }),
+      }),
+    );
+
+    await testPage.goto("/");
+    await testPage.getByTestId("app-nav-trigger").tap();
+    await testPage.getByTestId("mobile-improve-kandev-button").tap();
+    await testPage.getByTestId("improve-kandev-proceed").tap();
+
+    const dialog = testPage.getByTestId("create-task-dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const includeLogs = dialog.getByRole("checkbox", { name: "Include recent logs" });
+    await expect(includeLogs).toBeVisible();
+    await expect(includeLogs).toBeChecked();
+    await dialog.getByTestId("task-title-input").fill("Phone task with recent logs");
+  });
 });

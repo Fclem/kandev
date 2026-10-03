@@ -229,7 +229,7 @@
   "improveKandevIssueNoForkAccess": "Issueを開くのにフォークやプッシュ権限は不要。",
   "improveKandevIssuePlaceholder": "公開したい問題や依頼を説明してください。エージェントは対応するGitHub issueテンプレートに必要な詳細を尋ねます...",
   "improveKandevManagedForkPrepared": "Kandevが、エージェント開始前にこのタスク用の書き込み可能フォークを用意する。エージェントはそこへブランチをプッシュし、kdlbs/kandevに対してプルリクエストを開く。",
-  "includeRecentBackendAndBrowserLogs": "最近のバックエンドとブラウザログをエージェント用コンテキストに含める",
+  "includeRecentLogs": "最近のログを含める",
   "installed": "インストール済み",
   "integrations": "統合",
   "interruptedByRestart": "再起動で中断",

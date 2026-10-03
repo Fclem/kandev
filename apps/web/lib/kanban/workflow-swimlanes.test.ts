@@ -10,15 +10,34 @@ const IMPROVE_WORKFLOW_NAME = "Improve Kandev";
 describe("selectWorkflowSwimlanes — hidden workflow filter resolution", () => {
   const workflows = [
     { id: "dev", name: "Development", hidden: false },
-    { id: "improve", name: IMPROVE_WORKFLOW_NAME, hidden: true },
+    {
+      id: "improve",
+      name: IMPROVE_WORKFLOW_NAME,
+      hidden: true,
+      workflowTemplateId: "improve-kandev",
+    },
+    { id: "report", name: "Open issue", hidden: true, workflowTemplateId: "report-kandev-issue" },
+    { id: "unrelated", name: "Internal", hidden: true, workflowTemplateId: "internal" },
   ];
   const snapshots = {
     dev: { workflowName: "Development" },
     improve: { workflowName: IMPROVE_WORKFLOW_NAME },
+    report: { workflowName: "Open issue" },
+    unrelated: { workflowName: "Internal" },
   };
 
-  it("keeps hidden workflows off the All Workflows board", () => {
-    expect(selectWorkflowSwimlanes(null, workflows, snapshots).map((w) => w.id)).toEqual(["dev"]);
+  it("includes task-bearing Improve Kandev templates, but no unrelated hidden workflows", () => {
+    expect(selectWorkflowSwimlanes(null, workflows, snapshots).map((w) => w.id)).toEqual([
+      "dev",
+      "improve",
+      "report",
+    ]);
+  });
+
+  it("keeps explicit workflow selection scoped to the selected lane", () => {
+    expect(selectWorkflowSwimlanes("report", workflows, snapshots).map((w) => w.id)).toEqual([
+      "report",
+    ]);
   });
 
   it("renders a hidden workflow the user explicitly selects", () => {
@@ -43,24 +62,37 @@ describe("selectWorkflowSwimlanes — hidden workflow filter resolution", () => 
 describe("selectMobileNavigatorWorkflows — mobile board navigator options", () => {
   const workflows = [
     { id: "dev", name: "Development", hidden: false },
-    { id: "improve", name: IMPROVE_WORKFLOW_NAME, hidden: true },
-    { id: "report", name: "Report Kandev Issue", hidden: true },
+    {
+      id: "improve",
+      name: IMPROVE_WORKFLOW_NAME,
+      hidden: true,
+      workflowTemplateId: "improve-kandev",
+    },
+    { id: "report", name: "Open issue", hidden: true, workflowTemplateId: "report-kandev-issue" },
+    { id: "other", name: "Internal", hidden: true, workflowTemplateId: "internal" },
   ];
   const visibleOrdered = [{ id: "dev", name: "Development", hidden: false }];
   const noTasks = () => [];
   const tasks = (workflowId: string) => (workflowId === "improve" ? [{ id: "t1" }] : []);
 
-  it("lists visible workflows plus hidden workflows that have tasks", () => {
+  it("lists visible workflows and Improve templates regardless of filtered task counts", () => {
     const entries = selectMobileNavigatorWorkflows(visibleOrdered, workflows, tasks);
-    expect(entries.map((entry) => entry.workflow.id)).toEqual(["dev", "improve"]);
+    expect(entries.map((entry) => entry.workflow.id)).toEqual(["dev", "improve", "report"]);
   });
 
-  it("keeps empty hidden workflows out of the navigator", () => {
+  it("keeps empty Improve templates available but excludes other empty hidden workflows", () => {
     expect(
       selectMobileNavigatorWorkflows(visibleOrdered, workflows, noTasks).map(
         (entry) => entry.workflow.id,
       ),
-    ).toEqual(["dev"]);
+    ).toEqual(["dev", "improve", "report"]);
+  });
+  it("keeps both Improve workflows in the navigator even when task filters empty them", () => {
+    expect(
+      selectMobileNavigatorWorkflows(visibleOrdered, workflows, noTasks).map(
+        (entry) => entry.workflow.id,
+      ),
+    ).toEqual(["dev", "improve", "report"]);
   });
 
   it("keeps a hidden workflow whose live steps are all hidden", () => {
@@ -83,7 +115,7 @@ describe("selectMobileNavigatorWorkflows — mobile board navigator options", ()
       (workflowId) => workflowId === "improve",
     );
 
-    expect(entries.map((entry) => entry.workflow.id)).toEqual(["dev", "improve"]);
+    expect(entries.map((entry) => entry.workflow.id)).toEqual(["dev", "improve", "report"]);
   });
 
   it("returns the filtered tasks alongside each workflow so callers reuse the result", () => {
@@ -95,14 +127,13 @@ describe("selectMobileNavigatorWorkflows — mobile board navigator options", ()
   // gives every workflow tasks, so the hidden `report` workflow from the
   // module-scope fixture is added too — the point is that improve is not
   // duplicated just because it is both hidden and already in the visible list.
-  it("does not duplicate a hidden workflow already in the visible list but includes other hidden workflows with tasks", () => {
+  it("does not duplicate templates already in visible order", () => {
     const both = [
       { id: "dev", name: "Development", hidden: false },
       { id: "improve", name: IMPROVE_WORKFLOW_NAME, hidden: true },
     ];
-    const withTasks = () => [{ id: "t1" }];
     expect(
-      selectMobileNavigatorWorkflows(both, workflows, withTasks).map((entry) => entry.workflow.id),
+      selectMobileNavigatorWorkflows(both, workflows, noTasks).map((entry) => entry.workflow.id),
     ).toEqual(["dev", "improve", "report"]);
   });
 });

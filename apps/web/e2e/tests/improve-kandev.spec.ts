@@ -36,7 +36,7 @@ type BootstrapOverrides = {
     | "fork_not_writable"
     | "fork_not_ready"
     | "managed_unavailable";
-  issueWorkflowId?: string;
+  onBootstrapRequest?: (body: Record<string, unknown>) => void;
   /**
    * When provided, the bootstrap route handler awaits this promise before
    * fulfilling the response. Tests use it to keep the dialog in its
@@ -87,6 +87,7 @@ async function mockImproveKandevApis(
   );
 
   await page.route(BOOTSTRAP_URL, async (route) => {
+    overrides.onBootstrapRequest?.(route.request().postDataJSON() as Record<string, unknown>);
     if (overrides.bootstrapHold) {
       await overrides.bootstrapHold;
     }
@@ -110,7 +111,128 @@ async function mockImproveKandevApis(
   });
 }
 
+async function mockDiagnosticAttachment(
+  page: Page,
+  terminalStatus: "partial" | "expired",
+  leaseRejected = false,
+): Promise<{
+  submitted: Array<Record<string, unknown>>;
+  bundleRequests: Array<Record<string, unknown>>;
+}> {
+  const submitted: Array<Record<string, unknown>> = [];
+  const bundleRequests: Array<Record<string, unknown>> = [];
+  await page.route(
+    (url) => url.pathname.startsWith("/api/v1/system/logs/bundles"),
+    async (route) => {
+      const request = route.request();
+      if (request.method() !== "POST") return route.continue();
+      bundleRequests.push(request.postDataJSON() as Record<string, unknown>);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "improve-bundle",
+          status: terminalStatus === "partial" ? "building" : "expired",
+          sources: ["backend", "frontend", "runtime"],
+        }),
+      });
+    },
+  );
+  await page.route(
+    (url) => url.pathname.endsWith("/api/v1/system/logs/bundles/improve-bundle"),
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "improve-bundle",
+          status: terminalStatus,
+          sources: ["backend", "frontend", "runtime"],
+        }),
+      });
+    },
+  );
+  await page.route("**/api/v1/system/improve-kandev/bundle/lease", async (route) => {
+    if (leaseRejected) {
+      await route.fulfill({ status: 409, contentType: "application/json", body: "{}" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        path: "/leased/improve-kandev/diagnostic-bundle.zip",
+        status: "partial",
+        sources: ["backend", "frontend", "runtime"],
+      }),
+    });
+  });
+  await page.route(
+    (url) => url.pathname === "/api/v1/tasks",
+    async (route) => {
+      if (route.request().method() === "POST") {
+        submitted.push(route.request().postDataJSON() as Record<string, unknown>);
+      }
+      await route.continue();
+    },
+  );
+  return { submitted, bundleRequests };
+}
+
 test.describe("Improve Kandev dialog", () => {
+  test("leased diagnostic bundle path reaches task description", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    await apiClient.createWorkspace("Improve Kandev");
+    await mockImproveKandevApis(testPage, seedData, { has_write_access: true });
+    const { submitted, bundleRequests } = await mockDiagnosticAttachment(testPage, "partial");
+    await testPage.goto("/");
+    await testPage.getByTestId("sidebar-improve-kandev-button").click();
+    await testPage.getByTestId("improve-kandev-proceed").click();
+
+    const dialog = testPage.getByTestId("create-task-dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText(/push directly to a branch on the upstream repo/i)).toBeVisible();
+    await expect(dialog.getByRole("checkbox", { name: "Include recent logs" })).toBeChecked();
+    await dialog.getByTestId("task-title-input").fill("Attach partial diagnostic bundle");
+    await dialog.getByTestId("task-description-input").fill("Original task context.");
+    await dialog.getByTestId("submit-start-agent").click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+
+    await expect.poll(() => submitted.length).toBe(1);
+    expect(bundleRequests).toEqual([{ sources: ["backend", "frontend", "runtime"] }]);
+    expect(submitted[0].description).toContain("Original task context.");
+    expect(submitted[0].description).toContain("/leased/improve-kandev/diagnostic-bundle.zip");
+  });
+
+  test("diagnostic attachment failure does not block task creation", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    await apiClient.createWorkspace("Improve Kandev");
+    await mockImproveKandevApis(testPage, seedData, { has_write_access: true });
+    const { submitted, bundleRequests } = await mockDiagnosticAttachment(testPage, "expired");
+    await testPage.goto("/");
+    await testPage.getByTestId("sidebar-improve-kandev-button").click();
+    await testPage.getByTestId("improve-kandev-proceed").click();
+
+    const dialog = testPage.getByTestId("create-task-dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText(/push directly to a branch on the upstream repo/i)).toBeVisible();
+    await dialog.getByTestId("task-title-input").fill("Create task without expired bundle");
+    await dialog.getByTestId("task-description-input").fill("Keep task creation available.");
+    await dialog.getByTestId("submit-start-agent").click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+
+    await expect.poll(() => submitted.length).toBe(1);
+    expect(bundleRequests).toEqual([{ sources: ["backend", "frontend", "runtime"] }]);
+    expect(submitted[0].description).toContain("Keep task creation available.");
+    expect(submitted[0].description).not.toContain("diagnostic-bundle.zip");
+  });
+
   test("dismissed intro is persisted and later opens the create dialog directly", async ({
     testPage,
     apiClient,
@@ -695,6 +817,116 @@ test.describe("Improve Kandev dialog", () => {
 
     await choicePanel.click();
     await expect(testPage.getByTestId("create-task-dialog")).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("checked workspace choice places the task in the bootstrap target", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    for (const workspace of (await apiClient.listWorkspaces()).workspaces.filter(
+      (item) => item.name === "Improve Kandev",
+    )) {
+      await apiClient.deleteWorkspace(workspace.id, "Improve Kandev");
+    }
+    const target = await apiClient.createWorkspace("Improve Kandev Setup");
+    const workflow = await apiClient.createWorkflow(target.id, "Improve Kandev", "simple");
+    const issueWorkflow = await apiClient.createWorkflow(target.id, "Open issue", "simple");
+    const repository = await apiClient.createRepository(target.id, seedData.repositoryPath, "main");
+    const requests: Record<string, unknown>[] = [];
+    await mockImproveKandevApis(testPage, seedData, {
+      workspaceId: target.id,
+      workflowId: workflow.id,
+      issueWorkflowId: issueWorkflow.id,
+      repositoryId: repository.id,
+      onBootstrapRequest: (body) => requests.push(body),
+    });
+    await testPage.goto("/");
+    await testPage.getByTestId("sidebar-improve-kandev-button").click();
+    const intro = testPage.getByRole("dialog", { name: "Improve Kandev" });
+    const createChoice = intro.getByTestId("improve-kandev-create-workspace");
+    await expect(createChoice.getByRole("checkbox")).toBeChecked();
+    await testPage.getByTestId("improve-kandev-proceed").click();
+
+    const dialog = testPage.getByTestId("create-task-dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const title = "Checked workspace targeting";
+    await dialog.getByTestId("task-title-input").fill(title);
+    await dialog
+      .getByTestId("task-description-input")
+      .fill("Task belongs in the response workspace.");
+    await dialog.getByTestId("submit-start-agent").click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+    expect(requests).toContainEqual(expect.objectContaining({ create_workspace: true }));
+    await expect
+      .poll(async () => (await apiClient.listTasks(target.id)).tasks)
+      .toContainEqual(expect.objectContaining({ title }));
+    const created = (await apiClient.listTasks(target.id)).tasks.find(
+      (task) => task.title === title,
+    );
+    expect(created).toBeDefined();
+    const details = await apiClient.getTask(created!.id);
+    expect(details.workflow_id).toBe(workflow.id);
+    expect(details.repositories?.map((item) => item.repository_id)).toEqual([repository.id]);
+    await apiClient.deleteWorkspace(target.id, "Improve Kandev Setup");
+    expect((await apiClient.listTasks(seedData.workspaceId)).tasks).not.toContainEqual(
+      expect.objectContaining({ title }),
+    );
+  });
+
+  test("declining dedicated workspace creation keeps the task in the active workspace", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    for (const workspace of (await apiClient.listWorkspaces()).workspaces.filter(
+      (item) => item.name === "Improve Kandev",
+    )) {
+      await apiClient.deleteWorkspace(workspace.id, "Improve Kandev");
+    }
+    const requests: Record<string, unknown>[] = [];
+    await mockImproveKandevApis(testPage, seedData, {
+      onBootstrapRequest: (body) => requests.push(body),
+    });
+    await testPage.addInitScript(() =>
+      window.localStorage.setItem("kandev.improveKandev.skipIntro", "true"),
+    );
+    await testPage.goto("/");
+    await testPage.getByTestId("sidebar-improve-kandev-button").click();
+    const choice = testPage.getByTestId("improve-kandev-create-workspace-confirm");
+    const workspaceCheckbox = testPage
+      .getByTestId("improve-kandev-create-workspace")
+      .getByRole("checkbox");
+    await expect(choice).toBeVisible();
+    expect(requests).toHaveLength(0);
+    await expect(workspaceCheckbox).toBeChecked();
+    await workspaceCheckbox.click();
+    await choice.click();
+    const dialog = testPage.getByTestId("create-task-dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const title = "Active workspace fallback targeting";
+    await dialog.getByTestId("task-title-input").fill(title);
+    await dialog.getByTestId("task-description-input").fill("Task stays in the active workspace.");
+    await dialog.getByTestId("submit-start-agent").click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+    expect(requests).toContainEqual(
+      expect.objectContaining({
+        create_workspace: false,
+        workspace_id: seedData.workspaceId,
+      }),
+    );
+    await expect
+      .poll(async () => (await apiClient.listTasks(seedData.workspaceId)).tasks)
+      .toContainEqual(expect.objectContaining({ title }));
+    const created = (await apiClient.listTasks(seedData.workspaceId)).tasks.find(
+      (task) => task.title === title,
+    );
+    expect(created).toBeDefined();
+    const details = await apiClient.getTask(created!.id);
+    expect(details.workflow_id).toBe(seedData.workflowId);
+    expect(details.repositories?.map((item) => item.repository_id)).toEqual([
+      seedData.repositoryId,
+    ]);
   });
 
   test("workflows settings are read-only in the dedicated workspace", async ({

@@ -1,7 +1,7 @@
 ---
 id: "06-workspace-target-choice-e2e"
 title: "Verify Improve Kandev workspace choice"
-status: pending
+status: completed
 wave: 4
 depends_on: ["03-frontend-dialog-and-mobile", "04-e2e-coverage"]
 plan: "plan.md"
@@ -61,7 +61,7 @@ configuration isolation without cloning a remote repository.
 The managed E2E runner rebuilds backend, E2E web, and plugin artifacts before Playwright; do not add `--no-build`.
 
 ```bash
-(cd apps/backend && go test ./internal/integration -run 'TestImproveKandevBootstrap(CreatesBothHiddenWorkflowsIdempotently|ReusesExistingImproveWorkspace|FallsBackToRequestedWorkspaceWhenCreationDeclined|UsesResolvedWorkspaceGitHubAccess|CopiesGitHubConnectionOnWorkspaceCreation|DoesNotCopyWhenSourceHasNoGitHubConnection|PreservesExistingWorkspaceConfiguration|CopiesOnlyGitHubConfiguration)' -count=1)
+(cd apps/backend && go test ./internal/integration -run 'TestImproveKandevBootstrap(CreatesBothHiddenWorkflowsIdempotently|ReusesExistingImproveWorkspace|FallsBackToRequestedWorkspaceWhenCreationDeclined|UsesResolvedWorkspaceGitHubAccess|CopiesGitHubConnectionOnWorkspaceCreation|PreservesExistingWorkspaceConfiguration|CopiesOnlyGitHubConfiguration|CopiesConnectionFromResolvedWorkspace|DoesNotCopyWhenResolvedWorkspaceHasNoConnection)' -count=1)
 (cd apps/backend && go test ./internal/github -run TestCopyWorkspaceConnectionToWorkspace -count=1)
 (cd apps/backend && go test ./internal/integrations/workspacescope -run TestDefaultResolver -count=1)
 (cd apps/web && pnpm e2e:run --project chromium e2e/tests/improve-kandev.spec.ts -- --grep "checked workspace choice places the task in the bootstrap target|declining dedicated workspace creation keeps the task in the active workspace")
@@ -94,4 +94,9 @@ Tasks 03 and 04.
 
 ## Results
 
-Pending implementation.
+The checked dedicated-workspace and declined-creation browser E2Es passed in
+Chromium. Backend verification passed for bootstrap setup, selected-workspace
+GitHub probing, workspace reuse, isolated configuration copying, actual PAT
+connection/secret inheritance from the resolved source, the unconfigured-source
+no-copy case, GitHub connection-copy behavior, and active/earliest/literal
+workspace resolver precedence.

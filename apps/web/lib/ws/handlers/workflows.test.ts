@@ -4,12 +4,20 @@ import type { AppState } from "@/lib/state/store";
 import type { BackendMessageMap, WorkflowPayload } from "@/lib/types/backend";
 import { registerWorkflowsHandlers } from "./workflows";
 
-type WorkflowItem = { id: string; workspaceId: string; name: string; hidden?: boolean };
+type WorkflowItem = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  hidden?: boolean;
+  workflowTemplateId?: string;
+};
 
 const MESSAGE_TIMESTAMP = "2026-01-01T00:00:00Z";
 const REVIEW_STEP_ID = "step-1";
 const REVIEW_STEP_NAME = "Review";
 const REVIEW_STEP_COLOR = "bg-blue-500";
+const IMPROVE_WORKFLOW_TEMPLATE_ID = "improve-kandev";
+const IMPROVE_WORKFLOW_ID = "wf-improve";
 
 function makeStore(items: WorkflowItem[], activeId: string | null) {
   let state = {
@@ -116,6 +124,25 @@ describe("workflow.created handler — preserves user filter", () => {
 
     expect(store.getState().workflows.activeId).toBe("wf-1");
   });
+
+  it("preserves workflow template identity from created events", () => {
+    const store = makeStore([], null);
+    const handlers = registerWorkflowsHandlers(store);
+
+    handlers["workflow.created"]?.(
+      createdMessage({
+        id: IMPROVE_WORKFLOW_ID,
+        workspace_id: "ws-1",
+        name: "Improve",
+        workflow_template_id: IMPROVE_WORKFLOW_TEMPLATE_ID,
+      } as WorkflowPayload),
+    );
+
+    expect(store.getState().workflows.items[0]).toMatchObject({
+      id: IMPROVE_WORKFLOW_ID,
+      workflowTemplateId: IMPROVE_WORKFLOW_TEMPLATE_ID,
+    });
+  });
 });
 
 describe("workflow.updated handler — hidden flag reconciles activeId", () => {
@@ -203,6 +230,30 @@ describe("workflow.updated handler — hidden flag reconciles activeId", () => {
     const item = store.getState().workflows.items[0];
     expect(item?.description).toBe("Updated from another tab");
     expect(item?.prompt).toBe("Updated prompt");
+  });
+
+  it("preserves template identity when a partial update omits it", () => {
+    const store = makeStore(
+      [
+        {
+          id: IMPROVE_WORKFLOW_ID,
+          workspaceId: "ws-1",
+          name: "Improve",
+          hidden: true,
+          workflowTemplateId: IMPROVE_WORKFLOW_TEMPLATE_ID,
+        },
+      ],
+      null,
+    );
+    const handlers = registerWorkflowsHandlers(store);
+
+    handlers["workflow.updated"]?.(
+      updatedMessage({ id: IMPROVE_WORKFLOW_ID, workspace_id: "ws-1", name: "Updated" }),
+    );
+
+    expect(store.getState().workflows.items[0].workflowTemplateId).toBe(
+      IMPROVE_WORKFLOW_TEMPLATE_ID,
+    );
   });
 });
 

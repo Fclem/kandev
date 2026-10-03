@@ -226,7 +226,7 @@
   "improveKandevIssueNoForkAccess": "A abertura de uma issue não requer um fork nem acesso de escrita.",
   "improveKandevIssuePlaceholder": "Descreva o problema ou o pedido que quer publicar. O agente pedirá os detalhes exigidos pelo modelo de issue do GitHub correspondente...",
   "improveKandevManagedForkPrepared": "O Kandev preparará um fork com permissões de escrita para esta tarefa antes de o agente iniciar. O agente enviará o branch para esse fork e abrirá o pull request contra kdlbs/kandev.",
-  "includeRecentBackendAndBrowserLogs": "Incluir os registos recentes do backend e do navegador como contexto para o agente",
+  "includeRecentLogs": "Incluir registos recentes",
   "installed": "Instalado",
   "integrations": "Integrações",
   "interruptedByRestart": "Interrompida por reinício",

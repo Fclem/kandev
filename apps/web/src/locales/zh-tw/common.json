@@ -224,7 +224,7 @@
   "improveKandevBugPlaceholder": "例如：開啟看板時，在寬度小於 1200px 的螢幕上，列標題文字會與任務數量徽章重疊…",
   "improveKandevFeaturePlaceholder": "例如：新增鍵盤快捷鍵，以便從任務詳情檢視將任務標記為完成，並在任務操作選單中顯示該快捷鍵…",
   "improveKandevIssuePlaceholder": "描述你想釋出的問題或請求。代理程式會按匹配的 GitHub 議題模板詢問所需細節…",
-  "includeRecentBackendAndBrowserLogs": "將最近的後端與瀏覽器日誌作為上下文提供給代理程式",
+  "includeRecentLogs": "包含近期日誌",
   "installed": "已安裝",
   "integrations": "整合",
   "interruptedByRestart": "因重啟而中斷",

@@ -1,7 +1,7 @@
 ---
 id: "05-verification-and-commit"
 title: "Required verification and commit"
-status: pending
+status: in_progress
 wave: 6
 depends_on:
   - "02-backend-issue-workflow"
@@ -98,15 +98,19 @@ task to the next workflow step.
 
 ## Recorded verification
 
-- `make fmt` — passed for the Task 02–04 scope.
-- Initial `make typecheck test lint` was stopped by the RTK-injected indexed
-  `GIT_CONFIG_*` environment in the unrelated
-  `TestCollectAgentEnvPreservesParentIndexedGitConfig` test. With those
-  environment variables unset, the exact `make typecheck test lint` command
-  passed for the Task 02–04 scope: all backend tests, 922 web test files
-  (7,037 passing and 4 skipped), 30 CLI test files, script tests, backend/web/
-  harness lint, and typechecks.
-- `git diff --check` — passed for the Task 02–04 scope.
-- The full verification must be rerun after Tasks 06–07 and companion Kanban
-  visibility Task 01; the Conventional Commit and commit-hook receipt remain
-  pending.
+- The original Task 02–04 gate passed after unsetting injected indexed
+  `GIT_CONFIG_*` variables: backend tests, 922 web test files (7,037 passing,
+  4 skipped), 30 CLI test files, script tests, lint, and typechecks. This is
+  historical verification, not the final package gate.
+- Final `make fmt` passed after all implementation and lint-fix changes, using
+  `/var/tmp/kandev-go-cache` because the default Go cache was full.
+- Final `make typecheck test lint` reached and passed typechecking, then failed
+  in existing backend tests after the host-injected `KANDEV_*` and
+  `GIT_CONFIG_*` variables were unset. Failures included
+  `TestManagedNPMRuntimeLaunchIgnoresWorkspaceNpmrc` (reproduced alone with
+  npm 10.9.8) and four process-output timing tests in
+  `internal/agentctl/server/api` and `internal/agentctl/server/process`.
+- Separate final `make lint` passed (backend, web, harness, specs, architecture)
+  after the lint findings introduced by the workflow payload edits were fixed.
+- Focused DTO, workflow-event, boot-state, and E2E-fixture regression tests
+  passed after the final backend lint edits.

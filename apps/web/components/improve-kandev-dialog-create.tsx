@@ -309,7 +309,7 @@ function BootstrapStatusSlot({
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <label className="flex cursor-pointer items-center gap-2">
           <Checkbox checked={captureLogs} onCheckedChange={(v) => setCaptureLogs(v === true)} />
-          {t("common:includeRecentBackendAndBrowserLogs")}
+          {t("common:includeRecentLogs")}
         </label>
         <TooltipProvider delayDuration={150}>
           <Tooltip>

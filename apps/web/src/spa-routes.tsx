@@ -799,7 +799,9 @@ function mapWorkflowItem(workflow: Workflow) {
     sortOrder: workflow.sort_order ?? 0,
     ...(workflow.agent_profile_id ? { agent_profile_id: workflow.agent_profile_id } : {}),
     ...(workflow.hidden !== undefined ? { hidden: workflow.hidden } : {}),
-    ...(workflow.style !== undefined ? { style: workflow.style } : {}),
+    ...(workflow.workflow_template_id !== undefined
+      ? { workflowTemplateId: workflow.workflow_template_id }
+      : {}),
   };
 }
 

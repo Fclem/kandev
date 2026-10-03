@@ -169,6 +169,7 @@ function useSubmitHandlersWiring({
     onCreateSession,
     onOpenChange,
     createTask,
+    transformDescriptionBeforeSubmit,
   } = props;
   const { parentTaskId } = props;
   const taskId = props.taskId ?? null;
@@ -198,6 +199,7 @@ function useSubmitHandlersWiring({
     onCreateSession,
     onOpenChange,
     createTask,
+    transformDescriptionBeforeSubmit,
     refreshBranchPolicies,
     preserveTaskCreateLastUsedOnClose: preserveQueuedLastUsedOnClose,
     taskId,

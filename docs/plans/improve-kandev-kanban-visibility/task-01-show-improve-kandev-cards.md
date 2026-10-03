@@ -1,7 +1,7 @@
 ---
 id: "01-show-improve-kandev-cards"
 title: "Show Improve Kandev cards on Kanban"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -120,4 +120,11 @@ None.
 
 ## Results
 
-Pending implementation.
+Implemented AC-WORKSPACES-IMPROVE-KANDEV-001.9. Workflow template identity now survives the DTO, boot payload, live workflow events, and browser store projections. Unfiltered desktop lanes include task-bearing Improve Kandev templates only; mobile keeps both templates reachable with empty filtered snapshots and shows each task card when selected. E2E hidden-workflow fixtures seed template IDs; live bootstrap coverage uses the real endpoint in a target-local workspace.
+
+Verification passed:
+- Backend focused DTO, boot-state, E2E factory, and event tests.
+- Frontend selector and WebSocket handler tests: 30 passed.
+- Web typecheck and targeted ESLint.
+- Managed Chromium E2E: 2 passed.
+- Managed mobile-chrome E2E: 2 passed.

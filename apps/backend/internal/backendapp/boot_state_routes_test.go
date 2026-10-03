@@ -325,3 +325,15 @@ func TestMapUserSettingsStateNormalizesNilSubtaskOrder(t *testing.T) {
 		t.Fatalf("subtaskOrderByParentId = %#v, want empty map", prefs["subtaskOrderByParentId"])
 	}
 }
+
+func TestMapWorkflowItemStateIncludesTemplateID(t *testing.T) {
+	templateID := "improve-kandev"
+	state := mapWorkflowItemState(taskdto.WorkflowDTO{
+		ID:                 "workflow-1",
+		WorkflowTemplateID: &templateID,
+	})
+	got, ok := state["workflowTemplateId"].(*string)
+	if !ok || got == nil || *got != templateID {
+		t.Fatalf("workflowTemplateId = %#v, want %q", state["workflowTemplateId"], templateID)
+	}
+}

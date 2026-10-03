@@ -332,24 +332,19 @@ padding. No menu and dialog are stacked.
 ## Required cross-plan acceptance
 
 AC-WORKSPACES-IMPROVE-KANDEV-001.9 is owned by the separate
-[Kanban visibility plan](../improve-kandev-kanban-visibility/plan.md) and its
-pending [Task 01](../improve-kandev-kanban-visibility/task-01-show-improve-kandev-cards.md).
-The companion plan assigns Task 01 to its independent Wave 1 with no
-dependencies. It is not a prerequisite of Tasks 06–07, but it is a prerequisite
-of Task 05's final gate and overall completion. This plan remains incomplete
-until its backend, desktop, mobile, and live-WebSocket identity verification
-passes.
+[Kanban visibility plan](../improve-kandev-kanban-visibility/plan.md) and
+[Task 01](../improve-kandev-kanban-visibility/task-01-show-improve-kandev-cards.md).
+Its backend, desktop, mobile, and live-WebSocket identity checks passed. It is
+complete and was a prerequisite of Task 05's final gate.
 
 ---
 
-Tasks 01–04 and their implementation, focused tests, desktop/mobile E2E
-coverage, and original verification are complete. Follow-up Tasks 06–07 and
-Kanban visibility Task 01 remain pending. Task 05 remains pending for final
-repository-wide verification and commit after Tasks 06–07 and Kanban visibility
-Task 01. Task 06 covers workspace targeting; Task 07 aligns and verifies
-diagnostic attachment and localized toggle copy. Kanban visibility Task 01 owns
-AC `.9`. This plan is not complete until all three follow-ups and Task 05's
-final gate pass their assigned verification. The PR remains the authoritative
+Tasks 01–04 and follow-up Tasks 06–07, plus Kanban visibility Task 01, are
+complete with their assigned verification. Task 05 is in progress as the final
+repository-wide verification and commit gate. Task 06 covers workspace
+targeting; Task 07 attaches the leased diagnostic bundle and updates localized
+copy. Kanban visibility Task 01 owns AC `.9`. This plan remains incomplete
+until Task 05's final checks and commit pass. The PR remains the authoritative
 record for the original delivery's final commit and CI results.
 
 ---
@@ -379,15 +374,15 @@ Wave 3:
 
 Wave 4 (follow-up):
 
-- [ ] [Task 06: Workspace target choice E2E coverage](task-06-workspace-target-choice-e2e.md)
+- [x] [Task 06: Workspace target choice E2E coverage](task-06-workspace-target-choice-e2e.md)
 
 Wave 5 (follow-up):
 
-- [ ] [Task 07: Diagnostic bundle attachment](task-07-diagnostic-bundle-attachment.md)
+- [x] [Task 07: Diagnostic bundle attachment](task-07-diagnostic-bundle-attachment.md)
 
 Wave 6:
 
-- [ ] [Task 05: Required verification and commit](task-05-verification-and-commit.md)
+- [ ] [Task 05: Required verification and commit](task-05-verification-and-commit.md) (`in_progress`)
 
 No tasks are marked parallel-safe: Tasks 02–04 share the bootstrap contract and
 Improve Kandev test fixtures, Task 06 verifies the workspace-choice UI and

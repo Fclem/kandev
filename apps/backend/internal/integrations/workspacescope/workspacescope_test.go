@@ -50,6 +50,86 @@ func seedActiveWorkspace(t *testing.T, db *sqlx.DB, workspaceID string) {
 	}
 }
 
+func TestDefaultResolverUsesActiveWorkspaceBeforeEarliestCreated(t *testing.T) {
+	db := newTestDB(t)
+	seedActiveWorkspace(t, db, "ws-active")
+	earlier := time.Now().UTC().Add(-time.Hour)
+	if _, err := db.Exec(
+		`INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		"ws-earliest", "Earliest", earlier, earlier,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := (DefaultResolver{}).Resolve(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ws-active" {
+		t.Fatalf("Resolve() = %q, want active workspace ws-active", got)
+	}
+}
+
+func TestDefaultResolverFallsBackToEarliestCreatedWorkspace(t *testing.T) {
+	db := newTestDB(t)
+	seedActiveWorkspace(t, db, "ws-active")
+	earlier := time.Now().UTC().Add(-time.Hour)
+	if _, err := db.Exec(
+		`INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		"ws-earliest", "Earliest", earlier, earlier,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE users SET settings = ?`, `{"workspace_id":"stale"}`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := (DefaultResolver{}).Resolve(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ws-earliest" {
+		t.Fatalf("Resolve() = %q, want earliest workspace ws-earliest", got)
+	}
+}
+
+func TestDefaultResolverUsesLiteralDefaultWhenNoWorkspacesExist(t *testing.T) {
+	db := newTestDB(t)
+	if _, err := db.Exec(`CREATE TABLE workspaces (id TEXT PRIMARY KEY, created_at TIMESTAMP)`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := (DefaultResolver{}).Resolve(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != FallbackWorkspaceID {
+		t.Fatalf("Resolve() = %q, want %q", got, FallbackWorkspaceID)
+	}
+}
+
+func TestDefaultResolverFallsBackWhenActiveSettingIsMissing(t *testing.T) {
+	db := newTestDB(t)
+	seedActiveWorkspace(t, db, "ws-active")
+	earlier := time.Now().UTC().Add(-time.Hour)
+	if _, err := db.Exec(
+		`INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		"ws-earliest", "Earliest", earlier, earlier,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE users SET settings = ?`, `{}`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := (DefaultResolver{}).Resolve(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ws-earliest" {
+		t.Fatalf("Resolve() = %q, want earliest workspace ws-earliest", got)
+	}
+}
 func TestDefaultResolverReflectsActiveWorkspaceChange(t *testing.T) {
 	db := newTestDB(t)
 	seedActiveWorkspace(t, db, "ws-first")

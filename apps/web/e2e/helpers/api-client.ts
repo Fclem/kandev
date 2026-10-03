@@ -1682,10 +1682,18 @@ export class ApiClient {
   async e2eCreateHiddenWorkflow(
     workspaceId: string,
     name: string,
-  ): Promise<{ id: string; workspace_id: string; name: string; hidden: boolean }> {
+    workflowTemplateId?: string,
+  ): Promise<{
+    id: string;
+    workspace_id: string;
+    name: string;
+    hidden: boolean;
+    workflow_template_id?: string;
+  }> {
     return this.request("POST", "/api/v1/e2e/hidden-workflow", {
       workspace_id: workspaceId,
       name,
+      ...(workflowTemplateId ? { workflow_template_id: workflowTemplateId } : {}),
     });
   }
 

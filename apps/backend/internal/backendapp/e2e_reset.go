@@ -31,12 +31,14 @@ import (
 
 const (
 	// errKey is the JSON field used for error responses from the E2E endpoints.
-	errKey                     = "error"
-	statusKey                  = "status"
-	e2eResetSourceKey          = "source"
-	e2eResetTypeKey            = "type"
-	e2eTaskCleanupWaitTimeout  = 30 * time.Second
-	e2eTaskCleanupPollInterval = 25 * time.Millisecond
+	errKey                          = "error"
+	statusKey                       = "status"
+	e2eResetSourceKey               = "source"
+	e2eResetTypeKey                 = "type"
+	e2eHiddenWorkflowWorkspaceIDKey = "workspace_id"
+	e2eHiddenWorkflowNameKey        = "name"
+	e2eTaskCleanupWaitTimeout       = 30 * time.Second
+	e2eTaskCleanupPollInterval      = 25 * time.Millisecond
 )
 
 // registerE2EResetRoutes registers the E2E test-only endpoints.
@@ -807,8 +809,9 @@ func deleteCoordinatorStateForReset(
 }
 
 type e2eHiddenWorkflowRequest struct {
-	WorkspaceID string `json:"workspace_id"`
-	Name        string `json:"name"`
+	WorkspaceID        string  `json:"workspace_id"`
+	Name               string  `json:"name"`
+	WorkflowTemplateID *string `json:"workflow_template_id,omitempty"`
 }
 
 func handleE2ECreateHiddenWorkflow(taskSvc *taskservice.Service, log *logger.Logger) gin.HandlerFunc {
@@ -819,9 +822,10 @@ func handleE2ECreateHiddenWorkflow(taskSvc *taskservice.Service, log *logger.Log
 			return
 		}
 		workflow, err := taskSvc.CreateWorkflow(c.Request.Context(), &taskservice.CreateWorkflowRequest{
-			WorkspaceID: body.WorkspaceID,
-			Name:        body.Name,
-			Hidden:      true,
+			WorkspaceID:        body.WorkspaceID,
+			Name:               body.Name,
+			WorkflowTemplateID: body.WorkflowTemplateID,
+			Hidden:             true,
 		})
 		if err != nil {
 			log.Error("e2e: failed to create hidden workflow", zap.Error(err))
@@ -829,10 +833,11 @@ func handleE2ECreateHiddenWorkflow(taskSvc *taskservice.Service, log *logger.Log
 			return
 		}
 		c.JSON(http.StatusCreated, gin.H{
-			"id":           workflow.ID,
-			"workspace_id": workflow.WorkspaceID,
-			"name":         workflow.Name,
-			"hidden":       workflow.Hidden,
+			"id":                            workflow.ID,
+			e2eHiddenWorkflowWorkspaceIDKey: workflow.WorkspaceID,
+			e2eHiddenWorkflowNameKey:        workflow.Name,
+			"hidden":                        workflow.Hidden,
+			"workflow_template_id":          workflow.WorkflowTemplateID,
 		})
 	}
 }

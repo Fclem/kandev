@@ -1,0 +1,28 @@
+---
+status: current
+system: plugins
+requirements:
+  - REQ-PLUGINS-VOICE-EXTRACTION-HOST-001
+---
+
+# Task-create dialog completion system design
+
+## Purpose
+
+Expose successful task creation to plugin contributions rendered by that same create dialog. This lets a plugin associate state with the task it created without observing unrelated task events.
+
+## Design
+
+`TaskCreateDialog` owns a registry of task-created handlers and provides its registration function through a scoped React context. Only create-mode `task-create-input-actions` receive the registration function. A slot registers its handler for the lifetime of its contribution and unregisters it on cleanup.
+
+After the dialog's create operation succeeds, the dialog notifies its registered handlers once with the created task's identity (`id` and `workspace_id`). The registry is not connected to the application-wide task event stream. Failed or canceled requests do not notify; edit and new-session surfaces do not receive the create-only capability.
+
+Handlers are scoped to the owning dialog instance. Closing or replacing a dialog unmounts its contributions and removes their handlers, preventing late work from using another dialog's draft.
+
+## Requirement mapping
+
+| Requirement | Sections |
+| --- | --- |
+| REQ-PLUGINS-VOICE-EXTRACTION-HOST-001 | Design |
+
+See [requirements](../requirements/voice-extraction-host.md) and the [implementation plan](../../../plans/task-create-dialog-completion/plan.md).

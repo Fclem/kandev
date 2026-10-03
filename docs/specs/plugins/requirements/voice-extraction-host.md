@@ -27,6 +27,7 @@ Voice Mode can ship independently only if a plugin can participate in every nati
 - **AC-PLUGINS-VOICE-EXTRACTION-HOST-001.6:** The existing `chat-input-actions` registration remains source-compatible. Its slot props gain the composer capability and surface metadata; new `task-create-input-actions` and `new-session-input-actions` slots cover creation forms. Quick Chat uses `chat-input-actions` with `surface: "quick-chat"` and `taskId: null` when it is genuinely task-less.
 - **AC-PLUGINS-VOICE-EXTRACTION-HOST-001.7:** A webhook declaration chooses `access: public` or `access: authenticated`. Existing declarations default to `public`; authenticated webhooks require the current Kandev user and same-origin browser request checks before the existing plugin webhook RPC runs.
 - **AC-PLUGINS-VOICE-EXTRACTION-HOST-001.8:** A webhook declaration may lower its request cap through `max_body_bytes`. Only authenticated webhooks may raise it above the existing 4 MiB public ceiling, up to a host ceiling of 16 MiB. Voice transcription declares an authenticated webhook with a limit of at least 10 MiB.
+- **AC-PLUGINS-VOICE-EXTRACTION-HOST-001.9:** A create-mode `task-create-input-actions` contribution MAY register a handler for its owning dialog's successful task creation. The host SHALL notify that handler with the created task's `{ id, workspace_id }` only after that dialog succeeds, exactly once; failed, canceled, edit, and new-session flows SHALL NOT notify it. Unmounting the slot SHALL unregister its handler.
 
 ## Migrated source detail
 

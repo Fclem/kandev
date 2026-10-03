@@ -195,15 +195,15 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 
 | AC | Evidence |
 | --- | --- |
-| 007.1-007.4, 007.6 | `routingerr/classify_test.go` `TestClassifyLimitScope`, `TestClassifyRetryAfterPrecedence`, `TestClassifyAnthropicSpendLimit`, `TestClassifyGeminiResourceExhausted`, `TestClassifyOMPAnthropicEnvelope`, `TestSanitizeRedactsRequestID`; `transport/acp/opencode_stderr_test.go` `TestProviderErrorFromErrorRetryAfterMs` |
+| 007.1-007.4, 007.6-007.7 | `routingerr/classify_test.go` `TestClassifyLimitScope`, `TestClassifyRetryAfterPrecedence` (including an eight-day delay and unrepresentable values), `TestClassifyAnthropicSpendLimit`, `TestClassifyGeminiResourceExhausted`, `TestClassifyOMPAnthropicEnvelope`, `TestSanitizeRedactsRequestID`; `transport/acp/opencode_stderr_test.go` `TestProviderErrorFromErrorRetryAfterMs` |
 | 007.5 | `transport/acp/adapter_prompt_test.go` `TestOMPPromptEnd*`; `orchestrator/event_handlers_transient_omp_test.go` `TestClassifyKanbanFailureOMP` |
 | 001.1, 001.3, 001.4, 001.6 | `agent/settings/store/sqlite_limit_recovery_test.go`, `handlers/profile_handlers_limit_test.go`, `lifecycle/limit_policy_test.go` `TestLimitPolicyFor` |
 | 001.2, 001.3, 001.5 | `cli-profile-fallback-fields.test.tsx`, `model-fallback-settings-shell.test.tsx`, `agent-profile-dirty.test.ts` |
-| 002.1-002.7, 002.9 | `providerlimit/service_test.go` (including OMP provider-prefix scope), `dynamic/circuit_test.go` `TestCircuitCloseAndList`, `task/repository/sqlite/dynamic_route_test.go` reset_known round trip |
+| 002.1-002.7, 002.9 | `providerlimit/service_test.go` (including OMP provider-prefix scope and eight-day mark expiry), `dynamic/circuit_test.go` `TestCircuitCloseAndList`, `task/repository/sqlite/dynamic_route_test.go` reset_known round trip |
 | 002.8 | `agent-profiles-section.test.tsx` limited pill |
 | 003.1-003.6 | `orchestrator/provider_limit_failure_test.go` |
-| 004.1-004.8 | `orchestrator/provider_limit_waker_test.go`, `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
-| 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` plus seam integration tests |
+| 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (including same-task independent waits across restart/cancel/replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
+| 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict without payload replacement) plus seam integration tests |
 | 006.1-006.5 | `office/service/provider_limit_test.go`, `office/scheduler/routing_lifecycle_limit_test.go`, `scheduler_integration_routing_test.go` lift probe |
 
 ## E2E tests
@@ -262,8 +262,10 @@ Design checks on 2026-10-03:
 - **Continuation semantics.** For a harness that does not keep the user turn
   after a provider rejection, a continuation instruction loses the request.
   The no-turn-event rule resends the input in that case.
-- **Long resets.** A seven-day reset holds opted-in work for days. The user
-  can cancel the wait or send a manual prompt.
+- **Long resets.** A trusted reset up to seven days holds opted-in work for
+  days. A longer known reset remains visible and sets mark expiry, but creates
+  no automatic wait; new launches follow normal admission. Users can still
+  cancel a trusted-reset wait or send a manual prompt.
 - **Office scope.** The Office routing specs are deprecated in favor of
   dynamic routing. This package adds only profile-local behavior and leaves
   workspace routing semantics unchanged.

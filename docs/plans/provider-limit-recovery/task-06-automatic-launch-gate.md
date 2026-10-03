@@ -52,6 +52,9 @@ work proceeds with a one-time notice.
    defers or proceeds under the remaining rules. No third model is used.
 3. Manual launches and profiles that are not opted in behave as before. A
    manual prompt shows one notice.
+4. When one automatic launch already owns the task's deferred-launch slot, a
+   distinct limit-deferred launch receives an explicit conflict. The existing
+   launch payload remains intact, and the later caller retains ownership.
 
 ## ASCII UI preview
 

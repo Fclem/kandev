@@ -46,9 +46,9 @@ for opted-in fixed profiles. All other rules in those documents still apply.
   cannot be proven forms its own isolated binding.
 - **Limit mark:** a durable record that a credential binding and limit scope
   are limited until a stated instant.
-- **Trusted reset:** an instant that comes from structured provider data or a
-  recognized provider notice. It is later than the observation time and at
-  most seven days after it.
+- **Known reset:** a later instant from structured provider data or a
+  recognized provider notice. It may be more than seven days after observation.
+- **Trusted reset:** a known reset no more than seven days after observation.
 - **Opted-in profile:** a concrete profile with **Use fallback model when
   limited**, **Resume after reset**, or both enabled.
 - **Eligible limit fallback:** the profile's explicit fallback model, when Use
@@ -108,10 +108,10 @@ that would use the same account and model.
   session or usage window, exhausted credits, and a spend ceiling. Any other
   limit failure, including one with an unknown scope, shall mark the `model`
   scope for the model that failed.
-- **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.3:** A mark with a trusted reset
-  shall last until that reset. A mark with a known reset more than seven days
-  away shall last until that reset. A mark with no known reset shall last
-  30 minutes.
+- **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.3:** A mark with a known reset
+  shall last until that reset, including when it is more than seven days away.
+  A mark with no known reset shall last 30 minutes. A reset beyond seven days
+  is not trusted for automatic resumption.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.4:** A model shall count as limited
   while its model-scope mark or its binding's account-scope mark is active.
   A different credential binding shall never inherit the mark. If a profile's
@@ -211,11 +211,17 @@ in its own session.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.8:** A waiting session shall not
   occupy a session-ceiling slot. Its resume shall pass the same automatic
   launch admission as other automatic launches.
+- **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.9:** Two distinct sessions on the
+  same task may wait on provider-limit resets concurrently. Each wait shall
+  survive restart and shall be independently cancelled and resumed; changing
+  one wait shall not replace or cancel another.
 
-### REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-005: Automatic launches avoid known limits
+### REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-005: Automatic launch limit handling
 
-**Intent:** While a limit is known, opted-in automatic work does not launch into
-it. Users keep control of manual work.
+**Intent:** When a trusted reset permits recovery, opted-in automatic work
+uses an eligible fallback or waits for that reset. Without an eligible
+fallback or trusted reset, existing automatic launch admission applies.
+Manual work remains user-controlled.
 
 #### Acceptance criteria
 
@@ -227,11 +233,15 @@ it. Users keep control of manual work.
   after reset is on, and the mark has a trusted reset, Kandev shall defer the
   launch durably until that reset. The task shall show a localized `waiting
   for <model> limit reset at <time>` state. Otherwise the launch shall
-  proceed.
+  proceed under existing admission rules. In particular, a known reset beyond
+  seven days remains marked and visible but does not create an automatic wait.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-005.3:** A deferred launch shall replay
   once through the same admission gates as other automatic launches. A task
   that leaves the step, is archived, or is deleted shall drop the deferral
-  without launching.
+  without launching. Only one automatic launch deferral may own a task at a
+  time, following the session-ceiling contract: retain the first payload and
+  return an explicit conflict to a later launch so its caller retains
+  ownership.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-005.4:** Manual launches and manual
   prompts shall use the requested model even while it is limited. The session
   shall show a non-blocking `limited until <time>` notice.
@@ -303,6 +313,12 @@ harness exposes them.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-007.6:** Persisted and displayed
   diagnostics shall not contain a provider request identifier such as
   `req_<id>`. A retry delay shall be kept only as a number.
+- **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-007.7:** A positive delay extracted
+  from structured evidence or recognized delay text that fits the supported
+  duration range shall produce a known reset even when it exceeds seven days.
+  Such a reset shall be displayed and set mark expiry, but shall not authorize
+  automatic resumption. A malformed or unrepresentable delay shall not produce
+  a reset.
 
 ## Out of scope
 

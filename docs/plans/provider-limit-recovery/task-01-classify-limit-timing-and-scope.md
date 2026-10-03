@@ -13,6 +13,7 @@ acceptance_criteria:
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-007.3
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-007.4
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-007.6
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-007.7
 system_design:
   - ../../specs/agents/system-design/provider-limit-recovery.md
 ---
@@ -33,7 +34,8 @@ messages.
 - `routingerr.Input.RetryAfter` and the reset precedence in `Classify`.
 - `streams.ProviderError.RetryAfterMs`, filled in `ProviderErrorFromError`
   from allowlisted `acp.RequestError.Data` keys and bounded text patterns.
-  Values must be positive and no more than seven days.
+  Values must be positive and fit `time.Duration`; valid delays beyond seven
+  days remain known reset evidence but are not trusted for automatic resumption.
 - Pass-through in `classifyKanbanFailure` and Office `HandlePostStartFailure`.
 - Rules `claude.stderr.spend_limit.v1` (ordered before rate),
   `gemini.stderr.quota.v1`, `omp.chunk.anthropic_spend.v1` (ordered first), and
@@ -55,9 +57,9 @@ messages.
    current result. Both sanitizer paths drop `req_011CfL9vJs9DYV45eqL6jbh9`
    (AC 007.6).
 2. Precedence is absolute reset, then milliseconds, then seconds, then text.
-   Malformed, negative, zero, or over-bound delays are dropped. Existing Claude,
-   Codex, and OpenCode fixtures keep their codes and gain the scopes listed in
-   AC 007.3.
+   Malformed, negative, zero, or unrepresentable delays are dropped. An
+   eight-day delay remains an exact known reset. Existing Claude, Codex, and
+   OpenCode fixtures keep their codes and gain the scopes listed in AC 007.3.
 3. A Gemini `RESOURCE_EXHAUSTED` with `retryDelay "34s"` classifies as
    model-scope quota with a 34-second reset. Unrelated text stays unchanged.
 

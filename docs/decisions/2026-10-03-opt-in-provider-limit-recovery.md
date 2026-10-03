@@ -42,10 +42,12 @@ existing resource circuit table. Recording does not depend on
 of a mark. Automatic launches fall back or defer, and manual work always
 proceeds with a notice.
 
-Kanban waits reuse the task `deferred_launch` record and its replay kinds,
-woken by a timer and gated by the circuit's exclusive probe. Office waits reuse
-run parking and `earliest_retry_at`. Dynamic profiles keep their conductor
-policies, and concrete candidates ignore the new switches.
+Kanban session waits use independently keyed entries in the task's
+`deferred_launch` metadata, so several sessions on one task can wait
+concurrently. Automatic launch deferral keeps the existing single task-owned
+launch slot and explicit conflict behavior. Office waits reuse run parking and
+`earliest_retry_at`. Dynamic profiles keep their conductor policies, and
+concrete candidates ignore the new switches.
 
 ## Consequences
 
@@ -59,8 +61,9 @@ policies, and concrete candidates ignore the new switches.
   limit.
 - A profile whose credential binding is unprovable shares marks with no other
   profile.
-- A reset reported as far in the future, up to seven days, can hold opted-in
-  work for days. The user can cancel the wait or send a manual prompt.
+- A trusted reset up to seven days away can hold opted-in work for days. A
+  longer known reset remains the mark expiry and is shown, but does not create
+  an automatic wait. New automatic launches follow existing admission rules.
 
 ## Alternatives Considered
 

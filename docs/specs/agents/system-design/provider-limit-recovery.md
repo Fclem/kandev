@@ -112,11 +112,14 @@ projection fills it only from these sources:
 - Bounded message text matching `retry-after-ms[=:\s]+(\d{1,12})` or
   `Please retry in <n>[.<f>]s`.
 
-A value must be positive and must not exceed seven days in milliseconds.
-Anything else is dropped. Seconds and fractional seconds convert to
-milliseconds exactly; nothing rounds a millisecond value. `classifyKanbanFailure`
-and Office `HandlePostStartFailure` pass the delay through as
-`Input.RetryAfter`.
+A delay must be positive and convert without overflow to `time.Duration`
+(`RetryAfterMs <= math.MaxInt64 / int64(time.Millisecond)`); values outside
+that representable range are dropped. Seven days is not the parsing limit: a
+larger valid delay produces a known reset and mark expiry, but it is not a
+trusted reset for automatic waits or deferrals. Seconds and fractional seconds
+convert to milliseconds exactly; nothing rounds a millisecond value.
+`classifyKanbanFailure` and Office `HandlePostStartFailure` pass the delay
+through as `Input.RetryAfter`.
 
 New rules:
 
@@ -299,46 +302,66 @@ flowchart TD
 
 ## Deferred work and waking
 
-The task `deferred_launch` metadata gains a provider-limit half, next to the
-ceiling half and the dependency intent:
+The task `deferred_launch` metadata keeps its existing single automatic-launch
+slot, shared with the session ceiling, and adds independent session waits:
 
 ```go
-type ProviderLimitDeferral struct {
-    Kind      CeilingLaunchKind      // existing closed replay kinds
-    Payload   map[string]interface{} // same payload contract as the ceiling half
-    Origin    string
+type ProviderLimitWait struct {
     SessionID string
+    TurnID    string
     MarkKey   string
     Model     string
+    Payload   map[string]interface{}
     NotBefore time.Time // exact reset, nanosecond precision
     QueuedAt  time.Time
 }
+
+type ProviderLimitLaunchDeferral struct {
+    LaunchID  string
+    Kind      CeilingLaunchKind
+    Payload   map[string]interface{}
+    Origin    string
+    MarkKey   string
+    Model     string
+    NotBefore time.Time
+    QueuedAt  time.Time
+}
+
+type ProviderLimitDeferrals struct {
+    SessionWaits map[string]ProviderLimitWait // stable session + turn identity
+    Launch       *ProviderLimitLaunchDeferral // one task-owned automatic launch
+}
 ```
 
-- **Turn waits:** A turn wait records kind `prompt_ensure`, with the
-  continuation input from the failure flow and the limited model.
-- **Launch deferrals:** A launch deferral records the kind and payload that
-  the refused launch would have used.
-- **Coexistence:** Merge helpers mirror `MergeCeilingRecord`. A task holds at
-  most one provider-limit half. When a replayed launch meets a ceiling
-  refusal, `deferCeilingRefusal` converts it into the ceiling half and clears
-  the provider-limit half.
-- **Waker:** `providerLimitWaker` lists tasks with a provider-limit half when
-  the service starts. It arms one `time.Timer` for the earliest `NotBefore`
-  and re-arms after every write. The one-minute session reconciliation sweep
-  also calls it as a safety net. At the due time it groups deferrals by
-  `MarkKey` and acquires the probe for each group. It replays one deferral
-  through the replay functions used by `replayCeilingDeferral`, which
-  validate the entry binding, step, archive state, and queued ownership. The
-  rest wait until the mark closes and then replay in `QueuedAt` order. When a
-  probe lease expires, the next waiter may probe (AC 002.6).
-- **Cancellation (AC 004.5):** These actions clear the provider-limit half by
-  compare-and-swap on the record: the `session.recover` action
-  `cancel_retry`, manual `PromptTask`, session stop, a workflow step
-  transition, archive, and delete. Replay of an already-cleared record is a
-  no-op.
-- **Restart:** Records and marks are durable. The waker re-arms on startup,
-  and a past-due deferral fires immediately (AC 004.4).
+- **Turn waits:** Each wait is keyed by the session ID and failed-turn ID.
+  Duplicate delivery for the same turn is idempotent. Distinct sessions on
+  the same task occupy distinct entries and do not replace one another.
+- **Launch deferrals:** The launch entry contains the kind, complete replay
+  payload, origin, stable launch identity, mark key, model, and timing. It
+  extends the existing task-owned launch slot rather than adding another one.
+  The same launch identity survives transitions between limit and ceiling
+  admission. A later distinct launch gets the existing explicit conflict and
+  retains ownership at its caller.
+- **Coexistence:** Merge and clear operations update one wait entry or the
+  shared launch intent with compare-and-swap. They preserve sibling session
+  waits, the existing ceiling fields, and dependency intent. A replayed launch
+  continues through every admission gate; a ceiling refusal updates the same
+  launch identity rather than replacing a session wait or another launch.
+- **Waker:** `providerLimitWaker` lists tasks with pending provider-limit
+  entries on startup. It arms one timer for the earliest `NotBefore` across all
+  entries and re-arms after every write. The one-minute session reconciliation
+  sweep also calls it as a safety net. At a due time it groups session waits by
+  `MarkKey` and acquires the probe for each group. It replays one wait through
+  the existing replay functions. Siblings wait until the probe succeeds, then
+  replay in `QueuedAt` order. When a probe lease expires, the next waiter may
+  probe (AC 002.6). Launch deferrals use the same mark probe and remain
+  independently addressable.
+- **Cancellation (AC 004.5):** Cancel, manual prompt, and session stop clear
+  only the matching session/turn wait by identity. Step transition, archive,
+  and delete clear every wait and launch intent invalidated by that task
+  transition. Replay of an already-cleared identity is a no-op.
+- **Restart:** Waits, launch deferrals, and marks are durable. The waker
+  re-arms on startup, and a past-due entry fires immediately (AC 004.4).
 
 ## Automatic launch gate
 
@@ -358,9 +381,16 @@ excluded. Manual origins skip the gate. Outcomes:
    excluded. The warning is the same as in the failure flow, keyed by the
    launch decision.
 3. **Defer:** The mark has a trusted reset and `ResumeAfterReset` is on. The
-   gate writes the provider-limit half and moves the task to `SCHEDULING`. It
-   adds one status note through the same surface stamping that the ceiling
-   note uses.
+   gate writes the provider-limit state into the shared task launch slot and
+   moves the task to `SCHEDULING`. It adds one status note through the same
+   surface stamping that the ceiling note uses.
+4. **Proceed under existing admission:** No eligible fallback applies and
+   there is no trusted reset. A longer known reset stays active in the mark
+   and visible to profile rows, but does not create a wait (AC 002.3, AC 005.2).
+
+If a distinct launch already owns the task's deferred-launch slot, the gate
+returns the session-ceiling conflict without replacing the stored payload
+(AC 005.3).
 
 For a manual prompt while a mark is active, the gate records a
 `provider_limit_notice` status message, once per session and mark, and the

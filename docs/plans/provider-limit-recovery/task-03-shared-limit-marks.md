@@ -60,9 +60,10 @@ notification that feed a `limited until` pill on profile rows.
    leaves `openai-codex/...` eligible. A model-scope mark limits only its
    model. Unprovable bindings isolate to the profile, and marks survive
    restart.
-2. A later expiry extends a mark and an earlier one never shortens it. Success
-   clears both keys. Only one probe lease is held at a time, and the lease
-   expires after 10 minutes.
+2. A later expiry extends a mark and an earlier one never shortens it. A
+   known eight-day reset sets expiry to that instant; a reset beyond seven
+   days does not permit automatic resumption. Success clears both keys. Only
+   one probe lease is held at a time, and the lease expires after 10 minutes.
 3. A profile row shows a localized `limited until <time>` pill while a mark is
    active, on desktop and phone. The pill disappears after expiry or clear.
 

@@ -19,6 +19,7 @@ acceptance_criteria:
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.6
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.7
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.8
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.9
 system_design:
   - ../../specs/agents/system-design/provider-limit-recovery.md
 ---
@@ -27,16 +28,17 @@ system_design:
 
 ## Summary
 
-Add the provider-limit half of the task `deferred_launch` record and a durable
-timer waker with probe gating. When no fallback applies, an opted-in session
-with a trusted reset waits visibly, survives restart, can be cancelled, and
-resumes once in the same session.
+Add independent, durable session waits to the task `deferred_launch` metadata
+and a timer waker with probe gating. When no fallback applies, an opted-in
+session with a trusted reset waits visibly, survives restart, can be cancelled,
+and resumes once in the same session.
 
 ## In scope
 
-- `task/models` `ProviderLimitDeferral`, with merge, read, and clear helpers
-  and compare-and-swap writes that coexist with the ceiling half and the
-  dependency intent.
+- `task/models` collection of `ProviderLimitWait` entries keyed by session and
+  failed-turn identity, plus the existing single automatic-launch slot.
+- Merge, read, and clear helpers with compare-and-swap updates that preserve
+  sibling waits, the session-ceiling launch record, and dependency intent.
 - The wait branch of `handleProviderLimitFailure`, the
   `provider_limit_waits` counter (at most three), and the waiting status
   message metadata.
@@ -45,8 +47,10 @@ resumes once in the same session.
   probe acquire and release, and replay through the existing kind replay
   functions.
 - Cancellation hooks: `cancel_retry`, manual prompt, stop, step move, archive,
-  and delete.
-- Ceiling conversion when a replay is refused.
+  and delete. Session actions clear only that session's matching wait;
+  task-level invalidation clears all task-owned waits.
+- Ceiling interaction for the single automatic-launch slot, preserving the
+  launch identity and never replacing a session wait.
 - The limit variant of the waiting card in `action-message.tsx`, with
   localized copy and a phone layout.
 - Playwright wait, cancel, and auto-resume flows on desktop and phone.
@@ -58,15 +62,19 @@ resumes once in the same session.
 
 ## Acceptance
 
-1. A limit with a trusted reset shows the waiting card and resumes at the
-   exact reset instant, with no millisecond drift. It never resumes earlier.
-   A restart during the wait still resumes once.
-2. Each cancellation path clears the record and prevents the resume. The
-   fourth consecutive limit, an unknown reset, or a reset beyond the bound
-   shows the existing card.
+1. A trusted reset shows the waiting card and resumes at the exact reset
+   instant, with no millisecond drift. It never resumes earlier. A restart
+   during the wait still resumes once.
+2. Two sessions on one task waiting on the same or different marks survive
+   restart as separate entries. Cancelling or replaying one leaves the other
+   intact; both can resume independently.
 3. With three sessions sharing one account mark, exactly one probes first. The
    other two resume only after the probe succeeds. A failed probe renews the
    wait.
+4. An eight-day known reset remains the mark expiry and appears on the
+   recovery card, but creates no automatic wait. The fourth consecutive wait,
+   an unknown reset, or a reset beyond the trusted bound shows the existing
+   card and does not resume automatically.
 
 ## ASCII UI preview
 

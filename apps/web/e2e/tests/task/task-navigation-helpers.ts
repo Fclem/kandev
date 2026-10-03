@@ -91,10 +91,11 @@ export async function seedNavigationTasks(
         ...(branch
           ? { repositories: [{ repository_id: seed.repositoryId, base_branch: branch }] }
           : {}),
-        executor_profile_id: executorProfileId,
+        executor_profile_id: executorProfileId ?? seed.worktreeExecutorProfileId,
       },
     );
     tasks.push(task);
+    // Local executor sessions share the checkout's Git index.
     await waitForSessionDone(
       api,
       task.id,

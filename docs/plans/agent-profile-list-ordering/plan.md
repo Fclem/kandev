@@ -76,13 +76,15 @@ drag, the sort action, store sync, locales, and E2E coverage.
   for both SQLite and PostgreSQL; keep the historical SQL fixtures unchanged.
 - Global profile membership changes use the same per-agent transactional lock
   as reorder: create, duplicate, soft-delete, agent deletion with profile
-  cascade, and full-row profile updates. Updates also take a profile-ID lock,
-  reread ownership, and retry with sorted actual-owner/target-agent keys when
-  the preliminary owner changed.
+  cascade, and full-row profile updates. A profile deletion locks its candidate
+  owner and stable profile ID even when the preliminary row is workspace-scoped,
+  then rereads owner and scope under lock and retries if either changed.
 - Add deterministic multi-connection SQLite and Postgres tests for create/delete
   and competing A→B versus A→C or workspace/global ownership moves against
   reorder, in both lock acquisition orders. Stale membership rejects with `409`
-  and no event; reorder-first commits against the exact set validated.
+  and no event; reorder-first commits against the exact set validated. Also
+  cover a workspace-profile deletion racing promotion from A to B and reorder
+  of B, proving deletion retries under B's lock without disturbing saved order.
 
 ### Frontend (Task 02)
 
@@ -188,7 +190,7 @@ Installed agents
 | `003.8` | `handlers/agent_settings_org_scope_test.go` and `handlers/interim_settings_interlock_test.go` (route added to both tables); `handlers/profile_order_handlers_test.go`, `TestReorderProfilesRequiresConfigPermission` |
 | `003.2` (server) | `handlers/profile_order_handlers_test.go`, `TestReorderBroadcastsEvent` (payload carries revision), `TestStaleReorderDoesNotBroadcast`, and agent-deletion `404` with no reorder event; no event on unchanged order |
 | Migration and schema ownership | `store/sqlite_migration_test.go`: fresh install, same-DB replay, legacy `CHECK(model)` recreation preserving `sort_order`, `agent_profile_orders` created; `store/postgres_schema_test.go`: fresh and replay (DSN-gated); `requiredstores/catalog_test.go` and `storeconformance` assert both order tables; tagged upgrade manifest checks migrated `sort_order` on the pinned SQLite/Postgres fixtures |
-| `003.6` serialization | Two-connection SQLite and env-gated Postgres tests exercise both lock winners for global create/duplicate, profile soft-delete, `DeleteAgent` cascade, A→B versus A→C updates (including pre-read A, concurrent A→C commit, retry with sorted locks {B,C}), and workspace→global/global→workspace moves against reorder; assert final membership/order, `409` or `404` with no reorder event when mutation wins, and exact committed order/event when reorder wins |
+| `003.6` serialization | Two-connection SQLite and env-gated Postgres tests exercise both lock winners for global create/duplicate, profile soft-delete, `DeleteAgent` cascade, A→B versus A→C updates (including pre-read A, concurrent A→C commit, retry with sorted locks {B,C}), and workspace→global/global→workspace moves against reorder; assert final membership/order, `409` or `404` with no reorder event when mutation wins, and exact committed order/event when reorder wins. A deterministic race pauses deletion after reading a workspace-scoped profile, promotes it from A to B, commits a reorder of B, and proves deletion retries under B's lock without disturbing saved order |
 | `003.12` | `store/profile_order_snapshot_test.go`: file-backed SQLite WAL and DSN-gated Postgres tests call the production snapshot implementation through a package-private after-profile-query barrier, commit a reorder using an independent writer while the read transaction is paused, and assert old-order/old-revision in flight plus new-order/new-revision on the next snapshot. `controller/agent_crud_snapshot_test.go` gives the legacy profile getter different rows and proves both `GET /agents` and `GET /agents/:id` source DTO profiles and revision from the combined snapshot without calling the legacy getter |
 | `003.13` | `hooks/domains/settings/agent-list-resource.test.ts`: dispatch profile-created and profile-deleted events after a pre-event list request starts, resolve its stale response at the same order revision, assert it is not applied, the created profile stays first, the deleted profile stays absent, and a fresh response is applied. `app/settings/agents/page.agent-list-snapshot.test.tsx`: trigger the custom-TUI refresh, defer its `listAgents` response, dispatch create/delete events before resolving the old response, and assert both mirrored lists preserve event-known membership. `app/settings/agents/[agentId]/profiles/[profileId]/use-agent-profile-settings.test.tsx`: trigger the missing-profile fallback, defer its GET, dispatch create/delete events, resolve the pre-event response, and assert neither list loses or resurrects membership. `lib/settings/profile-order-queue.test.ts`: during a deferred `409` refetch, dispatch each event, resolve a pre-event response at the unchanged order revision, assert neither mirrored list is partially replaced, then accept a fresh resource response and replay queued intent with the created profile first and deleted profile absent. `lib/state/slices/settings/settings-slice.test.ts` verifies `applyAgentListSnapshot` atomically rejects a mismatched client epoch. `lib/state/hydration/hydrator.test.ts` verifies pre-event create and delete bootstrap snapshots cannot erase or resurrect event-known membership and leave agent loading incomplete for retry |
 | `002.2`, `002.3` | `lib/settings/agent-profile-order.test.ts`: name order, case-insensitive, numeric runs, accents distinct, stability |
@@ -245,6 +247,15 @@ services). The full backend test command remains blocked by two unchanged
 `internal/testutil/envscan_test.go` failures. PostgreSQL DSN-gated migration and
 concurrency tests were not run because `KANDEV_TEST_POSTGRES_DSN` was unset.
 Plan status remains `in_progress` pending those environment-dependent checks.
+
+Round-five review found workspace-scoped profile deletion could miss the
+membership lock when promotion committed between its reads. The deletion path
+now locks the candidate owner and stable profile identity, rereads, and retries
+when owner or scope changes.
+
+The full store-package race suite and focused regression passed; changed-backend
+golangci-lint reported zero issues. The PostgreSQL case was skipped because
+`KANDEV_TEST_POSTGRES_DSN` is unset.
 
 ## Risks
 

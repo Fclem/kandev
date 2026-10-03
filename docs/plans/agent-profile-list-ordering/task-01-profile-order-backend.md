@@ -46,11 +46,13 @@ permission-gated reorder endpoint with its WebSocket event.
   namespace and agent ID before the first membership read; retain SQLite's
   single-writer serialization.
 - Apply the same per-agent lock in the transaction for global profile creates,
-  duplicates, soft-deletes, and agent deletion with profile cascade. Full-row
-  updates (`UpdateAgentProfile` and `UpdateAgentProfileWithDynamic`) also take
-  a profile-ID lock, plus sorted locks for known global source/target agents;
-  reread ownership under lock and rollback/retry if the actual global owner is
-  not covered by the held lock set.
+  duplicates, soft-deletes, and agent deletion with profile cascade. Profile
+  deletion also locks the candidate owner and stable profile ID when its
+  preliminary row is workspace-scoped, then rereads owner and scope under lock
+  and retries if either changed. Full-row updates (`UpdateAgentProfile` and
+  `UpdateAgentProfileWithDynamic`) take a profile-ID lock plus sorted locks for
+  known global source/target agents; they reread ownership under lock and retry
+  when the preliminary owner is not covered by the held lock set.
 - `Controller.ReorderAgentProfiles`, `ErrProfileOrderStale`, Dynamic-agent
   rejection; the handler broadcasts the event.
 - `PUT /api/v1/agents/:id/profiles/order` and `ActionAgentProfilesReordered`.
@@ -88,6 +90,10 @@ permission-gated reorder endpoint with its WebSocket event.
   orders. Each scenario asserts final order/membership; mutation-first returns
   `409` or `404` as applicable and emits no reorder event; reorder-first returns
   success and broadcasts only the exact locked set.
+- A deterministic SQLite/Postgres race pauses deletion after its preliminary
+  workspace-profile read, promotes the profile from owner A to B, and reorders
+  B before deletion retries under B's lock. Assert both delete lock sets, the
+  committed reorder, and the final membership/order.
 - Snapshot race tests use a package-private after-profile-query barrier in the
   same private implementation called by the production repository method. The
   SQLite case uses a file-backed WAL database with independent reader and writer
@@ -178,3 +184,19 @@ test` remains blocked by two failures in the unchanged
 `internal/testutil/envscan_test.go` environment-scan tests; the expected
 diagnostics were absent. `KANDEV_TEST_POSTGRES_DSN` was unset, so the
 DSN-gated PostgreSQL migration and concurrency tests were not exercised.
+
+Round-five review follow-up: workspace-scoped profile deletion now acquires the
+candidate agent membership lock and stable profile-ID lock, rereads ownership
+and scope, and retries if promotion changed them. The regression in
+`sqlite_profile_order_concurrency_test.go` pauses a delete, promotes its profile
+from agent A to B, commits a reorder of B, and asserts the retry locks and final
+membership/order. The test failed before the fix because deletion completed
+without entering the ownership barrier.
+
+`TMPDIR=/home/clem/.kandev go test -race -trimpath ./internal/agent/settings/store`
+passed. The focused
+`go test -race -trimpath -run '^TestSQLiteWorkspaceProfileDeleteRetriesAfterPromotionAndReorder$' -count=1 ./internal/agent/settings/store`
+passed, and changed-backend `golangci-lint run ./... --new-from-rev=b0dc2bef512eda8def545ba5cf2edc67bbedf73d --timeout=5m`
+reported zero issues using the persistent Go cache outside the full managed
+cache mount. `TestPostgresWorkspaceProfileDeleteRetriesAfterPromotionAndReorder`
+was skipped because `KANDEV_TEST_POSTGRES_DSN` is unset.

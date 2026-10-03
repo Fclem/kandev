@@ -1493,15 +1493,24 @@ func (r *sqliteRepository) DeleteAgentProfile(ctx context.Context, id string) er
 		if err != nil {
 			return fmt.Errorf("agent profile not found: %s", id)
 		}
+		if r.profileOrderAfterOwnershipRead != nil {
+			if err := r.profileOrderAfterOwnershipRead(profile.ID, profile.AgentID, profile.WorkspaceID); err != nil {
+				return err
+			}
+		}
 		tx, err := r.db.BeginTxx(ctx, nil)
 		if err != nil {
 			return err
 		}
-		if profile.WorkspaceID == "" {
-			if err := r.lockMembership(ctx, tx, "delete-profile", profile.AgentID); err != nil {
-				_ = tx.Rollback()
-				return err
-			}
+		// Lock the candidate owner even for workspace-scoped rows; an owner move
+		// between reads must not bypass membership serialization.
+		if err := r.lockMembership(ctx, tx, "delete-profile", profile.AgentID); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if err := lockAgentProfileIdentity(ctx, tx, r.db.DriverName(), profile.ID); err != nil {
+			_ = tx.Rollback()
+			return err
 		}
 		var agentID, workspaceID string
 		err = tx.QueryRowxContext(ctx, tx.Rebind(`SELECT agent_id, workspace_id FROM agent_profiles WHERE id = ? AND deleted_at IS NULL`), id).Scan(&agentID, &workspaceID)

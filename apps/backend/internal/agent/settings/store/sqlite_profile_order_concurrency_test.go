@@ -454,3 +454,177 @@ func assertProfileOrderMutationResult(t *testing.T, ctx context.Context, repo *s
 		}
 	}
 }
+
+func TestSQLiteWorkspaceProfileDeleteRetriesAfterPromotionAndReorder(t *testing.T) {
+	runWorkspaceProfileDeletePromotionRace(t, openSQLiteProfileOrderRaceRepo(t))
+}
+
+func TestPostgresWorkspaceProfileDeleteRetriesAfterPromotionAndReorder(t *testing.T) {
+	db := testutil.OpenIsolatedPostgres(t, testutil.PostgresDSNFromEnv(t))
+	db.SetMaxOpenConns(8)
+	repo, err := newSQLiteRepositoryWithDB(db, db, nil)
+	if err != nil {
+		t.Fatalf("initialize profile order schema: %v", err)
+	}
+	runWorkspaceProfileDeletePromotionRace(t, repo)
+}
+
+func runWorkspaceProfileDeletePromotionRace(t *testing.T, repo *sqliteRepository) {
+	t.Helper()
+	ctx := context.Background()
+	oldOwner := &models.Agent{Name: "workspace-delete-old-owner"}
+	newOwner := &models.Agent{Name: "workspace-delete-new-owner"}
+	for _, agent := range []*models.Agent{oldOwner, newOwner} {
+		if err := repo.CreateAgent(ctx, agent); err != nil {
+			t.Fatal(err)
+		}
+	}
+	profiles := []*models.AgentProfile{
+		{AgentID: newOwner.ID, Name: "first", Model: "model"},
+		{AgentID: newOwner.ID, Name: "second", Model: "model"},
+		{AgentID: oldOwner.ID, WorkspaceID: "workspace-delete-race", Name: "promoted", Model: "model"},
+	}
+	for _, profile := range profiles {
+		if err := repo.CreateAgentProfile(ctx, profile); err != nil {
+			t.Fatal(err)
+		}
+	}
+	promotedID := profiles[2].ID
+
+	deleteObserved := make(chan struct{})
+	releaseDelete := make(chan struct{})
+	deleteRetryObserved := make(chan struct{})
+	releaseDeleteRetry := make(chan struct{})
+	reorderLocked := make(chan struct{})
+	releaseReorder := make(chan struct{})
+	var ownershipReads []struct {
+		agentID     string
+		workspaceID string
+	}
+	var ownershipMu sync.Mutex
+	var deleteLocks []string
+	var lockMu sync.Mutex
+	repo.profileOrderAfterOwnershipRead = func(profileID, agentID, workspaceID string) error {
+		if profileID != promotedID {
+			return nil
+		}
+		ownershipMu.Lock()
+		ownershipReads = append(ownershipReads, struct {
+			agentID     string
+			workspaceID string
+		}{agentID, workspaceID})
+		readCount := len(ownershipReads)
+		ownershipMu.Unlock()
+		switch readCount {
+		case 1:
+			close(deleteObserved)
+			<-releaseDelete
+		case 3:
+			close(deleteRetryObserved)
+			<-releaseDeleteRetry
+		}
+		return nil
+	}
+	repo.profileOrderAfterLock = func(operation, agentID string) error {
+		if operation == "delete-profile" {
+			lockMu.Lock()
+			deleteLocks = append(deleteLocks, agentID)
+			lockMu.Unlock()
+		}
+		if operation == "reorder" && agentID == newOwner.ID {
+			close(reorderLocked)
+			<-releaseReorder
+		}
+		return nil
+	}
+	t.Cleanup(func() {
+		select {
+		case <-releaseDelete:
+		default:
+			close(releaseDelete)
+		}
+		select {
+		case <-releaseDeleteRetry:
+		default:
+			close(releaseDeleteRetry)
+		}
+		select {
+		case <-releaseReorder:
+		default:
+			close(releaseReorder)
+		}
+	})
+
+	deleteDone := make(chan error, 1)
+	go func() { deleteDone <- repo.DeleteAgentProfile(ctx, promotedID) }()
+	select {
+	case <-deleteObserved:
+	case err := <-deleteDone:
+		t.Fatalf("delete completed without entering the ownership barrier: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for delete ownership barrier")
+	}
+
+	promoted, err := repo.GetAgentProfile(ctx, promotedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	promoted.AgentID = newOwner.ID
+	promoted.WorkspaceID = ""
+	if err := repo.UpdateAgentProfile(ctx, promoted); err != nil {
+		t.Fatalf("promote workspace profile while delete is paused: %v", err)
+	}
+	ids, err := globalProfileOrderIDs(ctx, repo, newOwner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("promoted global membership = %v, want three profiles", ids)
+	}
+	reordered := []string{ids[2], ids[1], ids[0]}
+	reorderDone := make(chan profileOrderReorderResult, 1)
+	close(releaseDelete)
+	awaitProfileOrderBarrier(t, deleteRetryObserved)
+	go func() {
+		revision, changed, err := repo.ReorderAgentProfiles(ctx, newOwner.ID, reordered)
+		reorderDone <- profileOrderReorderResult{revision: revision, changed: changed, err: err}
+	}()
+	awaitProfileOrderBarrier(t, reorderLocked)
+	close(releaseDeleteRetry)
+	close(releaseReorder)
+	reorderResult := <-reorderDone
+	if reorderResult.err != nil || !reorderResult.changed || reorderResult.revision != 1 {
+		t.Fatalf("reorder after promotion = revision %d changed %t err %v; want committed revision 1", reorderResult.revision, reorderResult.changed, reorderResult.err)
+	}
+	if err := <-deleteDone; err != nil {
+		t.Fatalf("delete after promotion and reorder: %v", err)
+	}
+	if _, err := repo.GetAgentProfile(ctx, promotedID); err == nil {
+		t.Fatal("promoted profile remains in global membership after delete")
+	}
+	finalIDs, err := globalProfileOrderIDs(ctx, repo, newOwner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(finalIDs) != 2 || finalIDs[0] != reordered[0] || finalIDs[1] != reordered[1] {
+		t.Fatalf("global profile order after delete = %v, want %v", finalIDs, reordered[:2])
+	}
+	lockMu.Lock()
+	gotDeleteLocks := append([]string(nil), deleteLocks...)
+	lockMu.Unlock()
+	if len(gotDeleteLocks) != 2 || gotDeleteLocks[0] != oldOwner.ID || gotDeleteLocks[1] != newOwner.ID {
+		t.Fatalf("delete membership locks = %v, want retry locks [%s %s]", gotDeleteLocks, oldOwner.ID, newOwner.ID)
+	}
+	ownershipMu.Lock()
+	gotReads := append([]struct {
+		agentID     string
+		workspaceID string
+	}(nil), ownershipReads...)
+	ownershipMu.Unlock()
+	if len(gotReads) != 3 ||
+		gotReads[0].agentID != oldOwner.ID || gotReads[0].workspaceID != profiles[2].WorkspaceID ||
+		gotReads[1].agentID != oldOwner.ID || gotReads[1].workspaceID != profiles[2].WorkspaceID ||
+		gotReads[2].agentID != newOwner.ID || gotReads[2].workspaceID != "" {
+		t.Fatalf("ownership reads = %+v, want delete stale owner, promotion source, then delete refreshed owner", gotReads)
+	}
+}

@@ -17,7 +17,7 @@ Expose successful task creation to plugin contributions rendered by that same cr
 
 After the dialog's create operation succeeds, the dialog notifies each registered handler once with a frozen copy of the created task identity (`id` and `workspace_id`). The registry is not connected to the application-wide task event stream. Failed or canceled requests do not notify; edit and new-session surfaces do not receive the create-only capability. Synchronous throws and asynchronous rejections are logged per handler, and dispatch continues without changing the completed creation.
 
-Handlers are scoped to the owning dialog instance. Closing or replacing a dialog unmounts its contributions and removes their handlers, preventing late work from using another dialog's draft.
+Handlers are scoped to the owning dialog open cycle. Closing, reopening, changing modes, or replacing the dialog revokes that cycle's registry before a late response can notify handlers for a later draft.
 
 ## Requirement mapping
 

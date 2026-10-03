@@ -22,6 +22,7 @@ Provide a task-created callback to create-mode task-create plugin contributions.
 ## In scope
 
 - The dialog-owned handler registry and scoped context.
+- Registry ownership for each open create cycle, including revocation when the dialog closes or changes modes.
 - The public SDK and composer-slot callback types, with capability injection only for create-mode task-create contributions.
 - Isolated sync/async handler failure logging and callback cleanup on unmount.
 - Regression coverage for successful create, failure, dialog isolation, and non-create surfaces.
@@ -38,18 +39,19 @@ Provide a task-created callback to create-mode task-create plugin contributions.
 2. Failed or canceled creation and unrelated task creation do not notify the callback.
 3. Unmounting a contribution unregisters its callback; edit and new-session slots do not receive the create-only capability.
 4. The public SDK types synchronous and asynchronous handlers; each failure is logged without blocking other handlers or changing task creation.
+5. A late create response from a closed or replaced dialog cycle cannot notify a contribution from a later cycle.
 
 ## Review remediation results
 
-The acceptance criteria now include the public SDK/slot contract, async handler
-failure isolation, and edit-mode capability exclusion. Verification results:
+The follow-up also binds the registry to one open create cycle, so a late result
+cannot reach callbacks registered after close or a mode change. Verification:
 
-- Targeted task-create dialog tests — passed (40 tests).
+- Targeted task-create dialog and plugin SDK tests — passed (83 tests across 5 files).
 - Web typecheck — passed.
-- ESLint on changed web TypeScript files, including the plugin registry adapter — passed.
+- ESLint on changed web TypeScript files — passed.
 - SDK typecheck, including the typed composer-slot consumer fixture — passed.
 - SDK runtime tests — passed (2 tests).
 - Prettier checks for changed TypeScript files — passed.
 - Specification validation and lint — passed.
-- Public documentation validation — passed (62 tests; 47 published pages).
+- Public documentation tests and validation — passed (62 tests; 47 published pages).
 - `git diff --check` — passed.

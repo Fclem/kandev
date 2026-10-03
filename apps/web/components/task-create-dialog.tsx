@@ -1,6 +1,14 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogFooter } from "@kandev/ui/dialog";
 import type { TaskCreateLastUsedState } from "@/lib/state/slices/settings/types";
@@ -273,14 +281,23 @@ export function TaskCreateDialog(props: TaskCreateDialogProps) {
   return <TaskCreateDialogContent {...props} />;
 }
 
-function useTaskCreateDialogTaskCreatedHandlers(onSuccess: TaskCreateDialogProps["onSuccess"]) {
-  const [registry] = useState(createTaskCreatedHandlerRegistry);
+function useTaskCreateDialogTaskCreatedHandlers(
+  openCreateMode: boolean,
+  onSuccess: TaskCreateDialogProps["onSuccess"],
+) {
+  const registry = useMemo(createTaskCreatedHandlerRegistry, [openCreateMode]);
+  const activeRegistryRef = useRef(registry);
+  useLayoutEffect(() => {
+    activeRegistryRef.current = registry;
+  }, [registry]);
   const notifyOnSuccess = useCallback<NonNullable<TaskCreateDialogProps["onSuccess"]>>(
     (task, mode, meta) => {
-      notifyTaskCreatedHandlers(registry, task, mode);
+      if (openCreateMode && activeRegistryRef.current === registry) {
+        notifyTaskCreatedHandlers(registry, task, mode);
+      }
       onSuccess?.(task, mode, meta);
     },
-    [onSuccess, registry],
+    [openCreateMode, onSuccess, registry],
   );
   return { registry, onSuccess: notifyOnSuccess };
 }
@@ -325,6 +342,7 @@ function TaskCreateDialogContent(props: TaskCreateDialogProps) {
     queuedLastUsedResetHandledRef.current = true;
   }, []);
   const { registry: taskCreatedHandlers, onSuccess } = useTaskCreateDialogTaskCreatedHandlers(
+    props.open && props.mode === "create",
     props.onSuccess,
   );
   const setup = useTaskCreateDialogSetup(
@@ -369,7 +387,7 @@ function TaskCreateDialogContent(props: TaskCreateDialogProps) {
       >
         <TaskCreateDialogPopoverContainerProvider container={popoverContainer}>
           <TaskCreateDialogTaskCreatedContext.Provider
-            value={setup.isCreateMode ? taskCreatedHandlers.register : null}
+            value={props.open && setup.isCreateMode ? taskCreatedHandlers.register : null}
           >
             <DialogHeader>
               <DialogHeaderContent

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- dialog lifecycle cases share one provider and submit harness. */
 import {
   createRef,
   type ComponentProps,
@@ -659,6 +660,7 @@ describe("TaskCreateDialog task-created plugin callback", () => {
     taskCreatedHandlerByWorkspace.set(SECOND_WORKSPACE_ID, second);
     taskSubmitHarness.succeeds = true;
     const firstDialog = renderDialog();
+    const completeFirstOpening = taskSubmitHarness.onSuccessByWorkspace.get(DEFAULT_WORKSPACE_ID);
     const secondDialog = renderDialog("create", { workspaceId: SECOND_WORKSPACE_ID });
     fireEvent.submit(firstDialog.container.querySelector("form")!);
     fireEvent.submit(secondDialog.container.querySelector("form")!);
@@ -670,9 +672,37 @@ describe("TaskCreateDialog task-created plugin callback", () => {
     renderDialog("edit", { workspaceId: "workspace-edit" });
     expect(taskCreatedRegistrationByWorkspace.get("workspace-edit")).toBeNull();
 
+    const firstDialogProps = {
+      mode: "create" as const,
+      onOpenChange: () => undefined,
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      workflowId: null,
+      defaultStepId: null,
+      steps: [],
+    };
+    firstDialog.rerender(<TaskCreateDialog {...firstDialogProps} open={false} />);
+    firstDialog.rerender(<TaskCreateDialog {...firstDialogProps} open />);
+    completeFirstOpening?.({ id: "late-task", workspace_id: DEFAULT_WORKSPACE_ID }, "create");
+    expect(first).toHaveBeenCalledTimes(1);
+    taskSubmitHarness.onSuccessByWorkspace.get(DEFAULT_WORKSPACE_ID)?.(
+      { id: "current-task", workspace_id: DEFAULT_WORKSPACE_ID },
+      "create",
+    );
+    expect(first).toHaveBeenCalledTimes(2);
+
+    const completeBeforeModeChange =
+      taskSubmitHarness.onSuccessByWorkspace.get(DEFAULT_WORKSPACE_ID);
+    firstDialog.rerender(<TaskCreateDialog {...firstDialogProps} mode="edit" open />);
+    firstDialog.rerender(<TaskCreateDialog {...firstDialogProps} open />);
+    completeBeforeModeChange?.(
+      { id: "late-edit-task", workspace_id: DEFAULT_WORKSPACE_ID },
+      "create",
+    );
+    expect(first).toHaveBeenCalledTimes(2);
+
     cleanup();
     const notifyAfterUnmount = taskSubmitHarness.onSuccessByWorkspace.get(DEFAULT_WORKSPACE_ID);
     notifyAfterUnmount?.({ id: "late-task", workspace_id: DEFAULT_WORKSPACE_ID }, "create");
-    expect(first).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(2);
   });
 });

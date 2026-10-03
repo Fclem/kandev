@@ -1653,15 +1653,14 @@ interface PluginComposerSlotProps {
   submittable: boolean;
   disabledReason?: string;
   composer: PluginComposerCapability;
+  /**
+   * Create-mode task-create-input-actions only. Registrations belong to one
+   * open cycle and receive a frozen task identity after successful creation.
+   * Cleanup unregisters the handler; close or replacement revokes that cycle.
+   * Handler errors are logged and do not change or delay task creation.
+   */
   registerTaskCreatedHandler?: RegisterPluginTaskCreatedHandler;
 }
-
-The optional `registerTaskCreatedHandler` is present only for create-mode
-`task-create-input-actions`. It registers a handler for that dialog's successful
-task creation and returns an unregister function. Handlers receive the readonly
-`{ id, workspace_id }` task identity and may return a promise; each thrown or
-rejected handler is logged without blocking other handlers or changing task
-creation.
 type PluginOpenMessageResult = { status: "accepted" | "unavailable" };
 interface PluginTaskPanelConversationCapability {
   openMessage(messageId: string): PluginOpenMessageResult;

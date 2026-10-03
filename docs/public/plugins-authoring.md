@@ -882,9 +882,12 @@ submittable, disabledReason?, composer, registerTaskCreatedHandler? }`. The
 optional `registerTaskCreatedHandler` is supplied only to create-mode
 `task-create-input-actions`. Register a callback that receives a readonly
 `{ id, workspace_id }` identity after that dialog successfully creates its task;
-the registration returns a cleanup function for slot unmount. Callbacks may
-return a promise. The host logs each synchronous throw or rejected promise and
-continues dispatching without affecting task creation.
+the registration returns a cleanup function for slot unmount. Each registration
+belongs to one open create cycle. Closing, reopening, or changing the dialog
+mode revokes that cycle, so a delayed result cannot notify a later contribution.
+Failed or canceled creation does not notify handlers. Callbacks may return a
+promise. The host logs each synchronous throw or rejected promise and continues
+dispatching without affecting task creation.
 The generic `PluginRegistry.registerComponent` signature lets the contribution
 declare `slotProps?: PluginComposerSlotProps` directly, without narrowing an
 `unknown` slot prop.

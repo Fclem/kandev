@@ -48,6 +48,10 @@ for every other case.
   then durably release the attached probe lease. Reconcile finished successful
   runs that retain probe ownership on startup before dispatching their siblings.
   A clear or release write failure retains the exact owner and parked siblings.
+- Every `LiftParkedRuns` due-row path checks for a retained same-mark
+  `provider_limit_probe` owner before clearing a routing block. Successful
+  completion keeps that barrier until durable lease release and owner cleanup
+  both persist, including across startup reconciliation.
 
 - The dispatch gate in `DispatchWithRouting` and unrouted dispatch.
 
@@ -68,15 +72,16 @@ for every other case.
    `ReleaseProbeDurable` for only the exact persisted `ProbeLease`. After
    release and owner/wait cleanup both persist, the handler wakes siblings
    exactly once. If mark clear, lease release, or owner cleanup fails, the owner
-   and sibling waits remain durable and no sibling wakes. Startup reconciliation
-   retries release and cleanup for a finished successful run that retains its
-   owner before sibling dispatch. Inject release persistence failure, restart,
-   restore the owner, then verify retry releases the exact lease and wakes
-   siblings once. `AgentFailed` and `AgentStopped` do not clear marks; limit
-   failure renews the mark.
-   Independently test non-limit failed and stopped probes staying parked until
-   their 10-minute lease expires, then a different waiter probes. Stale or
-   unrelated leases remain untouched.
+   and sibling waits remain durable and no sibling wakes. Every scheduler tick's
+   due-run lift checks the retained same-mark owner; due siblings stay routing-
+   blocked even after mark closure, before and after restart reconciliation.
+   Inject release and owner-cleanup persistence failures after clear succeeds,
+   run normal ticks and restart reconciliation, then verify the sibling remains
+   blocked until cleanup persists and is lifted exactly once afterward.
+   `AgentFailed` and `AgentStopped` do not clear marks; limit failure renews
+   the mark. Independently test non-limit failed and stopped probes staying
+   parked until their 10-minute lease expires, then a different waiter probes.
+   Stale or unrelated leases remain untouched.
 3. Runs on profiles that are not opted in keep their current Office test
    outcomes. Health retry and mark clearing do not affect each other.
 

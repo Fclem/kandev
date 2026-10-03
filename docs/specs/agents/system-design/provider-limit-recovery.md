@@ -482,11 +482,12 @@ each path continues with the requested model (AC 005.4).
     resume is on and the reset is trusted (AC 006.3).
   - Otherwise, preserve existing routing and escalation. An unavailable
     fallback alone never creates a wait.
-- **Lifting:** For `waiting_for_limit_reset` rows,
-  `SchedulerIntegration.liftParkedRoutingRuns` lifts one run per mark through
-  the probe. Siblings stay parked until the mark closes. The lifted run retains
-  the acquired `ProbeLease` identity so its terminal handler can release that
-  exact lease.
+- **Lifting:** Before `LiftParkedRuns` clears a due sibling's routing block,
+  check for a retained `provider_limit_probe` owner on the same mark key. A
+  successful owner remains a barrier after mark closure until exact lease
+  release and owner cleanup persist; every tick keeps due siblings blocked.
+  Startup reconciliation retries before lift; failed/stopped owners stop
+  blocking at lease expiry. The lifted run retains its exact token.
 - **Successful turn:** Only a successful `AgentCompleted` event clears marks;
   `AgentStopped` and `AgentFailed` do not. Resolve the binding from the run's
   `resolved_execution_profile_id`, or its concrete execution profile for an
@@ -496,9 +497,8 @@ each path continues with the requested model (AC 005.4).
   calls `ReleaseProbeDurable(lease, true, 0)` after clearing. A lease already
   invalidated by `ClearOnSuccess` is a successful no-op; unrelated or stale
   tokens never release a later lease.
-- **Release failure:** Keep the exact owner and sibling waits parked. Startup
-  reconciliation retries release and cleanup before sibling dispatch; wake
-  only after both persist. Retries are idempotent.
+- **Release failure:** Keep the exact owner/waits parked; startup reconciliation
+  retries release and cleanup before sibling dispatch.
 - **Unsuccessful turn:** `AgentStopped` and `AgentFailed` leave marks active.
   A classified limit failure records the renewed mark; a non-limit
   unsuccessful probe does not release its lease as a success. Siblings remain

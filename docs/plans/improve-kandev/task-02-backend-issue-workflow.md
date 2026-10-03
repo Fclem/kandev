@@ -5,7 +5,13 @@ status: done
 wave: 1
 depends_on: ["01-harness-planning-gate"]
 plan: "plan.md"
-spec: "../../specs/workspaces/requirements/improve-kandev.md"
+requirements:
+  - REQ-WORKSPACES-IMPROVE-KANDEV-001
+acceptance_criteria:
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.1
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.5
+system_design:
+  - ../../specs/workspaces/system-design/improve-kandev.md
 ---
 
 # Task 02: Backend issue workflow and bootstrap

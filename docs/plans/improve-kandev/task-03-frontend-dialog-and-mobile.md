@@ -5,22 +5,127 @@ status: done
 wave: 2
 depends_on: ["02-backend-issue-workflow"]
 plan: "plan.md"
-spec: "../../specs/workspaces/requirements/improve-kandev.md"
+requirements:
+  - REQ-WORKSPACES-IMPROVE-KANDEV-001
+acceptance_criteria:
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.1
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.2
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.3
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.4
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.5
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.6
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.7
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.8
+system_design:
+  - ../../specs/workspaces/system-design/improve-kandev.md
+  - ../../specs/platform/system-design/diagnostic-logging-02.md
 ---
 
 # Task 03: Dialog persistence, workflow selection, and mobile entry
 
 ## Acceptance
 
-- Selecting **Do not show this again** safely persists the browser-local
-  preference and future opens go directly to task creation unless GitHub-auth
-  recovery must be shown.
-- **Open issue** selects `issue_workflow_id`, renders report-only copy and the
-  one-step preview, while fork-blocked users remain blocked only on Bug
-  fix/Feature request.
-- Phone users reach the shared flow from a 44px-or-larger Utilities row in the
-  mobile home menu, without stacked overlays; touched files pass frontend
-  complexity/length/nested-ternary rules.
+- The desktop app-sidebar action enters the Improve Kandev flow: first-use intro
+  or task creation without the intro. **Do not show this again** persists
+  safely; GitHub-auth recovery takes precedence, and a missing dedicated
+  workspace still shows its choice gate. The phone Utilities row is at least
+  44px tall, closes the menu, and opens the shared dialog without stacked
+  overlays.
+- **Open issue** selects its workflow and one-step preview, shows report-only
+  guidance, and remains available when implementation kinds are fork-blocked.
+  Log capture defaults on for **Bug fix**, off for **Feature request** and
+  **Open issue**, and remains adjustable for every kind.
+- When no dedicated workspace exists, the intro shows a checked-by-default
+  workspace-creation checkbox; if the intro is skipped, a choice panel appears
+  before bootstrap. Opting out targets the active workspace. An existing
+  dedicated workspace is reused without showing the choice, and the bootstrap
+  response supplies the task's target workspace, repository, and workflow IDs.
+
+## UI Preview
+
+These excerpts use the same labels as the [plan preview](plan.md#ui-preview);
+they define structure and order, not pixel spacing. UI-01–02 cover ACs `.3`,
+`.4`, and `.8`; UI-03 and UI-05 cover ACs `.1`, `.2`, and `.5`–`.7`; UI-04
+covers AC `.1`. Task 04 proves desktop/mobile presentation; Task 06 proves
+workspace selection and task placement.
+
+### UI-01: Desktop intro, first open
+Entry point: the app-sidebar footer **Improve Kandev** action.
+
+```text
++-----------------------------------------------+
+| Improve Kandev                                 |
+| Contribution-flow explanation                  |
+| [x] Create a dedicated Improve Kandev workspace|
+| [x] Do not show this again                     |
+| [Cancel]                            [Contribute]|
++-----------------------------------------------+
+```
+
+If GitHub authorization is missing, show its actionable recovery instead of
+the intro, regardless of the saved intro preference.
+
+### UI-02: Desktop workspace choice, intro skipped
+
+```text
++-----------------------------------------------+
+| Improve Kandev                                 |
+| Dedicated workspace does not exist yet        |
+| [x] Create a dedicated Improve Kandev workspace|
+| [Cancel]                             [Continue]|
++-----------------------------------------------+
+```
+On phones this choice appears in the viewport-contained dialog after the menu
+closes, with a touch-sized checkbox.
+
+### UI-03: Desktop task creation
+
+```text
++------------------------------------------------------+
+| [Bug fix] [Feature request] [Open issue]              |
+| Repository: kdlbs/kandev (locked)                     |
+| Branch: main (locked)                                 |
+| Workflow: Improve Kandev (locked)                     |
+| Title: [                                           ]  |
+| Description: [starter template text                ]  |
+| [x] Include recent logs                               |
+| Workflow preview                                      |
+| [Cancel]                                  [Create task]|
++------------------------------------------------------+
+```
+
+**Open issue** replaces the implementation preview and contributor guidance
+with the report-only notice and one-step workflow.
+
+### UI-04: Phone entry
+Entry point: **Open menu**, then **Improve Kandev** in Utilities.
+
+```text
++-------------------------------+
+| Mobile menu                   |
+| Utilities                     |
+| [Improve Kandev]              | 44px-or-larger row
++-------------------------------+
+```
+
+### UI-05: Phone task creation
+
+```text
++-------------------------------+
+| Improve Kandev                | fixed header
+| [Bug fix] [Feature] [Issue]   |
+| Repository: kdlbs/kandev      |
+| Branch: main                 |
+| Workflow: Improve Kandev   |
+| Title: [                    ]|
+| Description: [starter text  ]|
+| [x] Include recent logs      |
+| [Create task]                |
++-------------------------------+
+```
+
+The mobile menu closes before the shared task-create dialog opens. The dialog
+owns internal scrolling and safe-area padding; no overlays are stacked.
 
 ## Verification
 
@@ -53,7 +158,8 @@ Task 04.
 
 - Spec: **What**, **Persistence guarantees**, **Failure modes**, and mobile
   scenario.
-- Plan: **Frontend**, **Mobile design contract**, and **Continuation Snapshot**.
+- Plan: **Frontend**, **Workspace target choice**, **Mobile design contract**,
+  and [UI Preview](plan.md#ui-preview).
 - Mobile exemplar:
   `apps/web/components/kanban/mobile-menu-sheet.tsx`.
 

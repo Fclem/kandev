@@ -5,7 +5,15 @@ status: done
 wave: 3
 depends_on: ["02-backend-issue-workflow", "03-frontend-dialog-and-mobile"]
 plan: "plan.md"
-spec: "../../specs/workspaces/requirements/improve-kandev.md"
+requirements:
+  - REQ-WORKSPACES-IMPROVE-KANDEV-001
+acceptance_criteria:
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.1
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.3
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.4
+  - AC-WORKSPACES-IMPROVE-KANDEV-001.5
+system_design:
+  - ../../specs/workspaces/system-design/improve-kandev.md
 ---
 
 # Task 04: Desktop and mobile E2E coverage
@@ -13,7 +21,9 @@ spec: "../../specs/workspaces/requirements/improve-kandev.md"
 ## Acceptance
 
 - Desktop Playwright proves intro dismissal persistence, direct reopen,
-  report-only task creation, and EMU implementation-versus-issue gating.
+  report-only task creation, and EMU implementation-versus-issue gating. Seed an
+  existing dedicated workspace in the dismissal/reopen scenario so it tests
+  direct task creation; Task 06 covers the missing-workspace choice gate.
 - Mobile Playwright opens the feature through **Open menu** → **Improve
   Kandev**, proves 44px touch targets, reaches **Open issue**, and detects no
   document horizontal overflow.
@@ -21,9 +31,11 @@ spec: "../../specs/workspaces/requirements/improve-kandev.md"
 
 ## Verification
 
+The first managed `pnpm e2e:run` command rebuilds the backend binary, E2E web bundle, and E2E plugin UI/package. The mobile command intentionally uses `--no-build` to reuse those artifacts immediately afterward; do not run it alone after changing source files. See the [runner implementation](../../../apps/web/e2e/scripts/run-e2e.sh) and [E2E documentation](../../../apps/web/e2e/README.md).
+
 ```bash
-cd apps/web && pnpm e2e:run tests/improve-kandev.spec.ts
-cd apps/web && pnpm e2e:run --no-build tests/mobile-improve-kandev.spec.ts -- --project=mobile-chrome
+(cd apps/web && pnpm e2e:run tests/improve-kandev.spec.ts)
+(cd apps/web && pnpm e2e:run --no-build tests/mobile-improve-kandev.spec.ts -- --project=mobile-chrome)
 ```
 
 ## Files likely touched
@@ -65,8 +77,8 @@ build.
   checkbox label was increased to `min-h-12`, then the rebuilt mobile run
   passed with the required touch target and no horizontal overflow.
 
-Task 04 is complete. Continue with Task 05 for repository verification and
-commit.
+Task 04 is complete. Continue with Tasks 06–07, then Task 05 for repository-wide
+verification and the final commit.
 
 ## Risks
 

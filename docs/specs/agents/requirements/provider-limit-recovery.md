@@ -116,9 +116,9 @@ that would use the same account and model.
   while its model-scope mark or its binding's account-scope mark is active.
   A different credential binding shall never inherit the mark. If a profile's
   binding cannot be proven, the mark shall apply only to that profile.
-- **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.5:** When a turn on a binding and
-  model completes successfully, Kandev shall clear that model-scope mark and
-  the binding's account-scope mark.
+- **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.5:** When a Kanban or Office turn
+  on a binding and model completes successfully, Kandev shall clear that
+  model-scope mark and the binding's applicable account-scope mark.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.6:** When a mark's reset passes and
   automatic work is waiting on it, only one waiting session or run shall
   resume first as a probe. The others shall resume after the probe completes a
@@ -243,8 +243,9 @@ Manual work remains user-controlled.
   return an explicit conflict to a later launch so its caller retains
   ownership.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-005.4:** Manual launches and manual
-  prompts shall use the requested model even while it is limited. The session
-  shall show a non-blocking `limited until <time>` notice.
+  prompts shall use the requested model even while it is limited, without
+  switching or deferring. Each shall show one non-blocking
+  `limited until <time>` notice per session and mark.
 - **AC-AGENTS-PROVIDER-LIMIT-RECOVERY-005.5:** Launches on profiles that are not
   opted in shall keep their existing behavior while a mark is active.
 

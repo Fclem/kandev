@@ -392,9 +392,14 @@ If a distinct launch already owns the task's deferred-launch slot, the gate
 returns the session-ceiling conflict without replacing the stored payload
 (AC 005.3).
 
-For a manual prompt while a mark is active, the gate records a
-`provider_limit_notice` status message, once per session and mark, and the
-prompt proceeds (AC 005.4).
+Manual launches use `recordManualProviderLimitNotice(ctx, taskID, sessionID,
+profileID, requestedModel)`, separate from the automatic gate. `StartTask`
+(seam 1), `StartCreatedSession` (seam 2), `ensureSessionRunning` cold resume
+(seam 3), and `ResumeTaskSessionWithOptions` (seam 4) call it after a session
+exists and before agent launch. `promptTask` calls it before dispatch. It
+looks up the requested model's mark and persists one `provider_limit_notice`
+per session and mark. It never changes the model or defers a manual action;
+each path continues with the requested model (AC 005.4).
 
 ## Office runs
 
@@ -416,7 +421,17 @@ prompt proceeds (AC 005.4).
   - Otherwise, the existing routing and escalation apply unchanged.
 - **Lifting:** For `waiting_for_limit_reset` rows,
   `SchedulerIntegration.liftParkedRoutingRuns` lifts one run per mark through
-  the probe. Siblings stay parked until the mark closes.
+  the probe. Siblings stay parked until the mark closes. The lifted run retains
+  the acquired `ProbeLease` identity so its terminal handler can release that
+  exact lease.
+- **Successful turn:** Only a successful `AgentCompleted` event clears marks;
+  `AgentStopped` and `AgentFailed` do not. Resolve the binding from the run's
+  `resolved_execution_profile_id`, or its concrete execution profile for an
+  unrouted run, and the actual `effective_model`. Call
+  `providerlimit.ClearOnSuccess` for that binding and model. For a run lifted
+  as a probe, call `ReleaseProbe(lease, true, 0)` after clearing. Releasing a
+  lease already invalidated by `ClearOnSuccess` is a no-op. The closed mark
+  releases parked siblings (AC 002.5, AC 002.6).
 - **Dispatch gate:** Before candidate launch, `DispatchWithRouting` and
   unrouted dispatch apply the same three outcomes as the Kanban gate. A park
   replaces a defer.

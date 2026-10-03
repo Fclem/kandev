@@ -11,6 +11,7 @@ requirements:
   - REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-006
 acceptance_criteria:
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.1
+  - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.5
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.6
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-006.1
   - AC-AGENTS-PROVIDER-LIMIT-RECOVERY-006.2
@@ -25,21 +26,26 @@ system_design:
 
 ## Summary
 
-Office records limit marks for runs on concrete profiles. For opted-in
-profiles, it requeues once on the profile's fallback model, or parks the run
-until a trusted reset with probe-gated lifting. Office provider health,
-routing, and inbox behavior stay unchanged for every other case.
+Office records limit marks for runs on concrete profiles and clears them after
+successful turns. For opted-in profiles, it requeues once on the profile's
+fallback model, or parks the run until a trusted reset with probe-gated
+lifting. Office provider health, routing, and inbox behavior stay unchanged
+for every other case.
 
 ## In scope
 
-- `Service.tryProviderLimitRecovery` before `tryPostStartFallback` in
-  `event_subscribers.go`, for routed and unrouted runs.
-- The `limit_fallback_model` run field (additive migration), dispatch of the
-  same execution profile under the launch-scoped exact policy, and route
-  attempt `requested_model`/`effective_model`/`override_reason`.
+- The `limit_fallback_model` and `provider_limit_probe` run fields (additive
+  migration), dispatch of the same execution profile under the launch-scoped
+  exact policy, and route attempt `requested_model`/`effective_model`/
+  `override_reason`.
 - Blocked status `waiting_for_limit_reset` through
   `ParkRunForProviderCapacity`, a probe-gated lift in
   `SchedulerIntegration.liftParkedRoutingRuns`, and its localized Office label.
+- Store the acquired `ProbeLease` identity with the lifted run and release it
+  from the matching terminal handler.
+- On successful `AgentCompleted`, resolve the run's execution binding and
+  actual `effective_model`, call `providerlimit.ClearOnSuccess`, and release an
+  attached probe lease after clearing. Stops and failures do not clear marks.
 - The dispatch gate in `DispatchWithRouting` and unrouted dispatch.
 
 ## Out of scope
@@ -55,7 +61,11 @@ routing, and inbox behavior stay unchanged for every other case.
    model.
 2. Without a fallback, a trusted reset parks the run until the reset. Exactly
    one parked run per mark lifts first, and the rest follow after success.
-3. Runs on profiles that are not opted in keep their current Office test
+3. A successful Office turn clears the mark for the resolved execution
+   binding and effective model. A successful probe releases a parked sibling;
+   a limit failure renews the mark and leaves siblings parked. `AgentStopped`
+   does not clear a mark.
+4. Runs on profiles that are not opted in keep their current Office test
    outcomes. Health retry and mark clearing do not affect each other.
 
 ## Verification

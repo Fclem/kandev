@@ -50,8 +50,10 @@ These were confirmed by the user on 2026-10-03:
 - The settings are two per-profile switches, both off by default, with no
   release toggle.
 - Kandev honors any trusted reset up to the fixed seven-day bound.
-- Opted-in automatic launches fall back or defer. Manual work proceeds with a
-  notice.
+- Opted-in automatic launches use an eligible fallback when available, wait
+  only when Resume after reset is on and a reset is trusted, and otherwise
+  follow existing admission rules with the mark retained. Manual work keeps the
+  requested model and shows a notice without deferral.
 
 ### Investigation summary
 
@@ -203,8 +205,8 @@ Chat after a manual prompt: (i) opus is limited until 11:10. Sending anyway.
 | 002.8 | `agent-profiles-section.test.tsx` limited pill |
 | 003.1-003.6 | `orchestrator/provider_limit_failure_test.go` |
 | 004.1-004.9 | `orchestrator/provider_limit_waker_test.go` (including same-task independent waits across restart/cancel/replay), `provider_limit_deferral_test.go`, `action-message.test.tsx` limit card |
-| 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict without payload replacement) plus seam integration tests |
-| 006.1-006.5 | `office/service/provider_limit_test.go`, `office/scheduler/routing_lifecycle_limit_test.go`, `scheduler_integration_routing_test.go` lift probe |
+| 005.1-005.5 | `orchestrator/provider_limit_gate_test.go` (including distinct-launch conflict and unknown/>7-day proceed cases), manual notice integration tests for `StartTask`, `StartCreatedSession`, `ensureSessionRunning`, `ResumeTaskSessionWithOptions`, and `promptTask`, plus `status-message.test.tsx` |
+| 006.1-006.5, 002.5-002.6 | `office/service/provider_limit_test.go` `TestProviderLimitOfficeProbeSuccessClearsMarkAndLiftsSibling` (plus failed-probe retention), `office/scheduler/routing_lifecycle_limit_test.go`, `scheduler_integration_routing_test.go` lift probe |
 
 ## E2E tests
 

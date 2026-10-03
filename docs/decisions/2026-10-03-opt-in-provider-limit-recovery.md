@@ -38,9 +38,12 @@ Every limit failure on a concrete profile records a shared limit mark, whether
 or not the profile opted in. The mark is keyed by the existing credential
 binding fingerprint, with `account` or `model` scope, and is stored in the
 existing resource circuit table. Recording does not depend on
-`features.dynamicAgentRouting`. Only opted-in profiles change behavior because
-of a mark. Automatic launches fall back or defer, and manual work always
-proceeds with a notice.
+`features.dynamicAgentRouting`. Only opted-in profiles change automatic
+behavior because of a mark. Automatic launches use an eligible fallback when
+available, wait only when Resume after reset is on and a reset is trusted, and
+otherwise follow existing admission rules with the mark retained. Manual
+launches and prompts on any profile always keep the requested model and show a
+notice without deferral.
 
 Kanban session waits use independently keyed entries in the task's
 `deferred_launch` metadata, so several sessions on one task can wait

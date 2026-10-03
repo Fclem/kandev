@@ -927,7 +927,7 @@ session.state_changed
 session.activity_changed
 session.turn.started
 session.turn.completed
-session.poll_mode_changed
+session.turn.updated
 agent.available.updated
 agent.install.started
 agent.install.output
@@ -940,7 +940,7 @@ gitlab.task_mr_options.updated
 system.job.update
 ```
 
-Current lifecycle code broadcasts `session.turn.started` and `session.turn.completed` globally even though their payloads identify a session. `task.subscribe` does not change this global routing.
+The `session.turn.started`, `session.turn.completed`, and `session.turn.updated` lifecycle events are delivered to clients subscribed to that session; they are not globally broadcast. Subscribe with `session.subscribe` to receive the events for a session.
 
 `session.activity_changed` carries `task_id`, `session_id`,
 `foreground_activity`, and `active_subagent_count`. The activity is

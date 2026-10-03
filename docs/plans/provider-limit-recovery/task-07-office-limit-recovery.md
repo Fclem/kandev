@@ -42,11 +42,13 @@ for every other case.
   `ParkRunForProviderCapacity`, a probe-gated lift in
   `SchedulerIntegration.liftParkedRoutingRuns`, and its localized Office label.
 - Store the acquired `ProbeLease` identity with the lifted run and release it
-  from the matching terminal handler.
+  from the matching terminal handler using `ReleaseProbeDurable`.
 - On successful `AgentCompleted`, resolve the run's execution binding and
   actual `effective_model`, atomically persist `providerlimit.ClearOnSuccess`,
-  and release the attached probe lease only after the clear succeeds. A clear
-  write failure leaves marks active and siblings parked.
+  then durably release the attached probe lease. Reconcile finished successful
+  runs that retain probe ownership on startup before dispatching their siblings.
+  A clear or release write failure retains the exact owner and parked siblings.
+
 - The dispatch gate in `DispatchWithRouting` and unrouted dispatch.
 
 ## Out of scope
@@ -62,13 +64,19 @@ for every other case.
    trusted reset; otherwise keep existing routing/escalation. A failed durable
    mark write also keeps existing routing/escalation without limit fallback or
    parking. Test resume-off, unknown, and >7-day reset boundaries.
-2. `AgentCompleted` atomically clears both resolved marks, then releases only
-   the exact persisted `ProbeLease` and wakes siblings. If clear persistence
-   fails, marks and siblings remain blocked. `AgentFailed` and `AgentStopped`
-   do not clear marks; limit failure renews the mark. Independently test
-   non-limit failed and stopped probes staying parked until their 10-minute
-   lease expires, then a different waiter probes. Stale/unrelated leases remain
-   untouched.
+2. `AgentCompleted` atomically clears both resolved marks, then calls
+   `ReleaseProbeDurable` for only the exact persisted `ProbeLease`. After
+   release and owner/wait cleanup both persist, the handler wakes siblings
+   exactly once. If mark clear, lease release, or owner cleanup fails, the owner
+   and sibling waits remain durable and no sibling wakes. Startup reconciliation
+   retries release and cleanup for a finished successful run that retains its
+   owner before sibling dispatch. Inject release persistence failure, restart,
+   restore the owner, then verify retry releases the exact lease and wakes
+   siblings once. `AgentFailed` and `AgentStopped` do not clear marks; limit
+   failure renews the mark.
+   Independently test non-limit failed and stopped probes staying parked until
+   their 10-minute lease expires, then a different waiter probes. Stale or
+   unrelated leases remain untouched.
 3. Runs on profiles that are not opted in keep their current Office test
    outcomes. Health retry and mark clearing do not affect each other.
 

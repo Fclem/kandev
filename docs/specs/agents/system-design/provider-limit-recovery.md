@@ -407,13 +407,10 @@ type ProviderLimitDeferrals struct {
   can complete the handoff on retry. The terminal handler reads the matching
   owner record; it never reconstructs a token from current circuit state. A
   restart restores the wait/owner token and does not create a duplicate probe.
-- **Probe completion:** For a matching successful `AgentCompleted`, durably
-  clear the mark, release the persisted token with
-  `ReleaseProbeDurable(lease, true, 0)`, remove that wait/owner, and wake
-  siblings. A clear-write error leaves ownership and siblings parked. A limit
-  failure durably renews the mark and requeues that wait under its new turn
-  identity. A non-limit failure or stop never success-releases the token;
-  siblings remain parked until the lease expires.
+- **Probe completion:** On matching successful `AgentCompleted`, durably clear
+  the mark, release the exact token, remove its wait/owner, and wake siblings.
+  Clear failures keep them parked; limit failures renew/requeue; stops and
+  non-limit failures retain the lease until expiry.
 - **Cancellation (AC 004.5):** Cancel, manual prompt, and session stop clear
   only the matching session/turn wait by identity. Step transition, archive,
   and delete clear every wait and launch intent invalidated by that task
@@ -496,9 +493,12 @@ each path continues with the requested model (AC 005.4).
   unrouted run, and the actual `effective_model`. Call
   `providerlimit.ClearOnSuccess` for that binding and model. For a run lifted
   as a probe, the handler reads the exact persisted `ProbeLease` identity and
-  calls `ReleaseProbe(lease, true, 0)` after clearing. Releasing a lease
-  already invalidated by `ClearOnSuccess` is a no-op. An unrelated or stale
-  lease is not released.
+  calls `ReleaseProbeDurable(lease, true, 0)` after clearing. A lease already
+  invalidated by `ClearOnSuccess` is a successful no-op; unrelated or stale
+  tokens never release a later lease.
+- **Release failure:** Keep the exact owner and sibling waits parked. Startup
+  reconciliation retries release and cleanup before sibling dispatch; wake
+  only after both persist. Retries are idempotent.
 - **Unsuccessful turn:** `AgentStopped` and `AgentFailed` leave marks active.
   A classified limit failure records the renewed mark; a non-limit
   unsuccessful probe does not release its lease as a success. Siblings remain

@@ -231,11 +231,15 @@ relative place at the front, matching the backend's sort for new profiles.
   `applyAgentListSnapshot(agents, epoch)`. The action rejects the result if the
   current epoch differs; otherwise it reconciles `ProfileOrderSync` ordering
   before committing both slices. A rejected result is discarded and the caller
-  uses a fresh resource read rather than writing either list. An existing-agent
-  save captures the epoch before sending its requests. Its response still
-  applies agent-level fields after the epoch changes, but keeps the current
-  stored profile list instead of applying a profile snapshot that could undo
-  create, update, or delete events received during the save.
+  uses a fresh resource read rather than writing either list. On acceptance,
+  fresh profiles replace flat-list groups for agents in the snapshot, while
+  options for agent IDs absent from it are retained. Workspace-scoped Office
+  agents are excluded from `GET /agents`, so their options remain available to
+  Office pickers across unrelated list refreshes. An existing-agent save captures
+  the epoch before sending its requests. Its response still applies agent-level
+  fields after the epoch changes, but keeps the current stored profile list
+  instead of applying a profile snapshot that could undo create, update, or
+  delete events received during the save.
 - `AgentListResourceScope` captures the epoch at request start, rejects and
   retries a response if profile events advanced it while the request was in
   flight, and keys its cached response by that epoch. Direct browser list

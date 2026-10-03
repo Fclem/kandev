@@ -239,11 +239,15 @@ function createAgentProfileOrderActions(
         }
         const reconciled = reconcileAgentOrders(agents, draft.agentProfiles.orderByAgent);
         draft.settingsAgents.items = reconciled;
+        const refreshedAgentIds = new Set(reconciled.map((agent) => agent.id));
         const profileOptions = reconciled.flatMap((agent) =>
           agent.profiles.map((profile) => toAgentProfileOption(agent, profile)),
         );
+        const preservedOptions = draft.agentProfiles.items.filter(
+          (profile) => !refreshedAgentIds.has(profile.agent_id),
+        );
         draft.agentProfiles.items = reconcileFlatAgentOrders(
-          profileOptions,
+          [...profileOptions, ...preservedOptions],
           draft.agentProfiles.orderByAgent,
         );
         applied = true;

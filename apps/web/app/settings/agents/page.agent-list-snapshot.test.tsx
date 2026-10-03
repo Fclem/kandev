@@ -7,15 +7,22 @@ import type { Agent } from "@/lib/types/http";
 
 const AGENT_ID = "agent";
 const AGENT_NAME = "mock-agent";
-const PROFILE_IDS = { created: "created", deleted: "deleted", live: "live" };
+const OFFICE_AGENT_ID = "office-agent";
+const PROFILE_IDS = {
+  created: "created",
+  deleted: "deleted",
+  live: "live",
+  office: "office-profile",
+  stale: "stale",
+};
 
 function Capture({ onStore }: { onStore: (store: StoreApi<AppState>) => void }) {
   onStore(useAppStoreApi());
   return null;
 }
 
-function option(id: string) {
-  return { id, label: id, agent_id: AGENT_ID, agent_name: AGENT_NAME, cli_passthrough: false };
+function option(id: string, agentId = AGENT_ID, agentName = AGENT_NAME) {
+  return { id, label: id, agent_id: agentId, agent_name: agentName, cli_passthrough: false };
 }
 
 describe("agent page list snapshot membership fence", () => {
@@ -86,6 +93,59 @@ describe("agent page list snapshot membership fence", () => {
     expect(api.getState().agentProfiles.items.map((profile) => profile.id)).toEqual([
       PROFILE_IDS.created,
       PROFILE_IDS.live,
+    ]);
+  });
+});
+
+describe("accepted agent-list snapshots", () => {
+  it("retains Office profile options for agents absent from an accepted list snapshot", () => {
+    let store!: StoreApi<AppState>;
+    render(
+      <StateProvider>
+        <Capture
+          onStore={(value) => {
+            store = value;
+          }}
+        />
+      </StateProvider>,
+    );
+    const api = store;
+    const existing = {
+      id: AGENT_ID,
+      name: AGENT_NAME,
+      profiles: [
+        { id: PROFILE_IDS.live, name: "Live" },
+        { id: PROFILE_IDS.stale, name: "Stale" },
+      ],
+    } as Agent;
+    act(() => {
+      api.getState().setSettingsAgents([existing]);
+      api
+        .getState()
+        .setAgentProfiles([
+          option(PROFILE_IDS.live),
+          option(PROFILE_IDS.stale),
+          option(PROFILE_IDS.office, OFFICE_AGENT_ID, "Office Agent"),
+        ]);
+    });
+
+    const accepted = api.getState().applyAgentListSnapshot(
+      [
+        {
+          ...existing,
+          profiles: [existing.profiles[0]],
+        } as Agent,
+      ],
+      api.getState().agentProfiles.version,
+    );
+
+    expect(accepted).toBe(true);
+    expect(api.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      PROFILE_IDS.live,
+    ]);
+    expect(api.getState().agentProfiles.items.map(({ agent_id, id }) => [agent_id, id])).toEqual([
+      [AGENT_ID, PROFILE_IDS.live],
+      [OFFICE_AGENT_ID, PROFILE_IDS.office],
     ]);
   });
 });

@@ -104,12 +104,46 @@ task to the next workflow step.
   historical verification, not the final package gate.
 - Final `make fmt` passed after all implementation and lint-fix changes, using
   `/var/tmp/kandev-go-cache` because the default Go cache was full.
-- Final `make typecheck test lint` reached and passed typechecking, then failed
-  in existing backend tests after the host-injected `KANDEV_*` and
-  `GIT_CONFIG_*` variables were unset. Failures included
-  `TestManagedNPMRuntimeLaunchIgnoresWorkspaceNpmrc` (reproduced alone with
-  npm 10.9.8) and four process-output timing tests in
-  `internal/agentctl/server/api` and `internal/agentctl/server/process`.
+- Final `make typecheck test lint` used `GOCACHE=/var/tmp/kandev-go-cache`,
+  `TMPDIR=/var/tmp`, `GOTMPDIR=/var/tmp`, `GOFLAGS=-p=2`, and `GOMAXPROCS=4`;
+  `CI=true`, Node `v22.22.3`, npm `10.9.8`. It unset `GIT_CONFIG_COUNT`,
+  `GIT_CONFIG_KEY_0`, `GIT_CONFIG_VALUE_0`, and every inherited `KANDEV_*`
+  variable listed by the session environment: `KANDEV_AGENT_PROFILE_ID`,
+  `KANDEV_AGENT_STANDALONE_PORT`, `KANDEV_BACKEND_PORT`, `KANDEV_BUNDLE_DIR`,
+  `KANDEV_CONSOLE_LOG_LEVEL`, `KANDEV_DEBUG_AGENT_MESSAGES`,
+  `KANDEV_DEBUG_PPROF_ENABLED`, `KANDEV_DESKTOP_HEALTH_TOKEN`,
+  `KANDEV_EXECUTION_PROFILE_ID`, `KANDEV_FEATURES_AGENT_SURVIVAL`,
+  `KANDEV_FEATURES_AUTH`, `KANDEV_FEATURES_CANVASES`,
+  `KANDEV_FEATURES_CLAUDE_BACKGROUND_PROMPT_HANDOFF`,
+  `KANDEV_FEATURES_CLAUDE_MID_TURN_STEERING`,
+  `KANDEV_FEATURES_DYNAMIC_AGENT_ROUTING`,
+  `KANDEV_FEATURES_LSP_BROWSER_CONTINUITY`,
+  `KANDEV_FEATURES_MULTI_TENANCY`, `KANDEV_FEATURES_NEEDS_YOU_INBOX`,
+  `KANDEV_FEATURES_OFFICE`, `KANDEV_GITLAB_HOST`, `KANDEV_HOME_DIR`,
+  `KANDEV_INSTALL_KIND`, `KANDEV_INSTANCE_ID`,
+  `KANDEV_INTERNAL_AGENTCTL_STARTUP_CONFIG`, `KANDEV_LOG_LEVEL`,
+  `KANDEV_RESTART_ADAPTER`, `KANDEV_RUNNING_AS_SERVICE`,
+  `KANDEV_SERVER_HOST`, `KANDEV_SERVER_PORT`, `KANDEV_SERVICE_MANAGER`,
+  `KANDEV_SERVICE_METADATA`, `KANDEV_SERVICE_MODE`, `KANDEV_SESSION_ID`,
+  `KANDEV_SUPERVISOR_MANIFEST`, `KANDEV_SUPERVISOR_SOCKET`, `KANDEV_TASK_ID`,
+  `KANDEV_TRUSTED_PROXIES`, and `KANDEV_VERSION`.
+- Exact remaining backend failures:
+  - `TestManagedNPMRuntimeLaunchIgnoresWorkspaceNpmrc`:
+    `managed_npm_runtime_test.go:250: workspace registry = "https://registry.npmjs.org/", want configured registry`.
+    Reproduced alone under Node `v22.22.3` / npm `10.9.8`.
+  - `TestProcessLifecycle_StartListGetCapturesOutput`:
+    `processes_test.go:188: get process = 404, want 200 — the process was retired before its output could be read (body {"error":"process not found"})`.
+  - `TestHandleGetProcess_OmitsOutputByDefault`:
+    `processes_test.go:206: get process = 404, want 200 — the process was retired before its output could be read (body {"error":"process not found"})`.
+  - `TestProcessRunnerCapturesOutput`: `runner_test.go:102: process output not captured in time`.
+  - `TestProcessRunnerStopLogsSignalAttempts`: `runner_test.go:145: signal-ignoring fixture did not become ready`.
+- The implementation commit changes no paths in
+  `internal/agent/agents`, `internal/agentctl/server/api`, or
+  `internal/agentctl/server/process` (checked with `git diff --name-only`
+  against `224cdc4dd`). The npm assertion is in the untouched agent package;
+  the other four failures are in untouched API/process packages. Their failure
+  messages do not identify a task-scoped correction. The process timing cause
+  remains unverified; do not weaken or exclude these tests.
 - Separate final `make lint` passed (backend, web, harness, specs, architecture)
   after the lint findings introduced by the workflow payload edits were fixed.
 - Focused DTO, workflow-event, boot-state, and E2E-fixture regression tests

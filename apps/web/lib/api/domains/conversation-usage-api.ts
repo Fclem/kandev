@@ -12,14 +12,22 @@ export async function getSessionUsageTotals(
   );
 }
 
+export type ListSessionUsageTurnsOptions = ApiRequestOptions & {
+  cursor?: string;
+  limit?: number;
+};
+
 export async function listSessionUsageTurns(
   taskId: string,
   sessionId: string,
-  options?: ApiRequestOptions,
+  options?: ListSessionUsageTurnsOptions,
 ): Promise<UsageTurnsPage> {
+  const { cursor, limit = 1, ...requestOptions } = options ?? {};
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
   return fetchJson<UsageTurnsPage>(
-    `/api/v1/tasks/${encodeURIComponent(taskId)}/sessions/${encodeURIComponent(sessionId)}/usage/turns?limit=1`,
-    options,
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/sessions/${encodeURIComponent(sessionId)}/usage/turns?${query}`,
+    options ? requestOptions : undefined,
   );
 }
 

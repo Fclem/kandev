@@ -517,6 +517,7 @@
       "markdown_preview_by_default",
       "mcp_task_agent_profile_default",
       "message_time_display",
+      "message_metadata_fields",
       "preferred_shell",
       "prevent_auto_start_agent_on_open",
       "prompt_suggestions",

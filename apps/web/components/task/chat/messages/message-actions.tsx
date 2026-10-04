@@ -9,14 +9,12 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconEyeCode,
-  IconHourglass,
   IconInfoCircle,
   IconStar,
   IconGitFork,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { MessageTimestamp } from "./message-timestamp";
-import { formatPromptDuration, messageTurnDurationSeconds } from "@/lib/turn-duration";
+import { messageTurnDurationSeconds } from "@/lib/turn-duration";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useAppStore } from "@/components/state-provider";
 import type { AppState } from "@/lib/state/app-state-types";
@@ -25,7 +23,11 @@ import {
   buildMessageDebugEntries,
   hasMessageDebugMetadata,
 } from "@/components/task/chat/messages/message-debug-metadata";
+import { MessageTurnMetrics } from "@/components/task/chat/messages/message-turn-metrics";
 import { formatMessageSessionConfig } from "@/components/task/chat/messages/message-session-config";
+import { MessageMetadataLine } from "@/components/task/chat/messages/message-metadata-line";
+import type { MessageMetadataField } from "@/lib/message-metadata-fields";
+import { lastQualifyingMessageId } from "@/lib/turn-metrics";
 import {
   Dialog,
   DialogContent,
@@ -245,6 +247,13 @@ function MessageDebugDialog({
           tabIndex={0}
           className="grid min-h-0 flex-1 gap-3 overflow-auto pr-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
+          {open && turn && (
+            <MessageTurnMetrics
+              turn={turn}
+              taskId={message.task_id}
+              sessionId={message.session_id}
+            />
+          )}
           {Object.entries(entries).map(([key, value]) => (
             <div key={key} className="grid gap-1">
               <div className="font-mono text-[10px] uppercase text-muted-foreground">{key}</div>
@@ -256,6 +265,7 @@ function MessageDebugDialog({
     </Dialog>
   );
 }
+
 
 /** Selects the message turn and its model-specific usage multiplier. */
 function findMessageTurn(state: AppState, message: Message): Turn | null {
@@ -284,15 +294,32 @@ function getMessageUsageMultiplier(
   );
 }
 
+const TURN_LINE_FIELDS: readonly MessageMetadataField[] = ["ttft", "tps", "tokens", "cost"];
+
+function lastSelectedTurnMessageId(
+  state: AppState,
+  message: Message,
+  turn: Turn | null,
+  fields: readonly MessageMetadataField[],
+): string | null {
+  if (!fields.some((field) => TURN_LINE_FIELDS.includes(field))) return null;
+  if (!turn?.completed_at || message.author_type !== "agent" || !message.session_id) return null;
+  const messages = state.messages.bySession[message.session_id];
+  return messages ? lastQualifyingMessageId(messages, turn) : null;
+}
+
 function selectMessageTurnAndUsage(state: AppState, message: Message) {
   const sessionId = message.session_id ?? "";
   const turn = findMessageTurn(state, message);
+  const fields = state.userSettings.messageMetadataFields;
   const currentModelId = state.sessionModels.bySessionId[sessionId]?.currentModelId;
   const modelId = resolveMessageModelId(message, turn, currentModelId);
   return {
     turn,
     usageMultiplier: getMessageUsageMultiplier(state, sessionId, modelId),
     nativeCodexForkEnabled: state.features?.codexAppServer ?? false,
+    metadataFields: fields,
+    isLastQualifyingMessage: lastSelectedTurnMessageId(state, message, turn, fields) === message.id,
   };
 }
 
@@ -300,6 +327,8 @@ function useMessageTurnAndUsage(message: Message): {
   turn: Turn | null;
   usageMultiplier: string | null;
   nativeCodexForkEnabled: boolean;
+  metadataFields: MessageMetadataField[];
+  isLastQualifyingMessage: boolean;
 } {
   return useAppStore(useShallow((state) => selectMessageTurnAndUsage(state, message)));
 }
@@ -408,29 +437,6 @@ function ForkConversationAction({ message, turn }: { message: Message; turn: Tur
   );
 }
 
-function MessageMetaInfo({
-  showModel,
-  sessionConfigText,
-  showTimestamp,
-  createdAt,
-}: {
-  showModel: boolean;
-  sessionConfigText: string | null;
-  showTimestamp: boolean;
-  createdAt: string;
-}) {
-  return (
-    <>
-      {showModel && sessionConfigText && (
-        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60 font-mono">
-          {sessionConfigText}
-        </span>
-      )}
-      {showTimestamp && <MessageTimestamp createdAt={createdAt} />}
-    </>
-  );
-}
-
 type ResolvedMessageActionsProps = {
   message: Message;
   showCopy: boolean;
@@ -491,9 +497,9 @@ export function MessageActions(props: MessageActionsProps) {
     isFavorite,
     onToggleFavorite,
   } = resolveMessageActionsProps(props);
-  const { t } = useTranslation();
   const { copied, copy } = useCopyToClipboard();
-  const { turn, usageMultiplier, nativeCodexForkEnabled } = useMessageTurnAndUsage(message);
+  const { turn, usageMultiplier, nativeCodexForkEnabled, metadataFields, isLastQualifyingMessage } =
+    useMessageTurnAndUsage(message);
   const usesTouchDrawer = useTouchDrawer();
   const durationSeconds = messageTurnDurationSeconds(message, turn);
   const sessionConfigText = formatMessageSessionConfig(message.metadata, turn?.metadata);
@@ -507,7 +513,7 @@ export function MessageActions(props: MessageActionsProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 mt-2 focus-within:opacity-100 transition-opacity",
+        "flex min-w-0 flex-wrap items-center gap-2 mt-2 focus-within:opacity-100 transition-opacity",
         actionRowVisibility,
       )}
     >
@@ -535,25 +541,17 @@ export function MessageActions(props: MessageActionsProps) {
           <ForkConversationAction message={message} turn={turn} />
         )}
       {onToggleFavorite && <FavoriteButton isFavorite={isFavorite} onToggle={onToggleFavorite} />}
-      <MessageMetaInfo
+      <MessageMetadataLine
+        message={message}
+        turn={turn}
+        fields={metadataFields}
         showModel={showModel}
         sessionConfigText={sessionConfigText}
         showTimestamp={showTimestamp}
         createdAt={message.created_at}
+        durationSeconds={durationSeconds}
+        isLastQualifyingMessage={isLastQualifyingMessage}
       />
-      {durationSeconds !== null && (
-        <span
-          data-testid="message-turn-duration"
-          className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 text-[10px] text-muted-foreground/60 font-mono"
-        >
-          <IconHourglass className="h-3 w-3 shrink-0" aria-hidden="true" />
-          {formatPromptDuration(durationSeconds, {
-            s: t("task:durationUnitSeconds"),
-            m: t("task:durationUnitMinutes"),
-            h: t("task:durationUnitHours"),
-          })}
-        </span>
-      )}
     </div>
   );
 }

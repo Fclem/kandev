@@ -27,6 +27,27 @@ function completePendingToolCalls(store: StoreApi<AppState>, sessionId: string):
   }
 }
 
+type TurnUpdatedMessage = Parameters<NonNullable<WsHandlers["session.turn.updated"]>>[0];
+
+function applyTurnUpdate(store: StoreApi<AppState>, message: TurnUpdatedMessage): void {
+  const payload = message.payload;
+  if (!payload.session_id || !payload.id) return;
+  store.getState().addTurn({
+    id: payload.id,
+    session_id: sessionId(payload.session_id),
+    task_id: taskId(payload.task_id),
+    started_at: payload.started_at,
+    completed_at: payload.completed_at,
+    execution_profile_id: payload.execution_profile_id
+      ? agentProfileId(payload.execution_profile_id)
+      : undefined,
+    route_generation: payload.route_generation,
+    metadata: payload.metadata,
+    created_at: payload.created_at,
+    updated_at: payload.updated_at,
+  });
+}
+
 /** Registers the session.turn.* WebSocket handlers (started/completed) against the store. */
 export function registerTurnsHandlers(
   store: StoreApi<AppState>,
@@ -140,5 +161,6 @@ export function registerTurnsHandlers(
       // wipes "approved"/"rejected" and re-shows the prompt buttons in the UI.
       completePendingToolCalls(store, payload.session_id);
     },
+    "session.turn.updated": (message) => applyTurnUpdate(store, message),
   };
 }

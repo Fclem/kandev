@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { StoreApi } from "zustand";
+import { TooltipProvider } from "@kandev/ui/tooltip";
 import { StateProvider, useAppStoreApi } from "@/components/state-provider";
 import { defaultState } from "@/lib/state/default-state";
 import {
@@ -241,7 +242,76 @@ describe("MessageActions action row disclosure", () => {
     expect(actions?.className).not.toContain("sm:group-hover:opacity-100");
   });
 });
+describe("MessageActions metadata dialog", () => {
+  it("opens metadata for a completed turn even when message metadata is empty", async () => {
+    renderMessageActions(
+      assistantMessage({ metadata: undefined, turn_id: "turn-1" }),
+      turn({ completed_at: TURN_COMPLETED_AT }),
+    );
 
+    fireEvent.click(screen.getByRole("button", { name: "Show message metadata" }));
+
+    expect(await screen.findByRole("heading", { name: "Message Metadata" })).toBeTruthy();
+    expect(screen.getByTestId("message-turn-metrics")).toBeTruthy();
+  });
+});
+
+describe("MessageActions metadata field selection", () => {
+  it("hides existing metadata values when the user selects an empty line", () => {
+    renderMessageActions(userMessage(), turn({ completed_at: TURN_COMPLETED_AT }));
+    const store = storeApi;
+    if (!store) throw new Error("App store was not captured");
+
+    act(() => {
+      store.getState().setUserSettings({
+        ...store.getState().userSettings,
+        messageMetadataFields: [],
+      });
+    });
+
+    expect(document.querySelector("time")).toBeNull();
+    expect(screen.queryByTestId(MESSAGE_TURN_DURATION_TEST_ID)).toBeNull();
+  });
+
+  it("renders TTFT only on the last qualifying message and supports keyboard tooltip focus", async () => {
+    const first = assistantMessage({ id: "msg-first", turn_id: "turn-1" });
+    const last = assistantMessage({ id: "msg-last", turn_id: "turn-1" });
+    render(
+      <TooltipProvider>
+        <StateProvider>
+          <StoreCapture />
+          <MessageActions message={first} />
+          <MessageActions message={last} />
+        </StateProvider>
+      </TooltipProvider>,
+    );
+    const store = storeApi;
+    if (!store) throw new Error("App store was not captured");
+
+    act(() => {
+      store.getState().addTurn(
+        turn({
+          completed_at: TURN_COMPLETED_AT,
+          metadata: { timing: { ttft_ms: 800 } },
+        }),
+      );
+      store.getState().setMessages("sess-1", [first, last]);
+      store.getState().setUserSettings({
+        ...store.getState().userSettings,
+        messageMetadataFields: ["ttft"],
+      });
+    });
+
+    expect(screen.getAllByTestId("message-metadata-ttft")).toHaveLength(1);
+    expect(screen.queryByTestId("message-metadata-tps")).toBeNull();
+    expect(screen.queryByTestId("message-metadata-tokens")).toBeNull();
+    expect(screen.queryByTestId("message-metadata-cost")).toBeNull();
+    const ttft = screen.getByTestId("message-metadata-ttft");
+    expect(ttft.getAttribute("tabindex")).toBe("0");
+    fireEvent.focus(ttft);
+    expect((await screen.findByRole("tooltip")).textContent).toContain("turn_started");
+  });
+});
 describe("MessageActions favorite toggle", () => {
   it("renders a star button reflecting isFavorite and calls onToggleFavorite when clicked", () => {
     const onToggleFavorite = vi.fn();

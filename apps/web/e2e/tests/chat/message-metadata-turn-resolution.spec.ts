@@ -138,6 +138,7 @@ test.describe("message metadata turn resolution across sessions", () => {
 
     const dialog = testPage.locator('[data-slot="dialog-content"]');
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByTestId("message-turn-metrics")).toBeVisible();
 
     // RED assertion: turn_metadata must be populated, not null. The dialog
     // renders the value verbatim; a missing turn renders the literal `null`.

@@ -5213,6 +5213,21 @@
           "settings_href": "/settings/preferences"
         },
         {
+          "key": "user_settings.message_metadata_fields",
+          "field_path": "message_metadata_fields",
+          "label": "message metadata fields",
+          "description": "Portable preference owned by the current user.",
+          "json_type": "array",
+          "support": "supported",
+          "classification": "writable",
+          "owner": "user-settings",
+          "writable": true,
+          "validator": "user-settings",
+          "authority": "user.self",
+          "change_timing": "future_views",
+          "settings_href": "/settings/preferences"
+        },
+        {
           "key": "user_settings.kanban_sort",
           "field_path": "kanban_sort",
           "label": "kanban board sort",
@@ -6108,6 +6123,7 @@
       "markdown_preview_by_default",
       "mcp_task_agent_profile_default",
       "message_time_display",
+      "message_metadata_fields",
       "preferred_shell",
       "prevent_auto_start_agent_on_open",
       "prompt_suggestions",

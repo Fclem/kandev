@@ -38,7 +38,8 @@ import {
 } from "./propose-task-renderer";
 import type { KandevRenderer } from "./types";
 
-export const KANDEV_RENDERERS: Record<string, KandevRenderer> = {
+import { hasKandevRendererStem, type KandevRendererKey } from "./registry-keys";
+export const KANDEV_RENDERERS: Record<KandevRendererKey, KandevRenderer> = {
   list_workspaces: ListWorkspacesRenderer,
   list_workflows: ListWorkflowsRenderer,
   list_workflow_steps: ListWorkflowStepsRenderer,
@@ -71,6 +72,6 @@ export const KANDEV_RENDERERS: Record<string, KandevRenderer> = {
 };
 
 export function getKandevRenderer(stem: string | null): KandevRenderer | null {
-  if (!stem) return null;
-  return KANDEV_RENDERERS[stem] ?? null;
+  if (!hasKandevRendererStem(stem)) return null;
+  return KANDEV_RENDERERS[stem];
 }

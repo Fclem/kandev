@@ -1,7 +1,7 @@
 ---
 id: "06-deliver-late-timing"
 title: "Deliver late timing updates"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "01-capture-turn-timing"
@@ -74,4 +74,4 @@ Task 01, which supplies the timing patch this event delivers.
 
 ## Results
 
-Pending.
+Results: Timing metadata patches now publish sanitized `turn.updated` snapshots after re-reading the persisted turn; the gateway routes them only to session subscribers, and the web handler updates the turn without completion side effects. The three backend packages, all 24 turn-handler tests, and web typecheck passed. `docs/public/websocket-api.md` already lists this lifecycle event and its session-only delivery scope, so it required no edit.

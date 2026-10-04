@@ -933,6 +933,7 @@ var publicTurnMetadataKeys = [...]string{
 	TurnMetaKeyRuntimeConfigSnapshot,
 	TurnMetaKeyWorkflowStepIDAtStart,
 	TurnMetaKeyLifecycleOnly,
+	"timing",
 	"prompt_usage",
 	"model",
 	"agent_id",

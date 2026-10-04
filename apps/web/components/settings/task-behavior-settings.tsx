@@ -16,6 +16,7 @@ import { SettingsTarget } from "@/components/settings/settings-target";
 import { SleepInhibitionSettings } from "@/components/settings/sleep-inhibition-settings";
 import { TodoListPanelSettings } from "@/components/settings/todo-list-panel-settings";
 import { TurnChangedFilesSettings } from "@/components/settings/turn-changed-files-settings";
+import { MessageMetadataSettings } from "@/components/settings/message-metadata-settings";
 import { UnreadDividerSettings } from "@/components/settings/unread-divider-settings";
 import { UnreadTaskDotSettings } from "@/components/settings/unread-task-dot-settings";
 import {
@@ -128,6 +129,7 @@ export function TaskBehaviorSettings() {
             <UnreadDividerSettings presentation="row" />
             <UnreadTaskDotSettings />
             <TurnChangedFilesSettings />
+            <MessageMetadataSettings />
             <AnchoredPromptBarSettings presentation="row" />
             <TodoListPanelSettings presentation="row" />
             <PromptSuggestionSettings />

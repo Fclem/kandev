@@ -11,6 +11,7 @@ import type {
 import type { NativeMCPDiagnostic } from "@/lib/prepare/native-mcp-diagnostic";
 import type { ModelCatalog } from "@kandev/types/model-catalog";
 import type { UserShellScope } from "@/lib/state/user-shell-scope";
+import type { UsageTurn, UsageTurnsPage } from "@/lib/types/conversation-usage";
 
 export type TerminalState = {
   terminals: Array<{ id: string; output: string[] }>;
@@ -619,6 +620,17 @@ export type BackgroundOutputWindow = {
   evicted: number;
 };
 
+export type UsageTurnIndexEntry = {
+  byTurnId: Record<string, UsageTurn>;
+  newestPageTurnIds: string[];
+  nextCursor?: string;
+  exhausted: boolean;
+};
+
+export type UsageTurnIndexState = {
+  bySessionId: Record<string, UsageTurnIndexEntry>;
+};
+
 export type SessionRuntimeSliceState = {
   terminal: TerminalState;
   shell: ShellState;
@@ -639,6 +651,7 @@ export type SessionRuntimeSliceState = {
   sessionMcpStatus: SessionMCPStatusState;
   promptUsage: PromptUsageState;
   usageInvalidation: { bySessionId: Record<string, number> };
+  usageTurns: UsageTurnIndexState;
   sessionTodos: SessionTodosState;
   userShells: UserShellsState;
   prepareProgress: PrepareProgressState;
@@ -748,6 +761,11 @@ export type SessionRuntimeSliceActions = {
   setSessionMCPStatus: (sessionId: string, history: MCPAttachmentHistory) => void;
   // Prompt usage actions
   setPromptUsage: (sessionId: string, usage: PromptUsageEntry) => void;
+  setSessionUsageTurnPage: (
+    sessionId: string,
+    page: UsageTurnsPage,
+    mode?: "append" | "refresh",
+  ) => void;
   bumpSessionUsageInvalidation: (sessionId: string) => void;
   // Session todos actions
   setSessionTodos: (sessionId: string, entries: TodoEntry[]) => void;

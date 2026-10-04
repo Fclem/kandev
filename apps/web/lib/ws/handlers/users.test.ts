@@ -113,6 +113,22 @@ describe("startup page websocket sync", () => {
   });
 });
 
+describe("message metadata fields websocket sync", () => {
+  it("applies remote selections and preserves explicit empty selections", () => {
+    const store = makeStore();
+    const handler = registerUsersHandlers(store)["user.settings.updated"];
+
+    handler?.(userSettingsMessage({ message_metadata_fields: ["ttft", "tokens"] }));
+    expect(store.getState().userSettings.messageMetadataFields).toEqual(["ttft", "tokens"]);
+
+    handler?.(userSettingsMessage({ message_metadata_fields: [] }));
+    expect(store.getState().userSettings.messageMetadataFields).toEqual([]);
+
+    handler?.(userSettingsMessage({ tasks_list_show_details: true }));
+    expect(store.getState().userSettings.messageMetadataFields).toEqual([]);
+  });
+});
+
 describe("status bar visibility websocket sync", () => {
   it("updates status bar visibility and preserves it when omitted", () => {
     const store = makeStore();

@@ -1,5 +1,5 @@
-import type { ImmerSet } from "./session-runtime-slice";
 import type { SessionRuntimeSlice } from "./types";
+import type { ImmerSet } from "./session-usage-turn-actions";
 
 type SessionViewActions = Pick<
   SessionRuntimeSlice,

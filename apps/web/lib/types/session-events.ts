@@ -343,6 +343,7 @@ export type SessionBackendMessageMap = {
     "session.turn.changes.updated",
     { task_id: string; session_id: string; change_set: TurnChangeSetSummary }
   >;
+  "session.turn.updated": BackendMessage<"session.turn.updated", TurnEventPayload>;
   "session.turn.removed": BackendMessage<
     "session.turn.removed",
     { id: string; session_id: string; task_id: string }

@@ -12,6 +12,7 @@ describe("Task behavior tab ownership", () => {
     expect(taskBehaviorTab("general-todo-list-panel")).toBe("conversation");
     expect(taskBehaviorTab("system-message-queue")).toBe("runtime");
     expect(taskBehaviorTab("general-task-sleep-inhibition")).toBe("runtime");
+    expect(taskBehaviorTab("general-message-metadata-fields")).toBe("conversation");
     expect(taskBehaviorTab("general-agent-tab-close-behavior")).toBe("conversation");
     expect(taskBehaviorTab("general-message-time-display")).toBe("conversation");
     expect(taskBehaviorTab("general-prompt-suggestions")).toBe("conversation");
@@ -42,6 +43,7 @@ it("preserves all discovery fragments", () => {
     "setting-unread-task-dot": "conversation",
     "setting-unread-task-dot-hide-delay": "conversation",
     "setting-agent-tab-close-behavior": "conversation",
+    "setting-message-metadata": "conversation",
     "setting-transcript-navigation": "conversation",
     "setting-session-capacity": "runtime",
     "setting-message-time-display": "conversation",

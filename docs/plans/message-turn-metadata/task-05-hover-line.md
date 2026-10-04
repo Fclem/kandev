@@ -1,7 +1,7 @@
 ---
 id: "05-hover-line"
 title: "Configurable hover line"
-status: pending
+status: done
 wave: 4
 depends_on:
   - "02-message-metadata-setting"
@@ -87,4 +87,4 @@ Tasks 02, 04 and 06. The settings PATCH can only set an explicit list, so the de
 
 ## Results
 
-Pending.
+Implemented configurable hover metadata line, seven-locale TTFT help, selective turn usage items, mobile wrapping, and public configuration documentation. Verification: desktop metadata E2E (3/3, including live TTFT), mobile metadata E2E (1/1), focused Vitest (35/35), web typecheck, lint, i18n checks, and Prettier passed.

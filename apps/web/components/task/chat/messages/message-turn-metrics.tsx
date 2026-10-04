@@ -1,0 +1,183 @@
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { formatPromptDuration } from "@/lib/turn-duration";
+import { useSessionUsageTurn } from "@/hooks/domains/session/use-session-usage-turns";
+import type { Turn } from "@/lib/types/http";
+import { deriveTurnMetrics, type TurnMetrics } from "@/lib/turn-metrics";
+import { formatUsageCost, formatUsageTokens } from "@/lib/utils/conversation-usage";
+
+type MessageTurnMetricsProps = {
+  turn: Turn;
+  taskId: string;
+  sessionId: string;
+};
+
+function MetricRow({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <dt className="min-w-0 text-muted-foreground break-words" title={title}>
+        {label}
+      </dt>
+      <dd className="shrink-0 font-medium tabular-nums text-right">{value}</dd>
+    </div>
+  );
+}
+
+function durationLabel(milliseconds: number, units: { s: string; m: string; h: string }): string {
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+  return formatPromptDuration(milliseconds / 1000, units);
+}
+
+function costSourceLabel(source: string, t: TFunction): string {
+  if (source === "models_dev_list") return t("task:conversationUsage.estimatedCost");
+  if (source === "provider_reported") return t("task:conversationUsage.providerReportedCost");
+  return t("task:conversationUsage.costUnavailable");
+}
+
+function MetricRows({
+  metrics,
+  t,
+  units,
+  rateFormatter,
+}: {
+  metrics: TurnMetrics;
+  t: TFunction;
+  units: { s: string; m: string; h: string };
+  rateFormatter: Intl.NumberFormat;
+}) {
+  const cost = formatUsageCost(metrics.costSubcents ?? undefined);
+  return (
+    <dl className="space-y-1">
+      {metrics.wallTimeMs !== null && (
+        <MetricRow
+          label={t("task:turnMetrics.wallTime")}
+          value={durationLabel(metrics.wallTimeMs, units)}
+        />
+      )}
+      {metrics.ttftMs !== null && (
+        <MetricRow
+          label={t("task:turnMetrics.ttft")}
+          value={durationLabel(metrics.ttftMs, units)}
+          title={t("task:turnMetrics.ttftHelp")}
+        />
+      )}
+      {metrics.tokensPerSecond !== null && (
+        <MetricRow
+          label={t("task:turnMetrics.tokensPerSecond")}
+          value={rateFormatter.format(metrics.tokensPerSecond)}
+          title={t("task:turnMetrics.tokensPerSecondHelp")}
+        />
+      )}
+      {metrics.inputTokens !== null && (
+        <MetricRow
+          label={t("task:conversationUsage.input")}
+          value={formatUsageTokens(metrics.inputTokens)}
+        />
+      )}
+      {metrics.outputTokens !== null && (
+        <MetricRow
+          label={t("task:conversationUsage.output")}
+          value={formatUsageTokens(metrics.outputTokens)}
+        />
+      )}
+      {metrics.cachedReadTokens !== null && (
+        <MetricRow
+          label={t("task:conversationUsage.cachedRead")}
+          value={formatUsageTokens(metrics.cachedReadTokens)}
+        />
+      )}
+      {metrics.cachedWriteTokens !== null && (
+        <MetricRow
+          label={t("task:conversationUsage.cachedWrite")}
+          value={formatUsageTokens(metrics.cachedWriteTokens)}
+        />
+      )}
+      {metrics.reasoningTokens !== null && (
+        <MetricRow
+          label={t("task:conversationUsage.reasoning")}
+          value={formatUsageTokens(metrics.reasoningTokens)}
+        />
+      )}
+      {cost && <MetricRow label={t("task:conversationUsage.recordedCost")} value={cost} />}
+      {cost && metrics.costSources.length > 0 && (
+        <MetricRow
+          label={t("task:conversationUsage.priceSource")}
+          value={metrics.costSources.map((source) => costSourceLabel(source, t)).join(", ")}
+        />
+      )}
+    </dl>
+  );
+}
+
+type UsageStatus = "pending" | "unavailable" | "none" | null;
+
+function getUsageStatus({
+  usageTurn,
+  metrics,
+  isLoading,
+  isUnavailable,
+  isNotFound,
+  completedAt,
+}: {
+  usageTurn: ReturnType<typeof useSessionUsageTurn>["usageTurn"];
+  metrics: TurnMetrics;
+  isLoading: boolean;
+  isUnavailable: boolean;
+  isNotFound: boolean;
+  completedAt: Turn["completed_at"];
+}): UsageStatus {
+  if (usageTurn) {
+    return metrics.inputTokens === null && metrics.outputTokens === null ? "none" : null;
+  }
+  if (isUnavailable) return "unavailable";
+  if (isLoading || !completedAt) return "pending";
+  return isNotFound ? "none" : null;
+}
+
+function UsageNotice({ status, t }: { status: UsageStatus; t: TFunction }) {
+  if (!status) return null;
+  const labels = {
+    pending: t("task:conversationUsage.pending"),
+    unavailable: t("task:turnMetrics.usageUnavailable"),
+    none: t("task:turnMetrics.noUsage"),
+  };
+  return (
+    <p className="text-xs text-muted-foreground" role="status">
+      {labels[status]}
+    </p>
+  );
+}
+
+export function MessageTurnMetrics({ turn, taskId, sessionId }: MessageTurnMetricsProps) {
+  const { t, i18n } = useTranslation();
+  const usageState = useSessionUsageTurn(taskId, sessionId, turn.completed_at ? turn.id : null, {
+    fallbackToSingleTurn: true,
+  });
+  const metrics = deriveTurnMetrics(turn, usageState.usageTurn);
+  const units = {
+    s: t("task:durationUnitSeconds"),
+    m: t("task:durationUnitMinutes"),
+    h: t("task:durationUnitHours"),
+  };
+  const status = getUsageStatus({
+    usageTurn: usageState.usageTurn,
+    metrics,
+    isLoading: usageState.isLoading,
+    isUnavailable: usageState.isUnavailable,
+    isNotFound: usageState.isNotFound,
+    completedAt: turn.completed_at,
+  });
+
+  return (
+    <section className="space-y-2 border-b pb-3" data-testid="message-turn-metrics">
+      <h3 className="text-xs font-semibold text-muted-foreground">{t("task:turnMetrics.title")}</h3>
+      <MetricRows
+        metrics={metrics}
+        t={t}
+        units={units}
+        rateFormatter={new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })}
+      />
+      <UsageNotice status={status} t={t} />
+    </section>
+  );
+}

@@ -1,6 +1,7 @@
 package backendapp
 
 import (
+	"reflect"
 	"testing"
 
 	userdto "github.com/kandev/kandev/internal/user/dto"
@@ -365,5 +366,16 @@ func TestMarkdownPreviewBootProjection(t *testing.T) {
 		if state["markdownPreviewByDefault"] != value {
 			t.Fatalf("boot = %#v", state["markdownPreviewByDefault"])
 		}
+	}
+}
+
+func TestMapUserSettingsStateIncludesMessageMetadataFields(t *testing.T) {
+	state := mapUserSettingsState(userdto.UserSettingsResponse{
+		Settings: userdto.UserSettingsDTO{
+			MessageMetadataFields: []string{"ttft"},
+		},
+	}, "workspace-1")
+	if got := state["messageMetadataFields"]; !reflect.DeepEqual(got, []string{"ttft"}) {
+		t.Fatalf("messageMetadataFields = %#v, want [ttft]", got)
 	}
 }

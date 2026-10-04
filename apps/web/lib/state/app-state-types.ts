@@ -82,15 +82,16 @@ import type {
 import type { TaskOverviewSlice } from "./slices/task-overview-types";
 import type { AppStateExtraActions } from "./app-state-extra-actions";
 import type { TurnChangeSetSummary } from "@/lib/types/turn-changes";
-import type { GitStatusRefreshState } from "./slices/session-runtime/types";
 import type {
   AvailableCommand,
-  SessionModeEntry,
   AgentCapabilitiesEntry,
-  SessionModelEntry,
   ConfigOptionEntry,
+  GitStatusRefreshState,
   PromptUsageEntry,
+  SessionModeEntry,
+  SessionModelEntry,
   SessionPollMode,
+  SessionRuntimeSliceActions,
   TodoEntry,
   UserShellInfo,
 } from "./slices/session-runtime/types";
@@ -171,6 +172,7 @@ export type AppState = KanbanSlice & {
   sessionMcpStatus: (typeof defaultSessionRuntimeState)["sessionMcpStatus"];
   promptUsage: (typeof defaultSessionRuntimeState)["promptUsage"];
   usageInvalidation: (typeof defaultSessionRuntimeState)["usageInvalidation"];
+  usageTurns: (typeof defaultSessionRuntimeState)["usageTurns"];
   sessionPollMode: (typeof defaultSessionRuntimeState)["sessionPollMode"];
   embeddedVscodeSupport: (typeof defaultSessionRuntimeState)["embeddedVscodeSupport"];
   backgroundWork: (typeof defaultSessionRuntimeState)["backgroundWork"];
@@ -669,6 +671,7 @@ export type AppState = KanbanSlice & {
   invalidateConfirmedConfigOptions: (sessionId: string, executionId?: string) => void;
   // Prompt usage actions
   setPromptUsage: (sessionId: string, usage: PromptUsageEntry) => void;
+  setSessionUsageTurnPage: SessionRuntimeSliceActions["setSessionUsageTurnPage"];
   bumpSessionUsageInvalidation: (sessionId: string) => void;
   // Session todos actions
   setSessionTodos: (sessionId: string, entries: TodoEntry[]) => void;

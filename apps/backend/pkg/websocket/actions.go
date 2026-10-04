@@ -284,6 +284,7 @@ const (
 	ActionSessionAgentctlError          = "session.agentctl_error"
 	ActionSessionTurnStarted            = "session.turn.started"
 	ActionSessionTurnCompleted          = "session.turn.completed"
+	ActionSessionTurnUpdated            = "session.turn.updated"
 	ActionSessionTurnRemoved            = "session.turn.removed"
 	ActionSessionTurnChangesUpdated     = "session.turn.changes.updated"
 	ActionSessionAvailableCommands      = "session.available_commands"

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { render, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StoreApi } from "zustand";
 import { StateProvider, useAppStoreApi } from "@/components/state-provider";
 import type { AppState } from "@/lib/state/store";
@@ -46,6 +46,10 @@ const SETTINGS_WORKSPACES_RESPONSE = {
   ],
   total: 1,
 };
+
+afterEach(() => {
+  document.cookie = `${scopedCookieName(ACTIVE_WORKSPACE_COOKIE)}=; path=/; max-age=0`;
+});
 
 function makeWrapper(initialActiveId: string | null) {
   let captured: StoreApi<AppState> | null = null;
@@ -124,6 +128,5 @@ describe("SettingsRouteBootstrap", () => {
     });
     expect(getStore()?.getState().workspaces.activeId).toBe(SETTINGS_WORKSPACE_ID);
     expect(getStore()?.getState().workspaces.activeIdRevision ?? 0).toBe(0);
-    document.cookie = `${scopedCookieName(ACTIVE_WORKSPACE_COOKIE)}=; path=/; max-age=0`;
   });
 });

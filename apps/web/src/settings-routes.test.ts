@@ -154,6 +154,24 @@ describe("buildSettingsInitialStateForRoute", () => {
   });
 });
 
+describe("current tab workspace settings hydration", () => {
+  beforeEach(() => {
+    document.cookie = `${ACTIVE_WORKSPACE_COOKIE}=; path=/; max-age=0`;
+    document.cookie = `${scopedCookieName(ACTIVE_WORKSPACE_COOKIE)}=; path=/; max-age=0`;
+  });
+
+  it("keeps the current tab workspace ahead of the shared cookie and saved setting", () => {
+    document.cookie = `${ACTIVE_WORKSPACE_COOKIE}=ws-2; path=/`;
+    const state = buildState({
+      workspaces: workspaceRows(["ws-1", "ws-2"]),
+      userSettingsResponse: userSettings({ workspace_id: workspaceId("ws-2") }),
+      currentWorkspaceId: "ws-1",
+    });
+    expect(state.workspaces?.activeId).toBe("ws-1");
+    expect(state.userSettings?.workspaceId).toBe("ws-1");
+  });
+});
+
 describe("message queue settings route", () => {
   it("renders the Message Queue inside the merged Task behavior page", () => {
     const route = renderSettingsRoute(TASK_BEHAVIOR_PATH);

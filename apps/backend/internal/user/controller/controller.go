@@ -158,6 +158,7 @@ func (c *Controller) UpdateUserSettings(ctx context.Context, req dto.UpdateUserS
 		QuickChatTabOrderByWorkspace:      req.QuickChatTabOrderByWorkspace,
 		KanbanHiddenStepIDs:               req.KanbanHiddenStepIDs,
 		WorkflowIDsWithAutoHideEmptySteps: req.WorkflowIDsWithAutoHideEmptySteps,
+		MessageMetadataFields:             req.MessageMetadataFields,
 		KanbanSort:                        req.KanbanSort,
 		KanbanPriorityFilterTokens:        req.KanbanPriorityFilterTokens,
 	})

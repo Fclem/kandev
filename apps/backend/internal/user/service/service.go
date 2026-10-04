@@ -32,7 +32,8 @@ const (
 	changesPanelLayoutFlat = "flat"
 	changesPanelLayoutTree = "tree"
 
-	maxUserSettingsCASAttempts = 3
+	messageMetadataFieldsSettingKey = "message_metadata_fields"
+	maxUserSettingsCASAttempts      = 3
 )
 
 type Service struct {
@@ -119,6 +120,7 @@ type UpdateUserSettingsRequest struct {
 	QuickChatTabOrderByWorkspace      *map[string][]string
 	KanbanHiddenStepIDs               *map[string][]string
 	WorkflowIDsWithAutoHideEmptySteps *[]string
+	MessageMetadataFields             *[]string
 	KanbanSort                        *string
 	KanbanPriorityFilterTokens        *[]string
 }
@@ -406,6 +408,12 @@ func taskCreateLastUsedPatchEmpty(patch models.TaskCreateLastUsed) bool {
 
 // applyBasicSettings copies simple (non-validated) fields from req to settings.
 func applyBasicSettings(settings *models.UserSettings, req *UpdateUserSettingsRequest) error {
+	if req.MessageMetadataFields != nil {
+		if err := validateMessageMetadataFields(*req.MessageMetadataFields); err != nil {
+			return err
+		}
+		settings.MessageMetadataFields = append([]string{}, (*req.MessageMetadataFields)...)
+	}
 	if req.JiraDefaultViewID != nil {
 		settings.JiraDefaultViewID = strings.TrimSpace(*req.JiraDefaultViewID)
 	}
@@ -620,6 +628,20 @@ func normalizeWorkflowIDsWithAutoHideEmptySteps(workflowIDs []string) ([]string,
 	}
 	sort.Strings(normalized)
 	return normalized, nil
+}
+
+func validateMessageMetadataFields(fields []string) error {
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		if !models.IsMessageMetadataField(field) {
+			return fmt.Errorf("%s: unknown value %q", messageMetadataFieldsSettingKey, field)
+		}
+		if _, exists := seen[field]; exists {
+			return fmt.Errorf("%s: duplicate value %q", messageMetadataFieldsSettingKey, field)
+		}
+		seen[field] = struct{}{}
+	}
+	return nil
 }
 
 // validateKanbanHiddenStepIDs bounds the per-workflow hidden-step-id map so a
@@ -1255,6 +1277,7 @@ func (s *Service) publishUserSettingsEvent(ctx context.Context, settings *models
 		"app_status_bar_order":                     settings.AppStatusBarOrder,
 		"kanban_hidden_step_ids":                   settings.KanbanHiddenStepIDs,
 		"workflow_ids_with_auto_hide_empty_steps":  settings.WorkflowIDsWithAutoHideEmptySteps,
+		messageMetadataFieldsSettingKey:            settings.MessageMetadataFields,
 		"kanban_sort":                              settings.KanbanSort,
 		"kanban_priority_filter_tokens":            settings.KanbanPriorityFilterTokens,
 		"revision":                                 settings.Revision,

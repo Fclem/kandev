@@ -686,6 +686,7 @@ func marshalUserSettingsPayload(settings *models.UserSettings) ([]byte, error) {
 		"quick_chat_tab_order_by_workspace":        quickChatTabOrderByWorkspace,
 		"kanban_hidden_step_ids":                   settings.KanbanHiddenStepIDs,
 		"workflow_ids_with_auto_hide_empty_steps":  settings.WorkflowIDsWithAutoHideEmptySteps,
+		"message_metadata_fields":                  settings.MessageMetadataFields,
 		"kanban_sort":                              models.NormalizeKanbanSort(settings.KanbanSort),
 		"kanban_priority_filter_tokens":            settings.KanbanPriorityFilterTokens,
 	})
@@ -781,6 +782,7 @@ func defaultUserSettings(userID string) *models.UserSettings {
 		QuickChatTabOrderByWorkspace:      map[string][]string{},
 		KanbanHiddenStepIDs:               map[string][]string{},
 		WorkflowIDsWithAutoHideEmptySteps: []string{},
+		MessageMetadataFields:             models.DefaultMessageMetadataFields(),
 		KanbanSort:                        models.KanbanSortDefault,
 		KanbanPriorityFilterTokens:        []string{},
 	}
@@ -888,6 +890,7 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 		QuickChatTabOrderByWorkspace      map[string][]string                     `json:"quick_chat_tab_order_by_workspace"`
 		KanbanHiddenStepIDs               json.RawMessage                         `json:"kanban_hidden_step_ids"`
 		WorkflowIDsWithAutoHideEmptySteps json.RawMessage                         `json:"workflow_ids_with_auto_hide_empty_steps"`
+		MessageMetadataFields             json.RawMessage                         `json:"message_metadata_fields"`
 		KanbanSort                        string                                  `json:"kanban_sort"`
 		KanbanPriorityFilterTokens        json.RawMessage                         `json:"kanban_priority_filter_tokens"`
 	}
@@ -1087,6 +1090,9 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 	settings.AgentTabCloseBehavior = normalizeAgentTabCloseBehaviorStored(payload.AgentTabCloseBehavior)
 	settings.KanbanHiddenStepIDs = decodeKanbanHiddenStepIDs(payload.KanbanHiddenStepIDs)
 	settings.WorkflowIDsWithAutoHideEmptySteps = decodeStringIDs(payload.WorkflowIDsWithAutoHideEmptySteps)
+	if len(payload.MessageMetadataFields) != 0 {
+		settings.MessageMetadataFields = decodeMessageMetadataFields(payload.MessageMetadataFields)
+	}
 	settings.KanbanSort = models.NormalizeKanbanSort(payload.KanbanSort)
 	settings.KanbanPriorityFilterTokens = decodeKanbanPriorityFilterTokens(payload.KanbanPriorityFilterTokens)
 	return settings, nil
@@ -1120,6 +1126,17 @@ func decodeStringIDs(raw json.RawMessage) []string {
 		return []string{}
 	}
 	return ids
+}
+
+func decodeMessageMetadataFields(raw json.RawMessage) []string {
+	fields := decodeStringIDs(raw)
+	known := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if models.IsMessageMetadataField(field) {
+			known = append(known, field)
+		}
+	}
+	return known
 }
 
 // normalizeLastSeenDisplayStored maps a stored JSON value to the canonical

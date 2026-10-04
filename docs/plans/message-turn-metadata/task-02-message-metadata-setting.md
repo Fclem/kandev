@@ -1,7 +1,7 @@
 ---
 id: "02-message-metadata-setting"
 title: "Message metadata fields setting"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -75,4 +75,4 @@ None.
 
 ## Results
 
-Pending.
+Results: Implemented durable storage, validation, DTO/controller/event/boot projection, settings catalog contracts, and web state mapping. `go test ./internal/user/... ./internal/backendapp/ ./internal/settingscatalog/... -count=1`, settings-catalog `--check`, `node --test scripts/settings-contract-ci.test.mjs`, focused web settings tests, and `pnpm run typecheck` passed.

@@ -532,7 +532,14 @@ func (s *Service) PatchTurnMetadata(
 	if !updated {
 		return fmt.Errorf("patch turn %s metadata: turn not found in session %s", turnID, sessionID)
 	}
-	return nil
+	if _, hasTiming := updates["timing"]; !hasTiming {
+		return nil
+	}
+	turn, err := s.turns.GetTurn(ctx, turnID)
+	if err != nil {
+		return fmt.Errorf("reload turn %s after timing metadata patch: %w", turnID, err)
+	}
+	return s.publishTurnEvent(events.TurnUpdated, turn, nil)
 }
 
 // AbandonOpenTurns closes any open turns for a session by setting their

@@ -1,6 +1,6 @@
 ---
 created: 2026-10-03
-status: draft
+status: complete
 requirements:
   - REQ-COSTS-CONVERSATION-USAGE-005
 system_design:
@@ -98,18 +98,20 @@ Maps to `AC-COSTS-CONVERSATION-USAGE-005.1`, `.2`, `.4`, `.7`.
 
 ## Work orders
 
-- [ ] [Task 01: Capture turn timing](task-01-capture-turn-timing.md)
-- [ ] [Task 06: Deliver late timing updates](task-06-deliver-late-timing.md)
-- [ ] [Task 02: Message metadata fields setting](task-02-message-metadata-setting.md)
-- [ ] [Task 03: Settings editor](task-03-settings-editor.md)
-- [ ] [Task 04: Turn metrics and metadata window](task-04-turn-metrics-window.md)
-- [ ] [Task 05: Configurable hover line](task-05-hover-line.md)
+- [x] [Task 01: Capture turn timing](task-01-capture-turn-timing.md)
+- [x] [Task 06: Deliver late timing updates](task-06-deliver-late-timing.md)
+- [x] [Task 02: Message metadata fields setting](task-02-message-metadata-setting.md)
+- [x] [Task 03: Settings editor](task-03-settings-editor.md)
+- [x] [Task 04: Turn metrics and metadata window](task-04-turn-metrics-window.md)
+- [x] [Task 05: Configurable hover line](task-05-hover-line.md)
 
 Dependency order: 01 and 02 are parallel-safe, then 03 (needs 02) and 06 (needs 01), 04 (needs 01; also sequenced after 03 because both regenerate the pseudo locale and `_verbatim.json`), 05 (needs 02, 04 and 06).
 
 ## Verification results
 
-Pending.
+Task 04 complete: focused Vitest (8 files, 84 tests), desktop E2E (2), mobile E2E (1), i18n checks, `make fmt`, web typecheck, and lint passed.
+
+Task 05 complete: focused Vitest (2 files, 35 tests), desktop E2E (3), mobile E2E (1), web typecheck, lint, i18n checks, and Prettier passed.
 
 ## Risks
 

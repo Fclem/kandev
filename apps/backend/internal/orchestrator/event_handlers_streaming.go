@@ -60,6 +60,7 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		eventExecutionID = payload.AgentID
 	}
 	eventType := payload.Data.Type
+	receivedAt := time.Now()
 	if !s.resumeAttemptAllowsExecution(payload.SessionID, eventExecutionID, payload.AttemptID) {
 		s.logger.Debug("ignoring stream event from a stale resume attempt",
 			zap.String("task_id", payload.TaskID),
@@ -198,9 +199,15 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 
 	case "message_streaming":
 		s.handleMessageStreamingEvent(ctx, payload)
+		if observedOutput {
+			s.recordTurnFirstOutput(sessionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
+		}
 
 	case "thinking_streaming":
 		s.handleThinkingStreamingEvent(ctx, payload)
+		if observedOutput {
+			s.recordTurnFirstOutput(sessionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
+		}
 
 	case streams.EventTypeResponseAttemptReset:
 		if !s.responseAttemptResetOwnsCurrentPrompt(payload) {
@@ -219,6 +226,7 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		s.handleCompleteStreamEventWithGuardRelease(ctx, payload, streamGuard)
 
 	case agentEventError:
+		s.discardTurnTiming(sessionID)
 		s.handleAgentErrorEvent(ctx, payload)
 
 	case "session_status":
@@ -284,6 +292,7 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		s.handleAgentLogEvent(ctx, payload)
 
 	case streams.EventTypeTurnStarted:
+		s.startTurnTiming(sessionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
 		s.persistNativeCodexTurnID(ctx, payload)
 		s.retireCountedEmptyTurn(sessionID)
 		// D3: the single turn boundary for the whole feature. Clearing here,
@@ -2195,6 +2204,7 @@ func (s *Service) terminalExecutionMarker(sessionID, executionID string) (termin
 type readyTurnMark struct {
 	turnID    string
 	expiresAt time.Time
+	closedAt  time.Time
 }
 
 func readyTurnKey(sessionID, executionID string, promptGeneration uint64) string {
@@ -2233,16 +2243,22 @@ func readyTurnZeroGenKey(sessionID, executionID string) string {
 // cross-subject/cross-instance gap; this mark remains a compatibility fallback
 // for older producers and completion paths without a captured ID.
 func (s *Service) markReadyTurn(sessionID, executionID string, promptGeneration uint64, turnID string) {
+	s.markReadyTurnAt(sessionID, executionID, promptGeneration, turnID, time.Now())
+}
+
+func (s *Service) markReadyTurnAt(sessionID, executionID string, promptGeneration uint64, turnID string, closedAt time.Time) {
 	if sessionID == "" || executionID == "" || turnID == "" {
 		return
 	}
-	expiresAt := time.Now().Add(completedExecutionRetention)
+	s.closeTurnTiming(sessionID, turnID, closedAt)
+	expiresAt := closedAt.Add(completedExecutionRetention)
+	mark := readyTurnMark{turnID: turnID, expiresAt: expiresAt, closedAt: closedAt}
 	if promptGeneration == 0 {
-		s.pushZeroGenReadyTurnMark(sessionID, executionID, readyTurnMark{turnID: turnID, expiresAt: expiresAt})
+		s.pushZeroGenReadyTurnMark(sessionID, executionID, mark)
 		return
 	}
 	key := readyTurnKey(sessionID, executionID, promptGeneration)
-	s.readyTurnMarks.Store(key, readyTurnMark{turnID: turnID, expiresAt: expiresAt})
+	s.readyTurnMarks.Store(key, mark)
 	time.AfterFunc(completedExecutionRetention, func() {
 		s.deleteReadyTurnMarkIfExpired(key, expiresAt)
 	})
@@ -3378,11 +3394,12 @@ func (s *Service) resolveCompleteEventTurnID(
 	terminalCompleteStream bool,
 	terminalMarker terminalExecutionMarker,
 ) string {
+	markedTurnID, _ := s.takeReadyTurnMark(payload.SessionID, payload.ExecutionID, payload.Data.PromptGeneration)
 	if payload.Data.TurnID != "" {
 		return payload.Data.TurnID
 	}
-	if turnID, ok := s.takeReadyTurnMark(payload.SessionID, payload.ExecutionID, payload.Data.PromptGeneration); ok {
-		return turnID
+	if markedTurnID != "" {
+		return markedTurnID
 	}
 	if terminalCompleteStream {
 		return terminalMarker.turnID
@@ -3400,6 +3417,7 @@ func (s *Service) flushTerminalCompleteStream(
 	if payload.Data.TurnID != "" {
 		terminalTurnID = payload.Data.TurnID
 	}
+	s.persistTurnTiming(ctx, payload.SessionID, terminalTurnID, extractStopReason(payload) == stopReasonCancelled)
 	s.saveAgentTextForTurn(ctx, payload, terminalTurnID)
 	s.publishAgentPlanForTurn(ctx, payload, terminalTurnID, false)
 	s.persistTurnPromptMetadataForTurn(ctx, payload, session, terminalTurnID)
@@ -3421,6 +3439,7 @@ func (s *Service) persistCompleteStreamOutput(
 	completionTurnID string,
 ) {
 	if completionTurnID != "" {
+		s.persistTurnTiming(ctx, payload.SessionID, completionTurnID, extractStopReason(payload) == stopReasonCancelled)
 		s.saveAgentTextForTurn(ctx, payload, completionTurnID)
 		s.publishAgentPlanForTurn(ctx, payload, completionTurnID, false)
 		s.persistTurnPromptMetadataForTurn(ctx, payload, session, completionTurnID)

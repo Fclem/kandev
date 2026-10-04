@@ -1,3 +1,4 @@
+import type { MessageMetadataField } from "@/lib/message-metadata-fields";
 import type { SidebarWorkspaceStateApi } from "@/lib/types/http-user-settings";
 import type {
   Agent,
@@ -491,6 +492,7 @@ export type UserSettingsState = {
   quickChatTabOrderByWorkspace: Record<string, string[]>;
   hiddenWorkflowStepIds: Record<string, string[]>;
   workflowIdsWithAutoHideEmptySteps: string[];
+  messageMetadataFields: MessageMetadataField[];
   kanbanSort: KanbanSort;
   kanbanPriorityFilterTokens: TaskPriority[];
   loaded: boolean;

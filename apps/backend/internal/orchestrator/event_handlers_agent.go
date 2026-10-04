@@ -1118,7 +1118,6 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 	// this same completion is published (and processed) after this handler
 	// returns, by which point completeTurnForSession below has already
 	// removed it from activeTurns. See markReadyTurn's doc comment.
-	s.markReadyTurn(data.SessionID, data.AgentExecutionID, data.PromptGeneration, turnAtEventFire)
 	if err := s.settleManagedInputTurn(
 		ctx, data.TaskID, data.SessionID, turnAtEventFire, data.AgentExecutionID,
 		messagequeue.ManagedInputStateCompleted, "",
@@ -1130,6 +1129,7 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 
 	// Complete the current turn
 	s.reconcileCompletedCIAutoFixTurn(ctx, data.TaskID, data.SessionID, turnAtEventFire)
+	s.markReadyTurnAt(data.SessionID, data.AgentExecutionID, data.PromptGeneration, turnAtEventFire, time.Now())
 	completionCtx := withWorkflowEffect(ctx, workflowEffectForEvent(data))
 	if turnAtEventFire != "" {
 		if err := s.completeTurnForTaskSessionCheckedOwned(
@@ -2762,6 +2762,7 @@ func (s *Service) finishAgentCompleted(
 	if !completionFollowUp {
 		s.reconcileCIAutoFixTurnBeforeCompletion(ctx, data.TaskID, data.SessionID, "")
 	}
+	s.closeTurnTiming(data.SessionID, s.currentTurnIDForSession(ctx, data.SessionID), time.Now())
 	completionCtx := withWorkflowEffect(context.WithoutCancel(ctx), workflowEffectForEvent(data))
 	if data.TurnID != "" {
 		if err := s.completeTurnForTaskSessionCheckedOwned(

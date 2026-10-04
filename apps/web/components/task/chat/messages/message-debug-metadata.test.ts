@@ -31,8 +31,8 @@ function turn(overrides: Partial<Turn> = {}): Turn {
 }
 
 describe("message debug metadata", () => {
-  it("hides the debug affordance when message and turn metadata are empty", () => {
-    expect(hasMessageDebugMetadata(message(), turn())).toBe(false);
+  it("shows the debug affordance when a turn is resolved without metadata", () => {
+    expect(hasMessageDebugMetadata(message(), turn())).toBe(true);
   });
 
   it("shows the debug affordance when turn metadata exists", () => {

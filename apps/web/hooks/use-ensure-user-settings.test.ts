@@ -125,6 +125,7 @@ function makeUnloadedSettings(): UserSettingsState {
     lspStatusLocation: "toolbar",
     hiddenWorkflowStepIds: {},
     workflowIdsWithAutoHideEmptySteps: [],
+    messageMetadataFields: ["session_config", "timestamp", "duration"],
     kanbanSort: "created_desc",
     kanbanPriorityFilterTokens: [],
     loaded: false,

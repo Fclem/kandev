@@ -1,7 +1,7 @@
 ---
 id: "01-capture-turn-timing"
 title: "Capture turn timing"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -75,4 +75,4 @@ None.
 
 ## Results
 
-Pending.
+Results: Implemented start/output/close timing capture, turn metadata persistence, projection allowlisting, and focused timing tests. Verified the commands below; the race-enabled timing test and model/gateway/vet checks passed.

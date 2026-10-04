@@ -1,7 +1,7 @@
 ---
 id: "03-settings-editor"
 title: "Settings editor"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "02-message-metadata-setting"
@@ -81,4 +81,4 @@ Task 02.
 
 ## Results
 
-Pending.
+Results: Added the Conversation-tab checkbox group, save contributor, discovery target, touch-sized wrapping controls, and localized labels. The 21 targeted settings/discovery tests, Traditional Chinese and pseudo generation, `i18n:check`, web typecheck, and lint passed.

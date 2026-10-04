@@ -10,7 +10,29 @@ const (
 	MCPTaskAgentProfileDefaultWorkspaceDefault = "workspace_default"
 	LspStatusLocationToolbar                   = "toolbar"
 	LspStatusLocationStatusBar                 = "status_bar"
+
+	MessageMetadataFieldSessionConfig = "session_config"
+	MessageMetadataFieldTimestamp     = "timestamp"
+	MessageMetadataFieldDuration      = "duration"
+	MessageMetadataFieldTTFT          = "ttft"
+	MessageMetadataFieldTPS           = "tps"
+	MessageMetadataFieldTokens        = "tokens"
+	MessageMetadataFieldCost          = "cost"
 )
+
+func DefaultMessageMetadataFields() []string {
+	return []string{MessageMetadataFieldSessionConfig, MessageMetadataFieldTimestamp, MessageMetadataFieldDuration}
+}
+
+func IsMessageMetadataField(value string) bool {
+	switch value {
+	case MessageMetadataFieldSessionConfig, MessageMetadataFieldTimestamp, MessageMetadataFieldDuration,
+		MessageMetadataFieldTTFT, MessageMetadataFieldTPS, MessageMetadataFieldTokens, MessageMetadataFieldCost:
+		return true
+	default:
+		return false
+	}
+}
 
 // NormalizeMCPTaskAgentProfileDefault returns the canonical MCP task agent
 // profile default: workspace_default is accepted as-is, anything else is
@@ -218,6 +240,7 @@ type UserSettings struct {
 	QuickChatTabOrderByWorkspace      map[string][]string               `json:"quick_chat_tab_order_by_workspace"`
 	KanbanHiddenStepIDs               map[string][]string               `json:"kanban_hidden_step_ids"`
 	WorkflowIDsWithAutoHideEmptySteps []string                          `json:"workflow_ids_with_auto_hide_empty_steps"`
+	MessageMetadataFields             []string                          `json:"message_metadata_fields"`
 	KanbanSort                        string                            `json:"kanban_sort"`
 	KanbanPriorityFilterTokens        []string                          `json:"kanban_priority_filter_tokens"`
 	Revision                          int64                             `json:"revision"`

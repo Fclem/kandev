@@ -1,6 +1,7 @@
 package backendapp
 
 import (
+	"reflect"
 	"testing"
 
 	userdto "github.com/kandev/kandev/internal/user/dto"
@@ -345,5 +346,16 @@ func TestMapUserSettingsStateIncludesSystemMetricsDisplayPreference(t *testing.T
 	}
 	if simplified, ok := got["simplified"].(bool); !ok || !simplified {
 		t.Fatalf("simplified = %#v, want true", got["simplified"])
+	}
+}
+
+func TestMapUserSettingsStateIncludesMessageMetadataFields(t *testing.T) {
+	state := mapUserSettingsState(userdto.UserSettingsResponse{
+		Settings: userdto.UserSettingsDTO{
+			MessageMetadataFields: []string{"ttft"},
+		},
+	}, "workspace-1")
+	if got := state["messageMetadataFields"]; !reflect.DeepEqual(got, []string{"ttft"}) {
+		t.Fatalf("messageMetadataFields = %#v, want [ttft]", got)
 	}
 }

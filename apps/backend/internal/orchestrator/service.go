@@ -1384,6 +1384,8 @@ type Service struct {
 	// This map is per-process — see markReadyTurn's doc comment for why a
 	// horizontally-scaled NATS deployment can miss cross-instance.
 	readyTurnMarks sync.Map
+	turnTimingMu   sync.Mutex
+	turnTimings    map[string]turnTimingRecord
 
 	// readyTurnMarksZeroGen is readyTurnMarks' sibling for promptGeneration==0
 	// completions (transports with no generation tracking at all), which share

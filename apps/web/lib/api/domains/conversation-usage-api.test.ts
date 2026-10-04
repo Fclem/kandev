@@ -35,4 +35,15 @@ describe("conversation usage API", () => {
       undefined,
     );
   });
+  it("encodes cursor and limit for turn history pages", async () => {
+    await listSessionUsageTurns("task-1", "session-1", {
+      cursor: "turn/a+",
+      limit: 40,
+    });
+
+    expect(fetchJson).toHaveBeenLastCalledWith(
+      "/api/v1/tasks/task-1/sessions/session-1/usage/turns?limit=40&cursor=turn%2Fa%2B",
+      {},
+    );
+  });
 });

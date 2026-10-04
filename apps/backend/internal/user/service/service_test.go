@@ -2049,9 +2049,10 @@ func TestRecordTaskCreateLastUsed(t *testing.T) {
 			ExecutorProfileID: "exec-1",
 		}
 		updatedSettings := &models.UserSettings{
-			UserID:    store.DefaultUserID,
-			Revision:  42,
-			UpdatedAt: time.Unix(123, 0).UTC(),
+			UserID:                store.DefaultUserID,
+			Revision:              42,
+			UpdatedAt:             time.Unix(123, 0).UTC(),
+			MessageMetadataFields: []string{"ttft"},
 			TaskCreateLastUsed: models.TaskCreateLastUsed{
 				RepositoryID: "repo-1",
 				Branch:       "feature",
@@ -2089,6 +2090,9 @@ func TestRecordTaskCreateLastUsed(t *testing.T) {
 		}
 		if !reflect.DeepEqual(data["task_create_last_used"], updatedSettings.TaskCreateLastUsed) {
 			t.Fatalf("expected event task-create state %+v, got %+v", updatedSettings.TaskCreateLastUsed, data["task_create_last_used"])
+		}
+		if got := data["message_metadata_fields"]; !reflect.DeepEqual(got, []string{"ttft"}) {
+			t.Fatalf("message_metadata_fields = %#v, want [ttft]", got)
 		}
 		if got := data["revision"]; got != int64(42) {
 			t.Fatalf("revision = %#v, want 42", got)

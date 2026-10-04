@@ -1,4 +1,8 @@
 import {
+  DEFAULT_MESSAGE_METADATA_FIELDS,
+  parseMessageMetadataFields,
+} from "@/lib/message-metadata-fields";
+import {
   DEFAULT_TASKS_LIST_GROUP,
   DEFAULT_TASKS_LIST_SORT,
   parseTasksListGroup,
@@ -113,6 +117,7 @@ export function createDefaultUserSettings(): UserSettingsState {
     quickChatTabOrderByWorkspace: {},
     hiddenWorkflowStepIds: {},
     workflowIdsWithAutoHideEmptySteps: [],
+    messageMetadataFields: [...DEFAULT_MESSAGE_METADATA_FIELDS],
     kanbanSort: DEFAULT_KANBAN_SORT,
     kanbanPriorityFilterTokens: [],
     loaded: false,
@@ -419,6 +424,10 @@ export function buildCoreFields(
     hiddenWorkflowStepIds: s.kanban_hidden_step_ids ?? current.hiddenWorkflowStepIds,
     workflowIdsWithAutoHideEmptySteps:
       s.workflow_ids_with_auto_hide_empty_steps ?? current.workflowIdsWithAutoHideEmptySteps,
+    messageMetadataFields:
+      s.message_metadata_fields === undefined
+        ? current.messageMetadataFields
+        : parseMessageMetadataFields(s.message_metadata_fields),
     kanbanSort: mapDefined(s.kanban_sort, current.kanbanSort, parseKanbanSort),
     kanbanPriorityFilterTokens: mapDefined(
       s.kanban_priority_filter_tokens,

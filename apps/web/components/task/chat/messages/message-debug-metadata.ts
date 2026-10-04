@@ -40,11 +40,7 @@ export function hasMessageDebugMetadata(
   turn?: Turn | null,
   context: MessageDebugContext = {},
 ): boolean {
-  return (
-    hasOwnMetadata(message.metadata) ||
-    hasOwnMetadata(turn?.metadata) ||
-    context.usageMultiplier != null
-  );
+  return turn != null || hasOwnMetadata(message.metadata) || context.usageMultiplier != null;
 }
 
 export function buildMessageDebugEntries(

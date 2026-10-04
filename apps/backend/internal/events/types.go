@@ -166,6 +166,7 @@ const (
 const (
 	TurnStarted   = "turn.started"
 	TurnCompleted = "turn.completed"
+	TurnUpdated   = "turn.updated"
 	TurnRemoved   = "turn.removed"
 )
 

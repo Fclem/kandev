@@ -90,6 +90,7 @@ type UserSettingsDTO struct {
 	QuickChatTabOrderByWorkspace      map[string][]string                     `json:"quick_chat_tab_order_by_workspace"`
 	KanbanHiddenStepIDs               map[string][]string                     `json:"kanban_hidden_step_ids"`
 	WorkflowIDsWithAutoHideEmptySteps []string                                `json:"workflow_ids_with_auto_hide_empty_steps"`
+	MessageMetadataFields             []string                                `json:"message_metadata_fields"`
 	KanbanSort                        string                                  `json:"kanban_sort"`
 	KanbanPriorityFilterTokens        []string                                `json:"kanban_priority_filter_tokens"`
 	Revision                          int64                                   `json:"revision"`
@@ -211,6 +212,7 @@ type UpdateUserSettingsRequest struct {
 	QuickChatTabOrderByWorkspace      *map[string][]string               `json:"quick_chat_tab_order_by_workspace,omitempty"`
 	KanbanHiddenStepIDs               *map[string][]string               `json:"kanban_hidden_step_ids,omitempty"`
 	WorkflowIDsWithAutoHideEmptySteps *[]string                          `json:"workflow_ids_with_auto_hide_empty_steps,omitempty"`
+	MessageMetadataFields             *[]string                          `json:"message_metadata_fields,omitempty"`
 	KanbanSort                        *string                            `json:"kanban_sort,omitempty"`
 	KanbanPriorityFilterTokens        *[]string                          `json:"kanban_priority_filter_tokens,omitempty"`
 }
@@ -416,6 +418,7 @@ func FromUserSettings(settings *models.UserSettings) UserSettingsDTO {
 		QuickChatTabOrderByWorkspace:      settings.QuickChatTabOrderByWorkspace,
 		KanbanHiddenStepIDs:               settings.KanbanHiddenStepIDs,
 		WorkflowIDsWithAutoHideEmptySteps: append([]string{}, settings.WorkflowIDsWithAutoHideEmptySteps...),
+		MessageMetadataFields:             append([]string{}, settings.MessageMetadataFields...),
 		KanbanSort:                        settings.KanbanSort,
 		KanbanPriorityFilterTokens:        append([]string{}, settings.KanbanPriorityFilterTokens...),
 		Revision:                          settings.Revision,

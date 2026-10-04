@@ -19,9 +19,9 @@ import { ToolCallMessage } from "@/components/task/chat/messages/tool-call-messa
 import { ToolEditMessage } from "@/components/task/chat/messages/tool-edit-message";
 import { ToolReadMessage } from "@/components/task/chat/messages/tool-read-message";
 import { ToolSearchMessage } from "@/components/task/chat/messages/tool-search-message";
-import { payloadRetentionMarker } from "@/lib/utils/tool-payload-retention";
 import { ToolPayloadRemovedMessage } from "./messages/tool-payload-removed-message";
 import { ToolExecuteMessage } from "@/components/task/chat/messages/tool-execute-message";
+import { messageAdapterMatchers } from "./message-adapter-matchers";
 import { ThinkingMessage } from "@/components/task/chat/messages/thinking-message";
 import { TodoMessage } from "@/components/task/chat/messages/todo-message";
 import { ScriptExecutionMessage } from "@/components/task/chat/messages/script-execution-message";
@@ -31,10 +31,7 @@ import { ToolSubagentMessage } from "@/components/task/chat/messages/tool-subage
 import { MonitorMessage } from "@/components/task/chat/messages/monitor-message";
 import { AgentPlanMessage } from "@/components/task/chat/messages/agent-plan-message";
 import { ActionMessage } from "@/components/task/chat/messages/action-message";
-import {
-  KandevToolMessage,
-  hasKandevRenderer,
-} from "@/components/task/chat/messages/kandev-tool-message";
+import { KandevToolMessage } from "@/components/task/chat/messages/kandev-tool-message";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 import { isDismissedGitPushErrorMessage } from "@/lib/utils/git-push-error-message";
@@ -255,236 +252,107 @@ function ClarificationRequestMessageAdapter({
   );
 }
 
-const adapters: MessageAdapter[] = [
-  {
-    matches: (comment) =>
-      comment.type !== "tool_execute" && Boolean(payloadRetentionMarker(comment.metadata)),
-    render: (comment) => <ToolPayloadRemovedMessage comment={comment} />,
-  },
-  {
-    matches: (comment) => comment.type === "thinking",
-    render: (comment, ctx) => (
-      <ThinkingMessage
+const adapterRenderers: MessageAdapter["render"][] = [
+  (comment) => <ToolPayloadRemovedMessage comment={comment} />,
+  (comment, ctx) => (
+    <ThinkingMessage
+      comment={comment}
+      worktreePath={ctx.worktreePath}
+      onOpenFile={ctx.onOpenFile}
+    />
+  ),
+  (comment) => <TodoMessage comment={comment} />,
+  (comment, ctx) => (
+    <ToolEditMessage
+      comment={comment}
+      worktreePath={ctx.worktreePath}
+      sessionId={ctx.sessionId}
+      onOpenFile={ctx.onOpenFile}
+    />
+  ),
+  (comment, ctx) => (
+    <ToolReadMessage
+      comment={comment}
+      worktreePath={ctx.worktreePath}
+      sessionId={ctx.sessionId}
+      onOpenFile={ctx.onOpenFile}
+    />
+  ),
+  (comment, ctx) => (
+    <ToolSearchMessage
+      comment={comment}
+      worktreePath={ctx.worktreePath}
+      onOpenFile={ctx.onOpenFile}
+    />
+  ),
+  (comment, ctx) => <ToolExecuteMessage comment={comment} worktreePath={ctx.worktreePath} />,
+  (comment) => <MonitorMessage comment={comment} />,
+  (comment, ctx) => {
+    const toolCallId = (comment.metadata as ToolCallMetadata | undefined)?.tool_call_id;
+    const childMessages = toolCallId ? (ctx.childrenByParentToolCallId?.get(toolCallId) ?? []) : [];
+    const renderChild = (child: Message) => {
+      const childCtx = { ...ctx, childrenByParentToolCallId: undefined };
+      const adapter =
+        adapters.find((entry) => entry.matches(child, childCtx)) ?? adapters[adapters.length - 1];
+      return adapter.render(child, childCtx);
+    };
+    return (
+      <ToolSubagentMessage
         comment={comment}
+        childMessages={childMessages}
+        isContainingTurnActive={ctx.isContainingTurnActive}
         worktreePath={ctx.worktreePath}
         onOpenFile={ctx.onOpenFile}
+        renderChild={renderChild}
       />
-    ),
+    );
   },
-  {
-    matches: (comment) => comment.type === "todo",
-    render: (comment) => <TodoMessage comment={comment} />,
-  },
-  {
-    matches: (comment) => comment.type === "tool_edit",
-    render: (comment, ctx) => (
-      <ToolEditMessage
+  (comment, ctx) => {
+    const toolCallId = (comment.metadata as { tool_call_id?: string } | undefined)?.tool_call_id;
+    const permissionMessage = toolCallId ? ctx.permissionsByToolCallId?.get(toolCallId) : undefined;
+    return (
+      <KandevToolMessage
         comment={comment}
-        worktreePath={ctx.worktreePath}
+        permissionMessage={permissionMessage}
         sessionId={ctx.sessionId}
         onOpenFile={ctx.onOpenFile}
       />
-    ),
+    );
   },
-  {
-    matches: (comment) => comment.type === "tool_read",
-    render: (comment, ctx) => (
-      <ToolReadMessage
+  (comment, ctx) => {
+    const toolCallId = (comment.metadata as { tool_call_id?: string } | undefined)?.tool_call_id;
+    const permissionMessage = toolCallId ? ctx.permissionsByToolCallId?.get(toolCallId) : undefined;
+    return (
+      <ToolCallMessage
         comment={comment}
+        permissionMessage={permissionMessage}
         worktreePath={ctx.worktreePath}
-        sessionId={ctx.sessionId}
-        onOpenFile={ctx.onOpenFile}
       />
-    ),
+    );
   },
-  {
-    matches: (comment) => comment.type === "tool_search",
-    render: (comment, ctx) => (
-      <ToolSearchMessage
-        comment={comment}
-        worktreePath={ctx.worktreePath}
-        onOpenFile={ctx.onOpenFile}
-      />
-    ),
-  },
-  {
-    matches: (comment) => comment.type === "tool_execute",
-    render: (comment, ctx) => (
-      <ToolExecuteMessage comment={comment} worktreePath={ctx.worktreePath} />
-    ),
-  },
-  {
-    // Claude-acp's Monitor tool — long-lived background script with streaming
-    // events. Rendered with a dedicated card that shows watching state, event
-    // count, and the most recent event tail. Detected via the structured
-    // `monitor` view the adapter writes into the Generic payload's output
-    // wrapper (presence-based rather than title-based so renames upstream
-    // don't break the match). Must run BEFORE the generic tool_call adapter.
-    matches: (comment) => {
-      if (comment.type !== "tool_call") return false;
-      const meta = comment.metadata as ToolCallMetadata | undefined;
-      const out = meta?.normalized?.generic?.output as { monitor?: unknown } | undefined;
-      return !!out && typeof out === "object" && !!out.monitor;
-    },
-    render: (comment) => <MonitorMessage comment={comment} />,
-  },
-  {
-    // Subagent Task tool calls with nested children
-    matches: (comment, ctx) => {
-      if (comment.type !== "tool_call") return false;
-      const metadata = comment.metadata as ToolCallMetadata | undefined;
-      const isSubagent = metadata?.normalized?.kind === "subagent_task";
-      const toolCallId = metadata?.tool_call_id;
-      const hasChildren = toolCallId
-        ? (ctx.childrenByParentToolCallId?.has(toolCallId) ?? false)
-        : false;
-      return isSubagent || hasChildren;
-    },
-    render: (comment, ctx) => {
-      const toolCallId = (comment.metadata as ToolCallMetadata | undefined)?.tool_call_id;
-      const childMessages = toolCallId
-        ? (ctx.childrenByParentToolCallId?.get(toolCallId) ?? [])
-        : [];
-
-      // Create a render function for child messages
-      const renderChild = (child: Message) => {
-        // Recursively use MessageRenderer for children (without subagent nesting)
-        const childCtx = { ...ctx, childrenByParentToolCallId: undefined };
-        const adapter =
-          adapters.find((entry) => entry.matches(child, childCtx)) ?? adapters[adapters.length - 1];
-        return adapter.render(child, childCtx);
-      };
-
+  (comment) => <ActionMessage comment={comment} />,
+  (comment) => <StatusMessage comment={comment} />,
+  (comment) => <PermissionRequestMessage comment={comment} />,
+  (comment, ctx) => (
+    <ClarificationRequestMessageAdapter
+      comment={comment}
+      isCurrentTurn={Boolean(ctx.isContainingTurnActive)}
+    />
+  ),
+  (comment, ctx) => (
+    <AgentPlanMessage
+      comment={comment}
+      worktreePath={ctx.worktreePath}
+      onOpenFile={ctx.onOpenFile}
+    />
+  ),
+  (comment) => <ScriptExecutionMessage comment={comment} />,
+  (comment, ctx) => {
+    if (ctx.isTaskDescription) {
       return (
-        <ToolSubagentMessage
+        <TaskDescriptionMessage
           comment={comment}
-          childMessages={childMessages}
-          isContainingTurnActive={ctx.isContainingTurnActive}
-          worktreePath={ctx.worktreePath}
-          onOpenFile={ctx.onOpenFile}
-          renderChild={renderChild}
-        />
-      );
-    },
-  },
-  {
-    // Kandev MCP tools — `mcp__kandev__list_tasks_kandev` etc. — get
-    // per-tool structured rendering. Must run BEFORE the generic tool_call
-    // adapter so the unwrapped + structured view wins. Unrecognised Kandev
-    // tools (no matching renderer) fall through to the generic adapter.
-    matches: (comment) => hasKandevRenderer(comment),
-    render: (comment, ctx) => {
-      const toolCallId = (comment.metadata as { tool_call_id?: string } | undefined)?.tool_call_id;
-      const permissionMessage = toolCallId
-        ? ctx.permissionsByToolCallId?.get(toolCallId)
-        : undefined;
-      return (
-        <KandevToolMessage
-          comment={comment}
-          permissionMessage={permissionMessage}
-          sessionId={ctx.sessionId}
-          onOpenFile={ctx.onOpenFile}
-        />
-      );
-    },
-  },
-  {
-    matches: (comment) => comment.type === "tool_call",
-    render: (comment, ctx) => {
-      const toolCallId = (comment.metadata as { tool_call_id?: string } | undefined)?.tool_call_id;
-      const permissionMessage = toolCallId
-        ? ctx.permissionsByToolCallId?.get(toolCallId)
-        : undefined;
-      return (
-        <ToolCallMessage
-          comment={comment}
-          permissionMessage={permissionMessage}
-          worktreePath={ctx.worktreePath}
-        />
-      );
-    },
-  },
-  {
-    matches: (comment) => {
-      const meta = comment.metadata as Record<string, unknown> | undefined;
-      const hasActions = Array.isArray(meta?.actions) && meta.actions.length > 0;
-      const isRetainedTurnFailure =
-        meta?.variant === "error" &&
-        meta.failure_scope === "turn" &&
-        meta.runtime_retained === true;
-      return hasActions || isRetainedTurnFailure;
-    },
-    render: (comment) => <ActionMessage comment={comment} />,
-  },
-  {
-    matches: (comment) =>
-      comment.type === "error" || comment.type === "status" || comment.type === "progress",
-    render: (comment) => <StatusMessage comment={comment} />,
-  },
-  {
-    // Standalone permission requests (no matching tool call)
-    matches: (comment) => comment.type === "permission_request",
-    render: (comment) => <PermissionRequestMessage comment={comment} />,
-  },
-  {
-    matches: (comment) => comment.type === "clarification_request",
-    render: (comment, ctx) => (
-      <ClarificationRequestMessageAdapter
-        comment={comment}
-        isCurrentTurn={Boolean(ctx.isContainingTurnActive)}
-      />
-    ),
-  },
-  {
-    matches: (comment) => comment.type === "agent_plan",
-    render: (comment, ctx) => (
-      <AgentPlanMessage
-        comment={comment}
-        worktreePath={ctx.worktreePath}
-        onOpenFile={ctx.onOpenFile}
-      />
-    ),
-  },
-  {
-    matches: (comment) => comment.type === "script_execution",
-    render: (comment) => <ScriptExecutionMessage comment={comment} />,
-  },
-  {
-    matches: () => true,
-    render: (comment, ctx) => {
-      if (ctx.isTaskDescription) {
-        return (
-          <TaskDescriptionMessage
-            comment={comment}
-            taskId={ctx.taskId}
-            sessionId={ctx.sessionId}
-            worktreePath={ctx.worktreePath}
-            onOpenFile={ctx.onOpenFile}
-            onScrollToMessage={ctx.onScrollToMessage}
-            isTurnActive={ctx.isTurnActive}
-          />
-        );
-      }
-      if (comment.author_type === "user") {
-        return (
-          <ChatMessage
-            comment={comment}
-            label={t("task:you")}
-            className="bg-primary/10 text-foreground border-primary/30"
-            sessionId={ctx.sessionId}
-            worktreePath={ctx.worktreePath}
-            onOpenFile={ctx.onOpenFile}
-            onScrollToMessage={ctx.onScrollToMessage}
-            isTurnActive={ctx.isTurnActive}
-          />
-        );
-      }
-      return (
-        <ChatMessage
-          comment={comment}
-          label={t("task:agent")}
-          className="bg-muted/40 text-foreground border-border/60"
-          showRichBlocks={comment.type === "message" || comment.type === "content" || !comment.type}
+          taskId={ctx.taskId}
           sessionId={ctx.sessionId}
           worktreePath={ctx.worktreePath}
           onOpenFile={ctx.onOpenFile}
@@ -492,9 +360,42 @@ const adapters: MessageAdapter[] = [
           isTurnActive={ctx.isTurnActive}
         />
       );
-    },
+    }
+    if (comment.author_type === "user") {
+      return (
+        <ChatMessage
+          comment={comment}
+          label={t("task:you")}
+          className="bg-primary/10 text-foreground border-primary/30"
+          sessionId={ctx.sessionId}
+          worktreePath={ctx.worktreePath}
+          onOpenFile={ctx.onOpenFile}
+          onScrollToMessage={ctx.onScrollToMessage}
+          isTurnActive={ctx.isTurnActive}
+        />
+      );
+    }
+    return (
+      <ChatMessage
+        comment={comment}
+        label={t("task:agent")}
+        className="bg-muted/40 text-foreground border-border/60"
+        showRichBlocks={comment.type === "message" || comment.type === "content" || !comment.type}
+        sessionId={ctx.sessionId}
+        worktreePath={ctx.worktreePath}
+        onOpenFile={ctx.onOpenFile}
+        onScrollToMessage={ctx.onScrollToMessage}
+        isTurnActive={ctx.isTurnActive}
+      />
+    );
   },
 ];
+
+const adapters: MessageAdapter[] = messageAdapterMatchers.map((matcher, index) => {
+  const render = adapterRenderers[index];
+  if (!render) throw new Error("Message adapter renderer order mismatch");
+  return { matches: matcher.matches, render };
+});
 
 type MessageRendererProps = {
   comment: Message;

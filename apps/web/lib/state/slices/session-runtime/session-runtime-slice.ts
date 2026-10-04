@@ -10,6 +10,8 @@ import {
 } from "./workspace-restoration";
 import { buildSessionViewActions } from "./session-runtime-view-actions";
 import { buildSessionGitCheckoutActions } from "./session-runtime-git-checkout-actions";
+import { buildSessionUsageTurnActions } from "./session-usage-turn-actions";
+import type { ImmerSet } from "./session-usage-turn-actions";
 
 const maxProcessOutputBytes = 2 * 1024 * 1024;
 // Shell + terminal streams are unbounded over a session's lifetime; cap them at
@@ -47,6 +49,7 @@ function purgePerSessionRuntime(state: SessionRuntimeSliceState, sessionId: stri
   delete state.sessionMcpStatus.bySessionId[sessionId];
   delete state.promptUsage.bySessionId[sessionId];
   delete state.usageInvalidation.bySessionId[sessionId];
+  delete state.usageTurns.bySessionId[sessionId];
   delete state.sessionTodos.bySessionId[sessionId];
   delete state.prepareProgress.bySessionId[sessionId];
   delete state.launchWarning.bySessionId[sessionId];
@@ -131,6 +134,7 @@ export const defaultSessionRuntimeState: SessionRuntimeSliceState = {
   sessionMcpStatus: { bySessionId: {} },
   promptUsage: { bySessionId: {} },
   usageInvalidation: { bySessionId: {} },
+  usageTurns: { bySessionId: {} },
   sessionTodos: { bySessionId: {} },
   userShells: { byEnvironmentId: {}, dismissedByEnvironmentId: {}, loading: {}, loaded: {} },
   prepareProgress: { bySessionId: {} },
@@ -145,8 +149,6 @@ export const defaultSessionRuntimeState: SessionRuntimeSliceState = {
     loadingBySessionId: {},
   },
 };
-
-export type ImmerSet = Parameters<typeof createSessionRuntimeSlice>[0];
 
 function buildTerminalShellProcessActions(set: ImmerSet) {
   return {
@@ -649,6 +651,7 @@ export const createSessionRuntimeSlice: StateCreator<
     set((draft) => {
       delete draft.sessionMode.bySessionId[sessionId];
     }),
+  ...buildSessionUsageTurnActions(set),
   ...buildSessionViewActions(set),
   ...buildBackgroundWorkActions(set),
   ...buildUserShellActions(set),

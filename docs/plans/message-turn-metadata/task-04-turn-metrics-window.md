@@ -1,7 +1,7 @@
 ---
 id: "04-turn-metrics-window"
 title: "Turn metrics and metadata window"
-status: pending
+status: done
 wave: 3
 depends_on:
   - "01-capture-turn-timing"
@@ -88,4 +88,4 @@ Tasks 01 and 03. Task 03 is a dependency only to sequence the shared pseudo loca
 
 ## Results
 
-Pending.
+Results: Added the always-visible turn-metrics section inside the existing metadata scroll region, a bounded per-session usage index with cursor paging and newest-page invalidation refresh, shared adapter matchers for dialog eligibility, and localized metric labels in all catalogs. Final focused Vitest run passed (8 files, 84 tests); desktop overflow/turn-resolution E2E passed (2 tests), mobile overflow E2E passed (1 test), `i18n:zh-hant`, `i18n:pseudo`, `i18n:check`, `make fmt`, web typecheck, and web lint passed.

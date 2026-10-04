@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { create } from "zustand";
+import { create, type StoreApi } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { createSessionSlice } from "@/lib/state/slices/session/session-slice";
 import type { SessionSlice } from "@/lib/state/slices/session/types";
@@ -9,6 +9,7 @@ import { registerTurnsHandlers } from "./turns";
 const SESSION_ID = "session-1";
 const TASK_ID = "task-1";
 const TURN_STARTED = "session.turn.started";
+const TURN_UPDATED = "session.turn.updated";
 const TURN_COMPLETED = "session.turn.completed";
 const NOTIFICATION = "notification";
 const TURN_STARTED_AT = "2026-07-23T10:00:00.000Z";
@@ -25,10 +26,11 @@ type TurnTestState = SessionSlice & {
   markQuickChatUnseenIdle: Mock;
   recordQuickChatSettled: (sessionId: string, updatedAt: string) => boolean;
 };
+type TurnTestStore = StoreApi<TurnTestState>;
 
 function makeStore(
   quickChat: TurnTestState["quickChat"] = { isOpen: false, activeSessionId: null, sessions: [] },
-) {
+): TurnTestStore {
   const settledLedger: Record<string, string> = {};
   return create<TurnTestState>()(
     immer((set) => ({
@@ -64,7 +66,7 @@ function turn(
   };
 }
 
-function addTurnUserPrompt(store: ReturnType<typeof makeStore>, turnId: string): void {
+function addTurnUserPrompt(store: TurnTestStore, turnId: string): void {
   store.getState().addMessage({
     id: `user-${turnId}`,
     session_id: SESSION_ID,
@@ -77,7 +79,7 @@ function addTurnUserPrompt(store: ReturnType<typeof makeStore>, turnId: string):
   } as never);
 }
 
-function emptyTurnNoticeCount(store: ReturnType<typeof makeStore>, turnId: string): number {
+function emptyTurnNoticeCount(store: TurnTestStore, turnId: string): number {
   return (
     store
       .getState()
@@ -89,25 +91,30 @@ function emptyTurnNoticeCount(store: ReturnType<typeof makeStore>, turnId: strin
 }
 
 function send(
-  store: ReturnType<typeof makeStore>,
-  action: typeof TURN_STARTED | typeof TURN_COMPLETED,
+  store: TurnTestStore,
+  action: typeof TURN_STARTED | typeof TURN_COMPLETED | typeof TURN_UPDATED,
   payload: TurnEventPayload,
-) {
-  const handler = registerTurnsHandlers(store as never)[action]!;
-  handler({ type: NOTIFICATION, action, payload } as never);
+): void {
+  const handlers = registerTurnsHandlers(store as never) as unknown as Record<
+    string,
+    ((message: unknown) => void) | undefined
+  >;
+  const handler = handlers[action];
+  if (!handler) throw new Error(`no turn handler for ${action}`);
+  handler({ type: NOTIFICATION, action, payload });
 }
 
 const IDLE_SESSION = { id: SESSION_ID, state: "IDLE", updated_at: TURN_COMPLETED_AT } as never;
 
-function settleViaSetTaskSession(store: ReturnType<typeof makeStore>): void {
+function settleViaSetTaskSession(store: TurnTestStore): void {
   store.getState().setTaskSession(IDLE_SESSION);
 }
 
-function settleViaSetTaskSessionsForTask(store: ReturnType<typeof makeStore>): void {
+function settleViaSetTaskSessionsForTask(store: TurnTestStore): void {
   store.getState().setTaskSessionsForTask(TASK_ID, [IDLE_SESSION], {});
 }
 
-function settleViaUpsertTaskSessionFromEvent(store: ReturnType<typeof makeStore>): void {
+function settleViaUpsertTaskSessionFromEvent(store: TurnTestStore): void {
   store.getState().upsertTaskSessionFromEvent(TASK_ID, IDLE_SESSION);
 }
 
@@ -236,6 +243,37 @@ describe("session turn WebSocket handlers", () => {
     send(store, TURN_COMPLETED, turn("turn-1", TURN_STARTED_AT, completed));
     expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
     expect(store.getState().turns.bySession[SESSION_ID][0].completed_at).toBe(completed);
+  });
+  it("applies late timing metadata without repeating completion side effects", () => {
+    const store = makeStore();
+    addTurnUserPrompt(store, "turn-1");
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+    send(
+      store,
+      TURN_COMPLETED,
+      turn("turn-1", TURN_STARTED_AT, TURN_COMPLETED_AT, { had_output: false }),
+    );
+    const noticeCount = emptyTurnNoticeCount(store, "turn-1");
+    expect(noticeCount).toBe(1);
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+
+    const updated = turn("turn-1", TURN_STARTED_AT, TURN_COMPLETED_AT, {
+      metadata: { timing: { ttft_ms: 120 } },
+    });
+    updated.updated_at = "2026-07-23T10:02:00.000Z";
+    send(store, TURN_UPDATED, updated);
+
+    expect(store.getState().turns.bySession[SESSION_ID][0]).toEqual(
+      expect.objectContaining({
+        id: "turn-1",
+        completed_at: TURN_COMPLETED_AT,
+        updated_at: updated.updated_at,
+        metadata: { timing: { ttft_ms: 120 } },
+      }),
+    );
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+    expect(emptyTurnNoticeCount(store, "turn-1")).toBe(noticeCount);
+    expect(store.getState().markQuickChatUnseenIdle).not.toHaveBeenCalled();
   });
 
   it.each([

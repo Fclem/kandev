@@ -158,6 +158,49 @@ func TestTaskEventBroadcaster_OrdersLifecycleStateNotifications(t *testing.T) {
 		t.Fatalf("lifecycle notification order = %q, %q; want task state then session state", first.Action, second.Action)
 	}
 }
+func TestTaskEventBroadcaster_TurnUpdatedIsSessionScoped(t *testing.T) {
+	log := testLogger()
+	eventBus := bus.NewMemoryEventBus(log)
+	hub := newTestHub(t)
+	sessionClient := newTestClient("session-client")
+	otherClient := newTestClient("other-client")
+	registerTestClient(hub, sessionClient)
+	registerTestClient(hub, otherClient)
+	hub.SubscribeToSession(sessionClient, "session-1")
+	hub.SubscribeToSession(otherClient, "session-2")
+	sessionClient.conversationSubscriptions = make(map[string]conversationSubscription)
+	sessionClient.conversationSubscriptions["core-scope"] = conversationSubscription{
+		ScopeID: "core-scope", SessionID: "session-1", ConsumerKind: conversationConsumerCore,
+		Epoch: "epoch-1",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	broadcaster := RegisterTaskNotifications(ctx, eventBus, hub, log)
+	t.Cleanup(broadcaster.Close)
+
+	payload := map[string]interface{}{
+		"id": "turn-1", "session_id": "session-1",
+		"conversation_receipt": &models.ConversationMutationReceipt{
+			SessionID: "session-1", BaseRevision: 1, Revision: 2, Complete: true,
+		},
+	}
+	require.NoError(t, eventBus.Publish(ctx, events.TurnUpdated, bus.NewEvent(events.TurnUpdated, "test", payload)))
+
+	received := <-sessionClient.send
+	var notification ws.Message
+	require.NoError(t, json.Unmarshal(received, &notification))
+	require.Equal(t, ws.ActionSessionTurnUpdated, notification.Action)
+	select {
+	case received := <-sessionClient.send:
+		var extra ws.Message
+		require.NoError(t, json.Unmarshal(received, &extra))
+		require.NotEqual(t, ws.ActionSessionConversationChanged, extra.Action)
+	default:
+	}
+	if clientReceived(otherClient) {
+		t.Fatal("turn update crossed the session boundary")
+	}
+}
 
 func TestTaskEventBroadcaster_TransferReconcilesSourceAndDestination(t *testing.T) {
 	log := testLogger()
@@ -253,7 +296,7 @@ func TestTaskEventBroadcaster_NoDuplicateSubscriptions(t *testing.T) {
 	//
 	// Update this number when adding or removing event subscriptions in
 	// RegisterTaskNotifications — it is intentionally exact.
-	const wantSubscriptions = 78
+	const wantSubscriptions = 79
 	if got := len(b.subscriptions); got != wantSubscriptions {
 		t.Errorf("RegisterTaskNotifications created %d subscriptions, want %d — "+
 			"did an event get subscribed twice?", got, wantSubscriptions)

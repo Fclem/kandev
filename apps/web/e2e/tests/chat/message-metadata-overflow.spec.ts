@@ -65,6 +65,7 @@ async function openMetadataDialog(
   await expect(entries).toBeVisible();
   // Geometry assertions compare the dialog and its children after the opening animation.
   await waitForFiniteAnimations(dialog);
+  await expect(entries.getByTestId("message-turn-metrics")).toBeVisible();
   return {
     dialog,
     entries,

@@ -28,6 +28,7 @@ const STABLE_CONTROL_IDS = [
   "keyboard-command-shortcuts",
   "task-actions-agent-profile",
   "task-actions-archive-confirmation",
+  "task-actions-message-metadata",
   "task-actions-transcript-navigation",
   "layouts-profiles",
   "sprites-connection",

@@ -5,6 +5,7 @@ import type { Message } from "@/lib/types/http";
 import { kandevToolStemOf, type ToolCallMetadata } from "@/components/task/chat/types";
 import { extractKandevArgs, extractMcpResult } from "./kandev/parse";
 import { getKandevRenderer } from "./kandev/registry";
+import { hasKandevRenderer } from "./kandev/has-renderer";
 import { PermissionActionRow } from "./permission-action-row";
 import { normalizeToolCallStatus } from "./tool-status";
 import {
@@ -14,6 +15,7 @@ import {
 } from "./use-permission-handlers";
 import { KandevPermissionUIProvider, type KandevPermissionUIState } from "./kandev/shared";
 import type { PermissionRequestMetadata } from "./use-permission-handlers";
+export { hasKandevRenderer };
 
 // Approval falls through to `undefined` on purpose: the tool_call status
 // stays the source of truth so an approved-but-still-pending tool does not
@@ -34,22 +36,9 @@ type KandevToolMessageProps = {
   onOpenFile?: (path: string, repo?: string) => void;
 };
 
-// hasKandevRenderer is the matcher used by the message dispatcher. It accepts
-// any `tool_call` whose tool name is recognised as a Kandev MCP tool AND for
-// which a per-tool renderer is registered. We require both because we still
-// want unregistered Kandev tools to fall through to the generic ToolCallMessage
-// (rather than rendering an empty row) until a dedicated renderer ships.
-export function hasKandevRenderer(comment: Message): boolean {
-  if (comment.type !== "tool_call") return false;
-  return !!getKandevRenderer(kandevToolStemOf(comment));
-}
-
 // KandevToolMessage is the rendered entry point for every Kandev tool call.
-// It parses the metadata once, looks up the per-tool renderer, and hands the
-// renderer pre-parsed args + result. If the renderer lookup fails we render
-// nothing rather than crashing; the matcher above guards against this in
-// practice, but defensive nulling avoids a bad runtime error if the dispatcher
-// rules drift out of sync with the registry.
+// It parses metadata once and invokes the registered renderer with normalized
+// arguments and results.
 export const KandevToolMessage = memo(function KandevToolMessage({
   comment,
   permissionMessage,

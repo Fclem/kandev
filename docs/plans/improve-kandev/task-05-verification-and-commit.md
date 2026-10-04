@@ -131,19 +131,22 @@ task to the next workflow step.
   - `TestManagedNPMRuntimeLaunchIgnoresWorkspaceNpmrc`:
     `managed_npm_runtime_test.go:250: workspace registry = "https://registry.npmjs.org/", want configured registry`.
     Reproduced alone under Node `v22.22.3` / npm `10.9.8`.
-  - `TestProcessLifecycle_StartListGetCapturesOutput`:
-    `processes_test.go:188: get process = 404, want 200 — the process was retired before its output could be read (body {"error":"process not found"})`.
-  - `TestHandleGetProcess_OmitsOutputByDefault`:
-    `processes_test.go:206: get process = 404, want 200 — the process was retired before its output could be read (body {"error":"process not found"})`.
-  - `TestProcessRunnerCapturesOutput`: `runner_test.go:102: process output not captured in time`.
-  - `TestProcessRunnerStopLogsSignalAttempts`: `runner_test.go:145: signal-ignoring fixture did not become ready`.
+- `TestProcessLifecycle_StartListGetCapturesOutput`:
+  `processes_test.go:188: get process = 404, want 200 — the process was retired before its output could be read (body {"error":"process not found"})`.
+- `TestHandleGetProcess_OmitsOutputByDefault`:
+  `processes_test.go:206: get process = 404, want 200 — the process was retired before its output could be read (body {"error":"process not found"})`.
+- `TestProcessRunnerCapturesOutput`: `runner_test.go:102: process output not captured in time`.
+- `TestProcessRunnerStopLogsSignalAttempts`: `runner_test.go:145: signal-ignoring fixture did not become ready`.
+- Both process-test pairs reproduced in targeted runs alone under the same
+  sanitized environment; the exact errors above remained. The full gate was not
+  rerun.
 - The implementation commit changes no paths in
   `internal/agent/agents`, `internal/agentctl/server/api`, or
   `internal/agentctl/server/process` (checked with `git diff --name-only`
   against `224cdc4dd`). The npm assertion is in the untouched agent package;
-  the other four failures are in untouched API/process packages. Their failure
-  messages do not identify a task-scoped correction. The process timing cause
-  remains unverified; do not weaken or exclude these tests.
+  the other four failures are in untouched API/process packages. No
+  package-scoped correction is supported by this evidence; process-test root
+  cause remains unverified. Do not weaken or exclude these tests.
 - Separate final `make lint` passed (backend, web, harness, specs, architecture)
   after the lint findings introduced by the workflow payload edits were fixed.
 - Focused DTO, workflow-event, boot-state, and E2E-fixture regression tests

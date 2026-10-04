@@ -23,12 +23,13 @@ import type {
   AutomationTrigger,
   TriggerTypeInfo,
   UpdateAutomationRequest,
-  RetryPolicy,
 } from "@/lib/types/automation";
 import { RunsSection } from "./runs-section";
 import {
   type CreatedWebhookDetails,
   type FormState,
+  DEFAULT_RETRY_POLICY,
+  normalizeRetryPolicyForTaskMode,
   buildCreatePayload,
   buildUpdatePayload,
   buildWebhookUrl,
@@ -59,14 +60,6 @@ type AutomationEditorProps = {
 // call the Jira (#2177), Linear (#2179) and Sentry (#2182) migrations made.
 // i18n-exempt: persisted prompt, sent to the agent and compared with ===. See the comment above.
 const DEFAULT_PROMPT = "Run scheduled automation.\n\nTrigger: {{trigger.type}}";
-
-const DEFAULT_RETRY_POLICY: RetryPolicy = {
-  mode: "disabled",
-  max_retries: "0",
-  delay_seconds: "0",
-  backoff: "fixed",
-  history_mode: "attempts",
-};
 
 const defaultForm: FormState = {
   name: "",
@@ -234,7 +227,10 @@ function useLoadAutomation(opts: LoadAutomationOpts) {
       .then((a) => {
         const loadedForm = formFromAutomation(a);
         const loadedTriggers = a.triggers ?? [];
-        setForm(loadedForm);
+        setForm({
+          ...loadedForm,
+          retryPolicy: normalizeRetryPolicyForTaskMode(loadedForm.taskMode, loadedForm.retryPolicy),
+        });
         loadTriggers(loadedTriggers);
         onLoaded(loadedForm, loadedTriggers);
       })
@@ -471,7 +467,15 @@ export function AutomationEditor({ workspaceId, automationId }: AutomationEditor
   });
 
   const updateField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      return key === "taskMode"
+        ? {
+            ...next,
+            retryPolicy: normalizeRetryPolicyForTaskMode(next.taskMode, prev.retryPolicy),
+          }
+        : next;
+    });
   }, []);
 
   const discard = useCallback(() => {

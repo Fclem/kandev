@@ -18,11 +18,9 @@ import { WebhookCreatedDialog } from "./webhook-created-dialog";
 import { RetryPolicySection } from "./retry-policy-section";
 import { useTaskTitleSelectionRestore } from "@/hooks/use-task-title-selection-restore";
 
+import { SELECTED_CARD_CLASS_NAME, UNSELECTED_CARD_CLASS_NAME } from "./automation-card-styles";
+
 type UpdateField = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
-
-const SELECTED_CARD_CLASS_NAME = "border-primary bg-primary/5";
-const UNSELECTED_CARD_CLASS_NAME = "border-border hover:bg-muted/30";
-
 export function NameField({
   value,
   isDirty,
@@ -506,11 +504,13 @@ export function SettingsSection({
       {form.taskMode === "managed_conversation" ? null : (
         <ContinuationPolicySection form={form} savedForm={savedForm} updateField={updateField} />
       )}
-      <RetryPolicySection
-        policy={form.retryPolicy}
-        savedPolicy={savedForm.retryPolicy}
-        updateField={updateField}
-      />
+      {form.taskMode === "managed_conversation" ? null : (
+        <RetryPolicySection
+          policy={form.retryPolicy}
+          savedPolicy={savedForm.retryPolicy}
+          updateField={updateField}
+        />
+      )}
     </div>
   );
 }

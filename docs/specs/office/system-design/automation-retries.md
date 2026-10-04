@@ -18,7 +18,7 @@ The Office automation service owns retry policy, durable retry-group identity, a
 
 | Requirement | Design section |
 | --- | --- |
-| `REQ-OFFICE-AUTOMATION-RETRIES-001` | [Data and contracts](#data-and-contracts), [Control flow](#control-flow), [Failure and recovery](#failure-and-recovery), [Persistence](#persistence), [Security](#security) |
+| `REQ-OFFICE-AUTOMATION-RETRIES-001` | [Data and contracts](#data-and-contracts), [Frontend editor behavior](#frontend-editor-behavior), [Control flow](#control-flow), [Failure and recovery](#failure-and-recovery), [Persistence](#persistence), [Security](#security) |
 
 ## Components and responsibilities
 
@@ -26,7 +26,34 @@ The Office automation service owns retry policy, durable retry-group identity, a
 - The automation lifecycle worker periodically discovers due automations, obtains a durable run claim, and dispatches the attempt through the existing automation service.
 - Retry admission and task operations persist the intent before creating a task. The operation ledger makes task creation recoverable across process interruption.
 - The WebSocket/API handlers expose retry policy, group controls, and bounded history to the web client.
-- `retry-policy-section.tsx` edits the retry policy. `runs-section.tsx` composes attempt rows into the configured attempt or timeline view. The history hook owns cursor progression and refresh timing.
+- `retry-policy-section.tsx` edits the policy and history mode. The automation editor owns target-aware visibility and resetting; the retry-mode selector shares card-state styles with the other automation radio-card sections.
+
+## Frontend editor behavior
+
+When the editor selects or loads an automation with `managed_conversation`,
+the draft retry policy is normalized to the canonical disabled values and the
+entire retry section is hidden. The create/update payload builder also emits
+that canonical disabled policy for managed targets, including when stale
+enabled values came from an older saved automation. Switching back to
+`automation_run` or `normal_task` reveals the disabled policy; discarded
+settings are not restored.
+
+For an existing managed automation with a non-disabled persisted policy, the
+editor presents the disabled draft but retains the persisted policy in its
+dirty baseline. The reset therefore remains visibly unsaved until the operator
+saves; loading the editor does not write to the API.
+
+Retry-mode radio cards share the selected primary border/background and
+unselected neutral-border/hover treatment used by Context between runs and Run
+destination. Their RadioGroup semantics remain unchanged. On phones, the cards
+stay full width and at least 44 pixels high; selected styling remains the touch
+feedback, while hover is desktop-only.
+
+This is an editor and payload contract. It adds no API shape or backend
+dispatch change and leaves managed conversation delivery retries unchanged.
+Existing managed records keep their saved non-disabled policy until Save, so
+current generic retry admission may create retry groups from that policy before
+then. Loading does not auto-write configuration or block this backend path.
 
 ## Data and contracts
 
@@ -38,7 +65,7 @@ The Office automation service owns retry policy, durable retry-group identity, a
 
 ## Control flow
 
-1. Policy updates are normalized and persisted with the automation. Switching from disabled to finite supplies a valid retry count before saving; disabled mode hides or locks retry-only controls.
+1. Policy updates are normalized and persisted with the automation. Switching from disabled to finite supplies a valid retry count before saving; disabled mode hides or locks retry-only controls. Selecting or loading a managed-conversation target resets the policy to canonical disabled values and hides the retry section; editor create/update payloads preserve that reset. Changing back to a retry-capable target does not restore the discarded values.
 2. A failed eligible attempt advances its retry group generation transactionally, records the next attempt and its exact due timestamp, and writes any required publication intent to the outbox.
 3. The lifecycle worker scans due work at a bounded cadence. A database claim serializes instances. Capacity deferral releases the claim with a later due time instead of repeatedly retrying at the scheduler tick rate.
 4. Admission persists a task intent and operation before invoking task creation. Completion binds the resulting task/session/turn to the exact run and acknowledges the matching outbox lease.

@@ -3,6 +3,55 @@ import { waitForFiniteAnimations } from "../helpers/animations";
 import { expectControlHeight } from "../helpers/control-sizing";
 import { AutomationsPage } from "../pages/automations-page";
 
+import {
+  ensureManagedConversation,
+  installAndGrantManagedConversationAccess,
+} from "./plugins/managed-automation-helpers";
+import { uninstallFixturePlugin } from "../helpers/plugin-fixture";
+
+test.describe("Automation settings page", () => {
+  test.afterEach(async ({ apiClient }) => {
+    await uninstallFixturePlugin(apiClient);
+  });
+
+  test("managed target resets retry policy and retry cards share selection states", async ({
+    testPage,
+    seedData,
+    apiClient,
+  }) => {
+    await installAndGrantManagedConversationAccess(testPage, apiClient, seedData.workspaceId);
+    await ensureManagedConversation(
+      apiClient,
+      seedData.workspaceId,
+      "desktop-retry-target",
+      seedData.agentProfileId,
+    );
+    const automations = new AutomationsPage(testPage, seedData.workspaceId);
+    await automations.gotoNew();
+    const finite = testPage.getByRole("radio", { name: "Retry a fixed number of times" });
+    await finite.check();
+    await testPage.locator("#automation-retry-max").fill("5");
+    const finiteCard = testPage.locator('label[for="automation-retry-finite"]');
+    await expect(finiteCard).toHaveClass(/border-primary bg-primary\/5/);
+    const disabledCard = testPage.locator('label[for="automation-retry-disabled"]');
+    await expect(disabledCard).toHaveClass(/border-border hover:bg-muted\/30/);
+    const neutralBackground = await disabledCard.evaluate(
+      (card) => getComputedStyle(card).backgroundColor,
+    );
+    await disabledCard.hover();
+    await expect
+      .poll(() => disabledCard.evaluate((card) => getComputedStyle(card).backgroundColor))
+      .not.toBe(neutralBackground);
+
+    await testPage.getByRole("radio", { name: /Managed conversation/ }).check();
+    await expect(testPage.locator("#automation-retry-finite")).toHaveCount(0);
+    await expect(testPage.getByText("Context between runs", { exact: true })).toHaveCount(0);
+    await testPage.getByRole("radio", { name: /Create a normal task/ }).check();
+    await expect(testPage.getByRole("radio", { name: "Do not retry" })).toBeChecked();
+    await testPage.getByRole("radio", { name: /Run in automation history only/ }).check();
+    await expect(testPage.getByRole("radio", { name: "Do not retry" })).toBeChecked();
+  });
+});
 test.describe("Automations settings page", () => {
   test("list page shows empty state", async ({ testPage, seedData }) => {
     const automations = new AutomationsPage(testPage, seedData.workspaceId);

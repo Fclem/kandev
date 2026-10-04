@@ -16,9 +16,17 @@ import {
   type RepositorySelection,
 } from "./automation-repository-selection";
 
-// Shared form state + pending trigger types used by the editor and its
-// save handler. Lifted out of automation-editor.tsx so the editor stays
-// under the file-length lint cap.
+// Managed conversations do not expose retry policy controls. Keep their wire
+// value canonical even when an older saved record hydrates an enabled policy.
+export const DEFAULT_RETRY_POLICY: RetryPolicy = {
+  mode: "disabled",
+  max_retries: "0",
+  delay_seconds: "0",
+  backoff: "fixed",
+  history_mode: "attempts",
+};
+// Shared form state and pending trigger types keep the editor and save handler
+// aligned while keeping automation-editor.tsx under its file-length limit.
 
 export type FormState = {
   name: string;
@@ -51,6 +59,13 @@ export function retryPolicyAfterModeChange(
       ? { max_retries: "1" }
       : {}),
   };
+}
+
+export function normalizeRetryPolicyForTaskMode(
+  taskMode: TaskMode,
+  policy: RetryPolicy,
+): RetryPolicy {
+  return taskMode === "managed_conversation" ? DEFAULT_RETRY_POLICY : policy;
 }
 
 export type PendingTrigger = {
@@ -191,8 +206,12 @@ export function buildCreatePayload(
     task_title_template: form.taskTitleTemplate,
     max_concurrent_runs: form.maxConcurrentRuns,
     continuation_policy: form.continuationPolicy,
-    retry_policy: form.retryPolicy,
-    triggers: pending.map((t) => ({ type: t.type, config: t.config, enabled: t.enabled })),
+    triggers: pending.map((trigger) => ({
+      type: trigger.type,
+      config: trigger.config,
+      enabled: trigger.enabled,
+    })),
+    retry_policy: normalizeRetryPolicyForTaskMode(form.taskMode, form.retryPolicy),
   };
 }
 
@@ -218,7 +237,7 @@ export function buildUpdatePayload(
     enabled: form.enabled,
     max_concurrent_runs: form.maxConcurrentRuns,
     continuation_policy: form.continuationPolicy,
-    retry_policy: form.retryPolicy,
+    retry_policy: normalizeRetryPolicyForTaskMode(form.taskMode, form.retryPolicy),
   };
 }
 

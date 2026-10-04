@@ -9,6 +9,7 @@ vi.mock("@/app/actions/workspaces", () => ({
 import {
   buildCreatePayload,
   buildUpdatePayload,
+  normalizeRetryPolicyForTaskMode,
   resolveNormalizedRepositoryIds,
   resolveRepositoryIdsForMode,
   resolveRepositoryIds,
@@ -237,6 +238,28 @@ describe("managed destination and retry payloads", () => {
       repository_ids: [],
     });
   });
+  it("serializes canonical disabled retry policy for managed create and update", () => {
+    const form = baseForm({
+      taskMode: "managed_conversation",
+      retryPolicy: {
+        mode: "finite",
+        max_retries: "4",
+        delay_seconds: "30",
+        backoff: "exponential",
+        history_mode: "timeline",
+      },
+    });
+    const disabledPolicy = {
+      mode: "disabled",
+      max_retries: "0",
+      delay_seconds: "0",
+      backoff: "fixed",
+      history_mode: "attempts",
+    };
+
+    expect(buildCreatePayload("ws-1", form, [], []).retry_policy).toEqual(disabledPolicy);
+    expect(buildUpdatePayload(form, []).retry_policy).toEqual(disabledPolicy);
+  });
 
   it("does not resolve stale repository selections for non-selected modes", async () => {
     const result = await resolveRepositoryIdsForMode(
@@ -248,6 +271,25 @@ describe("managed destination and retry payloads", () => {
 
     expect(result.ids).toEqual([]);
     expect(createRepositoryAction).not.toHaveBeenCalled();
+  });
+  it("normalizes managed retry drafts and does not restore them for task targets", () => {
+    const enabled = {
+      mode: "finite" as const,
+      max_retries: "4",
+      delay_seconds: "30",
+      backoff: "exponential" as const,
+      history_mode: "timeline" as const,
+    };
+
+    const managed = normalizeRetryPolicyForTaskMode("managed_conversation", enabled);
+    expect(managed).toEqual({
+      mode: "disabled",
+      max_retries: "0",
+      delay_seconds: "0",
+      backoff: "fixed",
+      history_mode: "attempts",
+    });
+    expect(normalizeRetryPolicyForTaskMode("normal_task", managed)).toEqual(managed);
   });
   it("sends decimal retry policy values unchanged", () => {
     const policy = {

@@ -4,6 +4,7 @@ import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import type { RetryPolicy } from "@/lib/types/automation";
+import { SELECTED_CARD_CLASS_NAME, UNSELECTED_CARD_CLASS_NAME } from "./automation-card-styles";
 import { retryPolicyAfterModeChange, type FormState } from "./automation-payload";
 type Props = {
   policy: RetryPolicy;
@@ -21,6 +22,7 @@ function RetryModeSelector({ policy, updateField }: Pick<Props, "policy" | "upda
   const { t } = useTranslation();
   return (
     <RadioGroup
+      data-testid="automation-retry-modes"
       value={policy.mode}
       onValueChange={(value) =>
         updateField("retryPolicy", retryPolicyAfterModeChange(policy, value as RetryPolicy["mode"]))
@@ -31,7 +33,9 @@ function RetryModeSelector({ policy, updateField }: Pick<Props, "policy" | "upda
         <Label
           key={mode.value}
           htmlFor={`automation-retry-${mode.value}`}
-          className="flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-md border p-3"
+          className={`flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-md border p-3 ${
+            policy.mode === mode.value ? SELECTED_CARD_CLASS_NAME : UNSELECTED_CARD_CLASS_NAME
+          }`}
         >
           <RadioGroupItem
             id={`automation-retry-${mode.value}`}

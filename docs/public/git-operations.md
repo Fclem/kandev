@@ -348,6 +348,11 @@ Open **Settings → Workspaces → _workspace_ → Repositories**, edit a reposi
 Policies belong to that repository. Create, edit, and delete actions take effect immediately.
 The branch controls list local and remote branches. You can search the list or refresh it from Git.
 
+Partial policy updates preserve fields they omit, including the saved pull-request target when
+only the base changes. Independent edits to different fields both survive. Supplying an empty or
+whitespace-only target resets it to the policy's effective base branch at the time of the update.
+An omitted target on creation defaults to the base branch.
+
 The base branch is the starting point for the new task branch. The pull-request target is its merge
 destination. These values are usually the same. A Gitflow Release policy can start from `develop`
 and target `main`.
@@ -359,7 +364,10 @@ line in the picker. Point to or focus its information icon to see the saved valu
 tap the icon.
 
 The **Gitflow starter** can create Feature, Bugfix, Hotfix, and Release policies in one operation.
-It requires two different existing branches and does not change Git branches. A task stores the
+It requires two different existing branches and an empty policy list. Concurrent starters admit
+one complete set; the other receives an already-seeded conflict. An ordinary policy added before
+the starter's admission also makes it reject. You can add custom policies after initialization.
+The starter does not change Git branches. A task stores the
 selected policy values when it is created. Later policy edits or deletion do not change that task's
 branch or pull-request target. Kandev's pull-request dialog uses the saved target by default. You can
 select a different target before creation.

@@ -113,3 +113,62 @@ test("mobile message timestamps remain contained and open their counterpart", as
     await expect(drawer).toBeHidden();
   }
 });
+
+test("mobile message-time settings reset, save, and persist through the UI", async ({
+  testPage,
+  apiClient,
+}) => {
+  await testPage.setViewportSize({ width: 390, height: 844 });
+  const initial = await apiClient.getUserSettings();
+  const initialDisplay =
+    OPTIONS.find(({ value }) => value === initial.settings.message_time_display)?.value ??
+    "relative";
+
+  try {
+    await apiClient.saveUserSettings({ message_time_display: "absolute_long" });
+    await testPage.goto("/settings/preferences/task-behavior?tab=conversation");
+
+    const select = testPage.getByRole("combobox", { name: "Message time" });
+    await expect(select).toBeVisible();
+    await expect(select).toContainText("Absolute (long)");
+    const selectBox = await select.boundingBox();
+    expect(selectBox).not.toBeNull();
+    expect(selectBox!.width).toBeGreaterThanOrEqual(44);
+    expect(selectBox!.height).toBeGreaterThanOrEqual(44);
+
+    await select.tap();
+    await testPage.getByRole("option", { name: "Relative", exact: true }).tap();
+    const saveBar = testPage.getByTestId("settings-floating-save");
+    await expect(saveBar).toBeVisible();
+    await expect
+      .poll(async () => (await apiClient.getUserSettings()).settings.message_time_display)
+      .toBe("absolute_long");
+
+    await saveBar.getByRole("button", { name: "Reset" }).tap();
+    await expect(select).toContainText("Absolute (long)");
+    await expect(saveBar).toBeHidden();
+
+    await select.tap();
+    await testPage.getByRole("option", { name: "Absolute (short)", exact: true }).tap();
+    const patchResponse = testPage.waitForResponse(
+      (response) =>
+        response.request().method() === "PATCH" &&
+        new URL(response.url()).pathname === "/api/v1/user/settings",
+    );
+    await saveBar.getByRole("button", { name: "Save changes" }).tap();
+    const response = await patchResponse;
+    expect(response.ok()).toBe(true);
+    expect(response.request().postDataJSON()).toEqual({ message_time_display: "absolute_short" });
+    await expect(saveBar).toBeHidden();
+    await expect
+      .poll(async () => (await apiClient.getUserSettings()).settings.message_time_display)
+      .toBe("absolute_short");
+
+    await testPage.reload();
+    await expect(testPage.getByRole("combobox", { name: "Message time" })).toContainText(
+      "Absolute (short)",
+    );
+  } finally {
+    await apiClient.saveUserSettings({ message_time_display: initialDisplay });
+  }
+});

@@ -4,13 +4,14 @@ import type { MessageTimeDisplay } from "@/lib/types/http-user-settings";
 import { parseStrictRfc3339Timestamp } from "@/lib/utils/strict-timestamp";
 
 const WEEK_MS = 7 * 86_400_000;
+const NANOSECONDS_PER_MILLISECOND = BigInt(1_000_000);
 const ABSOLUTE_SHORT_OPTIONS: Intl.DateTimeFormatOptions = {
   dateStyle: "short",
   timeStyle: "short",
 };
 const ABSOLUTE_LONG_OPTIONS: Intl.DateTimeFormatOptions = {
   dateStyle: "long",
-  timeStyle: "long",
+  timeStyle: "medium",
 };
 const RELATIVE_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -47,7 +48,7 @@ export function resolveMessageTimeLocale(): string {
   }
   if (parsed.region) return locale;
   const languages = typeof navigator === "undefined" ? [] : navigator.languages;
-  for (const language of languages ?? []) {
+  for (const language of languages) {
     try {
       const candidate = new Intl.Locale(language);
       if (candidate.language === parsed.language && candidate.region) return language;
@@ -63,8 +64,9 @@ export function formatMessageTime(
   display: MessageTimeDisplay,
   now: number = Date.now(),
 ): { label: string; counterpart: string } | null {
-  if (parseStrictRfc3339Timestamp(createdAt) === null || !createdAt) return null;
-  const date = new Date(createdAt);
+  const timestampNs = parseStrictRfc3339Timestamp(createdAt);
+  if (timestampNs === null) return null;
+  const date = new Date(Number(timestampNs / NANOSECONDS_PER_MILLISECOND));
   const locale = resolveMessageTimeLocale();
   const short = dateFormatter(locale, "short").format(date);
   const relative = formatCounterpartRelative(date, now);
@@ -73,7 +75,7 @@ export function formatMessageTime(
     label =
       now - date.getTime() >= WEEK_MS
         ? dateFormatter(locale, "relative-date").format(date)
-        : formatCompactRelative(createdAt);
+        : formatCompactRelative(date, now);
     return { label, counterpart: short };
   }
   label = display === "absolute_long" ? dateFormatter(locale, "long").format(date) : short;

@@ -262,8 +262,12 @@ describe("message time display websocket sync", () => {
       } as unknown as Partial<BackendMessageMap["user.settings.updated"]["payload"]>),
     );
     expect(store.getState().userSettings.messageTimeDisplay).toBe("relative");
-    handler?.(userSettingsMessage({}));
-    expect(store.getState().userSettings.messageTimeDisplay).toBe("relative");
+    store.setState((state) => ({
+      ...state,
+      userSettings: { ...state.userSettings, messageTimeDisplay: "absolute_short", revision: 4 },
+    }));
+    handler?.(userSettingsMessage({ revision: 5 }));
+    expect(store.getState().userSettings.messageTimeDisplay).toBe("absolute_short");
   });
 
   it("ignores a stale revision carrying an older display value", () => {

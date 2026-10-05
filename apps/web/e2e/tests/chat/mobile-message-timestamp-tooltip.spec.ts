@@ -1,7 +1,7 @@
 // Mobile companion: tap the timestamp to open a drawer with its counterpart.
 import { test, expect } from "../../fixtures/test-base";
 import { SessionPage } from "../../pages/session-page";
-const CREATED_AT = "2026-06-20T10:15:00Z";
+const CREATED_AT = new Date(Date.now() - 60_000).toISOString();
 
 test.use({ locale: "en-US", timezoneId: "UTC" });
 

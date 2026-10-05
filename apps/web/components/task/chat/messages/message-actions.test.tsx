@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { StoreApi } from "zustand";
 import { StateProvider, useAppStoreApi } from "@/components/state-provider";
+import { defaultState } from "@/lib/state/default-state";
 import {
   sessionId as toSessionId,
   taskId as toTaskId,
@@ -9,6 +10,7 @@ import {
   type Turn,
 } from "@/lib/types/http";
 import type { AppState } from "@/lib/state/store";
+import { resolveMessageTimeLocale } from "@/lib/i18n/message-time";
 import { MessageActions } from "./message-actions";
 
 const TOUCH_DRAWER = vi.hoisted(() => ({ enabled: false }));
@@ -114,6 +116,30 @@ describe("MessageActions timestamp tooltip", () => {
         new Date(MESSAGE_TIMESTAMP),
       ),
     );
+  });
+
+  it.each([
+    ["absolute_short", { dateStyle: "short", timeStyle: "short" }],
+    ["absolute_long", { dateStyle: "long", timeStyle: "medium" }],
+  ] as const)("renders the %s label and relative counterpart", (display, options) => {
+    const { container } = render(
+      <StateProvider
+        initialState={{
+          userSettings: { ...defaultState.userSettings, messageTimeDisplay: display },
+        }}
+      >
+        <MessageActions message={assistantMessage()} />
+      </StateProvider>,
+    );
+
+    const timeEl = container.querySelector("time");
+    const label = new Intl.DateTimeFormat(resolveMessageTimeLocale(), options).format(
+      new Date(MESSAGE_TIMESTAMP),
+    );
+    expect(timeEl?.textContent).toBe(label);
+    expect(timeEl?.getAttribute("title")).toMatch(/ago$/);
+    expect(timeEl?.getAttribute("aria-label")).toContain(label);
+    expect(timeEl?.getAttribute("aria-label")).toContain(timeEl?.getAttribute("title") ?? "");
   });
 
   it("exposes both the visible timestamp and counterpart in its accessible name", () => {

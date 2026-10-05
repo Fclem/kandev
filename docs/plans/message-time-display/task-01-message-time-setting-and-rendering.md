@@ -22,7 +22,7 @@ system_design:
 
 ## Summary
 
-Persist `message_time_display` end to end and make the transcript footer honor it. After this task, saving the setting through the user-settings API changes every transcript message timestamp, including in other tabs, with only the counterpart form in the tooltip, drawer, and accessible name. The Settings control is task 02.
+Persist `message_time_display` end to end and make the transcript footer honor it. After this task, saving the setting through the user-settings API changes every transcript message timestamp, including in other tabs. The tooltip and drawer show only the counterpart; the accessible name includes the visible label and counterpart. The Settings control is task 02.
 
 ## In scope
 
@@ -55,7 +55,7 @@ absolute_long:  "October 3, 2026 at 2:32:05 PM" tooltip: 5 minutes ago
 ## Verification
 
 ```bash
-(cd apps/backend && go test ./internal/user/... ./internal/backendapp/... ./internal/settingscatalog/... && go run ./cmd/settings-catalog --check)
+(cd apps/backend && go test -tags fts5 ./internal/user/... ./internal/backendapp/... ./internal/settingscatalog/... && go run ./cmd/settings-catalog --check)
 make -C apps/backend lint
 (cd apps && pnpm install --frozen-lockfile)
 (cd apps/web && pnpm run typecheck)
@@ -95,3 +95,5 @@ None.
 ## Results
 
 `make fmt`; backend tests passed for 9 packages and `go run ./cmd/settings-catalog --check` completed. Backend lint reported 0 issues. Frontend typecheck, focused Vitest (7 files, 145 tests), i18n generation/check/ratchet, and frontend lint passed. Desktop Chromium and mobile Chromium timestamp E2E each passed (1 test).
+
+PR review follow-up additionally passed focused Vitest (4 files, 74 tests), frontend typecheck and lint, i18n ratchet/check, `go test -tags fts5 ./internal/user/... ./internal/backendapp/... ./internal/settingscatalog/...`, and `go run ./cmd/settings-catalog --check`. The desktop `message-time-display.spec.ts` and mobile `mobile-message-timestamp-tooltip.spec.ts` Playwright runs each passed (1 test); desktop rebuilt backend/Vite assets and mobile reused that build.

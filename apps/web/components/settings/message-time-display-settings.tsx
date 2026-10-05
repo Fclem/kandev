@@ -10,7 +10,7 @@ import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import type { MessageTimeDisplay } from "@/lib/types/http-user-settings";
 import { GENERAL_SETTINGS_TARGETS } from "@/lib/settings-discovery/catalog/preferences";
 import { SettingsRow } from "./settings-group";
-import { useSettingsSaveContributor } from "./settings-save-provider";
+import { SettingsSaveCancelledError, useSettingsSaveContributor } from "./settings-save-provider";
 
 const MESSAGE_TIME_DISPLAY_OPTIONS: readonly {
   value: MessageTimeDisplay;
@@ -56,7 +56,7 @@ export function MessageTimeDisplaySettings() {
           state.userSettings === settingsAtSubmit,
         )
       ) {
-        return;
+        throw new SettingsSaveCancelledError();
       }
       setSaved(submitted);
       setUserSettings(mapUserSettingsResponse(response, state.userSettings));

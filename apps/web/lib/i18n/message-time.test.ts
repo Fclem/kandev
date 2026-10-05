@@ -7,7 +7,7 @@ const DATE = "2026-10-03T10:15:00Z";
 const SHORT_OPTIONS: Intl.DateTimeFormatOptions = { dateStyle: "short", timeStyle: "short" };
 const LONG_OPTIONS: Intl.DateTimeFormatOptions = {
   dateStyle: "long",
-  timeStyle: "long",
+  timeStyle: "medium",
 };
 
 afterEach(async () => {
@@ -22,6 +22,7 @@ describe("formatMessageTime", () => {
     ["absolute_short", "absolute_short"],
     ["absolute_long", "absolute_long"],
   ] as const)("pairs label and counterpart for %s", (display, expectedLabel) => {
+    vi.stubGlobal("navigator", { languages: ["en-US"] });
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     activateLocale("en-US");
@@ -40,6 +41,15 @@ describe("formatMessageTime", () => {
       expect(result?.counterpart).toMatch(/ago$/);
     }
     if (display === "absolute_long") expect(result?.label).not.toBe(result?.counterpart);
+  });
+
+  it("uses the supplied reference time for compact relative labels", async () => {
+    await activateLocale("en");
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW + 8 * 86_400_000);
+    vi.stubGlobal("navigator", { languages: ["en-US"] });
+    const result = formatMessageTime(DATE, "relative", NOW);
+    expect(result?.label).toMatch(/ago$/);
   });
 
   it("uses a resolved-locale calendar date at exactly seven days, but a relative label one millisecond earlier", () => {

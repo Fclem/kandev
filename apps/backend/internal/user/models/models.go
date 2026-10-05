@@ -60,9 +60,12 @@ func NormalizeLastSeenDisplay(value string) string {
 }
 
 const (
-	MessageTimeDisplayRelative      = "relative"
+	// MessageTimeDisplayRelative selects the compact relative transcript label.
+	MessageTimeDisplayRelative = "relative"
+	// MessageTimeDisplayAbsoluteShort selects the regional short date and time.
 	MessageTimeDisplayAbsoluteShort = "absolute_short"
-	MessageTimeDisplayAbsoluteLong  = "absolute_long"
+	// MessageTimeDisplayAbsoluteLong selects the regional long date with seconds.
+	MessageTimeDisplayAbsoluteLong = "absolute_long"
 )
 
 // NormalizeMessageTimeDisplay returns a supported transcript timestamp mode.

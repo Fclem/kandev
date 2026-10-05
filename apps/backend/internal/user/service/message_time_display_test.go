@@ -47,7 +47,7 @@ func TestPublishedSettingsSnapshotNormalizesMessageTimeDisplay(t *testing.T) {
 	if !ok {
 		t.Fatalf("published data has type %T", eventBus.events[0].Data)
 	}
-	if got := data["message_time_display"]; got != models.MessageTimeDisplayRelative {
+	if got := data["message_time_display"]; got != "relative" {
 		t.Fatalf("published display = %#v, want relative", got)
 	}
 }

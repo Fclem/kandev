@@ -4,6 +4,7 @@ import { SessionPage } from "../../pages/session-page";
 const SETTINGS_PATH = "/settings/preferences/task-behavior";
 const CREATED_AT = "2026-06-20T10:15:00Z";
 const MESSAGE = "Message time display seeded transcript message";
+const RECENT_MESSAGE = "Recent compact message time display fixture";
 const OPTIONS = [
   { value: "relative", label: "Relative" },
   { value: "absolute_short", label: "Absolute (short)" },
@@ -28,6 +29,13 @@ test("message time preference saves, persists, and appears in the transcript", a
     content: MESSAGE,
     authorType: "user",
     createdAt: CREATED_AT,
+  });
+  const recentCreatedAt = new Date(Date.now() - 60_000).toISOString();
+  const { messageId: recentMessageId } = await apiClient.seedSessionMessage(sessionId, {
+    type: "message",
+    content: RECENT_MESSAGE,
+    authorType: "user",
+    createdAt: recentCreatedAt,
   });
   await apiClient.saveUserSettings({ message_time_display: "absolute_long" });
 
@@ -98,7 +106,7 @@ test("message time preference saves, persists, and appears in the transcript", a
         } else if (display === "absolute_long") {
           label = new Intl.DateTimeFormat("en-US", {
             dateStyle: "long",
-            timeStyle: "long",
+            timeStyle: "medium",
           }).format(date);
         } else if (Date.now() - date.getTime() >= 7 * 86_400_000) {
           label = new Intl.DateTimeFormat("en-US", {
@@ -118,5 +126,12 @@ test("message time preference saves, persists, and appears in the transcript", a
     );
     await expect(timestamp).toHaveText(expected.label);
     await expect(timestamp).toHaveAttribute("title", expected.counterpart);
+    if (option.value === "relative") {
+      const recentTimestamp = session
+        .activeChat()
+        .locator(`#msg-${recentMessageId}`)
+        .locator("time[datetime]");
+      await expect(recentTimestamp).toHaveText(/^\d+[smhd] ago$/);
+    }
   }
 });

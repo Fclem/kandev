@@ -68,8 +68,8 @@ test.describe("Quick Chat entry points on mobile", () => {
     const editor = await waitForQuickChatComposerReady(dialog);
     await editor.fill("/e2e:bulk:20");
     await dialog.getByTestId("submit-message-button").tap();
-    await expect(editor).toHaveText("");
     await expect(dialog.getByText(/Done\. Emitted 20 messages/)).toBeVisible({ timeout: 30_000 });
+    await expect(editor).toHaveText("");
 
     const longChatLayout = await readQuickChatViewportLayout(dialog);
     expect(longChatLayout.messageScrollerScrollHeight).toBeGreaterThan(

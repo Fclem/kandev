@@ -13,7 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
-const acpUserRole = "user"
+const (
+	acpUserRole                         = "user"
+	availableCommandKindSkill           = "skill"
+	codexPlanCommandName                = "plan"
+	codexSetConfigOptionActionKind      = "setConfigOption"
+	codexCollaborationModeConfigID      = "collaboration_mode"
+	codexPlanModeValue                  = "plan"
+	codexDefaultModeValue               = "default"
+	codexPlanModePresentation           = "state"
+	normalizedSetConfigOptionActionKind = "set_config_option"
+)
 
 // notifWork is the item type carried on notifQueue. notif is populated for a
 // real SDK notification (the common case); sync identifies a barrier and may
@@ -801,6 +811,7 @@ func (a *Adapter) convertAvailableCommands(sessionID string, update *acp.Session
 			Name:        cmd.Name,
 			Description: acpcompat.NormalizeCommandDescription(a.agentID, cmd.Description),
 		}
+		ac.Kind, ac.Action = normalizeAvailableCommandMetadata(a.agentID, cmd)
 		if cmd.Input != nil && cmd.Input.Unstructured != nil {
 			ac.InputHint = cmd.Input.Unstructured.Hint
 		}
@@ -811,4 +822,37 @@ func (a *Adapter) convertAvailableCommands(sessionID string, update *acp.Session
 		SessionID:         sessionID,
 		AvailableCommands: commands,
 	}
+}
+
+func normalizeAvailableCommandMetadata(agentID string, cmd acp.AvailableCommand) (string, *streams.AvailableCommandAction) {
+	if agentID != codexAgentID {
+		return "", nil
+	}
+	if strings.HasPrefix(cmd.Name, "$") && len(cmd.Name) > 1 {
+		return availableCommandKindSkill, nil
+	}
+	if cmd.Name != codexPlanCommandName {
+		return "", nil
+	}
+	metadata, ok := cmd.Meta["commandAction"].(map[string]any)
+	if !ok {
+		return "", nil
+	}
+	if !isCodexPlanCommandAction(metadata) {
+		return "", nil
+	}
+	return "", &streams.AvailableCommandAction{
+		Kind:       normalizedSetConfigOptionActionKind,
+		ConfigID:   codexCollaborationModeConfigID,
+		Value:      codexPlanModeValue,
+		ResetValue: codexDefaultModeValue,
+	}
+}
+
+func isCodexPlanCommandAction(metadata map[string]any) bool {
+	return metadata["kind"] == codexSetConfigOptionActionKind &&
+		metadata["configId"] == codexCollaborationModeConfigID &&
+		metadata["value"] == codexPlanModeValue &&
+		metadata["resetValue"] == codexDefaultModeValue &&
+		metadata["presentation"] == codexPlanModePresentation
 }

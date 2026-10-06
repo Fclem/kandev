@@ -18,11 +18,8 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { getWebSocketClient } from "@/lib/ws/connection";
 import { searchWorkspaceFiles } from "@/lib/ws/workspace-files";
 import { EditorContextProvider } from "./editor-context";
-import { EntityReferenceMenu } from "./entity-reference-menu";
-import { MentionMenu } from "./mention-menu";
-import { MessageHistorySearch } from "./message-history-search";
+import { TipTapPopups } from "./tiptap-popups";
 import { useReverseSearchSelectHandler } from "./use-reverse-search-select-handler";
-import { SlashCommandMenu } from "./slash-command-menu";
 import { buildTaskMentionItems } from "./task-mention-items";
 import { createMessageHistorySelector, type MessageHistoryEntry } from "./message-history";
 import { useDrainOlderMessages } from "./use-drain-older-messages";
@@ -41,12 +38,13 @@ import {
   type ClarificationEscapePredicate,
 } from "@/hooks/use-clarification-escape-guard";
 import type { MentionItem } from "@/hooks/use-inline-mention";
-import type { SlashCommand } from "./slash-command-types";
+import { mapAvailableCommandToSlashCommand, type SlashCommand } from "./slash-command-types";
 import type { ContextFile } from "@/lib/state/context-files-store";
 import { useEntityReferenceComposer } from "./use-entity-reference-composer";
 import { EntityReferenceSuggestionPluginKey } from "./tiptap-entity-reference-suggestion";
 import type { ImagePasteIssue } from "./clipboard-attachments";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { rankMentionItems, recordChatMentionSelection } from "@/lib/chat-mention-recency";
 
 const RAW_DRAIN = { rawPagination: true } as const;
@@ -214,18 +212,23 @@ function useSuggestionConfigs({
   const agentCommands = useAppStore((state) =>
     sessionId ? state.availableCommands.bySessionId[sessionId] : undefined,
   );
+  const confirmedConfigOptions = useAppStore(
+    useShallow((state) =>
+      sessionId ? state.sessionModels.bySessionId[sessionId]?.confirmedConfigOptions : undefined,
+    ),
+  );
   const slashCommands = useMemo((): SlashCommand[] => {
     if (!agentCommands || agentCommands.length === 0) return [];
     return agentCommands
       .filter((cmd) => !(cmd.description || "").includes("(bundled)"))
-      .map((cmd) => ({
-        id: `agent-${cmd.name}`,
-        label: `/${cmd.name}`,
-        description: cmd.description || t("task:runCommand", { name: cmd.name }),
-        action: "agent" as const,
-        agentCommandName: cmd.name,
-      }));
-  }, [agentCommands]);
+      .map((cmd) =>
+        mapAvailableCommandToSlashCommand(
+          cmd,
+          confirmedConfigOptions,
+          cmd.description || t("task:runCommand", { name: cmd.name }),
+        ),
+      );
+  }, [agentCommands, confirmedConfigOptions, t]);
 
   const workspaceIdRef = useRef(workspaceId);
   useLayoutEffect(() => {
@@ -465,6 +468,7 @@ export const TipTapInput = forwardRef<TipTapInputHandle, TipTapInputProps>(funct
     <>
       <TipTapPopups
         menu={menu}
+        slashCommands={slashCommands}
         entityReferences={entityReferences}
         overlay={overlay}
         history={history}
@@ -484,74 +488,11 @@ export const TipTapInput = forwardRef<TipTapInputHandle, TipTapInputProps>(funct
   );
 });
 
-type TipTapPopupsProps = {
-  menu: ReturnType<typeof useMenuHandlers>;
-  entityReferences: ReturnType<typeof useEntityReferenceComposer>;
-  overlay: Omit<ReturnType<typeof useReverseSearchOverlay>, "editorWrapperRef" | "editorRef">;
-  history: readonly MessageHistoryEntry[];
-  isDraining: boolean;
-  onReverseSearchSelect: (index: number) => void;
-  onEntityReferenceClose: () => void;
-};
-
-function TipTapPopups({
-  menu,
-  entityReferences,
-  overlay,
-  history,
-  isDraining,
-  onReverseSearchSelect,
-  onEntityReferenceClose,
-}: TipTapPopupsProps) {
-  return (
-    <>
-      <MentionMenu
-        isOpen={menu.mentionMenu.isOpen}
-        isLoading={false}
-        clientRect={menu.mentionMenu.clientRect}
-        items={menu.mentionMenu.items}
-        query={menu.mentionMenu.query}
-        selectedIndex={menu.mentionSelectedIndex}
-        onSelect={menu.handleMentionSelect}
-        onClose={menu.handleMentionClose}
-        setSelectedIndex={menu.setMentionSelectedIndex}
-      />
-      <EntityReferenceMenu
-        isOpen={entityReferences.isOpen}
-        clientRect={entityReferences.clientRect}
-        groups={entityReferences.groups}
-        query={entityReferences.query}
-        selectedIndex={entityReferences.selectedIndex}
-        isSearching={entityReferences.isSearching}
-        error={entityReferences.error}
-        onRetry={entityReferences.retry}
-        onSelect={entityReferences.selectReference}
-        onClose={onEntityReferenceClose}
-        setSelectedIndex={entityReferences.setSelectedIndex}
-      />
-      <SlashCommandMenu
-        isOpen={menu.slashMenu.isOpen}
-        clientRect={menu.slashMenu.clientRect}
-        commands={menu.slashMenu.items}
-        selectedIndex={menu.slashSelectedIndex}
-        onSelect={menu.handleSlashSelect}
-        onClose={menu.handleSlashClose}
-        setSelectedIndex={menu.setSlashSelectedIndex}
-      />
-      {overlay.isReverseSearchOpen && overlay.reverseSearchContainer && (
-        <MessageHistorySearch
-          history={history}
-          isLoadingOlder={isDraining}
-          anchorRect={overlay.reverseSearchAnchor}
-          container={overlay.reverseSearchContainer}
-          onClose={overlay.closeReverseSearch}
-          onEscapeDismiss={overlay.closeReverseSearchAndFocusEditor}
-          onSelect={onReverseSearchSelect}
-        />
-      )}
-    </>
-  );
-}
+export type MenuHandlers = ReturnType<typeof useMenuHandlers>;
+export type ReverseSearchOverlay = Omit<
+  ReturnType<typeof useReverseSearchOverlay>,
+  "editorWrapperRef" | "editorRef"
+>;
 
 function useMessageHistoryForSession(sessionId: string | null): MessageHistoryEntry[] {
   // The memoized selector keeps its snapshot stable while agent messages

@@ -643,6 +643,7 @@ describe("mapUserSettingsResponse", () => {
       filters: [],
       sort: { key: "updatedAt", direction: "desc" },
       group: "workflow",
+      groupIndent: true,
       taskRow: {
         detailsEnabled: true,
         detailOrder: ["relative_time", "repository", "pull_request_number"],

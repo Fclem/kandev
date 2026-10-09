@@ -88,10 +88,19 @@ export async function scrollDiffIntoReadingPosition(
   interaction: "programmatic" | "touch" = "programmatic",
 ) {
   await waitForInitialDiffScroll(page);
-  await page
-    .getByTestId("review-diff-scroll")
-    .locator(`[data-review-file-key="${encodeURIComponent(filePath)}"]`)
-    .scrollIntoViewIfNeeded();
+  const diffRoot = page.getByTestId("review-diff-scroll");
+  const targetSection = diffRoot.locator(
+    `[data-review-file-key="${encodeURIComponent(filePath)}"]`,
+  );
+  await targetSection.waitFor({ state: "attached" });
+  await diffRoot.evaluate((element, path) => {
+    const root = element as HTMLElement;
+    const section = root.querySelector<HTMLElement>(
+      `[data-review-file-key="${encodeURIComponent(path)}"]`,
+    );
+    if (!section) throw new Error(`Missing diff section for ${path}`);
+    root.scrollTop += section.getBoundingClientRect().top - root.getBoundingClientRect().top;
+  }, filePath);
   await expect
     .poll(
       async () => {

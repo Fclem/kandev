@@ -512,6 +512,42 @@ describe("folder opener discovery", () => {
   });
 });
 describe("agent profile ordering snapshots", () => {
+  // @covers AC-AGENTS-PROFILE-LIST-ORDERING-003.14
+  it("keeps selector baseline independent of saved, optimistic, and remote Settings orders", () => {
+    const store = makeStore();
+    const snapshot = [
+      {
+        id: "agent-a",
+        name: "Agent A",
+        profiles: [
+          { id: "old", name: "Old", createdAt: "2026-01-01T00:00:00Z" },
+          { id: "new-b", name: "New B", createdAt: "2026-02-01T00:00:00Z" },
+          { id: "new-a", name: "New A", createdAt: "2026-02-01T00:00:00Z" },
+        ],
+        profile_order_revision: 2,
+      },
+    ] as never;
+    store.getState().applyAgentListSnapshot(snapshot, 0);
+    const selectorIds = () => store.getState().agentProfiles.items.map((profile) => profile.id);
+    expect(selectorIds()).toEqual(["new-a", "new-b", "old"]);
+    expect(store.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      "old",
+      "new-b",
+      "new-a",
+    ]);
+    store.getState().setAgentProfileOrder("agent-a", ["new-b", "old", "new-a"]);
+    expect(selectorIds()).toEqual(["new-a", "new-b", "old"]);
+    store.getState().setAgentProfileOrderIntent("agent-a", ["new-b", "old", "new-a"], null);
+    store.getState().acceptAgentProfileOrder("agent-a", ["old", "new-a", "new-b"], 3);
+    store.getState().setAgentProfileOrderIntent("agent-a", null, null);
+    expect(selectorIds()).toEqual(["new-a", "new-b", "old"]);
+    expect(store.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      "old",
+      "new-a",
+      "new-b",
+    ]);
+  });
+
   it("applies agent snapshots atomically only at the captured membership epoch", () => {
     const store = makeStore();
     const snapshot = [

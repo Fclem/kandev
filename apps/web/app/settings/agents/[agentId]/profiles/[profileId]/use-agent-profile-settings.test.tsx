@@ -6,23 +6,18 @@ import type { Agent, ListAgentsResponse } from "@/lib/types/http";
 import type { AppState } from "@/lib/state/store";
 import type { StoreApi } from "zustand";
 import { useAgentProfileSettings } from "./use-agent-profile-settings";
+import { registerAgentsHandlers } from "@/lib/ws/handlers/agents";
+import type { BackendMessageMap } from "@/lib/types/backend";
 
 const AGENT_ID = "agent";
 const AGENT_NAME = "mock-agent";
 const PROFILE_IDS = { created: "created", deleted: "deleted", live: "live" };
+const MEMBERSHIP_EVENT_TIME = "2026-02-01T00:00:00Z";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return { ...actual, listAgents: vi.fn() };
 });
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve: (value: T) => resolve(value) };
-}
 
 function option(id: string) {
   return { id, label: id, agent_id: AGENT_ID, agent_name: AGENT_NAME, cli_passthrough: false };
@@ -43,7 +38,7 @@ describe("useAgentProfileSettings list snapshot guard", () => {
   afterEach(() => vi.clearAllMocks());
 
   it("discards a delayed pre-create/delete GET and refreshes both mirrored lists", async () => {
-    const pending = deferred<ListAgentsResponse>();
+    const pending = Promise.withResolvers<ListAgentsResponse>();
     vi.mocked(listAgents)
       .mockReturnValueOnce(pending.promise)
       .mockResolvedValueOnce(snapshot([PROFILE_IDS.created, PROFILE_IDS.live]));
@@ -71,28 +66,23 @@ describe("useAgentProfileSettings list snapshot guard", () => {
     act(() => {
       api.getState().setSettingsAgents([baseAgent]);
       api.getState().setAgentProfiles([option(PROFILE_IDS.live), option(PROFILE_IDS.deleted)]);
-      api.getState().bumpAgentProfilesVersion();
-      api.getState().setSettingsAgents([
-        {
-          ...baseAgent,
-          profiles: [{ id: PROFILE_IDS.created, name: PROFILE_IDS.created }, ...baseAgent.profiles],
-        } as Agent,
-      ]);
-      api
-        .getState()
-        .setAgentProfiles([
-          option(PROFILE_IDS.created),
-          option(PROFILE_IDS.live),
-          option(PROFILE_IDS.deleted),
-        ]);
-      api.getState().bumpAgentProfilesVersion();
-      api.getState().setSettingsAgents([
-        {
-          ...baseAgent,
-          profiles: [{ id: PROFILE_IDS.created, name: PROFILE_IDS.created }, baseAgent.profiles[0]],
-        } as Agent,
-      ]);
-      api.getState().setAgentProfiles([option(PROFILE_IDS.created), option(PROFILE_IDS.live)]);
+      const handlers = registerAgentsHandlers(api);
+      handlers["agent.profile.created"]!({
+        timestamp: MEMBERSHIP_EVENT_TIME,
+        payload: {
+          profile: {
+            id: PROFILE_IDS.created,
+            agent_id: AGENT_ID,
+            name: "Created",
+            created_at: MEMBERSHIP_EVENT_TIME,
+            updated_at: MEMBERSHIP_EVENT_TIME,
+          },
+        },
+      } as BackendMessageMap["agent.profile.created"]);
+      handlers["agent.profile.deleted"]!({
+        timestamp: MEMBERSHIP_EVENT_TIME,
+        payload: { profile: { id: PROFILE_IDS.deleted, agent_id: AGENT_ID } },
+      } as BackendMessageMap["agent.profile.deleted"]);
     });
     await act(async () => {
       pending.resolve(snapshot([PROFILE_IDS.live, PROFILE_IDS.deleted]));

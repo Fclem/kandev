@@ -70,7 +70,6 @@ test.describe.serial("agent profile ordering member access", () => {
     expect(denied.status()).toBe(403);
     const page = await context.newPage();
     await page.goto("/settings/agents");
-    await expect(page.getByTestId("sort-profiles-by-name-button")).toHaveCount(0);
     await expect(page.getByTestId("agent-profile-drag-handle")).toHaveCount(0);
     await context.close();
   });

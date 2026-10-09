@@ -32,11 +32,8 @@ import { normalizeAgentProfiles } from "@/lib/api/domains/agent-profile-normaliz
 import { preserveOmittedExecutorFields } from "@/lib/kanban/map-task";
 import { mergeStepOrderRevisions } from "@/lib/kanban/workflow-step-order";
 import { deepMerge, mergeSessionMap, mergeLoadingState } from "./merge-strategies";
-import {
-  acceptServerOrder,
-  reconcileAgentOrders,
-  reconcileFlatAgentOrders,
-} from "@/lib/settings/agent-profile-order";
+import { acceptServerOrder, reconcileAgentOrders } from "@/lib/settings/agent-profile-order";
+import { hydrateSelectorProfileOptions } from "@/lib/settings/agent-profile-selector-order";
 
 /**
  * Hydration options for controlling merge behavior
@@ -221,9 +218,9 @@ function hydrateAgentProfileOrder(
     );
   }
   if (state.agentProfiles && !preserveLiveAgentProfiles) {
-    draft.agentProfiles.items = reconcileFlatAgentOrders(
+    draft.agentProfiles.items = hydrateSelectorProfileOptions(
       draft.agentProfiles.items,
-      draft.agentProfiles.orderByAgent,
+      draft.settingsAgents.items,
     );
   }
 }

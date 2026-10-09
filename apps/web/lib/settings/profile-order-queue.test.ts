@@ -2,31 +2,41 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppStore } from "@/lib/state/store";
 import { ApiError } from "@/lib/api/client";
 import { ProfileOrderQueue } from "./profile-order-queue";
+import { listAgents } from "@/lib/api";
+import { registerAgentsHandlers } from "@/lib/ws/handlers/agents";
+import type { BackendMessageMap } from "@/lib/types/backend";
+import type { Agent } from "@/lib/types/http";
+import type * as AgentsApi from "@/lib/api";
+
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof AgentsApi>()),
+  listAgents: vi.fn(),
+}));
 
 const store = createAppStore();
+const MEMBERSHIP_EVENT_TIME = "2026-03-01T00:00:00Z";
 
-describe("ProfileOrderQueue", () => {
-  beforeEach(() => {
-    store.getState().setSettingsAgents([
-      {
-        id: "a",
-        name: "Agent",
-        profiles: [
-          { id: "x", name: "X" },
-          { id: "y", name: "Y" },
-        ],
-      } as never,
-    ]);
-    store.setState((state) => {
-      state.agentProfiles.orderByAgent.a = {
-        revision: 1,
-        order: ["x", "y"],
-        inFlight: null,
-        queued: null,
-      };
-    });
+beforeEach(() => {
+  store.getState().setSettingsAgents([
+    {
+      id: "a",
+      name: "Agent",
+      profiles: [
+        { id: "x", name: "X" },
+        { id: "y", name: "Y" },
+      ],
+    } as never,
+  ]);
+  store.setState((state) => {
+    state.agentProfiles.orderByAgent.a = {
+      revision: 1,
+      order: ["x", "y"],
+      inFlight: null,
+      queued: null,
+    };
   });
-
+});
+describe("ProfileOrderQueue", () => {
   it("submits the latest intent after an earlier save rejects", async () => {
     let rejectFirst!: (error: Error) => void;
     const first = new Promise<{ profile_ids: string[]; revision: number }>((_, reject) => {
@@ -95,5 +105,101 @@ describe("ProfileOrderQueue", () => {
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(read).toHaveBeenCalledOnce();
     expect(save.mock.calls[1][1]).toEqual(["new", "y", "x"]);
+  });
+});
+
+describe("ProfileOrderQueue membership and revision races", () => {
+  it("discards a deferred conflict refetch after membership events and replays against a fresh resource snapshot", async () => {
+    const local = createAppStore();
+    const oldAgent = {
+      id: "queue-agent",
+      name: "Agent",
+      profile_order_revision: 1,
+      profiles: [
+        { id: "queue-x", name: "X", createdAt: "2026-01-01T00:00:00Z" },
+        { id: "queue-y", name: "Y", createdAt: "2026-02-01T00:00:00Z" },
+      ],
+    } as Agent;
+    local.getState().applyAgentListSnapshot([oldAgent], 0);
+    let resolveStale!: (response: { agents: Agent[] }) => void;
+    let resolveFresh!: (response: { agents: Agent[]; total: number }) => void;
+    const stale = new Promise<{ agents: Agent[] }>((resolve) => {
+      resolveStale = resolve;
+    });
+    const fresh = new Promise<{ agents: Agent[]; total: number }>((resolve) => {
+      resolveFresh = resolve;
+    });
+    vi.mocked(listAgents).mockReturnValueOnce(fresh);
+    const read = vi.fn().mockReturnValueOnce(stale);
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError("stale", 409, {}))
+      .mockResolvedValueOnce({ profile_ids: ["queue-new", "queue-y"], revision: 2 });
+    const queue = new ProfileOrderQueue(local, { save, read });
+    queue.requestProfileOrder(oldAgent.id, ["queue-y", "queue-x"]);
+    queue.requestProfileOrder(oldAgent.id, ["queue-y", "queue-x"]);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+    const handlers = registerAgentsHandlers(local);
+    handlers["agent.profile.created"]!({
+      timestamp: MEMBERSHIP_EVENT_TIME,
+      payload: {
+        profile: {
+          id: "queue-new",
+          agent_id: oldAgent.id,
+          name: "New",
+          created_at: MEMBERSHIP_EVENT_TIME,
+        },
+      },
+    } as BackendMessageMap["agent.profile.created"]);
+    handlers["agent.profile.deleted"]!({
+      timestamp: MEMBERSHIP_EVENT_TIME,
+      payload: { profile: { id: "queue-x", agent_id: oldAgent.id } },
+    } as BackendMessageMap["agent.profile.deleted"]);
+    resolveStale({ agents: [oldAgent] });
+    await vi.waitFor(() => expect(listAgents).toHaveBeenCalledOnce());
+    expect(local.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      "queue-new",
+      "queue-y",
+    ]);
+    expect(local.getState().agentProfiles.items.map((profile) => profile.id)).toEqual([
+      "queue-new",
+      "queue-y",
+    ]);
+    resolveFresh({
+      total: 1,
+      agents: [
+        {
+          ...oldAgent,
+          profiles: [
+            { id: "queue-new", name: "New", createdAt: MEMBERSHIP_EVENT_TIME },
+            oldAgent.profiles[1],
+          ],
+        } as Agent,
+      ],
+    });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1][1]).toEqual(["queue-new", "queue-y"]);
+    await vi.waitFor(() =>
+      expect(local.getState().agentProfiles.orderByAgent[oldAgent.id].inFlight).toBeNull(),
+    );
+  });
+
+  it("does not let a late successful response replace a higher-revision foreign order", async () => {
+    let resolveSave!: (response: { profile_ids: string[]; revision: number }) => void;
+    const pending = new Promise<{ profile_ids: string[]; revision: number }>((resolve) => {
+      resolveSave = resolve;
+    });
+    const queue = new ProfileOrderQueue(store, { save: vi.fn().mockReturnValueOnce(pending) });
+    queue.requestProfileOrder("a", ["y", "x"]);
+    store.getState().acceptAgentProfileOrder("a", ["x", "y"], 4);
+    resolveSave({ profile_ids: ["y", "x"], revision: 3 });
+    await vi.waitFor(() =>
+      expect(store.getState().agentProfiles.orderByAgent.a.inFlight).toBeNull(),
+    );
+    expect(store.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      "x",
+      "y",
+    ]);
+    expect(store.getState().agentProfiles.orderByAgent.a.revision).toBe(4);
   });
 });

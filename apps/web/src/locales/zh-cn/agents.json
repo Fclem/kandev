@@ -125,7 +125,6 @@
   "duplicateProfileSuccess": "智能体配置已复制",
   "dragProfile": "调整 {{name}} 的顺序",
   "profileSortable": "可排序的配置",
-  "sortProfilesByName": "按名称排序",
   "profileOrderSaveFailed": "无法保存配置顺序",
   "duplicateSaveBlocked": "设置仍在保存，请稍后重试。",
   "dynamicAgents": "动态代理",

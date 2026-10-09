@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   acceptServerOrder,
-  getAgentProfileIds,
   insertFirstInAgentGroup,
-  reorderFlatOptions,
   reorderIds,
   reconcileAgentOrders,
-  sortProfileIdsByName,
   type ProfileOrderState,
 } from "./agent-profile-order";
 import type { Agent, AgentProfile } from "@/lib/types/http";
@@ -24,21 +21,6 @@ const option = (id: string, agentId: string): AgentProfileOption =>
   }) as AgentProfileOption;
 
 describe("agent profile order helpers", () => {
-  it("sorts names case-insensitively, numerically, and stably", () => {
-    expect(
-      sortProfileIdsByName(
-        [
-          profile("a2", "Alpha 2"),
-          profile("a10", "Alpha 10"),
-          profile("a1", "alpha 1"),
-          profile("equal-1", "Same"),
-          profile("equal-2", "same"),
-        ],
-        "en",
-      ),
-    ).toEqual(["a1", "a2", "a10", "equal-1", "equal-2"]);
-  });
-
   it("moves only valid active and over IDs", () => {
     expect(reorderIds(["a", "b", "c"], "a", "c")).toEqual(["b", "c", "a"]);
     expect(reorderIds(["a", "b"], "x", "b")).toEqual(["a", "b"]);
@@ -63,22 +45,7 @@ describe("agent profile order helpers", () => {
       a: { revision: 3, order: ["x", "y"], inFlight: ["y", "x"], queued: ["x", "deleted", "y"] },
     };
     const reconciled = reconcileAgentOrders(agents, sync);
-    expect(getAgentProfileIds(reconciled[0])).toEqual(["new", "x", "y"]);
-  });
-
-  it("reorders flat options only inside the target agent group and preserves orphan options", () => {
-    const items = [
-      option("a1", "a"),
-      option("orphan", "missing"),
-      option("b1", "b"),
-      option("a2", "a"),
-    ];
-    expect(reorderFlatOptions(items, "a", ["a2", "a1"]).map((item) => item.id)).toEqual([
-      "a2",
-      "orphan",
-      "b1",
-      "a1",
-    ]);
+    expect(reconciled[0].profiles.map((item) => item.id)).toEqual(["new", "x", "y"]);
   });
 
   it("inserts a created profile at the start of its agent group without moving other groups", () => {

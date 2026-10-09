@@ -8,6 +8,7 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  pointerWithin,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -41,7 +42,6 @@ import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useConfirmationBoundary } from "@/components/confirmation/mobile-action-confirmation";
 import { useRouter } from "@/lib/routing/client-router";
 import { classifyAgentProfileFallback } from "@/lib/agent-profile-fallback";
-import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
 import type { Agent, AgentProfile } from "@/lib/types/http";
 import { RecordDot } from "@/components/settings/record-dot";
 import { DisabledBadge } from "@/components/settings/record-badges";
@@ -83,7 +83,9 @@ export function AgentProfilesSubList({
       {canManage && savedAgent.profiles.length > 1 ? (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={(args) =>
+            args.pointerCoordinates ? pointerWithin(args) : closestCenter(args)
+          }
           onDragEnd={(event: DragEndEvent) => {
             if (!event.over || event.active.id === event.over.id) return;
             onReorder(
@@ -476,12 +478,9 @@ export function ProfileRow({
         profiles: item.profiles.filter((p) => p.id !== profile.id),
       }));
       setSettingsAgents(nextAgents);
-      // `agentProfiles` is the flattened picker list over the same data. Every
-      // other writer updates the pair together, and its only refetch is a
-      // one-shot guarded by `agentsLoaded`, so skipping it here left the
-      // deleted profile selectable until a reload.
+      // Deletion preserves selector order and profiles absent from the Settings list.
       setAgentProfiles(
-        nextAgents.flatMap((item) => item.profiles.map((p) => toAgentProfileOption(item, p))),
+        store.getState().agentProfiles.items.filter((item) => item.id !== profile.id),
       );
       store.getState().bumpAgentProfilesVersion();
       return;

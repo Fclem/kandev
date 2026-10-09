@@ -42,11 +42,6 @@ test.describe("Agent settings profile layout", () => {
       actions
         .locator("[data-testid]")
         .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-testid"))),
-    ).resolves.toEqual([
-      "open-host-shell",
-      "sort-profiles-by-name-button",
-      "rescan-agents-button",
-      "new-agent-button",
-    ]);
+    ).resolves.toEqual(["open-host-shell", "rescan-agents-button", "new-agent-button"]);
   });
 });

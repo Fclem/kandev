@@ -243,6 +243,16 @@ describe("ProfileRow deletion", () => {
   });
   afterEach(() => cleanup());
 
+  it("removes only the deleted selector option and preserves orphan options and source order", async () => {
+    storeState.agentProfiles.items = [{ id: "p-2" }, { id: "office" }, { id: "p-1" }];
+    mocks.deleteAgentProfileAction.mockResolvedValue({ status: "ok" });
+    renderRows();
+    confirmDeleteFor("Alpha");
+    await waitFor(() =>
+      expect(storeState.agentProfiles.items.map((item) => item.id)).toEqual(["p-2", "office"]),
+    );
+  });
+
   it("keeps the flattened profile options in step with the agent list", async () => {
     mocks.deleteAgentProfileAction.mockResolvedValue({ status: "ok" });
     renderRows();

@@ -1,21 +1,8 @@
-import type { Agent, AgentProfile } from "@/lib/types/http";
+import type { Agent } from "@/lib/types/http";
 import type { AgentProfileOption, ProfileOrderSync } from "@/lib/state/slices/settings/types";
 
 export type ProfileOrderState = Record<string, ProfileOrderSync>;
 
-export function sortProfileIdsByName(
-  profiles: Pick<AgentProfile, "id" | "name">[],
-  locale: string,
-): string[] {
-  const collator = new Intl.Collator(locale, { sensitivity: "accent", numeric: true });
-  return profiles
-    .map((profile, index) => ({ profile, index }))
-    .sort(
-      (left, right) =>
-        collator.compare(left.profile.name, right.profile.name) || left.index - right.index,
-    )
-    .map(({ profile }) => profile.id);
-}
 export function acceptAgentOrdersFromSnapshot(
   state: ProfileOrderState,
   agents: Agent[],
@@ -94,28 +81,6 @@ export function reconcileAgentOrders(agents: Agent[], sync: ProfileOrderState): 
   return changed ? next : agents;
 }
 
-export function reorderFlatOptions(
-  options: AgentProfileOption[],
-  agentId: string,
-  ids: string[],
-): AgentProfileOption[] {
-  const groupIndexes: number[] = [];
-  const group: AgentProfileOption[] = [];
-  options.forEach((option, index) => {
-    if (option.agent_id === agentId) {
-      groupIndexes.push(index);
-      group.push(option);
-    }
-  });
-  const ordered = reorderProfileGroup(group, ids);
-  if (ordered.every((option, index) => option === group[index])) return options;
-  const next = options.slice();
-  groupIndexes.forEach((index, offset) => {
-    next[index] = ordered[offset];
-  });
-  return next;
-}
-
 export function insertFirstInAgentGroup(
   options: AgentProfileOption[],
   agentId: string,
@@ -125,19 +90,4 @@ export function insertFirstInAgentGroup(
   const firstIndex = withoutDuplicate.findIndex((existing) => existing.agent_id === agentId);
   withoutDuplicate.splice(firstIndex < 0 ? withoutDuplicate.length : firstIndex, 0, option);
   return withoutDuplicate;
-}
-export function reconcileFlatAgentOrders(
-  options: AgentProfileOption[],
-  sync: ProfileOrderState,
-): AgentProfileOption[] {
-  let next = options;
-  for (const [agentId, state] of Object.entries(sync)) {
-    const order = state.queued ?? state.inFlight ?? state.order;
-    if (order) next = reorderFlatOptions(next, agentId, order);
-  }
-  return next;
-}
-
-export function getAgentProfileIds(agent: Agent): string[] {
-  return agent.profiles.map((profile) => profile.id);
 }

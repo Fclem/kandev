@@ -92,6 +92,8 @@ export type AgentProfileOption = {
   /** Persisted profile revision (RFC3339 updated_at), used to prefer newer
    * WS-delivered options over a stale in-flight response. */
   updatedAt?: string;
+  /** Creation instant for the selector baseline, independent of Settings order. */
+  createdAt?: string;
   /**
    * False hides the profile from task/session creation pickers. Existing
    * sessions keep their labels and the profile stays editable in settings.
@@ -292,6 +294,7 @@ export function toAgentProfileOption(
   >,
   profile: Pick<AgentProfile, "id" | "agentDisplayName" | "name" | "workspaceId"> & {
     updatedAt?: string;
+    createdAt?: string;
     kind?: AgentProfileKind;
     cliPassthrough?: boolean;
     model?: string;
@@ -315,6 +318,7 @@ export function toAgentProfileOption(
     require_exact_model: profile.requireExactModel ?? undefined,
     workspace_id: profile.workspaceId,
     updatedAt: profile.updatedAt,
+    createdAt: profile.createdAt,
     enabled: profile.enabled ?? true,
     capability_status: agent.capability_status,
     capability_error: agent.capability_error,

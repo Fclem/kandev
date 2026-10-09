@@ -286,7 +286,6 @@
   "failedToDuplicateProfile": "Falha ao duplicar o perfil",
   "dragProfile": "Reordenar {{name}}",
   "profileSortable": "perfil ordenável",
-  "sortProfilesByName": "Ordenar por nome",
   "profileOrderSaveFailed": "Não foi possível guardar a ordem dos perfis",
   "installAgents": "Instalar agentes",
   "newProfile": "Novo perfil",

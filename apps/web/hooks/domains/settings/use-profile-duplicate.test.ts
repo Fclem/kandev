@@ -14,6 +14,39 @@ const option = (id: string): AgentProfileOption =>
   }) as AgentProfileOption;
 
 describe("profile duplication ordering", () => {
+  it("prepends the copy in Settings without applying saved order to existing selector options", () => {
+    const older = { ...profile("older", "Older"), createdAt: "2026-01-01T00:00:00Z" };
+    const newer = { ...profile("newer", "Newer"), createdAt: "2026-02-01T00:00:00Z" };
+    const agent = { id: "a", name: "Agent", profiles: [older, newer] } as Agent;
+    const state = {
+      settingsAgents: { items: [agent] },
+      agentProfiles: {
+        items: [
+          { ...option("newer"), createdAt: newer.createdAt },
+          { ...option("older"), createdAt: older.createdAt },
+          { ...option("office"), agent_id: "office" },
+        ],
+        version: 0,
+        orderByAgent: {},
+      },
+    };
+    const next = applyProfileDuplicated(state, agent, {
+      ...profile("copy", "Copy"),
+      createdAt: "2026-03-01T00:00:00Z",
+    });
+    expect(next.settingsAgents.items[0].profiles.map((item) => item.id)).toEqual([
+      "copy",
+      "older",
+      "newer",
+    ]);
+    expect(next.agentProfiles.items.map((item) => item.id)).toEqual([
+      "copy",
+      "newer",
+      "older",
+      "office",
+    ]);
+  });
+
   it("prepends a duplicated profile within its agent in both mirrored lists", () => {
     const agent = {
       id: "a",

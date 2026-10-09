@@ -10,6 +10,10 @@ import { updateAgentProfileAction } from "@/app/actions/agents";
 import { isHandledApiError } from "@/lib/api/client";
 import { useFeature } from "@/hooks/domains/features/use-feature";
 import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
+import {
+  orderProfilesForSelection,
+  toSelectorProfileOptions,
+} from "@/lib/settings/agent-profile-selector-order";
 import type { Agent, AgentProfile } from "@/lib/types/http";
 import type {
   DynamicAgentCandidate,
@@ -136,7 +140,7 @@ export function useDynamicAgentProfileEditorState({
       settingsAgents.flatMap((item) =>
         item.name === "dynamic"
           ? []
-          : item.profiles
+          : orderProfilesForSelection(item.profiles)
               .filter(
                 (candidate) =>
                   candidate.kind !== "dynamic" &&
@@ -193,11 +197,7 @@ export function useDynamicAgentProfileEditorState({
             },
       );
       setSettingsAgents(nextAgents);
-      setAgentProfiles(
-        nextAgents.flatMap((item) =>
-          item.profiles.map((itemProfile) => toAgentProfileOption(item, itemProfile)),
-        ),
-      );
+      setAgentProfiles(toSelectorProfileOptions(nextAgents));
       draft.acceptProfileSaveResponse(updated, submitted);
       toast({ title: t("agents:dynamicProfileSaved") });
     } catch (error) {

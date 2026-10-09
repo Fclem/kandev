@@ -3,7 +3,6 @@ status: draft
 system: agents
 requirements:
   - REQ-AGENTS-PROFILE-LIST-ORDERING-001
-  - REQ-AGENTS-PROFILE-LIST-ORDERING-002
   - REQ-AGENTS-PROFILE-LIST-ORDERING-003
 ---
 
@@ -16,11 +15,11 @@ monotonic revision of it. The settings controller validates and applies a
 reorder, the HTTP handler exposes it behind the existing agent-configuration
 permission and broadcasts a WebSocket event, and clients accept an order only
 when its revision is newer than the one they already hold. The Settings > Agents
-page owns drag interaction and the sort action. The sort action is client-side:
-it computes an order and saves it through the same reorder contract, so the
-backend has no sort logic.
+page and its navigation tree present the saved order; profile selectors outside
+that surface retain their existing order, recency, and default-selection
+behavior. The page exposes no automatic profile-sorting action.
 
-Agent-card order stays with `sortAgentsByDisplayOrder` in the settings
+Agent-card display order stays with `sortAgentsByDisplayOrder` in the settings
 controller and `orderAgentsForDisplay` in the web app. The Dynamic agent
 (`agents.DynamicAgentID`, name `dynamic`) is excluded.
 
@@ -29,7 +28,6 @@ controller and `orderAgentsForDisplay` in the web app. The Dynamic agent
 | Requirement | Design section |
 | --- | --- |
 | `REQ-AGENTS-PROFILE-LIST-ORDERING-001` | [Frontend](#frontend), [Save coordination](#save-coordination) |
-| `REQ-AGENTS-PROFILE-LIST-ORDERING-002` | [Sort action](#sort-action) |
 | `REQ-AGENTS-PROFILE-LIST-ORDERING-003` | [HTTP](#http), [Persistence](#persistence), [Order revisions](#order-revisions), [Store updates](#store-updates), [Failure and recovery](#failure-and-recovery) |
 
 ## Components and responsibilities
@@ -75,15 +73,17 @@ controller and `orderAgentsForDisplay` in the web app. The Dynamic agent
   for the per-profile lock. SQLite reserves its single writer before reading
   membership with a no-op update of the owning `agents` row inside the
   transaction; membership changes use the same write-reservation step.
-- `ListAgentProfiles` orders by `sort_order ASC, created_at DESC, id ASC`.
+- `ListAgentProfiles` orders rows by `sort_order ASC, created_at DESC, id ASC`.
   `filterGlobalProfiles` in `controller/agent_crud.go` still filters
-  workspace-scoped rows; it preserves input order.
-- `Controller.ReorderAgentProfiles` resolves the agent, rejects the Dynamic
-  agent, calls the repository, and maps a set mismatch to `ErrProfileOrderStale`.
-  `GetAgent` and `ListAgents` set `profile_order_revision` and profiles from the
-  same `GetAgentProfileOrderSnapshots` result. Controller regression tests make
-  `ListAgentProfiles` return deliberately different rows and verify both GET
-  paths use the snapshot rows and revision without calling that legacy getter.
+  workspace-scoped rows and preserves input order. `GetAgent` and `ListAgents`
+  expose the persisted profile order and `profile_order_revision` from the same
+  `GetAgentProfileOrderSnapshots` result.
+- Selector-facing projections restore the pre-feature per-agent baseline
+  (`created_at DESC, id ASC`) from profile timestamps before constructing
+  `AgentProfileOption` values. Direct selector paths that flatten `Agent.profiles`
+  use the same projection; context-specific recency and default-selection
+  behavior remains as it was. Settings page and navigation projections continue
+  to use the persisted order.
 - `handlers.httpReorderAgentProfiles` binds the body, maps errors, and, when the
   order changed, broadcasts the event with `h.hub.Broadcast`, next to
   `broadcastProfileEvent`, with a `//ws:global` comment: only global profiles are
@@ -94,8 +94,8 @@ controller and `orderAgentsForDisplay` in the web app. The Dynamic agent
   `ok`, `stale`, or `error`, with a 15 s abort timeout that takes the `error`
   path.
 - `lib/settings/agent-profile-order.ts` holds the pure helpers:
-  `sortProfileIdsByName(profiles, locale)`, `reorderIds(ids, activeId, overId)`,
-  `reorderFlatOptions(options, agentId, ids)`, and `insertFirstInAgentGroup(options, agentId, option)`.
+  `reorderIds(ids, activeId, overId)` and
+  `insertFirstInAgentGroup(options, agentId, option)`.
 - The settings slice owns the order state and the save queue, see
   [Store updates](#store-updates) and [Save coordination](#save-coordination).
   `lib/settings/profile-order-queue.ts` holds the queue functions, which take
@@ -106,9 +106,8 @@ controller and `orderAgentsForDisplay` in the web app. The Dynamic agent
   wraps rows in a dnd-kit `DndContext` and `SortableContext`, following
   `components/task/sidebar-filter/automatic-color-rule-list.tsx`. The sortable
   row is a separate component so `ProfileRowCard` does not grow.
-- `InstalledAgentsHeader` in `app/settings/agents/page.tsx` hosts the sort
-  button. The page passes it only the rendered installed-agent cards, which
-  exclude the Dynamic agent.
+- `InstalledAgentsHeader` in `app/settings/agents/page.tsx` keeps the existing
+  Terminal, Rescan, and agent-creation actions. It has no profile-sorting action.
 - `lib/ws/handlers/agents.ts` handles the new event.
 
 ## Data and contracts
@@ -211,35 +210,35 @@ writer while the read transaction is paused, then proves the in-flight result
 is O/r and the next snapshot is O2/r+1 on SQLite and PostgreSQL. The test must
 exercise the repository implementation rather than repeat its SQL reads.
 
-`reconcileAgentOrders(agents, sync)` is the pure function every list writer
-uses. For each agent it first calls the acceptance rule, then returns the
-agent's profiles sorted by `inFlight`/`queued` (the overlay) if present, else by
-the known `order`, else unchanged. Profiles the order does not name keep their
-relative place at the front, matching the backend's sort for new profiles.
-`reorderFlatOptions` applies the same order to the flat list.
+`reconcileAgentOrders(agents, sync)` is the pure function for the Settings
+projection. It applies overlays to `settingsAgents` only. The selector-facing
+`agentProfiles` projection keeps the pre-feature per-agent baseline
+(`createdAt DESC, id ASC`) and does not consume persisted order IDs; existing
+selector-specific recency and default-selection logic remains unchanged.
 
 ### Store updates
 
-- `setSettingsAgents` and `setAgentProfiles` reconcile order overlays; they do
-  not establish membership freshness. `profile_order_revision` protects order
-  only and is unchanged by create/delete.
+- `setSettingsAgents` reconciles order overlays; `setAgentProfiles` preserves
+  selector ordering and does not apply the Settings order. `profile_order_revision`
+  protects order only and is unchanged by create/delete.
 - `agentProfiles.version` is the client-local profile snapshot epoch, distinct
   from the backend order revision. The profile created, updated, and deleted
   WebSocket handlers advance it. Every browser `GET /agents` result written
   directly to the live store captures the epoch before the request and applies
   both `settingsAgents` and `agentProfiles` atomically through
   `applyAgentListSnapshot(agents, epoch)`. The action rejects the result if the
-  current epoch differs; otherwise it reconciles `ProfileOrderSync` ordering
-  before committing both slices. A rejected result is discarded and the caller
-  uses a fresh resource read rather than writing either list. On acceptance,
-  fresh profiles replace flat-list groups for agents in the snapshot, while
-  options for agent IDs absent from it are retained. Workspace-scoped Office
-  agents are excluded from `GET /agents`, so their options remain available to
-  Office pickers across unrelated list refreshes. An existing-agent save captures
-  the epoch before sending its requests. Its response still applies agent-level
-  fields after the epoch changes, but keeps the current stored profile list
-  instead of applying a profile snapshot that could undo create, update, or
-  delete events received during the save.
+  current epoch differs; otherwise it reconciles `ProfileOrderSync` for the
+  Settings projection while rebuilding selector options in their baseline order.
+  A rejected result is discarded and the caller uses a fresh resource read
+  rather than writing either list. On acceptance, fresh profiles replace
+  flat-list groups for agents in the snapshot, while options for agent IDs
+  absent from it are retained. Workspace-scoped Office agents are excluded from
+  `GET /agents`, so their options remain available to Office pickers across
+  unrelated list refreshes. An existing-agent save captures the epoch before
+  sending its requests. Its response still applies agent-level fields after the
+  epoch changes, but keeps the current stored profile list instead of applying a
+  profile snapshot that could undo create, update, or delete events received
+  during the save.
 - `AgentListResourceScope` captures the epoch at request start, rejects and
   retries a response if profile events advanced it while the request was in
   flight, and keys its cached response by that epoch. Direct browser list
@@ -247,43 +246,37 @@ relative place at the front, matching the backend's sort for new profiles.
   in `use-agent-profile-settings.ts`, use the same guarded action rather than
   writing raw response arrays. `loadSettingsInitialState` repeats its complete
   read until the epoch is stable; `hydrateSettings` rejects an older incoming
-  epoch, preserves the live membership in both slices, and leaves
+  epoch, preserves live membership in both projections, and leaves
   `settingsData.agentsLoaded` false so the list is retried.
 - The order revision acceptance rule cannot prevent a stale snapshot from
   deleting or resurrecting membership. `reconcileAgentOrders` only reconciles
-  ordering; the epoch fence above handles membership freshness.
+  Settings ordering; the epoch fence above handles membership freshness.
 - `setAgentProfileOrder(agentId, ids)` reorders that agent's entries in
-  `settingsAgents` and, in place, within the agent's group in the flat
-  `agentProfiles` list (`reorderFlatOptions`). It does not rebuild the flat list
-  from `settingsAgents`, so orphan options (profiles delivered for an agent
-  missing from `settingsAgents`) and per-ID newest options kept by
-  `mergeOptionsByNewest` are preserved.
+  `settingsAgents` only. It does not reorder the flat `agentProfiles` selector
+  list, rebuild it from `settingsAgents`, or discard orphan options.
 - The `agent.profile.created` handler, `applyProfileDuplicated` in
   `hooks/domains/settings/use-profile-duplicate.ts`, and the writers in
   `app/settings/agents/[agentId]/agent-save-helpers.ts` (`saveNewAgent`,
   `saveExistingProfiles`, `reconcilePartialProfileSave`) place a created profile
-  first within its own agent: in `settingsAgents` and, with
-  `insertFirstInAgentGroup`, before the agent's first entry of the flat list (or
-  at the end when the agent has none). The agent-save reconcile updates only the
-  saved agent's flat-list group and keeps the store's current order for existing
-  profiles instead of the draft's order. This preserves Office options whose
-  agents are absent from `settingsAgents`. The Office setup writer
+  first within its own agent in the Settings projection. Selector options keep
+  the existing newest-first baseline. The agent-save reconcile updates only the
+  saved agent's flat-list group and keeps the store's selector order for
+  existing profiles. This preserves Office options whose agents are absent from
+  `settingsAgents`. The Office setup writer
   `app/office/setup/agent-profile-setup-controls.tsx`, which upserts only the
-  flat list, uses `insertFirstInAgentGroup` on the flat list (and
-  `settingsAgents` when that agent exists), so the wizard pickers still contain
-  the profile it just created. `components/agent/cli-profile-editor.tsx` returns
-  the profile to its caller and writes no store.
+  flat list, keeps its existing selector ordering. `components/agent/cli-profile-editor.tsx`
+  returns the profile to its caller and writes no store.
 
 ### Save coordination
 
-All per-agent state lives in the slice, so the page, the sort button, every
+All per-agent state lives in the slice, so the page, every
 `AgentProfilesSubList`, and the WebSocket handler share it.
 
 1. `requestProfileOrder(agentId, ids)` sets the optimistic overlay and applies
    `setAgentProfileOrder`.
 2. If nothing is in flight for the agent, it moves `ids` to `inFlight` and sends
-   the PUT. Otherwise it replaces `queued`, so a drag and a sort of one agent
-   never overlap and the last request wins.
+   the PUT. Otherwise it replaces `queued`, so two reorder requests for one
+   agent never overlap and the latest request wins.
 3. Events and snapshots are never suppressed: they update the known server order
    through `acceptServerOrder`, and the overlay keeps masking it while an intent
    is pending. Own echoes carry the revision the `200` returns and are therefore
@@ -322,16 +315,6 @@ after the reorder commit and ignoring IDs already deleted. The Settings
 navigation tree (`use-settings-menu-branches.ts`) reads `settingsAgents`, so it
 follows without extra code.
 
-### Sort action
-
-`sortProfileIdsByName(profiles, locale)` returns the IDs sorted by
-`profile.name` with `new Intl.Collator(locale, { sensitivity: "accent", numeric: true })`
-built per call from the active i18n language. `accent` ignores case but keeps
-accented letters distinct. `Array.prototype.sort` is stable, so equal names keep
-their order. The button runs it for every rendered installed-agent card with two
-or more profiles, skips agents whose ID list is unchanged (no request), and
-submits the rest through `requestProfileOrder`, one agent each.
-
 ### Frontend
 
 - Each `ProfileRowCard` gets a handle button (`IconGripVertical`) with
@@ -347,20 +330,20 @@ submits the rest through `requestProfileOrder`, one agent each.
   `sortableKeyboardCoordinates`. The handle uses `touch-none`, so a touch drag on
   the handle arrives as pointer events and starts after 8 px of movement; page
   scroll outside the handle is unaffected. No `TouchSensor` is registered.
-- Drag is restricted to one agent by giving each `AgentProfilesSubList` its own
-  `DndContext`; a drop over another agent's row has no `over` target and changes
-  nothing.
-- The sort button is an outline button with a sort icon and
-  `data-testid="sort-profiles-by-name-button"` in `InstalledAgentsHeader`,
-  rendered only for `canManage`, placed between the Terminal and Rescan buttons
-  so Rescan stays immediately before the creation action
-  (`AC-AGENTS-SETTINGS-PROFILE-LAYOUT-001.4`). For an administrator the toolbar
-  test IDs are `["open-host-shell", "sort-profiles-by-name-button",
-  "rescan-agents-button", "new-agent-button"]`; both layout specs assert it.
-- Copy lives in the `agents` namespace in all seven locales: `dragProfile`,
-  `profileSortable`, `sortProfilesByName`, `profileOrderSaveFailed`. Traditional
-  Chinese comes from `pnpm run i18n:zh-hant` and the pseudo catalog from
-  `pnpm run i18n:pseudo`.
+- Each `AgentProfilesSubList` has its own `DndContext`. Pointer and touch collision
+  detection requires containment in one of that group's rows; a drop over another
+  agent or empty space has no `over` target and changes nothing. Keyboard
+  navigation resolves the nearest sortable row within the same group.
+- The Installed agents toolbar has no automatic profile-sorting control. Its
+  actions remain Terminal, Rescan, and agent creation; Rescan stays immediately
+  before creation and creation stays rightmost
+  (`AC-AGENTS-SETTINGS-PROFILE-LAYOUT-001.4`). The desktop and mobile layout
+  specs assert the toolbar test IDs `["open-host-shell", "rescan-agents-button",
+  "new-agent-button"]`.
+- Copy lives in the `agents` namespace in all locales: `dragProfile`,
+  `profileSortable`, and `profileOrderSaveFailed`. There is no sort-action label.
+  Traditional Chinese comes from `pnpm run i18n:zh-hant` and the pseudo catalog
+  from `pnpm run i18n:pseudo`.
 
 ## Failure and recovery
 
@@ -410,15 +393,18 @@ revision, and logs rejected stale requests at info. No metrics are added.
 
 ## Consumers of profile order
 
-Code that reads the first profile as a default follows the saved order:
-`app/office/tasks/[id]/advanced-panels/chat-panel.tsx` (`agentProfiles[0]`) and
-`app/office/setup/setup-route-data.ts` (`profiles[0]`). This is accepted and
-documented; no default is pinned. Operational pickers keep their own ordering
-rules (see `profile-recent-use.md`) and use the saved order as source order.
-`office/routing/provider.go` reads `ListAgentProfiles` for the execution-profile
-catalog but sorts the result by name and ID, so it is unaffected. A new profile
-is placed first within its own agent's entries in the flat list, never ahead of
-other agents, so cross-agent defaults do not shift on creation.
+Only Settings > Agents and its navigation tree consume the persisted order.
+Selector projections restore `createdAt DESC, id ASC` within each agent, with
+submillisecond timestamp precision and ID tie-breaking. Boot options recover
+creation timestamps from their matching normalized profile snapshot. Unstamped
+legacy options and workspace-scoped Office options retain their slots; only
+stamped global profiles are reordered. Options for agent IDs absent from a
+Settings snapshot are retained.
+
+Consumers that read the first profile as a default, including Office chat and
+Office setup, therefore retain their pre-feature default. Existing contextual
+recent-use rules remain independent of Settings order. The Office routing
+provider sorts its execution-profile catalog by name and ID and is unaffected.
 
 ## Related decisions
 

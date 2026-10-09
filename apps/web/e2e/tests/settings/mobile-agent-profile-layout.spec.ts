@@ -34,12 +34,12 @@ test.describe("Agent settings profile layout on mobile", () => {
       .toBeGreaterThanOrEqual(44);
 
     const actions = testPage.getByTestId("installed-agents-actions");
-    for (const testId of [
-      "open-host-shell",
-      "sort-profiles-by-name-button",
-      "rescan-agents-button",
-      "new-agent-button",
-    ]) {
+    await expect(
+      actions
+        .locator("[data-testid]")
+        .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-testid"))),
+    ).resolves.toEqual(["open-host-shell", "rescan-agents-button", "new-agent-button"]);
+    for (const testId of ["open-host-shell", "rescan-agents-button", "new-agent-button"]) {
       const control = actions.getByTestId(testId);
       await expect(control).toBeVisible();
       await expect

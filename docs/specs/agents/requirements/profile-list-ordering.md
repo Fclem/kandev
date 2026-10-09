@@ -11,11 +11,10 @@ owners:
 ## Overview
 
 An administrator who keeps many profiles under one agent on Settings > Agents
-cannot control their order: rows appear newest first. Users need to arrange
-profiles by hand and to tidy them alphabetically. The agent system owns this
-behavior because profile identity and the profile catalog order belong to agent
-profiles. The Settings page and the Settings navigation tree only present that
-order.
+needs to arrange them by hand instead of relying on the newest-first order. The
+agent system owns this behavior because profile identity and profile catalog
+order belong to agent profiles. The Settings page and Settings navigation tree
+only present that order.
 
 ## Terminology
 
@@ -24,8 +23,6 @@ order.
   part of it.
 - **Profile order:** The saved, install-wide sequence of one agent's profile
   list.
-- **Sort action:** A one-time command that rewrites the profile order of every
-  installed agent from the profile name.
 
 ## Requirements
 
@@ -48,8 +45,7 @@ position within its agent, so that the profiles I use most are easiest to find.
 - **AC-AGENTS-PROFILE-LIST-ORDERING-001.3:** A profile row shall not move to a
   different agent.
 - **AC-AGENTS-PROFILE-LIST-ORDERING-001.4:** A user without permission to manage
-  agent configuration shall see the rows in the saved order with no drag handle
-  and no sort action.
+  agent configuration shall see the rows in the saved order with no drag handle.
 - **AC-AGENTS-PROFILE-LIST-ORDERING-001.5:** When the latest pending save fails
   and no newer reorder is queued, the page shall restore the previously saved
   order and show an error message. A failed earlier save shall not roll back a
@@ -63,33 +59,10 @@ position within its agent, so that the profiles I use most are easiest to find.
   before an earlier save of the same agent has finished, the page shall keep
   showing the latest drag, and the saved order shall end as the latest drag. The
   list shall not show an earlier order in between.
-
-### REQ-AGENTS-PROFILE-LIST-ORDERING-002: Sort action
-
-**Intent:** Let an administrator alphabetize profiles in one step.
-
-**User story:** As an administrator, I want to sort my profiles by name, so that
-I can tidy a long list without dragging every row.
-
-#### Acceptance criteria
-
-- **AC-AGENTS-PROFILE-LIST-ORDERING-002.1:** The Installed agents section shall
-  offer a sort action labelled for sorting profiles by name.
-- **AC-AGENTS-PROFILE-LIST-ORDERING-002.2:** Running the sort action shall
-  reorder each installed agent's profile list by profile name.
-- **AC-AGENTS-PROFILE-LIST-ORDERING-002.3:** The name comparison shall be
-  case-insensitive, shall compare digit runs numerically, and shall keep the
-  current relative order of profiles whose names compare equal.
-- **AC-AGENTS-PROFILE-LIST-ORDERING-002.4:** A sort action shall save the
-  resulting order as the profile order. Rows shall stay draggable afterward, and
-  no sort mode shall remain active.
-- **AC-AGENTS-PROFILE-LIST-ORDERING-002.5:** When the sort leaves an agent's
-  order unchanged, the system shall not save that agent's order.
-- **AC-AGENTS-PROFILE-LIST-ORDERING-002.6:** When saving fails for one agent,
-  the page shall restore that agent's previous order, keep the other agents'
-  results, and show an error message.
-- **AC-AGENTS-PROFILE-LIST-ORDERING-002.7:** The sort action shall not change
-  the Dynamic agent's profile order.
+- **AC-AGENTS-PROFILE-LIST-ORDERING-001.9:** The Installed agents section shall
+  not offer an automatic profile-sorting action. Profile-order changes shall be
+  initiated through a row's drag handle, which remains operable with mouse,
+  touch, and keyboard.
 
 ### REQ-AGENTS-PROFILE-LIST-ORDERING-003: Shared and durable order
 
@@ -141,16 +114,18 @@ I can tidy a long list without dragging every row.
   profile remains absent until a full snapshot captured after the event is
   applied; equal `profile_order_revision` values do not establish membership
   freshness.
+- **AC-AGENTS-PROFILE-LIST-ORDERING-003.14:** Profile selectors outside
+  Settings > Agents shall retain their existing option ordering, recency, and
+  default-selection behavior. The saved Settings profile order shall not change
+  selector order or selection.
 
 ## Out of scope
 
-- Reordering or sorting agent cards (their order stays the backend display
-  order).
+- Changing the backend-controlled display order of agent cards.
 - The Dynamic agent's profiles, workspace-scoped (Office) profiles, and the
   Office agents list.
-- Reordering profiles in task, session, chat, or workflow pickers. Those keep
-  their own ordering rules and use the saved order only as their source order.
-  Code that already uses the first listed profile as a default follows the saved
-  order; this feature adds no default-profile setting.
-- A persistent sort mode, per-user orders, descending sorts, and sort keys other
-  than the profile name.
+- Profile selector ordering, recency, and default selection outside Settings >
+  Agents. These retain their existing behavior; the saved order only controls
+  the Settings profile list and its navigation tree.
+- Automatic profile sorting by name, agent label, or any other key; persistent
+  default-profile selection; and per-user profile orders.

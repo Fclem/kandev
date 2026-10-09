@@ -1,7 +1,7 @@
 import type { Agent } from "@/lib/types/http";
 import type { AppState } from "@/lib/state/store";
 import type { StoreApi } from "zustand";
-import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
+import { toSelectorProfileOptions } from "@/lib/settings/agent-profile-selector-order";
 
 export function syncSavedAgentToStore(
   store: StoreApi<AppState>,
@@ -35,7 +35,7 @@ export function syncSavedAgentToStore(
     ? settingsAgents.map((item) => (item.id === agent.id ? reconciled : item))
     : [...settingsAgents, reconciled];
   state.setSettingsAgents(nextAgents);
-  const savedProfileOptions = profiles.map((profile) => toAgentProfileOption(reconciled, profile));
+  const savedProfileOptions = toSelectorProfileOptions([reconciled]);
   const nextProfileOptions: typeof state.agentProfiles.items = [];
   let savedGroupInserted = false;
   for (const option of state.agentProfiles.items) {

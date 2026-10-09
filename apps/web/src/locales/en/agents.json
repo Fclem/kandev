@@ -287,7 +287,6 @@
   "duplicateProfileSuccess": "Profile duplicated",
   "dragProfile": "Reorder {{name}}",
   "profileSortable": "sortable profile",
-  "sortProfilesByName": "Sort by name",
   "profileOrderSaveFailed": "Could not save profile order",
   "duplicateSaveBlocked": "Settings are still saving. Try again in a moment.",
   "failedToDuplicateProfile": "Failed to duplicate profile",

@@ -19,9 +19,11 @@ import {
   acceptAgentOrdersFromSnapshot,
   acceptServerOrder,
   reconcileAgentOrders,
-  reconcileFlatAgentOrders,
 } from "@/lib/settings/agent-profile-order";
-import { toAgentProfileOption } from "./types";
+import {
+  orderProfileOptionsForSelection,
+  toSelectorProfileOptions,
+} from "@/lib/settings/agent-profile-selector-order";
 
 export const defaultSettingsState: SettingsSliceState = {
   executors: { items: [] },
@@ -240,16 +242,11 @@ function createAgentProfileOrderActions(
         const reconciled = reconcileAgentOrders(agents, draft.agentProfiles.orderByAgent);
         draft.settingsAgents.items = reconciled;
         const refreshedAgentIds = new Set(reconciled.map((agent) => agent.id));
-        const profileOptions = reconciled.flatMap((agent) =>
-          agent.profiles.map((profile) => toAgentProfileOption(agent, profile)),
-        );
+        const profileOptions = toSelectorProfileOptions(agents);
         const preservedOptions = draft.agentProfiles.items.filter(
           (profile) => !refreshedAgentIds.has(profile.agent_id),
         );
-        draft.agentProfiles.items = reconcileFlatAgentOrders(
-          [...profileOptions, ...preservedOptions],
-          draft.agentProfiles.orderByAgent,
-        );
+        draft.agentProfiles.items = [...profileOptions, ...preservedOptions];
         applied = true;
       });
       return applied;
@@ -266,7 +263,6 @@ function createAgentProfileOrderActions(
         if (next === draft.agentProfiles.orderByAgent) return;
         draft.agentProfiles.orderByAgent = next;
         draft.settingsAgents.items = reconcileAgentOrders(draft.settingsAgents.items, next);
-        draft.agentProfiles.items = reconcileFlatAgentOrders(draft.agentProfiles.items, next);
         accepted = true;
       });
       return accepted;
@@ -284,10 +280,6 @@ function createAgentProfileOrderActions(
           draft.settingsAgents.items,
           draft.agentProfiles.orderByAgent,
         );
-        draft.agentProfiles.items = reconcileFlatAgentOrders(
-          draft.agentProfiles.items,
-          draft.agentProfiles.orderByAgent,
-        );
       }),
     setAgentProfileOrderIntent: (agentId, inFlight, queued) =>
       set((draft) => {
@@ -300,10 +292,6 @@ function createAgentProfileOrderActions(
         };
         draft.settingsAgents.items = reconcileAgentOrders(
           draft.settingsAgents.items,
-          draft.agentProfiles.orderByAgent,
-        );
-        draft.agentProfiles.items = reconcileFlatAgentOrders(
-          draft.agentProfiles.items,
           draft.agentProfiles.orderByAgent,
         );
       }),
@@ -387,10 +375,7 @@ function createCoreActions(
       }),
     setAgentProfiles: (profiles) =>
       set((draft) => {
-        draft.agentProfiles.items = reconcileFlatAgentOrders(
-          profiles,
-          draft.agentProfiles.orderByAgent,
-        );
+        draft.agentProfiles.items = orderProfileOptionsForSelection(profiles);
       }),
     setEditors: (editors, folderOpeningAvailable) =>
       set((draft) => {

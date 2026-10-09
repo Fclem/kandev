@@ -14,7 +14,11 @@ import {
 } from "@/lib/state/slices/settings/types";
 import type { AppState } from "@/lib/state/store";
 import type { Agent, AgentProfile } from "@/lib/types/http";
-import { insertFirstInAgentGroup, reorderFlatOptions } from "@/lib/settings/agent-profile-order";
+import { insertFirstInAgentGroup } from "@/lib/settings/agent-profile-order";
+import {
+  orderProfileOptionsForSelection,
+  toSelectorProfileOptions,
+} from "@/lib/settings/agent-profile-selector-order";
 
 type ProfileState = Pick<AppState, "settingsAgents" | "agentProfiles">;
 
@@ -55,9 +59,7 @@ export function applyProfileDuplicated(
       : item,
   );
 
-  const rebuiltOptions = nextAgents.flatMap((item) =>
-    item.profiles.map((profile) => toAgentProfileOption(item, profile)),
-  );
+  const rebuiltOptions = toSelectorProfileOptions(nextAgents);
   const merged = mergeOptionsByNewest(state.agentProfiles.items, rebuiltOptions);
   // The copy must appear exactly once with the known agent metadata: append
   // it when absent, replace an OLDER existing option (e.g. a WS stub) with
@@ -83,24 +85,17 @@ export function applyProfileDuplicated(
   const latestCopy = agentProfilesItems.find((option) => option.id === created.id);
 
   if (latestCopy) {
-    const latestAgent = nextAgents.find((item) => item.id === agent.id);
-    agentProfilesItems = latestAgent
-      ? reorderFlatOptions(
-          agentProfilesItems,
-          agent.id,
-          latestAgent.profiles.map((profile) => profile.id),
-        )
-      : insertFirstInAgentGroup(agentProfilesItems, agent.id, {
-          ...latestCopy,
-          agent_id: agent.id,
-        });
+    agentProfilesItems = insertFirstInAgentGroup(agentProfilesItems, agent.id, {
+      ...latestCopy,
+      agent_id: agent.id,
+    });
   }
 
   return {
     settingsAgents: { ...state.settingsAgents, items: nextAgents },
     agentProfiles: {
       ...state.agentProfiles,
-      items: agentProfilesItems,
+      items: orderProfileOptionsForSelection(agentProfilesItems),
       version: state.agentProfiles.version + 1,
     },
   };

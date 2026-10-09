@@ -125,7 +125,6 @@
   "duplicateProfileSuccess": "代理程式設定檔已複製",
   "dragProfile": "調整 {{name}} 的順序",
   "profileSortable": "可排序的設定",
-  "sortProfilesByName": "按名稱排序",
   "profileOrderSaveFailed": "無法儲存設定順序",
   "duplicateSaveBlocked": "設定仍在儲存，請稍後重試。",
   "dynamicAgents": "動態代理",

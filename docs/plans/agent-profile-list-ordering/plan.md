@@ -3,7 +3,6 @@ created: 2026-10-03
 status: in_progress
 requirements:
   - REQ-AGENTS-PROFILE-LIST-ORDERING-001
-  - REQ-AGENTS-PROFILE-LIST-ORDERING-002
   - REQ-AGENTS-PROFILE-LIST-ORDERING-003
 system_design:
   - ../../specs/agents/system-design/profile-list-ordering.md
@@ -14,29 +13,33 @@ legacy_specs: []
 
 ## Overview
 
-Administrators can drag profile rows within an agent on Settings > Agents and
-sort every agent's profiles by name. The order is saved on the server and shared
-by every client. The backend ships first because the frontend needs the reorder
-endpoint, the WebSocket event, and the stored order. The frontend then adds
-drag, the sort action, store sync, locales, and E2E coverage.
+Administrators can manually reorder profile rows within an agent on Settings >
+Agents using the drag handle. The order is persisted for that screen and its
+Settings navigation tree. Profile selectors keep their existing ordering,
+recency, and default-selection behavior. The frontend removes automatic profile
+sorting while preserving the backend reorder contract and cross-client sync.
 
 ## Scope
 
 ### In scope
 
-- `agent_profiles.sort_order`, the ordered read, and the reorder endpoint and event.
-- Drag handles and sortable rows in each installed agent's profile list.
-- The Installed agents "Sort by name" action.
+- `agent_profiles.sort_order`, the ordered Settings read, and the reorder
+  endpoint and event.
+- Drag handles and reorderable rows in each installed agent's profile list.
 - Prepending newly created and duplicated profiles on every client.
-- Cross-client sync, including the Settings navigation tree.
-- Locale strings in all seven languages and public documentation.
+- Cross-client sync for the Settings list and navigation tree.
+- Preserve existing profile selector ordering, recency, and default selection;
+  ensure saved Settings order does not flow into selector options.
+- Locale strings in all catalogs and public documentation.
+- Removal of the automatic profile-sorting action and its helper, locale key,
+  tests, and public-documentation reference.
 
 ### Out of scope
 
 - Agent-card order, the Dynamic agent's profiles, workspace-scoped (Office)
   profiles, and the Office agents list.
-- A persistent sort mode, per-user orders, descending sorts, other sort keys,
-  and picker ordering.
+- Automatic profile sorting by name, agent label, or any other key; persistent
+  sort modes; per-user orders; and new selector ordering or recency behavior.
 
 ## Technical approach
 
@@ -88,13 +91,17 @@ drag, the sort action, store sync, locales, and E2E coverage.
 
 ### Frontend (Task 02)
 
-- `lib/settings/agent-profile-order.ts`: `sortProfileIdsByName`, `reorderIds`,
-  `reorderFlatOptions`, `insertFirstInAgentGroup`.
+- `lib/settings/agent-profile-order.ts`: `reorderIds`,
+  `insertFirstInAgentGroup`; remove `sortProfileIdsByName` and obsolete flat-list
+  Settings-order helpers.
+- `lib/settings/agent-profile-selector-order.ts`: normalize timestamp metadata
+  and restore per-agent selector baselines without moving workspace-scoped or
+  unstamped option slots.
 - `app/actions/agents.ts`: `reorderAgentProfilesAction` with a `stale` result for
   `409` and a 15 s abort timeout.
 - Settings slice: per-agent `ProfileOrderSync` (`revision`, `order`, `inFlight`,
   `queued`), `acceptServerOrder`, `reconcileAgentOrders` applied inside
-  `setSettingsAgents`, `setAgentProfiles`, and `hydrateSettings`, plus
+  `setSettingsAgents` and `hydrateSettings`, plus
   `applyAgentListSnapshot(agents, expectedProfileVersion)` as the membership
   freshness fence for fetched lists. It atomically rejects mismatched client
   epochs and reconciles `ProfileOrderSync` before applying accepted results.
@@ -102,36 +109,46 @@ drag, the sort action, store sync, locales, and E2E coverage.
   stable, and browser GET consumers use the guarded action. Order revision
   protects ordering only; profile membership changes do not increment it, and
   order changes do not bump `agentProfiles.version`.
+- Keep the persisted order in the Settings projection. The flat
+  `agentProfiles` selector list and direct selector options retain the
+  pre-feature per-agent baseline (`created_at DESC, id ASC`); existing
+  context-specific recency ranking and default selection remain unchanged.
 - `lib/settings/profile-order-queue.ts` and `hooks/domains/settings/use-profile-order.ts`:
   per-agent save queue and its thin accessor.
 - `lib/ws/handlers/agents.ts`, `lib/types/backend.ts`: handle
   `agent.profiles.reordered` and read `profile_order_revision` from agents; place
-  created profiles first within their agent in `handleProfileCreated`,
+  created profiles first in the Settings projection and preserve the selector
+  list's existing newest-first baseline in `handleProfileCreated`,
   `use-profile-duplicate.ts`, `app/settings/agents/[agentId]/agent-save-helpers.ts`,
   and `app/office/setup/agent-profile-setup-controls.tsx`.
-- `components/settings/agents/agent-profiles-section.tsx`: sortable rows, drag
-  handle.
-- `app/settings/agents/page.tsx`: sort button in `InstalledAgentsHeader`.
+- Audit every selector source (`agentProfiles`, `settingsAgents`, and direct
+  `GET /agents` flattening) so the saved Settings order does not change its
+  option order, recency, or default selection.
+- `components/settings/agents/agent-profiles-section.tsx`: reorderable rows and
+  drag handle.
+- `app/settings/agents/page.tsx`: remove the sort button and client-side sorting
+  handler from `InstalledAgentsHeader`.
 - `hooks/domains/settings/agent-list-resource.ts` and direct browser
   `listAgents` consumers (`app/settings/agents/page.tsx`,
   `app/settings/agents/[agentId]/profiles/[profileId]/use-agent-profile-settings.ts`):
   reject a full-list response captured before a profile membership event.
-- `src/locales/*/agents.json`: `dragProfile`, `profileSortable`,
-  `sortProfilesByName`, `profileOrderSaveFailed`.
-- `docs/public/agents-and-profiles.md`: short section on reordering and sorting.
+- `src/locales/*/agents.json`: retain `dragProfile`, `profileSortable`, and
+  `profileOrderSaveFailed`; remove `sortProfilesByName` from every locale.
+- `docs/public/agents-and-profiles.md`: describe manual reordering and remove the
+  automatic-sorting instruction; limit the ordering claim to Settings.
 
 ## ASCII UI preview
 
 ### UI-01: Settings > Agents, desktop, administrator
 
-Entry: Settings > Agents. Structural requirements: the sort button sits between
-Terminal and Rescan, so Rescan stays immediately before the creation action
-(`AC-AGENTS-SETTINGS-PROFILE-LAYOUT-001.4`); a drag handle leads each profile
-row; handles are absent when an agent has fewer than two profiles or the caller
-cannot manage agents. Spacing and icons are illustrative.
+Entry: Settings > Agents. The installed-agent toolbar keeps its existing
+actions; Rescan stays immediately before agent creation, which remains the
+rightmost action (`AC-AGENTS-SETTINGS-PROFILE-LAYOUT-001.4`). A drag handle leads
+each profile row; handles are absent when an agent has fewer than two profiles
+or the caller cannot manage agents. Spacing and icons are illustrative.
 
 ```text
-Installed agents          [Terminal] [Sort by name] [Rescan] [Add TUI agent]
+Installed agents          [Terminal] [Rescan] [Add TUI agent]
 +--------------------------------------------------------------------------+
 | Claude                                                                   |
 |--------------------------------------------------------------------------|
@@ -143,7 +160,7 @@ Installed agents          [Terminal] [Sort by name] [Rescan] [Add TUI agent]
 |   * Default                   [gpt-5]  [No fallback]        [dup] [del]  |
 +--------------------------------------------------------------------------+
 [::] = drag handle (mouse, touch, keyboard). Codex has one profile: no handle.
-Not an administrator: no handles and no Sort by name button.
+The toolbar has no automatic profile-sorting action.
 ```
 
 ### UI-02: Dragging a row (states)
@@ -168,7 +185,7 @@ the handle.
 
 ```text
 Installed agents
-[Terminal] [Sort by name]
+[Terminal]
 [Rescan]   [Add TUI agent]
 +------------------------------+
 | Claude                       |
@@ -193,10 +210,11 @@ Installed agents
 | `003.6` serialization | Two-connection SQLite and env-gated Postgres tests exercise both lock winners for global create/duplicate, profile soft-delete, `DeleteAgent` cascade, A→B versus A→C updates (including pre-read A, concurrent A→C commit, retry with sorted locks {B,C}), and workspace→global/global→workspace moves against reorder; assert final membership/order, `409` or `404` with no reorder event when mutation wins, and exact committed order/event when reorder wins. A deterministic race pauses deletion after reading a workspace-scoped profile, promotes it from A to B, commits a reorder of B, and proves deletion retries under B's lock without disturbing saved order |
 | `003.12` | `store/profile_order_snapshot_test.go`: file-backed SQLite WAL and DSN-gated Postgres tests call the production snapshot implementation through a package-private after-profile-query barrier, commit a reorder using an independent writer while the read transaction is paused, and assert old-order/old-revision in flight plus new-order/new-revision on the next snapshot. `controller/agent_crud_snapshot_test.go` gives the legacy profile getter different rows and proves both `GET /agents` and `GET /agents/:id` source DTO profiles and revision from the combined snapshot without calling the legacy getter |
 | `003.13` | `hooks/domains/settings/agent-list-resource.test.ts`: dispatch profile-created and profile-deleted events after a pre-event list request starts, resolve its stale response at the same order revision, assert it is not applied, the created profile stays first, the deleted profile stays absent, and a fresh response is applied. `app/settings/agents/page.agent-list-snapshot.test.tsx`: trigger the custom-TUI refresh, defer its `listAgents` response, dispatch create/delete events before resolving the old response, and assert both mirrored lists preserve event-known membership. `app/settings/agents/[agentId]/profiles/[profileId]/use-agent-profile-settings.test.tsx`: trigger the missing-profile fallback, defer its GET, dispatch create/delete events, resolve the pre-event response, and assert neither list loses or resurrects membership. `lib/settings/profile-order-queue.test.ts`: during a deferred `409` refetch, dispatch each event, resolve a pre-event response at the unchanged order revision, assert neither mirrored list is partially replaced, then accept a fresh resource response and replay queued intent with the created profile first and deleted profile absent. `lib/state/slices/settings/settings-slice.test.ts` verifies `applyAgentListSnapshot` atomically rejects a mismatched client epoch. `lib/state/hydration/hydrator.test.ts` verifies pre-event create and delete bootstrap snapshots cannot erase or resurrect event-known membership and leave agent loading incomplete for retry |
-| `002.2`, `002.3` | `lib/settings/agent-profile-order.test.ts`: name order, case-insensitive, numeric runs, accents distinct, stability |
-| `001.8`, `001.5`, `002.6`, `003.7`, `003.11` | `lib/settings/profile-order-queue.test.ts`: coalescing to latest drag; older-revision snapshots and out-of-order events cannot replace known order; own echo is ignored; higher-revision foreign order beats own `200`; an earlier save failure with a newer queued drag submits the queued order without rollback; on a deferred `409` refetch, create/delete events interleave at unchanged order revision, stale response changes neither list, fresh resource response reconciles and replays queued intent with the new profile first and deleted profile absent; terminal failure without newer intent restores server order; other agents' overlays survive |
+| `003.14` | `agent-profile-selector-order.test.ts` preserves global selector baselines and workspace-scoped option slots; `task-create-dialog-options.test.tsx` and the applicable context selector tests cover unchanged recent-use/default selection after a saved Settings reorder |
+| `001.9` | `agent-profile-layout.spec.ts` and `mobile-agent-profile-layout.spec.ts` assert the admin toolbar contains only the existing Terminal, Rescan, and agent-creation actions |
+| `001.8`, `001.5`, `003.7`, `003.11` | `lib/settings/profile-order-queue.test.ts`: coalescing to latest drag; older-revision snapshots and out-of-order events cannot replace known order; own echo is ignored; higher-revision foreign order beats own `200`; an earlier save failure with a newer queued drag submits the queued order without rollback; on a deferred `409` refetch, create/delete events interleave at unchanged order revision, stale response changes neither list, fresh resource response reconciles and replays queued intent with the new profile first and deleted profile absent; terminal failure without newer intent restores server order; other agents' overlays survive |
 | `003.11`, `003.2`, `003.5` (client) | `lib/state/hydration/hydrator.test.ts` preserves known order for older snapshots in both lists; `lib/ws/handlers/agents.test.ts` applies order patches without changing membership, preserving later creates and ignoring deleted IDs, and applies a remote `agent.profile.created` event to a second store after manual order exists, asserting the new profile is first in both `settingsAgents` and its group in `agentProfiles`; `lib/settings/agent-profile-order.test.ts` preserves orphan/newer options and prepends new profiles; duplicate, agent-save-helper, provider-helper, and Office setup tests cover profile creation flows |
-| `002.1`, `002.5`, `002.7`, `001.3`, `001.4`, `001.7` | `app/settings/agents/page.sort.test.tsx`: button for administrators only, Dynamic agent excluded, `reorderAgentProfilesAction` not called for an unchanged agent, no handle with one profile or without permission, a drop over another agent's row changes nothing and sends no request |
+| `001.3`, `001.4`, `001.7` | `agent-profile-order.spec.ts` covers a cross-agent drop and drag-handle behavior; the auth profile-order spec covers the no-handle permission boundary |
 
 ## E2E tests
 
@@ -207,46 +225,57 @@ changed order through `PUT /agents/:id/profiles/order`, because the e2e backend
 is worker-scoped and never resets global profiles; other specs pick
 `profiles[0]` and must not see a leaked order.
 
-- Drag a profile with the pointer and with the keyboard, reload, order persists
-  (`AC-AGENTS-PROFILE-LIST-ORDERING-001.1`, `001.2`, `003.1`).
-- Clicking a drag handle does not navigate; opening, duplicating, and deleting a
-  profile still work while handles are rendered (`001.6`).
-- Sort by name (`002.1` to `002.4`).
+- Drag a profile with the pointer and with the keyboard, reload, and confirm the
+  order persists (`AC-AGENTS-PROFILE-LIST-ORDERING-001.1`, `001.2`, `003.1`).
+- Clicking a drag handle does not navigate; a drop onto another agent's row
+  changes no order, and opening, duplicating, and deleting a profile still work
+  while handles are rendered (`001.3`, `001.6`).
+- The admin toolbar contains no automatic profile-sorting control (`001.9`).
+- Task/session/chat/handoff selectors retain their existing option order and
+  context-specific recent-use/default selection after a Settings reorder
+  (`003.14`).
 - A second page sees the reorder without reload, and the navigation tree
   matches (`003.2`, `003.3`).
 - A newly created profile appears first without reload (`003.5`).
-- A non-administrator sees no handles or sort button (`001.4`), in
+- A non-administrator sees no handles (`001.4`), in
   `e2e/tests/auth/agent-profile-order-member.spec.ts` (project `auth`), because
   the `chromium` project runs with authentication disabled and every identity
   is an administrator.
 - Mobile: touch drag on the handle using CDP `Input.dispatchTouchEvent`, following
   `e2e/tests/task/mobile-subtask-reparent-drag-drop.spec.ts`, and a touch scroll
-  that starts outside the handle and scrolls the page (`001.2`, `002.1`).
+  that starts outside the handle and scrolls the page (`001.2`).
 
 Existing `agent-profile-layout.spec.ts` and `mobile-agent-profile-layout.spec.ts`
-are updated for the new toolbar button: the expected test IDs become
-`open-host-shell`, `sort-profiles-by-name-button`, `rescan-agents-button`,
-`new-agent-button`.
+assert the unchanged toolbar test IDs:
+`open-host-shell`, `rescan-agents-button`, `new-agent-button`.
 
 ## Work orders
 
 - [x] [Task 01: Profile order backend](task-01-profile-order-backend.md)
-- [x] [Task 02: Profile reorder and sort UI](task-02-profile-order-ui.md)
+- [ ] [Task 02: Profile reorder UI without sorting](task-02-profile-order-ui.md) (in progress)
 
 ## Verification results
 
-Task 01 and Task 02 implementation is complete. Focused backend tests, SQLite
-race coverage, SQL guard, backend lint, focused frontend tests, typecheck, web
-lint, i18n gates, auth/mobile E2E, and desktop profile ordering/layout E2E
-passed. Desktop ordering and layout E2E passed 4/4 after the keyboard test
-waited for dnd-kit's drag activation and resolved target announcement.
+Task 01's focused backend tests, SQLite race coverage, SQL guard, backend lint,
+and store-package race suite passed. Two unchanged
+`internal/testutil/envscan_test.go` failures remain in the broad backend suite;
+PostgreSQL DSN-gated migration and concurrency tests were not run because
+`KANDEV_TEST_POSTGRES_DSN` was unset.
 
-Full frontend tests reported 2,480 passed and 15 unrelated infrastructure or
-timeout failures (including unavailable localhost:3000 and Docker bridge
-services). The full backend test command remains blocked by two unchanged
-`internal/testutil/envscan_test.go` failures. PostgreSQL DSN-gated migration and
-concurrency tests were not run because `KANDEV_TEST_POSTGRES_DSN` was unset.
-Plan status remains `in_progress` pending those environment-dependent checks.
+The revised Task 02 implementation removes automatic name sorting and keeps
+persisted order in Settings > Agents and its navigation tree. Selectors retain
+their creation baseline, context-specific recency/default behavior, and
+workspace-scoped option slots. Under pinned Node 24.19.0, the focused
+profile-order suite passed 20 files and 233 tests. Full web lint, typecheck,
+i18n checks and ratchet, formatting, desktop/mobile E2E, public-doc validation,
+and specification validation passed. The implementation subtask reported the
+auth E2E flow passing.
+
+The full `mise exec -- pnpm test` run failed: 44 files, 70 tests, 21,543
+passed, and 4 skipped. Reported failures did not include changed profile-order
+test files; they included timeouts and test-fixture connection errors. The
+focused profile-order suite, selector E2E, and reorder E2E passed. Leave the
+full-suite failure visible rather than treating it as a green check.
 
 Round-five review found workspace-scoped profile deletion could miss the
 membership lock when promotion committed between its reads. The deletion path
@@ -255,7 +284,8 @@ when owner or scope changes.
 
 The full store-package race suite and focused regression passed; changed-backend
 golangci-lint reported zero issues. The PostgreSQL case was skipped because
-`KANDEV_TEST_POSTGRES_DSN` is unset.
+`KANDEV_TEST_POSTGRES_DSN` is unset. The plan remains `in_progress` because the
+revised UI work order and environment-dependent checks remain open.
 
 ## Risks
 
@@ -264,8 +294,8 @@ golangci-lint reported zero issues. The PostgreSQL case was skipped because
 - The `sort_order = 0` default makes new profiles appear first after a manual
   order exists. This matches today's newest-first rule but may surprise a user
   who placed a profile first.
-- Code that uses the first profile as a default (Office chat panel, Office setup)
-  and pickers that flatten `agent.profiles` follow the saved order.
+- Every flat-list and direct `GET /agents` selector projection must retain the
+  creation baseline; otherwise Settings order can change a first-profile default.
 - Order changes do not bump `agentProfiles.version`, so the agent-list
   resource's cached `response` can carry an older order. Every writer of the
   agent lists, including the hydrator, must reconcile with the known per-agent

@@ -104,7 +104,7 @@ import {
 } from "@/lib/routing/route-bootstrap";
 import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import type { HydrationState } from "@/lib/state/store";
-import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
+import { toSelectorProfileOptions } from "@/lib/settings/agent-profile-selector-order";
 import type { ListWorkspacesResponse, UserSettingsResponse } from "@/lib/types/http";
 import type { LicenseEntry } from "@/lib/types/system";
 import { renderIntegrationSettingsRoute } from "./integration-settings-route";
@@ -653,9 +653,7 @@ export function buildSettingsInitialStateForRoute({
     workspaces: { items: workspaceItems, activeId: activeWorkspaceId },
     executors: { items: executors },
     agentProfiles: {
-      items: agents.flatMap((agent) =>
-        agent.profiles.map((profile) => toAgentProfileOption(agent, profile)),
-      ),
+      items: toSelectorProfileOptions(agents),
       version: agentProfilesVersion,
       orderByAgent: acceptAgentOrdersFromSnapshot({}, agents),
     },

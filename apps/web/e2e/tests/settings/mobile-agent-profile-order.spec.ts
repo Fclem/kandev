@@ -1,6 +1,7 @@
-import { type CDPSession, type Locator } from "@playwright/test";
+import type { CDPSession, Locator } from "@playwright/test";
 import { test, expect } from "../../fixtures/test-base";
 import { settledBoundingBox } from "../../helpers/settled-box";
+import { profileRow, restoreProfileOrder } from "./agent-profile-order-helpers";
 
 async function getScrollTop(anchor: Locator) {
   return anchor.evaluate((element) => {
@@ -45,9 +46,11 @@ async function touchDragProfile(
   targetRow: Locator,
 ) {
   await targetRow.scrollIntoViewIfNeeded();
-  await sourceHandle.scrollIntoViewIfNeeded();
   const from = await settledBoundingBox(sourceHandle);
-  const to = await settledBoundingBox(targetRow);
+  await expect(sourceHandle).toBeInViewport();
+  await expect(targetRow).toBeInViewport();
+  const to = await targetRow.boundingBox();
+  if (!to) throw new Error("Target profile row has no bounding box");
   const startX = from.x + from.width / 2;
   const startY = from.y + from.height / 2;
   const endX = to.x + to.width / 2;
@@ -89,56 +92,10 @@ async function visibleProfileNames(group: Locator) {
 }
 
 test.describe("Agent profile ordering on mobile", () => {
-  test("keeps drag handles touch-sized and sorts profile groups without overflow", async ({
-    testPage,
-    apiClient,
-  }) => {
-    const { agents } = await apiClient.listAgents();
-    const agent = agents[0];
-    if (!agent) throw new Error("The E2E fixture must provide an installed agent");
-    const suffix = Date.now();
-    const created: string[] = [];
-    try {
-      for (const name of [`Zulu ${suffix}`, `Alpha ${suffix}`]) {
-        const profile = await apiClient.createAgentProfile(agent.id, name, { model: "mock-fast" });
-        created.push(profile.id);
-      }
-      await testPage.goto("/settings/agents");
-      const handle = testPage.getByTestId("agent-profile-drag-handle").first();
-      await expect(handle).toBeVisible({ timeout: 15_000 });
-      await expect
-        .poll(async () => {
-          const box = await handle.boundingBox();
-          return box ? Math.min(box.width, box.height) : null;
-        })
-        .toBeGreaterThanOrEqual(44);
-      await testPage.getByTestId("sort-profiles-by-name-button").tap();
-      await expect
-        .poll(
-          async () => {
-            const { agents: refreshed } = await apiClient.listAgents();
-            const profiles = refreshed.find((item) => item.id === agent.id)?.profiles ?? [];
-            return (
-              profiles.findIndex((profile) => profile.name === `Alpha ${suffix}`) <
-              profiles.findIndex((profile) => profile.name === `Zulu ${suffix}`)
-            );
-          },
-          { timeout: 15_000 },
-        )
-        .toBe(true);
-      await expect
-        .poll(() =>
-          testPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-        )
-        .toBe(true);
-    } finally {
-      for (const id of created) await apiClient.deleteAgentProfile(id).catch(() => undefined);
-    }
-  });
-
   test("touch-drags a profile, persists its order, and scrolls outside the handle", async ({
     testPage,
     apiClient,
+    backend,
   }) => {
     const { agents } = await apiClient.listAgents();
     const agent = agents[0];
@@ -175,14 +132,21 @@ test.describe("Agent profile ordering on mobile", () => {
 
       await testPage.goto("/settings/agents");
       const group = testPage.getByTestId(`agent-profiles-${agent.name}`);
-      const profileName = new Map(
-        currentAgent.profiles.map((profile) => [profile.id, profile.name]),
-      );
-      const rowFor = (id: string) =>
-        group.getByTestId("agent-profile-row").filter({ hasText: profileName.get(id)! });
+      const rowFor = (id: string) => profileRow(testPage, agent, id);
       const sourceRow = rowFor(sourceProfile.id);
       const targetRow = rowFor(targetProfile.id);
       await expect(sourceRow).toBeVisible({ timeout: 15_000 });
+      const handle = sourceRow.getByTestId("agent-profile-drag-handle");
+      await expect(async () => {
+        await expect(handle).toBeVisible();
+        const handleBox = await settledBoundingBox(handle);
+        expect(Math.min(handleBox.width, handleBox.height)).toBeGreaterThanOrEqual(44);
+      }).toPass({ timeout: 15_000 });
+      await expect
+        .poll(() =>
+          testPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        )
+        .toBe(true);
       cdp = await testPage.context().newCDPSession(testPage);
 
       await sourceRow.scrollIntoViewIfNeeded();
@@ -217,9 +181,15 @@ test.describe("Agent profile ordering on mobile", () => {
         timeout: 15_000,
       });
       await expect.poll(() => visibleProfileNames(reloadedGroup)).toEqual(expectedNames);
+      await expect
+        .poll(() =>
+          testPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        )
+        .toBe(true);
     } finally {
       await cdp?.detach().catch(() => undefined);
       for (const id of created) await apiClient.deleteAgentProfile(id).catch(() => undefined);
+      await restoreProfileOrder(testPage, backend.baseUrl, agent);
     }
   });
 });

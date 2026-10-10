@@ -1414,17 +1414,7 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 
 	dispatchResult, err := dispatch()
 	if err != nil {
-		if isSessionRecoveryRequiredError(err) {
-			s.logger.Info("parked automation continuation for explicit session recovery",
-				zap.String("automation_id", a.ID), zap.String("task_id", task.ID),
-				zap.String("session_id", session.ID), zap.Error(err))
-			return
-		}
-		s.logger.Error("failed to dispatch automation continuation",
-			zap.String("automation_id", a.ID), zap.String("task_id", task.ID), zap.String("session_id", session.ID), zap.Error(err))
-		if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) && runID == "" {
-			s.markAutomationRunTerminal(ctx, task.ID, false, err.Error())
-		}
+		s.handleAutomationContinuationDispatchError(ctx, a, task, session, runID, err)
 		return false
 	}
 	if !s.bindAutomationRun(ctx, runID, dispatchResult.TaskID, dispatchResult.SessionID, dispatchResult.TurnID, action, reason, "continuation") {
@@ -1432,6 +1422,27 @@ func (s *Service) dispatchAutomationContinuation(ctx context.Context, a *automat
 		return false
 	}
 	return s.retryRunHasExactBinding(ctx, runID)
+}
+
+func (s *Service) handleAutomationContinuationDispatchError(
+	ctx context.Context,
+	a *automation.Automation,
+	task *models.Task,
+	session *models.TaskSession,
+	runID string,
+	err error,
+) {
+	if isSessionRecoveryRequiredError(err) {
+		s.logger.Info("parked automation continuation for explicit session recovery",
+			zap.String("automation_id", a.ID), zap.String("task_id", task.ID),
+			zap.String("session_id", session.ID), zap.Error(err))
+		return
+	}
+	s.logger.Error("failed to dispatch automation continuation",
+		zap.String("automation_id", a.ID), zap.String("task_id", task.ID), zap.String("session_id", session.ID), zap.Error(err))
+	if !s.markExactAutomationRunTerminal(ctx, runID, "", "", false, err.Error()) && runID == "" {
+		s.markAutomationRunTerminal(ctx, task.ID, false, err.Error())
+	}
 }
 
 func (s *Service) cancelAutomationDispatch(ctx context.Context, taskID, sessionID string) {

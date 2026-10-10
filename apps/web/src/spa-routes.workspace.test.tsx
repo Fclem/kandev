@@ -226,6 +226,45 @@ describe("SpaRoutes data-backed workspace context", () => {
     expect(store.getState().repositories.itemsByWorkspaceId[SELECTED_WORKSPACE_ID]).toEqual([]);
   });
 
+  it("keeps hidden Improve Kandev workflows in the store after the route bootstrap", async () => {
+    mockGitHubWorkspaceBootstrap();
+    mocks.listWorkflows.mockResolvedValueOnce({
+      workflows: [
+        workflow("wf-visible", SELECTED_WORKSPACE_ID),
+        {
+          ...workflow("wf-improve", SELECTED_WORKSPACE_ID),
+          hidden: true,
+          workflow_template_id: "improve-kandev",
+        },
+      ],
+    });
+
+    render(
+      <StateProvider
+        initialState={{
+          workspaces: {
+            items: [workspace(DEFAULT_WORKSPACE_ID), workspace(SELECTED_WORKSPACE_ID)],
+            activeId: SELECTED_WORKSPACE_ID,
+          },
+        }}
+      >
+        <CaptureStore />
+        <SpaRoutes />
+      </StateProvider>,
+    );
+
+    await waitFor(() =>
+      expect(store.getState().workflows.items).toEqual([
+        expect.objectContaining({ id: "wf-visible" }),
+        expect.objectContaining({
+          id: "wf-improve",
+          hidden: true,
+          workflowTemplateId: "improve-kandev",
+        }),
+      ]),
+    );
+  });
+
   it("applies partial successes", async () => {
     mockGitHubWorkspaceBootstrap();
     mocks.listWorkflows.mockResolvedValueOnce({
@@ -363,6 +402,7 @@ async function expectSelectedWorkspace() {
   });
   expect(mocks.listWorkflows).toHaveBeenCalledWith(SELECTED_WORKSPACE_ID, {
     cache: "no-store",
+    includeHidden: true,
   });
 }
 

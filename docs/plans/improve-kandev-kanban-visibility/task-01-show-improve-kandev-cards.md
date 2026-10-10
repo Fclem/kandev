@@ -152,3 +152,13 @@ write that reads `listWorkflows` (Kanban route, SPA route bootstrap,
 `use-workflows.ts`, task-detail hydration, session sheet) now uses the shared
 `toWorkflowStoreItem` in `lib/kanban/workflow-store-item.ts`, pinned by its unit
 test.
+
+Review corrections (implementation review round 3): the SPA route bootstrap
+(`src/spa-routes.tsx`, used by `/tasks`, integration pages, stats, and runs)
+listed only visible workflows and replaced `workflows.items` with them, so
+returning to the board dropped the Improve lanes until a reload. It now reads
+hidden workflows too, keeps them in the store, and passes only visible
+workflows to the route's watch dialogs; a route test pins this. Showing the
+hidden lanes also made them drag-sortable, and the dedicated workspace rejects
+reorder requests, so lane sorting is now limited to boards that show only user
+workflows (`canSortWorkflowLanes`, with unit tests).

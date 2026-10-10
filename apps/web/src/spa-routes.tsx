@@ -688,7 +688,9 @@ function useRouteData({
           );
       }
       const [workflowsResult, repositoriesResult, stepsResult] = await Promise.all([
-        settleRouteRead(listWorkflows(workspaceId, { cache: "no-store" })),
+        // Hidden workflows stay in the store so the board keeps Improve Kandev
+        // lanes after this route replaces `workflows.items`.
+        settleRouteRead(listWorkflows(workspaceId, { cache: "no-store", includeHidden: true })),
         settleRouteRead(listRepositories(workspaceId, undefined, { cache: "no-store" })),
         settleRouteRead(listWorkspaceWorkflowSteps(workspaceId)),
       ]);
@@ -738,7 +740,7 @@ function useRouteData({
         store.getState().hydrate({
           workflows: { items: workflowItems, activeId: activeWorkflowId },
         });
-        setRouteWorkflows(workflowsResult.value.workflows);
+        setRouteWorkflows(workflowsResult.value.workflows.filter((workflow) => !workflow.hidden));
       }
       if (repositoriesResult.ok) {
         store.getState().setRepositories(workspaceId, repositoriesResult.value.repositories);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canSortWorkflowLanes,
   selectMobileNavigatorWorkflows,
   selectWorkflowSwimlanes,
   selectVisibleWorkflows,
@@ -214,5 +215,36 @@ describe("selectVisibleWorkflows — lane retention for hidden columns", () => {
     });
 
     expect(result.map((w) => w.id)).toEqual([WF_A.id, WF_B.id]);
+  });
+});
+
+describe("canSortWorkflowLanes", () => {
+  const dev = { id: "dev", name: "Development" };
+  const review = { id: "review", name: "Review" };
+  const improve = {
+    id: "improve",
+    name: IMPROVE_WORKFLOW_NAME,
+    hidden: true,
+    workflowTemplateId: "improve-kandev",
+  };
+  const report = {
+    id: "report",
+    name: "Report issue",
+    hidden: true,
+    workflowTemplateId: "report-kandev-issue",
+  };
+
+  it("allows reordering two or more user workflows on the unfiltered board", () => {
+    expect(canSortWorkflowLanes(null, [dev, review])).toBe(true);
+  });
+
+  it("blocks reordering when the board shows hidden Improve Kandev lanes", () => {
+    expect(canSortWorkflowLanes(null, [improve, report])).toBe(false);
+    expect(canSortWorkflowLanes(null, [dev, improve])).toBe(false);
+  });
+
+  it("blocks reordering for a single lane or an explicit workflow filter", () => {
+    expect(canSortWorkflowLanes(null, [dev])).toBe(false);
+    expect(canSortWorkflowLanes("dev", [dev, review])).toBe(false);
   });
 });

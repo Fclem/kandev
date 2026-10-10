@@ -30,7 +30,11 @@ import {
   buildTaskVcsSearchIndex,
   getTaskPRsByTaskIdForCurrentWorkspace,
 } from "@/lib/kanban/task-search-index";
-import { selectVisibleWorkflows } from "@/lib/kanban/workflow-swimlanes";
+import {
+  canSortWorkflowLanes,
+  selectVisibleWorkflows,
+  type WorkflowLike,
+} from "@/lib/kanban/workflow-swimlanes";
 import { reorderWorkflows } from "@/lib/api";
 import { SwimlaneSection } from "./swimlane-section";
 import { ColumnsMenu } from "./columns-menu";
@@ -274,15 +278,12 @@ const WorkflowItemContent = memo(function WorkflowItemContent({
   );
 });
 
-function useWorkflowReorder(
-  orderedWorkflows: { id: string; name: string }[],
-  workflowFilter: string | null,
-) {
+function useWorkflowReorder(orderedWorkflows: WorkflowLike[], workflowFilter: string | null) {
   const reorderWorkflowItems = useAppStore((state) => state.reorderWorkflowItems);
   const workflows = useAppStore((state) => state.workflows.items);
   const workspaceId = workflows[0]?.workspaceId;
   const sensors = useSensors(useSensor(PointerSensor, WORKFLOW_POINTER_SENSOR_OPTIONS));
-  const canSort = !workflowFilter && orderedWorkflows.length > 1;
+  const canSort = canSortWorkflowLanes(workflowFilter, orderedWorkflows);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {

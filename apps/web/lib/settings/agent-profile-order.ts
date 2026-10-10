@@ -18,7 +18,7 @@ export function acceptAgentOrdersFromSnapshot(
     );
     const current = next[agent.id];
     const incoming = agent.profiles.map((profile) => profile.id);
-    const liveIds = new Set(incoming);
+    const liveIds = new Set<string>(incoming);
     const knownIds = new Set(current.order ?? []);
     // Membership has its own freshness fence; equal order revisions can add or remove rows.
     const order = [

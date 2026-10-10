@@ -6,6 +6,7 @@ import { StateProvider, useAppStoreApi } from "@/components/state-provider";
 import { normalizeAgentProfile } from "@/lib/api/domains/agent-profile-normalize";
 import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
 import type { Agent } from "@/lib/types/http";
+import { agentProfileId } from "@/lib/types/ids";
 import { useAgentCreationStoreSync } from "./use-agent-creation-store-sync";
 
 const profile = normalizeAgentProfile({
@@ -33,6 +34,7 @@ function setup(current = owner) {
         initialState={{
           settingsAgents: { items: [current] },
           agentProfiles: {
+            orderByAgent: {},
             items: current.profiles.map((item) => toAgentProfileOption(current, item)),
             version: 1,
           },
@@ -158,9 +160,9 @@ it("keeps a strictly newer accepted copy within the same millisecond", () => {
 });
 
 it("prepends accepted new profiles while preserving saved Settings order and orphan selector options", () => {
-  const older = { ...profile, id: "older", createdAt: "2026-01-01T00:00:00Z" };
-  const newer = { ...profile, id: "newer", createdAt: "2026-02-01T00:00:00Z" };
-  const created = { ...profile, id: "created", createdAt: "2026-03-01T00:00:00Z" };
+  const older = { ...profile, id: agentProfileId("older"), createdAt: "2026-01-01T00:00:00Z" };
+  const newer = { ...profile, id: agentProfileId("newer"), createdAt: "2026-02-01T00:00:00Z" };
+  const created = { ...profile, id: agentProfileId("created"), createdAt: "2026-03-01T00:00:00Z" };
   const current = { ...owner, profile_order_revision: 1, profiles: [older, newer] };
   const { result } = setup(current);
   act(() => {

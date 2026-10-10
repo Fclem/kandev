@@ -76,7 +76,7 @@ function reconcileSavedOptions(
 ) {
   const savedProfileOptions = toSelectorProfileOptions([reconciled]);
   const savedIds = new Set(savedProfileOptions.map((profile) => profile.id));
-  const previousIds = new Set(existing?.profiles.map((profile) => profile.id) ?? []);
+  const previousIds = new Set<string>(existing?.profiles.map((profile) => profile.id) ?? []);
   const nextOptions: typeof options = [];
   let inserted = false;
   for (const option of options) {

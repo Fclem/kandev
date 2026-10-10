@@ -20,6 +20,7 @@ import { workspaceModeFromMetadata } from "@/lib/kanban/map-task";
 import { type Repository, type SidebarTaskPageResponse, type Task } from "@/lib/types/http";
 import type { KanbanState } from "@/lib/state/slices";
 import { findTaskInSnapshots } from "@/lib/kanban/find-task";
+import { toWorkflowStoreItem } from "@/lib/kanban/workflow-store-item";
 import { repositorySlug } from "@/lib/repository-slug";
 import {
   mapSnapshotToKanban,
@@ -319,12 +320,7 @@ async function switchWorkspace(newWorkspaceId: string, opts: SheetNavOptions) {
           ...state.workflows.items.filter(
             (w: { workspaceId: string }) => w.workspaceId !== newWorkspaceId,
           ),
-          ...newWorkspaceWorkflows.map((w) => ({
-            id: w.id,
-            workspaceId: w.workspace_id,
-            name: w.name,
-            hidden: w.hidden,
-          })),
+          ...newWorkspaceWorkflows.map(toWorkflowStoreItem),
         ],
         activeId: firstWorkflow.id,
         taskWorkflowCoverage,

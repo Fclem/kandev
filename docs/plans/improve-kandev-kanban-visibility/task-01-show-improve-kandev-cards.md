@@ -143,3 +143,12 @@ Re-verified: focused backend tests, backend lint for the touched packages,
 selector/handler/hook unit tests, web typecheck, targeted ESLint, managed
 Chromium E2E (2 passed in the Kanban spec), and managed mobile-chrome E2E
 (2 passed in the Kanban spec).
+
+Review corrections (implementation review round 2): the task-detail hydration
+(`lib/ssr/session-page-state.ts`) and the mobile session-sheet workspace switch
+still wrote workflow items without template identity, so returning to All
+Workflows after visiting a task dropped the Improve lanes. Every workflow store
+write that reads `listWorkflows` (Kanban route, SPA route bootstrap,
+`use-workflows.ts`, task-detail hydration, session sheet) now uses the shared
+`toWorkflowStoreItem` in `lib/kanban/workflow-store-item.ts`, pinned by its unit
+test.

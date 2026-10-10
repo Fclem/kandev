@@ -10,6 +10,7 @@ import { fetchUserSettings } from "@/lib/api/domains/settings-api";
 import { listWorkflows } from "@/lib/api/domains/kanban-api";
 import { listRepositories, listWorkspaces } from "@/lib/api/domains/workspace-api";
 import { resolveDesiredWorkflowId } from "@/lib/kanban/resolve-workflow";
+import { toWorkflowStoreItem } from "@/lib/kanban/workflow-store-item";
 import { hasHydratedKanbanRouteState } from "@/lib/routing/kanban-route-hydration";
 import {
   mapWorkspaceItem,
@@ -25,7 +26,6 @@ import {
 } from "@/lib/state/workspace-context";
 import { isOfficeWorkspace } from "@/lib/state/slices/workspace/selectors";
 import type { WorkspaceState } from "@/lib/state/slices/workspace/types";
-import type { Workflow } from "@/lib/types/http";
 import { generateUUID } from "@/lib/utils";
 
 export type KanbanRouteSelection = {
@@ -251,7 +251,7 @@ export function useKanbanRouteBootstrap(route: KanbanRouteSelection, skip: boole
             workflowId,
           },
           workflows: {
-            items: workflowsResult.value.workflows.map(mapWorkflowItem),
+            items: workflowsResult.value.workflows.map(toWorkflowStoreItem),
             activeId: workflowId,
           },
         });
@@ -292,20 +292,6 @@ async function settleKanbanRead<T>(promise: Promise<T>): Promise<KanbanReadResul
   } catch (error) {
     return { ok: false, error };
   }
-}
-
-function mapWorkflowItem(workflow: Workflow) {
-  return {
-    id: workflow.id,
-    workspaceId: workflow.workspace_id,
-    name: workflow.name,
-    description: workflow.description ?? null,
-    sortOrder: workflow.sort_order ?? 0,
-    ...(workflow.agent_profile_id ? { agent_profile_id: workflow.agent_profile_id } : {}),
-    ...(workflow.hidden !== undefined ? { hidden: workflow.hidden } : {}),
-    ...(workflow.style !== undefined ? { style: workflow.style } : {}),
-    workflowTemplateId: workflow.workflow_template_id,
-  };
 }
 
 export function KanbanRoute({

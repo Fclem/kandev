@@ -160,3 +160,9 @@ their submit. Re-verified: helper and submit-hook unit tests, `i18n:check`,
 web typecheck, targeted ESLint, managed Chromium E2E for
 `improve-kandev.spec.ts` and the Kanban hidden-workflow spec (24 passed), and
 managed mobile-chrome E2E for both mobile specs (4 passed).
+
+Review corrections (implementation review round 2): the create-without-agent
+handler did not list the description transform as a dependency, so it could keep
+a transform built for an earlier log-capture choice. The dependency is added, and
+the submit-hook tests rerender with a new transform and assert that each create
+path uses the latest one.

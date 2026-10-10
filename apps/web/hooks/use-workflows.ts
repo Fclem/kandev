@@ -2,6 +2,7 @@ import { reconcileTaskWorkflowCoverage } from "@/lib/state/slices/task-workflow-
 import { useCallback, useEffect, useRef } from "react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { listWorkflows } from "@/lib/api";
+import { toWorkflowStoreItem } from "@/lib/kanban/workflow-store-item";
 import {
   classifyWorkspaceContextReadError,
   isCurrentWorkspaceContext,
@@ -107,18 +108,7 @@ function useWorkflowsFetchEffect(
         if (cancelled || staleWorkspaceContext) {
           return;
         }
-        const mapped = response.workflows.map((workflow) => ({
-          id: workflow.id,
-          workspaceId: workflow.workspace_id,
-          name: workflow.name,
-          description: workflow.description,
-          prompt: workflow.prompt,
-          sortOrder: workflow.sort_order ?? 0,
-          agent_profile_id: workflow.agent_profile_id,
-          hidden: workflow.hidden,
-          style: workflow.style,
-          workflowTemplateId: workflow.workflow_template_id,
-        }));
+        const mapped = response.workflows.map(toWorkflowStoreItem);
         setWorkflows(
           mapped,
           reconcileTaskWorkflowCoverage(state, response.task_workflow_coverage, overviewRead),

@@ -31,6 +31,7 @@ import { listWorkflows } from "@/lib/api/domains/kanban-api";
 import { fetchUserSettings } from "@/lib/api/domains/settings-api";
 import { listRepositories, listWorkspaces } from "@/lib/api/domains/workspace-api";
 import { resolveDesiredWorkflowId } from "@/lib/kanban/resolve-workflow";
+import { toWorkflowStoreItem } from "@/lib/kanban/workflow-store-item";
 import { usePathname, useSearchParams } from "@/lib/routing/client-router";
 import { pluginRegistry, usePluginRegistry } from "@/lib/plugins/registry";
 import {
@@ -725,7 +726,7 @@ function useRouteData({
       }
 
       const workflowItems = workflowsResult.ok
-        ? workflowsResult.value.workflows.map(mapWorkflowItem)
+        ? workflowsResult.value.workflows.map(toWorkflowStoreItem)
         : currentState.workflows.items.filter((workflow) => workflow.workspaceId === workspaceId);
       const activeWorkflowId = resolveDesiredWorkflowId({
         activeWorkflowId: currentState.workflows.activeId,
@@ -788,20 +789,6 @@ function firstKnownWorkspaceId(...ids: (string | null | undefined)[]): string | 
     if (value) return value;
   }
   return null;
-}
-
-function mapWorkflowItem(workflow: Workflow) {
-  return {
-    id: workflow.id,
-    workspaceId: workflow.workspace_id,
-    name: workflow.name,
-    description: workflow.description ?? null,
-    sortOrder: workflow.sort_order ?? 0,
-    ...(workflow.agent_profile_id ? { agent_profile_id: workflow.agent_profile_id } : {}),
-    ...(workflow.hidden !== undefined ? { hidden: workflow.hidden } : {}),
-    ...(workflow.style !== undefined ? { style: workflow.style } : {}),
-    workflowTemplateId: workflow.workflow_template_id,
-  };
 }
 
 function normalizePath(pathname: string): string {

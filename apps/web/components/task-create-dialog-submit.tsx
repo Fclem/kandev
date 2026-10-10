@@ -1104,6 +1104,7 @@ export function useTaskSubmitHandlers({
     blockedBy,
     workflowAgentOverrides,
     workflowAgentOverridesBlockedReason,
+    applyDescriptionTransform,
   ]);
 
   const editSubmitHandler = isStartedEdit ? handleUpdateWithoutAgent : handleEditSubmit;

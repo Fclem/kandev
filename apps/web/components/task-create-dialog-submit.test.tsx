@@ -1025,16 +1025,22 @@ describe("useTaskSubmitHandlers — description transform on every create path",
   const paths = ["start agent", "plan mode", "without agent"] as const;
 
   for (const path of paths) {
-    it(`submits the transformed description when creating via ${path}`, async () => {
+    it(`submits the latest transformed description when creating via ${path}`, async () => {
+      // The Improve dialog rebuilds its transform when log capture is toggled,
+      // so the handler must use the transform from the latest render.
+      const staleTransform = vi.fn(async (description: string) => `${description}\n\nstale`);
       const transformDescriptionBeforeSubmit = vi.fn(
         async (description: string) => `${description}\n\nleased bundle`,
       );
       const deps = makeDeps({
         createTask: vi.fn().mockResolvedValue({ id: TASK_ID }),
         descriptionInputRef: makeRef("report context"),
-        transformDescriptionBeforeSubmit,
+        transformDescriptionBeforeSubmit: staleTransform,
       });
-      const { result } = renderHook(() => useTaskSubmitHandlers(deps));
+      const { result, rerender } = renderHook((props) => useTaskSubmitHandlers(props), {
+        initialProps: deps,
+      });
+      rerender({ ...deps, transformDescriptionBeforeSubmit });
 
       await act(async () => {
         const handlers = result.current;
@@ -1043,6 +1049,7 @@ describe("useTaskSubmitHandlers — description transform on every create path",
         else await handlers.handleSubmit({ preventDefault() {} } as never);
       });
 
+      expect(staleTransform).not.toHaveBeenCalled();
       expect(transformDescriptionBeforeSubmit).toHaveBeenCalledWith("report context");
       expect(buildCreateTaskPayloadMock).toHaveBeenCalledWith(
         expect.objectContaining({ trimmedDescription: "report context\n\nleased bundle" }),

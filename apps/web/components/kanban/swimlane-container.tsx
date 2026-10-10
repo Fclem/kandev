@@ -31,7 +31,7 @@ import {
   getTaskPRsByTaskIdForCurrentWorkspace,
 } from "@/lib/kanban/task-search-index";
 import {
-  canSortWorkflowLanes,
+  selectSortableWorkflowLanes,
   selectVisibleWorkflows,
   type WorkflowLike,
 } from "@/lib/kanban/workflow-swimlanes";
@@ -84,8 +84,8 @@ export type SwimlaneContainerProps = {
 type EmptyMessageOptions = {
   isLoading: boolean;
   snapshots: Record<string, unknown>;
-  orderedWorkflows: { id: string; name: string }[];
-  visibleWorkflows: { id: string; name: string }[];
+  orderedWorkflows: WorkflowLike[];
+  visibleWorkflows: WorkflowLike[];
   showEmptyBoard: boolean;
 };
 
@@ -119,7 +119,7 @@ const WORKFLOW_POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 8 } 
 const EMPTY_TASK_MRS_BY_TASK_ID: Record<string, never[]> = {};
 
 type WorkflowItemProps = {
-  wf: { id: string; name: string };
+  wf: WorkflowLike;
   repoFilter: Set<string>;
   searchQuery: string;
   vcsSearchTextByTaskId?: Record<string, string>;
@@ -283,16 +283,20 @@ function useWorkflowReorder(orderedWorkflows: WorkflowLike[], workflowFilter: st
   const workflows = useAppStore((state) => state.workflows.items);
   const workspaceId = workflows[0]?.workspaceId;
   const sensors = useSensors(useSensor(PointerSensor, WORKFLOW_POINTER_SENSOR_OPTIONS));
-  const canSort = canSortWorkflowLanes(workflowFilter, orderedWorkflows);
+  const sortableWorkflows = useMemo(
+    () => selectSortableWorkflowLanes(workflowFilter, orderedWorkflows),
+    [orderedWorkflows, workflowFilter],
+  );
+  const canSort = sortableWorkflows.length > 0;
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over || active.id === over.id) return;
-      const oldIndex = orderedWorkflows.findIndex((wf) => wf.id === active.id);
-      const newIndex = orderedWorkflows.findIndex((wf) => wf.id === over.id);
+      const oldIndex = sortableWorkflows.findIndex((wf) => wf.id === active.id);
+      const newIndex = sortableWorkflows.findIndex((wf) => wf.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
-      const reordered = arrayMove(orderedWorkflows, oldIndex, newIndex);
+      const reordered = arrayMove(sortableWorkflows, oldIndex, newIndex);
       reorderWorkflowItems(reordered.map((wf) => wf.id));
       if (workspaceId) {
         reorderWorkflows(
@@ -301,7 +305,7 @@ function useWorkflowReorder(orderedWorkflows: WorkflowLike[], workflowFilter: st
         ).catch(() => {});
       }
     },
-    [orderedWorkflows, reorderWorkflowItems, workspaceId],
+    [sortableWorkflows, reorderWorkflowItems, workspaceId],
   );
 
   return { sensors, canSort, handleDragEnd };
@@ -331,7 +335,7 @@ function useVcsSearchIndex() {
 function getRenderedWorkflows(
   isMobileKanban: boolean,
   focusedWorkflowId: string | null,
-  visibleWorkflows: { id: string; name: string }[],
+  visibleWorkflows: WorkflowLike[],
 ) {
   if (!isMobileKanban || !focusedWorkflowId) return visibleWorkflows;
   return visibleWorkflows.filter((workflow) => workflow.id === focusedWorkflowId);
@@ -353,7 +357,7 @@ function shouldHideHeaders(
 }
 
 type WorkflowItemsProps = {
-  workflows: { id: string; name: string }[];
+  workflows: WorkflowLike[];
   repoFilter: Set<string>;
   searchQuery: string;
   vcsSearchTextByTaskId?: Record<string, string>;
@@ -405,7 +409,7 @@ function WorkflowItems({
         hideHeader={hideHeaders}
         fillHeight={fillHeight && !collapsed}
         compactHeight={compactHeight}
-        isSortable={canSortWorkflows && !isMobileKanban}
+        isSortable={canSortWorkflows && !isMobileKanban && !workflow.hidden}
         isCollapsed={collapsed}
         toggleCollapse={toggleCollapse}
         onPreviewTask={containerProps.onPreviewTask}
@@ -446,7 +450,7 @@ function usePublishMobileFocus(focusedWorkflowId: string | null) {
 
 type RenderedWorkflowLayoutOptions = {
   workflowFilter: string | null;
-  orderedWorkflows: { id: string; name: string }[];
+  orderedWorkflows: WorkflowLike[];
   getFilteredTasks: (workflowId: string) => Task[];
   hasLiveHiddenSteps: (workflowId: string) => boolean;
   isMobileKanban: boolean;
@@ -478,7 +482,7 @@ function useRenderedWorkflowLayout({
     getRenderedWorkflows(isMobileKanban, focusedWorkflowId, visibleWorkflows),
   );
   const sortableWorkflowIds = useMemo(
-    () => renderedWorkflows.map((workflow) => workflow.id),
+    () => renderedWorkflows.filter((workflow) => !workflow.hidden).map((workflow) => workflow.id),
     [renderedWorkflows],
   );
   const mobileWorkflowNavigation = useMobileWorkflowNavigation(

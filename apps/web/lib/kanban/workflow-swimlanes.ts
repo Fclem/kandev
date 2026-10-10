@@ -39,16 +39,19 @@ export function selectWorkflowSwimlanes(
 }
 
 /**
- * Lane drag-reorder applies only to user workflows. Hidden template-owned
- * lanes (Improve Kandev) keep a server-managed order, and the dedicated Improve
- * Kandev workspace rejects reorder requests, so a board that shows any hidden
- * lane is not sortable.
+ * Returns the lanes drag-reorder may move. Only user workflows are sortable:
+ * hidden template-owned lanes (Improve Kandev) keep a server-managed order,
+ * and the dedicated Improve Kandev workspace rejects reorder requests. Empty
+ * when there is nothing to reorder (explicit filter, or fewer than two user
+ * lanes).
  */
-export function canSortWorkflowLanes(
+export function selectSortableWorkflowLanes(
   workflowFilter: string | null | undefined,
   lanes: WorkflowLike[],
-): boolean {
-  return !workflowFilter && lanes.length > 1 && lanes.every((lane) => !lane.hidden);
+): WorkflowLike[] {
+  if (workflowFilter) return [];
+  const userLanes = lanes.filter((lane) => !lane.hidden);
+  return userLanes.length > 1 ? userLanes : [];
 }
 
 /**

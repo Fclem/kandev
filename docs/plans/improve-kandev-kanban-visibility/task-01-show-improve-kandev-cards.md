@@ -160,5 +160,7 @@ returning to the board dropped the Improve lanes until a reload. It now reads
 hidden workflows too, keeps them in the store, and passes only visible
 workflows to the route's watch dialogs; a route test pins this. Showing the
 hidden lanes also made them drag-sortable, and the dedicated workspace rejects
-reorder requests, so lane sorting is now limited to boards that show only user
-workflows (`canSortWorkflowLanes`, with unit tests).
+reorder requests. Round 4 refined the guard: only user lanes are sortable and
+only their ids are sent for reorder (`selectSortableWorkflowLanes`, with unit
+tests), so hidden Improve lanes stay fixed without blocking reordering of the
+user's own workflows.

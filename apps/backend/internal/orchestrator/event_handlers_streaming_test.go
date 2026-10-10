@@ -1937,8 +1937,8 @@ func TestTerminalCompleteStreamPersistsTimingFromReadyMark(t *testing.T) {
 	turn, err := svc.turnService.StartTurn(ctx, "s1")
 	require.NoError(t, err)
 	started := time.Now().Add(-3 * time.Second)
-	svc.startTurnTiming("s1", "exec-1", 7, turn.ID, started)
-	svc.recordTurnFirstOutput("s1", "exec-1", 7, turn.ID, started.Add(time.Second))
+	svc.startTurnTiming("s1", "exec-1", turn.ID, started)
+	svc.recordTurnFirstOutput("s1", "exec-1", turn.ID, started.Add(time.Second))
 
 	svc.handleAgentReady(ctx, watcher.AgentEventData{
 		TaskID: "t1", SessionID: "s1", AgentExecutionID: "exec-1", PromptGeneration: 7,
@@ -1955,6 +1955,51 @@ func TestTerminalCompleteStreamPersistsTimingFromReadyMark(t *testing.T) {
 	timing, ok := got.Metadata["timing"].(map[string]interface{})
 	require.True(t, ok, "timing must be persisted on the ready-marked turn: %#v", got.Metadata)
 	require.EqualValues(t, 1000, timing["ttft_ms"])
+}
+
+// ACP transports emit turn_started without a prompt generation while message
+// chunks, ready and complete carry the live generation. Timing must still be
+// recorded through the real handlers.
+func TestTurnTimingSurvivesGenerationlessTurnStarted(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "t1", "s1", "step1")
+
+	stepGetter := newMockStepGetter()
+	stepGetter.steps["step1"] = &wfmodels.WorkflowStep{
+		ID: "step1", WorkflowID: "wf1", Name: "Step 1", Position: 0,
+	}
+	taskRepo := newMockTaskRepo()
+	seedMockTaskState(taskRepo, "t1", v1.TaskStateInProgress)
+	agentMgr := &mockAgentManager{isAgentRunning: true}
+	agentMgr.currentPromptExecutionID = "exec-1"
+	agentMgr.currentPromptGeneration.Store(7)
+	svc := createTestServiceWithAgent(repo, stepGetter, taskRepo, agentMgr)
+	svc.turnService = &repoTurnService{repo: repo}
+	svc.eventBus = &recordingEventBus{}
+	svc.messageCreator = &mockMessageCreator{}
+
+	turn, err := svc.turnService.StartTurn(ctx, "s1")
+	require.NoError(t, err)
+
+	stream := func(data *lifecycle.AgentStreamEventData) {
+		svc.handleAgentStreamEvent(ctx, &lifecycle.AgentStreamEventPayload{
+			TaskID: "t1", SessionID: "s1", ExecutionID: "exec-1", Data: data,
+		})
+	}
+	stream(&lifecycle.AgentStreamEventData{Type: streams.EventTypeTurnStarted})
+	stream(&lifecycle.AgentStreamEventData{Type: "message_streaming", Text: "hello", PromptGeneration: 7})
+	svc.handleAgentReady(ctx, watcher.AgentEventData{
+		TaskID: "t1", SessionID: "s1", AgentExecutionID: "exec-1", PromptGeneration: 7,
+	})
+	stream(&lifecycle.AgentStreamEventData{Type: agentEventComplete, PromptGeneration: 7, TurnID: turn.ID})
+
+	got, err := repo.GetTurn(ctx, turn.ID)
+	require.NoError(t, err)
+	timing, ok := got.Metadata["timing"].(map[string]interface{})
+	require.True(t, ok, "timing must be persisted: %#v", got.Metadata)
+	require.Contains(t, timing, "ttft_ms")
+	require.Contains(t, timing, "generation_ms")
 }
 
 func findAllPromptUsageEvents(t *testing.T, eb *recordingEventBus, sessionID string) []lifecycle.SessionPromptUsageEventPayload {

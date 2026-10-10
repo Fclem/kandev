@@ -925,9 +925,7 @@ environment.updated
 environment.deleted
 session.state_changed
 session.activity_changed
-session.turn.started
-session.turn.completed
-session.turn.updated
+session.poll_mode_changed
 agent.available.updated
 agent.install.started
 agent.install.output
@@ -1005,6 +1003,9 @@ session.models_updated
 session.info_updated
 session.todos_updated
 session.prompt_usage
+session.turn.started
+session.turn.completed
+session.turn.updated
 ```
 
 Semantic `session.message.added`, `session.message.updated`, and

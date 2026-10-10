@@ -8,26 +8,32 @@ import (
 )
 
 type turnTimingRecord struct {
-	turnID           string
-	executionID      string
-	promptGeneration uint64
-	startedAt        time.Time
-	firstOutputAt    time.Time
-	completedAt      time.Time
+	turnID        string
+	executionID   string
+	startedAt     time.Time
+	firstOutputAt time.Time
+	completedAt   time.Time
 }
 
+// measurement returns ttft_ms whenever start and first output exist, and adds
+// generation_ms only when a valid close mark follows the first output.
 func (r turnTimingRecord) measurement(turnID string, completedAt time.Time, cancelled bool) (map[string]interface{}, bool) {
 	if cancelled || r.turnID == "" || r.turnID != turnID || r.startedAt.IsZero() ||
-		r.firstOutputAt.IsZero() || completedAt.IsZero() || completedAt.Before(r.firstOutputAt) {
+		r.firstOutputAt.IsZero() || r.firstOutputAt.Before(r.startedAt) {
 		return nil, false
 	}
-	return map[string]interface{}{
-		"ttft_ms":       r.firstOutputAt.Sub(r.startedAt).Milliseconds(),
-		"generation_ms": completedAt.Sub(r.firstOutputAt).Milliseconds(),
-	}, true
+	out := map[string]interface{}{"ttft_ms": r.firstOutputAt.Sub(r.startedAt).Milliseconds()}
+	if !completedAt.IsZero() && !completedAt.Before(r.firstOutputAt) {
+		out["generation_ms"] = completedAt.Sub(r.firstOutputAt).Milliseconds()
+	}
+	return out, true
 }
 
-func (s *Service) startTurnTiming(sessionID, executionID string, promptGeneration uint64, turnID string, receivedAt time.Time) {
+// Timing records are correlated by session, execution and Kandev turn ID. The
+// turn ID is unique per turn; prompt generations are not stamped on every
+// stream event kind (turn_started carries none on ACP transports), so they
+// cannot take part in the match.
+func (s *Service) startTurnTiming(sessionID, executionID, turnID string, receivedAt time.Time) {
 	if sessionID == "" || executionID == "" || receivedAt.IsZero() {
 		return
 	}
@@ -35,20 +41,17 @@ func (s *Service) startTurnTiming(sessionID, executionID string, promptGeneratio
 	if s.turnTimings == nil {
 		s.turnTimings = make(map[string]turnTimingRecord)
 	}
-	s.turnTimings[sessionID] = turnTimingRecord{
-		turnID: turnID, executionID: executionID, promptGeneration: promptGeneration, startedAt: receivedAt,
-	}
+	s.turnTimings[sessionID] = turnTimingRecord{turnID: turnID, executionID: executionID, startedAt: receivedAt}
 	s.turnTimingMu.Unlock()
 }
 
-func (s *Service) recordTurnFirstOutput(sessionID, executionID string, promptGeneration uint64, turnID string, receivedAt time.Time) {
+func (s *Service) recordTurnFirstOutput(sessionID, executionID, turnID string, receivedAt time.Time) {
 	if sessionID == "" || executionID == "" || receivedAt.IsZero() {
 		return
 	}
 	s.turnTimingMu.Lock()
 	record, ok := s.turnTimings[sessionID]
-	if ok && record.executionID == executionID && record.promptGeneration == promptGeneration &&
-		record.firstOutputAt.IsZero() {
+	if ok && record.executionID == executionID && record.firstOutputAt.IsZero() {
 		if record.turnID == "" {
 			record.turnID = turnID
 		}
@@ -60,14 +63,13 @@ func (s *Service) recordTurnFirstOutput(sessionID, executionID string, promptGen
 	s.turnTimingMu.Unlock()
 }
 
-func (s *Service) closeTurnTiming(sessionID, executionID string, promptGeneration uint64, turnID string, closedAt time.Time) {
+func (s *Service) closeTurnTiming(sessionID, executionID, turnID string, closedAt time.Time) {
 	if sessionID == "" || executionID == "" || turnID == "" || closedAt.IsZero() {
 		return
 	}
 	s.turnTimingMu.Lock()
 	record, ok := s.turnTimings[sessionID]
-	if ok && record.executionID == executionID && record.promptGeneration == promptGeneration &&
-		record.turnID == turnID && record.completedAt.IsZero() {
+	if ok && record.executionID == executionID && record.turnID == turnID && record.completedAt.IsZero() {
 		record.completedAt = closedAt
 		s.turnTimings[sessionID] = record
 	}

@@ -1399,6 +1399,7 @@ export class ApiClient {
       show_transcript_auto_scroll_control?: boolean;
       show_todo_list_panel?: boolean;
       show_todo_list_panel_only_when_not_empty?: boolean;
+      agent_generated_task_titles?: boolean;
       message_metadata_fields?: string[];
       [key: string]: unknown;
     };
@@ -1417,6 +1418,7 @@ export class ApiClient {
     agent_tab_close_behavior?: "delete_session" | "hide_panel";
     mcp_task_agent_profile_default?: MCPTaskAgentProfileDefault;
     show_anchored_prompt_bar?: boolean;
+    show_scroll_to_last_prompt?: boolean;
     message_metadata_fields?: string[];
     show_scroll_to_start?: boolean;
     show_transcript_auto_scroll_control?: boolean;

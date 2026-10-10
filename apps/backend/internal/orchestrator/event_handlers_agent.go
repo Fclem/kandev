@@ -2762,7 +2762,7 @@ func (s *Service) finishAgentCompleted(
 	if !completionFollowUp {
 		s.reconcileCIAutoFixTurnBeforeCompletion(ctx, data.TaskID, data.SessionID, "")
 	}
-	s.closeTurnTiming(data.SessionID, data.AgentExecutionID, data.PromptGeneration, s.currentTurnIDForSession(ctx, data.SessionID), time.Now())
+	s.closeTurnTiming(data.SessionID, data.AgentExecutionID, s.currentTurnIDForSession(ctx, data.SessionID), time.Now())
 	completionCtx := withWorkflowEffect(context.WithoutCancel(ctx), workflowEffectForEvent(data))
 	if data.TurnID != "" {
 		if err := s.completeTurnForTaskSessionCheckedOwned(

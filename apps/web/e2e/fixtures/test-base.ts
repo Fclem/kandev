@@ -420,6 +420,7 @@ export const test = backendFixture.extend<
         // saveUserSettings; without this reset it would leak into unrelated
         // tests running later in the same worker.
         show_anchored_prompt_bar: false,
+        show_scroll_to_last_prompt: true,
         message_metadata_fields: ["session_config", "timestamp", "duration"],
         show_scroll_to_start: false,
         show_transcript_auto_scroll_control: true,
@@ -670,6 +671,7 @@ test.beforeEach(async ({ apiClient, backend, seedData }) => {
       show_anchored_prompt_bar: false,
       show_scroll_to_last_prompt: true,
       show_scroll_to_start: false,
+      show_transcript_auto_scroll_control: true,
       message_metadata_fields: ["session_config", "timestamp", "duration"],
       // Reset the Kanban priority filter. Priority-filter tests persist their
       // selection, and a stale selection can hide default-priority tasks in

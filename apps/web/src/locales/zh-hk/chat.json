@@ -87,6 +87,7 @@
   "mergeWithAbove": "與上方訊息合併",
   "moveQuickChatTabLeft": "將 {{name}} 左移",
   "moveQuickChatTabRight": "將 {{name}} 右移",
+
   "newChatTab": "新建聊天",
   "newQuickChat": "新建快速聊天",
   "noAgentsAvailable": "沒有可用的代理程式",

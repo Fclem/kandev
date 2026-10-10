@@ -75,3 +75,5 @@ Task 01, which supplies the timing patch this event delivers.
 ## Results
 
 Results: Timing metadata patches now publish sanitized `turn.updated` snapshots after re-reading the persisted turn; the gateway routes them only to session subscribers, and the web handler updates the turn without completion side effects. The three backend packages, all 24 turn-handler tests, and web typecheck passed. `docs/public/websocket-api.md` already lists this lifecycle event and its session-only delivery scope, so it required no edit.
+
+Correction (review round 26): `docs/public/websocket-api.md` was edited: `session.turn.started`, `session.turn.completed` and `session.turn.updated` are listed under session-scoped broadcasts.

@@ -115,11 +115,11 @@ describe("useSessionUsageTurn page indexing", () => {
     expect(result.current.value.isLoading).toBe(false);
   });
 
-  it("refreshes only the newest page on invalidation and retains older indexed turns", async () => {
+  it("refresh merges the newest page and retains previously loaded turns", async () => {
     USAGE_API.list
       .mockResolvedValueOnce(page([usageTurn("newest")], "cursor-1"))
       .mockResolvedValueOnce(page([usageTurn("older")]))
-      .mockResolvedValueOnce(page([usageTurn("newest-updated")], "cursor-1"));
+      .mockResolvedValueOnce(page([usageTurn("newest-updated")], "cursor-new"));
     const { result } = renderSessionRead(
       () => useSessionUsageTurn("task", "session", "older"),
       undefined,
@@ -130,15 +130,34 @@ describe("useSessionUsageTurn page indexing", () => {
     await waitFor(() => expect(USAGE_API.list).toHaveBeenCalledTimes(3));
 
     expect(USAGE_API.list).toHaveBeenNthCalledWith(3, "task", "session", { limit: 100 });
-    expect(
-      result.current.store.getState().usageTurns.bySessionId.session.byTurnId.older,
-    ).toBeDefined();
-    expect(
-      result.current.store.getState().usageTurns.bySessionId.session.byTurnId.newest,
-    ).toBeUndefined();
-    expect(
-      result.current.store.getState().usageTurns.bySessionId.session.byTurnId["newest-updated"],
-    ).toBeDefined();
+    const index = result.current.store.getState().usageTurns.bySessionId.session;
+    expect(index.byTurnId.older).toBeDefined();
+    expect(index.byTurnId.newest).toBeDefined();
+    expect(index.byTurnId["newest-updated"]).toBeDefined();
+    expect(index.newestPageTurnIds).toEqual(["newest-updated"]);
+    expect(index.exhausted).toBe(true);
+  });
+
+  it("keeps a turn pushed past page one retrievable after refresh of an exhausted index", async () => {
+    USAGE_API.list
+      .mockResolvedValueOnce(page([usageTurn("t1")], "cursor-1"))
+      .mockResolvedValueOnce(page([usageTurn("t0")]))
+      .mockResolvedValueOnce(page([usageTurn("t2")], "cursor-fresh"));
+    const { result } = renderSessionRead(
+      () => useSessionUsageTurn("task", "session", "t1"),
+      undefined,
+    );
+
+    await waitFor(() => expect(result.current.value.usageTurn?.turn_id).toBe("t1"));
+    result.current.store.getState().setSessionUsageTurnPage("session", page([usageTurn("t0")]));
+    result.current.store.getState().bumpSessionUsageInvalidation("session");
+    await waitFor(() => expect(USAGE_API.list).toHaveBeenCalledTimes(2));
+
+    const index = result.current.store.getState().usageTurns.bySessionId.session;
+    expect(index.byTurnId.t1).toBeDefined();
+    expect(index.exhausted).toBe(true);
+    expect(index.nextCursor).toBeUndefined();
+    expect(result.current.value.isNotFound).toBe(false);
   });
 });
 describe("useSessionUsageTurn single-turn fallback", () => {

@@ -80,6 +80,17 @@ describe("MessageTurnMetrics", () => {
     expect(screen.getByText("Provider-reported cost")).toBeTruthy();
   });
 
+  it("renders TTFT and TPS definitions as visible text instead of hover-only titles", () => {
+    USAGE_READ.usageTurn = usageTurn();
+    const { container } = render(
+      <MessageTurnMetrics turn={turn()} taskId="task-1" sessionId="session-1" />,
+    );
+
+    expect(screen.getByText(/Backend-measured time from receipt of turn_started/)).toBeTruthy();
+    expect(screen.getByText(/Average direct output and reasoning token rate/)).toBeTruthy();
+    expect(container.querySelector("[title]")).toBeNull();
+  });
+
   it("shows pending or unavailable usage as status instead of fabricated token zeros", () => {
     USAGE_READ.isLoading = true;
     const { rerender } = render(

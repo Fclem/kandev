@@ -76,3 +76,5 @@ None.
 ## Results
 
 Results: Implemented start/output/close timing capture, turn metadata persistence, projection allowlisting, and focused timing tests. Verified the commands below; the race-enabled timing test and model/gateway/vet checks passed.
+
+Correction (review rounds 24-26): timing records are correlated by session, execution and Kandev turn ID (turn_started carries no prompt generation on ACP transports). A missing close mark keeps `ttft_ms` and omits `generation_ms`. `Service.timingClock` is the injectable clock; handler-level tests in `turn_timing_flow_test.go` cover receipt-to-ready measurement, ready close preserved across the terminal marker for TurnID and compatibility payloads, omitted generation without a close mark, and no-output turns. Not written under the work-order names: `TestTurnTimingUsesTurnStartedReceipt`, `TestTurnTimingIgnoresDiagnosticBeforeOutput`, `TestTurnTimingLazilyCreatedTurn`, `TestTurnTimingCorrelatesRegularAndTerminalCompletionPaths`, and the cancel, restart and second-completion cases; the ready-mark expiry window is the existing `completedExecutionRetention` check, not a separate close-mark expiry.

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { KandevToolMessage, hasKandevRenderer } from "./kandev-tool-message";
+import { KandevToolMessage } from "./kandev-tool-message";
+import { hasKandevRenderer } from "./kandev/has-renderer";
 import { sessionId as toSessionId, taskId as toTaskId, type Message } from "@/lib/types/http";
 import { kandevToolCall } from "./kandev-tool-message.test-helpers";
 import { KANDEV_RENDERERS } from "./kandev/registry";

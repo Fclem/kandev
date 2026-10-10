@@ -55,6 +55,18 @@ export function selectSortableWorkflowLanes(
 }
 
 /**
+ * Builds the complete workflow order after a user lane reorder. Positions
+ * held by reordered user lanes are refilled in their new order; every other
+ * workflow (hidden Improve Kandev lanes included) keeps its slot, so the
+ * store and the server's sort_order agree.
+ */
+export function mergeLaneReorder(allIds: string[], reorderedUserIds: string[]): string[] {
+  const moved = new Set(reorderedUserIds);
+  let next = 0;
+  return allIds.map((id) => (moved.has(id) ? reorderedUserIds[next++] : id));
+}
+
+/**
  * Selects the workflows the mobile board navigator offers. Both Improve
  * Kandev workflows stay reachable even when filters remove every task.
  * Other hidden workflows remain eligible only when they have tasks or live

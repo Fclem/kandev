@@ -31,6 +31,7 @@ import {
   getTaskPRsByTaskIdForCurrentWorkspace,
 } from "@/lib/kanban/task-search-index";
 import {
+  mergeLaneReorder,
   selectSortableWorkflowLanes,
   selectVisibleWorkflows,
   type WorkflowLike,
@@ -296,16 +297,17 @@ function useWorkflowReorder(orderedWorkflows: WorkflowLike[], workflowFilter: st
       const oldIndex = sortableWorkflows.findIndex((wf) => wf.id === active.id);
       const newIndex = sortableWorkflows.findIndex((wf) => wf.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
-      const reordered = arrayMove(sortableWorkflows, oldIndex, newIndex);
-      reorderWorkflowItems(reordered.map((wf) => wf.id));
+      const reorderedIds = arrayMove(sortableWorkflows, oldIndex, newIndex).map((wf) => wf.id);
+      const fullOrder = mergeLaneReorder(
+        workflows.filter((wf) => wf.workspaceId === workspaceId).map((wf) => wf.id),
+        reorderedIds,
+      );
+      reorderWorkflowItems(fullOrder);
       if (workspaceId) {
-        reorderWorkflows(
-          workspaceId,
-          reordered.map((wf) => wf.id),
-        ).catch(() => {});
+        reorderWorkflows(workspaceId, fullOrder).catch(() => {});
       }
     },
-    [sortableWorkflows, reorderWorkflowItems, workspaceId],
+    [sortableWorkflows, reorderWorkflowItems, workflows, workspaceId],
   );
 
   return { sensors, canSort, handleDragEnd };

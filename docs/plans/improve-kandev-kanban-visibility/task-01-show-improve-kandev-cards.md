@@ -164,3 +164,10 @@ reorder requests. Round 4 refined the guard: only user lanes are sortable and
 only their ids are sent for reorder (`selectSortableWorkflowLanes`, with unit
 tests), so hidden Improve lanes stay fixed without blocking reordering of the
 user's own workflows.
+
+Review corrections (implementation review round 5): a partial reorder sent
+only the user lane ids, so the store moved the hidden Improve lanes below
+every user lane and the server renumbered them, leaving the board and the
+server order different after a reload. The reorder now slots the reordered
+user lanes into their existing positions (`mergeLaneReorder`, with a unit
+test) and sends the complete order to both the store and `reorderWorkflows`.

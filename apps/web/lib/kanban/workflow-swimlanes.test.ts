@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  mergeLaneReorder,
   selectSortableWorkflowLanes,
   selectMobileNavigatorWorkflows,
   selectWorkflowSwimlanes,
@@ -249,5 +250,17 @@ describe("selectSortableWorkflowLanes", () => {
   it("offers nothing to sort with one user lane or an explicit workflow filter", () => {
     expect(selectSortableWorkflowLanes(null, [dev, improve])).toEqual([]);
     expect(selectSortableWorkflowLanes("dev", [dev, review])).toEqual([]);
+  });
+});
+
+describe("mergeLaneReorder", () => {
+  it("keeps hidden Improve lanes in their slots while user lanes move", () => {
+    expect(mergeLaneReorder(["a", "imp", "rep", "b", "c"], ["c", "a", "b"])).toEqual([
+      "c",
+      "imp",
+      "rep",
+      "a",
+      "b",
+    ]);
   });
 });

@@ -11,7 +11,11 @@ import {
 } from "@/lib/state/slices/settings/types";
 import { normalizeAgentProfile } from "@/lib/api/domains/agent-profile-normalize";
 import type { AgentProfile } from "@/lib/types/agent-profile";
-import { insertFirstInAgentGroup } from "@/lib/settings/agent-profile-order";
+import {
+  acceptAgentOrdersFromSnapshot,
+  reconcileAgentOrders,
+  insertFirstInAgentGroup,
+} from "@/lib/settings/agent-profile-order";
 
 function buildProfileEntry(profile: unknown): AgentProfile {
   return normalizeAgentProfile(profile);
@@ -134,13 +138,15 @@ function handleProfileCreated(
         }
       : item,
   );
+  const orderByAgent = acceptAgentOrdersFromSnapshot(state.agentProfiles.orderByAgent, nextAgents);
   return {
     agentProfiles: {
       ...state.agentProfiles,
       items: nextProfiles,
       version: state.agentProfiles.version + 1,
+      orderByAgent,
     },
-    settingsAgents: { items: nextAgents },
+    settingsAgents: { items: reconcileAgentOrders(nextAgents, orderByAgent) },
   };
 }
 
@@ -206,13 +212,15 @@ function handleProfileDeleted(
         }
       : item,
   );
+  const orderByAgent = acceptAgentOrdersFromSnapshot(state.agentProfiles.orderByAgent, nextAgents);
   return {
     agentProfiles: {
       ...state.agentProfiles,
       items: state.agentProfiles.items.filter((p) => p.id !== normalized.id),
       version: state.agentProfiles.version + 1,
+      orderByAgent,
     },
-    settingsAgents: { items: nextAgents },
+    settingsAgents: { items: reconcileAgentOrders(nextAgents, orderByAgent) },
   };
 }
 

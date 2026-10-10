@@ -5,6 +5,9 @@ import {
 } from "./agent-profile-selector-order";
 import type { AgentProfileOption } from "@/lib/state/slices/settings/types";
 
+const JANUARY = "2026-01-01T00:00:00Z";
+const FEBRUARY = "2026-02-01T00:00:00Z";
+
 describe("selector creation baseline", () => {
   it("compares creation instants including submillisecond precision before breaking ties by ID", () => {
     const profiles = [
@@ -24,9 +27,9 @@ describe("selector creation baseline", () => {
     "preserves source order when creation timestamp %s is malformed",
     (createdAt) => {
       const profiles = [
-        { id: "z", createdAt: "2026-01-01T00:00:00Z" },
+        { id: "z", createdAt: JANUARY },
         { id: "a", createdAt },
-        { id: "b", createdAt: "2026-02-01T00:00:00Z" },
+        { id: "b", createdAt: FEBRUARY },
       ];
       expect(orderProfilesForSelection(profiles)).toBe(profiles);
     },
@@ -37,11 +40,11 @@ describe("selector creation baseline", () => {
       {
         id: "old",
         agent_id: "a",
-        createdAt: "2026-01-01T00:00:00Z",
+        createdAt: JANUARY,
         updatedAt: "2026-03-01T00:00:00Z",
       },
       { id: "office", agent_id: "office" },
-      { id: "new", agent_id: "a", createdAt: "2026-02-01T00:00:00Z" },
+      { id: "new", agent_id: "a", createdAt: FEBRUARY },
     ] as AgentProfileOption[];
     expect(orderProfileOptionsForSelection(options).map((profile) => profile.id)).toEqual([
       "new",
@@ -52,9 +55,9 @@ describe("selector creation baseline", () => {
 
   it("preserves an unstamped Office option in the owning agent's slots without blocking the global baseline", () => {
     const options = [
-      { id: "old", agent_id: "a", createdAt: "2026-01-01T00:00:00Z" },
+      { id: "old", agent_id: "a", createdAt: JANUARY },
       { id: "office", agent_id: "a", workspace_id: "office-workspace" },
-      { id: "new", agent_id: "a", createdAt: "2026-02-01T00:00:00Z" },
+      { id: "new", agent_id: "a", createdAt: FEBRUARY },
     ] as AgentProfileOption[];
     expect(orderProfileOptionsForSelection(options).map((profile) => profile.id)).toEqual([
       "new",
@@ -64,14 +67,14 @@ describe("selector creation baseline", () => {
   });
   it("keeps a stamped workspace-scoped option in its slot while restoring global profile order", () => {
     const options = [
-      { id: "old", agent_id: "a", createdAt: "2026-01-01T00:00:00Z" },
+      { id: "old", agent_id: "a", createdAt: JANUARY },
       {
         id: "office",
         agent_id: "a",
         workspace_id: "office-workspace",
         createdAt: "2026-03-01T00:00:00Z",
       },
-      { id: "new", agent_id: "a", createdAt: "2026-02-01T00:00:00Z" },
+      { id: "new", agent_id: "a", createdAt: FEBRUARY },
     ] as AgentProfileOption[];
     expect(orderProfileOptionsForSelection(options).map((profile) => profile.id)).toEqual([
       "new",

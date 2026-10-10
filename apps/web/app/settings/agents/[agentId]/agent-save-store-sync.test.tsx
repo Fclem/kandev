@@ -7,6 +7,7 @@ import type { Agent } from "@/lib/types/http";
 import { registerAgentsHandlers } from "@/lib/ws/handlers/agents";
 import { syncSavedAgentToStore } from "./agent-save-store-sync";
 
+const MOCK_AGENT_NAME = "mock-agent";
 const AGENT_ID = "agent";
 const LIVE_PROFILE_ID = "live";
 const CREATED_PROFILE_ID = "created";
@@ -29,7 +30,7 @@ function option(id: string, agentId = AGENT_ID) {
     id,
     label: id,
     agent_id: agentId,
-    agent_name: "mock-agent",
+    agent_name: MOCK_AGENT_NAME,
     cli_passthrough: false,
   };
 }
@@ -64,7 +65,7 @@ describe("agent save response membership", () => {
     );
     const existing = {
       id: AGENT_ID,
-      name: "mock-agent",
+      name: MOCK_AGENT_NAME,
       profiles: [profile(LIVE_PROFILE_ID), profile(DELETED_PROFILE_ID)],
     } as Agent;
     act(() => {
@@ -134,7 +135,7 @@ describe("agent save profile option retention", () => {
     );
     const existing = {
       id: AGENT_ID,
-      name: "mock-agent",
+      name: MOCK_AGENT_NAME,
       profiles: [profile(LIVE_PROFILE_ID)],
     } as Agent;
     act(() => {
@@ -181,7 +182,7 @@ it("preserves an Office option owned by the saved agent", () => {
   );
   const existing = {
     id: AGENT_ID,
-    name: "mock-agent",
+    name: MOCK_AGENT_NAME,
     profiles: [profile(LIVE_PROFILE_ID)],
   } as Agent;
   act(() => {

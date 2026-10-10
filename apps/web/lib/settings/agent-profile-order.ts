@@ -9,12 +9,12 @@ export function acceptAgentOrdersFromSnapshot(
 ): ProfileOrderState {
   let next = state;
   for (const agent of agents) {
-    if (agent.profile_order_revision === undefined) continue;
+    if (agent.profile_order_revision === undefined && !state[agent.id]) continue;
     next = acceptServerOrder(
       next,
       agent.id,
       agent.profiles.map((profile) => profile.id),
-      agent.profile_order_revision,
+      agent.profile_order_revision ?? state[agent.id]?.revision ?? 0,
     );
     const current = next[agent.id];
     const incoming = agent.profiles.map((profile) => profile.id);

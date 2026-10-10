@@ -103,6 +103,63 @@ describe("ProfileOrderQueue", () => {
     ]);
   });
 
+  it("restores live creation order and keeps deletions after a failed drag", async () => {
+    const liveAgentId = "live-events";
+    const firstCreationId = "live-new1";
+    const secondCreationId = "live-new2";
+    const firstOldId = "live-old1";
+    const secondOldId = "live-old2";
+    const local = createAppStore();
+    local.getState().setSettingsAgents([
+      {
+        id: liveAgentId,
+        name: "Live events",
+        profile_order_revision: 3,
+        profiles: [
+          { id: firstOldId, name: "Old 1" },
+          { id: secondOldId, name: "Old 2" },
+        ],
+      } as Agent,
+    ]);
+    const handlers = registerAgentsHandlers(local);
+    for (const id of [firstCreationId, secondCreationId]) {
+      handlers["agent.profile.created"]!({
+        timestamp: MEMBERSHIP_EVENT_TIME,
+        payload: {
+          profile: { id, agent_id: liveAgentId, name: id, created_at: MEMBERSHIP_EVENT_TIME },
+        },
+      } as BackendMessageMap["agent.profile.created"]);
+    }
+    let rejectSave!: (error: Error) => void;
+    const pending = new Promise<{ profile_ids: string[]; revision: number }>((_, reject) => {
+      rejectSave = reject;
+    });
+    const onError = vi.fn();
+    const queue = new ProfileOrderQueue(local, { save: vi.fn().mockReturnValue(pending), onError });
+    queue.requestProfileOrder(liveAgentId, [
+      firstCreationId,
+      secondCreationId,
+      secondOldId,
+      firstOldId,
+    ]);
+    handlers["agent.profile.deleted"]!({
+      timestamp: MEMBERSHIP_EVENT_TIME,
+      payload: { profile: { id: secondOldId, agent_id: liveAgentId } },
+    } as BackendMessageMap["agent.profile.deleted"]);
+    rejectSave(new Error("failed"));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    expect(local.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      secondCreationId,
+      firstCreationId,
+      firstOldId,
+    ]);
+    expect(local.getState().agentProfiles.orderByAgent[liveAgentId].order).toEqual([
+      secondCreationId,
+      firstCreationId,
+      firstOldId,
+    ]);
+  });
+
   it("refetches on conflict and replays only surviving queued profiles after new IDs", async () => {
     let rejectFirst!: (error: Error) => void;
     const first = new Promise<{ profile_ids: string[]; revision: number }>((_, reject) => {

@@ -59,6 +59,12 @@ export type MCPStrategyOption = {
   description: string;
 };
 
+export type AgentProfilesReorderedPayload = {
+  agent_id: string;
+  profile_ids: string[];
+  revision: number;
+};
+
 export type Agent = {
   id: string;
   name: string;

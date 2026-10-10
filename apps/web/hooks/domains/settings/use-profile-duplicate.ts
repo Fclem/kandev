@@ -14,7 +14,11 @@ import {
 } from "@/lib/state/slices/settings/types";
 import type { AppState } from "@/lib/state/store";
 import type { Agent, AgentProfile } from "@/lib/types/http";
-import { insertFirstInAgentGroup } from "@/lib/settings/agent-profile-order";
+import {
+  acceptAgentOrdersFromSnapshot,
+  reconcileAgentOrders,
+  insertFirstInAgentGroup,
+} from "@/lib/settings/agent-profile-order";
 import {
   orderProfileOptionsForSelection,
   toSelectorProfileOptions,
@@ -91,12 +95,17 @@ export function applyProfileDuplicated(
     });
   }
 
+  const orderByAgent = acceptAgentOrdersFromSnapshot(state.agentProfiles.orderByAgent, nextAgents);
   return {
-    settingsAgents: { ...state.settingsAgents, items: nextAgents },
+    settingsAgents: {
+      ...state.settingsAgents,
+      items: reconcileAgentOrders(nextAgents, orderByAgent),
+    },
     agentProfiles: {
       ...state.agentProfiles,
       items: orderProfileOptionsForSelection(agentProfilesItems),
       version: state.agentProfiles.version + 1,
+      orderByAgent,
     },
   };
 }

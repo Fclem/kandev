@@ -193,7 +193,9 @@ events.
 The slice holds, per agent, `ProfileOrderSync`:
 `{ revision, order, inFlight, queued }`: the newest server order and revision
 this client knows (`order` is `null` until one is known) and the pending
-optimistic orders.
+optimistic orders. Fresh creation/deletion events and duplicate publications
+atomically update rollback membership and retain pending overlays, including
+when a legacy owning agent omits its order-revision field.
 
 `acceptServerOrder(agentId, ids, revision)` stores the order and revision only
 when `revision` is greater than the stored one, or when no order is stored yet,

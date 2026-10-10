@@ -16,33 +16,11 @@ export function syncSavedAgentToStore(
   const settingsAgents = state.settingsAgents.items;
   const existing = settingsAgents.find((item) => item.id === agent.id);
   if (!existing && state.agentProfiles.version !== profileVersionAtSaveStart) return;
-  let profiles = agent.profiles;
-  let membershipChanged = false;
-
-  if (state.agentProfiles.version === profileVersionAtSaveStart) {
-    const incomingById = new Map(agent.profiles.map((profile) => [profile.id, profile]));
-    const existingIds = new Set(existing?.profiles.map((profile) => profile.id) ?? []);
-    const newProfiles = agent.profiles.filter((profile) => !existingIds.has(profile.id));
-    const existingProfiles = (existing?.profiles ?? [])
-      .map((profile) => {
-        const incoming = incomingById.get(profile.id);
-        const currentTime = parseTurnTimestamp(profile.updatedAt);
-        const incomingTime = parseTurnTimestamp(incoming?.updatedAt);
-        return incoming &&
-          currentTime !== null &&
-          (incomingTime === null || incomingTime < currentTime)
-          ? profile
-          : incoming;
-      })
-      .filter((profile): profile is Agent["profiles"][number] => profile !== undefined);
-    membershipChanged =
-      newProfiles.length > 0 ||
-      (existing !== undefined &&
-        existing.profiles.some((profile) => !incomingById.has(profile.id)));
-    profiles = [...orderProfilesForSelection(newProfiles), ...existingProfiles];
-  } else if (existing) {
-    profiles = existing.profiles;
-  }
+  const { profiles, membershipChanged } = reconcileSavedProfiles(
+    existing,
+    agent,
+    state.agentProfiles.version === profileVersionAtSaveStart,
+  );
 
   const reconciled = existing
     ? {
@@ -57,25 +35,62 @@ export function syncSavedAgentToStore(
     ? settingsAgents.map((item) => (item.id === agent.id ? reconciled : item))
     : [...settingsAgents, reconciled];
   state.setSettingsAgents(nextAgents);
-  const savedProfileOptions = toSelectorProfileOptions([reconciled]);
-  const nextProfileOptions: typeof state.agentProfiles.items = [];
-  const savedIds = new Set(savedProfileOptions.map((profile) => profile.id));
-  const previousIds = new Set(existing?.profiles.map((profile) => profile.id) ?? []);
-  let savedGroupInserted = false;
-  for (const option of state.agentProfiles.items) {
-    if (option.agent_id === reconciled.id) {
-      if (!savedGroupInserted) {
-        nextProfileOptions.push(...savedProfileOptions);
-        savedGroupInserted = true;
-      }
-      if (!savedIds.has(option.id) && (option.workspace_id || !previousIds.has(option.id)))
-        nextProfileOptions.push(option);
-      continue;
-    }
-    nextProfileOptions.push(option);
-  }
-  if (!savedGroupInserted) nextProfileOptions.push(...savedProfileOptions);
-  state.setAgentProfiles(nextProfileOptions);
+  state.setAgentProfiles(reconcileSavedOptions(state.agentProfiles.items, existing, reconciled));
   if (membershipChanged) state.bumpAgentProfilesVersion();
   return reconciled;
+}
+
+function acceptedSavedProfile(
+  current: Agent["profiles"][number],
+  incoming: Agent["profiles"][number] | undefined,
+) {
+  const currentTime = parseTurnTimestamp(current.updatedAt);
+  const incomingTime = parseTurnTimestamp(incoming?.updatedAt);
+  return incoming && currentTime !== null && (incomingTime === null || incomingTime < currentTime)
+    ? current
+    : incoming;
+}
+
+function reconcileSavedProfiles(existing: Agent | undefined, incoming: Agent, fresh: boolean) {
+  if (!fresh)
+    return { profiles: existing?.profiles ?? incoming.profiles, membershipChanged: false };
+  const incomingById = new Map(incoming.profiles.map((profile) => [profile.id, profile]));
+  const existingIds = new Set(existing?.profiles.map((profile) => profile.id) ?? []);
+  const newProfiles = incoming.profiles.filter((profile) => !existingIds.has(profile.id));
+  const existingProfiles = (existing?.profiles ?? [])
+    .map((profile) => acceptedSavedProfile(profile, incomingById.get(profile.id)))
+    .filter((profile): profile is Agent["profiles"][number] => profile !== undefined);
+  const membershipChanged =
+    newProfiles.length > 0 ||
+    (existing !== undefined && existing.profiles.some((profile) => !incomingById.has(profile.id)));
+  return {
+    profiles: [...orderProfilesForSelection(newProfiles), ...existingProfiles],
+    membershipChanged,
+  };
+}
+
+function reconcileSavedOptions(
+  options: AppState["agentProfiles"]["items"],
+  existing: Agent | undefined,
+  reconciled: Agent,
+) {
+  const savedProfileOptions = toSelectorProfileOptions([reconciled]);
+  const savedIds = new Set(savedProfileOptions.map((profile) => profile.id));
+  const previousIds = new Set(existing?.profiles.map((profile) => profile.id) ?? []);
+  const nextOptions: typeof options = [];
+  let inserted = false;
+  for (const option of options) {
+    if (option.agent_id !== reconciled.id) {
+      nextOptions.push(option);
+      continue;
+    }
+    if (!inserted) {
+      nextOptions.push(...savedProfileOptions);
+      inserted = true;
+    }
+    if (!savedIds.has(option.id) && (option.workspace_id || !previousIds.has(option.id)))
+      nextOptions.push(option);
+  }
+  if (!inserted) nextOptions.push(...savedProfileOptions);
+  return nextOptions;
 }

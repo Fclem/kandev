@@ -1113,11 +1113,6 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 	// later, unrelated provider overload starts its backoff fresh at attempt 1.
 	s.resetTransientRetry(data.SessionID)
 
-	// Snapshot the turn this event is about to close for the office cost
-	// subscriber's benefit: publishPromptUsage's complete-stream frame for
-	// this same completion is published (and processed) after this handler
-	// returns, by which point completeTurnForSession below has already
-	// removed it from activeTurns. See markReadyTurn's doc comment.
 	if err := s.settleManagedInputTurn(
 		ctx, data.TaskID, data.SessionID, turnAtEventFire, data.AgentExecutionID,
 		messagequeue.ManagedInputStateCompleted, "",
@@ -1129,7 +1124,8 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 
 	// Complete the current turn
 	s.reconcileCompletedCIAutoFixTurn(ctx, data.TaskID, data.SessionID, turnAtEventFire)
-	s.markReadyTurnAt(data.SessionID, data.AgentExecutionID, data.PromptGeneration, turnAtEventFire, time.Now())
+	// Snapshot the turn before owned completion removes it from activeTurns.
+	s.markReadyTurnAt(data.SessionID, data.AgentExecutionID, data.PromptGeneration, turnAtEventFire, s.timingNow())
 	completionCtx := withWorkflowEffect(ctx, workflowEffectForEvent(data))
 	if turnAtEventFire != "" {
 		if err := s.completeTurnForTaskSessionCheckedOwned(
@@ -2762,7 +2758,7 @@ func (s *Service) finishAgentCompleted(
 	if !completionFollowUp {
 		s.reconcileCIAutoFixTurnBeforeCompletion(ctx, data.TaskID, data.SessionID, "")
 	}
-	s.closeTurnTiming(data.SessionID, data.AgentExecutionID, s.currentTurnIDForSession(ctx, data.SessionID), time.Now())
+	s.closeTurnTiming(data.SessionID, data.AgentExecutionID, s.currentTurnIDForSession(ctx, data.SessionID), s.timingNow())
 	completionCtx := withWorkflowEffect(context.WithoutCancel(ctx), workflowEffectForEvent(data))
 	if data.TurnID != "" {
 		if err := s.completeTurnForTaskSessionCheckedOwned(

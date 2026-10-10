@@ -1386,6 +1386,9 @@ type Service struct {
 	readyTurnMarks sync.Map
 	turnTimingMu   sync.Mutex
 	turnTimings    map[string]turnTimingRecord
+	// timingClock stamps turn-timing receipts and close marks; nil uses
+	// time.Now. Tests inject a controlled clock.
+	timingClock func() time.Time
 
 	// readyTurnMarksZeroGen is readyTurnMarks' sibling for promptGeneration==0
 	// completions (transports with no generation tracking at all), which share

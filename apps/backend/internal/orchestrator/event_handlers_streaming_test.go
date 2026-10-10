@@ -1610,7 +1610,7 @@ func findPromptUsageEvent(t *testing.T, eb *recordingEventBus) *lifecycle.Sessio
 // stays running, so agent.ready — not agent.completed — closes the turn.
 // handleAgentReady publishes agent.ready synchronously and closes the turn via
 // completeTurnForSession before the complete-stream frame for the same
-// completion is ever processed (see markReadyTurn's and
+// completion is ever processed (see markReadyTurnAt's and
 // handleCompleteStreamEvent's doc comments), so a live active-turn lookup at
 // that point finds nothing and would store turn_id NULL.
 func TestPublishPromptUsage_NonTerminalCompletionUsesReadyTurnSnapshot(t *testing.T) {
@@ -1717,9 +1717,9 @@ func TestPublishPromptUsage_CompletionPayloadTurnIDOwnsTurn(t *testing.T) {
 }
 
 // TestMarkReadyTurn_ZeroGenerationQueuesFIFO is the unit-level regression
-// test for R2-F3: markReadyTurn's old promptGeneration==0 early return
+// test for R2-F3: markReadyTurnAt's old promptGeneration==0 early return
 // rested on the false premise that generation-less completions never
-// publish agent.ready synchronously (see markReadyTurn's doc comment for the
+// publish agent.ready synchronously (see markReadyTurnAt's doc comment for the
 // actual mechanism — handleCompleteEventMarkState calls MarkReady
 // unconditionally). Two pending marks on the same (session, execution) with
 // no generation to disambiguate them must not collide — they queue FIFO and
@@ -1727,8 +1727,8 @@ func TestPublishPromptUsage_CompletionPayloadTurnIDOwnsTurn(t *testing.T) {
 func TestMarkReadyTurn_ZeroGenerationQueuesFIFO(t *testing.T) {
 	svc := &Service{}
 
-	svc.markReadyTurn("s1", "exec-1", 0, "turn-A")
-	svc.markReadyTurn("s1", "exec-1", 0, "turn-B")
+	svc.markReadyTurnAt("s1", "exec-1", 0, "turn-A", time.Now())
+	svc.markReadyTurnAt("s1", "exec-1", 0, "turn-B", time.Now())
 
 	first, ok := svc.takeReadyTurnMark("s1", "exec-1", 0)
 	require.True(t, ok, "expected a mark for the first pending completion")
@@ -1742,7 +1742,7 @@ func TestMarkReadyTurn_ZeroGenerationQueuesFIFO(t *testing.T) {
 	require.False(t, ok, "queue must be drained after both marks are consumed")
 
 	// A different execution on the same session must not share the queue.
-	svc.markReadyTurn("s1", "exec-2", 0, "turn-C")
+	svc.markReadyTurnAt("s1", "exec-2", 0, "turn-C", time.Now())
 	_, ok = svc.takeReadyTurnMark("s1", "exec-1", 0)
 	require.False(t, ok, "exec-1's (already-drained) queue must not see exec-2's mark")
 	turnC, ok := svc.takeReadyTurnMark("s1", "exec-2", 0)

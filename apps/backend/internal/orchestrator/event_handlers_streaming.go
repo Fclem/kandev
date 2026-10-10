@@ -60,7 +60,7 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		eventExecutionID = payload.AgentID
 	}
 	eventType := payload.Data.Type
-	receivedAt := time.Now()
+	receivedAt := s.timingNow()
 	if !s.resumeAttemptAllowsExecution(payload.SessionID, eventExecutionID, payload.AttemptID) {
 		s.logger.Debug("ignoring stream event from a stale resume attempt",
 			zap.String("task_id", payload.TaskID),
@@ -2204,7 +2204,6 @@ func (s *Service) terminalExecutionMarker(sessionID, executionID string) (termin
 type readyTurnMark struct {
 	turnID    string
 	expiresAt time.Time
-	closedAt  time.Time
 }
 
 func readyTurnKey(sessionID, executionID string, promptGeneration uint64) string {
@@ -2221,7 +2220,7 @@ func readyTurnZeroGenKey(sessionID, executionID string) string {
 	return fmt.Sprintf("%s\x00%s", sessionID, executionID)
 }
 
-// markReadyTurn records the turn ID handleAgentReady confirmed for
+// markReadyTurnAt records the turn ID handleAgentReady confirmed for
 // (sessionID, executionID, promptGeneration), just before completeTurnForSession
 // closes it and removes it from activeTurns. handleCompleteEventMarkState
 // (lifecycle package) publishes agent.ready and closes the turn before the
@@ -2242,17 +2241,13 @@ func readyTurnZeroGenKey(sessionID, executionID string) string {
 // per-process. The durable TurnID on the completion payload closes that
 // cross-subject/cross-instance gap; this mark remains a compatibility fallback
 // for older producers and completion paths without a captured ID.
-func (s *Service) markReadyTurn(sessionID, executionID string, promptGeneration uint64, turnID string) {
-	s.markReadyTurnAt(sessionID, executionID, promptGeneration, turnID, time.Now())
-}
-
 func (s *Service) markReadyTurnAt(sessionID, executionID string, promptGeneration uint64, turnID string, closedAt time.Time) {
 	if sessionID == "" || executionID == "" || turnID == "" {
 		return
 	}
 	s.closeTurnTiming(sessionID, executionID, turnID, closedAt)
 	expiresAt := closedAt.Add(completedExecutionRetention)
-	mark := readyTurnMark{turnID: turnID, expiresAt: expiresAt, closedAt: closedAt}
+	mark := readyTurnMark{turnID: turnID, expiresAt: expiresAt}
 	if promptGeneration == 0 {
 		s.pushZeroGenReadyTurnMark(sessionID, executionID, mark)
 		return

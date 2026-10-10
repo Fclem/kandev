@@ -29,6 +29,13 @@ func (r turnTimingRecord) measurement(turnID string, completedAt time.Time, canc
 	return out, true
 }
 
+func (s *Service) timingNow() time.Time {
+	if s.timingClock != nil {
+		return s.timingClock()
+	}
+	return time.Now()
+}
+
 // Timing records are correlated by session, execution and Kandev turn ID. The
 // turn ID is unique per turn; prompt generations are not stamped on every
 // stream event kind (turn_started carries none on ACP transports), so they

@@ -5,7 +5,6 @@ import type { Message } from "@/lib/types/http";
 import { kandevToolStemOf, type ToolCallMetadata } from "@/components/task/chat/types";
 import { extractKandevArgs, extractMcpResult } from "./kandev/parse";
 import { getKandevRenderer } from "./kandev/registry";
-import { hasKandevRenderer } from "./kandev/has-renderer";
 import { PermissionActionRow } from "./permission-action-row";
 import { normalizeToolCallStatus } from "./tool-status";
 import {
@@ -15,7 +14,6 @@ import {
 } from "./use-permission-handlers";
 import { KandevPermissionUIProvider, type KandevPermissionUIState } from "./kandev/shared";
 import type { PermissionRequestMetadata } from "./use-permission-handlers";
-export { hasKandevRenderer };
 
 // Approval falls through to `undefined` on purpose: the tool_call status
 // stays the source of truth so an approved-but-still-pending tool does not

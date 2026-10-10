@@ -12,13 +12,12 @@ type MessageTurnMetricsProps = {
   sessionId: string;
 };
 
-function MetricRow({ label, value, title }: { label: string; value: string; title?: string }) {
+function MetricRow({ label, value, help }: { label: string; value: string; help?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-sm">
-      <dt className="min-w-0 text-muted-foreground break-words" title={title}>
-        {label}
-      </dt>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+      <dt className="min-w-0 text-muted-foreground break-words">{label}</dt>
       <dd className="shrink-0 font-medium tabular-nums text-right">{value}</dd>
+      {help && <dd className="order-last basis-full text-xs text-muted-foreground">{help}</dd>}
     </div>
   );
 }
@@ -58,14 +57,14 @@ function MetricRows({
         <MetricRow
           label={t("task:turnMetrics.ttft")}
           value={durationLabel(metrics.ttftMs, units)}
-          title={t("task:turnMetrics.ttftHelp")}
+          help={t("task:turnMetrics.ttftHelp")}
         />
       )}
       {metrics.tokensPerSecond !== null && (
         <MetricRow
           label={t("task:turnMetrics.tokensPerSecond")}
           value={rateFormatter.format(metrics.tokensPerSecond)}
-          title={t("task:turnMetrics.tokensPerSecondHelp")}
+          help={t("task:turnMetrics.tokensPerSecondHelp")}
         />
       )}
       {metrics.inputTokens !== null && (

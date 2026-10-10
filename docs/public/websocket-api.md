@@ -457,6 +457,48 @@ task.walkthrough.get
 
 There are no ordinary dispatcher registrations for direct workflow-step update, delete, or reorder requests. Those operations are available through the workflow HTTP/configuration surfaces and relevant MCP tools.
 
+### Partial workflow updates
+
+`workflow.update` and REST `PATCH /api/v1/workflows/:id` change only supplied
+`name`, `description`, `prompt`, and `agent_profile_id` fields. Omitted fields
+and JSON `null` retain stored values; explicit empty strings clear them. Concurrent
+updates to different fields retain both edits across backend services. Supplying
+all four fields, as the workflow editor does, replaces all four values.
+
+Responses and `workflow.updated` events describe the row observed by each write.
+Concurrent events may arrive in a different order from writes. Reconcile with
+`workflow.get` after a gap or an uncertain request outcome.
+
+### Partial task updates
+
+`task.update` and REST `PATCH /api/v1/tasks/:id` change only supplied fields. Concurrent
+ordinary updates to different fields retain both edits, including requests handled by
+separate backend services. Omitted fields and JSON `null` retain current values; explicit
+empty strings keep the field's existing clear behavior, and `repositories: []` clears
+repository associations.
+
+A supplied `metadata` object retains the existing replacement or pending-title merge
+behavior. It does not merge arbitrary keys from competing requests. Server-owned
+lifecycle and handoff records remain protected, and an explicit title resolves pending
+agent naming.
+
+The REST `PATCH /api/v1/tasks/:id/port-forwarding` preference uses the explicit
+metadata merge path. Concurrent admitted merges preserve different ordinary top-level
+keys and omitted task fields across backend services. Supplying the same key uses the
+last committed value. This does not extend ordinary metadata replacement or later
+full-snapshot writes into per-key merges, and nested/null behavior keeps the current
+pending-title database semantics.
+
+GitHub issue linking and unlinking preserve unrelated metadata and omitted task fields,
+including concurrent port-forwarding preference changes. A link replaces the complete
+issue identity together; unlink removes its five issue keys. Legacy issue-watch metadata
+remains separate. These operations retain the ordinary task update notification path.
+
+This guarantee covers ordinary partial updates and participating field-scoped writes.
+Internal full-snapshot and exact/versioned commands retain their own contracts. Responses
+and notifications may observe a later commit; they do not establish a total event order
+or an exact mutation receipt.
+
 ### Sessions, messages, agents, and orchestration
 
 ```text
@@ -787,6 +829,16 @@ mcp.write_task_document
 ```
 
 These registrations back Kandev's agent/MCP bridge. The subset registered in a process depends on its MCP handler mode and enabled capabilities. They are internal transport shims: raw `/ws` rejects every one of them before handler dispatch. Use the MCP tools exposed to the agent so tool schemas, task/session scoping, and compatibility handling remain intact. In particular, `mcp.stop_task` is the internal action behind task-mode `stop_task_kandev`; External MCP does not register that tool.
+
+The `mcp.get_task_plan` shim accepts optional `offset`, `limit`, and
+`expected_version` from the agent tool. Offset and limit count Unicode code
+points. Supplying either selects an exact bounded fragment; omitting both
+preserves the full read. Partial results include the snapshot version, whole
+plan lengths, returned lengths, `has_more`, and `next_offset`; a stale expected
+version returns a conflict without content. These fields do not change the
+browser's `task.plan.get` contract. Use
+[the MCP plan-read guide](automation-and-mcp.md#read-only-the-relevant-part-of-a-plan)
+for defaults, bounds, and examples.
 
 ## Emitted notifications and recipients
 

@@ -17,6 +17,9 @@ const quickChatSessions = vi.hoisted(
   () => [] as Array<{ sessionId: string; taskId?: string; agentProfileId?: string }>,
 );
 const useEnsureTaskSession = vi.hoisted(() => vi.fn());
+const configChatRestarts = vi.hoisted(
+  () => ({}) as Record<string, { sessionId: string; status: string; source: string }>,
+);
 const useTask = vi.hoisted(() => vi.fn());
 const useSessionResumption = vi.hoisted(() =>
   vi.fn(() => ({
@@ -33,6 +36,7 @@ const useSessionResumption = vi.hoisted(() =>
   })),
 );
 const useTaskStatusSummary = vi.hoisted(() => vi.fn());
+const quickChatContentSpy = vi.hoisted(() => vi.fn());
 const TEST_IDS = vi.hoisted(() => ({
   sessionRecoveryCard: "session-bootstrap-recovery-card",
   quickChatContent: "quick-chat-content",
@@ -43,7 +47,7 @@ vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     selector({
       taskSessions: { items: sessionRows },
-      quickChat: { sessions: quickChatSessions },
+      quickChat: { sessions: quickChatSessions, configChatRestarts },
       agentProfiles: { items: [] },
     }),
 }));
@@ -56,7 +60,10 @@ vi.mock("@/components/task/passthrough-terminal", () => ({
   PassthroughTerminal: () => <div data-testid="passthrough-terminal" />,
 }));
 vi.mock("./quick-chat-content", () => ({
-  QuickChatContent: () => <div data-testid={TEST_IDS.quickChatContent} />,
+  QuickChatContent: (props: Record<string, unknown>) => {
+    quickChatContentSpy(props);
+    return <div data-testid={TEST_IDS.quickChatContent} />;
+  },
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -82,11 +89,25 @@ afterEach(() => {
   cleanup();
   delete sessionRows[session.sessionId];
   quickChatSessions.length = 0;
+  delete configChatRestarts[WORKSPACE_ID];
   vi.clearAllMocks();
   useTask.mockReset();
   useTask.mockReturnValue(null);
   useTaskStatusSummary.mockReset();
   useTaskStatusSummary.mockReturnValue(undefined);
+});
+
+it("unmounts retired configuration content before hydration or automatic resumption can run", () => {
+  configChatRestarts[WORKSPACE_ID] = {
+    sessionId: session.sessionId,
+    status: "restarting",
+    source: "local",
+  };
+  render(<QuickChatSessionView session={{ ...session, kind: "config" }} />);
+  expect(useEnsureTaskSession).not.toHaveBeenCalled();
+  expect(useSessionResumption).not.toHaveBeenCalled();
+  expect(screen.queryByTestId(TEST_IDS.quickChatContent)).toBeNull();
+  expect(screen.getByRole("status").textContent).toBe("configChat:restartingSession");
 });
 
 // @covers AC-TASKS-QUICK-CHAT-EXPIRATION-001.2
@@ -99,6 +120,7 @@ describe("QuickChatSessionView session resumption", () => {
 
     expect(useSessionResumption).toHaveBeenCalledWith(DESCRIPTOR_TASK_ID, session.sessionId, null, {
       preventAutoResume: false,
+      skipAutomaticRecovery: false,
     });
   });
 
@@ -109,6 +131,7 @@ describe("QuickChatSessionView session resumption", () => {
 
     expect(useSessionResumption).toHaveBeenLastCalledWith(null, session.sessionId, null, {
       preventAutoResume: false,
+      skipAutomaticRecovery: false,
     });
 
     sessionRows[session.sessionId] = { task_id: HYDRATED_TASK_ID };
@@ -118,7 +141,7 @@ describe("QuickChatSessionView session resumption", () => {
       DESCRIPTOR_TASK_ID,
       session.sessionId,
       null,
-      { preventAutoResume: false },
+      { preventAutoResume: false, skipAutomaticRecovery: false },
     );
   });
 
@@ -129,6 +152,7 @@ describe("QuickChatSessionView session resumption", () => {
 
     expect(useSessionResumption).toHaveBeenCalledWith(HYDRATED_TASK_ID, session.sessionId, null, {
       preventAutoResume: false,
+      skipAutomaticRecovery: false,
     });
   });
 
@@ -140,6 +164,7 @@ describe("QuickChatSessionView session resumption", () => {
 
     expect(useSessionResumption).toHaveBeenCalledWith(HYDRATED_TASK_ID, session.sessionId, true, {
       preventAutoResume: false,
+      skipAutomaticRecovery: false,
     });
   });
 
@@ -148,6 +173,7 @@ describe("QuickChatSessionView session resumption", () => {
 
     expect(useSessionResumption).toHaveBeenLastCalledWith(null, session.sessionId, null, {
       preventAutoResume: false,
+      skipAutomaticRecovery: false,
     });
 
     quickChatSessions.push({ sessionId: session.sessionId, taskId: HYDRATED_TASK_ID });
@@ -157,7 +183,7 @@ describe("QuickChatSessionView session resumption", () => {
       HYDRATED_TASK_ID,
       session.sessionId,
       false,
-      { preventAutoResume: true },
+      { preventAutoResume: true, skipAutomaticRecovery: false },
     );
   });
 
@@ -166,6 +192,7 @@ describe("QuickChatSessionView session resumption", () => {
 
     expect(useSessionResumption).toHaveBeenLastCalledWith(null, session.sessionId, null, {
       preventAutoResume: false,
+      skipAutomaticRecovery: false,
     });
 
     sessionRows[session.sessionId] = { task_id: "task-after-hydration" };
@@ -175,7 +202,7 @@ describe("QuickChatSessionView session resumption", () => {
       "task-after-hydration",
       session.sessionId,
       null,
-      { preventAutoResume: false },
+      { preventAutoResume: false, skipAutomaticRecovery: false },
     );
   });
 
@@ -192,7 +219,7 @@ describe("QuickChatSessionView session resumption", () => {
       HYDRATED_TASK_ID,
       session.sessionId,
       false,
-      { preventAutoResume: false },
+      { preventAutoResume: false, skipAutomaticRecovery: false },
     );
   });
 
@@ -203,7 +230,7 @@ describe("QuickChatSessionView session resumption", () => {
       HYDRATED_TASK_ID,
       session.sessionId,
       false,
-      { preventAutoResume: true },
+      { preventAutoResume: true, skipAutomaticRecovery: false },
     );
   });
 
@@ -225,6 +252,7 @@ describe("QuickChatSessionView session resumption", () => {
 
     expect(useSessionResumption).toHaveBeenCalledWith(HYDRATED_TASK_ID, session.sessionId, false, {
       preventAutoResume: true,
+      skipAutomaticRecovery: false,
     });
   });
 
@@ -244,7 +272,7 @@ describe("QuickChatSessionView session resumption", () => {
       HYDRATED_TASK_ID,
       session.sessionId,
       false,
-      { preventAutoResume: false },
+      { preventAutoResume: false, skipAutomaticRecovery: false },
     );
   });
 
@@ -371,5 +399,76 @@ describe("QuickChatSessionView session resumption", () => {
     );
     expect(screen.getByTestId("passthrough-terminal")).toBeTruthy();
     expect(screen.queryByTestId(TEST_IDS.quickChatContent)).toBeNull();
+  });
+});
+
+// @covers task-05-popover-shell.md#build-decisions "automaticRecovery" "hideSessionSelectors" "taskArchiveState" "initialDraft" "transformOutgoing"
+describe("QuickChatSessionView new props", () => {
+  it("maps automaticRecovery false to skipAutomaticRecovery true", () => {
+    sessionRows[session.sessionId] = { task_id: HYDRATED_TASK_ID };
+
+    render(<QuickChatSessionView session={session} automaticRecovery={false} />);
+
+    expect(useSessionResumption).toHaveBeenCalledWith(HYDRATED_TASK_ID, session.sessionId, null, {
+      skipAutomaticRecovery: true,
+      preventAutoResume: false,
+    });
+  });
+
+  it("keeps skipAutomaticRecovery false when automaticRecovery is left at its default", () => {
+    sessionRows[session.sessionId] = { task_id: HYDRATED_TASK_ID };
+
+    render(<QuickChatSessionView session={session} />);
+
+    expect(useSessionResumption).toHaveBeenCalledWith(HYDRATED_TASK_ID, session.sessionId, null, {
+      skipAutomaticRecovery: false,
+      preventAutoResume: false,
+    });
+  });
+
+  it("overrides resolveTaskArchiveState with an explicit taskArchiveState prop, null included", () => {
+    sessionRows[session.sessionId] = { task_id: HYDRATED_TASK_ID };
+    useTask.mockReturnValue({ isArchived: true });
+
+    render(<QuickChatSessionView session={session} taskArchiveState={null} />);
+
+    expect(useSessionResumption).toHaveBeenCalledWith(HYDRATED_TASK_ID, session.sessionId, null, {
+      skipAutomaticRecovery: false,
+      preventAutoResume: false,
+    });
+  });
+
+  it("forwards hideSessionSelectors to QuickChatContent's minimalToolbar", () => {
+    render(<QuickChatSessionView session={session} hideSessionSelectors />);
+
+    expect(quickChatContentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ minimalToolbar: true }),
+    );
+  });
+
+  it("keeps kind config's minimal toolbar when hideSessionSelectors is left unset", () => {
+    render(<QuickChatSessionView session={{ ...session, kind: "config" }} />);
+
+    expect(quickChatContentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ minimalToolbar: true }),
+    );
+  });
+
+  it("forwards initialDraft to QuickChatContent unchanged", () => {
+    render(<QuickChatSessionView session={session} initialDraft="why is KAN-418 here?" />);
+
+    expect(quickChatContentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ initialDraft: "why is KAN-418 here?" }),
+    );
+  });
+
+  it("forwards transformOutgoing to QuickChatContent unchanged", () => {
+    const transformOutgoing = (message: string) => `About t-1: ${message}`;
+
+    render(<QuickChatSessionView session={session} transformOutgoing={transformOutgoing} />);
+
+    expect(quickChatContentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ transformOutgoing }),
+    );
   });
 });

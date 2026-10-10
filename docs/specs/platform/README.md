@@ -35,6 +35,11 @@ Shared Git diff file metadata belongs to Platform, including commit and
 cumulative comparisons. UI retains historical-file navigation and merge-detail
 presentation; Tasks retains environment and repository bindings.
 
+Shared local Git commit evidence also belongs to Platform, including pushed
+reachability against the repository's tracked upstream. Tasks retains provider
+contribution provenance and mutation policy; Workspaces retains comparison-base
+and repository-context identity.
+
 ## Exclusions
 
 - Executor-specific runtime environments belong to the [executor
@@ -68,6 +73,7 @@ presentation; Tasks retains environment and repository bindings.
 - [Browser console retention](requirements/browser-console-retention.md)
 - [Diagnostic logging](requirements/diagnostic-logging.md)
 - [Runtime failure attribution](requirements/runtime-failure-attribution.md)
+- [Durable agent delivery](requirements/durable-agent-delivery.md) (draft)
 - [Duration-aware E2E sharding and CI reliability](requirements/e2e-duration-aware-sharding.md)
 - [External CI runner capacity](requirements/external-e2e-runner-capacity.md)
 - [Expected runtime log severity](requirements/expected-runtime-log-severity.md)
@@ -125,6 +131,8 @@ presentation; Tasks retains environment and repository bindings.
 - [Runtime failure attribution](system-design/runtime-failure-attribution.md)
 - [Expected runtime log severity](system-design/expected-runtime-log-severity.md)
 - [Frontend feature state](system-design/features-slice-state.md)
+- [Durable agent delivery](system-design/durable-agent-delivery.md) (draft)
+- [Durable agent stream processing](system-design/durable-agent-stream-processing.md) (draft)
 - [Duration-aware E2E sharding and CI reliability](system-design/e2e-duration-aware-sharding.md)
 - [External CI runner capacity](system-design/external-e2e-runner-capacity.md)
 - [Health Endpoint — Surface the Running Version](system-design/health-endpoint-version.md)

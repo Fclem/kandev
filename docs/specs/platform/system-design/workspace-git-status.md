@@ -4,7 +4,7 @@ system: platform
 requirements:
   - REQ-PLATFORM-WORKSPACE-GIT-STATUS-001
 created: 2026-07-19
-updated: 2026-10-02
+updated: 2026-10-03
 owners:
   - kandev
 ---
@@ -178,6 +178,7 @@ Keep these consumers explicit. Add `details=wait` to the existing status routes 
 The runtime client methods used by these consumers request that mode. Foreground Changes requests do not.
 
 The wait joins the current fingerprint's bounded enrichment completion, without another job or caller-owned publication.
+Record each ready result's basic source revision. Under the enrichment lock, accept that completion for the observed epoch/revision before selecting a job.
 If a newer fingerprint replaces that job, return a superseded/unavailable result instead of unrelated details.
 Caller cancellation ends only its wait. Tracker cancellation still drains the worker.
 If detail generation fails, these consumers receive an error or explicit unavailable result under their existing retry policy.
@@ -225,8 +226,9 @@ The implementation must reject all observable identity/content changes across it
 Preserving timestamps alone cannot defeat content validation for enriched files.
 Continuously mutating files can remain pending or unavailable. They must not receive unrelated old details.
 
-Runtime delivery captures immutable execution identity, environment binding, workspace identity, and stream generation.
-Revalidate these before publishing a delayed callback, initial-subscribe read, or HTTP result. Workspace callbacks are checked against the execution currently registered for their session.
+Before publishing callbacks or reads, revalidate execution, environment, workspace, and stream identity.
+Reject callbacks from executions no longer current for their session.
+See [stream continuity](workspace-stream-continuity.md) for ACP callback lifetime.
 After root promotion, the current environment root or active `TaskEnvironmentRepo.WorktreePath` may authorize an existing execution's exact working directory. Revalidate the inventory after async refresh; reject removed paths.
 Tracker epochs from different sibling executions are not numerically ordered.
 Preserve requested-session-first source probing. Eligible siblings remain valid sources for their common environment.
@@ -269,9 +271,8 @@ The multi-repository envelope still permits healthy repositories alongside faile
 A whole transport error emits an environment-scoped unavailable result for the known repository inventory.
 If inventory is unknown, use an environment-level state. Do not create a fake root repository.
 
-New producers always set `files_complete` explicitly.
-Legacy detailed completed snapshots remain readable. A known compact `live_monitor` row is always summary-only.
-An empty array of filenames from a compact row is insufficient to claim clean status.
+New producers set `files_complete` explicitly. Legacy detailed snapshots remain readable.
+A compact `live_monitor` row is summary-only; empty filenames cannot certify clean status.
 Persist snapshot quality in compact metadata if needed, but do not add full live diff persistence or a schema migration.
 Runtime ordering tokens are not durable ordering tokens across restarts.
 The database keeps its existing environment/repository selection and timestamp authority.
@@ -333,7 +334,7 @@ Enrichment-only arrival must not steal focus through an empty intermediate state
 | No complete snapshot, request active | Loading status without the clean empty message. |
 | No complete snapshot, request failed | Toolbar warning and delayed automatic recovery. |
 | Complete clean snapshot, no other Changes content | Existing clean empty message. |
-| Dirty basic snapshot | File rows immediately, with pending line totals and diffs. |
+| Dirty basic snapshot | File rows immediately; retain eligible prior displayed counts and diffs during enrichment. |
 | Valid prior snapshot during refresh/failure | Keep rows; show toolbar loading or warning status. |
 | Partial multi-repository failure | Keep healthy rows; identify failures in the warning tooltip and recover automatically. |
 
@@ -347,7 +348,7 @@ Review hashes and editor diff models cannot treat a pending empty string as fres
 
 Desktop and phone use the shared [toolbar loading/warning presentation](../../ui/system-design/changes-loading-feedback.md).
 Git read failures recover automatically without a body banner or manual Retry control.
-Diff viewers retain localized pending placeholders and their existing recovery behavior.
+Diff viewers follow [refresh continuity](git-refresh-continuity.md); initial loads retain localized placeholders.
 The full-height phone drawer retains Back/dismiss, focus return, dynamic viewport, and safe-area behavior.
 Changes keeps one vertical scroller. Existing actions retain their desktop and touch geometry.
 Status uses restrained, localized accessible announcements.

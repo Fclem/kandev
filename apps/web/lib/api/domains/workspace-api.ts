@@ -12,6 +12,7 @@ import type {
   Repository,
   TaskSession,
 } from "@/lib/types/http";
+import type { MessageAttachment } from "@/lib/services/session-launch-service";
 
 // Workspace operations
 export async function createWorkspace(
@@ -301,6 +302,7 @@ type StartQuickChatCommon = {
   agent_profile_id?: string;
   executor_id?: string;
   prompt?: string;
+  attachments?: MessageAttachment[];
   auto_title?: boolean;
 };
 
@@ -382,6 +384,8 @@ export type QuickChatSessionResponse = {
 export type ListQuickChatSessionsResponse = {
   sessions: QuickChatSessionResponse[];
   task_sessions: TaskSession[];
+  config_chat_restart_pending?: boolean;
+  config_chat_retiring_session_id?: string;
 };
 
 /**
@@ -403,6 +407,7 @@ export type StartConfigChatRequest = {
   agent_profile_id?: string;
   executor_id?: string;
   prompt?: string;
+  attachments?: MessageAttachment[];
 };
 
 export type StartConfigChatResponse = {
@@ -420,4 +425,29 @@ export async function startConfigChat(
     ...options,
     init: { method: "POST", body: JSON.stringify(payload), ...(options?.init ?? {}) },
   });
+}
+
+export type ConfigChatRestartFailure = {
+  code: string;
+  stage: "validate" | "stop" | "delete" | "create" | "start";
+  old_deleted: boolean;
+  replacement?: StartConfigChatResponse;
+};
+
+export async function restartConfigChat(
+  workspaceId: string,
+  payload: { task_id: string; session_id: string },
+  confirmationId: string,
+) {
+  return fetchJson<StartConfigChatResponse>(
+    `/api/v1/workspaces/${workspaceId}/config-chat/restart`,
+    {
+      cache: "no-store",
+      init: {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "X-Kandev-Task-Delete-Confirmation": confirmationId },
+      },
+    },
+  );
 }

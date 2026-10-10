@@ -39,6 +39,13 @@ type MockEventBus struct {
 	publishErrors map[string]error
 }
 
+// These read/cascade fakes reject a field mutation outside their test scope.
+type unsupportedTaskFieldUpdater struct{}
+
+func (unsupportedTaskFieldUpdater) UpdateTaskFieldsWithParentAdmission(context.Context, string, models.TaskFieldUpdate, repository.TaskParentValidator) (*models.TaskFieldUpdateResult, error) {
+	return nil, errors.New("field updates are not supported by this test repository")
+}
+
 type recordingTaskClarificationCanceller struct {
 	sessions    []string
 	hasDeadline []bool
@@ -241,6 +248,9 @@ func createTestServiceWithTaskAndSessionRepos(
 		Usage:             repo,
 		BackgroundWork:    repo,
 	}, eventBus, log, RepositoryDiscoveryConfig{})
+	svc.SetProjectRepositorySourceReader(projectRepositorySourceReaderFunc(func(context.Context, string) (ProjectRepositorySources, error) {
+		return ProjectRepositorySources{WorkspaceID: "ws-1"}, nil
+	}))
 	svc.SetWorkspaceBootstrapper(repo)
 	// Reach comes from the unit tree, so the service tests wire the real one
 	// rather than a stub: a resolver the wiring never calls protects nothing.

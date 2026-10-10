@@ -665,6 +665,10 @@ deletion is not success.
 
 ## Find and organize tasks
 
+In **List** view, compact and detailed task rows show critical, high, and low
+priority indicators after the task title on desktop and phones. Medium priority
+remains unmarked.
+
 On desktop and tablet, the header switches between **Kanban**, **Pipeline**,
 **Threads**, and **List**. Kanban and Pipeline show the same workflow steps in
 different layouts. Threads shows agent conversations side by side. Kandev

@@ -117,6 +117,7 @@ function useWorkflowsFetchEffect(
           agent_profile_id: workflow.agent_profile_id,
           hidden: workflow.hidden,
           style: workflow.style,
+          workflowTemplateId: workflow.workflow_template_id,
         }));
         setWorkflows(
           mapped,

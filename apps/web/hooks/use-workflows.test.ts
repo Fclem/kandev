@@ -251,6 +251,33 @@ describe("useWorkflows — explicit workspace selection", () => {
       ),
     );
   });
+
+  it("keeps hidden Improve Kandev workflow identity when the store is refreshed", async () => {
+    mockListWorkflows.mockResolvedValueOnce({
+      workflows: [
+        {
+          ...makeWorkflow("wf-improve", "ws-B"),
+          hidden: true,
+          workflow_template_id: "improve-kandev",
+        },
+      ],
+    });
+
+    renderHook(() => useWorkflows("ws-B", true));
+
+    await waitFor(() =>
+      expect(mockSetWorkflows).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            id: "wf-improve",
+            hidden: true,
+            workflowTemplateId: "improve-kandev",
+          }),
+        ],
+        undefined,
+      ),
+    );
+  });
 });
 
 // eslint-disable-next-line max-lines-per-function -- related workspace recovery cases share one fixture

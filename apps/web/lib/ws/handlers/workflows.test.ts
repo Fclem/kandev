@@ -125,7 +125,7 @@ describe("workflow.created handler — preserves user filter", () => {
     expect(store.getState().workflows.activeId).toBe("wf-1");
   });
 
-  it("preserves workflow template identity from created events", () => {
+  it("preserves workflow template identity, hidden flag, and style from created events", () => {
     const store = makeStore([], null);
     const handlers = registerWorkflowsHandlers(store);
 
@@ -134,12 +134,16 @@ describe("workflow.created handler — preserves user filter", () => {
         id: IMPROVE_WORKFLOW_ID,
         workspace_id: "ws-1",
         name: "Improve",
+        hidden: true,
+        style: "kanban",
         workflow_template_id: IMPROVE_WORKFLOW_TEMPLATE_ID,
-      } as WorkflowPayload),
+      }),
     );
 
     expect(store.getState().workflows.items[0]).toMatchObject({
       id: IMPROVE_WORKFLOW_ID,
+      hidden: true,
+      style: "kanban",
       workflowTemplateId: IMPROVE_WORKFLOW_TEMPLATE_ID,
     });
   });

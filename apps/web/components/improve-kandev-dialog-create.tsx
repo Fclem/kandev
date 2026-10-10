@@ -323,7 +323,7 @@ function BootstrapStatusSlot({
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
-              {t("common:kandevKeepsASmallInMemory")}
+              {t("common:improveKandevLogsHelp")}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

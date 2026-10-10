@@ -232,7 +232,7 @@
   "kandevAllowsEveryAgentPermissionRequest": "Kandev 會批准代理程式的每一項權限請求，而不會向你提示。",
   "kandevCouldNotLoad": "Kandev 無法載入。",
   "kandevIsOpenSourceAndYou": "Kandev 是開源的，你可以一起把它做得更好。",
-  "kandevKeepsASmallInMemory": "Kandev 會在記憶體中保留一小段最近後端日誌與瀏覽器控制台事件的環形緩衝區。啟用後，這些日誌會寫入本機臨時資料夾，檔案路徑會追加到任務描述中，便於代理程式在排查時讀取。",
+  "improveKandevLogsHelp": "啟用後，Kandev 會將最近的後端、前端和執行時日誌收集到一個診斷 ZIP 中，儲存到本機臨時資料夾，並將其路徑追加到任務描述中，便於代理程式在排查時讀取。不包含代理程式工作階段日誌。",
   "lastRefreshFailed": "上次重新整理失敗：{{error}}",
   "latestReleaseNotes": "最新發行說明",
   "loading": "載入中…",

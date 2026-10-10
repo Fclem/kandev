@@ -792,8 +792,9 @@ func mapWorkflowItemState(workflow taskdto.WorkflowDTO) map[string]any {
 		"description":                    workflow.Description,
 		"sortOrder":                      workflow.SortOrder,
 		taskmodels.MetaKeyAgentProfileID: nullString(workflow.AgentProfileID),
-		"workflowTemplateId":             workflow.WorkflowTemplateID,
+		"hidden":                         workflow.Hidden,
 		"style":                          workflow.Style,
+		"workflowTemplateId":             workflow.WorkflowTemplateID,
 	}
 }
 

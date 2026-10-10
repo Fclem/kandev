@@ -26,6 +26,8 @@ type BootstrapOverrides = {
   repositoryId?: string;
   /** Override the workflow id (must belong to the workspace). */
   workflowId?: string;
+  /** Override the issue-only workflow id (must belong to the workspace). */
+  issueWorkflowId?: string;
   github_login?: string;
   has_write_access?: boolean;
   fork_status?: ForkStatus;
@@ -109,6 +111,37 @@ async function mockImproveKandevApis(
       }),
     });
   });
+
+  // Scenarios that do not exercise diagnostics still submit with log capture
+  // on, so they get an immediately ready bundle instead of a real collection
+  // job. Diagnostic scenarios register their own routes afterwards, which take
+  // precedence.
+  await page.route(
+    (url) => url.pathname === "/api/v1/system/logs/bundles",
+    async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "improve-default-bundle",
+          status: "ready",
+          sources: ["backend", "frontend", "runtime"],
+        }),
+      });
+    },
+  );
+  await page.route("**/api/v1/system/improve-kandev/bundle/lease", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        path: `${bundleDir}/diagnostic-bundle.zip`,
+        status: "ready",
+        sources: ["backend", "frontend", "runtime"],
+      }),
+    }),
+  );
 }
 
 async function mockDiagnosticAttachment(
@@ -207,31 +240,42 @@ test.describe("Improve Kandev dialog", () => {
     expect(submitted[0].description).toContain("/leased/improve-kandev/diagnostic-bundle.zip");
   });
 
-  test("diagnostic attachment failure does not block task creation", async ({
-    testPage,
-    apiClient,
-    seedData,
-  }) => {
-    await apiClient.createWorkspace("Improve Kandev");
-    await mockImproveKandevApis(testPage, seedData, { has_write_access: true });
-    const { submitted, bundleRequests } = await mockDiagnosticAttachment(testPage, "expired");
-    await testPage.goto("/");
-    await testPage.getByTestId("sidebar-improve-kandev-button").click();
-    await testPage.getByTestId("improve-kandev-proceed").click();
+  for (const failure of [
+    { label: "expired bundle", terminalStatus: "expired" as const, leaseRejected: false },
+    { label: "lease rejected", terminalStatus: "partial" as const, leaseRejected: true },
+  ]) {
+    test(`diagnostic attachment failure does not block task creation (${failure.label})`, async ({
+      testPage,
+      apiClient,
+      seedData,
+    }) => {
+      await apiClient.createWorkspace("Improve Kandev");
+      await mockImproveKandevApis(testPage, seedData, { has_write_access: true });
+      const { submitted, bundleRequests } = await mockDiagnosticAttachment(
+        testPage,
+        failure.terminalStatus,
+        failure.leaseRejected,
+      );
+      await testPage.goto("/");
+      await testPage.getByTestId("sidebar-improve-kandev-button").click();
+      await testPage.getByTestId("improve-kandev-proceed").click();
 
-    const dialog = testPage.getByTestId("create-task-dialog");
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog.getByText(/push directly to a branch on the upstream repo/i)).toBeVisible();
-    await dialog.getByTestId("task-title-input").fill("Create task without expired bundle");
-    await dialog.getByTestId("task-description-input").fill("Keep task creation available.");
-    await dialog.getByTestId("submit-start-agent").click();
-    await expect(dialog).toBeHidden({ timeout: 10_000 });
+      const dialog = testPage.getByTestId("create-task-dialog");
+      await expect(dialog).toBeVisible({ timeout: 10_000 });
+      await expect(
+        dialog.getByText(/push directly to a branch on the upstream repo/i),
+      ).toBeVisible();
+      await dialog.getByTestId("task-title-input").fill(`Create task with ${failure.label}`);
+      await dialog.getByTestId("task-description-input").fill("Keep task creation available.");
+      await dialog.getByTestId("submit-start-agent").click();
+      await expect(dialog).toBeHidden({ timeout: 10_000 });
 
-    await expect.poll(() => submitted.length).toBe(1);
-    expect(bundleRequests).toEqual([{ sources: ["backend", "frontend", "runtime"] }]);
-    expect(submitted[0].description).toContain("Keep task creation available.");
-    expect(submitted[0].description).not.toContain("diagnostic-bundle.zip");
-  });
+      await expect.poll(() => submitted.length).toBe(1);
+      expect(bundleRequests).toEqual([{ sources: ["backend", "frontend", "runtime"] }]);
+      expect(submitted[0].description).toContain("Keep task creation available.");
+      expect(submitted[0].description).not.toContain("diagnostic-bundle.zip");
+    });
+  }
 
   test("dismissed intro is persisted and later opens the create dialog directly", async ({
     testPage,

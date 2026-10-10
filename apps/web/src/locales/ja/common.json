@@ -237,7 +237,7 @@
   "kandevAllowsEveryAgentPermissionRequest": "Kandevは、エージェントのすべての権限要求を確認なしで許可する。",
   "kandevCouldNotLoad": "Kandevを読み込めなかった。",
   "kandevIsOpenSourceAndYou": "Kandevはオープンソース。改善に協力できる。",
-  "kandevKeepsASmallInMemory": "Kandevは、最新のバックエンドログとブラウザコンソールイベントを小さなメモリ内リングバッファに保持する。有効時は、そのログを書き込み用にマシン上の一時フォルダへ保存し、エージェントが調査中に読めるよう、ファイルパスをタスク説明へ追加する。",
+  "improveKandevLogsHelp": "有効時は、Kandevが最近のバックエンド、フロントエンド、ランタイムのログを1つの診断ZIPにまとめ、マシン上の一時フォルダへ保存し、エージェントが調査中に読めるよう、そのパスをタスク説明へ追加する。エージェントのセッションログは含まれない。",
   "lastRefreshFailed": "最新更新失敗: {{error}}",
   "latestReleaseNotes": "最新リリースノート",
   "loading": "読み込み中…",

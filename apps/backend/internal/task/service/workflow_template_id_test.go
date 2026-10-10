@@ -8,7 +8,7 @@ import (
 	"github.com/kandev/kandev/internal/task/models"
 )
 
-func TestService_CreateWorkflowEventIncludesTemplateID(t *testing.T) {
+func TestService_CreateWorkflowEventIncludesTemplateIDAndHidden(t *testing.T) {
 	svc, eventBus, repo := createTestService(t)
 	ctx := context.Background()
 	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "workspace-1", Name: "Workspace"}); err != nil {
@@ -19,13 +19,13 @@ func TestService_CreateWorkflowEventIncludesTemplateID(t *testing.T) {
 		WorkspaceID:        "workspace-1",
 		Name:               "Open issue",
 		WorkflowTemplateID: &templateID,
+		Hidden:             true,
 	}); err != nil {
 		t.Fatalf("create workflow: %v", err)
 	}
 
-	published := eventBus.GetPublishedEvents()
 	var payload map[string]interface{}
-	for _, event := range published {
+	for _, event := range eventBus.GetPublishedEvents() {
 		if event.Type == events.WorkflowCreated {
 			payload, _ = event.Data.(map[string]interface{})
 		}
@@ -33,5 +33,8 @@ func TestService_CreateWorkflowEventIncludesTemplateID(t *testing.T) {
 	got, ok := payload["workflow_template_id"].(*string)
 	if !ok || got == nil || *got != templateID {
 		t.Fatalf("workflow.created payload = %#v, want workflow_template_id %q", payload, templateID)
+	}
+	if payload["hidden"] != true {
+		t.Fatalf("workflow.created hidden = %#v, want true", payload["hidden"])
 	}
 }

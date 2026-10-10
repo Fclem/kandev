@@ -84,6 +84,7 @@ function applyWorkflowCreated(state: AppState, payload: WorkflowPayload): AppSta
           workspaceId: payload.workspace_id,
           name: payload.name,
           hidden: isHidden,
+          style: payload.style,
           workflowTemplateId: payload.workflow_template_id,
         },
         ...state.workflows.items,

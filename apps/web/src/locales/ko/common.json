@@ -237,7 +237,7 @@
   "kandevAllowsEveryAgentPermissionRequest": "Kandev는 사용자에게 묻지 않고 모든 에이전트 권한 요청을 허용합니다.",
   "kandevCouldNotLoad": "Kandev를 불러오지 못했습니다.",
   "kandevIsOpenSourceAndYou": "Kandev는 오픈 소스이며, 더 나아지도록 도울 수 있습니다.",
-  "kandevKeepsASmallInMemory": "Kandev는 최근 백엔드 로그와 브라우저 콘솔 이벤트를 작은 인메모리 링 버퍼에 보관합니다. 활성화하면 해당 로그가 머신의 임시 폴더에 기록되고, 파일 경로가 작업 설명에 추가되어 에이전트가 조사 중에 읽을 수 있습니다.",
+  "improveKandevLogsHelp": "활성화하면 Kandev가 최근 백엔드, 프런트엔드, 런타임 로그를 하나의 진단 ZIP으로 모아 머신의 임시 폴더에 저장하고, 에이전트가 조사 중에 읽을 수 있도록 그 경로를 작업 설명에 추가합니다. 에이전트 세션 로그는 포함되지 않습니다.",
   "lastRefreshFailed": "마지막 새로 고침 실패: {{error}}",
   "latestReleaseNotes": "최신 릴리스 노트",
   "loading": "불러오는 중...",

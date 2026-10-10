@@ -69,6 +69,13 @@ test.describe("Improve Kandev workflow visibility", () => {
     testPage,
     seedData,
   }) => {
+    // Bootstrap reuses an existing dedicated workspace and ignores the
+    // requested target, so this scenario requires that none exists.
+    for (const existing of (await apiClient.listWorkspaces()).workspaces.filter(
+      (item) => item.name === "Improve Kandev",
+    )) {
+      await apiClient.deleteWorkspace(existing.id, "Improve Kandev");
+    }
     const workspace = await apiClient.createWorkspace("Improve Kanban live fixture");
     try {
       await apiClient.createRepository(workspace.id, seedData.repositoryPath, "main", {
@@ -111,6 +118,10 @@ test.describe("Improve Kandev workflow visibility", () => {
       expect(bootstrap.body.workflow_id).toBeTruthy();
       expect(bootstrap.body.issue_workflow_id).toBeTruthy();
       const [improveEvent, issueEvent] = await Promise.all([improveCreated, issueCreated]);
+      // Hidden must survive the live event so the card is shown because of its
+      // template identity, not because the workflow looks like a normal one.
+      expect(improveEvent.payload.hidden).toBe(true);
+      expect(issueEvent.payload.hidden).toBe(true);
       expect(improveEvent.payload.workflow_template_id).toBe(IMPROVE_TEMPLATE);
       expect(issueEvent.payload.workflow_template_id).toBe(ISSUE_TEMPLATE);
 

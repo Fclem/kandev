@@ -112,6 +112,8 @@ Structural requirement: the unfiltered desktop board presents cards from both ta
 
 Task 01 complete. Focused backend regression tests passed; frontend selector and WebSocket tests passed (30 tests), web typecheck and targeted ESLint passed, Chromium E2E passed (2 tests), and mobile-chrome E2E passed (2 tests).
 
+Implementation review round 1 found that the first pass dropped `hidden`, `sort_order`, and `style` from several workflow projections and never mapped template identity in `use-workflows.ts`. Those regressions are fixed and pinned by tests (see the Task 01 Results), and the Task 01 checks were rerun and passed.
+
 ## Risks
 
 - Workflow metadata must distinguish the two Improve Kandev templates from other hidden workflows; matching only `hidden` would broaden board visibility beyond the requirement.

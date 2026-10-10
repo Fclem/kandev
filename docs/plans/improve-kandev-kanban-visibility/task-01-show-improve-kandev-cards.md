@@ -128,3 +128,18 @@ Verification passed:
 - Web typecheck and targeted ESLint.
 - Managed Chromium E2E: 2 passed.
 - Managed mobile-chrome E2E: 2 passed.
+
+Review corrections (implementation review round 1): the first implementation
+dropped `hidden` from the boot projection and the workflow event payload,
+dropped `sort_order` from `FromWorkflow`, dropped `style` from three browser
+projections, and never mapped template identity in `use-workflows.ts`, so a
+sidebar refetch or reconnect lost it. All are restored, and the DTO, boot,
+event, WebSocket handler, and `use-workflows` tests now pin `hidden`,
+`sort_order`/`style`, and template identity together. The live E2E removes any
+existing dedicated workspace first and asserts both live events stay hidden, so
+the card is visible because of template identity. A duplicate selector test was
+removed and the hidden-step navigator test uses an unrelated hidden workflow.
+Re-verified: focused backend tests, backend lint for the touched packages,
+selector/handler/hook unit tests, web typecheck, targeted ESLint, managed
+Chromium E2E (2 passed in the Kanban spec), and managed mobile-chrome E2E
+(2 passed in the Kanban spec).

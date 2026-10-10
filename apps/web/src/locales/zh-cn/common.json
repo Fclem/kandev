@@ -232,7 +232,7 @@
   "kandevAllowsEveryAgentPermissionRequest": "Kandev 会批准智能体的每一项权限请求，而不会向你提示。",
   "kandevCouldNotLoad": "Kandev 无法加载。",
   "kandevIsOpenSourceAndYou": "Kandev 是开源的，你可以一起把它做得更好。",
-  "kandevKeepsASmallInMemory": "Kandev 会在内存中保留一小段最近后端日志与浏览器控制台事件的环形缓冲区。启用后，这些日志会写入本机临时文件夹，文件路径会追加到任务描述中，便于智能体在排查时读取。",
+  "improveKandevLogsHelp": "启用后，Kandev 会将最近的后端、前端和运行时日志收集到一个诊断 ZIP 中，保存到本机临时文件夹，并将其路径追加到任务描述中，便于智能体在排查时读取。不包含智能体会话日志。",
   "lastRefreshFailed": "上次刷新失败：{{error}}",
   "latestReleaseNotes": "最新发行说明",
   "loading": "加载中…",

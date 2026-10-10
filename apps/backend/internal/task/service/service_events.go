@@ -975,7 +975,10 @@ func (s *Service) publishWorkspaceAccessChanged(ctx context.Context, workspace *
 	s.publishWorkspaceEvent(ctx, events.WorkspaceUpdated, workspace)
 }
 
-const workflowEventSourceKey = "source"
+const (
+	workflowEventPromptKey = "prompt"
+	workflowEventSourceKey = "source"
+)
 
 func (s *Service) publishWorkflowEvent(ctx context.Context, eventType string, workflow *models.Workflow) {
 	if s.eventBus == nil || workflow == nil {
@@ -983,17 +986,18 @@ func (s *Service) publishWorkflowEvent(ctx context.Context, eventType string, wo
 	}
 
 	data := map[string]interface{}{
-		"id":                         workflow.ID,
-		"workspace_id":               workflow.WorkspaceID,
-		"name":                       workflow.Name,
-		"description":                workflow.Description,
-		attachmentDeliveryModePrompt: workflow.Prompt,
-		"agent_profile_id":           workflow.AgentProfileID,
-		"workflow_template_id":       workflow.WorkflowTemplateID,
-		workflowEventSourceKey:       workflow.Source,
-		"source_path":                workflow.SourcePath,
-		"created_at":                 workflow.CreatedAt.Format(time.RFC3339),
-		"updated_at":                 workflow.UpdatedAt.Format(time.RFC3339),
+		"id":                   workflow.ID,
+		"workspace_id":         workflow.WorkspaceID,
+		"name":                 workflow.Name,
+		"description":          workflow.Description,
+		workflowEventPromptKey: workflow.Prompt,
+		"agent_profile_id":     workflow.AgentProfileID,
+		"hidden":               workflow.Hidden,
+		"workflow_template_id": workflow.WorkflowTemplateID,
+		workflowEventSourceKey: workflow.Source,
+		"source_path":          workflow.SourcePath,
+		"created_at":           workflow.CreatedAt.Format(time.RFC3339),
+		"updated_at":           workflow.UpdatedAt.Format(time.RFC3339),
 	}
 
 	s.publishEventToBus(ctx, eventType, "workflow", workflow.ID, data)

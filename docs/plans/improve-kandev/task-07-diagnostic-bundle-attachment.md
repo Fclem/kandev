@@ -148,3 +148,15 @@ lease). Desktop E2E passed for partial archive path submission and expired
 collection without blocking task creation. Mobile E2E passed for the localized
 toggle. `i18n:check`, `i18n:ratchet`, frontend typecheck, and targeted ESLint
 passed.
+
+Review corrections (implementation review round 1): the description transformer
+now runs on every create path (start agent, plan mode, and create without agent),
+covered by `task-create-dialog-submit.test.tsx`. The log-toggle tooltip
+(`improveKandevLogsHelp`, replacing the ring-buffer copy) now describes the single
+backend/frontend/runtime diagnostic ZIP in all seven catalogs. Desktop E2E adds a
+lease-rejection case, and non-diagnostic Improve Kandev scenarios use an
+immediately ready mocked bundle so the real collection job no longer stalls
+their submit. Re-verified: helper and submit-hook unit tests, `i18n:check`,
+web typecheck, targeted ESLint, managed Chromium E2E for
+`improve-kandev.spec.ts` and the Kanban hidden-workflow spec (24 passed), and
+managed mobile-chrome E2E for both mobile specs (4 passed).

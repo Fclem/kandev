@@ -343,6 +343,15 @@ export function useTaskSubmitHandlers({
   const markRunnerConfirmed = useCallback((profileId: string) => {
     confirmedRunnerRef.current = profileId;
   }, []);
+  // Every create path submits the same transformed description, so context a
+  // caller attaches (for example a leased diagnostic bundle) is never skipped.
+  const applyDescriptionTransform = useCallback(
+    async (description: string) =>
+      description && transformDescriptionBeforeSubmit
+        ? await transformDescriptionBeforeSubmit(description)
+        : description,
+    [transformDescriptionBeforeSubmit],
+  );
 
   const isFreshBranchActive =
     freshBranchEnabled && isLocalExecutor && !useRemote && repositoryLocalPath !== "";
@@ -904,7 +913,7 @@ export function useTaskSubmitHandlers({
     try {
       await performCreate({
         trimmedTitle,
-        trimmedDescription,
+        trimmedDescription: await applyDescriptionTransform(trimmedDescription),
         consented: consent,
         withAgent: true,
         planMode: true,
@@ -934,6 +943,7 @@ export function useTaskSubmitHandlers({
     setIsCreatingTask,
     editDependencies,
     workflowAgentOverridesBlockedReason,
+    applyDescriptionTransform,
   ]);
 
   const submitCreateTask = useCallback(
@@ -949,12 +959,9 @@ export function useTaskSubmitHandlers({
       attachments: ReturnType<typeof toMessageAttachments>;
     }) => {
       if (trimmedDescription) {
-        const finalDescription = transformDescriptionBeforeSubmit
-          ? await transformDescriptionBeforeSubmit(trimmedDescription)
-          : trimmedDescription;
         await performCreate({
           trimmedTitle,
-          trimmedDescription: finalDescription,
+          trimmedDescription: await applyDescriptionTransform(trimmedDescription),
           consented: consent,
           withAgent: true,
           attachments,
@@ -965,7 +972,7 @@ export function useTaskSubmitHandlers({
         await handleCreatePlanMode(trimmedTitle, consent, attachments);
       }
     },
-    [autoTitle, handleCreatePlanMode, performCreate, transformDescriptionBeforeSubmit],
+    [autoTitle, handleCreatePlanMode, performCreate, applyDescriptionTransform],
   );
 
   const handleCreateSubmit = useCallback(async () => {
@@ -1026,13 +1033,14 @@ export function useTaskSubmitHandlers({
     if (consent === null) return;
     setIsCreatingTask(true);
     try {
+      const finalDescription = await applyDescriptionTransform(trimmedDescription);
       let submittedPayload: ReturnType<typeof buildCreateTaskPayload> | null = null;
       const buildPayload = (c: string[]) => {
         const p = buildCreateTaskPayload({
           workspaceId: requirements.workspaceId,
           effectiveWorkflowId: requirements.workflowId,
           trimmedTitle,
-          trimmedDescription,
+          trimmedDescription: finalDescription,
           autoTitle,
           repositoriesPayload: getRepositoriesPayload(c),
           agentProfileId,

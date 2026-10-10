@@ -802,6 +802,7 @@ func FromWorkflow(workflow *models.Workflow) WorkflowDTO {
 		Prompt:             prompt,
 		AgentProfileID:     workflow.AgentProfileID,
 		WorkflowTemplateID: workflow.WorkflowTemplateID,
+		SortOrder:          workflow.SortOrder,
 		Hidden:             workflow.Hidden,
 		Style:              workflow.Style,
 		Source:             workflow.Source,

@@ -326,14 +326,22 @@ func TestMapUserSettingsStateNormalizesNilSubtaskOrder(t *testing.T) {
 	}
 }
 
-func TestMapWorkflowItemStateIncludesTemplateID(t *testing.T) {
+func TestMapWorkflowItemStateIncludesTemplateIDAndHidden(t *testing.T) {
 	templateID := "improve-kandev"
 	state := mapWorkflowItemState(taskdto.WorkflowDTO{
 		ID:                 "workflow-1",
 		WorkflowTemplateID: &templateID,
+		Hidden:             true,
+		Style:              "kanban",
 	})
 	got, ok := state["workflowTemplateId"].(*string)
 	if !ok || got == nil || *got != templateID {
 		t.Fatalf("workflowTemplateId = %#v, want %q", state["workflowTemplateId"], templateID)
+	}
+	if state["hidden"] != true {
+		t.Fatalf("hidden = %#v, want true", state["hidden"])
+	}
+	if state["style"] != "kanban" {
+		t.Fatalf("style = %#v, want kanban", state["style"])
 	}
 }

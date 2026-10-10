@@ -237,7 +237,7 @@
   "kandevAllowsEveryAgentPermissionRequest": "Kandev allows every agent permission request without prompting you.",
   "kandevCouldNotLoad": "Kandev couldn’t load.",
   "kandevIsOpenSourceAndYou": "Kandev is open source, and you can help make it better.",
-  "kandevKeepsASmallInMemory": "Kandev keeps a small in-memory ring buffer of the most recent backend logs and browser console events. When enabled, those logs are written to a temporary folder on your machine, and the file paths are appended to the task description so the agent can read them while investigating.",
+  "improveKandevLogsHelp": "When enabled, Kandev collects recent backend, frontend, and runtime logs into one diagnostic ZIP, saves it in a temporary folder on your machine, and adds its path to the task description so the agent can read it while investigating. Agent session logs are not included.",
   "lastRefreshFailed": "Last refresh failed: {{error}}",
   "latestReleaseNotes": "Latest release notes",
   "loading": "Loading…",

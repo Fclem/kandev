@@ -234,7 +234,7 @@
   "kandevAllowsEveryAgentPermissionRequest": "O Kandev permite todos os pedidos de permissão do agente sem o questionar.",
   "kandevCouldNotLoad": "Não foi possível carregar o Kandev.",
   "kandevIsOpenSourceAndYou": "O Kandev é de código aberto e pode ajudar a torná-lo melhor.",
-  "kandevKeepsASmallInMemory": "O Kandev mantém em memória um pequeno buffer circular dos registos mais recentes do backend e dos eventos da consola do navegador. Quando esta opção está ativa, esses registos são escritos numa pasta temporária da sua máquina e os caminhos dos ficheiros são acrescentados à descrição da tarefa, para que o agente os possa ler durante a investigação.",
+  "improveKandevLogsHelp": "Quando esta opção está ativa, o Kandev reúne os registos recentes do backend, do frontend e do runtime num único ZIP de diagnóstico, guarda-o numa pasta temporária da sua máquina e acrescenta o respetivo caminho à descrição da tarefa, para que o agente o possa ler durante a investigação. Os registos das sessões do agente não são incluídos.",
   "lastRefreshFailed": "A última atualização falhou: {{error}}",
   "latestReleaseNotes": "Notas da versão mais recente",
   "loading": "A carregar…",

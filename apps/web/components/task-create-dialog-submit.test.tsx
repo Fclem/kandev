@@ -1021,6 +1021,36 @@ describe("useTaskSubmitHandlers — handleCreateWithoutAgent", () => {
   });
 });
 
+describe("useTaskSubmitHandlers — description transform on every create path", () => {
+  const paths = ["start agent", "plan mode", "without agent"] as const;
+
+  for (const path of paths) {
+    it(`submits the transformed description when creating via ${path}`, async () => {
+      const transformDescriptionBeforeSubmit = vi.fn(
+        async (description: string) => `${description}\n\nleased bundle`,
+      );
+      const deps = makeDeps({
+        createTask: vi.fn().mockResolvedValue({ id: TASK_ID }),
+        descriptionInputRef: makeRef("report context"),
+        transformDescriptionBeforeSubmit,
+      });
+      const { result } = renderHook(() => useTaskSubmitHandlers(deps));
+
+      await act(async () => {
+        const handlers = result.current;
+        if (path === "plan mode") await handlers.handleCreateWithPlanMode();
+        else if (path === "without agent") await handlers.handleCreateWithoutAgent();
+        else await handlers.handleSubmit({ preventDefault() {} } as never);
+      });
+
+      expect(transformDescriptionBeforeSubmit).toHaveBeenCalledWith("report context");
+      expect(buildCreateTaskPayloadMock).toHaveBeenCalledWith(
+        expect.objectContaining({ trimmedDescription: "report context\n\nleased bundle" }),
+      );
+    });
+  }
+});
+
 describe("useTaskSubmitHandlers — workflow override submit guard", () => {
   it("blocks keyboard submit when an executor change makes the replacement invalid", async () => {
     const createTask = vi.fn().mockResolvedValue({ id: TASK_ID });

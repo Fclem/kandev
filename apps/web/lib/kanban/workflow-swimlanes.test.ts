@@ -87,13 +87,6 @@ describe("selectMobileNavigatorWorkflows — mobile board navigator options", ()
       ),
     ).toEqual(["dev", "improve", "report"]);
   });
-  it("keeps both Improve workflows in the navigator even when task filters empty them", () => {
-    expect(
-      selectMobileNavigatorWorkflows(visibleOrdered, workflows, noTasks).map(
-        (entry) => entry.workflow.id,
-      ),
-    ).toEqual(["dev", "improve", "report"]);
-  });
 
   it("keeps a hidden workflow whose live steps are all hidden", () => {
     type NavigatorSelectorWithHiddenSteps = (
@@ -112,10 +105,15 @@ describe("selectMobileNavigatorWorkflows — mobile board navigator options", ()
       visibleOrdered,
       workflows,
       noTasks,
-      (workflowId) => workflowId === "improve",
+      (workflowId) => workflowId === "other",
     );
 
-    expect(entries.map((entry) => entry.workflow.id)).toEqual(["dev", "improve", "report"]);
+    expect(entries.map((entry) => entry.workflow.id)).toEqual([
+      "dev",
+      "improve",
+      "report",
+      "other",
+    ]);
   });
 
   it("returns the filtered tasks alongside each workflow so callers reuse the result", () => {

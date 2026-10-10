@@ -433,8 +433,8 @@
   "modelSourceCli": "CLI",
   "modelSourceAcp": "ACP",
   "profileDragInstructions": "To pick up a profile, press Space. Use the arrow keys to move it, then press Space to drop it or Escape to cancel.",
-  "profileDragStart": "Profile {{name}} picked up. Position {{position}} of {{count}}.",
-  "profileDragOver": "Profile {{name}} moved to position {{position}} of {{count}}.",
-  "profileDragEnd": "Profile {{name}} dropped at position {{position}} of {{count}}.",
+  "profileDragStart": "Profile {{name}} picked up. Position {{position}} of {{total}}.",
+  "profileDragOver": "Profile {{name}} moved to position {{position}} of {{total}}.",
+  "profileDragEnd": "Profile {{name}} dropped at position {{position}} of {{total}}.",
   "profileDragCancel": "Reordering profile {{name}} cancelled."
 }

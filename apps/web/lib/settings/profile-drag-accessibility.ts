@@ -9,7 +9,7 @@ export function profileDragAccessibility(
   const values = (activeId: string | number, overId: string | number = activeId) => ({
     name: profiles.find((profile) => profile.id === activeId)?.name ?? "",
     position: profiles.findIndex((profile) => profile.id === overId) + 1,
-    count: profiles.length,
+    total: profiles.length,
   });
   return {
     screenReaderInstructions: { draggable: t("agents:profileDragInstructions") },

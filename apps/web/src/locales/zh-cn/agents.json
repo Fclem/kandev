@@ -433,8 +433,8 @@
   "modelSourceCli": "CLI",
   "modelSourceAcp": "ACP",
   "profileDragInstructions": "按空格键选取配置档。使用方向键移动，再按空格键放下，或按 Escape 取消。",
-  "profileDragStart": "已选取配置档 {{name}}。第 {{position}} 个，共 {{count}} 个。",
-  "profileDragOver": "配置档 {{name}} 已移动到第 {{position}} 个位置，共 {{count}} 个。",
-  "profileDragEnd": "配置档 {{name}} 已放到第 {{position}} 个位置，共 {{count}} 个。",
+  "profileDragStart": "已选取配置档 {{name}}。第 {{position}} 个，共 {{total}} 个。",
+  "profileDragOver": "配置档 {{name}} 已移动到第 {{position}} 个位置，共 {{total}} 个。",
+  "profileDragEnd": "配置档 {{name}} 已放到第 {{position}} 个位置，共 {{total}} 个。",
   "profileDragCancel": "已取消配置档 {{name}} 的重新排序。"
 }

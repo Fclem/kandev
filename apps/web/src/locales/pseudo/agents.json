@@ -433,8 +433,8 @@
   "modelSourceCli": "ĆĹĨ",
   "modelSourceAcp": "ÀĆƤ",
   "profileDragInstructions": "Ţō ƥĩćķ ũƥ à ƥŕōƒĩĺē, ƥŕēśś Śƥàćē. Ũśē ţĥē àŕŕōŵ ķēŷś ţō ḿōvē ĩţ, ţĥēń ƥŕēśś Śƥàćē ţō ďŕōƥ ĩţ ōŕ Ēśćàƥē ţō ćàńćēĺ.",
-  "profileDragStart": "Ƥŕōƒĩĺē {{name}} ƥĩćķēď ũƥ. Ƥōśĩţĩōń {{position}} ōƒ {{count}}.",
-  "profileDragOver": "Ƥŕōƒĩĺē {{name}} ḿōvēď ţō ƥōśĩţĩōń {{position}} ōƒ {{count}}.",
-  "profileDragEnd": "Ƥŕōƒĩĺē {{name}} ďŕōƥƥēď àţ ƥōśĩţĩōń {{position}} ōƒ {{count}}.",
+  "profileDragStart": "Ƥŕōƒĩĺē {{name}} ƥĩćķēď ũƥ. Ƥōśĩţĩōń {{position}} ōƒ {{total}}.",
+  "profileDragOver": "Ƥŕōƒĩĺē {{name}} ḿōvēď ţō ƥōśĩţĩōń {{position}} ōƒ {{total}}.",
+  "profileDragEnd": "Ƥŕōƒĩĺē {{name}} ďŕōƥƥēď àţ ƥōśĩţĩōń {{position}} ōƒ {{total}}.",
   "profileDragCancel": "Ŕēōŕďēŕĩńĝ ƥŕōƒĩĺē {{name}} ćàńćēĺĺēď."
 }

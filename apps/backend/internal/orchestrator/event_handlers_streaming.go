@@ -3294,7 +3294,7 @@ func (s *Service) handleCompleteStreamEventWithGuardRelease(
 	s.publishPromptUsage(ctx, payload, session, completionTurnID)
 
 	if terminalCompleteStream {
-		s.flushTerminalCompleteStream(ctx, payload, session, terminalMarker)
+		s.flushTerminalCompleteStream(ctx, payload, session, completionTurnID)
 		return
 	}
 
@@ -3411,12 +3411,8 @@ func (s *Service) flushTerminalCompleteStream(
 	ctx context.Context,
 	payload *lifecycle.AgentStreamEventPayload,
 	session *models.TaskSession,
-	terminalMarker terminalExecutionMarker,
+	terminalTurnID string,
 ) {
-	terminalTurnID := terminalMarker.turnID
-	if payload.Data.TurnID != "" {
-		terminalTurnID = payload.Data.TurnID
-	}
 	s.persistTurnTiming(ctx, payload.SessionID, terminalTurnID, extractStopReason(payload) == stopReasonCancelled)
 	s.saveAgentTextForTurn(ctx, payload, terminalTurnID)
 	s.publishAgentPlanForTurn(ctx, payload, terminalTurnID, false)

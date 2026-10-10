@@ -25,9 +25,9 @@ controller and `orderAgentsForDisplay` in the web app. The Dynamic agent
 
 ## Requirement mapping
 
-| Requirement | Design section |
-| --- | --- |
-| `REQ-AGENTS-PROFILE-LIST-ORDERING-001` | [Frontend](#frontend), [Save coordination](#save-coordination) |
+| Requirement                            | Design section                                                                                                                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REQ-AGENTS-PROFILE-LIST-ORDERING-001` | [Frontend](#frontend), [Save coordination](#save-coordination)                                                                                                  |
 | `REQ-AGENTS-PROFILE-LIST-ORDERING-003` | [HTTP](#http), [Persistence](#persistence), [Order revisions](#order-revisions), [Store updates](#store-updates), [Failure and recovery](#failure-and-recovery) |
 
 ## Components and responsibilities
@@ -90,9 +90,9 @@ controller and `orderAgentsForDisplay` in the web app. The Dynamic agent
   ever reordered. The route uses the same `cfg` permission and `h.interlock`
   middleware as `POST /agents/:id/profiles`.
 - The web client adds `reorderAgentProfilesAction(agentId, profileIds)` beside
-  the other `*Action` exports in `app/actions/agents.ts`, returning
-  `ok`, `stale`, or `error`, with a 15 s abort timeout that takes the `error`
-  path.
+  the other `*Action` exports in `app/actions/agents.ts`, returning the committed IDs and revision, or rejecting with an API error.
+  A 15 s abort timeout enters the queue failure path; HTTP 409 enters its
+  membership-refetch path.
 - `lib/settings/agent-profile-order.ts` holds the pure helpers:
   `reorderIds(ids, activeId, overId)` and
   `insertFirstInAgentGroup(options, agentId, option)`.
@@ -149,19 +149,22 @@ All existing profile rows keep `sort_order = 0`, so the first read orders by
 `created_at DESC` exactly as today. A reorder writes positions `1..n` to global
 rows only. A profile created or duplicated later has `0` and sorts first, which
 matches newest-first. Workspace-scoped rows keep `0`. Creating or deleting a
-profile does not change the revision.
+profile does not change the revision. Moving a profile to another owner or
+scope resets its old group rank to `0` inside the locked transaction, so a
+profile entering a global group cannot inherit a saved position from its prior
+group. Surviving profiles keep their saved relative order.
 
 ### HTTP
 
 `PUT /api/v1/agents/:id/profiles/order`, body `{ "profile_ids": ["..."] }`.
 
-| Status | Condition |
-| --- | --- |
-| `200` | Saved or already equal. Body `{ "agent_id": "...", "profile_ids": [...], "revision": 7 }` |
-| `400` | Malformed body, empty list, an ID longer than 255 bytes, or the Dynamic agent (`code: "profile_order_unsupported"`) |
-| `404` | Agent not found |
-| `409` | `{ "code": "profile_order_stale" }`: list is not exactly the agent's current global profiles |
-| `403` | Caller lacks agent-configuration permission |
+| Status | Condition                                                                                                           |
+| ------ | ------------------------------------------------------------------------------------------------------------------- |
+| `200`  | Saved or already equal. Body `{ "agent_id": "...", "profile_ids": [...], "revision": 7 }`                           |
+| `400`  | Malformed body, empty list, an ID longer than 255 bytes, or the Dynamic agent (`code: "profile_order_unsupported"`) |
+| `404`  | Agent not found                                                                                                     |
+| `409`  | `{ "code": "profile_order_stale" }`: list is not exactly the agent's current global profiles                        |
+| `403`  | Caller lacks agent-configuration permission                                                                         |
 
 A request equal to the stored order returns `200` with the current revision and
 without a write or event. `GET /agents` and `GET /agents/:id` carry
@@ -197,7 +200,11 @@ when `revision` is greater than the stored one, or when no order is stored yet,
 and returns whether it did. Every source of a server order goes through it:
 the `200` body, the event, and the `profile_order_revision` on each agent of a
 fetched or hydrated snapshot. A snapshot with a revision not newer than the
-stored one does not replace the known order.
+stored one does not replace the known relative order. Fresh membership
+snapshots separately prepend previously unknown IDs and remove absent IDs,
+even when the order revision is unchanged. A later order acknowledgement
+preserves known profiles created after that reorder began. The client epoch
+fence prevents pre-event snapshots from changing membership.
 
 The repository snapshot method reads ordered profile rows and their revision
 map in one read-only transaction. PostgreSQL uses `sql.LevelRepeatableRead`.
@@ -232,7 +239,8 @@ selector-specific recency and default-selection logic remains unchanged.
   A rejected result is discarded and the caller uses a fresh resource read
   rather than writing either list. On acceptance, fresh profiles replace
   flat-list groups for agents in the snapshot, while options for agent IDs
-  absent from it are retained. Workspace-scoped Office agents are excluded from
+  absent from it, and workspace-scoped options owned by a refreshed agent, are
+  retained. Workspace-scoped Office agents are excluded from
   `GET /agents`, so their options remain available to Office pickers across
   unrelated list refreshes. An existing-agent save captures the epoch before
   sending its requests. Its response still applies agent-level fields after the
@@ -255,17 +263,19 @@ selector-specific recency and default-selection logic remains unchanged.
   `settingsAgents` only. It does not reorder the flat `agentProfiles` selector
   list, rebuild it from `settingsAgents`, or discard orphan options.
 - The `agent.profile.created` handler, `applyProfileDuplicated` in
-  `hooks/domains/settings/use-profile-duplicate.ts`, and the writers in
-  `app/settings/agents/[agentId]/agent-save-helpers.ts` (`saveNewAgent`,
-  `saveExistingProfiles`, `reconcilePartialProfileSave`) place a created profile
-  first within its own agent in the Settings projection. Selector options keep
-  the existing newest-first baseline. The agent-save reconcile updates only the
-  saved agent's flat-list group and keeps the store's selector order for
-  existing profiles. This preserves Office options whose agents are absent from
-  `settingsAgents`. The Office setup writer
-  `app/office/setup/agent-profile-setup-controls.tsx`, which upserts only the
-  flat list, keeps its existing selector ordering. `components/agent/cli-profile-editor.tsx`
-  returns the profile to its caller and writes no store.
+  `hooks/domains/settings/use-profile-duplicate.ts`, and
+  `hooks/domains/settings/use-agent-creation-store-sync.ts` place newly created
+  profiles first in their own Settings group. The creation publisher retains
+  current-main revision checks, accepted-creation metadata, and missing-owner
+  protection. Non-creation saves use `agent-save-store-sync.ts`, preserve current
+  membership when the request epoch is stale, and update only the saved group's
+  known global selector options. Workspace-scoped and unrepresented Office
+  options survive. Selector projections restore the creation baseline and do
+  not consume Settings ranks. The Office setup writer updates the live selector
+  list without replacing it with its potentially smaller wizard snapshot and
+  mirrors a created global profile into its existing Settings owner.
+  `components/agent/cli-profile-editor.tsx` returns the profile to its caller
+  and writes no store.
 
 ### Save coordination
 
@@ -288,10 +298,10 @@ All per-agent state lives in the slice, so the page, every
    the own `200`.
 5. On network, `5xx`, or timeout failure, if a newer `queued` intent exists,
    promote it to `inFlight` and submit it without clearing the optimistic
-   overlay. Show an error for the failed save, but do not roll back the newer
-   intent. If there is no queued intent, clear the overlay and show the known
+   overlay. Do not roll back the newer intent or show a terminal-failure toast
+   while it is still being submitted. If there is no queued intent, clear the overlay and show the known
    server order with an error message.
-6. On `409`, show an error for the stale save and capture the current
+6. On `409`, capture the current
    `agentProfiles.version` before refetching `listAgents({ cache: "no-store" })`.
    Retain a newer queued intent and its overlay while refetching. Apply the
    response only through `applyAgentListSnapshot`; if a create/delete event
@@ -318,12 +328,14 @@ follows without extra code.
 ### Frontend
 
 - Each `ProfileRowCard` gets a handle button (`IconGripVertical`) with
-  `data-testid="agent-profile-drag-handle"`, `touch-none`, a 44 px touch-sized
-  hitbox, an `aria-label` from `agents:dragProfile` with `{{name}}`, and the
+  `data-testid="agent-profile-drag-handle"`, `touch-none`, the shared 28 px
+  desktop control size and 44 px phone/coarse-pointer hitbox, an `aria-label` from `agents:dragProfile` with `{{name}}`, and the
   dnd-kit `aria-roledescription` overridden with `agents:profileSortable`
   (the repo pattern in `automatic-color-rule-card.tsx`). The handle is the only
   drag activator (`setActivatorNodeRef`) and sits in the `z-10` action layer
   above the row's overlay link, so row links and action buttons stay clickable.
+  Instructions and start, move, drop, and cancel announcements use translated
+  profile names and positions through `profile-drag-accessibility.ts`.
   Handles render only when `canManage` is true and the agent has two or more
   profiles.
 - Sensors: `PointerSensor` with `distance: 8` and `KeyboardSensor` with
@@ -339,9 +351,10 @@ follows without extra code.
   before creation and creation stays rightmost
   (`AC-AGENTS-SETTINGS-PROFILE-LAYOUT-001.4`). The desktop and mobile layout
   specs assert the toolbar test IDs `["open-host-shell", "rescan-agents-button",
-  "new-agent-button"]`.
+"new-agent-button"]`.
 - Copy lives in the `agents` namespace in all locales: `dragProfile`,
-  `profileSortable`, and `profileOrderSaveFailed`. There is no sort-action label.
+  `profileSortable`, `profileOrderSaveFailed`, and the five drag instruction
+  and announcement keys. There is no sort-action label.
   Traditional Chinese comes from `pnpm run i18n:zh-hant` and the pseudo catalog
   from `pnpm run i18n:pseudo`.
 
@@ -388,8 +401,9 @@ are never written by this route.
 
 ## Observability
 
-The controller logs a reorder at debug level with agent ID, profile count, and
-revision, and logs rejected stale requests at info. No metrics are added.
+The existing handler error path reports unexpected repository failures. No
+reorder-specific logs or metrics are added; expected stale membership errors
+are returned as HTTP 409.
 
 ## Consumers of profile order
 

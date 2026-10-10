@@ -98,7 +98,7 @@ export function CreateProfilePanel({
           };
           const option = toAgentProfileOption(agentForProfile, saved);
           const state = store.getState();
-          state.setAgentProfiles(
+          setAgentProfiles(
             insertFirstInAgentGroup(state.agentProfiles.items, option.agent_id, option),
           );
           const existingAgent = state.settingsAgents.items.find(
@@ -121,7 +121,6 @@ export function CreateProfilePanel({
           }
           state.bumpAgentProfilesVersion();
           const nextWizardProfiles = upsertProfileOption(wizardProfiles, option);
-          setAgentProfiles(nextWizardProfiles);
           onAgentProfilesChange?.(nextWizardProfiles);
           onProfileSaved(saved.id);
           onClose();
@@ -141,8 +140,13 @@ export function CreateProfileButton({
 }) {
   const { t } = useTranslation();
   return (
-    <Button variant="outline" className="w-full" onClick={onCreateClick}>
-      {t(hasProfiles ? "agents:newProfile" : "agents:createProfile")}
+    <Button
+      type="button"
+      variant="link"
+      onClick={onCreateClick}
+      className="h-auto p-0 cursor-pointer text-primary"
+    >
+      {hasProfiles ? t("office:createANewCliProfile") : t("office:createOneInline")}
     </Button>
   );
 }

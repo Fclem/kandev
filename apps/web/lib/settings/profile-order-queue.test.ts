@@ -75,6 +75,34 @@ describe("ProfileOrderQueue", () => {
     expect(store.getState().agentProfiles.orderByAgent.a.inFlight).toBeNull();
   });
 
+  it("restores the saved order of newly created profiles after a failed drag", async () => {
+    const baseline = {
+      id: "a",
+      name: "Agent",
+      profile_order_revision: 1,
+      profiles: [
+        { id: "new2", name: "New 2" },
+        { id: "new1", name: "New 1" },
+        { id: "x", name: "X" },
+        { id: "y", name: "Y" },
+      ],
+    } as Agent;
+    store.getState().applyAgentListSnapshot([baseline], store.getState().agentProfiles.version);
+    const onError = vi.fn();
+    const queue = new ProfileOrderQueue(store, {
+      save: vi.fn().mockRejectedValue(new Error("failed")),
+      onError,
+    });
+    queue.requestProfileOrder("a", ["new1", "new2", "y", "x"]);
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    expect(store.getState().settingsAgents.items[0].profiles.map((profile) => profile.id)).toEqual([
+      "new2",
+      "new1",
+      "x",
+      "y",
+    ]);
+  });
+
   it("refetches on conflict and replays only surviving queued profiles after new IDs", async () => {
     let rejectFirst!: (error: Error) => void;
     const first = new Promise<{ profile_ids: string[]; revision: number }>((_, reject) => {

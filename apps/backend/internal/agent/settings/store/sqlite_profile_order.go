@@ -75,12 +75,16 @@ func lockAgentProfileIdentity(ctx context.Context, tx *sqlx.Tx, driver, profileI
 func (r *sqliteRepository) updateAgentProfileWithMembershipLocks(
 	ctx context.Context,
 	profile *models.AgentProfile,
+	enabled *bool,
 	updateExtra func(*sqlx.Tx) error,
 ) error {
 	for range 3 {
 		observed, err := r.GetAgentProfile(ctx, profile.ID)
-		if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("agent profile not found: %s", profile.ID)
+		}
+		if err != nil {
+			return err
 		}
 		if r.profileOrderAfterOwnershipRead != nil {
 			if err := r.profileOrderAfterOwnershipRead(profile.ID, observed.AgentID, observed.WorkspaceID); err != nil {
@@ -104,11 +108,25 @@ func (r *sqliteRepository) updateAgentProfileWithMembershipLocks(
 			_ = tx.Rollback()
 			continue
 		}
-		if err := r.applyProfileUpdate(ctx, tx, profile, updateExtra); err != nil {
+		if actualAgentID != profile.AgentID || actualWorkspaceID != profile.WorkspaceID {
+			if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE agent_profiles SET sort_order = 0 WHERE id = ?`), profile.ID); err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+		committedEnabled, err := r.updateAgentProfile(ctx, tx, profile, enabled)
+		if err == nil && updateExtra != nil {
+			err = updateExtra(tx)
+		}
+		if err != nil {
 			_ = tx.Rollback()
 			return err
 		}
-		return tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		profile.Enabled = committedEnabled
+		return nil
 	}
 	return ErrProfileChanged
 }
@@ -138,21 +156,6 @@ func readProfileOwnership(ctx context.Context, tx *sqlx.Tx, profileID string) (s
 		return "", "", fmt.Errorf("agent profile not found: %s", profileID)
 	}
 	return agentID, workspaceID, err
-}
-
-func (r *sqliteRepository) applyProfileUpdate(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	profile *models.AgentProfile,
-	updateExtra func(*sqlx.Tx) error,
-) error {
-	if err := r.updateAgentProfile(ctx, tx, profile); err != nil {
-		return err
-	}
-	if updateExtra != nil {
-		return updateExtra(tx)
-	}
-	return nil
 }
 
 func ensureAgentProfileOrderAgentExists(ctx context.Context, tx *sqlx.Tx, agentID string) error {

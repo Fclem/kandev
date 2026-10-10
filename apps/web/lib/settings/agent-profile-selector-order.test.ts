@@ -20,6 +20,18 @@ describe("selector creation baseline", () => {
     expect(profiles.map((profile) => profile.id)).toEqual(["a", "z", "b"]);
   });
 
+  it.each(["invalid", "2026-02-30T00:00:00Z", "2026-01-01", "9999"])(
+    "preserves source order when creation timestamp %s is malformed",
+    (createdAt) => {
+      const profiles = [
+        { id: "z", createdAt: "2026-01-01T00:00:00Z" },
+        { id: "a", createdAt },
+        { id: "b", createdAt: "2026-02-01T00:00:00Z" },
+      ];
+      expect(orderProfilesForSelection(profiles)).toBe(profiles);
+    },
+  );
+
   it("keeps other agent slots and unstamped orphan options without using profile updatedAt", () => {
     const options = [
       {

@@ -171,3 +171,31 @@ describe("agent save profile option retention", () => {
     });
   });
 });
+
+it("preserves an Office option owned by the saved agent", () => {
+  let store!: StoreApi<AppState>;
+  render(
+    <StateProvider>
+      <Capture onStore={(value) => (store = value)} />
+    </StateProvider>,
+  );
+  const existing = {
+    id: AGENT_ID,
+    name: "mock-agent",
+    profiles: [profile(LIVE_PROFILE_ID)],
+  } as Agent;
+  act(() => {
+    store.getState().setSettingsAgents([existing]);
+    store
+      .getState()
+      .setAgentProfiles([
+        option(LIVE_PROFILE_ID),
+        { ...option("office"), workspace_id: "workspace" },
+      ]);
+    syncSavedAgentToStore(store, existing, store.getState().agentProfiles.version);
+  });
+  expect(store.getState().agentProfiles.items.map((item) => item.id)).toEqual([
+    LIVE_PROFILE_ID,
+    "office",
+  ]);
+});

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   acceptServerOrder,
+  acceptAgentOrdersFromSnapshot,
   insertFirstInAgentGroup,
   reorderIds,
   reconcileAgentOrders,
@@ -39,6 +40,18 @@ describe("agent profile order helpers", () => {
     });
   });
 
+  it("keeps newly created rollback rows when an earlier reorder acknowledgement arrives later", () => {
+    const current: ProfileOrderState = {
+      a: { revision: 4, order: ["new2", "new1", "x", "y"], inFlight: null, queued: null },
+    };
+    expect(acceptServerOrder(current, "a", ["y", "x"], 5).a.order).toEqual([
+      "new2",
+      "new1",
+      "y",
+      "x",
+    ]);
+  });
+
   it("reconciles snapshots with new profiles first, queued order next, and deleted IDs omitted", () => {
     const agents = [agent("a", [profile("new", "New"), profile("x", "X"), profile("y", "Y")])];
     const sync: ProfileOrderState = {
@@ -46,6 +59,27 @@ describe("agent profile order helpers", () => {
     };
     const reconciled = reconcileAgentOrders(agents, sync);
     expect(reconciled[0].profiles.map((item) => item.id)).toEqual(["new", "x", "y"]);
+  });
+
+  it("refreshes rollback membership at the same revision without accepting older reorder events", () => {
+    const initial: ProfileOrderState = {
+      a: { revision: 4, order: ["x", "y"], inFlight: ["new1", "new2", "y", "x"], queued: null },
+    };
+    const incoming = {
+      ...agent("a", [
+        profile("new2", "New 2"),
+        profile("new1", "New 1"),
+        profile("y", "Y"),
+        profile("x", "X"),
+      ]),
+      profile_order_revision: 4,
+    };
+    const next = acceptAgentOrdersFromSnapshot(initial, [incoming]);
+    expect(next.a.order).toEqual(["new2", "new1", "x", "y"]);
+    expect(next.a.inFlight).toEqual(initial.a.inFlight);
+    expect(acceptServerOrder(next, "a", ["x", "y"], 3)).toBe(next);
+    const rolledBack = reconcileAgentOrders([incoming], { a: { ...next.a, inFlight: null } });
+    expect(rolledBack[0].profiles.map((item) => item.id)).toEqual(["new2", "new1", "x", "y"]);
   });
 
   it("inserts a created profile at the start of its agent group without moving other groups", () => {

@@ -76,8 +76,8 @@ permission-gated reorder endpoint with its WebSocket event.
   `agent_profiles`, and `agent_profile_orders`, and the upgrade manifest verifies
   legacy `sort_order = 0`.
 - A request that is not exactly the agent's global profiles returns `409
-  profile_order_stale`, a request for the Dynamic agent returns `400
-  profile_order_unsupported`, both change nothing; a caller without
+profile_order_stale`, a request for the Dynamic agent returns `400
+profile_order_unsupported`, both change nothing; a caller without
   agent-configuration permission is refused; a changed order broadcasts
   `agent.profiles.reordered` from the handler and an unchanged order does not.
 - Deterministic two-connection SQLite and Postgres tests exercise both lock
@@ -175,6 +175,9 @@ None.
 
 ## Results
 
+The results below are historical contributor reports from before integration
+with current main. They are not verification of the combined review head.
+
 Implemented the schema, snapshot reads, reorder endpoint/event, ownership locks,
 and concurrent membership/reorder coverage.
 
@@ -200,3 +203,21 @@ passed, and changed-backend `golangci-lint run ./... --new-from-rev=b0dc2bef512e
 reported zero issues using the persistent Go cache outside the full managed
 cache mount. `TestPostgresWorkspaceProfileDeleteRetriesAfterPromotionAndReorder`
 was skipped because `KANDEV_TEST_POSTGRES_DSN` is unset.
+
+## Integration review validation
+
+The review fixup preserves current-main catalogue publication, enabled-intent
+persistence, capability/runtime metadata, and Settings model-picker behavior.
+It adds regression coverage for creation baselines during pending drags and
+late acknowledgements, terminal rollback, the 15-second request timeout,
+malformed timestamp handling, Office option preservation, and localized drag
+announcements. Desktop handles use the shared 28 px size; phone and coarse
+pointer handles retain 44 px hit targets. Backend regressions cover canceled
+repository reads, equal/missing ranks, and create/delete after saved ordering.
+
+Focused frontend tests run in a credential-free, nonroot, network-disabled
+container. Broad frontend/backend, race, lint, build, typecheck, and rendered
+desktop/mobile checks remain assigned to hosted CI. Host hooks and contributor
+tooling are not executed during this review. The historical broad-suite
+failures above remain visible; they are not attributed to unrelated tests
+without exact source and log evidence.

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,28 @@ func TestListAgentProfiles_UsesSavedOrderAndNewestFirstDefault(t *testing.T) {
 	if _, _, err := repo.(*sqliteRepository).ReorderAgentProfiles(ctx, agent.ID, []string{profiles[0].ID, profiles[0].ID}); err != ErrProfileOrderSetMismatch {
 		t.Fatalf("duplicate reorder error = %v, want ErrProfileOrderSetMismatch", err)
 	}
+	created := &models.AgentProfile{AgentID: agent.ID, Name: "created-after-order", Model: "model"}
+	if err := repo.CreateAgentProfile(ctx, created); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := repo.GetAgentProfileOrderSnapshots(ctx, []string{agent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot[agent.ID].Profiles[0].ID != created.ID || snapshot[agent.ID].Revision != 1 {
+		t.Fatalf("create snapshot = %#v, want new profile first at revision 1", snapshot[agent.ID])
+	}
+	if err := repo.DeleteAgentProfile(ctx, profiles[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = repo.GetAgentProfileOrderSnapshots(ctx, []string{agent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot[agent.ID].Profiles) != 2 || snapshot[agent.ID].Profiles[1].ID != profiles[1].ID || snapshot[agent.ID].Revision != 1 {
+		t.Fatalf("delete snapshot = %#v, want surviving saved order at revision 1", snapshot[agent.ID])
+	}
+
 }
 
 func TestReorderAgentProfilesMissingAgentIsNotAStaleMembershipSet(t *testing.T) {
@@ -69,5 +92,98 @@ func TestReorderAgentProfilesMissingAgentIsNotAStaleMembershipSet(t *testing.T) 
 	_, _, err := repo.ReorderAgentProfiles(context.Background(), "missing-agent", nil)
 	if err == nil || !strings.Contains(err.Error(), "agent not found") {
 		t.Fatalf("reorder missing agent error = %v, want missing-agent error", err)
+	}
+}
+
+func TestProfileMembershipReadPreservesCancellation(t *testing.T) {
+	repo := newTestRepo(t).(*sqliteRepository)
+	agent := &models.Agent{Name: "cancelled-membership"}
+	if err := repo.CreateAgent(context.Background(), agent); err != nil {
+		t.Fatal(err)
+	}
+	profile := &models.AgentProfile{AgentID: agent.ID, Name: "Profile", Model: "model"}
+	if err := repo.CreateAgentProfile(context.Background(), profile); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for name, operation := range map[string]func() error{
+		"delete": func() error { return repo.DeleteAgentProfile(ctx, profile.ID) },
+		"update": func() error { return repo.UpdateAgentProfile(ctx, profile) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := operation(); !errors.Is(err, context.Canceled) {
+				t.Fatalf("error = %v, want context cancellation", err)
+			}
+		})
+	}
+}
+
+func TestDefaultProfileRanksBreakEqualCreationTimesByID(t *testing.T) {
+	repo := newTestRepo(t).(*sqliteRepository)
+	ctx := context.Background()
+	agent := &models.Agent{Name: "equal-profile-ranks"}
+	if err := repo.CreateAgent(ctx, agent); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"z-profile", "a-profile"} {
+		if err := repo.CreateAgentProfile(ctx, &models.AgentProfile{ID: id, AgentID: agent.ID, Name: id, Model: "model"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	timestamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := repo.db.ExecContext(ctx, `UPDATE agent_profiles SET created_at = ? WHERE agent_id = ?`, timestamp, agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	profiles, err := repo.ListAgentProfiles(ctx, agent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profiles) != 2 || profiles[0].ID != "a-profile" || profiles[1].ID != "z-profile" {
+		t.Fatalf("equal default ranks = %#v, want stable ID tie-break", profiles)
+	}
+}
+
+func TestProfileMoveDoesNotCarrySavedRankToAnotherGroup(t *testing.T) {
+	repo := newTestRepo(t).(*sqliteRepository)
+	ctx := context.Background()
+	source, target := &models.Agent{Name: "move-source"}, &models.Agent{Name: "move-target"}
+	for _, agent := range []*models.Agent{source, target} {
+		if err := repo.CreateAgent(ctx, agent); err != nil {
+			t.Fatal(err)
+		}
+	}
+	profiles := []*models.AgentProfile{
+		{ID: "source-first", AgentID: source.ID, Name: "First", Model: "model"},
+		{ID: "moved-profile", AgentID: source.ID, Name: "Moved", Model: "model"},
+		{ID: "target-first", AgentID: target.ID, Name: "Target first", Model: "model"},
+		{ID: "target-second", AgentID: target.ID, Name: "Target second", Model: "model"},
+	}
+	for _, profile := range profiles {
+		if err := repo.CreateAgentProfile(ctx, profile); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := repo.ReorderAgentProfiles(ctx, source.ID, []string{profiles[0].ID, profiles[1].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := repo.ReorderAgentProfiles(ctx, target.ID, []string{profiles[2].ID, profiles[3].ID}); err != nil {
+		t.Fatal(err)
+	}
+	moved := profiles[1]
+	moved.AgentID = target.ID
+	if err := repo.UpdateAgentProfileWithEnabledIntent(ctx, moved, nil); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := repo.GetAgentProfileOrderSnapshots(ctx, []string{source.ID, target.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := snapshot[target.ID]
+	if len(got.Profiles) != 3 || got.Profiles[0].ID != moved.ID || got.Profiles[1].ID != profiles[2].ID || got.Profiles[2].ID != profiles[3].ID || got.Revision != 1 {
+		t.Fatalf("target snapshot = %#v, want moved profile before saved group at revision 1", got)
+	}
+	if len(snapshot[source.ID].Profiles) != 1 || snapshot[source.ID].Profiles[0].ID != profiles[0].ID || snapshot[source.ID].Revision != 1 {
+		t.Fatalf("source snapshot = %#v, want surviving saved order at revision 1", snapshot[source.ID])
 	}
 }

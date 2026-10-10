@@ -129,7 +129,9 @@ Applies to `AC-AGENTS-PROFILE-LIST-ORDERING-001.1`, `001.2`, `001.7`, and
 `001.9`.
 
 ## Verification
+
 Run these commands with the Node version pinned in `apps/.node-version` (24).
+
 ```bash
 (cd apps && pnpm install --frozen-lockfile)
 (cd apps/web && pnpm exec vitest run lib/settings/agent-profile-order.test.ts lib/settings/agent-profile-selector-order.test.ts lib/settings/profile-order-queue.test.ts lib/state/slices/settings/settings-slice.test.ts hooks/domains/settings/agent-list-resource.test.ts lib/state/hydration/hydrator.test.ts hooks/domains/settings/use-profile-duplicate.test.ts hooks/domains/settings/use-profile-enabled-toggle.test.ts lib/ws/handlers/agents.test.ts "app/settings/agents/[agentId]/agent-save-helpers.test.ts" "app/settings/agents/[agentId]/agent-save-helpers-provider.test.ts" "app/settings/agents/[agentId]/profiles/[profileId]/use-agent-profile-settings.test.tsx" app/office/setup/agent-profile-setup-controls.test.tsx "app/settings/agents/page.agent-list-snapshot.test.tsx" components/task-create-dialog-options.test.tsx components/quick-chat/quick-chat-setup.test.tsx components/settings/agents src/settings-routes.test.ts)
@@ -152,7 +154,7 @@ Run these commands with the Node version pinned in `apps/.node-version` (24).
 - `apps/web/hooks/domains/settings/use-profile-duplicate.ts` and `.test.ts`
 - `apps/web/lib/ws/handlers/agents.ts` and `.test.ts`
 - `apps/web/lib/types/backend.ts`
-- `apps/web/app/settings/agents/[agentId]/agent-save-helpers.ts`, `agent-save-helpers.test.ts`, and `agent-save-helpers-provider.test.ts`
+- `apps/web/hooks/domains/settings/use-agent-creation-store-sync.ts`, `agent-save-helpers.test.ts`, and `agent-save-helpers-provider.test.ts`
 - `apps/web/app/office/setup/agent-profile-setup-controls.tsx` and `.test.tsx`
 - `apps/web/lib/state/hydration/hydrator.ts` and `hydrator.test.ts`
 - `apps/web/hooks/domains/settings/agent-list-resource.ts` and `.test.ts`
@@ -200,6 +202,9 @@ Task 01 (endpoint, event, stored order).
 
 ## Results
 
+The results below are historical contributor reports from before integration
+with current main. They are not verification of the combined review head.
+
 The revised implementation removes the automatic name-sort action and limits
 saved ordering to Settings > Agents and its navigation tree. Profile selectors
 retain their creation baseline, context-specific recent-use ranking, defaults,
@@ -216,3 +221,21 @@ passed, and 4 skipped. Reported failures did not include the changed
 profile-order test files; they included timeouts and test-fixture connection
 errors. Keep this broad-suite failure visible; the focused profile-order suite,
 selector E2E, and reorder E2E passed.
+
+## Integration review validation
+
+The review fixup preserves current-main catalogue publication, enabled-intent
+persistence, capability/runtime metadata, and Settings model-picker behavior.
+It adds regression coverage for creation baselines during pending drags and
+late acknowledgements, terminal rollback, the 15-second request timeout,
+malformed timestamp handling, Office option preservation, and localized drag
+announcements. Desktop handles use the shared 28 px size; phone and coarse
+pointer handles retain 44 px hit targets. Backend regressions cover canceled
+repository reads, equal/missing ranks, and create/delete after saved ordering.
+
+Focused frontend tests run in a credential-free, nonroot, network-disabled
+container. Broad frontend/backend, race, lint, build, typecheck, and rendered
+desktop/mobile checks remain assigned to hosted CI. Host hooks and contributor
+tooling are not executed during this review. The historical broad-suite
+failures above remain visible; they are not attributed to unrelated tests
+without exact source and log evidence.

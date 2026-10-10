@@ -51,6 +51,16 @@ async function touchDragProfile(
   await expect(targetRow).toBeInViewport();
   const to = await targetRow.boundingBox();
   if (!to) throw new Error("Target profile row has no bounding box");
+  expect(from.width).toBeGreaterThanOrEqual(44);
+  expect(from.height).toBeGreaterThanOrEqual(44);
+  expect(
+    await sourceHandle.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return element.contains(
+        document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+      );
+    }),
+  ).toBe(true);
   const startX = from.x + from.width / 2;
   const startY = from.y + from.height / 2;
   const endX = to.x + to.width / 2;
@@ -96,7 +106,7 @@ test.describe("Agent profile ordering on mobile", () => {
     testPage,
     apiClient,
     backend,
-  }) => {
+  }, testInfo) => {
     const { agents } = await apiClient.listAgents();
     const agent = agents[0];
     if (!agent) throw new Error("The E2E fixture must provide an installed agent");
@@ -147,6 +157,10 @@ test.describe("Agent profile ordering on mobile", () => {
           testPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         )
         .toBe(true);
+      await testInfo.attach("profile-order-mobile", {
+        body: await testPage.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
       cdp = await testPage.context().newCDPSession(testPage);
 
       await sourceRow.scrollIntoViewIfNeeded();

@@ -3,27 +3,22 @@ import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
 import type { AgentProfileOption } from "@/lib/state/slices/settings/types";
 import { normalizeAgentProfiles } from "@/lib/api/domains/agent-profile-normalize";
 
+import { parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
+
 type CreatedProfile = { id: string; createdAt?: string };
 
 /** Settings order is not a selector input. Retain source order for unstamped legacy options. */
 export function orderProfilesForSelection<T extends CreatedProfile>(profiles: T[]): T[] {
-  if (profiles.some((profile) => !profile.createdAt)) return profiles;
   const keyed = profiles.map((profile) => ({
     profile,
-    milliseconds: Date.parse(profile.createdAt!),
-    submillisecond: Number(
-      (profile.createdAt!.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? "")
-        .padEnd(9, "0")
-        .slice(3),
-    ),
+    timestamp: parseTurnTimestamp(profile.createdAt),
   }));
+  if (keyed.some(({ timestamp }) => timestamp === null)) return profiles;
   return keyed
-    .toSorted(
-      (left, right) =>
-        right.milliseconds - left.milliseconds ||
-        right.submillisecond - left.submillisecond ||
-        (left.profile.id < right.profile.id ? -1 : Number(left.profile.id > right.profile.id)),
-    )
+    .toSorted((left, right) => {
+      if (left.timestamp! !== right.timestamp!) return left.timestamp! > right.timestamp! ? -1 : 1;
+      return left.profile.id < right.profile.id ? -1 : Number(left.profile.id > right.profile.id);
+    })
     .map(({ profile }) => profile);
 }
 

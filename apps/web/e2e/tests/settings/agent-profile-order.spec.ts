@@ -7,8 +7,8 @@ import {
   restoreProfileOrder,
 } from "./agent-profile-order-helpers";
 
-/** Fragment of dnd-kit's default onDragOver accessibility announcement. */
-const MOVED_OVER = "was moved over droppable area";
+/** Fragment of the translated profile-position announcement. */
+const MOVED_OVER = "moved to position";
 
 test.describe("Agent profile ordering", () => {
   test("pointer reorder persists across clients and Settings navigation while membership changes stay first", async ({
@@ -108,7 +108,7 @@ test.describe("Agent profile ordering", () => {
     testPage,
     apiClient,
     backend,
-  }) => {
+  }, testInfo) => {
     const { original, current, createdIds } = await seedProfileOrder(apiClient, "Keyboard");
     try {
       await testPage.goto("/settings/agents");
@@ -116,16 +116,25 @@ test.describe("Agent profile ordering", () => {
       const row = profileRow(testPage, original, source.id);
       const handle = row.getByTestId("agent-profile-drag-handle");
       await expect(handle).toBeVisible();
+      const box = await handle.boundingBox();
+      expect(box?.height).toBeCloseTo(28, 0);
+      expect(box?.width).toBeCloseTo(28, 0);
+      await expect(handle).toHaveCSS("cursor", "pointer");
+      await testInfo.attach("profile-order-desktop", {
+        body: await testPage.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
       await handle.focus();
       await handle.press("Space");
       await expect(row.locator("xpath=..")).toHaveClass(/opacity-70/);
       const announcedTarget = async () =>
         (await testPage.locator('[id^="DndLiveRegion"]').allTextContents()).find((text) =>
-          text.includes(MOVED_OVER),
+          text.includes("Profile"),
         ) ?? "";
       await expect.poll(announcedTarget).toContain(MOVED_OVER);
       const initialAnnouncement = await announcedTarget();
       await handle.press("ArrowDown");
+      await expect.poll(announcedTarget).toContain(MOVED_OVER);
       await expect.poll(announcedTarget).not.toBe(initialAnnouncement);
       await handle.press("Escape");
       await expect(row.locator("xpath=..")).not.toHaveClass(/opacity-70/);

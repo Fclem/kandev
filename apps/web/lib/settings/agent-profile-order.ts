@@ -16,6 +16,21 @@ export function acceptAgentOrdersFromSnapshot(
       agent.profiles.map((profile) => profile.id),
       agent.profile_order_revision,
     );
+    const current = next[agent.id];
+    const incoming = agent.profiles.map((profile) => profile.id);
+    const liveIds = new Set(incoming);
+    const knownIds = new Set(current.order ?? []);
+    // Membership has its own freshness fence; equal order revisions can add or remove rows.
+    const order = [
+      ...incoming.filter((id) => !knownIds.has(id)),
+      ...(current.order ?? []).filter((id) => liveIds.has(id)),
+    ];
+    if (
+      order.length !== current.order?.length ||
+      order.some((id, index) => id !== current.order?.[index])
+    ) {
+      next = { ...next, [agent.id]: { ...current, order } };
+    }
   }
   return next;
 }
@@ -43,7 +58,7 @@ export function acceptServerOrder(
     ...state,
     [agentId]: {
       revision,
-      order: [...ids],
+      order: [...(current?.order ?? []).filter((id) => !ids.includes(id)), ...ids],
       inFlight: current?.inFlight ?? null,
       queued: current?.queued ?? null,
     },

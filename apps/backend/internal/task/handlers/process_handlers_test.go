@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/kandev/kandev/internal/task/repository"
+	managed "github.com/kandev/kandev/internal/task/repository/managedconversation"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -35,6 +36,18 @@ type mockRepository struct {
 	scriptsByRepo map[string][]*models.RepositoryScript
 	sessions      map[string]*models.TaskSession
 	executors     map[string]*models.Executor
+}
+
+func (*mockRepository) EnsureManagedConversation(context.Context, managed.EnsureRequest) (managed.Result, error) {
+	return managed.Result{}, managed.ErrUnavailable
+}
+
+func (*mockRepository) ChangeManagedConversationState(context.Context, managed.StateRequest) (managed.Result, error) {
+	return managed.Result{}, managed.ErrUnavailable
+}
+
+func (m *mockRepository) UpdateTaskFieldsWithParentAdmission(context.Context, string, models.TaskFieldUpdate, repository.TaskParentValidator) (*models.TaskFieldUpdateResult, error) {
+	return nil, fmt.Errorf("field updates are not supported by this test repository")
 }
 
 func (m *mockRepository) CommitWorkspaceRecoveryErrorIfCurrent(
@@ -68,6 +81,9 @@ func (m *mockRepository) CreateWorkspace(ctx context.Context, workspace *models.
 	return nil
 }
 func (m *mockRepository) GetWorkspace(ctx context.Context, id string) (*models.Workspace, error) {
+	return nil, nil
+}
+func (m *mockRepository) UpdateWorkspaceFields(_ context.Context, _ string, _ models.WorkspaceFieldUpdate, _ *time.Time) (*models.Workspace, error) {
 	return nil, nil
 }
 func (m *mockRepository) UpdateWorkspace(ctx context.Context, workspace *models.Workspace) error {
@@ -144,6 +160,9 @@ func (m *mockRepository) ListExpiredQuickChatTasks(ctx context.Context, cutoff t
 func (m *mockRepository) DeleteExpiredQuickChatTask(ctx context.Context, id string, cutoff time.Time) (bool, error) {
 	return false, nil
 }
+func (m *mockRepository) ListCoordinatorOriginTasks(ctx context.Context, workspaceID string) ([]*models.Task, error) {
+	return nil, nil
+}
 func (m *mockRepository) CountOpenWatcherCreatedTasks(_ context.Context, _, _ string) (int, error) {
 	return 0, nil
 }
@@ -218,6 +237,10 @@ func (m *mockRepository) ReleaseTaskExternalID(_ context.Context, _, _ string) (
 func (m *mockRepository) SwitchTaskRunner(context.Context, models.RunnerSwitchRequest) (*models.RunnerSwitchResult, error) {
 	return nil, nil
 }
+func (m *mockRepository) ReplaceTaskRepositories(context.Context, string, func(models.TaskRepositoryReplacementSnapshot) ([]*models.TaskRepository, error)) ([]*models.TaskRepository, error) {
+	return nil, fmt.Errorf("complete repository replacement is unsupported by this handler fixture")
+}
+
 func (m *mockRepository) CreateTaskRepository(ctx context.Context, taskRepo *models.TaskRepository) error {
 	return nil
 }
@@ -267,6 +290,9 @@ func (m *mockRepository) GetWorkflow(ctx context.Context, id string) (*models.Wo
 }
 func (m *mockRepository) UpdateWorkflow(ctx context.Context, workflow *models.Workflow) error {
 	return nil
+}
+func (m *mockRepository) UpdateWorkflowFields(ctx context.Context, id string, update models.WorkflowFieldUpdate) (*models.Workflow, error) {
+	return nil, fmt.Errorf("workflow field updates are not configured in this fixture")
 }
 func (m *mockRepository) DeleteWorkflow(ctx context.Context, id string) error {
 	return nil

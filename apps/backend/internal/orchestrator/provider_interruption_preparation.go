@@ -42,9 +42,17 @@ func (s *Service) retryContinuationPreparation(ctx context.Context, taskID, sess
 	if ctx.Err() != nil || entry.attempt >= transientMaxAttempts {
 		return false
 	}
-	classified := routingerr.Classify(routingerr.Input{Phase: routingerr.PhaseSessionInit, Stderr: failure.Error()})
+	classificationFailure := failure
+	var restoreFailure *agentruntime.RestoreRequiredError
+	if errors.As(failure, &restoreFailure) {
+		if restoreFailure.Decision.Reason != agentruntime.RestoreReasonTransport || restoreFailure.Cause == nil {
+			return false
+		}
+		classificationFailure = restoreFailure.Cause
+	}
+	classified := routingerr.Classify(routingerr.Input{Phase: routingerr.PhaseSessionInit, Stderr: classificationFailure.Error()})
 	var typed *routingerr.Error
-	if errors.As(failure, &typed) {
+	if errors.As(classificationFailure, &typed) {
 		classified = typed
 	}
 	if classified.Confidence != routingerr.ConfHigh || routingerr.Decide(routingerr.ContextKanban, classified, time.Now().UTC()) != routingerr.DecisionShortRetry {
@@ -99,7 +107,7 @@ func (s *Service) createContinuationRecoveryMessage(ctx context.Context, data wa
 	if data.RecoveryDisposition == "" {
 		data.RecoveryDisposition = recoveryDispositionManual
 		if data.RecoveryAttemptsStarted >= transientMaxAttempts {
-			data.RecoveryDisposition = "exhausted"
+			data.RecoveryDisposition = recoveryDispositionExhausted
 		}
 	}
 	return s.createRecoveryStatusMessage(ctx, data, "")

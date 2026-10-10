@@ -20,11 +20,14 @@ type ReorderAgentProfilesResult struct {
 // ReorderAgentProfiles saves a complete order for one installed global profile list.
 func (c *Controller) ReorderAgentProfiles(ctx context.Context, agentID string, profileIDs []string) (*ReorderAgentProfilesResult, error) {
 	agent, err := c.repo.GetAgent(ctx, agentID)
-	if errors.Is(err, sql.ErrNoRows) || agent == nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrAgentNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if agent == nil {
+		return nil, ErrAgentNotFound
 	}
 	if agent.ID == agents.DynamicAgentID {
 		return nil, ErrProfileOrderUnsupported

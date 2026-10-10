@@ -16,6 +16,7 @@ function makeStore() {
 
 function updateJob(overrides: Record<string, unknown> = {}) {
   return {
+    update_mode: "pinned",
     job_id: "update-1",
     agent_name: AGENT_NAME,
     status: "updating",
@@ -613,4 +614,23 @@ describe("agent profile ordering snapshots", () => {
       queued: ["p1", "p2"],
     });
   });
+});
+
+it("retains a workspace profile owned by a refreshed global agent", () => {
+  const store = makeStore();
+  store
+    .getState()
+    .setAgentProfiles([
+      { id: "office", agent_id: "agent", workspace_id: "workspace", label: "Office" },
+    ] as never);
+  store
+    .getState()
+    .applyAgentListSnapshot(
+      [{ id: "agent", name: "Agent", profiles: [{ id: "global", name: "Global" }] }] as never,
+      0,
+    );
+  expect(store.getState().agentProfiles.items.map((profile) => profile.id)).toEqual([
+    "global",
+    "office",
+  ]);
 });

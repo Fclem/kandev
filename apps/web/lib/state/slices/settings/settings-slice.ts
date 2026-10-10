@@ -230,23 +230,21 @@ function createAgentProfileOrderActions(
       let applied = false;
       set((draft) => {
         if (draft.agentProfiles.version !== expectedProfileVersion) return;
-        for (const agent of agents) {
-          if (agent.profile_order_revision === undefined) continue;
-          draft.agentProfiles.orderByAgent = acceptServerOrder(
-            draft.agentProfiles.orderByAgent,
-            agent.id,
-            agent.profiles.map((profile) => profile.id),
-            agent.profile_order_revision,
-          );
-        }
+        draft.agentProfiles.orderByAgent = acceptAgentOrdersFromSnapshot(
+          draft.agentProfiles.orderByAgent,
+          agents,
+        );
         const reconciled = reconcileAgentOrders(agents, draft.agentProfiles.orderByAgent);
         draft.settingsAgents.items = reconciled;
         const refreshedAgentIds = new Set(reconciled.map((agent) => agent.id));
         const profileOptions = toSelectorProfileOptions(agents);
         const preservedOptions = draft.agentProfiles.items.filter(
-          (profile) => !refreshedAgentIds.has(profile.agent_id),
+          (profile) => !!profile.workspace_id || !refreshedAgentIds.has(profile.agent_id),
         );
-        draft.agentProfiles.items = [...profileOptions, ...preservedOptions];
+        draft.agentProfiles.items = orderProfileOptionsForSelection([
+          ...profileOptions,
+          ...preservedOptions,
+        ]);
         applied = true;
       });
       return applied;
@@ -272,7 +270,12 @@ function createAgentProfileOrderActions(
         const current = draft.agentProfiles.orderByAgent[agentId];
         draft.agentProfiles.orderByAgent[agentId] = {
           revision: current?.revision ?? 0,
-          order: current?.order ?? null,
+          order:
+            current?.order ??
+            draft.settingsAgents.items
+              .find((agent) => agent.id === agentId)
+              ?.profiles.map((profile) => profile.id) ??
+            null,
           inFlight: current?.inFlight ?? null,
           queued: [...profileIds],
         };

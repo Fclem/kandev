@@ -112,6 +112,12 @@ export type AgentDiscovery = {
   available: boolean;
   matched_path?: string | null;
   login_command?: LoginCommand;
+  /**
+   * Vendor CLI version state. Present only for agent types that declare a
+   * host CLI (Claude, Codex); every other agent omits both fields.
+   */
+  cli_version?: string;
+  cli_version_error?: string;
 };
 
 export type AgentCapabilities = {
@@ -127,7 +133,8 @@ export type ModelEntry = {
   provider?: string;
   context_window?: number;
   is_default?: boolean;
-  source?: "static" | "dynamic";
+  /** "cli" for a vendor-CLI-discovered entry, "acp" for a bridge-advertised one. */
+  source?: "static" | "dynamic" | "cli" | "acp";
   /**
    * Agent-specific extras from ACP's `_meta` field. GitHub Copilot exposes
    * `copilotUsage` (e.g. "1x", "0.33x", "0x" — premium-request multiplier)
@@ -182,6 +189,23 @@ export type ProfileCapabilityRequest = {
   refresh?: boolean;
 };
 
+export type ProfileRuntimeComponent = {
+  role: "bridge" | "provider";
+  name: string;
+  package?: string;
+  source: "managed" | "bundled" | "external" | "unknown";
+  owner: "kandev" | "external" | "unknown";
+  effective_version?: string;
+  observed_version?: string;
+  guidance_url?: string;
+};
+
+export type ProfileRuntimeInfo = {
+  scope: "host";
+  observed_at: string;
+  components: ProfileRuntimeComponent[];
+};
+
 export type ModelConfig = {
   default_model: string;
   available_models: ModelEntry[];
@@ -193,6 +217,22 @@ export type ModelConfig = {
   supports_dynamic_models: boolean;
   status?: CapabilityStatus;
   error?: string;
+  /** How the model list was assembled. Absent for agent types without a vendor CLI. */
+  discovery?: ModelDiscovery;
+};
+
+// ModelDiscovery reports how Kandev assembled an agent type's model list and
+// whether the operator may type a model identifier that is not in it.
+export type ModelDiscovery = {
+  /** "cli_command" when the vendor CLI supplied models, "acp_probe" otherwise. */
+  source: "cli_command" | "acp_probe";
+  executable?: string;
+  cli_version?: string;
+  /** "ok", "skipped" (the CLI publishes no list), "pending", or a failure reason. */
+  status: string;
+  error?: string;
+  checked_at?: string;
+  allows_custom_model: boolean;
 };
 
 export type DynamicModelsResponse = {
@@ -204,7 +244,11 @@ export type DynamicModelsResponse = {
   current_mode_id?: string;
   commands?: CommandEntry[];
   error: string | null;
+  /** Mirrors ModelConfig.discovery for the models endpoint. */
+  discovery?: ModelDiscovery;
   context_revision?: string;
+  /** Ephemeral host-scoped runtime evidence for this exact profile probe. */
+  runtime_info?: ProfileRuntimeInfo;
 };
 
 export type ResolveAgentModelConfigRequest = {
@@ -268,6 +312,7 @@ export type LoginCommand = {
 export type RuntimeUpdate = {
   managed_fallback?: boolean;
   supported: boolean;
+  update_mode: "pinned" | "self_update";
   package: string;
   current_version?: string;
   default_version?: string;

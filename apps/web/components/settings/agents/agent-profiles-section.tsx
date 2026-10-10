@@ -20,6 +20,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { controlSizingClassName } from "@kandev/ui/control-sizing";
+import { profileDragAccessibility } from "@/lib/settings/profile-drag-accessibility";
 import { reorderIds } from "@/lib/settings/agent-profile-order";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -67,6 +69,7 @@ export function AgentProfilesSubList({
   canManage: boolean;
   onReorder: (agentId: string, profileIds: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -82,6 +85,7 @@ export function AgentProfilesSubList({
     >
       {canManage && savedAgent.profiles.length > 1 ? (
         <DndContext
+          accessibility={profileDragAccessibility(savedAgent.profiles, t)}
           sensors={sensors}
           collisionDetection={(args) =>
             args.pointerCoordinates ? pointerWithin(args) : closestCenter(args)
@@ -139,7 +143,10 @@ function SortableProfileRow({ agent, profile }: { agent: Agent; profile: AgentPr
           <button
             ref={setActivatorNodeRef}
             type="button"
-            className="relative z-10 flex h-11 w-11 touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+            className={controlSizingClassName(
+              "icon",
+              "relative z-10 flex shrink-0 cursor-pointer touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-muted",
+            )}
             data-testid="agent-profile-drag-handle"
             {...attributes}
             {...listeners}

@@ -13,7 +13,7 @@ import (
 var (
 	ErrProfileOrderAgentNotFound = errors.New("agent not found")
 	ErrProfileOrderSetMismatch   = errors.New("profile order does not match current global profile set")
-	// row changed between the caller's read and the transactional insert, so
+	// ErrProfileChanged means the source profile row changed between the caller's read and the transactional insert, so
 	// the copy would not reflect a consistent snapshot. Callers retry on a
 	// fresh read.
 	ErrProfileChanged = errors.New("source profile changed during duplicate")
@@ -54,6 +54,9 @@ type Repository interface {
 	// otherwise ErrProfileChanged is returned and no row is created.
 	DuplicateAgentProfile(ctx context.Context, input DuplicateAgentProfileInput) error
 	UpdateAgentProfile(ctx context.Context, profile *models.AgentProfile) error
+	// UpdateAgentProfileWithEnabledIntent preserves the stored enabled value
+	// when enabled is nil and returns the written value in profile.Enabled.
+	UpdateAgentProfileWithEnabledIntent(ctx context.Context, profile *models.AgentProfile, enabled *bool) error
 	UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) (time.Time, error)
 	DeleteAgentProfile(ctx context.Context, id string) error
 	GetAgentProfile(ctx context.Context, id string) (*models.AgentProfile, error)
@@ -125,5 +128,13 @@ type AtomicDynamicProfileRepository interface {
 		dynamic *models.DynamicAgentProfile,
 		expectedVersion int64,
 		routes []models.DynamicAgentRoute,
+	) error
+	UpdateAgentProfileWithDynamicEnabledIntent(
+		ctx context.Context,
+		profile *models.AgentProfile,
+		dynamic *models.DynamicAgentProfile,
+		expectedVersion int64,
+		routes []models.DynamicAgentRoute,
+		enabled *bool,
 	) error
 }

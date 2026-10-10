@@ -22,14 +22,14 @@ import { seedDefaultCLIFlags } from "@/lib/cli-flags";
 import { generateUUID } from "@/lib/utils";
 import { agentProfileId as toAgentProfileId } from "@/lib/types/ids";
 import type { AgentProfileKind } from "@/lib/types/agent-profile";
-import { useAppStore, useAppStoreApi } from "@/components/state-provider";
-import { syncSavedAgentToStore } from "./agent-save-store-sync";
+import { useAppStore } from "@/components/state-provider";
+import { useAgentCreationStoreSync } from "@/hooks/domains/settings/use-agent-creation-store-sync";
 import { useAvailableAgents } from "@/hooks/domains/settings/use-available-agents";
 import { useSecrets } from "@/hooks/domains/settings/use-secrets";
 import { deleteAgentAction } from "@/app/actions/agents";
 import { SettingsRedirect } from "@/src/settings-route-helpers";
 import { saveNewAgent, saveExistingAgent, isProfileDirty } from "./agent-save-helpers";
-import type { DraftProfile, DraftAgent } from "./agent-save-helpers";
+import type { DraftProfile, DraftAgent, SaveAgentCallbacks } from "./agent-save-helpers";
 import { AgentHeader, ProfilesCard } from "./agent-setup-parts";
 import { isHandledApiError } from "@/lib/api/client";
 
@@ -166,15 +166,6 @@ function useAgentFormState(
   };
 }
 
-function useAgentStoreSync() {
-  const store = useAppStoreApi();
-  const getAgentProfilesVersion = () => store.getState().agentProfiles.version;
-  const upsertAgent = (agent: Agent, profileVersionAtSaveStart: number) =>
-    syncSavedAgentToStore(store, agent, profileVersionAtSaveStart);
-
-  return { getAgentProfilesVersion, upsertAgent };
-}
-
 type AgentSaveHandlersProps = {
   draftAgent: DraftAgent;
   savedAgent: Agent | null;
@@ -185,7 +176,7 @@ type AgentSaveHandlersProps = {
   resolveDisplayName: (name: string) => string;
   setDraftAgent: (agent: DraftAgent | ((current: DraftAgent) => DraftAgent)) => void;
   setSaveStatus: (status: "idle" | "loading" | "success" | "error") => void;
-  upsertAgent: (agent: Agent, profileVersionAtSaveStart: number) => void;
+  upsertAgent: ReturnType<typeof useAgentCreationStoreSync>["upsertAgent"];
   getAgentProfilesVersion: () => number;
   onToastError: (error: unknown) => void;
   replaceRoute: (path: string) => void;
@@ -227,7 +218,12 @@ function useAgentSaveHandlers({
       currentAgentModelConfig,
       permissionSettings,
       resolveDisplayName,
-      upsertAgent: (agent: Agent) => upsertAgent(agent, profileVersionAtSaveStart),
+      upsertAgent: ((agent, creation) =>
+        upsertAgent(
+          agent,
+          creation,
+          profileVersionAtSaveStart,
+        )) satisfies SaveAgentCallbacks["upsertAgent"],
       setDraftAgent,
       ensureProfiles,
       cloneAgent,
@@ -363,7 +359,7 @@ function AgentSetupForm({
   const router = useRouter();
   const availableAgents = useAvailableAgents().items;
   const { items: secrets } = useSecrets();
-  const { getAgentProfilesVersion, upsertAgent } = useAgentStoreSync();
+  const { getAgentProfilesVersion, upsertAgent } = useAgentCreationStoreSync();
 
   const {
     draftAgent,
@@ -400,8 +396,8 @@ function AgentSetupForm({
     resolveDisplayName,
     setDraftAgent,
     setSaveStatus,
-    getAgentProfilesVersion,
     upsertAgent,
+    getAgentProfilesVersion,
     onToastError,
     replaceRoute: (path: string) => router.replace(path),
   });

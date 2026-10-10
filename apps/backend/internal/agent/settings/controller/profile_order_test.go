@@ -30,3 +30,12 @@ func TestReorderAgentProfilesMapsStaleAndRejectsDynamic(t *testing.T) {
 		t.Fatalf("dynamic reorder error = %v, want ErrProfileOrderUnsupported", err)
 	}
 }
+
+func TestReorderAgentProfilesPreservesReadCancellation(t *testing.T) {
+	ctrl, _ := newSQLiteBackedController(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := ctrl.ReorderAgentProfiles(ctx, "cancelled-agent", []string{"profile"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
+	}
+}

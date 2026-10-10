@@ -76,6 +76,7 @@ export async function reorderAgentProfilesAction(
     {
       method: "PUT",
       body: JSON.stringify({ profile_ids: profileIds }),
+      signal: AbortSignal.timeout(15_000),
     },
   );
 }

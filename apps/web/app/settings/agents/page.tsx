@@ -24,7 +24,13 @@ import {
   listAvailableAgents,
 } from "@/lib/api";
 import { useIsAdmin } from "@/hooks/domains/auth/use-is-admin";
-import type { AgentUpdateJob, AgentUpdatePreview, AgentUpdateStatus, InstallJob } from "@/lib/api";
+import type {
+  AgentUpdateJob,
+  AgentUpdateMode,
+  AgentUpdatePreview,
+  AgentUpdateStatus,
+  InstallJob,
+} from "@/lib/api";
 import { useAgentDiscovery } from "@/hooks/domains/settings/use-agent-discovery";
 import { useAgentRuntimeUpdates } from "@/hooks/domains/settings/use-agent-runtime-updates";
 import { useAgentRuntimeUpdateStatuses } from "@/hooks/domains/settings/use-agent-runtime-update-statuses";
@@ -44,7 +50,7 @@ import {
   type DiscoveredAgent,
 } from "@/lib/settings/agent-display-order";
 import { AgentRuntimePolicies } from "@/components/settings/agent-runtime-policies";
-import { HideDisabledAgentProfilesSetting } from "@/app/settings/agents/hide-disabled-agent-profiles-setting";
+import { AgentOptionsDialog } from "@/app/settings/agents/agent-options-dialog";
 import type { AgentDiscovery, Agent, AvailableAgent, RuntimeUpdate } from "@/lib/types/http";
 import { useProfileOrder } from "@/hooks/domains/settings/use-profile-order";
 import { getAgentListResourceScope } from "@/hooks/domains/settings/agent-list-resource";
@@ -69,11 +75,14 @@ type InstalledAgentsSectionProps = {
     name: string,
     targetVersion?: string,
     useDefault?: boolean,
+    targetFamily?: "v2",
   ) => Promise<AgentUpdatePreview>;
   startUpdate: (
     name: string,
     targetVersion: string,
     useDefault?: boolean,
+    updateMode?: AgentUpdateMode | "v2",
+    expectedRuntimeRevision?: number,
   ) => Promise<AgentUpdateJob>;
   setTuiDialogOpen: (open: boolean) => void;
   handleRescan: () => Promise<void>;
@@ -93,6 +102,7 @@ function InstalledAgentsHeader({
   const { t } = useTranslation();
   return (
     <div className="flex w-full flex-wrap gap-2 md:w-auto" data-testid="installed-agents-actions">
+      <AgentOptionsDialog />
       <Button
         variant="outline"
         onClick={onOpenShell}
@@ -286,7 +296,6 @@ function InstalledAgentsSection({
       }
       contentClassName="space-y-4 divide-y-0"
     >
-      <HideDisabledAgentProfilesSetting />
       <HostShellDialog
         open={shellOpen}
         onOpenChange={setShellOpen}
@@ -352,6 +361,14 @@ function useAgentPageState() {
   const { updateJobs, previewUpdate, startUpdate } = useAgentRuntimeUpdates();
   const { refresh: refreshRuntimeUpdateStatuses, statusByAgent } =
     useAgentRuntimeUpdateStatuses(updateJobs);
+
+  const handleStartUpdate: InstalledAgentsSectionProps["startUpdate"] = async (...args) => {
+    const result = await startUpdate(...args);
+    if (!result.job_id && result.operation === "up_to_date") {
+      void refreshRuntimeUpdateStatuses().catch(() => {});
+    }
+    return result;
+  };
 
   const installedAgents = useMemo(() => detectedAgents(discoveryAgents), [discoveryAgents]);
   const savedAgentsByName = useMemo(
@@ -424,7 +441,7 @@ function useAgentPageState() {
     installJobs,
     updateJobs,
     previewUpdate,
-    startUpdate,
+    startUpdate: handleStartUpdate,
   };
 }
 

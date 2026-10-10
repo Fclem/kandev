@@ -5,6 +5,7 @@ requirements:
   - REQ-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001
 system_design:
   - ../../specs/integrations/system-design/github-repository-stars.md
+  - ../../specs/integrations/system-design/deployment-secret-store.md
 legacy_specs: []
 ---
 # Implementation Plan: GitHub repository stars
@@ -106,11 +107,14 @@ The star button is separate from repository navigation and row overlay links, us
 - [x] [Task 01: Add personal star auth and API](task-01-github-api.md)
 - [x] [Task 02: Add plugin settings star controls](task-02-plugin-settings-controls.md)
 - [x] [Task 03: Add browser star flows](task-03-plugin-stars-e2e.md)
+- [ ] [Task 04: Protect deployment secret store](task-04-protected-deployment-secret-store.md)
 
 ## Verification results
 
 All three work orders are implemented and verified on `feature/sync-plugin-reposito-673`; each work
 order's `## Results` carries its own commits and gates, including the corrections that followed it.
+
+Task 04 is pending. Round 11 found that the backend service account can replace deployment secret-store files through its writable data-directory parent. Task 04 moves identity and the store to the root-owned, installation-ID-keyed layout under `/var/lib/kandev-deployment-secrets/` and makes a clean cutover from the unreleased data-directory layout without migration. It claims no implementation verification.
 
 Passing at head: the Task 01 verification block (gates 1-11, including the Windows cross-build, the
 Linux-only daemon build, the runtime-bundle contract, and the `-race` unsupported-target filter);

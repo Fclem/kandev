@@ -29,6 +29,8 @@ Plugin repository links identify GitHub projects that users may want to support.
 - **AC-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001.8:** Batch status hydration SHALL use a bounded, deduplicated request contract with explicit input limits and one shared 30-second deadline for provider work; per-repository failures or deadline expiry SHALL produce unknown results, and duplicate canonical repository keys SHALL cause at most one provider call.
 - **AC-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001.9:** Fine-pointer controls on non-mobile desktop SHALL use the existing 24px compact inline sizing. Any touch context, defined as a mobile viewport or a coarse primary pointer, SHALL use a minimum 44px touch target, including mobile viewports with fine pointers. Each surface SHALL expose keyboard activation, `aria-pressed`, a stable accessible name while busy, and localized live status feedback.
 - **AC-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001.10:** The personal GitHub star connection SHALL use a dedicated OAuth App authorization that requests and persists the `public_repo` capability. Existing GitHub App user-to-server connections, connections without that capability, and connections with unknown scope metadata SHALL not be used for star mutations. They SHALL expose reconnect/re-consent through the personal connection flow; reduced-scope or declined re-consent SHALL fail silently in the optional star control.
+- **AC-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001.11:** The backend service account MAY read deployment-owned OAuth client-secret metadata and ciphertext required at runtime, but SHALL NOT alter, replace, or reactivate revoked secret references or deployment identity material, including by replacing store files or their parent directory.
+- **AC-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001.12:** Deployment identity and secret references SHALL exist only in the protected deployment store. Runtime resolution, root bootstrap, provisioning, and revocation SHALL never read, import, or fall back to deployment identity or secret-store state under the backend data directory. When protected state is missing, unbound, or fails ownership validation, the star capability SHALL report unavailable; the operator recovers through root bootstrap and provisioning, not through migration.
 
 ## Explicit exclusions
 
@@ -39,4 +41,4 @@ Plugin repository links identify GitHub projects that users may want to support.
 
 ## System design
 
-See [GitHub repository stars system design](../system-design/github-repository-stars.md).
+See [GitHub repository stars system design](../system-design/github-repository-stars.md) and [protected deployment secret store design](../system-design/deployment-secret-store.md).

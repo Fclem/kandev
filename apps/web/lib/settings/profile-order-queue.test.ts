@@ -74,7 +74,9 @@ describe("ProfileOrderQueue", () => {
     ]);
     expect(store.getState().agentProfiles.orderByAgent.a.inFlight).toBeNull();
   });
+});
 
+describe("ProfileOrderQueue creation rollback", () => {
   it("restores the saved order of newly created profiles after a failed drag", async () => {
     const baseline = {
       id: "a",
@@ -159,7 +161,9 @@ describe("ProfileOrderQueue", () => {
       firstOldId,
     ]);
   });
+});
 
+describe("ProfileOrderQueue conflict replay", () => {
   it("refetches on conflict and replays only surviving queued profiles after new IDs", async () => {
     let rejectFirst!: (error: Error) => void;
     const first = new Promise<{ profile_ids: string[]; revision: number }>((_, reject) => {

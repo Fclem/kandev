@@ -97,8 +97,9 @@ sorting while preserving the backend reorder contract and cross-client sync.
 - `lib/settings/agent-profile-selector-order.ts`: normalize timestamp metadata
   and restore per-agent selector baselines without moving workspace-scoped or
   unstamped option slots.
-- `app/actions/agents.ts`: `reorderAgentProfilesAction` with a `stale` result for
-  `409` and a 15 s abort timeout.
+- `app/actions/agents.ts`: `reorderAgentProfilesAction` returns the saved order
+  response and throws `ApiError` for HTTP failures. The queue handles `409`
+  through its conflict path; requests use a 15 s abort timeout.
 - Settings slice: per-agent `ProfileOrderSync` (`revision`, `order`, `inFlight`,
   `queued`), `acceptServerOrder`, `reconcileAgentOrders` applied inside
   `setSettingsAgents` and `hydrateSettings`, plus

@@ -32,6 +32,8 @@ export type ProfileFormData = {
   /** Legacy automatic-fallback opt-in; hides the fallback_model field. */
   auto_fallback?: boolean;
   require_exact_model?: boolean;
+  limit_fallback?: boolean;
+  resume_after_reset?: boolean;
   mode: string;
   config_options?: Record<string, string>;
   cli_passthrough: boolean;

@@ -506,6 +506,46 @@ func TestDispatch_ForwardsLaunchContextToStarter(t *testing.T) {
 	}
 }
 
+// @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-006.1
+func TestDispatchProviderLimitFallbackKeepsResolvedProvider(t *testing.T) {
+	repo := newTestRepoSched(t)
+	seedRoutingConfig(t, repo, []routing.ProviderID{"claude-acp", "codex-acp"})
+	starter := newFakeTaskStarter()
+	ss := buildScheduler(t, repo, starter)
+	run := seedRun(t, repo, `{"task_id":"t-provider-limit"}`)
+	run.ResolvedExecutionProfileID = new("claude-acp-profile")
+	fallbackModel := "claude-fallback-model"
+	run.LimitFallbackModel = &fallbackModel
+
+	launched, parked, err := ss.DispatchWithRouting(context.Background(), run, makeAgent(), scheduler.LaunchContext{})
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if !launched || parked {
+		t.Fatalf("launched=%v parked=%v, want same-provider fallback launch", launched, parked)
+	}
+	got := starter.lastCall().route
+	if got.ProviderID != "claude-acp" || got.ExecutionProfileID != "claude-acp-profile" {
+		t.Fatalf("fallback changed provider/profile: %+v", got)
+	}
+	if got.Model != fallbackModel {
+		t.Fatalf("effective model = %q, want provider-limit fallback %q", got.Model, fallbackModel)
+	}
+	attempts, err := repo.ListRouteAttempts(context.Background(), run.ID)
+	if err != nil {
+		t.Fatalf("list route attempts: %v", err)
+	}
+	if len(attempts) != 1 {
+		t.Fatalf("route attempts = %d, want 1", len(attempts))
+	}
+	attempt := attempts[0]
+	if attempt.RequestedModel != "claude-acp-bal" ||
+		attempt.EffectiveModel != fallbackModel ||
+		attempt.OverrideReason != "provider_limit" {
+		t.Fatalf("provider-limit route audit = %+v", attempt)
+	}
+}
+
 func TestDispatch_FirstProviderSucceeds(t *testing.T) {
 	repo := newTestRepoSched(t)
 	seedRoutingConfig(t, repo, []routing.ProviderID{"claude-acp", "codex-acp"})

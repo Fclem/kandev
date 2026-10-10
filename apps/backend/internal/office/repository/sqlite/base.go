@@ -443,6 +443,9 @@ func (r *Repository) createRunTables() error {
 		session_recovery_block_id TEXT,
 		session_recovery_reason TEXT,
 		earliest_retry_at TIMESTAMP,
+		limit_fallback_model TEXT,
+		provider_limit_wait_key TEXT,
+		provider_limit_probe TEXT NOT NULL DEFAULT '',
 		-- route_cycle_baseline_seq marks the floor at which the current
 		-- retry cycle began. excludedFromAttempts filters prior attempt
 		-- rows with seq <= baseline so a parked-then-lifted run gets a

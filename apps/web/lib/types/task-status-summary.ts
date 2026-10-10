@@ -35,8 +35,10 @@ export type TaskStatusSummaryLaunchQueue = {
   agent_profile_id?: string;
   workflow_step_id?: string;
   queued_at: string;
-  reason: "session_capacity" | "ownership_unavailable" | "replay_error";
+  reason: "session_capacity" | "ownership_unavailable" | "replay_error" | "provider_limit";
   retrying: boolean;
+  model?: string;
+  retry_at?: string;
   capacity?: {
     in_use: number;
     limit: number;

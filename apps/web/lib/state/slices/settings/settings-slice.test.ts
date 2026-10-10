@@ -634,3 +634,39 @@ it("retains a workspace profile owned by a refreshed global agent", () => {
     "office",
   ]);
 });
+
+describe("provider limit snapshots", () => {
+  // @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.8
+  it("does not restore a cleared limit from an older pending HTTP snapshot", () => {
+    const store = makeStore();
+    const limit = {
+      profile_id: "profile-one",
+      model: "opus",
+      scope: "account" as const,
+      until: "2026-10-03T13:00:00Z",
+      reset_known: true,
+    };
+    store.getState().setAgentProfileLimits([limit]);
+    const requestVersion = store.getState().agentProfileLimits.version;
+    store.getState().setAgentProfileLimits([]);
+    store.getState().setAgentProfileLimits([limit], requestVersion);
+    expect(store.getState().agentProfileLimits.byProfileId["profile-one"]).toBeUndefined();
+  });
+  it("removes cleared sibling marks while preserving an extended independent limit", () => {
+    const store = makeStore();
+    const first = {
+      profile_id: "profile-one",
+      model: "opus",
+      scope: "model" as const,
+      until: "2026-10-03T13:00:00Z",
+      reset_known: true,
+    };
+    const second = { ...first, profile_id: "profile-two", model: "sonnet" };
+    store.getState().setAgentProfileLimits([first, second]);
+    store.getState().setAgentProfileLimits([{ ...first, until: "2026-10-03T15:00:00Z" }]);
+    expect(store.getState().agentProfileLimits.byProfileId["profile-one"]?.until).toBe(
+      "2026-10-03T15:00:00Z",
+    );
+    expect(store.getState().agentProfileLimits.byProfileId["profile-two"]).toBeUndefined();
+  });
+});

@@ -53,3 +53,21 @@ describe("isProfileDirty Cursor MCP selection", () => {
     ).toBe(false);
   });
 });
+
+describe("isProfileDirty limit recovery", () => {
+  it.each(["limitFallback", "resumeAfterReset"])("tracks %s independently", (field) => {
+    const saved = profile({ limitFallback: true, resumeAfterReset: true });
+    expect(isProfileDirty(profile({ ...saved, [field]: false }), saved, permissions)).toBe(true);
+    expect(isProfileDirty(profile({ ...saved }), saved, permissions)).toBe(false);
+  });
+
+  it("treats legacy omissions as disabled", () => {
+    expect(
+      isProfileDirty(
+        profile({ limitFallback: false, resumeAfterReset: false }),
+        profile(),
+        permissions,
+      ),
+    ).toBe(false);
+  });
+});

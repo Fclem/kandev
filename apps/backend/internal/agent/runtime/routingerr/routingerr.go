@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/kandev/kandev/internal/common/providerretry"
 )
 
 // Code is the normalized provider-routing error code.
@@ -124,6 +126,7 @@ type Error struct {
 	ClassifierRule   string
 	ExitCode         *int
 	ResetHint        *time.Time
+	LimitScope       string
 	RawExcerpt       string
 	RemediationPath  string // path to clean before retry; only set for codes that have a known remediation
 }
@@ -161,6 +164,8 @@ type Input struct {
 	StructuredErr             error
 	HTTPStatus                int
 	ResetHint                 *time.Time
+	RetryAfter                time.Duration
+	DiagnosticSource          string    // adapter-attested diagnostic origin, never inferred from prose
 	OccurredAt                time.Time // observation time for this provider diagnostic
 	Stderr                    string
 	Stdout                    string
@@ -187,9 +192,22 @@ func Classify(in Input) *Error {
 			observedAt = time.Now()
 		}
 		text := in.Stderr + "\n" + in.Stdout
-		hint := parseResetHintAt(text, observedAt)
+		hint := in.ResetHint
+		if in.RetryAfter > 0 {
+			reset := observedAt.Add(in.RetryAfter)
+			hint = &reset
+		}
+		if hint == nil {
+			hint = parseResetHintAt(text, observedAt)
+		}
 		if hint == nil && e.ClassifierRule == "claude.stderr.session_limit.v1" {
 			hint = parseResetClockHintAt(text, observedAt)
+		}
+		if hint == nil {
+			if delay := providerretry.FromText(text); delay != nil {
+				reset := observedAt.Add(providerretry.Duration(delay))
+				hint = &reset
+			}
 		}
 		if hint != nil {
 			e.ResetHint = hint
@@ -214,7 +232,7 @@ func classify(in Input) *Error {
 		e.ResetHint = in.ResetHint
 		return applyInvariants(e)
 	}
-	if e, ok := matchProviderRules(in.ProviderID, excerpt); ok {
+	if e, ok := matchProviderRulesWithSource(in, excerpt); ok {
 		e.Phase = in.Phase
 		e.ExitCode = in.ExitCode
 		e.ResetHint = in.ResetHint
@@ -345,9 +363,20 @@ func classifyByPhase(in Input, excerpt string) *Error {
 	}
 }
 
+// Limit scopes classify which provider resource a quota or rate limit covers.
+const (
+	// LimitScopeAccount covers every model on one provider account.
+	LimitScopeAccount = "account"
+	// LimitScopeModel covers one model.
+	LimitScopeModel = "model"
+)
+
 func applyInvariants(e *Error) *Error {
 	e.Class = ClassForCode(e.Code)
 	e.CatalogueVersion = CatalogueVersion
+	if (e.Code == CodeQuotaLimited || e.Code == CodeRateLimited) && e.LimitScope == "" {
+		e.LimitScope = LimitScopeModel
+	}
 	switch e.Code {
 	case CodeAuthRequired, CodeMissingCredentials, CodeSubscriptionRequired, CodeProviderNotConfigured:
 		e.UserAction = true

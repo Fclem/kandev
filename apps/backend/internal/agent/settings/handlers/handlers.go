@@ -92,6 +92,7 @@ func (h *Handlers) registerHTTP(router *gin.Engine) {
 	api.POST("/agent-update/:agentName", cfg, h.interlock, h.httpUpdateAgentRuntime)
 	api.GET("/agent-update/jobs", h.httpListAgentUpdateJobs)
 	api.GET("/agent-update/jobs/:id", h.httpGetAgentUpdateJob)
+	api.GET("/agent-profiles/limits", h.httpListProfileLimits)
 	api.PATCH("/agent-profiles/:id", cfg, h.interlock, h.httpUpdateProfile)
 	api.DELETE("/agent-profiles/:id", cfg, h.interlock, h.httpDeleteProfile)
 	api.POST("/agent-profiles/:id/duplicate", cfg, h.interlock, h.httpDuplicateProfile)
@@ -469,6 +470,8 @@ type createAgentProfileRequest struct {
 	FallbackModel           string                 `json:"fallback_model,omitempty"`
 	AutoFallback            bool                   `json:"auto_fallback"`
 	RequireExactModel       bool                   `json:"require_exact_model"`
+	LimitFallback           bool                   `json:"limit_fallback"`
+	ResumeAfterReset        bool                   `json:"resume_after_reset"`
 	CursorMCPAuthEnabled    *bool                  `json:"cursor_mcp_auth_enabled,omitempty"`
 	CursorPluginsMCPEnabled *bool                  `json:"cursor_plugins_mcp_enabled,omitempty"`
 	Mode                    string                 `json:"mode,omitempty"`
@@ -499,6 +502,8 @@ func (h *Handlers) httpCreateAgent(c *gin.Context) {
 			FallbackModel:           profile.FallbackModel,
 			AutoFallback:            profile.AutoFallback,
 			RequireExactModel:       profile.RequireExactModel,
+			LimitFallback:           profile.LimitFallback,
+			ResumeAfterReset:        profile.ResumeAfterReset,
 			CursorMCPAuthEnabled:    profile.CursorMCPAuthEnabled,
 			CursorPluginsMCPEnabled: profile.CursorPluginsMCPEnabled,
 			Mode:                    profile.Mode,

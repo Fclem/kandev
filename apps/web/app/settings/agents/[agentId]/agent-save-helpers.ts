@@ -33,6 +33,8 @@ const profilePatchFieldMap: Array<[keyof ProfileFormData, keyof AgentProfile]> =
   ["fallback_model", "fallbackModel"],
   ["auto_fallback", "autoFallback"],
   ["require_exact_model", "requireExactModel"],
+  ["limit_fallback", "limitFallback"],
+  ["resume_after_reset", "resumeAfterReset"],
   ["mode", "mode"],
   ["config_options", "configOptions"],
   ["allow_indexing", "allowIndexing"],
@@ -248,6 +250,12 @@ function buildCreateProfilePayload(profile: DraftProfile) {
     kind: profile.kind,
     fallback_model: profile.fallbackModel ?? "",
     auto_fallback: profile.autoFallback ?? false,
+    ...(profile.kind !== "dynamic"
+      ? {
+          limit_fallback: profile.limitFallback ?? false,
+          resume_after_reset: profile.resumeAfterReset ?? false,
+        }
+      : {}),
     mode: profile.mode,
     config_options: profile.configOptions ?? {},
     ...permissionsToProfilePatch(profile),
@@ -305,6 +313,12 @@ function buildUpdateProfilePayload(profile: DraftProfile, savedProfile: AgentPro
     kind: profile.kind,
     fallback_model: profile.fallbackModel ?? "",
     auto_fallback: profile.autoFallback ?? false,
+    ...(profile.kind !== "dynamic"
+      ? {
+          limit_fallback: profile.limitFallback ?? false,
+          resume_after_reset: profile.resumeAfterReset ?? false,
+        }
+      : {}),
     mode: profile.mode,
     config_options: profile.configOptions ?? {},
     ...permissionsToProfilePatch(profile),
@@ -625,6 +639,8 @@ function isProfileIdentityDirty(draft: DraftProfile, saved: AgentProfile): boole
     (draft.mode ?? "") !== (saved.mode ?? ""),
     (draft.fallbackModel ?? "") !== (saved.fallbackModel ?? ""),
     (draft.autoFallback ?? false) !== (saved.autoFallback ?? false),
+    (draft.limitFallback ?? false) !== (saved.limitFallback ?? false),
+    (draft.resumeAfterReset ?? false) !== (saved.resumeAfterReset ?? false),
   ].some(Boolean);
 }
 

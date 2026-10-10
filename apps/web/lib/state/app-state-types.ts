@@ -115,6 +115,7 @@ export type AppState = KanbanSlice & {
   agentDiscovery: (typeof defaultSettingsState)["agentDiscovery"];
   availableAgents: (typeof defaultSettingsState)["availableAgents"];
   agentProfiles: (typeof defaultSettingsState)["agentProfiles"];
+  agentProfileLimits: (typeof defaultSettingsState)["agentProfileLimits"];
   installJobs: (typeof defaultSettingsState)["installJobs"];
   updateJobs: (typeof defaultSettingsState)["updateJobs"];
   agentRuntimeUpdates: (typeof defaultSettingsState)["agentRuntimeUpdates"];
@@ -297,6 +298,7 @@ export type AppState = KanbanSlice & {
   setAgentProfileOrder: SettingsSliceTypes.SettingsSliceActions["setAgentProfileOrder"];
   setAgentProfileOrderIntent: SettingsSliceTypes.SettingsSliceActions["setAgentProfileOrderIntent"];
   setAgentProfiles: (profiles: AgentProfilesState["items"]) => void;
+  setAgentProfileLimits: SettingsSliceTypes.SettingsSliceActions["setAgentProfileLimits"];
   setInstallJobs: SettingsSliceTypes.SettingsSliceActions["setInstallJobs"];
   upsertInstallJob: (job: InstallJob) => void;
   appendInstallOutput: (agentName: string, chunk: string) => void;

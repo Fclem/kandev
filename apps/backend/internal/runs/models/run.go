@@ -248,6 +248,14 @@ type Run struct {
 	// resolved. Set only when at least one degraded route is auto-retryable.
 	EarliestRetryAt *time.Time `json:"earliest_retry_at,omitempty" db:"earliest_retry_at"`
 
+	// LimitFallbackModel is the profile fallback selected for this run's
+	// current provider-limit retry cycle.
+	LimitFallbackModel *string `json:"limit_fallback_model,omitempty" db:"limit_fallback_model"`
+	// ProviderLimitWaitKey and ProviderLimitProbe are scheduler ownership
+	// state and are never part of the public run projection.
+	ProviderLimitWaitKey *string `json:"-" db:"provider_limit_wait_key"`
+	ProviderLimitProbe   string  `json:"-" db:"provider_limit_probe"`
+
 	// CausationID is copied from the agent_wakeup_requests row that
 	// created this run (REQ-OFFICE-LOOP-LIVENESS-002). "" means
 	// uncorrelated — either a legacy pre-migration row or a run created

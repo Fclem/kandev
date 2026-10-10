@@ -40,6 +40,7 @@ const (
 	LaunchQueueReasonSessionCapacity      = "session_capacity"
 	LaunchQueueReasonOwnershipUnavailable = "ownership_unavailable"
 	LaunchQueueReasonReplayError          = "replay_error"
+	LaunchQueueReasonProviderLimit        = "provider_limit"
 )
 
 // TaskStatusSummary is the complete replacement value delivered to task-list
@@ -90,6 +91,8 @@ type LaunchQueueSummary struct {
 	QueuedAt       time.Time            `json:"queued_at"`
 	Reason         string               `json:"reason"`
 	Retrying       bool                 `json:"retrying"`
+	Model          string               `json:"model,omitempty"`
+	RetryAt        *time.Time           `json:"retry_at,omitempty"`
 	Capacity       *LaunchQueueCapacity `json:"capacity,omitempty"`
 }
 
@@ -341,7 +344,8 @@ func validateLaunchQueue(queue *LaunchQueueSummary) error {
 	}
 	if queue.Reason != LaunchQueueReasonSessionCapacity &&
 		queue.Reason != LaunchQueueReasonOwnershipUnavailable &&
-		queue.Reason != LaunchQueueReasonReplayError {
+		queue.Reason != LaunchQueueReasonReplayError &&
+		queue.Reason != LaunchQueueReasonProviderLimit {
 		return fmt.Errorf("launch queue has unknown reason")
 	}
 	if queue.Capacity == nil {

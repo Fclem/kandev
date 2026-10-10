@@ -37,6 +37,32 @@ func TestRunJSONContract(t *testing.T) {
 	}
 }
 
+func TestRunProviderLimitOwnershipIsNotSerialized(t *testing.T) {
+	fallback := "mock-slow"
+	waitKey := "limit|opaque-binding|account"
+	run := Run{
+		LimitFallbackModel:   &fallback,
+		ProviderLimitWaitKey: &waitKey,
+		ProviderLimitProbe:   `{"key":"limit|opaque-binding|account","expires_at":"2026-10-04T09:00:00Z"}`,
+	}
+	payload, err := json.Marshal(run)
+	if err != nil {
+		t.Fatalf("marshal run: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("decode run JSON: %v", err)
+	}
+	if got["limit_fallback_model"] != fallback {
+		t.Errorf("limit_fallback_model = %#v, want %q", got["limit_fallback_model"], fallback)
+	}
+	for _, key := range []string{"provider_limit_wait_key", "provider_limit_probe"} {
+		if _, exists := got[key]; exists {
+			t.Errorf("internal ownership field %q leaked into run JSON", key)
+		}
+	}
+}
+
 func TestRunEventJSONContract(t *testing.T) {
 	event := RunEvent{RunID: "run-1", Seq: 3, EventType: RunEventTypeStep, Level: RunEventLevelInfo}
 	payload, err := json.Marshal(event)

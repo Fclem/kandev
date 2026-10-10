@@ -1,7 +1,7 @@
 ---
 id: "06-automatic-launch-gate"
 title: "Automatic launch gate"
-status: pending
+status: done
 wave: 5
 depends_on:
   - "05-kanban-reset-waits"
@@ -81,9 +81,9 @@ Run this complete block from the repository root:
 
 ```bash
 (cd apps/backend && go test -tags fts5 ./internal/orchestrator -run 'TestProviderLimitGate|ProviderLimitProbeLease|ManualProviderLimitNotice|CeilingSeam|Seam1|Seam2|Seam3|Seam4' -count=1)
-(cd apps/web && pnpm exec vitest run components/chat/messages/status-message.test.tsx)
+(cd apps/web && pnpm exec vitest run components/task/chat/messages/status-message.test.tsx)
 (cd apps/web && pnpm run typecheck && pnpm run i18n:check && pnpm run i18n:ratchet)
-(cd apps/web && pnpm e2e:run --project chromium tests/task/provider-limit-recovery.spec.ts -- --grep "auto-start")
+(cd apps/web && pnpm e2e:run --project chromium tests/task/provider-limit-recovery.spec.ts --grep "auto-start")
 git diff --check
 ```
 
@@ -91,7 +91,7 @@ git diff --check
 
 - `apps/backend/internal/orchestrator/{provider_limit_gate.go,ceiling_seams.go,ceiling_seam2.go,ceiling_seam3.go,ceiling_seam4.go}`
 - `apps/backend/internal/agent/runtime/lifecycle/{start_model.go,session.go}`
-- `apps/web/components/chat/messages/status-message.tsx`, `apps/web/locales/*/task.json`
+- `apps/web/components/task/chat/messages/status-message.tsx`, `apps/web/src/locales/*/task.json`
 
 ## Dependencies
 
@@ -115,4 +115,19 @@ Task 05.
 
 ## Results
 
-Pending.
+Implemented the pre-admission provider-limit gate across automatic launch seams,
+durable deferral and probe-lease transfer, and one-time manual notices. Created
+and TODO tasks with provider-limit launch records now transition to SCHEDULING;
+ordinary ceiling reconciliation remains unchanged. Launch queue summaries
+accept the `provider_limit` reason, and retry timestamps use localized date
+formatting.
+
+- Focused Go regressions passed across orchestrator, task repository, launch
+  summary, and task models, including provider gate/wait/waker/probe lease and
+  created-task scheduling cases.
+- `launch-queue-status.test.tsx`: 8 tests passed. `pnpm run typecheck` passed.
+- `pnpm run build:e2e` passed.
+- Desktop and mobile provider-limit recovery E2E suites each passed all three
+  flows: automatic launch wait, manual notice, and reset wait/reload/cancel/
+  resume. Desktop and phone screenshots were inspected; the phone layout has
+  no horizontal overflow.

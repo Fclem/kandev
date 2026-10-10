@@ -10,6 +10,7 @@ import (
 
 	"github.com/kandev/kandev/internal/agent/runtime/routingerr"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
+	"github.com/kandev/kandev/internal/common/providerretry"
 	"github.com/kandev/kandev/internal/orchestrator/watcher"
 	"github.com/kandev/kandev/internal/task/models"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
@@ -204,14 +205,9 @@ func transientRetryNotices(messages []*models.Message, taskID, sessionID string)
 }
 
 func classifyKanbanFailure(data watcher.AgentEventData) *routingerr.Error {
-	providerID, message, resetHint, occurredAt := kanbanFailureDetails(data)
-	classified := routingerr.Classify(routingerr.Input{
-		Phase:      kanbanFailurePhase(data),
-		ProviderID: providerID,
-		ResetHint:  resetHint,
-		OccurredAt: occurredAt,
-		Stderr:     message,
-	})
+	input := kanbanFailureInput(data)
+	input.Phase = kanbanFailurePhase(data)
+	classified := routingerr.Classify(input)
 	if isExactUnknownDynamicProviderFailure(data, classified) {
 		// An exact terminal provider diagnostic can identify the unknown result
 		// shape without changing the global post-start classifier contract.
@@ -220,19 +216,23 @@ func classifyKanbanFailure(data watcher.AgentEventData) *routingerr.Error {
 	return classified
 }
 
-func kanbanFailureDetails(data watcher.AgentEventData) (string, string, *time.Time, time.Time) {
-	providerID, message := data.AgentID, data.ErrorMessage
-	var resetHint *time.Time
-	var occurredAt time.Time
-	if providerError := data.ProviderError; providerError != nil {
-		providerID = kanbanFailureProviderID(providerID, providerError.ProviderID)
-		if providerError.Message != "" {
-			message = providerError.Message
-		}
-		resetHint = providerError.ResetAt
-		occurredAt = providerError.OccurredAt
+// kanbanFailureInput projects the failure's structured provider error, when
+// present, over the agent ID and lifecycle message.
+func kanbanFailureInput(data watcher.AgentEventData) routingerr.Input {
+	input := routingerr.Input{ProviderID: data.AgentID, Stderr: data.ErrorMessage}
+	providerError := data.ProviderError
+	if providerError == nil {
+		return input
 	}
-	return providerID, message, resetHint, occurredAt
+	input.ProviderID = kanbanFailureProviderID(input.ProviderID, providerError.ProviderID)
+	if providerError.Message != "" {
+		input.Stderr = providerError.Message
+	}
+	input.ResetHint = providerError.ResetAt
+	input.OccurredAt = providerError.OccurredAt
+	input.RetryAfter = providerretry.Duration(providerError.RetryAfterMs)
+	input.DiagnosticSource = providerError.Source
+	return input
 }
 
 func kanbanFailureProviderID(agentID, providerID string) string {

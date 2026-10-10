@@ -214,8 +214,9 @@ func (a *Adapter) handleACPUpdate(
 				}
 			}
 		}
-		if event != nil && (a.observeCodexProviderEvidence(promptGeneration, event) ||
-			a.observeCursorRetriableEvidence(promptGeneration, event)) {
+		if a.observeOMPLimitEvidence(n, promptGeneration) ||
+			(event != nil && (a.observeCodexProviderEvidence(promptGeneration, event) ||
+				a.observeCursorRetriableEvidence(promptGeneration, event))) {
 			// Suppress provider control/evidence chunks. The adapter emits one
 			// normalized error after the prompt barrier instead.
 			event = nil

@@ -97,6 +97,11 @@ describe("composer recovery ownership", () => {
     expect(resume).toHaveBeenCalledWith("resume");
     expect(document.body.textContent).not.toContain("hidden-fixture-value");
   });
+  it("keeps manual recovery without exposing a cancelled wait as a provider failure", () => {
+    renderCase("provider_limit_wait_cancelled");
+    for (const id of [RESUME_BUTTON, FRESH_BUTTON]) expect(screen.getByTestId(id)).toBeTruthy();
+    expect(screen.getByTestId(RECOVERY_CARD).textContent).not.toContain(CONNECTION_LOST);
+  });
   it.each(["managed_runtime_npm_resolution", NPM_POLICY])(
     "uses runtime retry for %s in the same card instead of resume",
     (kind) => {

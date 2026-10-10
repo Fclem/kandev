@@ -92,6 +92,52 @@ func TestHandlePostStartFailure_AvailabilityFailureRequeuesViaWorkspaceRoute(t *
 	}
 }
 
+// @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-006.3
+func TestPostStartLimitFailureRequeuesFallbackOnResolvedProvider(t *testing.T) {
+	repo := newTestRepoSched(t)
+	starter := newFakeTaskStarter()
+	ss := buildScheduler(t, repo, starter)
+	run := seedRoutedRun(t, repo)
+	fallbackModel := "claude-fallback"
+	run.LimitFallbackModel = &fallbackModel
+	if err := repo.SetRunProviderLimitRecoveryState(
+		context.Background(), run.ID, &fallbackModel, nil, "",
+	); err != nil {
+		t.Fatalf("persist fallback: %v", err)
+	}
+	for seq := 2; seq <= 4; seq++ {
+		if _, err := repo.IncrementRouteAttemptSeq(context.Background(), run.ID); err != nil {
+			t.Fatalf("increment attempt sequence: %v", err)
+		}
+		attempt := &officemodels.RouteAttempt{
+			RunID: run.ID, Seq: seq, ExecutionProfileID: "claude-profile",
+			ProviderID: "claude-acp", Model: "claude-sonnet", Tier: "balanced",
+			Outcome: officemodels.RouteAttemptOutcomeRetryScheduled, StartedAt: time.Now().UTC(),
+		}
+		if err := repo.AppendRouteAttempt(context.Background(), attempt); err != nil {
+			t.Fatalf("append retry attempt %d: %v", seq, err)
+		}
+	}
+	run.CurrentRouteAttemptSeq = 4
+	handled, err := ss.HandlePostStartFailure(
+		context.Background(), run, makeAgent(), "You've hit your rate limit", nil,
+	)
+	if err != nil {
+		t.Fatalf("handle provider-limit failure: %v", err)
+	}
+	if !handled {
+		t.Fatal("provider-limit fallback should requeue the run")
+	}
+	got, err := repo.GetRun(context.Background(), run.ID)
+	if err != nil {
+		t.Fatalf("read requeued run: %v", err)
+	}
+	if got.Status != "queued" || got.RouteCycleBaselineSeq != 4 ||
+		got.LimitFallbackModel == nil || *got.LimitFallbackModel != fallbackModel {
+		t.Fatalf("provider-limit requeue state = %+v", got)
+	}
+}
+
 // TestHandlePostStartFailure_NonFallbackFailureEscalates verifies failures
 // the classifier marks as not fallback-allowed (ambiguous runtime errors)
 // keep the pre-existing escalation path: handled=false so the caller runs

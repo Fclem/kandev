@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 
 	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events"
@@ -818,7 +819,15 @@ type Service struct {
 	agentProfileRecentUseRecorder AgentProfileRecentUseRecorder
 
 	// Turn service for managing session turns
-	turnService TurnService
+	turnService                 TurnService
+	providerLimits              *providerlimit.Service
+	providerLimitClock          providerLimitClock
+	providerLimitRecoveryMu     sync.Mutex
+	providerLimitRecoveryPassMu sync.Mutex
+	providerLimitRecoveryCtx    context.Context
+	providerLimitRecoveryCancel context.CancelFunc
+	providerLimitRecoveryTimer  providerLimitTimer
+	providerLimitReplays        sync.Map
 
 	// Task event publisher for emitting task.updated events.
 	// Task service owns the rich payload; orchestrator delegates.
@@ -3443,6 +3452,7 @@ func (s *Service) startBackgroundRecovery(ctx context.Context) {
 	// Restore durable dynamic policy waits after the route and lifecycle
 	// services are ready. Only un-dispatched pending states are scheduled.
 	s.startDynamicPolicyRecovery(ctx)
+	s.startProviderLimitRecovery(ctx)
 
 	// Start the idle-session reaper last. It depends on s.repo
 	// (already wired), s.agentManager (already wired), and the
@@ -3509,6 +3519,7 @@ func (s *Service) Stop() error {
 	// Stop detached dynamic successors before the scheduler and watcher. Their
 	// workers can otherwise observe the shutdown only after those components
 	// have already stopped, and may launch or recover a session during teardown.
+	s.stopProviderLimitRecovery()
 	s.stopDynamicSuccessorWorkers()
 	s.stopDynamicPolicyRecovery()
 	s.stopLifecycleSweepAsync()

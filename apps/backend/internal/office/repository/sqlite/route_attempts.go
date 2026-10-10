@@ -24,13 +24,15 @@ func (r *Repository) AppendRouteAttempt(
 		INSERT INTO office_run_route_attempts (
 			run_id, seq, execution_profile_id, provider_id, model, tier, tier_source, outcome,
 			error_code, error_confidence, adapter_phase, classifier_rule,
-			exit_code, raw_excerpt, reset_hint, started_at, finished_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			exit_code, raw_excerpt, reset_hint, requested_model, effective_model,
+			override_reason, started_at, finished_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`), a.RunID, a.Seq, a.ExecutionProfileID, a.ProviderID, a.Model, a.Tier, a.TierSource, a.Outcome,
 		nullableString(a.ErrorCode), nullableString(string(a.ErrorConfidence)),
 		nullableString(string(a.AdapterPhase)), nullableString(a.ClassifierRule),
 		a.ExitCode, nullableString(a.RawExcerpt), a.ResetHint,
-		a.StartedAt, a.FinishedAt)
+		nullableString(a.RequestedModel), nullableString(a.EffectiveModel),
+		nullableString(a.OverrideReason), a.StartedAt, a.FinishedAt)
 	if err != nil {
 		return fmt.Errorf("route_attempts: insert run=%s seq=%d: %w",
 			a.RunID, a.Seq, err)
@@ -52,7 +54,11 @@ func (r *Repository) ListRouteAttempts(
 			COALESCE(classifier_rule,'') AS classifier_rule,
 			exit_code,
 			COALESCE(raw_excerpt,'') AS raw_excerpt,
-			reset_hint, started_at, finished_at
+			reset_hint,
+			COALESCE(requested_model,'') AS requested_model,
+			COALESCE(effective_model,'') AS effective_model,
+			COALESCE(override_reason,'') AS override_reason,
+			started_at, finished_at
 		FROM office_run_route_attempts
 		WHERE run_id = ?
 		ORDER BY seq ASC

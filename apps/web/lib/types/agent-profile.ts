@@ -129,6 +129,8 @@ export type AgentProfile = {
   autoFallback?: boolean;
   /** Require the configured model to be advertised and applied before prompting. */
   requireExactModel?: boolean;
+  limitFallback?: boolean;
+  resumeAfterReset?: boolean;
   /** Optional ACP session mode applied via `session/set_mode`. */
   mode?: string;
   /** Dynamic ACP session config options applied via `session/set_config_option`. */
@@ -248,6 +250,8 @@ export type AgentProfilePayload = {
   fallback_model?: string;
   auto_fallback?: boolean;
   require_exact_model?: boolean;
+  limit_fallback?: boolean;
+  resume_after_reset?: boolean;
   mode?: string;
   config_options?: Record<string, string>;
   allow_indexing: boolean;

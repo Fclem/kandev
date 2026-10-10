@@ -1,5 +1,5 @@
 ---
-status: draft
+status: current
 system: agents
 requirements:
   - REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-001
@@ -58,7 +58,7 @@ error message or data.
 | `claude-acp` subscription | `You've hit your session limit · resets 11:10am (Europe/Helsinki)` | `quota_limited`, clock reset (#4135) | account scope |
 | `claude-acp` API key | `429 {"type":"error","error":{"type":"rate_limit_error",...}}`; `retry-after` (seconds), `retry-after-ms`, RFC 3339 `anthropic-ratelimit-*-reset`; spend ceiling: `monthly spend limit`, `enforced_spend_limit_reached` | `rate_limited` via `rate.?limit`; no delay; spend text unclassified | delay extraction; spend as account quota |
 | `claude-acp` credits | `credit balance`, `insufficient credits` | `quota_limited` | account scope |
-| `omp-acp` (Anthropic models) | assistant `agent_message_chunk` holding `429 {"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account's monthly spend limit. ..."},"request_id":"req_..."} retry-after-ms=274579000`; `session/prompt` then returns `end_turn` with no RPC error or stderr (observed with OMP 18.5.0 against a fake endpoint) | ordinary completed output; `Classify` with `omp-acp` gives `agent_runtime_error` | prompt-end failure conversion; spend gives account quota scoped to the `anthropic` provider prefix; exact-ms delay; request ID redacted |
+| `omp-acp` (Anthropic models) | assistant `agent_message_chunk`: `429` JSON `rate_limit_error`, monthly spend-limit message, `request_id`, and `retry-after-ms=274579000`; `session/prompt` returns `end_turn`, without RPC error or stderr (OMP 18.5.0, fake endpoint) | ordinary completed output; `Classify` gives `agent_runtime_error` | prompt-end failure conversion; account quota under `anthropic` prefix; exact-ms delay; request ID redacted |
 | `codex-acp` | `usageLimitExceeded`, `You've hit your usage limit ... try again at <date>` | `quota_limited`; zoned dates only (#4019) | account scope |
 | `codex-app-server` | `account/rateLimits/updated` windows with `resetsAt` | not classified | out of scope; needs a captured failure fixture |
 | `opencode-acp` | stderr `N-hour usage limit reached ... Resets in 3 days 4 hours`, credit exhaustion | `quota_limited`, minute-precision reset (#2167, #3320, #4078) | account scope |
@@ -135,6 +135,14 @@ New rules:
   below, never generic prose. Spend gives account-scope `quota_limited`;
   other Anthropic `rate_limit_error` envelopes give `rate_limited`.
 
+`routingerr.Input.DiagnosticSource` carries the adapter's `ProviderError.Source`
+through Kanban and Office classification. OMP rules require `omp_acp`; source
+is never inferred from message text. The adapter assigns it only after strict
+envelope validation. Task 01 tests the sanitized diagnostic with this source
+and rejects the same text without it; Task 09 tests the wire-to-diagnostic
+conversion. This is an internal classification discriminator, not a new
+transport field.
+
 ### OMP prompt-end failure conversion
 
 OMP has no Kandev dialect. It emits a provider failure as an assistant
@@ -171,8 +179,8 @@ the same place:
 
 `models.AgentProfile` gains `LimitFallback bool` (`db:"limit_fallback"`) and
 `ResumeAfterReset bool` (`db:"resume_after_reset"`). Additive migrations add
-both columns as `INTEGER NOT NULL DEFAULT 0` (SQLite) and the matching boolean
-columns (Postgres). The DTO and profile contract expose `limit_fallback` and
+both columns as `INTEGER NOT NULL DEFAULT 0` through the existing dialect-backed
+store on SQLite and Postgres. The DTO and profile contract expose `limit_fallback` and
 `resume_after_reset`. The update request uses pointer fields so an omitted
 value keeps the saved one. Duplication, export, and import copy both fields.
 Dynamic profile writes reject them (AC 001.6).
@@ -273,8 +281,12 @@ state feeds the `limited until` pill in the profile row of
 
 `handleAgentFailedLocked` keeps its order. It filters stale failures, then
 runs `handleTransientFailure`, then routes dynamic sessions. A new
-`handleProviderLimitFailure(ctx, data) bool` runs before
-`handleRecoverableFailureLockedState`:
+`handleProviderLimitFailure(ctx, data) func(context.Context)` runs before
+`handleRecoverableFailureLockedState`. An accepted recovery returns its dispatch
+callback for the existing bounded failure worker after releasing the session
+guard; `nil` keeps the existing recovery path. Failed-execution stream guards
+retain the failed prompt generation, admitting a new generation on the reused
+ACP process while rejecting late frames and failures from the predecessor:
 
 ```mermaid
 flowchart TD
@@ -483,20 +495,18 @@ each path continues with the requested model (AC 005.4).
     resume is on and the reset is trusted (AC 006.3).
   - Otherwise, preserve existing routing and escalation. An unavailable
     fallback alone never creates a wait.
-- **Lifting:** Persist the opaque `provider_limit_wait_key` on each wait run
-  and reuse the existing status and badge. `redispatchWaitingRuns`,
-  workspace-disable clearing, and `LiftParkedRuns` preserve keyed waits. Due
-  lifts and both dispatch paths block on a retained same-key successful owner,
-  independent of mark state. Remove the barrier only after exact lease release
-  and owner/wait cleanup persist. Startup reconciliation precedes lifts and
-  dispatch; failed/stopped owners unblock at expiry.
+- **Lifting:** Persist `provider_limit_wait_key`, retaining the existing status
+  and badge. `redispatchWaitingRuns`, workspace-disable clearing, and
+  `LiftParkedRuns` preserve keyed waits. Due lifts and both dispatch paths block
+  on retained same-key successful owners, even after mark closure. Unblock only
+  after exact lease release and durable owner/wait cleanup. Reconcile before
+  startup lifts or dispatch; failed/stopped owners unblock at expiry.
 - **Successful turn:** Only successful `AgentCompleted` clears marks. Resolve
-  binding from `resolved_execution_profile_id` or the concrete profile, and
-  model from `effective_model`. If `ClearOnSuccess` fails, stop before release,
-  owner cleanup, or wake. Otherwise release the exact probe token with
-  `ReleaseProbeDurable`; an invalidated or stale token is a no-op. Persist
-  owner/wait-key cleanup before waking. Any clear/release/cleanup error retains
-  owner and waits; startup reconciliation retries before dispatch.
+  binding from `resolved_execution_profile_id` or the concrete profile, model
+  from `effective_model`. Persist `ClearOnSuccess`, exact-token
+  `ReleaseProbeDurable`, then owner/wait cleanup before waking. Stale or
+  invalidated tokens are no-ops. Any persistence error retains owners and waits;
+  startup reconciliation retries before dispatch.
 - **Unsuccessful turn:** `AgentStopped` and `AgentFailed` leave marks active.
   A classified limit failure records the renewed mark; a non-limit
   unsuccessful probe does not release its lease as a success. Siblings remain
@@ -512,50 +522,40 @@ each path continues with the requested model (AC 005.4).
 
 ## Failure and recovery
 
-- **Persistence failures:** Publish provider-limit mutations only after durable
-  commit. Log failed mark writes, preserve prior marks, and use existing
-  Kanban/Office surfaces instead of limit fallback/waits/probes. Failed clears
-  keep siblings blocked. Failed probe, deferral, or owner writes do not replay
-  or launch work; unowned leases expire.
+- **Persistence failures:** Publish only after durable commit. Log failed mark
+  writes, preserve marks, and use existing Kanban/Office surfaces instead of
+  fallback/waits/probes. Failed clears block siblings. Failed probe, deferral,
+  or owner writes prohibit replay and launch; unowned leases expire.
 - **Unsafe input:** A missing catalog, an unknown binding, or a malformed
   delay causes no switch and no trusted reset. The failure takes the existing
   manual surface.
-- **Concurrency:** Duplicate failure events are deduplicated by the existing
-  stale-failure filter and the per-turn fallback marker. Concurrent replays are
-  serialized by the compare-and-swap on the deferral and the ceiling entry
-  admission lock.
+- **Concurrency:** Stale-failure filtering and per-turn fallback markers
+  deduplicate failures. Deferral CAS and ceiling admission locks serialize replay.
 
 ## Security
 
-Marks hold opaque keys, model IDs, codes, and instants. Deferral payloads keep
-the ceiling contract, which already persists prompts for replay. Provider text
-stays in the existing sanitized, bounded diagnostic of the recovery message.
-The new delay field carries a number, never header text.
-The internal `provider_limit_wait_key` and `provider_limit_probe` run fields are
-excluded from JSON; the API retains the existing routing status and retry time.
+Marks store opaque keys, model IDs, codes, and instants. Deferrals inherit the
+ceiling's prompt-replay persistence. Provider text remains in the existing
+sanitized, bounded recovery diagnostic; delay is numeric, never header text.
+Internal run fields `provider_limit_wait_key` and `provider_limit_probe` are
+excluded from JSON. Public routing status and retry time remain unchanged.
 
 ## Observability
 
-Counters are published through expvar with structured `provider_limit.*` zap
-logs.
+Expvar counters and structured `provider_limit.*` zap logs count accepted mark
+mutations, final fallback decisions, durable wait transitions, and probe outcomes
+once. Read-only lookups, duplicate events, and stale events do not increment.
 
-Count each accepted mark mutation once, each final fallback decision once, and
-each wait transition or probe outcome once. Do not count read-only lookups or
-duplicate and stale events.
-
-- `provider_limit_marks_total`, labelled `scope` (`account`, `model`) and
-  `code` (`quota_limited`, `rate_limited`), increments after an accepted mark
-  create or renewal.
-- `provider_limit_fallback_total`, labelled `context` (`kanban`, `office`) and
-  `outcome` (`switched`, `not_advertised`, `marked`, `failed`), increments at
-  the final fallback decision, including early rejection and terminal launch
-  failure paths.
-- `provider_limit_waits_total`, labelled `context` and `outcome` (`armed`,
-  `resumed`, `cancelled`, `exhausted`, `probe_failed`), increments on the
-  corresponding durable wait transition or probe outcome. `exhausted` means
-  the existing wait budget rejects another wait; an unknown or untrusted reset
-  with no wait is not exhausted. `probe_failed` means the probe does not
-  complete successfully, including when a limit failure renews the mark.
+- `provider_limit_marks_total`: `scope` (`account`, `model`), `code`
+  (`quota_limited`, `rate_limited`). Increment after durable create or renewal.
+- `provider_limit_fallback_total`: `context` (`kanban`, `office`), `outcome`
+  (`switched`, `not_advertised`, `marked`, `failed`). Count final decisions,
+  including early rejection and terminal launch failure.
+- `provider_limit_waits_total`: `context` (`kanban`, `office`), `outcome`
+  (`armed`, `resumed`, `cancelled`, `exhausted`, `probe_failed`). Count durable
+  transitions or probe outcomes. `exhausted` requires budget rejection, not an
+  unknown or untrusted reset. `probe_failed` includes limit renewals and any
+  unsuccessful probe completion.
 
 All label sets are closed. No profile, binding, task, session, or run
 identifier is ever a label.

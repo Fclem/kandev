@@ -541,9 +541,10 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 		return err
 	}
 	startModelPolicy = strictAuggieTaskStartModelPolicy(startModelPolicy, execution, agentConfig)
+	launchPolicy, hasLaunchPolicy := StartModelPolicyFromContext(ctx)
 
 	execution.ACPSessionID = result.SessionID
-	if !cacheFreshSessionModelState(execution) && (profileModel != "" || runtimeModel != "") {
+	if !cacheFreshSessionModelState(execution) && (profileModel != "" || runtimeModel != "" || hasLaunchPolicy && launchPolicy.Model != "") {
 		waitForFreshSessionModelState(ctx, sm.logger, execution)
 	}
 	providerDefaultConfig := execution.GetModelState()
@@ -559,6 +560,10 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 		runtimeMode = ""
 		runtimeConfigOptions = sanitizeProviderRestoredConfigOptions(runtimeConfigOptions, providerDefaultConfig)
 		startModelPolicy = StartModelPolicy{}
+	}
+	if hasLaunchPolicy {
+		startModelPolicy = launchPolicy
+		runtimeModel = launchPolicy.Model
 	}
 
 	// Decide the effective model up front under the executor-authoritative
@@ -1933,6 +1938,12 @@ func (sm *SessionManager) sendPrompt(
 	if err != nil {
 		sm.reportPromptFailure(execution, promptGeneration, err, callbacks.onFailure)
 		return nil, err
+	}
+	if hook := promptAdmissionHookFromContext(preparedCtx); hook != nil {
+		if err := hook(execution.ID, promptGeneration); err != nil {
+			sm.reportPromptFailure(execution, promptGeneration, err, callbacks.onAdmissionRejected)
+			return nil, err
+		}
 	}
 	if sm.beforePromptDispatchHook != nil {
 		sm.beforePromptDispatchHook()

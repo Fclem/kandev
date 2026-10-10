@@ -24,6 +24,8 @@ describe("buildLaunchQueueViewModel", () => {
       queuedAt,
       reason: "session_capacity",
       retrying: true,
+      model: "",
+      retryAt: "",
       capacityFreshness: "current",
       capacity: { inUse: 5, limit: 5, observedAt: queuedAt },
     });
@@ -98,5 +100,24 @@ describe("buildLaunchQueueViewModel", () => {
         retrying: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe("buildLaunchQueueViewModel provider limits", () => {
+  it("preserves the bounded provider reset display fields", () => {
+    expect(
+      buildLaunchQueueViewModel({
+        queued_at: queuedAt,
+        reason: "provider_limit",
+        retrying: true,
+        model: "vendor/model",
+        retry_at: "2026-09-16T21:15:44.123456789Z",
+      }),
+    ).toMatchObject({
+      reason: "provider_limit",
+      model: "vendor/model",
+      retryAt: "2026-09-16T21:15:44.123456789Z",
+      capacity: null,
+    });
   });
 });

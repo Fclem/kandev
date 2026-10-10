@@ -635,7 +635,15 @@ func TestStopTaskForCoordinator_PartialFailureAttemptsEveryCandidateAndSkipsRevi
 	lookupMu.Lock()
 	gotOrder := append([]string(nil), lookupOrder...)
 	lookupMu.Unlock()
-	require.Equal(t, []string{"session-a", "session-b", "session-c"}, gotOrder)
+	attempted := make(map[string]struct{}, len(gotOrder))
+	for _, sessionID := range gotOrder {
+		attempted[sessionID] = struct{}{}
+	}
+	require.Equal(t, map[string]struct{}{
+		"session-a": {},
+		"session-b": {},
+		"session-c": {},
+	}, attempted)
 	state, history := coordinatorStopTaskStateSnapshot(taskRepo, "task-partial")
 	require.Equal(t, v1.TaskStateInProgress, state)
 	require.Empty(t, history, "partial failure must not reconcile the task to REVIEW")

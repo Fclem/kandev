@@ -178,6 +178,7 @@ func provideOrchestrator(
 	// orphaned-session healing) verifies "no live execution" against the agent
 	// runtime's in-memory execution store through this registry.
 	taskSvc.SetSessionExecutionRegistry(agentManagerClient)
+	taskSvc.SetProviderLimitReconciler(orchestratorSvc.ReconcileProviderLimitWaits)
 	taskSvc.SetContextWindowResetter(orchestratorSvc.ResetContextWindow)
 	taskSvc.SetGitArchiveCapture(orchestratorSvc)
 	// Automation runs keep their worktrees so they stay repliable, which makes

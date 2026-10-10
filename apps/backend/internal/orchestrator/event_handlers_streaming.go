@@ -93,7 +93,7 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 	var observedOutput, observedEffect bool
 
 	if eventType == agentEventComplete {
-		if marker, ok := s.terminalExecutionMarker(sessionID, payload.ExecutionID); ok {
+		if marker, ok := s.terminalExecutionMarkerForPrompt(sessionID, payload.ExecutionID, payload.Data.PromptGeneration); ok {
 			if !marker.allowCompleteStream {
 				s.logger.Debug("ignoring complete stream event from terminal failed execution",
 					zap.String("task_id", taskID),
@@ -1236,7 +1236,7 @@ func (s *Service) shouldDropCompletedExecutionStreamEvent(payload *lifecycle.Age
 	if payload == nil || payload.ExecutionID == "" || payload.SessionID == "" {
 		return false
 	}
-	if !s.isExecutionCompleted(payload.SessionID, payload.ExecutionID) {
+	if _, completed := s.terminalExecutionMarkerForPrompt(payload.SessionID, payload.ExecutionID, payload.Data.PromptGeneration); !completed {
 		return false
 	}
 	s.logger.Debug("ignoring stream event from completed execution",
@@ -2110,6 +2110,7 @@ type terminalExecutionMarker struct {
 	expiresAt           time.Time
 	allowCompleteStream bool
 	turnID              string
+	promptGeneration    uint64
 }
 
 func terminalExecutionKey(sessionID, executionID string) string {
@@ -2135,6 +2136,20 @@ func (s *Service) markTerminalExecution(sessionID, executionID string, allowComp
 		allowCompleteStream: allowCompleteStream,
 		turnID:              s.currentTurnIDForSession(context.Background(), sessionID),
 	}
+	if attempt, ok := s.promptAttemptForSession(sessionID); ok {
+		attempt.mu.Lock()
+		if attempt.executionID == executionID {
+			candidate.promptGeneration = attempt.promptGeneration
+		}
+		attempt.mu.Unlock()
+	}
+	if candidate.promptGeneration == 0 && s.agentManager != nil {
+		ctx := context.Background()
+		currentExecution, err := s.agentManager.GetExecutionIDForSession(ctx, sessionID)
+		if err == nil && currentExecution == executionID {
+			candidate.promptGeneration = s.promptGenerationForSession(ctx, sessionID)
+		}
+	}
 	for {
 		value, loaded := s.completedExecutions.LoadOrStore(key, candidate)
 		if !loaded {
@@ -2146,10 +2161,9 @@ func (s *Service) markTerminalExecution(sessionID, executionID string, allowComp
 			continue
 		}
 		merged := candidate
-		if current.allowCompleteStream {
-			// Terminal stream permission is monotonic for an execution:
-			// StopExecution may emit agent.stopped after agent.completed but
-			// before the successful execution's buffered complete stream.
+		if current.allowCompleteStream && current.promptGeneration == candidate.promptGeneration {
+			// A stop acknowledgement must preserve the same prompt's successful
+			// terminal stream, never grant that permission to a later prompt.
 			merged.allowCompleteStream = true
 			merged.turnID = current.turnID
 		}
@@ -2167,9 +2181,20 @@ func (s *Service) isExecutionCompleted(sessionID, executionID string) bool {
 	return ok
 }
 
-func (s *Service) terminalCompleteStreamMarker(sessionID, executionID string) (terminalExecutionMarker, bool) {
-	marker, ok := s.terminalExecutionMarker(sessionID, executionID)
-	return marker, ok && marker.allowCompleteStream
+func (s *Service) terminalExecutionMarkerForPrompt(sessionID, executionID string, promptGeneration uint64) (terminalExecutionMarker, bool) {
+	marker, terminal := s.terminalExecutionMarker(sessionID, executionID)
+	if !terminal || promptGeneration == 0 || marker.promptGeneration == 0 || promptGeneration <= marker.promptGeneration {
+		return marker, terminal
+	}
+	if attempt, ok := s.promptAttemptForSession(sessionID); ok {
+		attempt.mu.Lock()
+		current := attempt.executionID == executionID && attempt.promptGeneration == promptGeneration
+		attempt.mu.Unlock()
+		if current {
+			return marker, false
+		}
+	}
+	return marker, terminal
 }
 
 func (s *Service) terminalExecutionMarker(sessionID, executionID string) (terminalExecutionMarker, bool) {
@@ -3251,7 +3276,8 @@ func (s *Service) handleCompleteStreamEventWithGuardRelease(
 	s.logger.Debug("handling complete stream event",
 		zap.String("task_id", payload.TaskID),
 		zap.String("session_id", payload.SessionID))
-	terminalMarker, terminalCompleteStream := s.terminalCompleteStreamMarker(payload.SessionID, payload.ExecutionID)
+	terminalMarker, terminalCompleteStream := s.terminalExecutionMarkerForPrompt(payload.SessionID, payload.ExecutionID, payload.Data.PromptGeneration)
+	terminalCompleteStream = terminalCompleteStream && terminalMarker.allowCompleteStream
 
 	// Load session once up front — used by storeResumeToken, state check, and setSessionWaitingForInput.
 	session, ok := s.loadCompleteEventSession(ctx, payload)
@@ -4602,7 +4628,9 @@ func modelSelectionWarningMetadata(warning streams.ModelSelectionWarning) map[st
 		"executor_type":       warning.ExecutorType,
 		"executor_profile_id": warning.ExecutorProfileID,
 		"decision_id":         warning.DecisionID,
-		"remediation":         []string{"executor_credentials", "copied_agent_configuration", "agent_version"},
+	}
+	if warning.Reason != providerLimitReason {
+		metadata["remediation"] = []string{"executor_credentials", "copied_agent_configuration", "agent_version"}
 	}
 	if warning.FallbackModel != "" {
 		metadata["fallback_model"] = warning.FallbackModel

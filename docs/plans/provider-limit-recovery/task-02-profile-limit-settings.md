@@ -1,7 +1,7 @@
 ---
 id: "02-profile-limit-settings"
 title: "Per-profile limit recovery settings"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -87,10 +87,10 @@ git diff --check
 
 - `apps/backend/internal/agent/settings/{models/models.go,dto/dto.go,dto/profile_contract.go,store/sqlite.go,handlers/profile_handlers.go}`
 - `apps/backend/internal/agent/runtime/lifecycle/profile_resolver.go`
-- `apps/web/components/agent/{cli-profile-editor.tsx,cli-profile-fallback-fields.tsx}`
+- `apps/web/components/agent/{cli-profile-editor.tsx,cli-profile-model-fields.tsx,cli-profile-fallback-fields.tsx}`
 - `apps/web/components/settings/{profile-model-fields.tsx,model-fallback-settings-shell.tsx,agent-profile-dirty.ts,agent-profile-page-state.ts,agent-profile-reconciliation.ts}`
 - `apps/web/app/settings/agents/[agentId]/agent-save-helpers.ts`
-- `apps/web/locales/*/settings.json`
+- `apps/web/src/locales/*/settings.json`
 
 ## Dependencies
 
@@ -98,8 +98,8 @@ None.
 
 ## Risks
 
-- Postgres schema coverage (`postgres_schema_test.go`) must include the
-  columns.
+- Postgres schema coverage includes both columns in the isolated-schema
+  `postgres_limit_recovery_test.go` test.
 - The profile export format must stay backward compatible: missing keys read
   as false.
 
@@ -115,4 +115,31 @@ None.
 
 ## Results
 
-Pending.
+Completed. Both opt-ins default to false and survive create, partial update,
+duplication, legacy SQLite upgrade, interrupted table rebuild, and PostgreSQL
+schema replay. Dynamic-profile requests reject either field even when explicitly
+false; normalized dynamic writes omit them. The lifecycle limit policy is
+separate from existing start-model fallback behavior.
+
+RED: persistence and response tests exposed missing fields, dynamic writes were
+accepted, and the dirty checker ignored the new settings. GREEN: the work-order
+backend command passed, including the PostgreSQL test against an owned
+PostgreSQL 18.6 instance (not skipped). The four prescribed frontend test files
+passed all 19 tests. The normalizer's 22 behavior tests also passed; its obsolete
+whole-response mirror test was removed rather than repinned.
+
+The managed desktop Chromium and mobile Chromium E2E commands each passed one
+test. They exercised defaults, save/reload, strict and auto-fallback precedence,
+empty fallback, retained inactive choices, independent reset recovery, help,
+and cleanup. Typecheck, `i18n:check`, `i18n:ratchet`, and `git diff --check`
+passed. All seven required languages and the pseudo-locale are synchronized.
+
+Live owned-runtime smoke: keyboard toggles saved both flags through a 200 PATCH
+and reload retained them. Desktop and native 393px touch screenshots were
+inspected. Phone document and scroll widths were both 393px, the switch hit
+target measured 44.59px, and the complete recovery-help drawer was visible.
+Owned UI and Chromium smoke services were stopped after inspection.
+
+CLI model controls were extracted without behavior changes to keep the editor
+within its file-size limit. The prescribed frontend tests and type/locale gates
+passed again after that refactor.

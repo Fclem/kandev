@@ -1029,6 +1029,7 @@ func (s *Service) handleAgentReady(ctx context.Context, data watcher.AgentEventD
 	// A turn completed successfully — clear any transient retry budget so a
 	// later, unrelated provider overload starts its backoff fresh at attempt 1.
 	s.resetTransientRetry(data.SessionID)
+	s.clearProviderLimitSuccess(ctx, data, session)
 
 	// Snapshot the turn this event is about to close for the office cost
 	// subscriber's benefit: publishPromptUsage's complete-stream frame for
@@ -2638,6 +2639,7 @@ func (s *Service) finishAgentCompleted(
 	// A successful, still-live completion clears retry state and scheduler
 	// ownership only after the guarded terminal/rotation checks above.
 	s.resetTransientRetry(data.SessionID)
+	s.clearProviderLimitSuccess(ctx, data, session)
 	if !completionFollowUp {
 		s.scheduler.HandleTaskCompleted(data.TaskID, true)
 		s.scheduler.RemoveTask(data.TaskID)
@@ -2808,6 +2810,27 @@ func (s *Service) handleAgentFailed(ctx context.Context, data watcher.AgentEvent
 	}
 }
 
+// agentFailureFromSupersededPrompt reports whether a generation-stamped failure
+// belongs to a prompt that a newer generation on the same execution replaced.
+func (s *Service) agentFailureFromSupersededPrompt(ctx context.Context, data watcher.AgentEventData) bool {
+	if data.PromptGeneration == 0 {
+		return false
+	}
+	if attempt, ok := s.promptAttemptForSession(data.SessionID); ok {
+		attempt.mu.Lock()
+		stale := attempt.executionID == data.AgentExecutionID && attempt.promptGeneration > data.PromptGeneration
+		attempt.mu.Unlock()
+		if stale {
+			return true
+		}
+	}
+	if s.agentManager == nil || s.promptGenerationForSession(ctx, data.SessionID) <= data.PromptGeneration {
+		return false
+	}
+	executionID, err := s.agentManager.GetExecutionIDForSession(ctx, data.SessionID)
+	return err == nil && executionID == data.AgentExecutionID
+}
+
 // handleAgentFailedLocked reconciles a failure under the session guard and returns
 // recovery work that must run after that guard is released.
 func (s *Service) handleAgentFailedLocked(ctx context.Context, data watcher.AgentEventData) func(context.Context) {
@@ -2825,7 +2848,11 @@ func (s *Service) handleAgentFailedLocked(ctx context.Context, data watcher.Agen
 			zap.String("agent_execution_id", data.AgentExecutionID))
 		return nil
 	}
+	if s.agentFailureFromSupersededPrompt(ctx, data) {
+		return nil
+	}
 	data = s.withPromptAttemptEvidence(data)
+	s.retireFailedProviderLimitProbeOwner(ctx, data)
 	defer s.clearPromptAttemptEvidence(data.SessionID, data.AgentExecutionID, data.PromptGeneration)
 	s.logger.Warn("handling agent failed",
 		zap.String("task_id", data.TaskID),
@@ -2844,8 +2871,7 @@ func (s *Service) handleAgentFailedLocked(ctx context.Context, data watcher.Agen
 		return nil
 	}
 	// Short transient provider errors get a paced, visible retry-with-backoff
-	// before any red banner. This is the ONLY non-terminal
-	// failure path, so it runs before automation finalization below — otherwise
+	// before any red banner and before automation finalization below; otherwise
 	// a transient 529 on an automation run would mark the run failed and
 	// reap its ephemeral worktree out from under the in-flight retry.
 	// handleTransientFailure returns false (falling through) for non-transient
@@ -2865,6 +2891,12 @@ func (s *Service) handleAgentFailedLocked(ctx context.Context, data watcher.Agen
 		if routeResult.handled && !routeResult.manualRecovery {
 			return nil
 		}
+	}
+	if continuation := s.handleProviderLimitFailure(ctx, data); continuation != nil {
+		s.retireExecutionActivityAndPublish(
+			context.WithoutCancel(ctx), data.TaskID, data.SessionID, data.AgentExecutionID,
+		)
+		return continuation
 	}
 
 	// All paths below are terminal for this execution (resume recovery included).

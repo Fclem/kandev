@@ -260,9 +260,10 @@ const (
 
 // Event types for agent profiles (settings)
 const (
-	AgentProfileCreated = "agent_profile.created"
-	AgentProfileUpdated = "agent_profile.updated"
-	AgentProfileDeleted = "agent_profile.deleted"
+	AgentProfileCreated       = "agent_profile.created"
+	AgentProfileUpdated       = "agent_profile.updated"
+	AgentProfileDeleted       = "agent_profile.deleted"
+	AgentProfileLimitsUpdated = "agent.profile.limits_updated"
 )
 
 // Event types for agents

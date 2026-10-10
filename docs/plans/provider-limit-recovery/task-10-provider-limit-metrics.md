@@ -1,7 +1,7 @@
 ---
 id: "10-provider-limit-metrics"
 title: "Provider limit metrics"
-status: pending
+status: done
 wave: 8
 depends_on:
   - "07-office-limit-recovery"
@@ -86,4 +86,21 @@ Tasks 03-07 and 09 deliver the instrumented decision paths.
 
 ## Results
 
-Pending.
+Implemented the three expvar counters and fixed-field `provider_limit.*`
+structured logs for Kanban and Office. Counter labels are closed and contain no
+profile, binding, task, session, or run identifiers. Tests cover accepted versus
+failed/duplicate marks, each fallback and wait label in both contexts, durable
+transition counting, and safe label fields.
+
+Focused tests passed:
+
+```bash
+env TMPDIR=/home/clem/provider-limit-build/tmp GOCACHE=/home/clem/provider-limit-build/cache GOTMPDIR=/home/clem/provider-limit-build/tmp go test -trimpath -tags fts5 ./internal/agent/runtime/providerlimit ./internal/orchestrator ./internal/office/service ./internal/office/scheduler -run 'TestProviderLimitMetric|TestProviderLimitFallbackIneligibleDecisionsKeepRecoverySurface|TestProviderLimitWait|TestDispatchWithUnadvertisedProviderLimitFallbackCountsTerminalDecision|TestOfficeTrustedResetParksRunWithOpaqueWaitKey|TestSuccessfulProviderLimitProbeReleasesLeaseAndWakesSiblings|TestNonLimitFailureKeepsProbeLeaseAndParksUntilExpiry' -count=1
+```
+
+The complete four-package run passed for providerlimit, Office service, and
+Office scheduler. The orchestrator package remains red in
+`TestStopTaskForCoordinator_PartialFailureAttemptsEveryCandidateAndSkipsReview`
+and `TestStopSession_GracefulTeardownClaimSuppressesLateForceCleanup`, both
+outside the provider-limit paths. The Office fallback persistence regression
+found during this run was fixed, and its focused regression test passes.

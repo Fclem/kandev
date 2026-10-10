@@ -9,6 +9,7 @@ import (
 
 	"github.com/coder/acp-go-sdk"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
+	"github.com/kandev/kandev/internal/common/providerretry"
 	"go.uber.org/zap"
 )
 
@@ -88,10 +89,8 @@ func validProviderErrorMetadataField(value string) string {
 	return ""
 }
 
-// acpErrorKindFromData reads the allowlisted `errorKind` field from a terminal
-// ACP prompt error's structured Data. Data is adapter-defined `any`; only the
-// exact map[string]any shape encoding/json produces is accepted, and no other
-// field of Data is ever read.
+// acpErrorKindFromData reads only the allowlisted errorKind field from terminal
+// ACP prompt error data. Retry timing is extracted separately as numeric data.
 func acpErrorKindFromData(data any) string {
 	m, ok := data.(map[string]any)
 	if !ok {
@@ -104,11 +103,9 @@ func acpErrorKindFromData(data any) string {
 	return validProviderErrorMetadataField(kind)
 }
 
-// mergeAllowlistedProviderErrorMetadata fills provider_id and model_id
-// verbatim from the adapter's own state, and rpc_code/error_kind from the
-// underlying *acp.RequestError when err is (or wraps) one. Raw
-// RequestError.Data never crosses this call other than through the
-// validated error_kind extraction.
+// mergeAllowlistedProviderErrorMetadata fills adapter identity and allowlisted
+// error kind, RPC code, and numeric retry timing. Raw RequestError.Data never
+// crosses the projection boundary.
 func mergeAllowlistedProviderErrorMetadata(projection *streams.ProviderError, err error, providerID, modelID string) {
 	if projection.ProviderID == "" {
 		projection.ProviderID = providerID
@@ -125,6 +122,12 @@ func mergeAllowlistedProviderErrorMetadata(projection *streams.ProviderError, er
 	}
 	if projection.ErrorKind == "" {
 		projection.ErrorKind = acpErrorKindFromData(reqErr.Data)
+	}
+	if projection.RetryAfterMs == nil {
+		projection.RetryAfterMs = providerretry.FromData(reqErr.Data)
+		if projection.RetryAfterMs == nil {
+			projection.RetryAfterMs = providerretry.FromText(reqErr.Message)
+		}
 	}
 }
 

@@ -221,6 +221,8 @@ func (r *sqliteRepository) initSchema() error {
 	_ = r.migrate.Apply("agent_profiles.provider_base_url", `ALTER TABLE agent_profiles ADD COLUMN provider_base_url TEXT NOT NULL DEFAULT ''`)
 	_ = r.migrate.Apply("agent_profiles.provider_api_key_secret_id", `ALTER TABLE agent_profiles ADD COLUMN provider_api_key_secret_id TEXT NOT NULL DEFAULT ''`)
 	_ = r.migrate.Apply("agent_profiles.require_exact_model", `ALTER TABLE agent_profiles ADD COLUMN require_exact_model INTEGER NOT NULL DEFAULT 0`)
+	_ = r.migrate.Apply("agent_profiles.limit_fallback", `ALTER TABLE agent_profiles ADD COLUMN limit_fallback INTEGER NOT NULL DEFAULT 0`)
+	_ = r.migrate.Apply("agent_profiles.resume_after_reset", `ALTER TABLE agent_profiles ADD COLUMN resume_after_reset INTEGER NOT NULL DEFAULT 0`)
 	_ = r.migrate.Apply("agent_profiles.cursor_mcp_auth_enabled", `ALTER TABLE agent_profiles ADD COLUMN cursor_mcp_auth_enabled INTEGER NOT NULL DEFAULT 1`)
 	_ = r.migrate.Apply("agent_profiles.cursor_plugins_mcp_enabled", `ALTER TABLE agent_profiles ADD COLUMN cursor_plugins_mcp_enabled INTEGER NOT NULL DEFAULT 1`)
 	_ = r.migrate.Apply("agent_profiles.mcp_selection_mode", `ALTER TABLE agent_profiles ADD COLUMN mcp_selection_mode TEXT NOT NULL DEFAULT 'inherit'`)
@@ -362,6 +364,8 @@ func (r *sqliteRepository) recreateAgentProfilesWithoutModelCheck() error {
 	srcHasFallbackModel := columnExists(tx, "agent_profiles", "fallback_model")
 	srcHasAutoFallback := columnExists(tx, "agent_profiles", "auto_fallback")
 	srcHasRequireExactModel := columnExists(tx, "agent_profiles", "require_exact_model")
+	srcHasLimitFallback := columnExists(tx, "agent_profiles", "limit_fallback")
+	srcHasResumeAfterReset := columnExists(tx, "agent_profiles", "resume_after_reset")
 	srcHasCursorMCPAuthEnabled := columnExists(tx, "agent_profiles", "cursor_mcp_auth_enabled")
 	srcHasCursorPluginsMCPEnabled := columnExists(tx, "agent_profiles", "cursor_plugins_mcp_enabled")
 	srcHasMCPSelectionMode := columnExists(tx, "agent_profiles", "mcp_selection_mode")
@@ -397,6 +401,14 @@ func (r *sqliteRepository) recreateAgentProfilesWithoutModelCheck() error {
 	if srcHasRequireExactModel {
 		srcCols += ", require_exact_model"
 		dstCols += ", require_exact_model"
+	}
+	if srcHasLimitFallback {
+		srcCols += ", limit_fallback"
+		dstCols += ", limit_fallback"
+	}
+	if srcHasResumeAfterReset {
+		srcCols += ", resume_after_reset"
+		dstCols += ", resume_after_reset"
 	}
 	if srcHasCursorMCPAuthEnabled {
 		srcCols += ", cursor_mcp_auth_enabled"
@@ -443,6 +455,8 @@ func (r *sqliteRepository) recreateAgentProfilesWithoutModelCheck() error {
 		fallback_model TEXT NOT NULL DEFAULT '',
 		auto_fallback INTEGER NOT NULL DEFAULT 0,
 		require_exact_model INTEGER NOT NULL DEFAULT 0,
+		limit_fallback INTEGER NOT NULL DEFAULT 0,
+		resume_after_reset INTEGER NOT NULL DEFAULT 0,
 		cursor_mcp_auth_enabled INTEGER NOT NULL DEFAULT 1,
 		cursor_plugins_mcp_enabled INTEGER NOT NULL DEFAULT 1,
 		mcp_selection_mode TEXT NOT NULL DEFAULT 'inherit',
@@ -1113,7 +1127,7 @@ func (r *sqliteRepository) insertAgentProfile(ctx context.Context, execer profil
 			provider_kind, provider_base_url, provider_api_key_secret_id, require_exact_model,
 			cursor_mcp_auth_enabled, cursor_plugins_mcp_enabled,
 			mcp_selection_mode, mcp_selected_servers,
-			execution_agent_profile_id
+			execution_agent_profile_id, limit_fallback, resume_after_reset
 		) VALUES (
 			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?,
@@ -1128,7 +1142,7 @@ func (r *sqliteRepository) insertAgentProfile(ctx context.Context, execer profil
 			?, ?, ?, ?,
 			?, ?,
 			?, ?,
-			?
+			?, ?, ?
 		)
 	`),
 		profile.ID, profile.AgentID, profile.Name, profile.AgentDisplayName, profile.Model,
@@ -1152,6 +1166,7 @@ func (r *sqliteRepository) insertAgentProfile(ctx context.Context, execer profil
 		normalizeMCPSelectionMode(profile.MCPSelectionMode),
 		mcpSelectedServersJSON,
 		profile.ExecutionAgentProfileID,
+		dialect.BoolToInt(profile.LimitFallback), dialect.BoolToInt(profile.ResumeAfterReset),
 	)
 	return err
 }
@@ -1460,7 +1475,7 @@ func (r *sqliteRepository) updateAgentProfile(ctx context.Context, updater profi
 			provider_kind = ?, provider_base_url = ?, provider_api_key_secret_id = ?, require_exact_model = ?,
 			cursor_mcp_auth_enabled = ?, cursor_plugins_mcp_enabled = ?,
 			mcp_selection_mode = ?, mcp_selected_servers = ?,
-			execution_agent_profile_id = ?
+			execution_agent_profile_id = ?, limit_fallback = ?, resume_after_reset = ?
 		WHERE id = ? AND deleted_at IS NULL
 		RETURNING enabled
 	`), profile.AgentID, profile.Name, profile.AgentDisplayName, profile.Model,
@@ -1485,6 +1500,7 @@ func (r *sqliteRepository) updateAgentProfile(ctx context.Context, updater profi
 		normalizeMCPSelectionMode(profile.MCPSelectionMode),
 		mcpSelectedServersJSON,
 		profile.ExecutionAgentProfileID,
+		dialect.BoolToInt(profile.LimitFallback), dialect.BoolToInt(profile.ResumeAfterReset),
 		profile.ID)
 	var committedEnabled bool
 	if err := row.Scan(&committedEnabled); err != nil {
@@ -1605,7 +1621,8 @@ const agentProfileSelectColumns = `
 		COALESCE(cursor_plugins_mcp_enabled, 1),
 		COALESCE(mcp_selection_mode, 'inherit'),
 		COALESCE(mcp_selected_servers, '[]'),
-		COALESCE(execution_agent_profile_id, '')
+		COALESCE(execution_agent_profile_id, ''),
+		COALESCE(limit_fallback, 0), COALESCE(resume_after_reset, 0)
 	FROM agent_profiles`
 
 func (r *sqliteRepository) GetAgentProfile(ctx context.Context, id string) (*models.AgentProfile, error) {
@@ -1787,6 +1804,7 @@ func scanAgentProfile(scanner interface {
 	var failureThreshold int
 	var autoFallback int
 	var requireExactModel int
+	var limitFallback, resumeAfterReset int
 	var cursorMCPAuthEnabled int
 	var cursorPluginsMCPEnabled int
 	var mcpSelectedServersJSON string
@@ -1841,6 +1859,7 @@ func scanAgentProfile(scanner interface {
 		&profile.MCPSelectionMode,
 		&mcpSelectedServersJSON,
 		&profile.ExecutionAgentProfileID,
+		&limitFallback, &resumeAfterReset,
 	); err != nil {
 		return nil, err
 	}
@@ -1859,6 +1878,8 @@ func scanAgentProfile(scanner interface {
 	profile.SkipIdleRuns = skipIdleRuns == 1
 	profile.AutoFallback = autoFallback == 1
 	profile.RequireExactModel = requireExactModel == 1
+	profile.LimitFallback = limitFallback == 1
+	profile.ResumeAfterReset = resumeAfterReset == 1
 	profile.CursorMCPAuthEnabled = cursorMCPAuthEnabled == 1
 	profile.CursorPluginsMCPEnabled = cursorPluginsMCPEnabled == 1
 	profile.MCPSelectionMode = normalizeMCPSelectionMode(profile.MCPSelectionMode)

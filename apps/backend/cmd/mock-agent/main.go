@@ -60,6 +60,8 @@ type mockAgent struct {
 	sessionModes                   map[acp.SessionId]acp.SessionModeId
 	commandsEmitted                map[acp.SessionId]bool
 	dynamicFallbackCounterSessions map[acp.SessionId]acp.SessionId
+	providerLimitNow               func() time.Time
+	providerLimitWindows           map[providerLimitScenarioKey]time.Time
 	nextSessionID                  uint64
 	mu                             sync.Mutex
 }
@@ -484,6 +486,9 @@ func (a *mockAgent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.Prom
 	if resp, err, handled := a.handleRetainedCapacity(promptCtx, req.SessionId, prompt); handled {
 		return resp, err
 	}
+	if response, err, handled := a.handleProviderLimit(req.SessionId, prompt); handled {
+		return response, err
+	}
 	// The /overloaded scenario must surface a real prompt-time ACP *error*
 	// (a JSON-RPC error response), which handlePrompt's emitter cannot do —
 	// so intercept it here and return the error from Prompt directly.
@@ -757,6 +762,7 @@ func mockAvailableCommands() []acp.AvailableCommand {
 		{Name: "async-subagent-teardown", Description: "Replay async Agent work with a missing completion"},
 		{Name: toolKeyError, Description: "Simulate an error"},
 		{Name: "overloaded", Description: "Simulate a transient 529 Overloaded error (fails once, then recovers)"},
+		{Name: "provider-limit", Description: "Simulate a model-scoped provider limit", Input: hint("model seconds")},
 		{Name: "transport-lost", Description: "Simulate an ACP transport disconnect (fails once, then recovers)"},
 		{Name: "thinking", Description: "Emit thinking/reasoning blocks"},
 		{Name: "crash", Description: "Simulate agent crash"},

@@ -1,7 +1,7 @@
 ---
 id: "01-classify-limit-timing-and-scope"
 title: "Classify limit timing and scope"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -37,6 +37,8 @@ messages.
   Values must be positive and fit `time.Duration`; valid delays beyond seven
   days remain known reset evidence but are not trusted for automatic resumption.
 - Pass-through in `classifyKanbanFailure` and Office `HandlePostStartFailure`.
+- Propagate `ProviderError.Source` as `routingerr.Input.DiagnosticSource`;
+  OMP rules require `omp_acp`, never an inferred text marker.
 - Rules `claude.stderr.spend_limit.v1` (ordered before rate),
   `gemini.stderr.quota.v1`, `omp.chunk.anthropic_spend.v1` (ordered first), and
   `omp.chunk.anthropic_rate.v1`.
@@ -53,8 +55,9 @@ messages.
 1. The issue example (`rate_limit_error`, monthly spend limit,
    `retry-after-ms=274579000`) classifies as account-scope `quota_limited`
    with reset = `OccurredAt + 274579000ms`, exact to the millisecond. It does
-   so from both `claude-acp` and `omp-acp`; any other agent ID keeps its
-   current result. Both sanitizer paths drop `req_011CfL9vJs9DYV45eqL6jbh9`
+   so from `claude-acp` raw evidence and `omp-acp` adapter-converted evidence
+   carrying `DiagnosticSource=omp_acp`; other agent IDs and unmarked OMP prose
+   keep their current results. Both sanitizer paths drop `req_011CfL9vJs9DYV45eqL6jbh9`
    (AC 007.6).
 2. Precedence is absolute reset, then milliseconds, then seconds, then text.
    Malformed, negative, zero, or unrepresentable delays are dropped. An
@@ -109,4 +112,23 @@ None.
 
 ## Results
 
-Pending.
+Completed on 2026-10-03.
+
+- RED: spend quota, Gemini quota, limit scope, reset precision/precedence,
+  OMP source gating, short request-ID redaction, and ACP delay projection
+  failed on expected behavior assertions. Kanban and Office timing consumers
+  also failed before propagation. Missing Gemini duration units failed before
+  strict unit validation.
+- GREEN: every command in the Verification block passed, with `-trimpath`
+  added for shared build-cache compatibility. The same package paths, test
+  selectors, tags, and `-count=1` were used.
+- Added common duration-range boundary coverage; classifier, stream,
+  projection, Kanban, and Office regressions pass.
+- Smoke: a real ACP RequestError projection classified the issue fixture as
+  `quota_limited`, account scope, delay `274579000ms`, exact reset
+  `2026-10-06T16:16:19.123Z`, with the request ID redacted.
+- The existing `ProviderError.Source` is propagated into internal
+  `DiagnosticSource`, requiring `omp_acp` for OMP rules. Design and work
+  order were synchronized after the user requested continuation.
+- The shared cache volume and `/tmp` were unavailable; checks used isolated
+  `TMPDIR`, `GOTMPDIR`, and `GOCACHE` under `/home/clem/provider-limit-build`.

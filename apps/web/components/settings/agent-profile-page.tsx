@@ -70,6 +70,25 @@ export {
 } from "@/components/settings/profile-edit/profile-env-vars-section";
 export { preserveNewerProfileDraft } from "@/components/settings/agent-profile-page-state";
 
+function toModelFallbackFormData(
+  profile: AgentProfile,
+): Pick<
+  ProfileFormData,
+  | "fallback_model"
+  | "auto_fallback"
+  | "require_exact_model"
+  | "limit_fallback"
+  | "resume_after_reset"
+> {
+  return {
+    fallback_model: profile.fallbackModel ?? "",
+    auto_fallback: profile.autoFallback ?? false,
+    require_exact_model: profile.requireExactModel ?? false,
+    limit_fallback: profile.limitFallback ?? false,
+    resume_after_reset: profile.resumeAfterReset ?? false,
+  };
+}
+
 function toProfileFormData(
   profile: AgentProfile,
   permissionSettings: Record<string, PermissionSetting>,
@@ -78,9 +97,7 @@ function toProfileFormData(
   return {
     name: profile.name,
     model: profile.model,
-    fallback_model: profile.fallbackModel ?? "",
-    auto_fallback: profile.autoFallback ?? false,
-    require_exact_model: profile.requireExactModel ?? false,
+    ...toModelFallbackFormData(profile),
     mode: profile.mode ?? "",
     config_options: profile.configOptions ?? {},
     auto_approve: pv.auto_approve,

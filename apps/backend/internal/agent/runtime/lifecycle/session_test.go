@@ -395,9 +395,11 @@ func TestInitializeAndPromptWithLayers_UnadvertisedModelFailsBeforeInference(t *
 		name         string
 		profileModel string
 		runtimeModel string
+		launchPolicy *StartModelPolicy
 	}{
 		{name: "profile start model gone", profileModel: "claude-gone", runtimeModel: ""},
 		{name: "runtime override gone", profileModel: "", runtimeModel: "claude-gone"},
+		{name: "limit fallback gone without saved exact policy", profileModel: "gpt-5", runtimeModel: "gpt-5", launchPolicy: &StartModelPolicy{Model: "claude-gone", RequireExactModel: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mock := newMockAgentServer(t)
@@ -439,6 +441,11 @@ func TestInitializeAndPromptWithLayers_UnadvertisedModelFailsBeforeInference(t *
 			readyCalls := 0
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
+			policy := StartModelPolicy{RequireExactModel: true}
+			if tc.launchPolicy != nil {
+				ctx = WithStartModelPolicy(ctx, *tc.launchPolicy)
+				policy = StartModelPolicy{}
+			}
 			err := sm.InitializeAndPromptWithLayers(
 				ctx, execution, agentConfig, "", nil, nil,
 				func(executionID string) error {
@@ -447,7 +454,7 @@ func TestInitializeAndPromptWithLayers_UnadvertisedModelFailsBeforeInference(t *
 				},
 				tc.profileModel, "plan", nil,
 				tc.runtimeModel, "", nil,
-				StartModelPolicy{RequireExactModel: true},
+				policy,
 			)
 			if err == nil || !strings.Contains(err.Error(), "requested_not_advertised") {
 				t.Fatalf("unadvertised model error = %v, want requested_not_advertised", err)

@@ -373,6 +373,7 @@ type promptTurnState struct {
 	cursorRetriableMsg          string
 	cursorRetriableComplete     bool
 	cursorRetriableAt           time.Time
+	ompLimit                    *streams.ProviderError
 	continuationTools           map[string]bool
 	continuationPermissions     uint16
 	continuationPermissionTools map[string]struct{}

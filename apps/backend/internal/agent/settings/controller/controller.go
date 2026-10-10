@@ -16,6 +16,7 @@ import (
 	"github.com/kandev/kandev/internal/agent/managedruntime"
 	"github.com/kandev/kandev/internal/agent/mcpconfig"
 	"github.com/kandev/kandev/internal/agent/registry"
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	"github.com/kandev/kandev/internal/agent/settings/store"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/secrets"
@@ -89,6 +90,7 @@ type Controller struct {
 	openCodeMigrationGuard      OpenCodeMigrationGuard
 	maintenance                 *maintenanceCoordinator
 	hub                         JobBroadcaster
+	providerLimits              *providerlimit.Service
 	logger                      *logger.Logger
 	secretStore                 secrets.SecretStore
 	runtimeUpdateStatusMu       sync.Mutex

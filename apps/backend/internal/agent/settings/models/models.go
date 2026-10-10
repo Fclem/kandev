@@ -83,6 +83,8 @@ type AgentProfile struct {
 	// RequireExactModel makes the configured model an explicit per-profile
 	// identity requirement. False preserves compatible pre-PR behavior.
 	RequireExactModel bool `json:"require_exact_model" db:"require_exact_model"`
+	LimitFallback     bool `json:"limit_fallback" db:"limit_fallback"`
+	ResumeAfterReset  bool `json:"resume_after_reset" db:"resume_after_reset"`
 
 	// Mode is the optional ACP session mode applied via session/set_mode at
 	// session start. Empty when the agent does not advertise modes.

@@ -115,6 +115,16 @@ No exactly-once execution guarantee is implied.
 
 The recovery card places the recommended action first and shows every available alternative as an individual button, including **Restore read-only workspace** and **Start fresh session** when eligible. Buttons wrap on desktop and stack at touch size on phones. Runtime installation failures offer **Retry**; provider quota failures show reset guidance, while Archive and Delete remain in the task menu. Restoring the workspace does not restart the agent. Expand **Technical details** for wrapped, bounded diagnostics; **Copy details** copies the same redacted text you see. When a workspace pane can identify the same failure and its visible recovery entry, **View recovery** opens Chat and focuses the recovery card. Independent workspace failures retain their own retry.
 
+When a task session waits for a provider reset, its recovery notice shows the
+limited model, reset time, and **Cancel** action. Kandev resumes the same
+session after a trusted reset no more than seven days away. A session can make
+three consecutive automatic waits without a successful turn; the next limit
+failure returns to manual recovery. **Cancel**, sending a prompt, stopping the
+session, changing workflow step, archiving, or deleting the task cancels the
+wait. A prompt is delivered normally. Manual launches and prompts use the
+requested model even while it is marked limited and show a non-blocking
+**limited until** notice.
+
 Failures during task or workspace preparation appear as one task error strip below the task header and above the session and Plan tabs. The strip remains visible when you switch sessions or tabs and disappears only after task recovery succeeds. Select **Show details** to open the available guarded actions in a desktop dialog or phone drawer.
 
 If Kandev cannot prove that the native conversation is available, it keeps the

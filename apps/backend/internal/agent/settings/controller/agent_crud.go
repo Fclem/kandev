@@ -134,6 +134,8 @@ type CreateAgentProfileRequest struct {
 	FallbackModel           string
 	AutoFallback            bool
 	RequireExactModel       bool
+	LimitFallback           bool
+	ResumeAfterReset        bool
 	CursorMCPAuthEnabled    *bool
 	CursorPluginsMCPEnabled *bool
 	Mode                    string
@@ -288,6 +290,8 @@ func (c *Controller) createAgentProfiles(ctx context.Context, agentID, displayNa
 			FallbackModel:           strings.TrimSpace(profileReq.FallbackModel),
 			AutoFallback:            profileReq.AutoFallback,
 			RequireExactModel:       profileReq.RequireExactModel,
+			LimitFallback:           profileReq.LimitFallback,
+			ResumeAfterReset:        profileReq.ResumeAfterReset,
 			CursorMCPAuthEnabled:    cursorMCPAuthEnabled(profileReq.CursorMCPAuthEnabled),
 			CursorPluginsMCPEnabled: cursorPluginsMCPEnabled(profileReq.CursorPluginsMCPEnabled),
 			Mode:                    profileReq.Mode,

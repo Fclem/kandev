@@ -58,6 +58,8 @@ type CreateProfileRequest struct {
 	FallbackModel     string
 	AutoFallback      bool
 	RequireExactModel bool
+	LimitFallback     *bool
+	ResumeAfterReset  *bool
 	Mode              string
 	ConfigOptions     map[string]string
 	AllowIndexing     bool
@@ -119,6 +121,9 @@ func (c *Controller) CreateProfile(ctx context.Context, req CreateProfileRequest
 	if err := validateRequireExactModelPolicy(req.Model, req.RequireExactModel, req.CLIPassthrough, agent.Name == agents.DynamicAgentID); err != nil {
 		return nil, err
 	}
+	if agent.Name == agents.DynamicAgentID && (req.LimitFallback != nil || req.ResumeAfterReset != nil) {
+		return nil, fmt.Errorf("%w: limit recovery requires a concrete profile", ErrDynamicProfileRule)
+	}
 	if err := dto.ValidateMCPSelection(req.MCPSelectionMode, req.MCPSelectedServers); err != nil {
 		return nil, err
 	}
@@ -155,6 +160,8 @@ func (c *Controller) CreateProfile(ctx context.Context, req CreateProfileRequest
 		FallbackModel:           strings.TrimSpace(req.FallbackModel),
 		AutoFallback:            req.AutoFallback,
 		RequireExactModel:       req.RequireExactModel,
+		LimitFallback:           req.LimitFallback != nil && *req.LimitFallback,
+		ResumeAfterReset:        req.ResumeAfterReset != nil && *req.ResumeAfterReset,
 		Mode:                    req.Mode,
 		ConfigOptions:           profileconfig.SanitizeConfigOptions(req.ConfigOptions),
 		AllowIndexing:           req.AllowIndexing,
@@ -409,6 +416,8 @@ type UpdateProfileRequest struct {
 	FallbackModel     *string
 	AutoFallback      *bool
 	RequireExactModel *bool
+	LimitFallback     *bool
+	ResumeAfterReset  *bool
 	Mode              *string
 	ConfigOptions     *map[string]string
 	AllowIndexing     *bool
@@ -444,6 +453,7 @@ func (req UpdateProfileRequest) touchesProvider() bool {
 func enabledOnlyUpdate(req UpdateProfileRequest) bool {
 	return req.Enabled != nil && req.Name == nil && req.Model == nil &&
 		req.FallbackModel == nil && req.AutoFallback == nil && req.RequireExactModel == nil && req.Mode == nil &&
+		req.LimitFallback == nil && req.ResumeAfterReset == nil &&
 		req.ConfigOptions == nil && req.AllowIndexing == nil && req.AutoApprove == nil &&
 		req.CLIPassthrough == nil && req.CLIFlags == nil && req.EnvVars == nil &&
 		req.CommandPrefix == nil && !req.touchesProvider() && req.CursorMCPAuthEnabled == nil &&
@@ -461,6 +471,9 @@ func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest
 	isDynamic := profileKind(profile) == dynamicProfileKind
 	if isDynamic && !c.dynamicAgentRoutingEnabled {
 		return nil, ErrDynamicAgentRoutingDisabled
+	}
+	if isDynamic && (req.LimitFallback != nil || req.ResumeAfterReset != nil) {
+		return nil, fmt.Errorf("%w: limit recovery requires a concrete profile", ErrDynamicProfileRule)
 	}
 	var (
 		dynamicRepo   store.DynamicProfileRepository
@@ -495,6 +508,12 @@ func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest
 	}
 	if req.RequireExactModel != nil {
 		profile.RequireExactModel = *req.RequireExactModel
+	}
+	if req.LimitFallback != nil {
+		profile.LimitFallback = *req.LimitFallback
+	}
+	if req.ResumeAfterReset != nil {
+		profile.ResumeAfterReset = *req.ResumeAfterReset
 	}
 	if req.Mode != nil {
 		profile.Mode = *req.Mode
@@ -835,6 +854,8 @@ func duplicateClone(source *models.AgentProfile) *models.AgentProfile {
 		FallbackModel:              strings.TrimSpace(source.FallbackModel),
 		AutoFallback:               source.AutoFallback,
 		RequireExactModel:          source.RequireExactModel,
+		LimitFallback:              source.LimitFallback,
+		ResumeAfterReset:           source.ResumeAfterReset,
 		Mode:                       source.Mode,
 		ConfigOptions:              profileconfig.SanitizeConfigOptions(cloneStringMap(source.ConfigOptions)),
 		AllowIndexing:              source.AllowIndexing,
@@ -1400,6 +1421,8 @@ func toProfileDTO(profile *models.AgentProfile) dto.AgentProfileDTO {
 		FallbackModel:           profile.FallbackModel,
 		AutoFallback:            profile.AutoFallback,
 		RequireExactModel:       profile.RequireExactModel,
+		LimitFallback:           profile.LimitFallback,
+		ResumeAfterReset:        profile.ResumeAfterReset,
 		Mode:                    profile.Mode,
 		ConfigOptions:           profileconfig.SanitizeConfigOptions(profile.ConfigOptions),
 		AllowIndexing:           profile.AllowIndexing,

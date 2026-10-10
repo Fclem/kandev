@@ -196,6 +196,7 @@
   "fallbackModel": "後備：{{model}}",
   "fallbackNext": "後備：下一個",
   "fallbackNone": "後備：無",
+  "limitedUntil": "受限至 {{time}}",
   "filterModels": "篩選模型…",
   "fixInvalidMcpConfig": "請先修復無效的 MCP 設定再儲存。",
   "fixInvalidMcpJson": "請先修復無效的 MCP JSON 再儲存。",

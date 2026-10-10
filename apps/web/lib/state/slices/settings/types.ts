@@ -37,6 +37,7 @@ import type { AgentProfileRecentUseContext } from "@/lib/types/http-agent-profil
 import type { TaskColor } from "@/lib/task-colors";
 import type { SSHReachabilityRecord } from "@/lib/types/http-ssh";
 import type { AgentUpdateJob } from "@/lib/api";
+import type { AgentProfileLimit } from "@/lib/types/http-agents";
 
 export type {
   AgentProfileRecentUseRecord,
@@ -90,6 +91,8 @@ export type AgentProfileOption = {
   auto_fallback?: boolean;
   /** Explicit exact-model policy opt-in. */
   require_exact_model?: boolean;
+  limit_fallback?: boolean;
+  resume_after_reset?: boolean;
   workspace_id?: string;
   /** Persisted profile revision (RFC3339 updated_at), used to prefer newer
    * WS-delivered options over a stale in-flight response. */
@@ -303,6 +306,8 @@ export function toAgentProfileOption(
     fallbackModel?: string;
     autoFallback?: boolean;
     requireExactModel?: boolean;
+    limitFallback?: boolean;
+    resumeAfterReset?: boolean;
     enabled?: boolean;
   },
 ): AgentProfileOption {
@@ -318,6 +323,8 @@ export function toAgentProfileOption(
     fallback_model: profile.fallbackModel ?? undefined,
     auto_fallback: profile.autoFallback ?? undefined,
     require_exact_model: profile.requireExactModel ?? undefined,
+    limit_fallback: profile.limitFallback ?? undefined,
+    resume_after_reset: profile.resumeAfterReset ?? undefined,
     workspace_id: profile.workspaceId,
     updatedAt: profile.updatedAt,
     createdAt: profile.createdAt,
@@ -521,6 +528,7 @@ export type SettingsSliceState = {
   agentDiscovery: AgentDiscoveryState;
   availableAgents: AvailableAgentsState;
   agentProfiles: AgentProfilesState;
+  agentProfileLimits: { byProfileId: Record<string, AgentProfileLimit>; version: number };
   installJobs: InstallJobsState;
   updateJobs: AgentUpdateJobsState;
   editors: EditorsState;
@@ -562,6 +570,7 @@ export type SettingsSliceActions = {
     queued: string[] | null,
   ) => void;
   setAgentProfiles: (profiles: AgentProfilesState["items"]) => void;
+  setAgentProfileLimits: (limits: AgentProfileLimit[], expectedVersion?: number) => void;
   setInstallJobs: (jobs: InstallJob[]) => void;
   upsertInstallJob: (job: InstallJob) => void;
   appendInstallOutput: (agentName: string, chunk: string) => void;

@@ -36,6 +36,7 @@ type circuit struct {
 	until      time.Time
 	code       routingerr.Code
 	probeUntil time.Time
+	resetKnown bool
 }
 
 // CircuitSnapshot is the durable representation of one resource circuit.
@@ -46,11 +47,13 @@ type CircuitSnapshot struct {
 	Until      time.Time
 	Code       routingerr.Code
 	ProbeUntil time.Time
+	ResetKnown bool
 }
 
 // CircuitPersistence stores shared resource health across backend restarts.
 type CircuitPersistence interface {
 	SaveCircuit(context.Context, CircuitSnapshot) error
+	SaveCircuits(context.Context, []CircuitSnapshot) error
 	LoadCircuits(context.Context) ([]CircuitSnapshot, error)
 }
 
@@ -114,7 +117,7 @@ func (r *CircuitRegistry) Restore(ctx context.Context) error {
 	for _, snapshot := range snapshots {
 		r.circuits[snapshot.Key] = circuit{
 			state: snapshot.State, until: snapshot.Until,
-			code: snapshot.Code, probeUntil: snapshot.ProbeUntil,
+			code: snapshot.Code, probeUntil: snapshot.ProbeUntil, resetKnown: snapshot.ResetKnown,
 		}
 	}
 	return nil
@@ -239,10 +242,7 @@ func (r *CircuitRegistry) persistSnapshotLocked(key string) error {
 	if !ok {
 		return nil
 	}
-	err := r.persist.SaveCircuit(context.Background(), CircuitSnapshot{
-		Key: key, State: entry.state, Until: entry.until,
-		Code: entry.code, ProbeUntil: entry.probeUntil,
-	})
+	err := r.persist.SaveCircuit(context.Background(), circuitSnapshot(key, entry))
 	if err != nil {
 		_, alreadyPending := r.pending[key]
 		r.pending[key] = struct{}{}

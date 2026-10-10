@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { IconChevronRight, IconInfoCircle } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import {
@@ -17,9 +18,21 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kande
 import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
 import { cn } from "@/lib/utils";
 
-export type FallbackOptionKind = "automatic" | "explicit" | "strict";
+export type FallbackOptionKind =
+  | "automatic"
+  | "explicit"
+  | "strict"
+  | "limitFallback"
+  | "resumeAfterReset";
 
 function helpCopy(kind: FallbackOptionKind, t: (key: string) => string) {
+  if (kind === "limitFallback" || kind === "resumeAfterReset") {
+    return {
+      label: t(`settings:${kind}InfoLabel`),
+      title: t(`settings:${kind}HelpTitle`),
+      body: t(`settings:${kind}Help`),
+    };
+  }
   if (kind === "automatic") {
     return {
       label: t("settings:autoFallbackInfoLabel"),
@@ -97,11 +110,39 @@ export function FallbackOptionHelp({ kind }: { kind: FallbackOptionKind }) {
   );
 }
 
+function fallbackSettingsSummary(
+  policy: {
+    fallbackModel: string;
+    autoFallback: boolean;
+    requireExactModel: boolean;
+    limitFallback: boolean;
+    resumeAfterReset: boolean;
+  },
+  t: TFunction,
+) {
+  let summary = t("settings:fallbackSettingsSummaryExecutorDefault");
+  if (policy.fallbackModel) {
+    summary = t("settings:fallbackSettingsSummaryExplicit", { model: policy.fallbackModel });
+  }
+  if (policy.autoFallback) summary = t("settings:fallbackSettingsSummaryAutomatic");
+  if (policy.requireExactModel) summary = t("settings:fallbackSettingsSummaryExact");
+  if (policy.limitFallback) {
+    const eligible =
+      !policy.requireExactModel && !policy.autoFallback && policy.fallbackModel.trim() !== "";
+    summary += `; ${t(eligible ? "settings:limitFallbackSummary" : "settings:limitFallbackSummaryInactive")}`;
+  }
+  if (policy.resumeAfterReset) summary += `; ${t("settings:resumeAfterResetSummary")}`;
+  return summary;
+}
+
 export function ModelFallbackSettingsShell({
   autoFallback,
   fallbackModel,
   isDirty,
   requireExactModel = false,
+  limitFallback = false,
+  resumeAfterReset = false,
+  limitRecoveryOption,
   strictOption,
   automaticOption,
   explicitOption,
@@ -110,22 +151,19 @@ export function ModelFallbackSettingsShell({
   fallbackModel: string;
   isDirty?: boolean;
   requireExactModel?: boolean;
+  limitFallback?: boolean;
+  resumeAfterReset?: boolean;
+  limitRecoveryOption?: ReactNode;
   strictOption?: ReactNode;
   automaticOption: ReactNode;
   explicitOption: ReactNode;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  let summary = t("settings:fallbackSettingsSummaryExecutorDefault");
-  if (fallbackModel) {
-    summary = t("settings:fallbackSettingsSummaryExplicit", { model: fallbackModel });
-  }
-  if (autoFallback) {
-    summary = t("settings:fallbackSettingsSummaryAutomatic");
-  }
-  if (requireExactModel) {
-    summary = t("settings:fallbackSettingsSummaryExact");
-  }
+  const summary = fallbackSettingsSummary(
+    { fallbackModel, autoFallback, requireExactModel, limitFallback, resumeAfterReset },
+    t,
+  );
 
   return (
     <Collapsible
@@ -135,7 +173,7 @@ export function ModelFallbackSettingsShell({
       data-testid="profile-fallback-settings"
     >
       <div
-        className="flex min-h-11 min-w-0 items-center gap-2 md:min-h-9"
+        className="flex min-h-11 min-w-0 flex-wrap items-center gap-2 md:min-h-9"
         data-settings-dirty={isDirty}
         data-settings-dirty-level="container"
       >
@@ -156,7 +194,7 @@ export function ModelFallbackSettingsShell({
           </button>
         </CollapsibleTrigger>
         <span
-          className="min-w-0 truncate text-xs text-muted-foreground"
+          className="min-w-0 max-w-full text-xs text-muted-foreground"
           data-testid="profile-fallback-settings-summary"
         >
           {summary}
@@ -187,6 +225,7 @@ export function ModelFallbackSettingsShell({
           >
             {explicitOption}
           </div>
+          {limitRecoveryOption}
         </div>
       </CollapsibleContent>
     </Collapsible>

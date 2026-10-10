@@ -6,6 +6,7 @@ import (
 	"github.com/kandev/kandev/internal/agent/managedruntime"
 	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
 	dynamicruntime "github.com/kandev/kandev/internal/agent/runtime/dynamic"
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	settingsstore "github.com/kandev/kandev/internal/agent/settings/store"
 	analyticsrepository "github.com/kandev/kandev/internal/analytics/repository"
 	authservice "github.com/kandev/kandev/internal/auth"
@@ -83,6 +84,7 @@ type Services struct {
 	ManagedRuntimeSelections managedruntime.SelectionStore
 	DynamicProfileResolver   *agentruntime.ProfileExecutionResolver
 	DynamicBindingResolver   *dynamicruntime.CredentialBindingResolver
+	ProviderLimits           *providerlimit.Service
 	Task                     *taskservice.Service
 	// Org owns organizations. Always non-nil; Enabled() reports whether the
 	// multi-tenancy feature is on.

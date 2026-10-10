@@ -328,10 +328,11 @@ const (
 	ActionSystemMetricsUpdated          = "system.metrics.updated"
 	ActionUpdateAvailable               = "system.update_available"
 
-	ActionAgentProfileDeleted    = "agent.profile.deleted"
-	ActionAgentProfileCreated    = "agent.profile.created"
-	ActionAgentProfileUpdated    = "agent.profile.updated"
-	ActionAgentProfilesReordered = "agent.profiles.reordered"
+	ActionAgentProfileDeleted       = "agent.profile.deleted"
+	ActionAgentProfileCreated       = "agent.profile.created"
+	ActionAgentProfileUpdated       = "agent.profile.updated"
+	ActionAgentProfilesReordered    = "agent.profiles.reordered"
+	ActionAgentProfileLimitsUpdated = "agent.profile.limits_updated"
 
 	// ActionAgentSettingsUpdated carries a full agent settings record
 	// (dto.AgentDTO) after a settings-side change such as a custom TUI agent's

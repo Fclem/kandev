@@ -566,6 +566,7 @@ type Service struct {
 	orphanReapSignaler        orphanReapSignaler
 	sessionRunningChecker     SessionRunningChecker
 	sessionExecutionRegistry  SessionExecutionRegistry
+	providerLimitReconciler   func(context.Context)
 	stallDetectionThreshold   time.Duration
 	// stallNotifiedSessions dedupes task.stalled events per stall episode:
 	// task ID -> session IDs already reported. A session is reported at most
@@ -922,6 +923,11 @@ func (s *Service) SetExecutionStopper(stopper TaskExecutionStopper) {
 // guessing, because "no live execution" cannot be verified.
 func (s *Service) SetSessionExecutionRegistry(registry SessionExecutionRegistry) {
 	s.sessionExecutionRegistry = registry
+}
+
+// SetProviderLimitReconciler installs the timed-recovery safety sweep before startup.
+func (s *Service) SetProviderLimitReconciler(reconcile func(context.Context)) {
+	s.providerLimitReconciler = reconcile
 }
 
 // SetStallDetectionThreshold configures the event-silence window after which

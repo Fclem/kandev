@@ -12,6 +12,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/office/models"
@@ -207,6 +208,7 @@ type SchedulerService struct {
 	workflowStepGetter      WorkflowStepGetter
 	participantStore        engine.ParticipantStore
 	pauseGate               shared.PauseGate
+	providerLimits          *providerlimit.Service
 }
 
 // WorkflowStepGetter resolves a workflow step by ID. Implemented by
@@ -230,6 +232,11 @@ func (ss *SchedulerService) SetWorkflowStepGetter(g WorkflowStepGetter) {
 // never attaches a for-each-participant action's payload.
 func (ss *SchedulerService) SetParticipantStore(store engine.ParticipantStore) {
 	ss.participantStore = store
+}
+
+// SetProviderLimitService wires durable profile-local provider-limit recovery.
+func (ss *SchedulerService) SetProviderLimitService(limits *providerlimit.Service) {
+	ss.providerLimits = limits
 }
 
 // NewSchedulerService creates a new SchedulerService.

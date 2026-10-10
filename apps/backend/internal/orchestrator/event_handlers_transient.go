@@ -46,6 +46,9 @@ const (
 	metaKeyPrompt          = "prompt"
 	metaKeyPlanMode        = "plan_mode"
 	metaKeyAttachments     = "attachments"
+	metaKeyRetrying        = "retrying"
+	metaKeyModelID         = "model_id"
+	metaKeyRetryAt         = "retry_at"
 )
 
 // metaVariantWarning is the status-message variant that drives the frontend's

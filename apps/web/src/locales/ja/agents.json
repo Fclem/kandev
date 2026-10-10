@@ -180,6 +180,7 @@
   "model": "モデル",
   "modelHeading": "モデル",
   "fallbackNone": "フォールバック: なし",
+  "limitedUntil": "{{time}} まで制限中",
   "fallbackExact": "フォールバック: exact",
   "fallbackNext": "フォールバック: next",
   "fallbackModel": "フォールバック: {{model}}",

@@ -52,12 +52,25 @@ func (s *stubCircuitPersistence) SaveCircuit(_ context.Context, snapshot Circuit
 	return nil
 }
 
+func (s *stubCircuitPersistence) SaveCircuits(_ context.Context, snapshots []CircuitSnapshot) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.saves++
+	if s.failing {
+		return errors.New("db is locked")
+	}
+	for _, snapshot := range snapshots {
+		s.rows[snapshot.Key] = snapshot
+	}
+	return nil
+}
+
 func (s *stubCircuitPersistence) LoadCircuits(_ context.Context) ([]CircuitSnapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snapshots := make([]CircuitSnapshot, 0, len(s.rows))
 	for _, row := range s.rows {
-		if row.State == CircuitClosed {
+		if row.State == CircuitClosed && row.ProbeUntil.IsZero() {
 			continue
 		}
 		snapshots = append(snapshots, row)
@@ -326,6 +339,15 @@ func (s *gatedFailingCircuitPersistence) SaveCircuit(_ context.Context, snapshot
 		<-s.releaseWrite
 	}
 	return errors.New("db is locked")
+}
+
+func (s *gatedFailingCircuitPersistence) SaveCircuits(ctx context.Context, snapshots []CircuitSnapshot) error {
+	for _, snapshot := range snapshots {
+		if err := s.SaveCircuit(ctx, snapshot); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *gatedFailingCircuitPersistence) LoadCircuits(_ context.Context) ([]CircuitSnapshot, error) {

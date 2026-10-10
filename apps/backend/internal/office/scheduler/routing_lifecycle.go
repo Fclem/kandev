@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,9 +11,11 @@ import (
 
 	"github.com/kandev/kandev/internal/agent/runtime/routingerr"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
+	"github.com/kandev/kandev/internal/common/providerretry"
 	"github.com/kandev/kandev/internal/office/models"
 	sqliterepo "github.com/kandev/kandev/internal/office/repository/sqlite"
 	"github.com/kandev/kandev/internal/office/routing"
+	runmodels "github.com/kandev/kandev/internal/runs/models"
 )
 
 // HandlePostStartFailure is the post-start fallback hook. Called by the
@@ -37,19 +40,41 @@ func (ss *SchedulerService) HandlePostStartFailure(
 	if err != nil {
 		return false, err
 	}
+	providerLimitFallbackAttempt := false
+	if run.LimitFallbackModel != nil {
+		attempts, err := ss.repo.ListRouteAttempts(ctx, run.ID)
+		if err != nil {
+			return false, err
+		}
+		for _, attempt := range attempts {
+			if attempt.Seq == run.CurrentRouteAttemptSeq {
+				providerLimitFallbackAttempt = attempt.OverrideReason == "provider_limit"
+				break
+			}
+		}
+	}
 	message := errorMessage
 	var resetHint *time.Time
+	var occurredAt time.Time
+	var retryAfter time.Duration
+	var diagnosticSource string
 	if providerError != nil {
 		if providerError.Message != "" {
 			message = providerError.Message
 		}
 		resetHint = providerError.ResetAt
+		occurredAt = providerError.OccurredAt
+		retryAfter = providerretry.Duration(providerError.RetryAfterMs)
+		diagnosticSource = providerError.Source
 	}
 	classified := routingerr.Classify(routingerr.Input{
-		Phase:      routingerr.PhaseStreaming,
-		ProviderID: string(candidate.ProviderID),
-		Stderr:     message,
-		ResetHint:  resetHint,
+		Phase:            routingerr.PhaseStreaming,
+		ProviderID:       string(candidate.ProviderID),
+		Stderr:           message,
+		ResetHint:        resetHint,
+		OccurredAt:       occurredAt,
+		RetryAfter:       retryAfter,
+		DiagnosticSource: diagnosticSource,
 	})
 	if !classified.FallbackAllowed {
 		return false, nil
@@ -65,6 +90,15 @@ func (ss *SchedulerService) HandlePostStartFailure(
 			}
 			return true, nil
 		}
+	}
+	if run.LimitFallbackModel != nil {
+		if providerLimitFallbackAttempt {
+			return false, nil
+		}
+		if err := ss.applyProviderLimitFallback(ctx, run, classified); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	if err := ss.applyPostStartFallback(ctx, run, agent, candidate, classified); err != nil {
 		return false, err
@@ -125,6 +159,25 @@ func (ss *SchedulerService) shortRouteRetryCount(
 		count++
 	}
 	return count, nil
+}
+
+// ProviderLimitShortRetryRemaining preserves the bounded same-provider
+// retry window before Office records provider-limit recovery state.
+func (ss *SchedulerService) ProviderLimitShortRetryRemaining(
+	ctx context.Context, run *runmodels.Run,
+) (bool, error) {
+	if run == nil {
+		return false, nil
+	}
+	candidate, err := ss.inflightCandidate(ctx, run)
+	if err != nil {
+		return false, err
+	}
+	count, err := ss.shortRouteRetryCount(ctx, run, candidate)
+	if err != nil {
+		return false, err
+	}
+	return count < officeShortRetryMaxAttempts, nil
 }
 
 func (ss *SchedulerService) applyShortRouteRetry(
@@ -227,6 +280,18 @@ func (ss *SchedulerService) applyPostStartFallback(
 		return err
 	}
 	return ss.RequeueForNextCandidate(ctx, run.ID)
+}
+
+func (ss *SchedulerService) applyProviderLimitFallback(
+	ctx context.Context, run *runmodels.Run, classified *routingerr.Error,
+) error {
+	if err := ss.finishAttempt(
+		ctx, run.ID, run.CurrentRouteAttemptSeq,
+		RouteAttemptOutcomeFailedProviderUnavail, classified, time.Now().UTC(),
+	); err != nil {
+		return err
+	}
+	return ss.repo.RequeueRunForProviderLimitFallback(ctx, run.ID)
 }
 
 // RequeueForNextCandidate flips a claimed run back to queued so the
@@ -345,6 +410,9 @@ func (ss *SchedulerService) redispatchWaitingRuns(
 		return err
 	}
 	for _, run := range runs {
+		if run.ProviderLimitWaitKey != nil && *run.ProviderLimitWaitKey != "" {
+			continue
+		}
 		if err := ss.repo.ClearRoutingBlock(ctx, run.ID); err != nil {
 			ss.logger.Warn("clear routing block failed",
 				zap.String("run_id", run.ID), zap.Error(err))
@@ -365,12 +433,40 @@ func (ss *SchedulerService) redispatchWaitingRuns(
 // by a normal launch/failure outcome; otherwise the short-retry budget would
 // reset every time the run wakes and the same provider could loop forever.
 func (ss *SchedulerService) LiftParkedRuns(ctx context.Context, now time.Time) (int, error) {
+	if ss.svc != nil {
+		if err := ss.svc.ReconcileProviderLimitProbeOwners(ctx); err != nil {
+			ss.logger.Warn("reconcile provider-limit probe owners failed", zap.Error(err))
+		}
+	}
 	runs, err := ss.repo.ListPendingProviderCapacityRuns(ctx, now)
 	if err != nil {
 		return 0, err
 	}
 	lifted := 0
 	for _, run := range runs {
+		if run.ProviderLimitWaitKey != nil && *run.ProviderLimitWaitKey != "" {
+			if ss.providerLimits == nil {
+				continue
+			}
+			lease, acquired, acquireErr := ss.providerLimits.AcquireProbe(ctx, *run.ProviderLimitWaitKey)
+			if acquireErr != nil || !acquired {
+				continue
+			}
+			leaseJSON, marshalErr := json.Marshal(lease)
+			if marshalErr != nil {
+				_, _ = ss.providerLimits.ReleaseProbe(ctx, lease, false)
+				continue
+			}
+			if err := ss.repo.SetRunProviderLimitRecoveryState(
+				ctx, run.ID, run.LimitFallbackModel, run.ProviderLimitWaitKey, string(leaseJSON),
+			); err != nil {
+				_, _ = ss.providerLimits.ReleaseProbe(ctx, lease, false)
+				ss.logger.Warn("persist provider-limit probe lease failed",
+					zap.String("run_id", run.ID), zap.Error(err))
+				continue
+			}
+			run.ProviderLimitProbe = string(leaseJSON)
+		}
 		if err := ss.repo.ClearRoutingBlock(ctx, run.ID); err != nil {
 			ss.logger.Warn("lift parked run failed",
 				zap.String("run_id", run.ID), zap.Error(err))

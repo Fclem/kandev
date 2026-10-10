@@ -259,12 +259,13 @@ func TestReapPromptUnreadyExecution_DoesNotResumeAfterConcurrentCancellation(t *
 	require.ErrorIs(t, err, orchestratorexec.ErrSessionStateSuperseded)
 }
 
+// @covers AC-TASKS-SESSION-STOP-OWNERSHIP-001.1, AC-TASKS-SESSION-STOP-OWNERSHIP-001.2, AC-TASKS-SESSION-STOP-OWNERSHIP-001.3
 func TestStopSession_GracefulTeardownClaimSuppressesLateForceCleanup(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
 	seedTaskAndSession(t, repo, "task-legacy-stop", "session-legacy-stop", models.TaskSessionStateRunning)
 
-	stopCalls := make(chan stopAgentCall, 2)
+	stopCalls := make(chan stopAgentCall, 3)
 	allowGracefulStop := make(chan struct{})
 	gracefulStopDone := make(chan struct{})
 	manager := &mockAgentManager{
@@ -288,11 +289,16 @@ func TestStopSession_GracefulTeardownClaimSuppressesLateForceCleanup(t *testing.
 	require.False(t, first.Force)
 
 	svc.cleanupAgentExecution("execution-legacy-stop", "task-legacy-stop", "session-legacy-stop")
-	close(allowGracefulStop)
-	coordinatorStopAwaitSignal(t, gracefulStopDone, "legacy graceful teardown")
 	select {
 	case duplicate := <-stopCalls:
 		t.Fatalf("late terminal cleanup duplicated legacy teardown: %#v", duplicate)
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
+	close(allowGracefulStop)
+	coordinatorStopAwaitSignal(t, gracefulStopDone, "legacy graceful teardown")
+
+	svc.cleanupAgentExecution("execution-next", "task-legacy-stop", "session-legacy-stop")
+	next := <-stopCalls
+	require.Equal(t, "execution-next", next.ExecutionID)
+	require.True(t, next.Force)
 }

@@ -180,6 +180,7 @@
   "model": "Model",
   "modelHeading": "Model",
   "fallbackNone": "fallback: none",
+  "limitedUntil": "limited until {{time}}",
   "fallbackExact": "fallback: exact",
   "fallbackNext": "fallback: next",
   "fallbackModel": "fallback: {{model}}",

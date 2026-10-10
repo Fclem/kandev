@@ -2,18 +2,21 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TaskStatusSummaryLaunchQueue } from "@/lib/types/task-status-summary";
+import { formatDateTime } from "@/lib/i18n/formats";
 import { LaunchQueueStatus } from "./launch-queue-status";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, providedValues?: Record<string, unknown>) => {
       const values = providedValues ?? {};
+      const v = (name: string) => String(values[name] ?? "");
       const labels: Record<string, string> = {
         "task:launchQueueTitle": "Automatic launch",
         "task:launchQueueLabel": "Queued",
         "task:launchQueueIndicator": "Automatic launch queued",
-        "task:launchQueueDestination": `Destination: ${values.destination ?? ""}`,
+        "task:launchQueueDestination": `Destination: ${v("destination")}`,
         "task:launchQueueWaitingCapacity": "Waiting for session capacity.",
+        "task:providerLimitLaunchWaiting": `Waiting for ${v("model")} limit reset at ${v("reset")}.`,
         "task:launchQueueWaitingGlobalCapacity": "Waiting for global session capacity.",
         "task:launchQueueGlobalScope": "Global session limit",
         "task:launchQueueGlobalScopeHelp": "All workspaces",
@@ -21,12 +24,12 @@ vi.mock("react-i18next", () => ({
         "task:launchQueueOwnershipUnavailable": "Launch ownership is unavailable.",
         "task:launchQueueReplayError": "The queued launch needs attention.",
         "task:launchQueueReplayErrorStopped": "The queued launch needs attention.",
-        "task:launchQueueCapacity": `${values.inUse ?? ""} of ${values.limit ?? ""} sessions in use. Checked ${values.checkedAt ?? ""}.`,
-        "task:launchQueueCapacityStale": `${values.inUse ?? ""} of ${values.limit ?? ""} sessions in use. Capacity data is stale. Last checked ${values.checkedAt ?? ""}.`,
-        "task:launchQueueCapacityDisconnected": `${values.inUse ?? ""} of ${values.limit ?? ""} sessions in use. Capacity connection is unavailable. Last checked ${values.checkedAt ?? ""}.`,
+        "task:launchQueueCapacity": `${v("inUse")} of ${v("limit")} sessions in use. Checked ${v("checkedAt")}.`,
+        "task:launchQueueCapacityStale": `${v("inUse")} of ${v("limit")} sessions in use. Capacity data is stale. Last checked ${v("checkedAt")}.`,
+        "task:launchQueueCapacityDisconnected": `${v("inUse")} of ${v("limit")} sessions in use. Capacity connection is unavailable. Last checked ${v("checkedAt")}.`,
         "task:launchQueueCapacityUnavailable": "Capacity is unavailable.",
         "task:launchQueueCapacityUnavailableStopped": "Capacity information is unavailable.",
-        "task:launchQueueSince": `Queued since ${values.time ?? ""}.`,
+        "task:launchQueueSince": `Queued since ${v("time")}.`,
         "task:launchQueueAutomaticRetry": "Kandev will retry automatically.",
         "task:launchQueueRetryPending": "Retry pending.",
         "task:launchQueueRetryStopped": "Automatic retry stopped.",
@@ -109,6 +112,24 @@ describe("LaunchQueueStatus", () => {
     );
     expect(screen.getByText(/retry automatically/)).toBeTruthy();
     expect(screen.queryByText(/position|ETA/i)).toBeNull();
+  });
+  it("shows the model and trusted reset deadline for a provider limit deferral", () => {
+    render(
+      <LaunchQueueStatus
+        queue={{
+          queued_at: "2026-09-16T20:15:44Z",
+          reason: "provider_limit",
+          retrying: true,
+          model: "vendor/model",
+          retry_at: "2026-09-16T21:15:44.123456789Z",
+        }}
+      />,
+    );
+
+    const reset = formatDateTime("2026-09-16T21:15:44.123456789Z");
+    expect(reset).not.toContain("T");
+    expect(screen.getByText(`Waiting for vendor/model limit reset at ${reset}.`)).toBeTruthy();
+    expect(screen.queryByTestId("launch-queue-session-capacity-link")).toBeNull();
   });
 
   it("does not render when the queue projection is cleared", () => {

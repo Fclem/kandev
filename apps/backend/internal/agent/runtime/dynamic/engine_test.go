@@ -45,6 +45,30 @@ func TestEngineSelectsFixedOrderAndFencesGenerations(t *testing.T) {
 	}
 }
 
+// @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-001.6
+func TestEngineProviderLimitMarksDoNotChangeDynamicSelection(t *testing.T) {
+	now := time.Now().UTC()
+	circuits := NewCircuitRegistry(WithCircuitPersistence(newStubCircuitPersistence()))
+	if err := circuits.OpenDurable(context.Background(), "limit|binding|account", now.Add(time.Hour), routingerr.CodeQuotaLimited, true); err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngine(WithCircuitRegistry(circuits))
+	profile := Profile{
+		ID: "dynamic",
+		Candidates: []Candidate{
+			{ID: "first", Enabled: true, BindingKey: ResourceKey(ScopeCredential, "binding")},
+			{ID: "second", Enabled: true, BindingKey: ResourceKey(ScopeCredential, "other")},
+		},
+	}
+	decision, err := engine.Select("session", profile, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.ExecutionProfileID != "first" {
+		t.Fatalf("a concrete-profile mark changed the dynamic conductor's selection: %+v", decision)
+	}
+}
+
 func TestEnginePreferenceKeepsRetryOnCurrentCandidate(t *testing.T) {
 	engine := NewEngine()
 	profile := Profile{

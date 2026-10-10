@@ -78,9 +78,10 @@ func (e *Executor) stopMissingSessionSynchronously(
 	}
 }
 
-// SessionStopResult describes the synchronous, logical portion of a stop. A
-// true Changed value means CANCELLED was accepted and runtime teardown is ready
-// to be scheduled. FinalState is empty when no live execution exists.
+// SessionStopResult describes the logical state transition and exact execution
+// targeted by a stop. Changed reports whether CANCELLED was accepted; a
+// current execution can still have teardown prepared when its state was already
+// terminal or the state write failed, allowing an explicit stop to retry it.
 type SessionStopResult struct {
 	Changed     bool
 	FinalState  models.TaskSessionState
@@ -102,11 +103,10 @@ func (r *SessionStopResult) ScheduleTeardown() bool {
 	return true
 }
 
-// StopSessionDetailed stops a live session while preserving lookup and
-// persistence failures for callers that need a truthful structured result.
-// A naturally absent or terminal session returns Changed=false with no error.
-// Callers accepting Changed=true must invoke ScheduleTeardown after releasing
-// any lifecycle-arbitration locks.
+// StopSessionDetailed resolves the current execution and preserves lookup and
+// persistence failures for callers that need a structured result. A naturally
+// absent session returns Changed=false with no execution. Callers scheduling
+// teardown must do so after releasing lifecycle-arbitration locks.
 func (e *Executor) StopSessionDetailed(
 	ctx context.Context,
 	session *models.TaskSession,
@@ -355,23 +355,16 @@ func (e *Executor) stopSession(
 		models.TaskSessionStateCancelled,
 		reason,
 	)
-	if stateErr != nil {
-		return SessionStopResult{FinalState: finalState}, fmt.Errorf("cancel session %q: %w", session.ID, stateErr)
-	}
 	result := SessionStopResult{
 		Changed:     changed,
 		FinalState:  finalState,
 		ExecutionID: executionID,
+		teardown: func() {
+			e.scheduleStop(ctx, session.ID, executionID, reason, force)
+		},
 	}
-	if !changed {
-		return result, nil
-	}
-
-	// Preparing rather than starting teardown here lets the coordinator release
-	// its per-session cancellation guard first. agentctl's stop endpoint blocks
-	// until the process exits, so the actual call still runs detached.
-	result.teardown = func() {
-		e.scheduleStop(ctx, session.ID, executionID, reason, force)
+	if stateErr != nil {
+		return result, fmt.Errorf("cancel session %q: %w", session.ID, stateErr)
 	}
 	return result, nil
 }

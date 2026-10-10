@@ -24,6 +24,8 @@ type AgentProfileDTO struct {
 	// behavior (session-start best-effort, office re-dispatch).
 	AutoFallback      bool               `json:"auto_fallback"`
 	RequireExactModel bool               `json:"require_exact_model"`
+	LimitFallback     bool               `json:"limit_fallback"`
+	ResumeAfterReset  bool               `json:"resume_after_reset"`
 	ConfigOptions     map[string]string  `json:"config_options,omitempty"`
 	AllowIndexing     bool               `json:"allow_indexing"` // Deprecated: use CLIFlags. Retained for legacy clients.
 	AutoApprove       bool               `json:"auto_approve"`

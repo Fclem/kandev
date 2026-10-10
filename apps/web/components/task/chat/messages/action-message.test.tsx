@@ -439,8 +439,53 @@ function renderActionWithStore(
   const addMessage = (message: Message) => act(() => store?.getState().addMessage(message));
   const updateMessage = (message: Message) =>
     act(() => store?.getState().updateMessages([message]));
-  return { ...utils, setSessionState, addMessage, updateMessage };
+  const setSessionMetadata = (metadata: Record<string, unknown>) =>
+    act(() => {
+      store?.getState().setTaskSession({
+        id: toSessionId(TEST_SESSION_ID),
+        task_id: toTaskId(TEST_TASK_ID),
+        state: sessionState,
+        metadata,
+      } as TaskSession);
+    });
+  return { ...utils, setSessionState, setSessionMetadata, addMessage, updateMessage };
 }
+
+// @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.1
+// @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-004.7
+describe("provider limit reset wait ownership", () => {
+  it("hides a stale or uncommitted wait and scopes Cancel to its exact owner", async () => {
+    const identity = `${TEST_SESSION_ID}|limited-turn`;
+    const comment = retryMessage();
+    comment.metadata = {
+      ...comment.metadata,
+      limit_wait: true,
+      limit_wait_identity: identity,
+      model_id: "provider/long-model-name",
+      retry_at: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const action = (
+      comment.metadata.actions as { params: { payload: Record<string, unknown> } }[]
+    )[0];
+    action.params.payload.limit_wait_identity = identity;
+    const view = renderActionWithStore(comment, "WAITING_FOR_INPUT");
+    expect(screen.queryByTestId("provider-limit-wait-card")).toBeNull();
+    view.setSessionMetadata({ provider_limit_wait_identity: identity });
+    expect(screen.getByTestId("provider-limit-wait-card")).toBeTruthy();
+    expect(screen.getByRole("time").getAttribute("datetime")).toBe(comment.metadata.retry_at);
+    fireEvent.click(screen.getByTestId(CANCEL_TEST_ID));
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(SESSION_RECOVER_METHOD, {
+        task_id: TEST_TASK_ID,
+        session_id: TEST_SESSION_ID,
+        action: "cancel_retry",
+        limit_wait_identity: identity,
+      }),
+    );
+    view.setSessionMetadata({ provider_limit_wait_identity: `${TEST_SESSION_ID}|successor-turn` });
+    expect(screen.queryByTestId("provider-limit-wait-card")).toBeNull();
+  });
+});
 
 describe("ActionMessage — transient retry (warning variant)", () => {
   it("announces legacy retry status politely", () => {

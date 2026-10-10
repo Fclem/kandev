@@ -132,6 +132,8 @@ func (a *OpenCodeACP) Description() string {
 func (a *OpenCodeACP) Enabled() bool     { return true }
 func (a *OpenCodeACP) DisplayOrder() int { return 4 }
 
+func (a *OpenCodeACP) SupportsProviderQualifiedModels() bool { return true }
+
 func (a *OpenCodeACP) Logo(v LogoVariant) []byte {
 	if v == LogoDark {
 		return opencodeACPLogoDark

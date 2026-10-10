@@ -37,11 +37,14 @@ func launchQueueSummaryFromTask(
 	task *models.Task,
 	observation *LaunchQueueCapacityObservation,
 ) *LaunchQueueSummary {
+	record, _ := task.Metadata[models.MetaKeyDeferredLaunch].(map[string]interface{})
+	if launch, err := models.ReadProviderLimitLaunch(record); err == nil && launch != nil {
+		return &LaunchQueueSummary{SessionID: launch.SessionID, AgentProfileID: launchQueueStringField(launch.Payload, "agent_profile_id"), WorkflowStepID: launch.WorkflowStepID, QueuedAt: launch.QueuedAt, Reason: LaunchQueueReasonProviderLimit, Retrying: true, Model: launch.Model, RetryAt: &launch.NotBefore}
+	}
 	if !models.HasCeilingDeferredIntent(task) {
 		return nil
 	}
 
-	record, _ := task.Metadata[models.MetaKeyDeferredLaunch].(map[string]interface{})
 	deferral, err := models.ReadCeilingDeferral(record)
 	if err != nil {
 		return launchQueueReplayErrorSummary(task)

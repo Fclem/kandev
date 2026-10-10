@@ -47,10 +47,11 @@ func originFromAutoStart(autoStart bool) launchOrigin {
 // session exists but before it ever reaches STARTING must still free the
 // slot, so release is gated on consumed, not on rebound.
 type seam1Reservation struct {
-	controller *sessionCeilingController
-	key        string
-	rebound    bool
-	consumed   bool
+	controller    *sessionCeilingController
+	key           string
+	rebound       bool
+	consumed      bool
+	providerLimit *providerLimitGateDecision
 
 	// manualOverride, population, populationKnown and ceiling are the
 	// admission decision's own reading, carried forward so AC-14/AC-53's
@@ -195,6 +196,10 @@ func seam1StartPayload(
 func (s *Service) admitOrDeferSeam1(
 	ctx context.Context, taskID string, origin launchOrigin, startPayload map[string]interface{},
 ) (reservation *seam1Reservation, deferred bool, err error) {
+	limit, deferred, err := s.gateProviderLimitLaunch(ctx, taskID, "", origin, models.CeilingLaunchStart, startPayload)
+	if err != nil || deferred {
+		return nil, deferred, err
+	}
 	decision := s.sessionCeiling.admit(ctx, admissionRequest{
 		taskID: taskID,
 		origin: origin,
@@ -203,6 +208,7 @@ func (s *Service) admitOrDeferSeam1(
 	if decision.admitted {
 		return &seam1Reservation{
 			controller: s.sessionCeiling, key: decision.reservationKey,
+			providerLimit:  limit,
 			manualOverride: decision.manualOverride, population: decision.population,
 			populationKnown: decision.populationKnown, ceiling: decision.ceiling,
 		}, false, nil

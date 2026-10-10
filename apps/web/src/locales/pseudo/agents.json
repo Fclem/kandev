@@ -180,6 +180,7 @@
   "model": "Ḿōďēĺ",
   "modelHeading": "Ḿōďēĺ",
   "fallbackNone": "ƒàĺĺƀàćķ: ńōńē",
+  "limitedUntil": "ĺĩḿĩţēď ũńţĩĺ {{time}}",
   "fallbackExact": "ƒàĺĺƀàćķ: ēxàćţ",
   "fallbackNext": "ƒàĺĺƀàćķ: ńēxţ",
   "fallbackModel": "ƒàĺĺƀàćķ: {{model}}",

@@ -84,6 +84,21 @@ func (s *Service) deferCeilingRefusal(
 				PopulationKnown: populationKnown,
 				Ceiling:         ceiling,
 			}
+			if limitLaunch, readErr := models.ReadProviderLimitLaunch(existingRaw); readErr != nil {
+				result = readErr
+				return
+			} else if limitLaunch != nil {
+				equivalent, cmpErr := ceilingDeferralsEquivalentForAdmission(models.CeilingDeferral{Kind: limitLaunch.Kind, Payload: limitLaunch.Payload}, deferral)
+				if cmpErr != nil {
+					result = cmpErr
+					return
+				}
+				if !equivalent {
+					result = ErrCeilingLaunchConflict
+					return
+				}
+				deferral.Payload, deferral.QueuedAt = limitLaunch.Payload, limitLaunch.QueuedAt
+			}
 
 			if existingCeiling, readErr := models.ReadCeilingDeferral(existingRaw); readErr == nil {
 				// A ceiling_deferred record already exists for this task (AC-12d).
@@ -189,18 +204,31 @@ func (s *Service) reconcileQueuedTaskState(ctx context.Context, taskID string) {
 		}
 		return
 	}
+	providerLimitLaunch := false
 	deferral, queued, err := s.readValidCeilingDeferredLaunch(ctx, task)
 	if err != nil || !queued {
-		if err != nil {
-			s.logger.Zap().Warn("could not validate deferred launch before repairing task state",
-				zap.String("task_id", taskID), zap.Error(err))
+		record, _, readErr := s.repo.GetTaskDeferredLaunch(ctx, taskID)
+		if readErr != nil {
+			s.logger.Zap().Warn("could not validate deferred launch before repairing task state", zap.String("task_id", taskID), zap.Error(readErr))
+			return
 		}
-		return
+		launch, readErr := models.ReadProviderLimitLaunch(record)
+		if readErr != nil || launch == nil || launch.WorkflowStepID != task.WorkflowStepID || task.ArchivedAt != nil {
+			if err != nil {
+				s.logger.Zap().Warn("could not validate deferred launch before repairing task state", zap.String("task_id", taskID), zap.Error(err))
+			}
+			return
+		}
+		providerLimitLaunch = true
+		deferral = models.CeilingDeferral{Kind: launch.Kind}
 	}
 	if blockingSessionID, readable := s.otherWorkingSessionID(ctx, taskID, ""); !readable || blockingSessionID != "" {
 		return
 	}
 	allowedStates := []v1.TaskState{v1.TaskStateReview, v1.TaskStateInProgress}
+	if providerLimitLaunch {
+		allowedStates = append(allowedStates, v1.TaskStateCreated, v1.TaskStateTODO)
+	}
 	updated, err := s.taskRepo.UpdateTaskStateIfCurrentIn(
 		ctx, taskID, v1.TaskStateScheduling, allowedStates,
 	)

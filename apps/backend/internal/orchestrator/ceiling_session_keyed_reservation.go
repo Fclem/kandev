@@ -15,9 +15,10 @@ import (
 // by the session id from the moment it is taken, because both seams are
 // called with a session id already in hand.
 type sessionKeyedCeilingReservation struct {
-	controller *sessionCeilingController
-	key        string
-	consumed   bool
+	controller    *sessionCeilingController
+	key           string
+	consumed      bool
+	providerLimit *providerLimitGateDecision
 
 	// manualOverride, population, populationKnown and ceiling are the
 	// admission decision's own reading, carried forward so AC-14/AC-53's
@@ -72,12 +73,17 @@ func (s *Service) admitOrDeferSessionKeyedLaunch(
 	ctx context.Context, taskID, sessionID string, origin launchOrigin, seam string,
 	kind models.CeilingLaunchKind, payload map[string]interface{}, failureContext string,
 ) (*sessionKeyedCeilingReservation, bool, error) {
+	limit, deferred, err := s.gateProviderLimitLaunch(ctx, taskID, sessionID, origin, kind, payload)
+	if err != nil || deferred {
+		return nil, deferred, err
+	}
 	decision := s.sessionCeiling.admit(ctx, admissionRequest{
 		taskID: taskID, sessionID: sessionID, origin: origin, seam: seam,
 	})
 	if decision.admitted {
 		return &sessionKeyedCeilingReservation{
 			controller: s.sessionCeiling, key: decision.reservationKey,
+			providerLimit:  limit,
 			manualOverride: decision.manualOverride, population: decision.population,
 			populationKnown: decision.populationKnown, ceiling: decision.ceiling,
 		}, false, nil

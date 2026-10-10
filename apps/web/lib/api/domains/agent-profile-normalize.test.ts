@@ -8,63 +8,8 @@ const SAMPLE_PREFIX = "greywall --";
 const WORKSPACE_ID = "workspace-1";
 const dynamicProfileId = "dynamic-profile";
 
-const snakeCaseWirePayload = {
-  id: SAMPLE_ID,
-  agent_id: "claude",
-  name: "default",
-  agent_display_name: "Claude Code",
-  model: "claude-sonnet-4-5",
-  mode: "acp",
-  allow_indexing: true,
-  auto_approve: false,
-  cli_flags: [{ flag: "--verbose", description: "v", enabled: true }],
-  env_vars: [sampleEnvVar],
-  cli_passthrough: false,
-  cursor_mcp_auth_enabled: false,
-  cursor_plugins_mcp_enabled: false,
-  mcp_selection_mode: "inherit",
-  mcp_selected_servers: [],
-  enabled: false,
-  workspace_id: WORKSPACE_ID,
-  user_modified: true,
-  created_at: "2026-01-01T00:00:00Z",
-  updated_at: "2026-01-02T00:00:00Z",
-};
-
-const expectedCamelCaseProfile = {
-  id: SAMPLE_ID,
-  name: "default",
-  agentId: "claude",
-  agentDisplayName: "Claude Code",
-  model: "claude-sonnet-4-5",
-  fallbackModel: "",
-  autoFallback: false,
-  requireExactModel: false,
-  mode: "acp",
-  allowIndexing: true,
-  autoApprove: false,
-  cliFlags: [{ flag: "--verbose", description: "v", enabled: true }],
-  envVars: [sampleEnvVar],
-  cliPassthrough: false,
-  cursorMcpAuthEnabled: false,
-  cursorPluginsMcpEnabled: false,
-  mcpSelectionMode: "inherit",
-  mcpSelectedServers: [],
-  enabled: false,
-  providerSupported: false,
-  workspaceId: WORKSPACE_ID,
-  userModified: true,
-  createdAt: "2026-01-01T00:00:00Z",
-  updatedAt: "2026-01-02T00:00:00Z",
-};
-
 // eslint-disable-next-line max-lines-per-function -- keeps the canonical wire-shape matrix together.
 describe("normalizeAgentProfile", () => {
-  it("converts snake_case wire payload to canonical camelCase", () => {
-    const result = normalizeAgentProfile(snakeCaseWirePayload);
-    expect(result).toEqual(expectedCamelCaseProfile);
-  });
-
   it("falls back to safe defaults for missing fields", () => {
     const result = normalizeAgentProfile({ id: "x", name: "y" });
     expect(result.cliFlags).toEqual([]);

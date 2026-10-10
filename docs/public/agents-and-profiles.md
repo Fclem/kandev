@@ -494,6 +494,36 @@ change makes a saved option value unsupported, Kandev removes that value after
 a successful resolution; a failed resolution keeps the draft unchanged so you
 can retry it.
 
+### Provider-limit recovery
+
+Concrete profiles can opt into limit recovery from **Settings > Agents**, in
+the profile's **Fallback settings**. **Use fallback model when limited** and
+**Resume after reset** are both off by default. Dynamic profiles do not show
+these switches; concrete profiles used as dynamic candidates follow the
+dynamic conductor's policy instead.
+
+**Use fallback model when limited** continues work on the configured fallback
+after a provider limit. The fallback must be advertised for the current
+session or executor and must not already be limited. This switch is unavailable
+when the fallback is empty, **Require exact model** is on, or automatic
+fallback is on.
+
+When no fallback resolves the limit, **Resume after reset** can resume the same
+task session or re-dispatch the Office run after a trusted reset. Kandev records
+limit marks independently of these switches: account-scope limits apply to the
+same credential binding, while model-scope limits apply to that model. A
+trusted reset can schedule automatic work only when it is no more than seven
+days away. Unknown resets and resets farther in the future do not schedule an
+automatic wait. After three consecutive automatic waits without a successful
+turn, the next limit failure needs manual recovery.
+
+You can send a prompt or stop the session, move its task to another workflow
+step, archive the task, or delete it to cancel a task-session wait. A prompt
+cancels the wait and is delivered normally. Manual launches and prompts still
+use the model you requested while it is marked limited; Kandev shows a
+non-blocking **limited until** notice rather than switching or deferring that
+manual action.
+
 ### Use a dynamic profile
 
 > [!EXPERIMENTAL]

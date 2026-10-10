@@ -23,7 +23,6 @@ import {
 import { interruptionRecoveryKey } from "./messages/interruption-recovery-feedback";
 import { managedRuntimeStartupCopy } from "./managed-runtime-startup-copy";
 import { useOptionalAppStore } from "@/components/state-provider";
-
 type RecoveryCopy = { title: string; summary: string; showSummary: boolean };
 
 function managedRuntimeFailureCopy(
@@ -63,6 +62,12 @@ export function recoveryCopy(
   model: ActiveSessionRecovery,
   t: ReturnType<typeof useTranslation>["t"],
 ) {
+  if (model.kind === "provider_limit_wait_cancelled")
+    return {
+      title: t("task:launchQueueRetryStopped"),
+      summary: "",
+      showSummary: false,
+    };
   if (model.kind === "recovery_inspection_busy")
     return {
       title: t("task:launchNeedsAttention"),

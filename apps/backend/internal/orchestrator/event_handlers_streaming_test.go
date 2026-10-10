@@ -2751,7 +2751,7 @@ func TestTerminalExecutionMarker_CompletionPermissionIsMonotonic(t *testing.T) {
 		close(start)
 		wait.Wait()
 
-		marker, ok := svc.terminalCompleteStreamMarker(sessionID, executionID)
+		marker, ok := svc.terminalExecutionMarkerForPrompt(sessionID, executionID, 0)
 		require.True(t, ok, "concurrent stopped marker downgraded successful completion")
 		require.True(t, marker.allowCompleteStream)
 	}

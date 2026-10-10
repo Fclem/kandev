@@ -74,6 +74,32 @@ func TestBoot_ExistingDatabaseWithoutLaunchSafetyColumns_MigratesWithoutError(t 
 		t.Fatalf("seed legacy runs table: %v", err)
 	}
 
+	if _, err := db.Exec(`
+		CREATE TABLE office_run_route_attempts (
+			run_id TEXT NOT NULL,
+			seq INTEGER NOT NULL,
+			execution_profile_id TEXT NOT NULL DEFAULT '',
+			provider_id TEXT NOT NULL,
+			model TEXT NOT NULL,
+			tier TEXT NOT NULL,
+			tier_source TEXT NOT NULL DEFAULT '',
+			outcome TEXT NOT NULL,
+			error_code TEXT,
+			error_confidence TEXT,
+			adapter_phase TEXT,
+			classifier_rule TEXT,
+			exit_code INTEGER,
+			raw_excerpt TEXT,
+			reset_hint TIMESTAMP,
+			started_at TIMESTAMP NOT NULL,
+			finished_at TIMESTAMP,
+			PRIMARY KEY (run_id, seq),
+			FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		t.Fatalf("seed legacy route-attempt table: %v", err)
+	}
+
 	if _, _, err := settingsstore.Provide(db, db, nil); err != nil {
 		t.Fatalf("settings store init: %v", err)
 	}
@@ -85,5 +111,21 @@ func TestBoot_ExistingDatabaseWithoutLaunchSafetyColumns_MigratesWithoutError(t 
 	var causationCol string
 	if err := db.Get(&causationCol, `SELECT name FROM pragma_table_info('runs') WHERE name = 'causation_id'`); err != nil {
 		t.Fatalf("causation_id column missing after migration: %v", err)
+	}
+	for _, column := range []string{
+		"limit_fallback_model",
+		"provider_limit_wait_key",
+		"provider_limit_probe",
+	} {
+		var got string
+		if err := db.Get(&got, `SELECT name FROM pragma_table_info('runs') WHERE name = ?`, column); err != nil {
+			t.Errorf("%s column missing after migration: %v", column, err)
+		}
+	}
+	for _, column := range []string{"requested_model", "effective_model", "override_reason"} {
+		var got string
+		if err := db.Get(&got, `SELECT name FROM pragma_table_info('office_run_route_attempts') WHERE name = ?`, column); err != nil {
+			t.Errorf("%s column missing after migration: %v", column, err)
+		}
 	}
 }

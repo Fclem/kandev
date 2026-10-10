@@ -19,6 +19,8 @@ import { ManagedRuntimeNpmRecoveryMessage } from "./managed-runtime-npm-recovery
 import { formatDateTime } from "@/lib/i18n/formats";
 import { TransientRetryNotice } from "./transient-retry-notice";
 import { ActionButtons } from "./action-message-actions";
+import { isSupersededLimitWaitNotice, ProviderLimitWaitNotice } from "./provider-limit-wait-notice";
+import { RunningActionNotice } from "./running-action-notice";
 import { SessionRecoveryActionButtons, sessionRecoveryAction } from "./action-message-recovery";
 import { RecoveryHistory, resolveRecoveryHistoryState } from "./action-message-recovery-history";
 import { readableFailureSummary } from "./action-message-utils";
@@ -63,6 +65,24 @@ export const ActionMessage = memo(function ActionMessage({ comment }: { comment:
   }
   return <ActionMessageControls comment={comment} />;
 });
+
+/**
+ * Running-only actions render as a compact notice while their turn is active.
+ * A terminal error persisted with the running shape falls through to the
+ * settled renderer so its diagnostic stays visible.
+ */
+function runningActionPresentation(
+  comment: Message,
+  metadata: ActionMeta | undefined,
+  sessionState: TaskSessionState | undefined,
+  activeTurnId: string | null | undefined,
+): "notice" | "hidden" | "settled" {
+  if (metadata?.action_visibility !== "running") return "settled";
+  if (sessionState === "RUNNING" && comment.turn_id && activeTurnId === comment.turn_id) {
+    return "notice";
+  }
+  return comment.type === "error" ? "settled" : "hidden";
+}
 
 const ActionMessageControls = memo(function ActionMessageControls({
   comment,
@@ -115,22 +135,13 @@ const ActionMessageControls = memo(function ActionMessageControls({
     recoveryFailedAgain,
     sessionState,
   });
-
-  if (metadata?.action_visibility === "running") {
-    if (sessionState === "RUNNING" && comment.turn_id && activeTurnId === comment.turn_id) {
-      return (
-        <RunningActionNotice
-          actions={metadata.actions}
-          message={message}
-          taskId={comment.task_id}
-        />
-      );
-    }
-    // A terminal error may have been persisted with the old running metadata
-    // shape. Let it use the settled renderer instead of hiding the diagnostic.
-    if (comment.type !== "error") {
-      return null;
-    }
+  if (isSupersededLimitWaitNotice(metadata, sessionMetadata)) return null;
+  const running = runningActionPresentation(comment, metadata, sessionState, activeTurnId);
+  if (running === "hidden") return null;
+  if (running === "notice") {
+    return (
+      <RunningActionNotice actions={metadata?.actions} message={message} taskId={comment.task_id} />
+    );
   }
 
   return (
@@ -173,6 +184,12 @@ function SettledActionMessage({
     metadata?.variant === "error" &&
     metadata.failure_scope === "turn" &&
     metadata.runtime_retained === true;
+  if (metadata?.limit_wait) {
+    // A wait notice belongs to the parked turn; hide it while a replay runs.
+    return isSessionActive(sessionState) ? null : (
+      <ProviderLimitWaitNotice metadata={metadata} taskId={taskId} />
+    );
+  }
   if (metadata?.retrying) {
     return retryNoticeVisible(sessionState, metadata) ? (
       <TransientRetryNotice metadata={metadata} taskId={taskId} />
@@ -456,25 +473,6 @@ function ProviderQuotaRecovery({
   );
 }
 
-function RunningActionNotice({
-  actions,
-  message,
-  taskId,
-}: {
-  actions?: MessageAction[];
-  message: string;
-  taskId?: string;
-}) {
-  return (
-    <div
-      data-testid="running-action-notice"
-      className="flex min-w-0 items-center gap-2 py-1 text-muted-foreground"
-    >
-      <span className="min-w-0 flex-1 truncate text-xs">{message}</span>
-      {actions && actions.length > 0 && <ActionButtons actions={actions} taskId={taskId} compact />}
-    </div>
-  );
-}
 function MissingBranchRecovery({
   metadata,
   taskId,

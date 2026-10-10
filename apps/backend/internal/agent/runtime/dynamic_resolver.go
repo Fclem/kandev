@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
-	"strings"
 	"sync/atomic"
 
 	"github.com/google/uuid"
@@ -781,7 +779,7 @@ func (r *ProfileExecutionResolver) loadDynamicProfile(ctx context.Context, profi
 		case concrete == nil || concrete.DeletedAt != nil || !concrete.Enabled:
 			candidate.Enabled = false
 		case r.bindingResolver != nil:
-			binding := profileCredentialBindingDescriptor(concrete)
+			binding := dynamic.ProfileCredentialBindingDescriptor(concrete, concrete.BillingType)
 			candidate.BindingKey = dynamic.ResourceKey(
 				dynamic.ScopeCredential,
 				r.bindingResolver.Resolve(binding, route.ExecutionProfileID),
@@ -849,32 +847,4 @@ func legacyActionPolicy(action dynamic.Action) routingpolicy.Policy {
 		policy.OnExhausted = routingpolicy.OutcomeStop
 	}
 	return policy
-}
-
-func profileCredentialBindingDescriptor(profile *agentsettingsmodels.AgentProfile) dynamic.CredentialBindingDescriptor {
-	if profile == nil {
-		return dynamic.CredentialBindingDescriptor{}
-	}
-	descriptor := dynamic.CredentialBindingDescriptor{
-		Version:              1,
-		AgentFamilyID:        profile.AgentID,
-		AuthenticationMethod: strings.TrimSpace(profile.BillingType),
-		ExecutorNamespace:    "local",
-		AuthorizationScope:   "agent_runtime",
-	}
-	secretIDs := make([]string, 0, len(profile.EnvVars))
-	for _, envVar := range profile.EnvVars {
-		if strings.TrimSpace(envVar.SecretID) != "" {
-			secretIDs = append(secretIDs, strings.TrimSpace(envVar.SecretID))
-		}
-	}
-	if len(secretIDs) > 0 {
-		sort.Strings(secretIDs)
-		descriptor.CredentialSourceKind = "profile_secret"
-		descriptor.CredentialLocator = strings.Join(secretIDs, ",")
-	} else if descriptor.AuthenticationMethod != "" {
-		descriptor.CredentialSourceKind = "agent_credentials"
-		descriptor.CredentialLocator = profile.AgentID + ":" + descriptor.AuthenticationMethod
-	}
-	return descriptor
 }

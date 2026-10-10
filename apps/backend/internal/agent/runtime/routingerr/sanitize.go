@@ -56,7 +56,7 @@ var redactions = append(append([]redaction{
 	// contract used by MCP diagnostics while dropping paths, query strings, and
 	// fragments that can carry account or workspace identifiers.
 	literalRedaction(`(https?://)(?:[^@\s/]+@)?([^/\s?#]+)[^\s]*`, "$1$2"),
-	literalRedaction(`\b(?:wrk|ses|run)_[A-Za-z0-9_-]+\b`, "[redacted-id]"),
+	literalRedaction(`\b(?:wrk|ses|run|req)_[A-Za-z0-9_-]+\b`, "[redacted-id]"),
 }, credentialRedactions...), []redaction{
 	literalRedaction(`[A-Za-z0-9+/=_-]{32,}`, redactionMask),
 	literalRedaction(`/Users/[^/\s]+/`, "/Users/<redacted>/"),

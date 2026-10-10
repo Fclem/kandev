@@ -1695,6 +1695,8 @@ type AgentProfileInfo struct {
 	// RequireExactModel makes the configured model an explicit identity
 	// requirement. False preserves compatible pre-PR behavior.
 	RequireExactModel       bool
+	LimitFallback           bool
+	ResumeAfterReset        bool
 	AllowIndexing           bool // Deprecated: legacy, kept so existing call sites compile; launch path reads CLIFlags.
 	CLIPassthrough          bool
 	CursorMCPAuthEnabled    bool

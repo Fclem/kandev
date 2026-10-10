@@ -818,6 +818,8 @@ export class ApiClient {
       fallback_model?: string;
       auto_fallback?: boolean;
       require_exact_model?: boolean;
+      limit_fallback?: boolean;
+      resume_after_reset?: boolean;
       auto_approve?: boolean;
       mode?: string;
       config_options?: Record<string, string>;
@@ -833,6 +835,8 @@ export class ApiClient {
       fallback_model: opts.fallback_model,
       auto_fallback: opts.auto_fallback,
       require_exact_model: opts.require_exact_model,
+      limit_fallback: opts.limit_fallback,
+      resume_after_reset: opts.resume_after_reset,
       auto_approve: opts.auto_approve,
       mode: opts.mode,
       config_options: opts.config_options,
@@ -906,6 +910,8 @@ export class ApiClient {
       fallback_model?: string;
       auto_fallback?: boolean;
       require_exact_model?: boolean;
+      limit_fallback?: boolean;
+      resume_after_reset?: boolean;
       mode?: string;
       config_options?: Record<string, string>;
       cli_passthrough?: boolean;

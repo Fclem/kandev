@@ -162,6 +162,7 @@
   "model": "Modelo",
   "modelHeading": "Modelo",
   "fallbackNone": "alternativa: nenhum",
+  "limitedUntil": "Limitado até {{time}}",
   "fallbackExact": "alternativa: exato",
   "fallbackNext": "alternativa: seguinte",
   "fallbackModel": "alternativa: {{model}}",

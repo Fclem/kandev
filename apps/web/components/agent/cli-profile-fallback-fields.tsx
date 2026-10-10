@@ -9,6 +9,7 @@ import {
   FallbackOptionHelp,
   ModelFallbackSettingsShell,
 } from "@/components/settings/model-fallback-settings-shell";
+import { LimitRecoveryFields } from "@/components/settings/limit-recovery-fields";
 
 function ExactModelOption({
   requireExactModel,
@@ -113,6 +114,10 @@ export function ModelFallbackFields({
   fallbackModelGone,
   autoFallback,
   requireExactModel,
+  limitFallback,
+  resumeAfterReset,
+  onLimitFallbackChange,
+  onResumeAfterResetChange,
   currentModelId,
   onFallbackModelChange,
   onAutoFallbackChange,
@@ -123,6 +128,10 @@ export function ModelFallbackFields({
   fallbackModelGone: boolean;
   autoFallback: boolean;
   requireExactModel: boolean;
+  limitFallback: boolean;
+  resumeAfterReset: boolean;
+  onLimitFallbackChange: (v: boolean) => void;
+  onResumeAfterResetChange: (v: boolean) => void;
   currentModelId: string | undefined;
   onFallbackModelChange: (v: string) => void;
   onAutoFallbackChange: (v: boolean) => void;
@@ -133,6 +142,17 @@ export function ModelFallbackFields({
     <ModelFallbackSettingsShell
       autoFallback={autoFallback}
       requireExactModel={requireExactModel}
+      limitFallback={limitFallback}
+      resumeAfterReset={resumeAfterReset}
+      limitRecoveryOption={
+        <LimitRecoveryFields
+          limitFallback={limitFallback}
+          resumeAfterReset={resumeAfterReset}
+          fallbackDisabled={requireExactModel || autoFallback || !fallbackModel.trim()}
+          onLimitFallbackChange={onLimitFallbackChange}
+          onResumeAfterResetChange={onResumeAfterResetChange}
+        />
+      }
       strictOption={
         <ExactModelOption
           requireExactModel={requireExactModel}

@@ -24,6 +24,7 @@ export function buildStateOverrides(m: DefaultState) {
     agentDiscovery: m.agentDiscovery,
     availableAgents: m.availableAgents,
     agentProfiles: m.agentProfiles,
+    agentProfileLimits: m.agentProfileLimits,
     editors: m.editors,
     prompts: m.prompts,
     secrets: m.secrets,

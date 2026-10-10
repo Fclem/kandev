@@ -51,6 +51,143 @@ func (r *Repository) SetRunResolvedRoute(
 	return nil
 }
 
+// SetRunProviderLimitRecoveryState persists the concrete fallback and exact
+// provider-limit wait/probe ownership for one Office run.
+func (r *Repository) SetRunProviderLimitRecoveryState(
+	ctx context.Context, runID string, fallbackModel, waitKey *string, probe string,
+) error {
+	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE runs
+		SET limit_fallback_model = ?, provider_limit_wait_key = ?, provider_limit_probe = ?
+		WHERE id = ?
+	`), fallbackModel, waitKey, probe, runID)
+	if err != nil {
+		return fmt.Errorf("run_routing: set provider-limit state: %w", err)
+	}
+	return nil
+}
+
+// RequeueRunForProviderLimitFallback starts a new route cycle on the same
+// resolved provider after its configured limit fallback has been selected.
+func (r *Repository) RequeueRunForProviderLimitFallback(
+	ctx context.Context, runID string,
+) error {
+	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE runs
+		SET status = 'queued',
+		    session_id = '',
+		    claimed_at = NULL,
+		    finished_at = NULL,
+		    routing_blocked_status = NULL,
+		    earliest_retry_at = NULL,
+		    scheduled_retry_at = NULL,
+		    route_cycle_baseline_seq = current_route_attempt_seq,
+		    priority_class = CASE WHEN priority_class = ? THEN priority_class ELSE ? END
+		WHERE id = ?
+	`), runsmodels.PriorityClassHuman, runsmodels.PriorityClassRecovery, runID)
+	if err != nil {
+		return fmt.Errorf("run_routing: requeue provider-limit fallback: %w", err)
+	}
+	return nil
+}
+
+// ParkRunForProviderLimit records an opaque mark key with the reset deadline
+// so only a profile-local probe can lift the run.
+func (r *Repository) ParkRunForProviderLimit(
+	ctx context.Context, runID, waitKey string, resetAt time.Time,
+) error {
+	if waitKey == "" || resetAt.IsZero() {
+		return fmt.Errorf("run_routing: invalid provider-limit wait")
+	}
+	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
+		UPDATE runs
+		SET status = 'queued',
+		    routing_blocked_status = 'waiting_for_provider_capacity',
+		    earliest_retry_at = ?,
+		    scheduled_retry_at = ?,
+		    claimed_at = NULL,
+		    finished_at = NULL,
+		    priority_class = CASE WHEN priority_class = ? THEN priority_class ELSE ? END,
+		    provider_limit_wait_key = ?
+		WHERE id = ?
+	`), resetAt, resetAt, runsmodels.PriorityClassHuman, runsmodels.PriorityClassRecovery, waitKey, runID)
+	if err != nil {
+		return fmt.Errorf("run_routing: park provider-limit run: %w", err)
+	}
+	return nil
+}
+
+// CompleteProviderLimitProbeOwner atomically clears the successful owner and
+// wakes every sibling waiting on the same opaque mark key.
+func (r *Repository) CompleteProviderLimitProbeOwner(
+	ctx context.Context, ownerRunID, waitKey string,
+) error {
+	if ownerRunID == "" || waitKey == "" {
+		return fmt.Errorf("run_routing: invalid provider-limit probe completion")
+	}
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("run_routing: begin provider-limit completion: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE runs
+		SET limit_fallback_model = NULL,
+		    provider_limit_wait_key = NULL,
+		    provider_limit_probe = ''
+		WHERE id = ? AND provider_limit_wait_key = ? AND provider_limit_probe <> ''
+	`), ownerRunID, waitKey)
+	if err != nil {
+		return fmt.Errorf("run_routing: clear provider-limit owner: %w", err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("run_routing: inspect provider-limit owner cleanup: %w", err)
+	}
+	if changed != 1 {
+		return fmt.Errorf("run_routing: provider-limit owner state changed before cleanup")
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`
+		UPDATE runs
+		SET routing_blocked_status = NULL,
+		    earliest_retry_at = NULL,
+		    scheduled_retry_at = NULL,
+		    provider_limit_wait_key = NULL,
+		    provider_limit_probe = '',
+		    route_cycle_baseline_seq = current_route_attempt_seq
+		WHERE provider_limit_wait_key = ? AND id <> ? AND status = 'queued'
+	`), waitKey, ownerRunID); err != nil {
+		return fmt.Errorf("run_routing: wake provider-limit waiters: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("run_routing: commit provider-limit completion: %w", err)
+	}
+	return nil
+}
+
+// ListProviderLimitProbeOwners returns runs that still retain an exact probe
+// lease so startup can finish a successful owner's deferred cleanup.
+func (r *Repository) ListProviderLimitProbeOwners(ctx context.Context) ([]runsmodels.Run, error) {
+	rows, err := r.ro.QueryxContext(ctx, r.ro.Rebind(`
+		SELECT * FROM runs
+		WHERE provider_limit_probe <> ''
+		ORDER BY requested_at ASC
+	`))
+	if err != nil {
+		return nil, fmt.Errorf("run_routing: list provider-limit probe owners: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]runsmodels.Run, 0)
+	for rows.Next() {
+		var run runsmodels.Run
+		if err := rows.StructScan(&run); err != nil {
+			return nil, fmt.Errorf("run_routing: scan provider-limit probe owner: %w", err)
+		}
+		out = append(out, run)
+	}
+	return out, rows.Err()
+}
+
 // IncrementRouteAttemptSeq atomically bumps the run's
 // current_route_attempt_seq and returns the new value. Used to monotonically
 // number RouteAttempt rows even across post-start fallbacks.

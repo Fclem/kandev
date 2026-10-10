@@ -810,6 +810,7 @@ func startAgentInfrastructure(
 		orchestratorSvc.LaunchDynamicRouteAction,
 	))
 	orchestratorSvc.SetProfileExecutionResolver(services.DynamicProfileResolver)
+	orchestratorSvc.SetProviderLimitService(services.ProviderLimits)
 
 	// Wire the soft-deleted-profile pre-flight into the watcher dispatch.
 	// Orphan watchers (their agent profile was soft-deleted by the
@@ -1801,6 +1802,7 @@ func newRunProcessorService(
 		TaskCanceller:      orchestratorSvc,
 		AgentctlBinaryPath: agentctlBinaryPath,
 		EventBus:           eventBus,
+		ProviderLimits:     services.ProviderLimits,
 	})
 	svc.SetRunSessionLauncher(newOfficeRunSessionLauncher(repos.Office, lifecycleMgr, services.DynamicProfileResolver, log))
 	return svc
@@ -1905,6 +1907,7 @@ func wireOfficeProviderRouting(
 ) {
 	scheduler := services.OfficeSvcs.Scheduler
 	resolver := routing.NewResolver(&officeRoutingRepoAdapter{repo: repos.Office}, nil)
+	scheduler.SetProviderLimitService(services.ProviderLimits)
 	resolver.SetExecutionProfileStore(repos.AgentSettings, agentRegistry)
 	scheduler.SetResolver(resolver)
 	scheduler.SetTaskStarter(&schedulerTaskStarterAdapter{orch: orchestratorSvc})

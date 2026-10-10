@@ -55,6 +55,7 @@ func (r *Repository) runMigrations() error {
 	if err := r.migrateSessionRecoveryColumns(); err != nil {
 		return err
 	}
+	r.migrateProviderLimitRunColumns()
 	if err := r.migrateContinuationScope(); err != nil {
 		return err
 	}
@@ -572,6 +573,9 @@ func (r *Repository) migrateProviderRouting() error {
 		exit_code        INTEGER,
 		raw_excerpt      TEXT,
 		reset_hint       TIMESTAMP,
+		requested_model TEXT,
+		effective_model TEXT,
+		override_reason TEXT,
 		started_at       TIMESTAMP NOT NULL,
 		finished_at      TIMESTAMP,
 		PRIMARY KEY (run_id, seq),
@@ -588,6 +592,13 @@ func (r *Repository) migrateProviderRouting() error {
 		`ALTER TABLE office_workspace_routing ADD COLUMN role_tiers TEXT NOT NULL DEFAULT '{}'`)
 	r.migrate.Apply("office_run_route_attempts.tier_source",
 		`ALTER TABLE office_run_route_attempts ADD COLUMN tier_source TEXT NOT NULL DEFAULT ''`)
+	// MigrateLogger.Apply logs and swallows replay errors by contract.
+	_ = r.migrate.Apply("office_run_route_attempts.requested_model",
+		`ALTER TABLE office_run_route_attempts ADD COLUMN requested_model TEXT`)
+	_ = r.migrate.Apply("office_run_route_attempts.effective_model",
+		`ALTER TABLE office_run_route_attempts ADD COLUMN effective_model TEXT`)
+	_ = r.migrate.Apply("office_run_route_attempts.override_reason",
+		`ALTER TABLE office_run_route_attempts ADD COLUMN override_reason TEXT`)
 
 	if _, err := r.db.Exec(`
 	CREATE TABLE IF NOT EXISTS office_provider_health (
@@ -608,6 +619,21 @@ func (r *Repository) migrateProviderRouting() error {
 		return fmt.Errorf("office_provider_health table: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) migrateProviderLimitRunColumns() {
+	_ = r.migrate.Apply(
+		"runs.limit_fallback_model",
+		`ALTER TABLE runs ADD COLUMN limit_fallback_model TEXT`,
+	)
+	_ = r.migrate.Apply(
+		"runs.provider_limit_wait_key",
+		`ALTER TABLE runs ADD COLUMN provider_limit_wait_key TEXT`,
+	)
+	_ = r.migrate.Apply(
+		"runs.provider_limit_probe",
+		`ALTER TABLE runs ADD COLUMN provider_limit_probe TEXT NOT NULL DEFAULT ''`,
+	)
 }
 
 // migrateFailureColumns creates the auxiliary failure-handling tables:

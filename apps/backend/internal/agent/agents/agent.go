@@ -86,6 +86,11 @@ func IsVirtualAgent(agent Agent) bool {
 	return ok && virtual.IsVirtual()
 }
 
+// ProviderQualifiedModelAgent uses provider/model IDs across independent providers.
+type ProviderQualifiedModelAgent interface {
+	SupportsProviderQualifiedModels() bool
+}
+
 // InferenceAgent is an optional capability marker for agents that support
 // one-shot LLM inference via the host utility manager. The actual model list
 // is populated dynamically from the ACP probe — agents no longer declare a

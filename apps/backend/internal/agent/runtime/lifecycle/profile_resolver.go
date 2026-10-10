@@ -88,6 +88,8 @@ func (r *StoreProfileResolver) ResolveProfile(ctx context.Context, profileID str
 		FallbackModel:              profile.FallbackModel,
 		AutoFallback:               profile.AutoFallback,
 		RequireExactModel:          profile.RequireExactModel,
+		LimitFallback:              profile.LimitFallback,
+		ResumeAfterReset:           profile.ResumeAfterReset,
 		ConfigOptions:              profile.ConfigOptions,
 		AutoApprove:                profile.AutoApprove,
 		DangerouslySkipPermissions: profile.DangerouslySkipPermissions,

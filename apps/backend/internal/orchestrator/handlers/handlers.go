@@ -309,12 +309,13 @@ func (h *Handlers) wsSetPlanMode(ctx context.Context, msg *ws.Message) (*ws.Mess
 }
 
 type wsRecoverSessionRequest struct {
-	TaskID         string                        `json:"task_id"`
-	SessionID      string                        `json:"session_id"`
-	Action         string                        `json:"action"`
-	IdempotencyKey string                        `json:"idempotency_key,omitempty"`
-	ErrorStamp     string                        `json:"error_stamp,omitempty"`
-	SettingsPolicy executor.ResumeSettingsPolicy `json:"settings_policy,omitempty"`
+	TaskID            string                        `json:"task_id"`
+	SessionID         string                        `json:"session_id"`
+	Action            string                        `json:"action"`
+	IdempotencyKey    string                        `json:"idempotency_key,omitempty"`
+	ErrorStamp        string                        `json:"error_stamp,omitempty"`
+	SettingsPolicy    executor.ResumeSettingsPolicy `json:"settings_policy,omitempty"`
+	LimitWaitIdentity string                        `json:"limit_wait_identity,omitempty"`
 }
 
 type wsGetWorkspaceRecoveryStatusRequest struct {
@@ -457,6 +458,10 @@ func (h *Handlers) wsRecoverSession(ctx context.Context, msg *ws.Message) (*ws.M
 	// the manual recovery banner. Distinct from resume/fresh_start: it does not
 	// relaunch the agent, it stops the backoff timer.
 	if req.Action == "cancel_retry" {
+		if req.LimitWaitIdentity != "" {
+			cancelled := h.service.CancelProviderLimitWait(ctx, req.TaskID, req.SessionID, req.LimitWaitIdentity)
+			return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"cancelled": cancelled})
+		}
 		cancelled := h.service.CancelTransientRetry(ctx, req.TaskID, req.SessionID)
 		return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"cancelled": cancelled})
 	}

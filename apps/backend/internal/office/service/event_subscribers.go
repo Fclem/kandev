@@ -13,9 +13,12 @@ import (
 	"go.uber.org/zap"
 
 	runtimeapi "github.com/kandev/kandev/internal/agent/runtime"
+	"github.com/kandev/kandev/internal/agent/runtime/dynamic"
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	"github.com/kandev/kandev/internal/agent/runtime/routingerr"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	commoncosts "github.com/kandev/kandev/internal/common/costs"
+	"github.com/kandev/kandev/internal/common/providerretry"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/office/costs"
@@ -24,6 +27,7 @@ import (
 	"github.com/kandev/kandev/internal/office/shared"
 	"github.com/kandev/kandev/internal/runs/commentkeys"
 	"github.com/kandev/kandev/internal/runs/dedupkeys"
+	runmodels "github.com/kandev/kandev/internal/runs/models"
 	runsservice "github.com/kandev/kandev/internal/runs/service"
 	"github.com/kandev/kandev/internal/workflow/engine"
 )
@@ -507,10 +511,24 @@ func (s *Service) handleAgentCompleted(ctx context.Context, event *bus.Event) er
 		return nil
 	}
 	// Lifecycle: terminal "complete" event for the run detail Events log.
-	s.AppendRunEvent(ctx, run.ID, "complete", "info", map[string]interface{}{
+	completionPayload := map[string]interface{}{
 		"task_id":    data.TaskID,
 		"session_id": data.SessionID,
-	})
+	}
+	if event.Type == events.AgentStopped {
+		completionPayload["stopped"] = true
+	}
+	s.AppendRunEvent(ctx, run.ID, "complete", "info", completionPayload)
+	if event.Type == events.AgentStopped && run.ProviderLimitWaitKey != nil {
+		outcome := providerlimit.MetricWaitCancelled
+		if run.ProviderLimitProbe != "" {
+			outcome = providerlimit.MetricWaitProbeFailed
+		}
+		providerlimit.ObserveWait(s.logger.Zap(), providerlimit.MetricContextOffice, outcome)
+	}
+	if event.Type != events.AgentStopped {
+		s.clearProviderLimitOnSuccess(ctx, run)
+	}
 	s.markRoutingSuccess(ctx, run)
 	s.recordRunOutputSummary(ctx, run, *data)
 	s.warnIfReviewDecisionMissing(ctx, run)
@@ -859,6 +877,9 @@ func (s *Service) handleAgentFailed(ctx context.Context, event *bus.Event) error
 	// Clear before routing can make the run claimable again. This prevents
 	// cleanup from this attempt from matching a relaunch that reuses its run ID.
 	s.clearAgentWorking(ctx, run.AgentProfileID, run.ID)
+	if s.tryProviderLimitRecovery(ctx, run, data.ErrorMessage, data.ProviderError) {
+		return nil
+	}
 	if s.tryPostStartFallback(ctx, run, data.ErrorMessage, data.ProviderError) {
 		return nil
 	}
@@ -911,6 +932,9 @@ func (s *Service) handleTasklessAgentFailed(
 	s.clearAgentWorking(ctx, run.AgentProfileID, run.ID)
 	if err := s.finishRunSession(ctx, data, models.RunSessionStateFailed, data.ErrorMessage); err != nil {
 		return err
+	}
+	if s.tryProviderLimitRecovery(ctx, run, data.ErrorMessage, data.ProviderError) {
+		return nil
 	}
 	if s.tryPostStartFallback(ctx, run, data.ErrorMessage, data.ProviderError) {
 		return nil
@@ -1007,6 +1031,294 @@ func enrichModelFailureMessage(run *models.Run, message string) string {
 		return message
 	}
 	return routingerr.ModelUnavailableMessage(*run.ResolvedModel) + "\n\n" + message
+}
+
+func providerLimitProfileID(run *runmodels.Run) string {
+	if run == nil {
+		return ""
+	}
+	if run.ResolvedExecutionProfileID != nil && *run.ResolvedExecutionProfileID != "" {
+		return *run.ResolvedExecutionProfileID
+	}
+	return run.AgentProfileID
+}
+
+func (s *Service) tryProviderLimitRecovery(
+	ctx context.Context, run *runmodels.Run, errorMessage string,
+	providerError *streams.ProviderError,
+) bool {
+	subject, ok := s.providerLimitRecoverySubject(ctx, run)
+	if !ok {
+		return false
+	}
+	probeLease, valid := providerLimitRunProbe(run)
+	if !valid {
+		s.logger.Warn("office provider-limit probe ownership is invalid", zap.String("run_id", run.ID))
+		return true
+	}
+	classified, occurredAt := classifyOfficeProviderFailure(run, errorMessage, providerError)
+	isLimit := classified.Code == routingerr.CodeRateLimited || classified.Code == routingerr.CodeQuotaLimited
+	if !isLimit {
+		if probeLease.Key == "" {
+			return false
+		}
+		providerlimit.ObserveWait(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricWaitProbeFailed)
+		return s.parkProviderLimitProbe(ctx, run, probeLease)
+	}
+	if s.providerLimitShortRetryRemains(ctx, run, classified) {
+		return false
+	}
+	model := *run.ResolvedModel
+	mark, err := s.providerLimits.Record(ctx, subject, model, classified, occurredAt)
+	if err != nil {
+		s.logger.Warn("office provider-limit mark write failed",
+			zap.String("run_id", run.ID), zap.Error(err))
+		return false
+	}
+	if probeLease.Key != "" {
+		providerlimit.ObserveWait(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricWaitProbeFailed)
+		return s.parkProviderLimitProbe(ctx, run, probeLease)
+	}
+	if handled, recovered := s.tryOfficeLimitFallback(ctx, run, subject, model, errorMessage, providerError); handled {
+		return recovered
+	}
+	return s.parkRunForProviderLimitReset(ctx, run, subject, mark)
+}
+
+// providerLimitRecoverySubject resolves the concrete opted-in profile of a run
+// that reported a resolved provider and model and has not already fallen back.
+func (s *Service) providerLimitRecoverySubject(ctx context.Context, run *runmodels.Run) (providerlimit.Subject, bool) {
+	profileID := providerLimitProfileID(run)
+	if s.providerLimits == nil || profileID == "" ||
+		run.ResolvedProviderID == nil || *run.ResolvedProviderID == "" ||
+		run.ResolvedModel == nil || *run.ResolvedModel == "" ||
+		run.LimitFallbackModel != nil {
+		return providerlimit.Subject{}, false
+	}
+	subject, err := s.providerLimits.ResolveSubject(ctx, profileID)
+	if err != nil || subject.Dynamic || subject.Profile == nil ||
+		(!subject.Profile.LimitFallback && !subject.Profile.ResumeAfterReset) {
+		return providerlimit.Subject{}, false
+	}
+	return subject, true
+}
+
+// providerLimitRunProbe decodes the run's probe lease. A run without a probe
+// returns a zero lease; valid is false when the stored ownership is malformed.
+func providerLimitRunProbe(run *runmodels.Run) (dynamic.ProbeLease, bool) {
+	var lease dynamic.ProbeLease
+	if run.ProviderLimitProbe == "" {
+		return lease, true
+	}
+	if err := json.Unmarshal([]byte(run.ProviderLimitProbe), &lease); err != nil {
+		return dynamic.ProbeLease{}, false
+	}
+	valid := lease.Key != "" && !lease.ExpiresAt.IsZero() &&
+		run.ProviderLimitWaitKey != nil && *run.ProviderLimitWaitKey == lease.Key
+	return lease, valid
+}
+
+// classifyOfficeProviderFailure classifies a run failure, preferring the
+// structured provider error's message, reset, and retry timing.
+func classifyOfficeProviderFailure(run *runmodels.Run, errorMessage string, providerError *streams.ProviderError) (*routingerr.Error, time.Time) {
+	input := routingerr.Input{
+		Phase:      routingerr.PhaseStreaming,
+		ProviderID: *run.ResolvedProviderID,
+		Stderr:     errorMessage,
+	}
+	if providerError != nil {
+		if providerError.Message != "" {
+			input.Stderr = providerError.Message
+		}
+		input.ResetHint = providerError.ResetAt
+		input.OccurredAt = providerError.OccurredAt
+		input.RetryAfter = providerretry.Duration(providerError.RetryAfterMs)
+		input.DiagnosticSource = providerError.Source
+	}
+	return routingerr.Classify(input), input.OccurredAt
+}
+
+// providerLimitShortRetryRemains reports whether a short retryable limit still
+// has scheduler retry budget, in which case the scheduler owns recovery.
+func (s *Service) providerLimitShortRetryRemains(ctx context.Context, run *runmodels.Run, classified *routingerr.Error) bool {
+	if !classified.ShouldShortRetry() || s.routingDispatcher == nil {
+		return false
+	}
+	retryOracle, ok := s.routingDispatcher.(interface {
+		ProviderLimitShortRetryRemaining(context.Context, *runmodels.Run) (bool, error)
+	})
+	if !ok {
+		return false
+	}
+	remaining, err := retryOracle.ProviderLimitShortRetryRemaining(ctx, run)
+	return err != nil || remaining
+}
+
+// tryOfficeLimitFallback switches the run to the profile's unmarked fallback
+// model. handled is false when no fallback applies; recovered reports whether
+// the fallback launch took over the run.
+func (s *Service) tryOfficeLimitFallback(
+	ctx context.Context, run *runmodels.Run, subject providerlimit.Subject, model, errorMessage string,
+	providerError *streams.ProviderError,
+) (handled, recovered bool) {
+	fallbackModel := subject.Profile.FallbackModel
+	if !subject.Profile.LimitFallback || fallbackModel == "" || fallbackModel == model {
+		return false, false
+	}
+	if _, limited := s.providerLimits.Lookup(subject, fallbackModel); limited {
+		providerlimit.ObserveFallback(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricFallbackMarked)
+		return false, false
+	}
+	if err := s.repo.SetRunProviderLimitRecoveryState(ctx, run.ID, &fallbackModel, nil, ""); err != nil {
+		s.logger.Warn("office provider-limit fallback persistence failed",
+			zap.String("run_id", run.ID), zap.Error(err))
+		providerlimit.ObserveFallback(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricFallbackFailed)
+		return true, false
+	}
+	run.LimitFallbackModel = &fallbackModel
+	if s.tryPostStartFallback(ctx, run, errorMessage, providerError) {
+		return true, true
+	}
+	providerlimit.ObserveFallback(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricFallbackFailed)
+	return true, false
+}
+
+// parkRunForProviderLimitReset parks the run until a trusted reset when the
+// profile opts into resuming.
+func (s *Service) parkRunForProviderLimitReset(ctx context.Context, run *runmodels.Run, subject providerlimit.Subject, mark providerlimit.Mark) bool {
+	if !subject.Profile.ResumeAfterReset || !mark.TrustedReset(time.Now().UTC()) {
+		return false
+	}
+	if err := s.repo.ParkRunForProviderLimit(ctx, run.ID, mark.Key, mark.Until); err != nil {
+		s.logger.Warn("office provider-limit wait persistence failed",
+			zap.String("run_id", run.ID), zap.Error(err))
+		return false
+	}
+	waitKey := mark.Key
+	run.ProviderLimitWaitKey = &waitKey
+	providerlimit.ObserveWait(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricWaitArmed)
+	return true
+}
+
+func (s *Service) parkProviderLimitProbe(
+	ctx context.Context, run *runmodels.Run, lease dynamic.ProbeLease,
+) bool {
+	if run.ProviderLimitWaitKey == nil || *run.ProviderLimitWaitKey != lease.Key {
+		return true
+	}
+	if err := s.repo.ParkRunForProviderLimit(ctx, run.ID, lease.Key, lease.ExpiresAt); err != nil {
+		s.logger.Warn("office provider-limit probe wait persistence failed",
+			zap.String("run_id", run.ID), zap.Error(err))
+		return true
+	}
+	providerlimit.ObserveWait(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricWaitArmed)
+	return true
+}
+
+func (s *Service) clearProviderLimitOnSuccess(ctx context.Context, run *runmodels.Run) {
+	if s.providerLimits == nil || run == nil {
+		return
+	}
+	subject, err := s.providerLimits.ResolveSubject(ctx, providerLimitProfileID(run))
+	if err != nil || subject.Dynamic {
+		return
+	}
+	if run.ResolvedModel != nil && *run.ResolvedModel != "" {
+		if _, err := s.providerLimits.ClearOnSuccess(ctx, subject, *run.ResolvedModel); err != nil {
+			s.logger.Warn("office provider-limit mark clear failed",
+				zap.String("run_id", run.ID), zap.Error(err))
+			return
+		}
+	}
+	waitKey := ""
+	if run.ProviderLimitWaitKey != nil {
+		waitKey = *run.ProviderLimitWaitKey
+	}
+	if run.ProviderLimitProbe != "" {
+		s.completeOfficeProviderLimitProbe(ctx, run, waitKey)
+		return
+	}
+	if err := s.repo.SetRunProviderLimitRecoveryState(ctx, run.ID, nil, nil, ""); err != nil {
+		s.logger.Warn("office provider-limit ownership cleanup failed",
+			zap.String("run_id", run.ID), zap.Error(err))
+		return
+	}
+	if waitKey != "" {
+		providerlimit.ObserveWait(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricWaitResumed)
+	}
+}
+
+// completeOfficeProviderLimitProbe releases a succeeded run's probe lease and
+// clears its ownership, keeping ownership when a successor probe holds the mark.
+func (s *Service) completeOfficeProviderLimitProbe(ctx context.Context, run *runmodels.Run, waitKey string) {
+	var lease dynamic.ProbeLease
+	if err := json.Unmarshal([]byte(run.ProviderLimitProbe), &lease); err != nil {
+		s.logger.Warn("office provider-limit probe lease is invalid",
+			zap.String("run_id", run.ID), zap.Error(err))
+		return
+	}
+	if waitKey == "" || lease.Key != waitKey {
+		s.logger.Warn("office provider-limit probe owner key mismatch",
+			zap.String("run_id", run.ID))
+		return
+	}
+	released, err := s.providerLimits.ReleaseProbe(ctx, lease, true)
+	if err != nil {
+		s.logger.Warn("office provider-limit probe release failed",
+			zap.String("run_id", run.ID), zap.Error(err))
+		return
+	}
+	if !released {
+		mark, stillOwned := s.providerLimits.Get(lease.Key)
+		if stillOwned && (!mark.Cleared || !mark.ProbeUntil.IsZero()) {
+			s.logger.Warn("office provider-limit probe lease no longer owns mark",
+				zap.String("run_id", run.ID))
+			return
+		}
+	}
+	if err := s.repo.CompleteProviderLimitProbeOwner(ctx, run.ID, waitKey); err != nil {
+		s.logger.Warn("office provider-limit owner cleanup failed",
+			zap.String("run_id", run.ID), zap.Error(err))
+		return
+	}
+	providerlimit.ObserveWait(s.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricWaitResumed)
+}
+
+// ReconcileProviderLimitProbeOwners finishes successful owners whose durable
+// mark or lease cleanup failed before shutdown.
+func (s *Service) ReconcileProviderLimitProbeOwners(ctx context.Context) error {
+	owners, err := s.repo.ListProviderLimitProbeOwners(ctx)
+	if err != nil {
+		return err
+	}
+	for _, owner := range owners {
+		if owner.Status != runmodels.RunStatusFinished || owner.Outcome == nil ||
+			*owner.Outcome != RunOutcomeProcessed {
+			continue
+		}
+		runEvents, err := s.repo.ListRunEvents(ctx, owner.ID, -1, 0)
+		if err != nil {
+			return err
+		}
+		if len(runEvents) == 0 || runEvents[len(runEvents)-1].EventType != runmodels.RunEventTypeComplete {
+			continue
+		}
+		var completion struct {
+			Stopped bool `json:"stopped"`
+		}
+		if err := json.Unmarshal([]byte(runEvents[len(runEvents)-1].Payload), &completion); err != nil || completion.Stopped {
+			continue
+		}
+		s.clearProviderLimitOnSuccess(ctx, &owner)
+		refreshed, err := s.repo.GetRunByID(ctx, owner.ID)
+		if err != nil {
+			return err
+		}
+		if refreshed.ProviderLimitProbe != "" {
+			return fmt.Errorf("provider-limit probe owner cleanup remains pending for run %s", owner.ID)
+		}
+	}
+	return nil
 }
 
 // tryPostStartFallback delegates to the routing dispatcher when one is

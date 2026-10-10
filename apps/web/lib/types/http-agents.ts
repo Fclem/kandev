@@ -20,6 +20,21 @@ import type { AgentProfile } from "./agent-profile";
 import type { CLIFlag } from "./agent-profile";
 import type { BackendMessage } from "./backend-message";
 
+export type AgentProfileLimit = {
+  profile_id: string;
+  model: string;
+  scope: "account" | "model";
+  until: string;
+  reset_known: boolean;
+};
+
+export type AgentProfileLimitsBackendMessageMap = {
+  "agent.profile.limits_updated": BackendMessage<
+    "agent.profile.limits_updated",
+    { limits: AgentProfileLimit[] }
+  >;
+};
+
 /**
  * How kandev drives a custom agent's command. Absent means terminal
  * passthrough, which is what every definition stored before the field existed

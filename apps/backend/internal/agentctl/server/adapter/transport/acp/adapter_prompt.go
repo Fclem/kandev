@@ -351,6 +351,20 @@ func (a *Adapter) sendPrompt(
 		return nil
 	}
 
+	if a.agentID == ompAgentID && resp.StopReason == acp.StopReasonEndTurn {
+		if providerError := turn.ompLimitFailure(); providerError != nil {
+			a.cancelAsyncTurnComplete(sessionID)
+			a.sendUpdate(AgentEvent{
+				Type:             streams.EventTypeError,
+				SessionID:        sessionID,
+				PromptGeneration: promptGeneration,
+				Error:            providerError.Message,
+				ProviderError:    providerError,
+			})
+			return nil
+		}
+	}
+
 	// Emit complete event via the stream, including the StopReason from the agent.
 	a.logger.Debug("emitting complete event after prompt",
 		zap.String("session_id", sessionID),

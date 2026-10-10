@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events/bus"
@@ -401,6 +402,7 @@ type ServiceOptions struct {
 	TaskPRs                 TaskPRLister
 	APIBaseURL              string
 	AgentctlBinaryPath      string
+	ProviderLimits          *providerlimit.Service
 }
 
 // Service provides office business logic.
@@ -429,6 +431,7 @@ type Service struct {
 	agentTokenMinter        AgentTokenMinter
 	runsService             *runsservice.Service
 	apiBaseURL              string
+	providerLimits          *providerlimit.Service
 	agentctlBinaryPath      string
 	syncHandlers            bool // when true, event handlers run synchronously (for tests)
 
@@ -626,6 +629,7 @@ func NewService(opts ServiceOptions) *Service {
 		projectSkillDirResolver: opts.ProjectSkillDirResolver,
 		apiBaseURL:              opts.APIBaseURL,
 		agentctlBinaryPath:      opts.AgentctlBinaryPath,
+		providerLimits:          opts.ProviderLimits,
 	}
 	svc.relay = NewChannelRelay(svc)
 	return svc

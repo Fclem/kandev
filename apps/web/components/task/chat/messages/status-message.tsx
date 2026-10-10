@@ -15,6 +15,8 @@ import { sanitizeSessionErrorDetails } from "@/lib/session-error-details";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 
+import { formatDateTime } from "@/lib/i18n/formats";
+import { parseRetryAt } from "./transient-retry";
 const UNKNOWN_TASK_KEY = "task:unknown";
 
 interface ErrorMetadata extends StatusMetadata {
@@ -31,6 +33,9 @@ interface ErrorMetadata extends StatusMetadata {
   effective_model?: string;
   fallback_model?: string;
   agent_id?: string;
+  model_id?: string;
+  reset_known?: boolean;
+  retry_at?: string;
   executor_type?: string;
   executor_profile_id?: string;
   remediation?: string[];
@@ -160,6 +165,34 @@ function parseStatusMetadata(comment: Message) {
   };
 }
 
+function ProviderLimitManualStatus({ metadata }: { metadata: ErrorMetadata }) {
+  const { t } = useTranslation();
+  const model = safeProviderModelId(metadata.model_id) || t(UNKNOWN_TASK_KEY);
+  const deadline = metadata.reset_known === true ? parseRetryAt(metadata.retry_at) : undefined;
+  return (
+    <div
+      data-testid="provider-limit-notice"
+      role="status"
+      className="flex items-start gap-2 py-1 text-xs text-amber-600 dark:text-amber-400"
+    >
+      <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="min-w-0 space-y-1 break-words [overflow-wrap:anywhere]">
+        <p>{t("task:providerLimitManualNotice", { model })}</p>
+        <p>
+          {deadline !== undefined ? (
+            <time dateTime={metadata.retry_at}>
+              {t("task:providerLimitManualReset", { reset: formatDateTime(new Date(deadline)) })}
+            </time>
+          ) : (
+            t("task:providerLimitManualResetUnknown")
+          )}
+        </p>
+        <p>{t("task:providerLimitSendingAnyway")}</p>
+      </div>
+    </div>
+  );
+}
+
 function getStatusMessage(
   comment: Message,
   metadata: ErrorMetadata | undefined,
@@ -177,7 +210,11 @@ function getStatusMessage(
       ? t("task:providerRestoredResumeSuccessWithModel", { model })
       : t("task:providerRestoredResumeSuccess");
   }
-  if (metadata?.kind === "model_selection_warning") return t("task:modelSelectionWarning");
+  if (metadata?.kind === "model_selection_warning") {
+    return metadata.reason === "provider_limit"
+      ? t("task:providerLimitModelWarning")
+      : t("task:modelSelectionWarning");
+  }
   return metadata?.message || comment.content || statusLine || t("task:statusUpdate");
 }
 
@@ -217,6 +254,7 @@ function modelSelectionReasonLabel(reason: string | undefined): string {
     catalog_empty: "task:modelSelectionReasonCatalogEmpty",
     selection_unsupported: "task:modelSelectionReasonUnsupported",
     selection_failed_auto_fallback: "task:modelSelectionReasonAutoFallback",
+    provider_limit: "task:providerLimitModelReason",
   };
   // Old persisted rows can contain this retired reason. Rendering it is a
   // migration-only compatibility path; no active selection policy uses it.
@@ -232,14 +270,17 @@ function ModelSelectionWarningDetails({ metadata }: { metadata: ErrorMetadata })
   const unknown = t(UNKNOWN_TASK_KEY);
   const requested = metadata.requested_model || unknown;
   const effective = metadata.effective_model || t("task:modelSelectionProviderDefault");
-  const remediation = Array.isArray(metadata.remediation) ? metadata.remediation : [];
+  const remediation =
+    metadata.reason !== "provider_limit" && Array.isArray(metadata.remediation)
+      ? metadata.remediation
+      : [];
   const remediationKey: Record<string, string> = {
     executor_credentials: "task:modelSelectionRemediationCredentials",
     copied_agent_configuration: "task:modelSelectionRemediationConfiguration",
     agent_version: "task:modelSelectionRemediationAgentVersion",
   };
   return (
-    <div className="mt-2 space-y-2 text-[11px] text-muted-foreground">
+    <div className="mt-2 space-y-2 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
       <div className="grid gap-1">
         <p>
           {t("task:modelSelectionRequested")}: <code>{requested}</code>
@@ -390,6 +431,9 @@ function renderSpecialStatusMessage({
   isError: boolean;
   isWarning: boolean;
 }): ReactElement | null {
+  if (metadata?.kind === "provider_limit_notice") {
+    return <ProviderLimitManualStatus metadata={metadata} />;
+  }
   if (metadata?.kind === "branch_recreated") return <BranchRecreatedWarning metadata={metadata} />;
   if (metadata?.variant === "resume_settings_provider_restored") {
     return <ProviderRestoredResumeStatus message={message} />;

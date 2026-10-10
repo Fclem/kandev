@@ -1995,6 +1995,9 @@ func (e *Executor) LaunchPreparedSession(ctx context.Context, task *v1.Task, ses
 		req.OfficeAgentProfileID = session.AgentProfileID
 	}
 	req.StartAgent = startAgent
+	if policy, overridden := lifecycle.StartModelPolicyFromContext(ctx); overridden {
+		req.ModelOverride = policy.Model
+	}
 	mergeEnv(req, opts.Env)
 	req.AdditionalSkillSlugs = append([]string(nil), opts.AdditionalSkillSlugs...)
 	if opts.RouteOverride != nil {

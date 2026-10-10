@@ -1,7 +1,7 @@
 ---
 id: "08-docs-and-promotion"
 title: "Documentation and promotion"
-status: pending
+status: done
 wave: 9
 depends_on:
   - "10-provider-limit-metrics"
@@ -80,4 +80,22 @@ None.
 
 ## Results
 
-Pending.
+Updated `agents-and-profiles.md` with the per-profile switches, binding/model
+limit scope, seven-day trusted-reset limit, fallback eligibility, wait limit,
+and manual override. Updated `sessions-and-review.md` with task-session wait
+cancellation and prompt behavior. Added all three counters, closed labels, and
+identifier exclusions to the `AGENTS.md` Observability section.
+
+Promoted the requirement to `active`, the system design to `current`, and the
+plan to `implemented`. All work orders are checked complete.
+
+Validation passed:
+
+```bash
+python3 scripts/list-docs.py validate
+python3 scripts/lint-spec-files.test.py
+python3 scripts/lint-spec-files.py --all
+node --test scripts/validate-public-docs.test.mjs
+node scripts/validate-public-docs.mjs
+git diff --check
+```

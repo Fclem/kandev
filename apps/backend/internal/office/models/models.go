@@ -452,6 +452,9 @@ type RouteAttempt struct {
 	// attempt that never resolved a tier (both empty, e.g. a
 	// max-attempts-exceeded row) — never interpreted as "workspace".
 	TierSource      string              `json:"tier_source,omitempty" db:"tier_source"`
+	RequestedModel  string              `json:"requested_model,omitempty" db:"requested_model"`
+	EffectiveModel  string              `json:"effective_model,omitempty" db:"effective_model"`
+	OverrideReason  string              `json:"override_reason,omitempty" db:"override_reason"`
 	Outcome         RouteAttemptOutcome `json:"outcome" db:"outcome"`
 	ErrorCode       string              `json:"error_code,omitempty" db:"error_code"`
 	ErrorConfidence ErrorConfidence     `json:"error_confidence,omitempty" db:"error_confidence"`

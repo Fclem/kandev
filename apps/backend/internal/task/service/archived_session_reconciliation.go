@@ -57,6 +57,9 @@ func (s *Service) StartSessionReconciliationLoop(ctx context.Context) {
 				s.runArchivedSessionReconciliation(ctx)
 				s.runOrphanedSessionReconciliation(ctx)
 				s.runActiveSessionSweep(ctx, now)
+				if s.providerLimitReconciler != nil {
+					s.providerLimitReconciler(ctx)
+				}
 			}
 		}
 	}()

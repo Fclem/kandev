@@ -15,6 +15,8 @@ type ProfileCreateRequest struct {
 	FallbackModel           string                  `json:"fallback_model,omitempty"`
 	AutoFallback            bool                    `json:"auto_fallback,omitempty"`
 	RequireExactModel       bool                    `json:"require_exact_model,omitempty"`
+	LimitFallback           *bool                   `json:"limit_fallback,omitempty"`
+	ResumeAfterReset        *bool                   `json:"resume_after_reset,omitempty"`
 	Mode                    string                  `json:"mode,omitempty"`
 	ConfigOptions           map[string]string       `json:"config_options,omitempty"`
 	AllowIndexing           bool                    `json:"allow_indexing,omitempty"`
@@ -43,6 +45,8 @@ type ProfileUpdateRequest struct {
 	FallbackModel     *string             `json:"fallback_model,omitempty"`
 	AutoFallback      *bool               `json:"auto_fallback,omitempty"`
 	RequireExactModel *bool               `json:"require_exact_model,omitempty"`
+	LimitFallback     *bool               `json:"limit_fallback,omitempty"`
+	ResumeAfterReset  *bool               `json:"resume_after_reset,omitempty"`
 	Mode              *string             `json:"mode,omitempty"`
 	ConfigOptions     *map[string]string  `json:"config_options,omitempty"`
 	AllowIndexing     *bool               `json:"allow_indexing,omitempty"`
@@ -132,6 +136,8 @@ func ProfileContractFields() []ProfileContractField {
 		{Path: "fallback_model", JSONType: "string", Support: "read_write", Description: "Optional fallback model."},
 		{Path: "auto_fallback", JSONType: "boolean", Support: "read_write", Description: "Enable automatic fallback behavior."},
 		{Path: "require_exact_model", JSONType: "boolean", Support: "read_write", Description: "Require the configured model to be advertised and applied."},
+		{Path: "limit_fallback", JSONType: "boolean", Support: "read_write", Description: "Use the explicit fallback model after a provider limit."},
+		{Path: "resume_after_reset", JSONType: "boolean", Support: "read_write", Description: "Resume automatically after a trusted provider reset."},
 		{Path: "mode", JSONType: "string", Support: "read_write", Description: "Agent operating mode."},
 		{Path: "config_options", JSONType: "object", Support: "read_write", Description: "Typed provider configuration options.", Replacement: true},
 		{Path: "allow_indexing", JSONType: "boolean", Support: "compatibility", Description: "Legacy indexing permission field."},

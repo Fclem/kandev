@@ -345,6 +345,8 @@ export function registerAgentsHandlers(store: StoreApi<AppState>): WsHandlers {
       store.getState().acceptAgentProfileOrder(agentId, profileIds, revision);
     },
     "agent.profile.updated": (message) => applyProfileUpdatedEvent(store, message),
+    "agent.profile.limits_updated": (message) =>
+      store.getState().setAgentProfileLimits(message.payload.limits),
     "agent.profile.deleted": (message) => {
       store.setState((state) => ({
         ...state,

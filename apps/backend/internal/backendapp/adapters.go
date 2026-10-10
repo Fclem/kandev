@@ -955,6 +955,10 @@ func (a *lifecycleAdapter) SetSessionModelBySessionID(ctx context.Context, sessi
 	return a.mgr.SetSessionModelBySessionID(ctx, sessionID, modelID)
 }
 
+func (a *lifecycleAdapter) GetModelStateForSession(sessionID string) *lifecycle.CachedModelState {
+	return a.mgr.GetModelStateForSession(sessionID)
+}
+
 // SetSessionConfigOptionBySessionID applies an ACP dynamic session option.
 // Workflow conditional configuration uses this optional seam so older agent
 // manager test doubles and non-ACP providers can fail closed without widening

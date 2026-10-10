@@ -18,7 +18,9 @@ import (
 // carries no replay fields, so it never persists a deferral itself — it only
 // decides admit/refuse and reports the refusal for its caller to record.
 type seam3Refusal struct {
-	reasonCode string
+	reasonCode    string
+	providerLimit *providerLimitGateDecision
+	cause         error
 	// population, populationKnown and ceiling are the admission decision's own
 	// reading, carried so a caller-side disposition can pass them on to
 	// deferCeilingRefusal for the AC-49 card carrier's content.
@@ -34,8 +36,13 @@ type seam3Refusal struct {
 }
 
 func (e *seam3Refusal) Error() string {
+	if e.cause != nil {
+		return e.cause.Error()
+	}
 	return fmt.Sprintf("session ceiling refused seam 3 admission (%s)", e.reasonCode)
 }
+
+func (e *seam3Refusal) Unwrap() error { return e.cause }
 
 func isSeam3Refusal(err error) (*seam3Refusal, bool) {
 	var refusal *seam3Refusal
@@ -72,12 +79,20 @@ const (
 func (s *Service) admitSeam3(
 	ctx context.Context, taskID, sessionID string, origin launchOrigin,
 ) (*sessionKeyedCeilingReservation, *seam3Refusal) {
+	limit, err := s.providerLimitLaunchDecision(ctx, taskID, sessionID, origin, nil)
+	if err != nil {
+		return nil, &seam3Refusal{reasonCode: "provider_limit_lookup_failed", cause: err}
+	}
+	if limit != nil && limit.wait {
+		return nil, &seam3Refusal{reasonCode: providerLimitReason, providerLimit: limit}
+	}
 	decision := s.sessionCeiling.admit(ctx, admissionRequest{
 		taskID: taskID, sessionID: sessionID, origin: origin, seam: "ensureSessionRunning",
 	})
 	if decision.admitted {
 		return &sessionKeyedCeilingReservation{
 			controller: s.sessionCeiling, key: decision.reservationKey,
+			providerLimit:  limit,
 			manualOverride: decision.manualOverride, population: decision.population,
 			populationKnown: decision.populationKnown, ceiling: decision.ceiling,
 		}, nil
@@ -112,22 +127,27 @@ func (s *Service) admitOrDeferWorkflowStepEnsureWithBinding(
 			binding, _ = s.workflowEntryBindingForStep(ctx, taskID, step, sessionID)
 		}
 	}
-	decision := s.sessionCeiling.admit(ctx, admissionRequest{
-		taskID: taskID, sessionID: sessionID, origin: launchOriginAutomatic, seam: "startSessionForWorkflowStepPreConsult",
-	})
-	if decision.admitted {
-		return &sessionKeyedCeilingReservation{
-			controller: s.sessionCeiling, key: decision.reservationKey,
-			manualOverride: decision.manualOverride, population: decision.population,
-			populationKnown: decision.populationKnown, ceiling: decision.ceiling,
-		}, false, nil
-	}
 	payload := map[string]interface{}{
 		metaKeySessionID:      sessionID,
 		metaKeyWorkflowStepID: workflowStepID,
 	}
 	if binding != nil {
 		payload[models.CeilingLaunchEntryBindingKey] = ceilingEntryBindingValue(*binding)
+	}
+	limit, deferred, err := s.gateProviderLimitLaunch(ctx, taskID, sessionID, launchOriginAutomatic, models.CeilingLaunchWorkflowStepEnsure, payload)
+	if err != nil || deferred {
+		return nil, deferred, err
+	}
+	decision := s.sessionCeiling.admit(ctx, admissionRequest{
+		taskID: taskID, sessionID: sessionID, origin: launchOriginAutomatic, seam: "startSessionForWorkflowStepPreConsult",
+	})
+	if decision.admitted {
+		return &sessionKeyedCeilingReservation{
+			controller: s.sessionCeiling, key: decision.reservationKey,
+			providerLimit:  limit,
+			manualOverride: decision.manualOverride, population: decision.population,
+			populationKnown: decision.populationKnown, ceiling: decision.ceiling,
+		}, false, nil
 	}
 	if err := s.deferCeilingRefusal(ctx, taskID, sessionID, models.CeilingLaunchWorkflowStepEnsure, payload, decision.reasonCode,
 		decision.population, decision.populationKnown, decision.ceiling); err != nil {
@@ -153,6 +173,18 @@ func (s *Service) deferSeam3QueueDrainRefusal(ctx context.Context, taskID, sessi
 		payload[models.CeilingLaunchEntryBindingKey] = ceilingEntryBindingValue(*bindings[0])
 	}
 	payload = s.enrichCeilingLaunchPayload(ctx, taskID, sessionID, payload)
+	if refusal.providerLimit != nil {
+		if err := s.deferProviderLimitLaunch(ctx, taskID, sessionID, models.CeilingLaunchQueueDrainEnsure, payload, refusal.providerLimit); err != nil {
+			s.logger.Zap().Error("could not persist provider limit queue drain", zap.String("task_id", taskID), zap.String("session_id", sessionID), zap.Error(err))
+		} else {
+			refusal.deferred = true
+			s.publishTaskUpdatedByID(ctx, taskID)
+		}
+		return
+	}
+	if refusal.cause != nil {
+		return
+	}
 	if err := s.deferCeilingRefusal(ctx, taskID, sessionID, models.CeilingLaunchQueueDrainEnsure, payload, refusal.reasonCode,
 		refusal.population, refusal.populationKnown, refusal.ceiling); err != nil {
 		s.logger.Zap().Error("could not persist a ceiling deferral; the workflow queue drain could not be recorded",
@@ -205,6 +237,9 @@ func seam3PromptEnsurePayload(
 	if options.ceilingEntryBinding != nil {
 		payload[models.CeilingLaunchEntryBindingKey] = ceilingEntryBindingValue(*options.ceilingEntryBinding)
 	}
+	if options.providerLimitWaitIdentity != "" {
+		payload[providerLimitWaitIdentityKey] = options.providerLimitWaitIdentity
+	}
 	return payload
 }
 
@@ -220,11 +255,22 @@ func (s *Service) disposeSeam3PromptEnsureRefusal(
 	ctx context.Context, taskID, sessionID, prompt, model string, planMode bool,
 	attachments []v1.MessageAttachment, dispatchOnly bool, options promptTaskOptions, refusal *seam3Refusal,
 ) error {
+	if refusal.cause != nil {
+		return refusal.cause
+	}
 	if seam3PromptEnsureNonReconstructableOptionsSet(options) {
 		return nil
 	}
 	payload := seam3PromptEnsurePayload(sessionID, prompt, model, planMode, attachments, dispatchOnly, options)
 	payload = s.enrichCeilingLaunchPayload(ctx, taskID, sessionID, payload)
+	if refusal.providerLimit != nil {
+		if err := s.deferProviderLimitLaunch(ctx, taskID, sessionID, models.CeilingLaunchPromptEnsure, payload, refusal.providerLimit); err != nil {
+			return err
+		}
+		refusal.deferred = true
+		s.publishTaskUpdatedByID(ctx, taskID)
+		return nil
+	}
 	if err := s.deferCeilingRefusal(ctx, taskID, sessionID, models.CeilingLaunchPromptEnsure, payload, refusal.reasonCode,
 		refusal.population, refusal.populationKnown, refusal.ceiling); err != nil {
 		s.logger.Zap().Error("could not persist a ceiling deferral; the prompt could not be admitted or recorded",

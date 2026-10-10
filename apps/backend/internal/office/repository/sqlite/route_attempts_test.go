@@ -41,6 +41,7 @@ func TestAppendAndListRouteAttempts_RoundTrip(t *testing.T) {
 	seedRun(t, repo, "run-1", "agent-1", now)
 
 	exitCode := 137
+	resetHint := now.Add(2 * time.Hour)
 	finished := now.Add(time.Minute)
 	first := &models.RouteAttempt{
 		RunID:              "run-1",
@@ -57,6 +58,7 @@ func TestAppendAndListRouteAttempts_RoundTrip(t *testing.T) {
 		ExitCode:           &exitCode,
 		RawExcerpt:         "anthropic_quota_exceeded",
 		StartedAt:          now,
+		ResetHint:          &resetHint,
 		FinishedAt:         &finished,
 	}
 	if err := repo.AppendRouteAttempt(ctx, first); err != nil {
@@ -96,6 +98,9 @@ func TestAppendAndListRouteAttempts_RoundTrip(t *testing.T) {
 	}
 	if attempts[0].ExitCode == nil || *attempts[0].ExitCode != 137 {
 		t.Errorf("exit code lost: %v", attempts[0].ExitCode)
+	}
+	if attempts[0].ResetHint == nil || !attempts[0].ResetHint.Equal(resetHint) {
+		t.Errorf("reset hint lost: %v", attempts[0].ResetHint)
 	}
 	if attempts[1].Outcome != "launched" {
 		t.Errorf("outcome = %q", attempts[1].Outcome)

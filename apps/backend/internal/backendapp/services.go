@@ -23,6 +23,7 @@ import (
 	"github.com/kandev/kandev/internal/agent/registry"
 	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
 	dynamicruntime "github.com/kandev/kandev/internal/agent/runtime/dynamic"
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	agentsettingscontroller "github.com/kandev/kandev/internal/agent/settings/controller"
 	agentsettingsmodels "github.com/kandev/kandev/internal/agent/settings/models"
 	analyticsservice "github.com/kandev/kandev/internal/analytics/service"
@@ -34,6 +35,7 @@ import (
 	"github.com/kandev/kandev/internal/coordinator"
 	"github.com/kandev/kandev/internal/db"
 	editorservice "github.com/kandev/kandev/internal/editors/service"
+	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/gitcredentials"
 	"github.com/kandev/kandev/internal/github"
@@ -103,6 +105,13 @@ func provideServices(ctx context.Context, cfg *config.Config, log *logger.Logger
 	if err != nil {
 		return nil, nil, err
 	}
+	agentSettingsController.SetProviderLimitService(core.providerLimits)
+	if _, err := eventBus.Subscribe(events.AgentProfileLimitsUpdated, func(ctx context.Context, _ *bus.Event) error {
+		agentSettingsController.BroadcastProfileLimits(ctx)
+		return nil
+	}); err != nil {
+		return nil, nil, fmt.Errorf("subscribe provider limit notifications: %w", err)
+	}
 	taskSvc, workflowSvc, promptSvc := core.taskSvc, core.workflowSvc, core.promptSvc
 
 	wireTaskWorkflowCrossReferences(taskSvc, workflowSvc, userSecretStore, repos, log)
@@ -152,6 +161,7 @@ func assembleServices(
 		ManagedRuntimeSelections: managedRuntimeSelections,
 		DynamicProfileResolver:   core.dynamicResolver,
 		DynamicBindingResolver:   core.dynamicBindingResolver,
+		ProviderLimits:           core.providerLimits,
 		Task:                     core.taskSvc,
 		Org:                      core.orgSvc,
 		OrgUnits:                 core.unitSvc,
@@ -196,6 +206,7 @@ type coreTaskServices struct {
 	utilitySvc             *utilityservice.Service
 	dynamicResolver        *agentruntime.ProfileExecutionResolver
 	dynamicBindingResolver *dynamicruntime.CredentialBindingResolver
+	providerLimits         *providerlimit.Service
 	workflowSvc            *workflowservice.Service
 	taskSvc                *taskservice.Service
 	orgSvc                 *org.Service
@@ -224,7 +235,7 @@ func initCoreTaskServices(
 		_, ok := agentRegistry.GetInferenceAgent(agentID)
 		return ok
 	}))
-	dynamicResolver, dynamicBindingResolver, err := initDynamicRuntimeResolver(ctx, repos, cfg, log)
+	dynamicResolver, dynamicBindingResolver, providerLimits, err := initProfileRuntime(ctx, repos, cfg, agentRegistry, eventBus, log)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +304,8 @@ func initCoreTaskServices(
 	return &coreTaskServices{
 		userSvc: userSvc, editorSvc: editorSvc, promptSvc: promptSvc, utilitySvc: utilitySvc,
 		dynamicResolver: dynamicResolver, dynamicBindingResolver: dynamicBindingResolver,
-		workflowSvc: workflowSvc, taskSvc: taskSvc, orgSvc: orgSvc, unitSvc: unitSvc,
+		providerLimits: providerLimits,
+		workflowSvc:    workflowSvc, taskSvc: taskSvc, orgSvc: orgSvc, unitSvc: unitSvc,
 	}, nil
 }
 
@@ -339,21 +351,22 @@ func initManagedRuntimeAndDiscovery(
 	return managedRuntimeSelections, discoveryRegistry, nil
 }
 
-// initDynamicRuntimeResolver builds the dynamic-agent-routing circuit
-// registry, engine, and credential binding resolver, and returns the
-// execution-profile resolver that wraps them.
-func initDynamicRuntimeResolver(
+// initProfileRuntime shares durable circuits and credential identity while
+// concrete provider limits remain independent of the dynamic-routing flag.
+func initProfileRuntime(
 	ctx context.Context,
 	repos *Repositories,
 	cfg *config.Config,
+	agentRegistry *registry.Registry,
+	eventBus bus.EventBus,
 	log *logger.Logger,
-) (*agentruntime.ProfileExecutionResolver, *dynamicruntime.CredentialBindingResolver, error) {
+) (*agentruntime.ProfileExecutionResolver, *dynamicruntime.CredentialBindingResolver, *providerlimit.Service, error) {
 	dynamicCircuits := dynamicruntime.NewCircuitRegistry(
 		dynamicruntime.WithCircuitPersistence(repos.Task),
 		dynamicruntime.WithCircuitLogger(log.Zap()),
 	)
 	if err := dynamicCircuits.Restore(ctx); err != nil {
-		return nil, nil, fmt.Errorf("restore dynamic routing health: %w", err)
+		return nil, nil, nil, fmt.Errorf("restore profile routing health: %w", err)
 	}
 	dynamicEngine := dynamicruntime.NewEngine(
 		dynamicruntime.WithPersistence(repos.Task),
@@ -362,7 +375,7 @@ func initDynamicRuntimeResolver(
 	)
 	dynamicBindingResolver, err := dynamicruntime.NewPersistentCredentialBindingResolver(ctx, repos.Task)
 	if err != nil {
-		return nil, nil, fmt.Errorf("initialize dynamic routing installation key: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize profile routing installation key: %w", err)
 	}
 	dynamicResolver := agentruntime.NewProfileExecutionResolver(
 		repos.AgentSettings,
@@ -370,7 +383,14 @@ func initDynamicRuntimeResolver(
 		cfg.Features.DynamicAgentRouting,
 	)
 	dynamicResolver.SetCredentialBindingResolver(dynamicBindingResolver)
-	return dynamicResolver, dynamicBindingResolver, nil
+	limits := providerlimit.NewService(dynamicCircuits, dynamicBindingResolver, repos.AgentSettings, agentRegistry,
+		providerlimit.WithLogger(log.Zap()),
+		providerlimit.WithOnChange(func(ctx context.Context) {
+			if err := eventBus.Publish(ctx, events.AgentProfileLimitsUpdated, bus.NewEvent(events.AgentProfileLimitsUpdated, "providerlimit", nil)); err != nil {
+				log.Warn("publish provider limit change failed", zap.Error(err))
+			}
+		}))
+	return dynamicResolver, dynamicBindingResolver, limits, nil
 }
 
 // initOrgAndUnitServices builds the organization and organization-unit

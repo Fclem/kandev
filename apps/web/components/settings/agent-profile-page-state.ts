@@ -216,6 +216,12 @@ function buildProfileUpdatePatch(
     fallback_model: draft.fallbackModel ?? "",
     auto_fallback: draft.autoFallback ?? false,
     require_exact_model: draft.requireExactModel ?? false,
+    ...(draft.kind !== "dynamic"
+      ? {
+          limit_fallback: draft.limitFallback ?? false,
+          resume_after_reset: draft.resumeAfterReset ?? false,
+        }
+      : {}),
     mode: draft.mode,
     config_options: draft.configOptions ?? {},
     ...permissionsToProfilePatch(draft),

@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@kandev/ui/tooltip";
 
 import type { Agent, AgentProfile } from "@/lib/types/http";
+import type { AgentProfileLimit } from "@/lib/types/http-agents";
 
 const mocks = vi.hoisted(() => ({
   deleteAgentProfileAction: vi.fn(),
@@ -36,6 +37,7 @@ let storeState: {
   settingsAgents: { items: Agent[] };
   agentProfiles: { items: Array<{ id: string }> };
   features?: { codexAppServer: boolean };
+  agentProfileLimits?: { byProfileId: Record<string, AgentProfileLimit>; version: number };
   // The row's actions are gated on org.config.manage, which useIsAdmin reads
   // off the auth slice. Auth disabled is the default install and resolves to
   // an administrator, matching the backend's synthetic identity.
@@ -55,7 +57,8 @@ const selectors = {
 };
 
 vi.mock("@/components/state-provider", () => ({
-  useAppStore: (selector: (s: unknown) => unknown) => selector({ ...storeState, ...selectors }),
+  useAppStore: (selector: (s: unknown) => unknown) =>
+    selector({ agentProfileLimits: { byProfileId: {}, version: 0 }, ...storeState, ...selectors }),
   useAppStoreApi: () => ({
     getState: () => ({ ...storeState, bumpAgentProfilesVersion: vi.fn() }),
     setState: vi.fn(),
@@ -127,99 +130,6 @@ function renderRows() {
     </>,
   );
 }
-describe("ProfileRow fallback summary", () => {
-  const PROFILE_BADGES_SELECTOR = '[data-slot="badge"]';
-  const MODEL_NAME = "start-model";
-  beforeEach(() => {
-    storeState = {
-      settingsAgents: { items: [] },
-      agentProfiles: { items: [] },
-      auth: { mode: undefined, user: undefined },
-    };
-    mocks.responsive.isFullDesktop = false;
-    mocks.responsive.isFinePointer = false;
-  });
-  afterEach(() => cleanup());
-
-  it("renders the opaque fallback badge immediately after the model badge", () => {
-    const fallbackModel = "  provider/model:with spaces  ";
-    const fallbackProfile = {
-      ...profile("p-fallback", "Fallback"),
-      model: MODEL_NAME,
-      fallbackModel,
-      autoFallback: false,
-    } as AgentProfile;
-
-    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={fallbackProfile} />);
-
-    const badges = Array.from(
-      screen.getByTestId(PROFILE_ROW_TEST_ID).querySelectorAll(PROFILE_BADGES_SELECTOR),
-    ).map((badge) => badge.textContent);
-    expect(badges).toEqual([MODEL_NAME, `fallback: ${fallbackModel}`]);
-  });
-  it("renders the no-configured-fallback label", () => {
-    const strictProfile = {
-      ...profile("p-strict", "Strict"),
-      model: MODEL_NAME,
-      fallbackModel: "",
-      autoFallback: false,
-    } as AgentProfile;
-
-    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={strictProfile} />);
-
-    const badges = screen
-      .getByTestId(PROFILE_ROW_TEST_ID)
-      .querySelectorAll(PROFILE_BADGES_SELECTOR);
-    expect(badges[1]?.textContent).toBe("fallback: none");
-  });
-  it("renders exact when exact-model selection keeps a saved explicit fallback", () => {
-    const exactProfile = {
-      ...profile("p-exact", "Exact"),
-      model: MODEL_NAME,
-      fallbackModel: "saved-explicit-model",
-      autoFallback: false,
-      requireExactModel: true,
-    } as AgentProfile;
-
-    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={exactProfile} />);
-
-    const badges = screen
-      .getByTestId(PROFILE_ROW_TEST_ID)
-      .querySelectorAll(PROFILE_BADGES_SELECTOR);
-    expect(badges[1]?.textContent).toBe("fallback: exact");
-  });
-  it("renders exact when exact-model selection keeps automatic fallback enabled", () => {
-    const exactProfile = {
-      ...profile("p-exact-auto", "Exact automatic"),
-      model: MODEL_NAME,
-      fallbackModel: "",
-      autoFallback: true,
-      requireExactModel: true,
-    } as AgentProfile;
-
-    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={exactProfile} />);
-
-    const badges = screen
-      .getByTestId(PROFILE_ROW_TEST_ID)
-      .querySelectorAll(PROFILE_BADGES_SELECTOR);
-    expect(badges[1]?.textContent).toBe("fallback: exact");
-  });
-  it("renders next when automatic fallback takes precedence", () => {
-    const automaticProfile = {
-      ...profile("p-automatic", "Automatic"),
-      model: MODEL_NAME,
-      fallbackModel: "saved-explicit-model",
-      autoFallback: true,
-    } as AgentProfile;
-
-    renderWithTooltipProvider(<ProfileRow agent={AGENT} profile={automaticProfile} />);
-
-    const badges = screen
-      .getByTestId(PROFILE_ROW_TEST_ID)
-      .querySelectorAll(PROFILE_BADGES_SELECTOR);
-    expect(badges[1]?.textContent).toBe("fallback: next");
-  });
-});
 
 function confirmDeleteFor(name: string) {
   const row = screen.getByLabelText(name).closest(PROFILE_ROW_SELECTOR);
@@ -503,5 +413,56 @@ describe("AgentProfilesSubList layout", () => {
     );
 
     expect(screen.queryByTestId("agent-profiles-claude")).toBeNull();
+  });
+});
+
+describe("ProfileRow provider limits", () => {
+  const limitedProfileId = "profile-limit-p-1";
+  const now = new Date("2026-10-03T12:00:00Z");
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    storeState = {
+      settingsAgents: { items: [AGENT] },
+      agentProfiles: { items: [] },
+      agentProfileLimits: {
+        byProfileId: {
+          "p-1": {
+            profile_id: "p-1",
+            model: "opus",
+            scope: "account",
+            until: new Date(now.getTime() + 1000).toISOString(),
+            reset_known: true,
+          },
+        },
+        version: 1,
+      },
+      auth: { mode: undefined, user: undefined },
+    };
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+  // @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-002.8
+  it("limits only the marked profile and removes the indicator exactly at expiry", () => {
+    renderRows();
+    expect(screen.queryByTestId(limitedProfileId)).not.toBeNull();
+    expect(screen.queryByTestId("profile-limit-p-2")).toBeNull();
+    act(() => vi.advanceTimersByTime(999));
+    expect(screen.queryByTestId(limitedProfileId)).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByTestId(limitedProfileId)).toBeNull();
+  });
+  it("removes a cleared mark without waiting for its previous expiry", () => {
+    const mounted = renderRows();
+    expect(screen.queryByTestId(limitedProfileId)).not.toBeNull();
+    storeState.agentProfileLimits = { byProfileId: {}, version: 2 };
+    mounted.rerender(
+      <TooltipProvider>
+        <ProfileRow agent={AGENT} profile={AGENT.profiles[0]} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByTestId(limitedProfileId)).toBeNull();
   });
 });

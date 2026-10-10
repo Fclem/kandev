@@ -14,7 +14,6 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	dynamicruntime "github.com/kandev/kandev/internal/agent/runtime/dynamic"
-	"github.com/kandev/kandev/internal/agent/runtime/routingerr"
 	"github.com/kandev/kandev/internal/db/dialect"
 )
 
@@ -525,54 +524,6 @@ func (r *Repository) SaveRouteContinuation(ctx context.Context, record dynamicru
 		return dynamicruntime.ErrStaleGeneration
 	}
 	return nil
-}
-
-func (r *Repository) SaveCircuit(ctx context.Context, snapshot dynamicruntime.CircuitSnapshot) error {
-	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
-		INSERT INTO dynamic_resource_circuits
-			(resource_key, state, until_at, code, probe_until, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(resource_key) DO UPDATE SET
-			state = excluded.state,
-			until_at = excluded.until_at,
-			code = excluded.code,
-			probe_until = excluded.probe_until,
-			updated_at = excluded.updated_at
-	`), snapshot.Key, snapshot.State, nullableTime(snapshot.Until), snapshot.Code,
-		nullableTime(snapshot.ProbeUntil), time.Now().UTC())
-	return err
-}
-
-func (r *Repository) LoadCircuits(ctx context.Context) ([]dynamicruntime.CircuitSnapshot, error) {
-	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
-		SELECT resource_key, state, until_at, code, probe_until
-		FROM dynamic_resource_circuits
-		WHERE state <> ? ORDER BY resource_key
-	`), dynamicruntime.CircuitClosed)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var snapshots []dynamicruntime.CircuitSnapshot
-	for rows.Next() {
-		var snapshot dynamicruntime.CircuitSnapshot
-		var until, probeUntil sql.NullTime
-		var state string
-		var code string
-		if err := rows.Scan(&snapshot.Key, &state, &until, &code, &probeUntil); err != nil {
-			return nil, err
-		}
-		snapshot.State = dynamicruntime.CircuitState(state)
-		snapshot.Code = routingerr.Code(code)
-		if until.Valid {
-			snapshot.Until = until.Time
-		}
-		if probeUntil.Valid {
-			snapshot.ProbeUntil = probeUntil.Time
-		}
-		snapshots = append(snapshots, snapshot)
-	}
-	return snapshots, rows.Err()
 }
 
 func (r *Repository) LoadOrCreate(ctx context.Context) ([]byte, error) {

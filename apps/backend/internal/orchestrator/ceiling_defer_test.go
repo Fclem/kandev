@@ -78,6 +78,56 @@ func TestReconcileQueuedTaskStateRepairsLegacyInProgressRow(t *testing.T) {
 	}
 }
 
+func TestReconcileProviderLimitLaunchMovesCreatedTaskToScheduling(t *testing.T) {
+	svc, repo := newServiceWithRealRepo(t)
+	taskRepo := newMockTaskRepo()
+	seedMockTaskState(taskRepo, "provider-limit-created", v1.TaskStateCreated)
+	svc.taskRepo = taskRepo
+	ctx := context.Background()
+	queuedAt := time.Now().UTC()
+	launch, err := models.PutProviderLimitLaunch(nil, models.ProviderLimitLaunch{
+		ID: "launch-created", Kind: models.CeilingLaunchStart, Origin: "automatic",
+		WorkflowStepID: "step-created", MarkKey: "mark-created", Model: "mock-fast",
+		NotBefore: queuedAt.Add(time.Hour), QueuedAt: queuedAt,
+		Payload: map[string]interface{}{"agent_profile_id": "profile-created"},
+	})
+	if err != nil {
+		t.Fatalf("PutProviderLimitLaunch: %v", err)
+	}
+	if err := repo.CreateTask(ctx, &models.Task{
+		ID: "provider-limit-created", Title: "T", State: v1.TaskStateCreated,
+		WorkflowStepID: "step-created",
+		Metadata:       map[string]interface{}{models.MetaKeyDeferredLaunch: launch},
+		CreatedAt:      queuedAt, UpdatedAt: queuedAt,
+	}); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if err := repo.SetTaskMetadataKey(ctx, "provider-limit-created", models.MetaKeyDeferredLaunch, launch); err != nil {
+		t.Fatalf("SetTaskMetadataKey: %v", err)
+	}
+
+	storedTask, err := repo.GetTask(ctx, "provider-limit-created")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	record, _, err := repo.GetTaskDeferredLaunch(ctx, "provider-limit-created")
+	if err != nil {
+		t.Fatalf("GetTaskDeferredLaunch: %v", err)
+	}
+	storedLaunch, err := models.ReadProviderLimitLaunch(record)
+	if err != nil || storedLaunch == nil || storedTask.WorkflowStepID != "step-created" {
+		t.Fatalf("stored launch not eligible for state reconciliation: task=%+v launch=%+v error=%v", storedTask, storedLaunch, err)
+	}
+	blockingSessionID, readable := svc.otherWorkingSessionID(ctx, "provider-limit-created", "")
+	if !readable || blockingSessionID != "" {
+		t.Fatalf("unexpected blocking session before state reconciliation: session=%q readable=%t", blockingSessionID, readable)
+	}
+	svc.reconcileQueuedTaskState(ctx, "provider-limit-created")
+	if taskRepo.updatedStates["provider-limit-created"] != v1.TaskStateScheduling {
+		t.Fatalf("provider limit deferred state = %q, want %q", taskRepo.updatedStates["provider-limit-created"], v1.TaskStateScheduling)
+	}
+}
+
 // TestDeferCeilingRefusalMergesOntoExistingWIPIntent pins AC-46a/AC-12b: a
 // ceiling refusal must not clobber a pre-existing start_when_unblocked intent.
 func TestDeferCeilingRefusalMergesOntoExistingWIPIntent(t *testing.T) {

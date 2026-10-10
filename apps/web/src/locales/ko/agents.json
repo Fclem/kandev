@@ -174,6 +174,7 @@
   "model": "모델",
   "modelHeading": "모델",
   "fallbackNone": "폴백: 없음",
+  "limitedUntil": "{{time}}까지 제한됨",
   "fallbackExact": "폴백: exact",
   "fallbackNext": "폴백: next",
   "fallbackModel": "폴백: {{model}}",

@@ -7,6 +7,7 @@ import Link from "@/components/routing/app-link";
 import { settingsActionClassName } from "@/components/settings/settings-control";
 import { useOptionalAppStore } from "@/components/state-provider";
 import { formatRelativeTime } from "@/lib/utils";
+import { formatDateTime } from "@/lib/i18n/formats";
 import type { TaskStatusSummaryLaunchQueue } from "@/lib/types/task-status-summary";
 import {
   buildLaunchQueueViewModel,
@@ -14,17 +15,23 @@ import {
 } from "@/lib/tasks/launch-queue-view-model";
 
 function reasonLabel(
-  reason: LaunchQueueViewModel["reason"],
-  retrying: boolean,
-  t: (key: string) => string,
+  view: LaunchQueueViewModel,
+  t: (key: string, values?: Record<string, unknown>) => string,
 ): string {
-  switch (reason) {
+  switch (view.reason) {
     case "session_capacity":
       return t("task:launchQueueWaitingGlobalCapacity");
+    case "provider_limit":
+      return t("task:providerLimitLaunchWaiting", {
+        model: view.model,
+        reset: Number.isFinite(Date.parse(view.retryAt)) ? formatDateTime(view.retryAt) : "",
+      });
     case "ownership_unavailable":
       return t("task:launchQueueOwnershipUnavailable");
     case "replay_error":
-      return t(retrying ? "task:launchQueueReplayError" : "task:launchQueueReplayErrorStopped");
+      return t(
+        view.retrying ? "task:launchQueueReplayError" : "task:launchQueueReplayErrorStopped",
+      );
   }
 }
 
@@ -133,9 +140,7 @@ function LaunchQueueStatusContent({
           <p className="min-w-0 break-words text-foreground">
             {t("task:launchQueueDestination", { destination })}
           </p>
-          <p className="min-w-0 break-words text-muted-foreground">
-            {reasonLabel(view.reason, view.retrying, t)}
-          </p>
+          <p className="min-w-0 break-words text-muted-foreground">{reasonLabel(view, t)}</p>
           {view.reason === "session_capacity" && (
             <>
               <p className="min-w-0 break-words text-muted-foreground">
@@ -155,9 +160,11 @@ function LaunchQueueStatusContent({
               </Link>
             </>
           )}
-          <p className="min-w-0 break-words tabular-nums text-muted-foreground">
-            {capacityLabel(view, isConnected, t)}
-          </p>
+          {view.reason === "session_capacity" && (
+            <p className="min-w-0 break-words tabular-nums text-muted-foreground">
+              {capacityLabel(view, isConnected, t)}
+            </p>
+          )}
           <p className="min-w-0 break-words text-muted-foreground">
             {t("task:launchQueueSince", { time: formatRelativeTime(view.queuedAt) })}
           </p>

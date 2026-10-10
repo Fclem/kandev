@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/kandev/kandev/internal/task/models"
 )
@@ -201,5 +202,47 @@ func TestRestoreWIPKeysIsANoOpForAnEmptyClaim(t *testing.T) {
 	}
 	if record := storedDeferredLaunch(t, repo, "wip-restore-empty"); record[models.CeilingDeferredKey] != true {
 		t.Fatalf("empty restore disturbed the record: %+v", record)
+	}
+}
+
+// @covers AC-AGENTS-PROVIDER-LIMIT-RECOVERY-005.2
+func TestTakeWIPKeysPreservesProviderLimitLaunchAndSiblingWait(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	reset := time.Date(2026, 10, 4, 12, 0, 0, 123456789, time.UTC)
+	launch := models.ProviderLimitLaunch{
+		ID: "launch-one", Kind: models.CeilingLaunchStart, Origin: "automatic", WorkflowStepID: "step-one",
+		MarkKey: "limit|binding|account", Model: "one", NotBefore: reset, QueuedAt: reset.Add(-time.Hour),
+		ProbeLease: &models.ProviderLimitProbeLease{Key: "limit|binding|account", Until: reset.Add(time.Minute)},
+		Payload:    map[string]interface{}{"prompt": "original launch input"},
+	}
+	record, err := models.PutProviderLimitLaunch(wipOnlyRecord(), launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait := models.ProviderLimitWait{SessionID: "sibling", TurnID: "failed", MarkKey: launch.MarkKey, Model: "one", NotBefore: reset, QueuedAt: reset, Payload: map[string]interface{}{"prompt": "sibling input"}}
+	record, err = models.PutProviderLimitWait(record, wait)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createTaskWithDeferredLaunch(t, repo, "wip-provider-limit", record)
+	wip, claimed, err := repo.TakeTaskDeferredLaunchWIPKeys(ctx, "wip-provider-limit")
+	if err != nil || !claimed || wip[models.DeferredLaunchStartWhenUnblockedKey] != true {
+		t.Fatalf("dependency intent was not claimed: %+v claimed=%t error=%v", wip, claimed, err)
+	}
+	if _, stolen := wip[models.ProviderLimitLaunchKey]; stolen {
+		t.Fatal("dependency claim stole the automatic launch probe")
+	}
+	if _, stolen := wip[models.ProviderLimitWaitsKey]; stolen {
+		t.Fatal("dependency claim stole an independent session wait")
+	}
+	remaining := storedDeferredLaunch(t, repo, "wip-provider-limit")
+	restored, err := models.ReadProviderLimitLaunch(remaining)
+	if err != nil || restored == nil || restored.ID != launch.ID || restored.ProbeLease == nil || !restored.ProbeLease.Until.Equal(launch.ProbeLease.Until) || restored.Payload["prompt"] != "original launch input" {
+		t.Fatalf("automatic launch changed during dependency claim: %+v error=%v", restored, err)
+	}
+	waits, err := models.ReadProviderLimitWaits(remaining)
+	if err != nil || waits[models.ProviderLimitWaitIdentity(wait.SessionID, wait.TurnID)].Payload["prompt"] != "sibling input" {
+		t.Fatalf("sibling wait changed during dependency claim: %+v error=%v", waits, err)
 	}
 }

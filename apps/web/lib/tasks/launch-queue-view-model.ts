@@ -7,6 +7,8 @@ export type LaunchQueueViewModel = {
   queuedAt: string;
   reason: TaskStatusSummaryLaunchQueue["reason"];
   retrying: boolean;
+  model: string;
+  retryAt: string;
   capacityFreshness: LaunchQueueCapacityFreshness;
   capacity: {
     inUse: number;
@@ -17,6 +19,7 @@ export type LaunchQueueViewModel = {
 
 const LAUNCH_QUEUE_REASONS = new Set<TaskStatusSummaryLaunchQueue["reason"]>([
   "session_capacity",
+  "provider_limit",
   "ownership_unavailable",
   "replay_error",
 ]);
@@ -67,6 +70,8 @@ export function buildLaunchQueueViewModel(
     queuedAt: queue.queued_at,
     reason: queue.reason,
     retrying: queue.retrying,
+    model: queue.model ?? "",
+    retryAt: queue.retry_at ?? "",
     capacityFreshness,
     capacity,
   };

@@ -35,6 +35,7 @@ import { useAgentDiscovery } from "@/hooks/domains/settings/use-agent-discovery"
 import { useAgentRuntimeUpdates } from "@/hooks/domains/settings/use-agent-runtime-updates";
 import { useAgentRuntimeUpdateStatuses } from "@/hooks/domains/settings/use-agent-runtime-update-statuses";
 import { useAvailableAgents } from "@/hooks/domains/settings/use-available-agents";
+import { useAgentProfileLimits } from "@/hooks/domains/settings/use-agent-profile-limits";
 import { AddTUIAgentDialog } from "@/components/settings/add-tui-agent-dialog";
 import { AgentProfilesSubList } from "@/components/settings/agents/agent-profiles-section";
 import { HostShellDialog } from "@/components/settings/host-shell-dialog";
@@ -446,6 +447,7 @@ function useAgentPageState() {
 }
 
 export default function AgentsSettingsPage() {
+  useAgentProfileLimits();
   const {
     canManage,
     savedAgents,

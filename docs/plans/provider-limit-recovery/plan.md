@@ -1,6 +1,6 @@
 ---
 created: 2026-10-03
-status: draft
+status: implemented
 requirements:
   - REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-001
   - REQ-AGENTS-PROVIDER-LIMIT-RECOVERY-002
@@ -227,16 +227,16 @@ reset is the given number of seconds after the error. Other models succeed.
 
 ## Work orders
 
-- [ ] [Task 01: Classify limit timing and scope](task-01-classify-limit-timing-and-scope.md)
-- [ ] [Task 02: Per-profile limit recovery settings](task-02-profile-limit-settings.md)
-- [ ] [Task 03: Shared limit marks](task-03-shared-limit-marks.md)
-- [ ] [Task 04: Kanban limit fallback](task-04-kanban-limit-fallback.md)
-- [ ] [Task 05: Kanban reset waits](task-05-kanban-reset-waits.md)
-- [ ] [Task 06: Automatic launch gate](task-06-automatic-launch-gate.md)
-- [ ] [Task 07: Office limit recovery](task-07-office-limit-recovery.md)
-- [ ] [Task 09: OMP prompt-end limit failure](task-09-omp-prompt-end-limit-failure.md)
-- [ ] [Task 10: Provider limit metrics](task-10-provider-limit-metrics.md)
-- [ ] [Task 08: Documentation and promotion](task-08-docs-and-promotion.md)
+- [x] [Task 01: Classify limit timing and scope](task-01-classify-limit-timing-and-scope.md)
+- [x] [Task 02: Per-profile limit recovery settings](task-02-profile-limit-settings.md)
+- [x] [Task 03: Shared limit marks](task-03-shared-limit-marks.md)
+- [x] [Task 04: Kanban limit fallback](task-04-kanban-limit-fallback.md)
+- [x] [Task 05: Kanban reset waits](task-05-kanban-reset-waits.md)
+- [x] [Task 06: Automatic launch gate](task-06-automatic-launch-gate.md)
+- [x] [Task 07: Office limit recovery](task-07-office-limit-recovery.md)
+- [x] [Task 09: OMP prompt-end limit failure](task-09-omp-prompt-end-limit-failure.md)
+- [x] [Task 10: Provider limit metrics](task-10-provider-limit-metrics.md)
+- [x] [Task 08: Documentation and promotion](task-08-docs-and-promotion.md)
 
 Dependency order: tasks 01 and 02 can run in parallel. Task 09 follows 01 and
 can run in parallel with 02 and 03. Then 03, 04, 05, 06, and 07 run in
@@ -249,15 +249,27 @@ failover. Failover for OMP needs Tasks 03-06 (Kanban) or 07 (Office).
 
 ## Verification results
 
-Implementation: pending.
+Implementation: complete. Tasks 01-10 are done; each work order records its
+scope-specific verification. Focused provider-limit tests pass across
+providerlimit, orchestrator, Office service, and Office scheduler. The complete
+package suites pass for providerlimit, Office service, and Office scheduler.
+The orchestrator package suite fails in two coordinator-stop and teardown tests,
+outside the provider-limit paths:
+`TestStopTaskForCoordinator_PartialFailureAttemptsEveryCandidateAndSkipsReview`
+and `TestStopSession_GracefulTeardownClaimSuppressesLateForceCleanup`.
 
-Design checks on 2026-10-03:
+Task 02 records backend persistence, frontend typecheck and i18n gates, and
+desktop and phone E2E evidence. Task 09 records complete ACP tests, captured
+frame classification tests, and an independent SDK-pipe smoke. Task 07 records
+Office service, scheduler, repository, routing, and routing E2E evidence.
 
-- `python3 scripts/list-docs.py validate`: passed (344 decisions, 1323 specifications).
-- `python3 scripts/lint-spec-files.test.py`: passed (36 tests).
-- `python3 scripts/lint-spec-files.py --all`: passed.
-- PR-documentation `validateCoverage` preflight: `covered`, no errors.
-- `git diff --check`: passed.
+Documentation and lifecycle validation passed:
+
+- `python3 scripts/list-docs.py validate`: 344 decisions and 1323 specifications.
+- `python3 scripts/lint-spec-files.test.py`: 36 tests.
+- `python3 scripts/lint-spec-files.py --all`.
+- Public docs validation: 62 tests and 47 published pages.
+- `git diff --check`.
 
 ## Risks
 

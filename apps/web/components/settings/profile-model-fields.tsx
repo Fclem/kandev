@@ -22,6 +22,7 @@ import {
   FallbackOptionHelp,
   ModelFallbackSettingsShell,
 } from "@/components/settings/model-fallback-settings-shell";
+import { LimitRecoveryFields } from "@/components/settings/limit-recovery-fields";
 import type { ModelConfig, ModeEntry, ModelEntry, ModelDiscovery } from "@/lib/types/http";
 import type { PermissionKey } from "@/lib/agent-permissions";
 import type { CLIFlag } from "@/lib/types/http";
@@ -38,6 +39,8 @@ export type ProfileFormData = {
   /** Legacy automatic-fallback opt-in; hides the fallback_model field. */
   auto_fallback?: boolean;
   require_exact_model?: boolean;
+  limit_fallback?: boolean;
+  resume_after_reset?: boolean;
   mode: string;
   config_options?: Record<string, string>;
   cli_passthrough: boolean;
@@ -332,6 +335,91 @@ function FallbackModelPicker({
 // configured fallback would be redundant. Strict mode disables both fallback
 // controls while preserving their saved values. Compatible mode keeps the
 // legacy explicit/automatic/default order.
+function StrictModelOption({
+  checked,
+  gapCls,
+  labelCls,
+  onChange,
+}: {
+  checked: boolean;
+  gapCls: string;
+  labelCls?: string;
+  onChange: (checked: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className={gapCls}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1">
+          <SettingsFieldLabel className={labelCls}>
+            {t("settings:requireExactModel")}
+          </SettingsFieldLabel>
+          <FallbackOptionHelp kind="strict" />
+        </div>
+        <Switch
+          checked={checked}
+          onCheckedChange={onChange}
+          aria-label={t("settings:requireExactModel")}
+        />
+      </div>
+      <SettingsFieldDescription>{t("settings:requireExactModelHelper")}</SettingsFieldDescription>
+    </div>
+  );
+}
+
+function modelFallbackSectionIsDirty(
+  profile: ProfileFormData,
+  baselineProfile: ProfileFormData | undefined,
+): boolean {
+  return (
+    profileAutoFallbackIsDirty(profile, baselineProfile) ||
+    profileFallbackModelIsDirty(profile, baselineProfile) ||
+    profileRequireExactModelIsDirty(profile, baselineProfile) ||
+    (profile.limit_fallback ?? false) !== (baselineProfile?.limit_fallback ?? false) ||
+    (profile.resume_after_reset ?? false) !== (baselineProfile?.resume_after_reset ?? false)
+  );
+}
+
+function AutomaticFallbackOption({
+  checked,
+  dirty,
+  disabled,
+  gapCls,
+  labelCls,
+  onChange,
+}: {
+  checked: boolean;
+  dirty: boolean;
+  disabled: boolean;
+  gapCls: string;
+  labelCls?: string;
+  onChange: (checked: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      data-testid="profile-auto-fallback-field"
+      className={`min-w-0 ${gapCls}`}
+      data-settings-dirty={dirty}
+      data-settings-dirty-level="container"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1">
+          <SettingsFieldLabel className={labelCls}>{t("settings:autoFallback")}</SettingsFieldLabel>
+          <FallbackOptionHelp kind="automatic" />
+        </div>
+        <Switch
+          checked={checked}
+          onCheckedChange={onChange}
+          disabled={disabled}
+          aria-label={t("settings:autoFallback")}
+        />
+      </div>
+      <SettingsFieldDescription>{t("settings:autoFallbackHelper")}</SettingsFieldDescription>
+    </div>
+  );
+}
+
 export function ModelFallbackSection({
   profile,
   models,
@@ -351,63 +439,46 @@ export function ModelFallbackSection({
   gapCls: string;
   onChange: (patch: Partial<ProfileFormData>) => void;
 }) {
-  const { t } = useTranslation();
   const autoFallback = profile.auto_fallback ?? false;
   const requireExactModel = profile.require_exact_model ?? false;
-  const isDirty =
-    profileAutoFallbackIsDirty(profile, baselineProfile) ||
-    profileFallbackModelIsDirty(profile, baselineProfile) ||
-    profileRequireExactModelIsDirty(profile, baselineProfile);
+  const limitFallback = profile.limit_fallback ?? false;
+  const resumeAfterReset = profile.resume_after_reset ?? false;
+  const fallbackModel = profile.fallback_model ?? "";
 
   return (
     <ModelFallbackSettingsShell
       autoFallback={autoFallback}
       requireExactModel={requireExactModel}
-      strictOption={
-        <div className={gapCls}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-1">
-              <SettingsFieldLabel className={labelCls}>
-                {t("settings:requireExactModel")}
-              </SettingsFieldLabel>
-              <FallbackOptionHelp kind="strict" />
-            </div>
-            <Switch
-              checked={requireExactModel}
-              onCheckedChange={(checked) => onChange({ require_exact_model: checked })}
-              aria-label={t("settings:requireExactModel")}
-            />
-          </div>
-          <SettingsFieldDescription>
-            {t("settings:requireExactModelHelper")}
-          </SettingsFieldDescription>
-        </div>
+      limitFallback={limitFallback}
+      resumeAfterReset={resumeAfterReset}
+      limitRecoveryOption={
+        <LimitRecoveryFields
+          limitFallback={limitFallback}
+          resumeAfterReset={resumeAfterReset}
+          fallbackDisabled={requireExactModel || autoFallback || !fallbackModel.trim()}
+          onLimitFallbackChange={(checked) => onChange({ limit_fallback: checked })}
+          onResumeAfterResetChange={(checked) => onChange({ resume_after_reset: checked })}
+        />
       }
-      fallbackModel={profile.fallback_model ?? ""}
-      isDirty={isDirty}
+      strictOption={
+        <StrictModelOption
+          checked={requireExactModel}
+          gapCls={gapCls}
+          labelCls={labelCls}
+          onChange={(checked) => onChange({ require_exact_model: checked })}
+        />
+      }
+      fallbackModel={fallbackModel}
+      isDirty={modelFallbackSectionIsDirty(profile, baselineProfile)}
       automaticOption={
-        <div
-          data-testid="profile-auto-fallback-field"
-          className={`min-w-0 ${gapCls}`}
-          data-settings-dirty={profileAutoFallbackIsDirty(profile, baselineProfile)}
-          data-settings-dirty-level="container"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-1">
-              <SettingsFieldLabel className={labelCls}>
-                {t("settings:autoFallback")}
-              </SettingsFieldLabel>
-              <FallbackOptionHelp kind="automatic" />
-            </div>
-            <Switch
-              checked={autoFallback}
-              onCheckedChange={(checked) => onChange({ auto_fallback: checked })}
-              disabled={requireExactModel}
-              aria-label={t("settings:autoFallback")}
-            />
-          </div>
-          <SettingsFieldDescription>{t("settings:autoFallbackHelper")}</SettingsFieldDescription>
-        </div>
+        <AutomaticFallbackOption
+          checked={autoFallback}
+          dirty={profileAutoFallbackIsDirty(profile, baselineProfile)}
+          disabled={requireExactModel}
+          gapCls={gapCls}
+          labelCls={labelCls}
+          onChange={(checked) => onChange({ auto_fallback: checked })}
+        />
       }
       explicitOption={
         <FallbackModelPicker

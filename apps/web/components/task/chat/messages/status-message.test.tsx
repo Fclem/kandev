@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { StatusMessage } from "./status-message";
-import { sessionId as toSessionId, taskId as toTaskId, type Message } from "@/lib/types/http";
+import { sessionId as toSessionId, taskId as toTaskId } from "@/lib/types/http";
+import type { Message } from "@/lib/types/http";
 
 afterEach(cleanup);
 
@@ -34,32 +35,22 @@ describe("StatusMessage model selection warnings", () => {
   it("renders the persisted decision context and remediation guidance", () => {
     render(<StatusMessage comment={modelSelectionWarningMessage()} />);
 
-    expect(screen.getByText("The executor could not use the saved model selection.")).toBeTruthy();
     expect(screen.getByText("claude-sonnet-4")).toBeTruthy();
     expect(screen.getByText("claude-haiku-4")).toBeTruthy();
     expect(screen.getByText("claude-acp")).toBeTruthy();
     expect(screen.getByText("executor-1")).toBeTruthy();
-    expect(screen.getByText("Check executor credentials.")).toBeTruthy();
-    expect(screen.getByText("Check the copied agent configuration.")).toBeTruthy();
-    expect(screen.getByText("Check the agent version in the executor.")).toBeTruthy();
-    expect(screen.getByText("The saved model was not advertised by the executor.")).toBeTruthy();
   });
 
-  it("renders a retired variation reason from a persisted legacy warning", () => {
+  it("renders provider-limit model context without executor repair guidance", () => {
     const comment = modelSelectionWarningMessage();
     comment.metadata = {
       ...comment.metadata,
-      reason: "unique_variation_applied",
-      effective_model: "opus[1m]",
-      fallback_model: undefined,
+      reason: "provider_limit",
     };
-
-    render(<StatusMessage comment={comment} />);
-
-    expect(
-      screen.getByText("The executor applied the only advertised variation of the saved model."),
-    ).toBeTruthy();
-    expect(screen.queryByText(/fallback model/i)).toBeNull();
+    const { container } = render(<StatusMessage comment={comment} />);
+    expect(screen.getByText("claude-sonnet-4")).toBeTruthy();
+    expect(screen.getByText("claude-haiku-4")).toBeTruthy();
+    expect(container.querySelector("ul")).toBeNull();
   });
 });
 
@@ -244,3 +235,38 @@ function providerRestoredSuccessMessage(selectorMetadata: Record<string, unknown
     },
   };
 }
+
+describe("StatusMessage manual provider limit notices", () => {
+  it("shows the requested model and exact reset without exposing backend content or retry controls", () => {
+    const comment = modelSelectionWarningMessage();
+    const reset = "2026-10-04T12:00:00.123456789Z";
+    comment.content = "synthetic private backend notice";
+    comment.metadata = {
+      kind: "provider_limit_notice",
+      variant: "warning",
+      model_id: "vendor/limited-model",
+      reset_known: true,
+      retry_at: reset,
+    };
+    const { container } = render(<StatusMessage comment={comment} />);
+    expect(screen.getByText(/vendor\/limited-model/)).toBeTruthy();
+    expect(container.querySelector("time")?.getAttribute("datetime")).toBe(reset);
+    expect(screen.queryByRole("button")).toBeNull();
+    expectNoProviderSecretsInDOM(comment.content);
+  });
+
+  it("does not present an invalid deadline or a private model as a trusted reset", () => {
+    const comment = modelSelectionWarningMessage();
+    comment.content = "synthetic private backend notice";
+    comment.metadata = {
+      kind: "provider_limit_notice",
+      variant: "warning",
+      model_id: `/home/alice/${PRIVATE_PATH}`,
+      reset_known: true,
+      retry_at: "invalid-private-deadline",
+    };
+    const { container } = render(<StatusMessage comment={comment} />);
+    expect(container.querySelector("time")).toBeNull();
+    expectNoProviderSecretsInDOM(comment.content, PRIVATE_PATH, "invalid-private-deadline");
+  });
+});

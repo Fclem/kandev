@@ -51,6 +51,151 @@ func seedAgentProfile(t *testing.T, db *sqlx.DB, id, workspaceID string) {
 	}
 }
 
+func TestProviderLimitRunColumnsExistOnFreshSchema(t *testing.T) {
+	repo, db := newTestRepoWithDB(t)
+	rows, err := db.Queryx(`PRAGMA table_info(runs)`)
+	if err != nil {
+		t.Fatalf("inspect runs schema: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	type column struct {
+		CID          int    `db:"cid"`
+		Name         string `db:"name"`
+		Type         string `db:"type"`
+		NotNull      int    `db:"notnull"`
+		DefaultValue any    `db:"dflt_value"`
+		PrimaryKey   int    `db:"pk"`
+	}
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var got column
+		if err := rows.StructScan(&got); err != nil {
+			t.Fatalf("scan runs column: %v", err)
+		}
+		columns[got.Name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate runs columns: %v", err)
+	}
+	for _, name := range []string{"limit_fallback_model", "provider_limit_wait_key", "provider_limit_probe"} {
+		if !columns[name] {
+			t.Errorf("runs table is missing provider-limit column %q", name)
+		}
+	}
+	fallback := "mock-slow"
+	waitKey := "limit|binding|account"
+	probe := `{"key":"` + waitKey + `","expires_at":"2026-10-04T09:00:00Z"}`
+	run := &runsmodels.Run{
+		AgentProfileID: "office-cto",
+		Reason:         "task_assigned",
+		Payload:        `{}`,
+		Status:         "queued",
+		CoalescedCount: 1,
+	}
+	if err := repo.CreateRun(context.Background(), run); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := repo.SetRunProviderLimitRecoveryState(context.Background(), run.ID, &fallback, &waitKey, probe); err != nil {
+		t.Fatalf("persist provider-limit state: %v", err)
+	}
+	got, err := repo.GetRunByID(context.Background(), run.ID)
+	if err != nil {
+		t.Fatalf("read run: %v", err)
+	}
+	if got.LimitFallbackModel == nil || *got.LimitFallbackModel != fallback {
+		t.Errorf("limit fallback model = %v, want %q", got.LimitFallbackModel, fallback)
+	}
+	if got.ProviderLimitWaitKey == nil || *got.ProviderLimitWaitKey != waitKey {
+		t.Errorf("provider-limit wait key = %v, want %q", got.ProviderLimitWaitKey, waitKey)
+	}
+	if got.ProviderLimitProbe != probe {
+		t.Errorf("provider-limit probe = %s, want exact lease %s", got.ProviderLimitProbe, probe)
+	}
+}
+
+func TestProviderLimitRouteAttemptColumnsExistOnFreshSchema(t *testing.T) {
+	_, db := newTestRepoWithDB(t)
+	rows, err := db.Queryx(`PRAGMA table_info(office_run_route_attempts)`)
+	if err != nil {
+		t.Fatalf("inspect route-attempt schema: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	type column struct {
+		CID          int    `db:"cid"`
+		Name         string `db:"name"`
+		Type         string `db:"type"`
+		NotNull      int    `db:"notnull"`
+		DefaultValue any    `db:"dflt_value"`
+		PrimaryKey   int    `db:"pk"`
+	}
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var got column
+		if err := rows.StructScan(&got); err != nil {
+			t.Fatalf("scan route-attempt column: %v", err)
+		}
+		columns[got.Name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate route-attempt columns: %v", err)
+	}
+	for _, name := range []string{"requested_model", "effective_model", "override_reason"} {
+		if !columns[name] {
+			t.Errorf("route-attempt table is missing provider-limit audit column %q", name)
+		}
+	}
+}
+
+func TestCompleteProviderLimitProbeOwnerWakesWaitersAtomically(t *testing.T) {
+	repo, _ := newTestRepoWithDB(t)
+	ctx := context.Background()
+	resetAt := time.Now().UTC().Add(time.Hour)
+	waitKey := "limit|binding|account"
+	newRun := func() *runsmodels.Run {
+		t.Helper()
+		run := &runsmodels.Run{
+			AgentProfileID: "office-cto",
+			Reason:         "task_assigned",
+			Payload:        `{}`,
+			Status:         "queued",
+			CoalescedCount: 1,
+		}
+		if err := repo.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run: %v", err)
+		}
+		if err := repo.ParkRunForProviderLimit(ctx, run.ID, waitKey, resetAt); err != nil {
+			t.Fatalf("park run: %v", err)
+		}
+		return run
+	}
+	owner := newRun()
+	waiter := newRun()
+	probe := `{"Key":"limit|binding|account","Token":"lease"}`
+	if err := repo.SetRunProviderLimitRecoveryState(ctx, owner.ID, nil, &waitKey, probe); err != nil {
+		t.Fatalf("set owner probe: %v", err)
+	}
+	if err := repo.CompleteProviderLimitProbeOwner(ctx, owner.ID, waitKey); err != nil {
+		t.Fatalf("complete probe owner: %v", err)
+	}
+	gotOwner, err := repo.GetRunByID(ctx, owner.ID)
+	if err != nil {
+		t.Fatalf("read owner: %v", err)
+	}
+	gotWaiter, err := repo.GetRunByID(ctx, waiter.ID)
+	if err != nil {
+		t.Fatalf("read waiter: %v", err)
+	}
+	if gotOwner.ProviderLimitWaitKey != nil || gotOwner.ProviderLimitProbe != "" {
+		t.Fatalf("owner state was not cleared: %+v", gotOwner)
+	}
+	if gotWaiter.ProviderLimitWaitKey != nil || gotWaiter.RoutingBlockedStatus != nil ||
+		gotWaiter.EarliestRetryAt != nil || gotWaiter.ScheduledRetryAt != nil {
+		t.Fatalf("waiter was not released: %+v", gotWaiter)
+	}
+}
+
 func TestSetRunResolvedRoute_PersistsExecutionProfileAndSnapshots(t *testing.T) {
 	repo, _ := newTestRepoWithDB(t)
 	ctx := context.Background()
@@ -124,6 +269,10 @@ func TestClearAllParkedRoutingForWorkspace_ClearsOnlyTargetWorkspace(t *testing.
 	if err := repo.ParkRunForProviderCapacity(ctx, runB.ID, "blocked_provider_action_required", retry); err != nil {
 		t.Fatalf("park runB: %v", err)
 	}
+	waitKey := "limit|binding|account"
+	if err := repo.SetRunProviderLimitRecoveryState(ctx, runA.ID, nil, &waitKey, ""); err != nil {
+		t.Fatalf("set keyed provider-limit wait: %v", err)
+	}
 
 	// Clear ws-a only.
 	if err := repo.ClearAllParkedRoutingForWorkspace(ctx, "ws-a"); err != nil {
@@ -151,6 +300,9 @@ func TestClearAllParkedRoutingForWorkspace_ClearsOnlyTargetWorkspace(t *testing.
 	}
 	if gotA.Status != "queued" {
 		t.Errorf("ws-a status = %q, want queued", gotA.Status)
+	}
+	if gotA.ProviderLimitWaitKey == nil || *gotA.ProviderLimitWaitKey != waitKey {
+		t.Errorf("workspace routing disable lost keyed provider-limit wait: %v", gotA.ProviderLimitWaitKey)
 	}
 
 	// ws-b must be untouched.

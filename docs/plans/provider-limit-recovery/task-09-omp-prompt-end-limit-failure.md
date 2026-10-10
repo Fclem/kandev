@@ -1,7 +1,7 @@
 ---
 id: "09-omp-prompt-end-limit-failure"
 title: "OMP prompt-end limit failure"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "01-classify-limit-timing-and-scope"
@@ -71,7 +71,7 @@ git diff --check
 
 ## Files likely touched
 
-- `apps/backend/internal/agentctl/server/adapter/transport/acp/{adapter_updates.go,adapter_prompt.go,adapter_prompt_test.go}`
+- `apps/backend/internal/agentctl/server/adapter/transport/acp/{adapter.go,adapter_updates.go,adapter_prompt.go,omp_prompt_end.go,omp_prompt_end_test.go}`
 - `apps/backend/internal/agentctl/types/streams/provider_error.go`
 - `apps/backend/internal/orchestrator/event_handlers_transient_omp_test.go`
 
@@ -100,4 +100,25 @@ Task 01 (OMP rules, `RetryAfterMs`, request-ID redaction).
 
 ## Results
 
-Pending.
+Completed. Strict final Anthropic 429 rate-limit envelopes are owned by the
+current OMP session and prompt generation. Their raw chunks are suppressed;
+the terminal event carries the sanitized inner message and numeric retry delay.
+Any later assistant chunk, including an empty chunk, replaces the candidate.
+Malformed, quoted, split, foreign-agent, foreign-session, and stale-generation
+evidence preserves normal completion.
+
+RED: the captured spend envelope crossed the normalized boundary with its
+request ID; eligible envelopes produced completion instead of failure. GREEN:
+all focused `TestOMPPromptEnd` tests and the complete ACP package passed.
+`TestClassifyKanbanFailureOMP` passed both real SDK-pipe boundary cases after
+fixing its fixture to provide the required cwd. The JSON-round-tripped
+diagnostic classified as account quota or model rate with exact millisecond
+reset arithmetic. `git diff --check` passed.
+
+An independent disposable executable exercised Initialize, NewSession, and
+Prompt through real ACP SDK pipes. Observed: one terminal error, zero
+completions, `source=omp_acp`, model `anthropic/claude-opus-5-5`,
+`retry_after_ms=274579000`, account-scope `quota_limited`, reset
+`2026-10-07T00:50:00.375668822Z` from observation
+`2026-10-03T20:33:41.375668822Z`. No request ID or textual retry suffix crossed
+the diagnostic boundary. The executable was removed after the smoke run.

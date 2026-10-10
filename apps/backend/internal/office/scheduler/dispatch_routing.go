@@ -10,11 +10,14 @@ import (
 
 	"go.uber.org/zap"
 
+	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
+	"github.com/kandev/kandev/internal/agent/runtime/providerlimit"
 	"github.com/kandev/kandev/internal/agent/runtime/routingerr"
 	"github.com/kandev/kandev/internal/office/models"
 	sqliterepo "github.com/kandev/kandev/internal/office/repository/sqlite"
 	"github.com/kandev/kandev/internal/office/routing"
 	"github.com/kandev/kandev/internal/office/service"
+	runmodels "github.com/kandev/kandev/internal/runs/models"
 )
 
 // TaskStarterWithSession optionally returns the id of the agent session
@@ -71,6 +74,10 @@ func (ss *SchedulerService) DispatchWithRouting(
 	ctx context.Context, run *models.Run, agent *models.AgentInstance,
 	launch LaunchContext,
 ) (bool, bool, error) {
+	if run != nil && run.ProviderLimitWaitKey != nil &&
+		*run.ProviderLimitWaitKey != "" && run.ProviderLimitProbe == "" {
+		return false, true, nil
+	}
 	if ss.resolver == nil || (ss.taskStarter == nil && ss.runSessionLauncher == nil) {
 		return false, false, nil
 	}
@@ -268,10 +275,30 @@ func (ss *SchedulerService) tryCandidates(
 	var prev *routing.Candidate
 	for i := range res.Candidates {
 		candidate := res.Candidates[i]
+		requestedModel := candidate.Model
+		providerLimitOverride := false
+		if run.LimitFallbackModel != nil && *run.LimitFallbackModel != "" &&
+			run.ResolvedExecutionProfileID != nil &&
+			candidate.ExecutionProfileID == *run.ResolvedExecutionProfileID {
+			candidate.Model = *run.LimitFallbackModel
+			providerLimitOverride = true
+		}
+		if !providerLimitOverride {
+			override, skip, block, err := ss.applyProviderLimitToCandidate(ctx, run, &candidate)
+			if err != nil || block != nil {
+				return false, block, err
+			}
+			if skip {
+				continue
+			}
+			providerLimitOverride = override
+		}
 		candidateLaunch := continuationLaunchContext(
 			launch, prior, run.RouteCycleBaselineSeq, candidate,
 		)
-		seq, err := ss.recordAttemptStart(ctx, run, candidate, res.RequestedTier, res.TierSource)
+		seq, err := ss.recordAttemptStart(
+			ctx, run, candidate, res.RequestedTier, res.TierSource, requestedModel, providerLimitOverride,
+		)
 		if err != nil {
 			return false, nil, err
 		}
@@ -280,6 +307,9 @@ func (ss *SchedulerService) tryCandidates(
 			return ss.handleLaunchDeferred(ctx, run, agent.WorkspaceID, seq)
 		}
 		if launchErr == nil {
+			if providerLimitOverride {
+				providerlimit.ObserveFallback(ss.logger.Zap(), providerlimit.MetricContextOffice, providerlimit.MetricFallbackSwitched)
+			}
 			if prev != nil {
 				// We walked past at least one prior candidate — that's
 				// a fallback hop. Recorded once per hop, regardless of
@@ -302,6 +332,19 @@ func (ss *SchedulerService) tryCandidates(
 		}
 		ss.recordRouteAttempt(agent.WorkspaceID,
 			string(candidate.ProviderID), outcome, string(classified.Code))
+		if providerLimitOverride {
+			fallbackOutcome := providerlimit.MetricFallbackFailed
+			if agentruntime.IsModelUnavailableBootstrapFailure(launchErr) {
+				fallbackOutcome = providerlimit.MetricFallbackNotAdvertised
+			}
+			providerlimit.ObserveFallback(ss.logger.Zap(), providerlimit.MetricContextOffice, fallbackOutcome)
+			if err := ss.finishAttempt(
+				ctx, run.ID, seq, RouteAttemptOutcomeFailedOther, classified, time.Now().UTC(),
+			); err != nil {
+				return false, nil, err
+			}
+			return false, nil, launchErr
+		}
 		if officeShortRetryAllowed(classified) {
 			retryCount, countErr := ss.shortRouteRetryCount(ctx, run, candidate)
 			if countErr != nil {
@@ -336,6 +379,48 @@ func (ss *SchedulerService) tryCandidates(
 		prev = &c
 	}
 	return ss.exhaustedCandidates(ctx, run, agent, res.RequestedTier)
+}
+
+// applyProviderLimitToCandidate switches a limited candidate to the profile's
+// unmarked fallback model, parks the run until a trusted reset, or reports
+// that the candidate must be skipped.
+func (ss *SchedulerService) applyProviderLimitToCandidate(
+	ctx context.Context, run *runmodels.Run, candidate *routing.Candidate,
+) (override, skip bool, block *routing.BlockReason, err error) {
+	if ss.providerLimits == nil || run.ProviderLimitProbe != "" {
+		return false, false, nil, nil
+	}
+	subject, subjectErr := ss.providerLimits.ResolveSubject(ctx, candidate.ExecutionProfileID)
+	if subjectErr != nil || subject.Dynamic || subject.Profile == nil {
+		return false, false, nil, nil
+	}
+	mark, limited := ss.providerLimits.Lookup(subject, candidate.Model)
+	if !limited {
+		return false, false, nil, nil
+	}
+	fallbackModel := subject.Profile.FallbackModel
+	if subject.Profile.LimitFallback && fallbackModel != "" && fallbackModel != candidate.Model {
+		if _, fallbackLimited := ss.providerLimits.Lookup(subject, fallbackModel); !fallbackLimited {
+			if err := ss.repo.SetRunProviderLimitRecoveryState(
+				ctx, run.ID, &fallbackModel, run.ProviderLimitWaitKey, run.ProviderLimitProbe,
+			); err != nil {
+				return false, false, nil, err
+			}
+			run.LimitFallbackModel = &fallbackModel
+			candidate.Model = fallbackModel
+			return true, false, nil, nil
+		}
+	}
+	if subject.Profile.ResumeAfterReset && mark.TrustedReset(time.Now().UTC()) {
+		waitKey := mark.Key
+		if err := ss.repo.ParkRunForProviderLimit(ctx, run.ID, waitKey, mark.Until); err == nil {
+			run.ProviderLimitWaitKey = &waitKey
+			return false, false, &routing.BlockReason{
+				Status: routing.StatusWaitingForCapacity, EarliestRetry: mark.Until,
+			}, nil
+		}
+	}
+	return false, true, nil, nil
 }
 
 func continuationLaunchContext(
@@ -381,7 +466,8 @@ func latestFailedExecutionProfile(
 // the sole producer).
 func (ss *SchedulerService) recordAttemptStart(
 	ctx context.Context, run *models.Run,
-	candidate routing.Candidate, tier routing.Tier, tierSource string,
+	candidate routing.Candidate, tier routing.Tier, tierSource, requestedModel string,
+	providerLimitOverride bool,
 ) (int, error) {
 	seq, err := ss.repo.IncrementRouteAttemptSeq(ctx, run.ID)
 	if err != nil {
@@ -396,8 +482,13 @@ func (ss *SchedulerService) recordAttemptStart(
 		Model:              candidate.Model,
 		Tier:               string(tier),
 		TierSource:         tierSource,
+		RequestedModel:     requestedModel,
+		EffectiveModel:     candidate.Model,
 		Outcome:            RouteAttemptOutcomeLaunched,
 		StartedAt:          time.Now().UTC(),
+	}
+	if providerLimitOverride {
+		attempt.OverrideReason = "provider_limit"
 	}
 	if err := ss.repo.AppendRouteAttempt(ctx, &attempt); err != nil {
 		return 0, err

@@ -351,6 +351,7 @@ func (r *Repository) initDynamicRoutingSchema() error {
 			until_at TIMESTAMP,
 			code TEXT NOT NULL DEFAULT '',
 			probe_until TIMESTAMP,
+			reset_known INTEGER NOT NULL DEFAULT 0,
 			updated_at TIMESTAMP NOT NULL
 		);
 
@@ -360,7 +361,11 @@ func (r *Repository) initDynamicRoutingSchema() error {
 			created_at TIMESTAMP NOT NULL
 		);
 	`, dialect.BlobType(r.db.DriverName())))
-	return err
+	if err != nil {
+		return err
+	}
+	return r.migrate.Apply("dynamic_resource_circuits.reset_known",
+		`ALTER TABLE dynamic_resource_circuits ADD COLUMN reset_known INTEGER NOT NULL DEFAULT 0`)
 }
 
 const taskResourceCleanupSchemaDDL = `

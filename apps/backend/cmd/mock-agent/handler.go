@@ -393,6 +393,10 @@ func handlePrompt(e *emitter, prompt, model string) {
 	if handleAutopilotParentQuestion(e, cmd) {
 		return
 	}
+	if _, _, _, ok := parseProviderLimitScenario(cmd); ok {
+		e.text("Provider limit recovery continued using " + model + ".")
+		return
+	}
 
 	// Script mode: each line is a command (e2e:message, e2e:mcp:*, etc.)
 	if isScriptMode(cmd) {

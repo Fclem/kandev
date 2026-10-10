@@ -1,7 +1,7 @@
 ---
 id: "05-kanban-reset-waits"
 title: "Kanban reset waits"
-status: pending
+status: done
 wave: 4
 depends_on:
   - "04-kanban-limit-fallback"
@@ -109,7 +109,7 @@ git diff --check
 
 - `apps/backend/internal/task/models/{ceiling_record.go,provider_limit_record.go}`
 - `apps/backend/internal/orchestrator/{provider_limit_failure.go,provider_limit_deferral.go,provider_limit_waker.go,ceiling_replay.go,ceiling_defer.go,event_handlers_transient.go}`
-- `apps/web/components/task/chat/messages/action-message.tsx`, `apps/web/locales/*/task.json`
+- `apps/web/components/task/chat/messages/action-message.tsx`, `apps/web/src/locales/*/task.json`
 - `apps/web/e2e/tests/task/{provider-limit-recovery,mobile-provider-limit-recovery}.spec.ts`
 
 ## Dependencies
@@ -135,4 +135,20 @@ Task 04.
 
 ## Results
 
-Pending.
+Completed with durable session/failed-turn waits, exact reset timers, scoped
+cancellation, and restart-safe probe ownership.
+
+- Model and orchestrator verification blocks passed, including the full
+  ceiling set. Regressions cover three sessions sharing one FIFO probe,
+  waking all siblings after success, failed-probe renewal without early
+  replay, failed owner writes, and stale completion/cancel protection.
+- Consecutive wait budgets reset only after durable successful mark clearing.
+  Stop, delete, archive, and manual supersession invalidate owned waits.
+- Action-message and recovery-card suites passed: 63 tests. Typecheck,
+  seven-language completeness, and the new-code i18n ratchet passed.
+- Native desktop and phone suites both passed: two scenarios per project.
+  Wait/reload/cancel and exact-deadline same-conversation auto-resume ran
+  against the real backend, ACP adapter, and canonical mock provider.
+- Desktop and phone screenshots were inspected. Phone Cancel remains inline,
+  content-width, and at least 44px tall; horizontal-overflow assertions passed.
+- Go formatting, frontend formatting, and `git diff --check` passed.

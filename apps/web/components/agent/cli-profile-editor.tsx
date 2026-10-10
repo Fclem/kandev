@@ -9,9 +9,7 @@ import { Button } from "@kandev/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { useAppStore } from "@/components/state-provider";
 import { useAvailableAgents } from "@/hooks/domains/settings/use-available-agents";
-import { ModelCombobox } from "@/components/settings/model-combobox";
-import { ModeCombobox } from "@/components/settings/mode-combobox";
-import { ModelFallbackFields } from "@/components/agent/cli-profile-fallback-fields";
+import { ModelModeFields } from "@/components/agent/cli-profile-model-fields";
 import { CLIFlagsField } from "@/components/settings/cli-flags-field";
 import {
   createAgentAction,
@@ -57,6 +55,8 @@ type FormState = {
   fallbackModel: string;
   autoFallback: boolean;
   requireExactModel: boolean;
+  limitFallback: boolean;
+  resumeAfterReset: boolean;
   mode: string;
   cliFlags: CLIFlag[];
   cliPassthrough: boolean;
@@ -76,6 +76,8 @@ function fromExistingProfile(profile: AgentProfile): FormState {
     fallbackModel: profile.fallbackModel ?? "",
     autoFallback: profile.autoFallback ?? false,
     requireExactModel: profile.requireExactModel ?? false,
+    limitFallback: profile.limitFallback ?? false,
+    resumeAfterReset: profile.resumeAfterReset ?? false,
     mode: profile.mode ?? "",
     cliFlags: profile.cliFlags ?? [],
     cliPassthrough: profile.cliPassthrough ?? false,
@@ -98,6 +100,8 @@ function fromDefaultAgent(
     fallbackModel: "",
     autoFallback: false,
     requireExactModel: false,
+    limitFallback: false,
+    resumeAfterReset: false,
     mode: cfg?.current_mode_id ?? "",
     cliFlags: seedDefaultCLIFlags(permissionSettings),
     cliPassthrough: false,
@@ -338,6 +342,10 @@ function ModelModeFieldsBinding({
       fallbackModel={form.fallbackModel}
       autoFallback={form.autoFallback}
       requireExactModel={form.requireExactModel}
+      limitFallback={form.limitFallback}
+      resumeAfterReset={form.resumeAfterReset}
+      onLimitFallbackChange={(v) => patch({ limitFallback: v })}
+      onResumeAfterResetChange={(v) => patch({ resumeAfterReset: v })}
       mode={form.mode}
       onModelChange={(v) => patch({ model: v })}
       onFallbackModelChange={(v) => patch({ fallbackModel: v })}
@@ -345,92 +353,6 @@ function ModelModeFieldsBinding({
       onRequireExactModelChange={(v) => patch({ requireExactModel: v })}
       onModeChange={(v) => patch({ mode: v })}
     />
-  );
-}
-
-type ModelModeFieldsProps = {
-  modelConfig: NonNullable<AvailableAgent["model_config"]> | null;
-  model: string;
-  fallbackModel: string;
-  autoFallback: boolean;
-  requireExactModel: boolean;
-  mode: string;
-  onModelChange: (v: string) => void;
-  onFallbackModelChange: (v: string) => void;
-  onAutoFallbackChange: (v: boolean) => void;
-  onRequireExactModelChange: (v: boolean) => void;
-  onModeChange: (v: string) => void;
-};
-
-function ModelModeFields({
-  modelConfig,
-  model,
-  fallbackModel,
-  autoFallback,
-  requireExactModel,
-  mode,
-  onModelChange,
-  onFallbackModelChange,
-  onAutoFallbackChange,
-  onRequireExactModelChange,
-  onModeChange,
-}: ModelModeFieldsProps) {
-  const { t } = useTranslation();
-  if (!modelConfig) {
-    return <p className="text-xs text-muted-foreground">{t("common:pickACliClientToLoad")}</p>;
-  }
-  const availableModels = modelConfig.available_models ?? [];
-  const startModelGone = Boolean(model && !availableModels.some((m) => m.id === model));
-  const fallbackModelGone = Boolean(
-    fallbackModel && !availableModels.some((m) => m.id === fallbackModel),
-  );
-  return (
-    <div className="grid grid-cols-1 gap-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <Label>{t("common:model")}</Label>
-          <ModelCombobox
-            value={model}
-            onChange={onModelChange}
-            models={
-              startModelGone
-                ? [
-                    ...availableModels,
-                    {
-                      id: model,
-                      name: `${model} (${t("settings:startModelUnavailable")})`,
-                      disabled: true,
-                    },
-                  ]
-                : availableModels
-            }
-            currentModelId={modelConfig.current_model_id}
-          />
-        </div>
-        {(modelConfig.available_modes ?? []).length > 0 && (
-          <div>
-            <Label>{t("common:mode")}</Label>
-            <ModeCombobox
-              value={mode}
-              onChange={onModeChange}
-              modes={modelConfig.available_modes ?? []}
-              currentModeId={modelConfig.current_mode_id}
-            />
-          </div>
-        )}
-      </div>
-      <ModelFallbackFields
-        availableModels={availableModels}
-        fallbackModel={fallbackModel}
-        fallbackModelGone={fallbackModelGone}
-        autoFallback={autoFallback}
-        requireExactModel={requireExactModel}
-        currentModelId={modelConfig.current_model_id}
-        onFallbackModelChange={onFallbackModelChange}
-        onAutoFallbackChange={onAutoFallbackChange}
-        onRequireExactModelChange={onRequireExactModelChange}
-      />
-    </div>
   );
 }
 
@@ -585,6 +507,8 @@ async function saveExistingProfile(id: string, form: FormState): Promise<AgentPr
     fallback_model: form.fallbackModel ?? "",
     auto_fallback: form.autoFallback,
     require_exact_model: form.requireExactModel,
+    limit_fallback: form.limitFallback,
+    resume_after_reset: form.resumeAfterReset,
     mode: form.mode || undefined,
     allow_indexing: form.allowIndexing,
     auto_approve: form.autoApprove,
@@ -601,6 +525,8 @@ async function saveNewProfile(form: FormState, settingsAgents: Agent[]): Promise
     fallback_model: form.fallbackModel ?? "",
     auto_fallback: form.autoFallback,
     require_exact_model: form.requireExactModel,
+    limit_fallback: form.limitFallback,
+    resume_after_reset: form.resumeAfterReset,
     mode: form.mode || undefined,
     allow_indexing: form.allowIndexing,
     auto_approve: form.autoApprove,

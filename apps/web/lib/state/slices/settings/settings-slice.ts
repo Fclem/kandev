@@ -31,6 +31,7 @@ export const defaultSettingsState: SettingsSliceState = {
   agentDiscovery: { items: [], loading: false, loaded: false },
   availableAgents: { items: [], tools: [], loading: false, loaded: false },
   agentProfiles: { items: [], version: 0, orderByAgent: {} },
+  agentProfileLimits: { byProfileId: {}, version: 0 },
   installJobs: { byAgent: {} },
   updateJobs: { byAgent: {} },
   agentRuntimeUpdates: { byAgent: {}, checkedAt: 0, loading: false },
@@ -580,6 +581,15 @@ export const createSettingsSlice: StateCreator<
   SettingsSlice
 > = (set) => ({
   ...defaultSettingsState,
+  setAgentProfileLimits: (limits, expectedVersion) =>
+    set((draft) => {
+      if (expectedVersion !== undefined && draft.agentProfileLimits.version !== expectedVersion)
+        return;
+      draft.agentProfileLimits.byProfileId = Object.fromEntries(
+        limits.map((limit) => [limit.profile_id, limit]),
+      );
+      draft.agentProfileLimits.version += 1;
+    }),
   setAgentRuntimeUpdateStatuses: (statuses, checkedAt) =>
     set((draft) => {
       draft.agentRuntimeUpdates.byAgent = Object.fromEntries(

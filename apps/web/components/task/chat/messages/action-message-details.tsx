@@ -43,6 +43,8 @@ export type ActionMeta = {
   max_attempts?: number;
   retry_in_seconds?: number;
   retry_at?: string;
+  limit_wait?: boolean;
+  limit_wait_identity?: string;
   failure_code?: string;
   code?: string;
   causes?: AgentErrorCause[];

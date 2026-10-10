@@ -42,6 +42,8 @@ function hasCoreProfileFieldsChanged(draft: AgentProfile, savedProfile: AgentPro
     (draft.fallbackModel ?? "") !== (savedProfile.fallbackModel ?? ""),
     (draft.autoFallback ?? false) !== (savedProfile.autoFallback ?? false),
     (draft.requireExactModel ?? false) !== (savedProfile.requireExactModel ?? false),
+    (draft.limitFallback ?? false) !== (savedProfile.limitFallback ?? false),
+    (draft.resumeAfterReset ?? false) !== (savedProfile.resumeAfterReset ?? false),
     (draft.mode ?? "") !== (savedProfile.mode ?? ""),
     !areConfigOptionsEqual(draft.configOptions, savedProfile.configOptions),
   ].some(Boolean);

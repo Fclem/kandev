@@ -207,7 +207,7 @@ func (r *Repository) TakeTaskDeferredLaunchWIPKeys(
 	claimedKeys := make(map[string]interface{})
 	retained := make(map[string]interface{})
 	for key, value := range record {
-		if models.IsCeilingRecordKey(key) {
+		if models.IsCeilingRecordKey(key) || models.IsProviderLimitRecordKey(key) {
 			retained[key] = value
 			continue
 		}

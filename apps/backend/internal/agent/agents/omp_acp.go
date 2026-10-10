@@ -61,6 +61,8 @@ func (a *OmpACP) Description() string {
 func (a *OmpACP) Enabled() bool     { return true }
 func (a *OmpACP) DisplayOrder() int { return 18 }
 
+func (a *OmpACP) SupportsProviderQualifiedModels() bool { return true }
+
 func (a *OmpACP) Logo(v LogoVariant) []byte {
 	if v == LogoDark {
 		return ompACPLogoDark

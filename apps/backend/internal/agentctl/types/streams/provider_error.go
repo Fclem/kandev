@@ -18,7 +18,7 @@ const MaxCompleteProviderDiagnosticBytes = 1024
 
 var (
 	providerMessageURLPattern        = regexp.MustCompile(`(?i)https?://[^\s]+`)
-	providerMessageIdentifierPattern = regexp.MustCompile(`(?i)\b(?:wrk|ses|run)_[A-Za-z0-9_-]+\b`)
+	providerMessageIdentifierPattern = regexp.MustCompile(`(?i)\b(?:wrk|ses|run|req)_[A-Za-z0-9_-]+\b`)
 )
 
 // SanitizeProviderMessage redacts likely credentials (via
@@ -65,6 +65,8 @@ const (
 	// ProviderErrorSourceCursorACP marks Cursor's bounded HTTP/2 stream-reset
 	// diagnostic reconstructed from its terminal ACP control chunk.
 	ProviderErrorSourceCursorACP = "cursor_acp"
+	// ProviderErrorSourceOMPACP attests a final strict Anthropic limit envelope.
+	ProviderErrorSourceOMPACP = "omp_acp"
 	// ProviderErrorSourceACPPrompt marks a safe diagnostic projected from a
 	// terminal ACP session/prompt JSON-RPC error.
 	ProviderErrorSourceACPPrompt = "acp_prompt"
@@ -92,6 +94,7 @@ type ProviderError struct {
 	RemediationURL string     `json:"remediation_url,omitempty"`
 	OccurredAt     time.Time  `json:"occurred_at,omitempty"`
 	ResetAt        *time.Time `json:"reset_at,omitempty"`
+	RetryAfterMs   *int64     `json:"retry_after_ms,omitempty"`
 }
 
 func (e *ProviderError) Valid() bool {

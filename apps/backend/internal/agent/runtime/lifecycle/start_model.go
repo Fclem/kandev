@@ -57,6 +57,18 @@ type StartModelPolicy struct {
 	RequireExactModel bool
 }
 
+type startModelPolicyContextKey struct{}
+
+// WithStartModelPolicy overrides model selection for this launch, not the saved profile.
+func WithStartModelPolicy(ctx context.Context, policy StartModelPolicy) context.Context {
+	return context.WithValue(ctx, startModelPolicyContextKey{}, policy)
+}
+
+func StartModelPolicyFromContext(ctx context.Context) (StartModelPolicy, bool) {
+	policy, ok := ctx.Value(startModelPolicyContextKey{}).(StartModelPolicy)
+	return policy, ok
+}
+
 // ModelSelectionOutcome describes the executor-authoritative result.
 type ModelSelectionOutcome string
 

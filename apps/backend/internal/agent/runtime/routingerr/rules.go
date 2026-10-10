@@ -7,6 +7,7 @@ type rule struct {
 	pattern    *regexp.Regexp
 	code       Code
 	confidence Confidence
+	scope      string
 }
 
 // Provider rules match provider error signatures, never a bare topic word.
@@ -48,12 +49,20 @@ const (
 		`(?:(?:pro|max|team|enterprise)\s+(?:or\s+(?:pro|max|team|enterprise)\s+)?)?subscription\b|` +
 		`(?:your\s+)?subscription\s+(?:has\s+)?(?:expired|is\s+required|required|is\s+inactive|is\s+not\s+active|not\s+active)\b|` +
 		`no\s+active\s+subscription\b)`
+	// claudeSpendLimitSignature is Anthropic's account spend-limit rejection:
+	// the "enforced_spend_limit_reached" error code at the start of an error
+	// line, or a 429 rate_limit_error envelope whose message names the spend
+	// limit. Prose that merely mentions a spend limit does not match.
+	claudeSpendLimitSignature = `(?im)^\s*(?:(?:Error|Internal\s+error|API\s+Error):\s*)?(?:429\s+)?` +
+		`(?:(?:rate_limit_error:\s*)?enforced_spend_limit_reached\b|` +
+		`\{[^\n]*"rate_limit_error"[^\n]*\bspend\s+limit\b)`
 )
 
 var providerRules = map[string][]rule{
 	"claude-acp": {
-		mustRule("claude.stderr.quota.v1", `(?im)^\s*(?:(?:Error|Internal\s+error|API\s+Error):\s*)?(?:anthropic_quota_exceeded\b|(?:your\s+)?credit\s+balance\s+is\s+too\s+low\b|insufficient\s+credits\b)`, CodeQuotaLimited, ConfHigh),
-		mustRule("claude.stderr.session_limit.v1", `(?im)^\s*(?:(?:Internal\s+error|Error):\s*)?(?:you['’]ve|you\s+have)\s+hit\s+your\s+session\s+limit\b`, CodeQuotaLimited, ConfHigh),
+		mustRule("claude.stderr.quota.v1", `(?im)^\s*(?:(?:Error|Internal\s+error|API\s+Error):\s*)?(?:anthropic_quota_exceeded\b|(?:your\s+)?credit\s+balance\s+is\s+too\s+low\b|insufficient\s+credits\b)`, CodeQuotaLimited, ConfHigh, LimitScopeAccount),
+		mustRule("claude.stderr.session_limit.v1", `(?im)^\s*(?:(?:Internal\s+error|Error):\s*)?(?:you['’]ve|you\s+have)\s+hit\s+your\s+session\s+limit\b`, CodeQuotaLimited, ConfHigh, LimitScopeAccount),
+		mustRule("claude.stderr.spend_limit.v1", claudeSpendLimitSignature, CodeQuotaLimited, ConfHigh, LimitScopeAccount),
 		mustRule("claude.stderr.rate.v1", claudeRateLimitSignature, CodeRateLimited, ConfHigh),
 		// A proxy can reject every account credential before it sends a request
 		// upstream. This is a hard credential condition; a retry or a switch
@@ -71,16 +80,16 @@ var providerRules = map[string][]rule{
 			"codex.stderr.quota.v1",
 			`(?im)^\s*(?:(?:AI_APICallError|Error|Internal\s+error|API\s+Error):\s*)?(?:insufficient_quota\b|quota_exceeded\b|usagelimitexceeded\b|(?:you['’]ve|you have)\s+hit\s+your\s+usage\s+limit\b)|`+
 				`(?im)^\s*\{[^\n]*"codexErrorInfo"\s*:\s*"usageLimitExceeded"`,
-			CodeQuotaLimited, ConfHigh,
+			CodeQuotaLimited, ConfHigh, LimitScopeAccount,
 		),
 		mustRule("codex.stderr.rate.v1", `(?im)^\s*(?:(?:AI_APICallError|Error|Internal\s+error|API\s+Error):\s*)?(?:rate_limit_exceeded\b|too\s+many\s+requests\b)`, CodeRateLimited, ConfHigh),
 		mustRule("codex.stderr.auth.v1", `(?i)invalid api key|incorrect api key|missing api key`, CodeMissingCredentials, ConfHigh),
 		mustRule("codex.stderr.model.v1", `(?i)model_not_found`, CodeModelUnavailable, ConfHigh),
 	},
 	"opencode-acp": {
-		mustRule("opencode.stderr.usage_limit.v1", `(?im)^\s*(?:(?:AI_APICallError|Error|Internal\s+error|API\s+Error):\s*)?\b(?:\d+[- ]hour(?:s)?|daily|weekly|monthly)\s+usage\s+limit\s+reached\b`, CodeQuotaLimited, ConfHigh),
+		mustRule("opencode.stderr.usage_limit.v1", `(?im)^\s*(?:(?:AI_APICallError|Error|Internal\s+error|API\s+Error):\s*)?\b(?:\d+[- ]hour(?:s)?|daily|weekly|monthly)\s+usage\s+limit\s+reached\b`, CodeQuotaLimited, ConfHigh, LimitScopeAccount),
 		// Explicit credit exhaustion takes precedence over generic payment wording.
-		mustRule("opencode.stderr.credit.v1", `(?im)^\s*(?:AI_APICallError:[^\n]*\b(?:credit\s+limit\s+reached|out\s+of\s+credits?|insufficient\s+credits?|insufficient\s+balance)\b|(?:(?:Error|Internal\s+error|API\s+Error):\s*)?\b(?:credit\s+limit\s+reached|out\s+of\s+credits?|insufficient\s+credits?|insufficient\s+balance)\b)`, CodeQuotaLimited, ConfHigh),
+		mustRule("opencode.stderr.credit.v1", `(?im)^\s*(?:AI_APICallError:[^\n]*\b(?:credit\s+limit\s+reached|out\s+of\s+credits?|insufficient\s+credits?|insufficient\s+balance)\b|(?:(?:Error|Internal\s+error|API\s+Error):\s*)?\b(?:credit\s+limit\s+reached|out\s+of\s+credits?|insufficient\s+credits?|insufficient\s+balance)\b)`, CodeQuotaLimited, ConfHigh, LimitScopeAccount),
 		mustRule("opencode.stderr.subscription.v1", `(?im)^\s*(?:(?:AI_APICallError|Error|Internal\s+error|API\s+Error):\s*)?payment\s+required\b`, CodeSubscriptionRequired, ConfHigh),
 		mustRule("opencode.stderr.quota.v1", genericQuotaSignature, CodeQuotaLimited, ConfMedium),
 		mustRule("opencode.stderr.rate.v1", genericRateLimitSignature, CodeRateLimited, ConfHigh),
@@ -96,10 +105,28 @@ var providerRules = map[string][]rule{
 		mustRule("amp.stderr.rate.v1", genericRateLimitSignature, CodeRateLimited, ConfHigh),
 		mustRule("amp.stderr.quota.v1", genericQuotaSignature, CodeQuotaLimited, ConfMedium),
 	},
+	"gemini": {
+		mustRule("gemini.stderr.quota.v1", `(?i)resource_exhausted|exceeded your current quota`, CodeQuotaLimited, ConfHigh),
+	},
+	"omp-acp": {
+		mustRule("omp.chunk.anthropic_spend.v1", `(?i)spend limit|enforced_spend_limit_reached`, CodeQuotaLimited, ConfHigh, LimitScopeAccount),
+		mustRule("omp.chunk.anthropic_rate.v1", `(?s).+`, CodeRateLimited, ConfHigh),
+	},
 }
 
-func mustRule(id, pat string, code Code, conf Confidence) rule {
-	return rule{id: id, pattern: regexp.MustCompile(pat), code: code, confidence: conf}
+func mustRule(id, pat string, code Code, conf Confidence, scope ...string) rule {
+	r := rule{id: id, pattern: regexp.MustCompile(pat), code: code, confidence: conf}
+	if len(scope) > 0 {
+		r.scope = scope[0]
+	}
+	return r
+}
+
+func matchProviderRulesWithSource(in Input, text string) (*Error, bool) {
+	if in.ProviderID == "omp-acp" && in.DiagnosticSource != "omp_acp" {
+		return nil, false
+	}
+	return matchProviderRules(in.ProviderID, text)
 }
 
 // HasProviderRules reports whether providerID is a rules catalogue key (an
@@ -122,6 +149,7 @@ func matchProviderRules(providerID, text string) (*Error, bool) {
 				Code:           r.code,
 				Confidence:     r.confidence,
 				ClassifierRule: r.id,
+				LimitScope:     r.scope,
 			}, true
 		}
 	}

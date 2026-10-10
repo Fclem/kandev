@@ -1,7 +1,7 @@
 ---
 id: "03-shared-limit-marks"
 title: "Shared limit marks"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "01-classify-limit-timing-and-scope"
@@ -144,4 +144,33 @@ endpoint).
 
 ## Results
 
-Pending.
+Implemented the shared provider-limit service, opaque binding descriptors,
+provider-qualified account domains, durable reset knowledge, atomic batch
+clears, exact-token ten-minute probes, SQL migration/restore, concrete Kanban
+recording/clearing, privacy-safe REST/WS projection, and localized profile pills.
+Dynamic routing remains independent of `limit|` marks; Office recording and
+fallback/wait behavior remain assigned to the later work orders.
+
+Observed RED: SQL lost reset knowledge and omitted closed probe ownership;
+the global API leaked an Office-private profile; the profile indicator was
+absent; root StrictMode cancelled the initial offline read. These regressions
+and atomic-clear, commit-rollback and lease failure cases now pass. Existing
+wording/mirror tests were removed rather than repinned.
+
+Verification:
+
+- Complete backend block passed: targeted durable/provider persistence,
+  full providerlimit/dynamic packages, all `Circuit` SQL tests, and
+  `TestProviderLimitMark` orchestrator tests.
+- Focused real API/broadcast tests passed. Native backend compiled.
+- Final profile/hook/settings-store run: 39 tests passed. Earlier root-store
+  and WS handler runs passed. Typecheck, i18n check, i18n ratchet and scoped
+  ESLint passed; scoped lint has no remaining warnings.
+- Native runtime smoke with dynamic routing explicitly disabled restored a
+  real SQLite mark. The API returned only the five public fields. Desktop
+  and 393px coarse-pointer phone rendered the pill without horizontal
+  overflow. Real expiry removed the phone pill and returned HTTP 200 with
+  an empty projection. Screenshots were visually inspected.
+- `git diff --check` passed. Disposable smoke source and owned UI/browser
+  services were removed/stopped; the owned PostgreSQL service remains for
+  later package verification.

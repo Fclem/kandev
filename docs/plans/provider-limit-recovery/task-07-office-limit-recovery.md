@@ -1,7 +1,7 @@
 ---
 id: "07-office-limit-recovery"
 title: "Office limit recovery"
-status: pending
+status: done
 wave: 6
 depends_on:
   - "06-automatic-launch-gate"
@@ -97,7 +97,7 @@ Run this complete block from the repository root:
 (cd apps/backend && go test -tags fts5 ./internal/office/service -run 'TestProviderLimit|TestPostStartFallback|SchedulerIntegration' -count=1)
 (cd apps/backend && go test -tags fts5 ./internal/office/scheduler ./internal/office/repository/sqlite ./internal/office/routing -count=1)
 (cd apps/web && pnpm run typecheck && pnpm run i18n:check && pnpm run i18n:ratchet)
-(cd apps/web && pnpm e2e:run --project chromium tests/office/office-routing-recovery.spec.ts)
+(cd apps/web && pnpm e2e:run --project routing tests/office/office-routing-recovery.spec.ts)
 git diff --check
 ```
 
@@ -134,4 +134,11 @@ Task 06 (launch-scoped exact fallback policy).
 
 ## Results
 
-Pending.
+- Added durable Office run fallback/wait/probe ownership, profile-local same-provider fallback routing, provider-limit route-attempt audit, and active-mark dispatch gating.
+- Successful probes durably clear marks and release only their persisted lease; owner cleanup and sibling wake now commit atomically. Startup reconciliation retains owners and waits across failed mark-clear, lease-release, and owner-transaction writes.
+- Added injected persistence-failure/restart coverage, stopped/non-limit probe retention, limit renewal, reset trust boundaries, disabled-routing dispatch guards, different-waiter lease handoff, workspace-disable wait preservation, and Office health independence.
+- Backend checks passed:
+  `go test -trimpath -tags fts5 ./internal/office/service -run 'TestProviderLimit|TestPostStartFallback|SchedulerIntegration' -count=1`
+  and
+  `go test -trimpath -tags fts5 ./internal/office/scheduler ./internal/office/repository/sqlite ./internal/office/routing -count=1`.
+- Web typecheck, `i18n:check`, and `i18n:ratchet` passed. Office routing recovery E2E passed (1 test, `routing` project; the `chromium` project excludes `office-routing-*`). `git diff --check` passed.

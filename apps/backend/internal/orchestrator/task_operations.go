@@ -815,6 +815,7 @@ func (s *Service) startCreatedSession(
 		return nil, nil
 	}
 	defer seam2Res.releaseIfNotConsumed()
+	ctx = seam2Res.providerLimit.launchContext(ctx)
 
 	// Reserve any pending "start it later" intent for the rest of this start.
 	// Taken here rather than just before the launch: everything below persists
@@ -931,6 +932,9 @@ func (s *Service) startCreatedSession(
 		effectiveProfileID = activeSession.AgentProfileID
 	}
 	s.recordManualOverrideIfAdmitted(ctx, taskID, sessionID, seam2Res.manualOverride, seam2Res.population, seam2Res.populationKnown, seam2Res.ceiling)
+	if err := s.recordManualProviderLimitNotice(ctx, taskID, sessionID, originFromAutoStart(autoStart), ""); err != nil {
+		s.logger.Warn("provider limit notice write failed", zap.Error(err))
+	}
 
 	if effectiveProfileID, err = s.resolveDynamicLaunchExecution(ctx, session, effectiveProfileID, true); err != nil {
 		return nil, err
@@ -1646,7 +1650,7 @@ func (s *Service) startTask(ctx context.Context, taskID string, agentProfileID s
 		}
 	}
 	seam1Res, deferred, err := s.admitOrDeferSeam1(ctx, taskID, origin,
-		seam1StartPayload(agentProfileID, executorID, executorProfileID, priority, prompt, workflowStepID, planMode, autoStart, attachments, opts))
+		seam1StartPayload(preflightProfileID, executorID, executorProfileID, priority, prompt, workflowStepID, planMode, autoStart, attachments, opts))
 	if err != nil {
 		return nil, err
 	}
@@ -1654,6 +1658,7 @@ func (s *Service) startTask(ctx context.Context, taskID string, agentProfileID s
 		return nil, ErrCeilingLaunchDeferred
 	}
 	defer seam1Res.releaseIfNotConsumed()
+	ctx = seam1Res.providerLimit.launchContext(ctx)
 
 	// Reserve any pending "start it later" intent for the whole of this start,
 	// taken before the session is prepared rather than just before the launch:
@@ -1865,6 +1870,9 @@ func (s *Service) startTask(ctx context.Context, taskID string, agentProfileID s
 	// selected profile and before the first prompt, preserving the original
 	// session tab.
 	s.applyWorkflowSessionConfigBeforeLaunchForStep(ctx, taskID, sessionID, workflowSessionConfigStepID)
+	if err := s.recordManualProviderLimitNotice(ctx, taskID, sessionID, origin, ""); err != nil {
+		s.logger.Warn("provider limit notice write failed", zap.Error(err))
+	}
 	// Surface the newly created session before LaunchPreparedSession performs
 	// potentially slow environment setup (for example, a Docker health check).
 	// The frontend adopts this CREATED session and can render
@@ -3585,7 +3593,11 @@ func (s *Service) resumeTaskSessionWithContinuation(
 		return nil, nil
 	}
 	defer seam4Res.releaseIfNotConsumed()
+	resumeCtx = seam4Res.providerLimit.launchContext(resumeCtx)
 	s.recordManualOverrideIfAdmitted(ctx, taskID, sessionID, seam4Res.manualOverride, seam4Res.population, seam4Res.populationKnown, seam4Res.ceiling)
+	if err := s.recordManualProviderLimitNotice(ctx, taskID, sessionID, launchOrigin(options.Origin), ""); err != nil {
+		s.logger.Warn("provider limit notice write failed", zap.Error(err))
+	}
 
 	if _, err := s.resolveDynamicLaunchExecution(resumeCtx, session, session.AgentProfileID, true); err != nil {
 		if attemptErr := s.validateResumeAttempt(attempt); attemptErr != nil {
@@ -4271,7 +4283,11 @@ func (s *Service) coldResumeSession(
 		return startupAttempt, refusal
 	}
 	defer seam3Res.releaseIfNotConsumed()
+	ctx = seam3Res.providerLimit.launchContext(ctx)
 	s.recordManualOverrideIfAdmitted(ctx, session.TaskID, sessionID, seam3Res.manualOverride, seam3Res.population, seam3Res.populationKnown, seam3Res.ceiling)
+	if err := s.recordManualProviderLimitNotice(ctx, session.TaskID, sessionID, origin, ""); err != nil {
+		s.logger.Warn("provider limit notice write failed", zap.Error(err))
+	}
 
 	// Bounded to two attempts: a fresh cold resume, and — if the launched
 	// agent never reports prompt-ready — one reap-and-retry, mirroring the
@@ -5467,23 +5483,64 @@ func (s *Service) StopSession(ctx context.Context, sessionID string, reason stri
 	if err := s.authorizeSession(ctx, sessionID); err != nil {
 		return err
 	}
+	guard, release := s.acquireCancelInFlightGuard(sessionID)
+	var result executor.SessionStopResult
+	stopErr := func() error {
+		defer release()
+		guard.Lock()
+		defer guard.Unlock()
 
-	// A direct session stop is a true retry-ending transition. Retire the
-	// in-memory loop and its durable notice before stopping the execution.
-	s.resetTransientRetryWithContext(ctx, sessionID, true)
+		session, err := s.repo.GetTaskSession(ctx, sessionID)
+		if err != nil {
+			return err
+		}
 
-	s.logger.Info("stopping session execution",
-		zap.String("session_id", sessionID),
-		zap.String("reason", reason),
-		zap.Bool("force", force))
-	if s.lspLeases != nil {
-		s.lspLeases.StopLSPLeasesForSession(sessionID)
+		// A direct session stop is a true retry-ending transition. Retire the
+		// in-memory loop and its durable notice before stopping the execution.
+		s.resetTransientRetryWithContext(ctx, sessionID, true)
+
+		s.logger.Info("stopping session execution",
+			zap.String("session_id", sessionID),
+			zap.String("reason", reason),
+			zap.Bool("force", force))
+		if s.lspLeases != nil {
+			s.lspLeases.StopLSPLeasesForSession(sessionID)
+		}
+
+		result, err = s.executor.StopSessionDetailed(ctx, session, reason, force)
+		if result.ExecutionID == "" {
+			if err != nil {
+				return fmt.Errorf("%w: %w", executor.ErrExecutionNotFound, err)
+			}
+			return executor.ErrExecutionNotFound
+		}
+		if err != nil {
+			// The legacy stop path logs a failed session-state write but still
+			// stops the live execution. Keep that behavior while retaining the
+			// exact execution ID for teardown ownership.
+			s.logger.Error("failed to update agent session status",
+				zap.String("session_id", sessionID),
+				zap.Error(err))
+		}
+
+		intent := executionTeardownIntentGraceful
+		if force {
+			intent = executionTeardownIntentForce
+		}
+		s.claimExecutionTeardown(sessionID, result.ExecutionID, intent)
+
+		if session != nil {
+			if _, err := s.removePendingProviderLimitWait(ctx, session.TaskID, sessionID, "", false); err != nil {
+				return err
+			}
+		}
+		s.clearDynamicUnclassifiedStreakForStop(ctx, sessionID)
+		return nil
+	}()
+	if result.ExecutionID != "" {
+		result.ScheduleTeardown()
 	}
-	if err := s.executor.Stop(ctx, sessionID, reason, force); err != nil {
-		return err
-	}
-	s.clearDynamicUnclassifiedStreakForStop(ctx, sessionID)
-	return nil
+	return stopErr
 }
 
 // StopSessionSynchronously is the internal cleanup variant of StopSession. It
@@ -5491,11 +5548,21 @@ func (s *Service) StopSession(ctx context.Context, sessionID string, reason stri
 // rows have been removed, and it waits for the executor process to exit before
 // returning to the destructive worktree cleanup path.
 func (s *Service) StopSessionSynchronously(ctx context.Context, sessionID string, reason string, force bool) error {
+	guard, release := s.acquireCancelInFlightGuard(sessionID)
+	defer release()
+	guard.Lock()
+	defer guard.Unlock()
+	session, _ := s.repo.GetTaskSession(ctx, sessionID)
 	if s.lspLeases != nil {
 		s.lspLeases.StopLSPLeasesForSession(sessionID)
 	}
 	if err := s.executor.StopSessionSynchronously(ctx, sessionID, reason, force); err != nil {
 		return err
+	}
+	if session != nil {
+		if _, err := s.removePendingProviderLimitWait(ctx, session.TaskID, sessionID, "", false); err != nil {
+			return err
+		}
 	}
 	s.clearDynamicUnclassifiedStreakForStop(ctx, sessionID)
 	return nil
@@ -5563,6 +5630,9 @@ func (s *Service) DeleteSession(ctx context.Context, sessionID string) error {
 	// Retire the retry loop before removing the row so a buffered provider
 	// failure cannot recreate notice state for a deleted session ID.
 	s.resetTransientRetryWithContext(ctx, sessionID, true)
+	if _, err := s.removePendingProviderLimitWait(ctx, taskID, sessionID, "", false); err != nil {
+		return err
+	}
 
 	s.logger.Info("deleting session",
 		zap.String("session_id", sessionID),
@@ -6502,9 +6572,10 @@ type promptTaskOptions struct {
 	// and before the first provider or model-switch I/O that can carry the
 	// prompt. Queue receipts use this boundary because admission can reject a
 	// stale claim.
-	afterDispatchAdmission func() error
-	disableDispatchRetry   bool
-	preservePromptContext  bool
+	afterDispatchAdmission    func() error
+	disableDispatchRetry      bool
+	providerLimitWaitIdentity string
+	preservePromptContext     bool
 	// reserveTurnUntilDispatch persists detached-resume ownership before agentctl
 	// dispatch, while delaying the visible turn.started event until acceptance.
 	reserveTurnUntilDispatch bool
@@ -6734,6 +6805,9 @@ func (s *Service) promptTask(ctx context.Context, taskID, sessionID string, prom
 	if err != nil {
 		return nil, err
 	}
+	if err := s.recordManualProviderLimitNotice(ctx, taskID, sessionID, origin, model); err != nil {
+		s.logger.Warn("provider limit notice write failed", zap.Error(err))
+	}
 
 	// After a lazy backend restart the session may be WAITING_FOR_INPUT with no agent process yet.
 	_, hadExecutionBeforeEnsure := s.executor.GetExecutionBySession(sessionID)
@@ -6812,7 +6886,8 @@ func (s *Service) promptTask(ctx context.Context, taskID, sessionID string, prom
 		}
 	}
 	runBeforeDispatch := runBeforeDispatchOnce(options.beforeDispatch)
-	runAfterDispatchAdmission := runBeforeDispatchOnce(options.afterDispatchAdmission)
+	afterDispatchAdmission := s.providerLimitDispatchAdmission(resumePromptCtx, taskID, sessionID, origin, options)
+	runAfterDispatchAdmission := runBeforeDispatchOnce(afterDispatchAdmission)
 
 	// Keep the replay payload only after this provider attempt is accepted.
 	// Admission and dispatch failures must not retain prompt attachments until
@@ -6922,6 +6997,40 @@ func (s *Service) promptTask(ctx context.Context, taskID, sessionID string, prom
 		runAfterDispatchAdmission,
 		releaseDispatchGuard, resumeAttempt,
 	)
+}
+
+// providerLimitDispatchAdmission extends the caller's post-admission hook so a
+// wait replay binds its probe, and a manual prompt retires any pending wait.
+func (s *Service) providerLimitDispatchAdmission(ctx context.Context, taskID, sessionID string, origin launchOrigin, options promptTaskOptions) func() error {
+	if options.providerLimitWaitIdentity == "" && origin != launchOriginManual {
+		return options.afterDispatchAdmission
+	}
+	return func() error {
+		if options.afterDispatchAdmission != nil {
+			if err := options.afterDispatchAdmission(); err != nil {
+				return err
+			}
+		}
+		if options.providerLimitWaitIdentity != "" {
+			return s.bindProviderLimitProbe(ctx, taskID, sessionID, options.providerLimitWaitIdentity)
+		}
+		return s.retireManualProviderLimitWait(ctx, taskID, sessionID)
+	}
+}
+
+// retireManualProviderLimitWait removes the session's pending wait because a
+// manual prompt supersedes it.
+func (s *Service) retireManualProviderLimitWait(ctx context.Context, taskID, sessionID string) error {
+	session, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	identity, _ := session.Metadata[providerLimitWaitIdentityKey].(string)
+	changed, err := s.removePendingProviderLimitWait(ctx, taskID, sessionID, identity, false)
+	if changed {
+		s.resolveProviderLimitWaitNotice(ctx, sessionID, identity)
+	}
+	return err
 }
 
 // runPromptTurn is promptTask's dispatch tail: it validates and runs the
@@ -9583,7 +9692,7 @@ func (s *Service) checkSessionPromptable(taskID, sessionID string, state models.
 // Returns the (possibly remapped) error for the caller to surface.
 func (s *Service) handlePromptError(ctx context.Context, taskID, sessionID string, previousSessionState models.TaskSessionState, err error) error {
 	var retainedFailure *lifecycle.RetainedPromptFailureError
-	if errors.As(err, &retainedFailure) {
+	if errors.As(err, &retainedFailure) || s.providerLimitRecoveryOwnsReportedFailure(ctx, sessionID, err) {
 		return err
 	}
 	if isTransientPromptError(err) && s.isSessionResetInProgress(sessionID) {

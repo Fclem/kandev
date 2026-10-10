@@ -84,13 +84,11 @@ describe("reorderAgentProfilesAction", () => {
   it("bounds the real fetch request with a fifteen-second abort signal", async () => {
     const controller = new AbortController();
     const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ agent_id: "agent", profile_ids: ["b", "a"], revision: 2 }), {
-          status: 200,
-        }),
-      );
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ agent_id: "agent", profile_ids: ["b", "a"], revision: 2 }), {
+        status: 200,
+      }),
+    );
     vi.stubGlobal("fetch", fetcher);
     try {
       await reorderAgentProfilesAction("agent", ["b", "a"]);

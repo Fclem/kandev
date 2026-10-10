@@ -222,13 +222,13 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 	case "message_streaming":
 		s.handleMessageStreamingEvent(ctx, payload)
 		if observedOutput {
-			s.recordTurnFirstOutput(sessionID, eventExecutionID, payload.Data.PromptGeneration, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
+			s.recordTurnFirstOutput(sessionID, eventExecutionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
 		}
 
 	case "thinking_streaming":
 		s.handleThinkingStreamingEvent(ctx, payload)
 		if observedOutput {
-			s.recordTurnFirstOutput(sessionID, eventExecutionID, payload.Data.PromptGeneration, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
+			s.recordTurnFirstOutput(sessionID, eventExecutionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
 		}
 
 	case streams.EventTypeResponseAttemptReset:
@@ -327,7 +327,7 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		s.handleAgentLogEvent(ctx, payload)
 
 	case streams.EventTypeTurnStarted:
-		s.startTurnTiming(sessionID, eventExecutionID, payload.Data.PromptGeneration, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
+		s.startTurnTiming(sessionID, eventExecutionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
 		s.persistNativeCodexTurnID(ctx, payload)
 		s.retireCountedEmptyTurn(sessionID)
 		// D3: the single turn boundary for the whole feature. Clearing here,
@@ -2357,7 +2357,7 @@ func (s *Service) markReadyTurnAt(sessionID, executionID string, promptGeneratio
 	if sessionID == "" || executionID == "" || turnID == "" {
 		return
 	}
-	s.closeTurnTiming(sessionID, executionID, promptGeneration, turnID, closedAt)
+	s.closeTurnTiming(sessionID, executionID, turnID, closedAt)
 	expiresAt := closedAt.Add(completedExecutionRetention)
 	mark := readyTurnMark{turnID: turnID, expiresAt: expiresAt, closedAt: closedAt}
 	if promptGeneration == 0 {

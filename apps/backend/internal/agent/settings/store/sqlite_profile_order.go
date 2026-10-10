@@ -112,10 +112,7 @@ func (r *sqliteRepository) updateAgentProfileWithMembershipLocks(
 			_ = tx.Rollback()
 			return err
 		}
-		committedEnabled, err := r.updateAgentProfile(ctx, tx, profile, enabled)
-		if err == nil && updateExtra != nil {
-			err = updateExtra(tx)
-		}
+		committedEnabled, err := r.updateAgentProfileWithExtra(ctx, tx, profile, enabled, updateExtra)
 		if err != nil {
 			_ = tx.Rollback()
 			return err
@@ -127,6 +124,20 @@ func (r *sqliteRepository) updateAgentProfileWithMembershipLocks(
 		return nil
 	}
 	return ErrProfileChanged
+}
+
+func (r *sqliteRepository) updateAgentProfileWithExtra(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	profile *models.AgentProfile,
+	enabled *bool,
+	updateExtra func(*sqlx.Tx) error,
+) (bool, error) {
+	committedEnabled, err := r.updateAgentProfile(ctx, tx, profile, enabled)
+	if err == nil && updateExtra != nil {
+		err = updateExtra(tx)
+	}
+	return committedEnabled, err
 }
 
 func resetProfileOrderOnMembershipMove(

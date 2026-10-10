@@ -416,5 +416,17 @@
   "runtimeFallbackReview": "Reveja o pacote alternativo gerido antes de alterar futuros arranques remotos ou em contentores.",
   "options": "Opções",
   "agentOptions": "Opções do agente",
-  "changesApplyImmediately": "As alterações são aplicadas imediatamente."
+  "changesApplyImmediately": "As alterações são aplicadas imediatamente.",
+  "cliVersionLabel": "{{name}} {{version}}",
+  "cliVersionUnknown": "Versão de {{name}} desconhecida: {{reason}}",
+  "modelDiscoveryFromCli": "Modelos de {{executable}} {{version}}",
+  "modelDiscoveryFromCliNoVersion": "Modelos de {{executable}}",
+  "modelDiscoveryNoListing": "{{executable}} não publica uma lista de modelos. Introduza um ID de modelo para usar outro modelo.",
+  "modelDiscoveryFailed": "Falha na deteção de modelos: {{reason}}",
+  "useCustomModelId": "Usar \"{{model}}\" como ID de modelo",
+  "modelDiscoveryNotInstalled": "A ferramenta de linha de comandos não está disponível para o Kandev.",
+  "modelDiscoveryNotLoggedIn": "A ferramenta de linha de comandos não tem sessão iniciada.",
+  "modelDiscoveryTimeout": "O pedido da lista de modelos excedeu o tempo limite.",
+  "modelSourceCli": "CLI",
+  "modelSourceAcp": "ACP"
 }

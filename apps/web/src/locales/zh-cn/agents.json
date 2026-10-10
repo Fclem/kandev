@@ -416,5 +416,17 @@
   "runtimeFallbackReview": "在更改后续远程或容器启动前，请先查看托管后备软件包。",
   "options": "选项",
   "agentOptions": "智能体选项",
-  "changesApplyImmediately": "更改会立即生效。"
+  "changesApplyImmediately": "更改会立即生效。",
+  "cliVersionLabel": "{{name}} {{version}}",
+  "cliVersionUnknown": "{{name}} 版本未知：{{reason}}",
+  "modelDiscoveryFromCli": "模型来自 {{executable}} {{version}}",
+  "modelDiscoveryFromCliNoVersion": "模型来自 {{executable}}",
+  "modelDiscoveryNoListing": "{{executable}} 未发布模型列表。输入模型 ID 以使用其他模型。",
+  "modelDiscoveryFailed": "模型发现失败：{{reason}}",
+  "useCustomModelId": "将“{{model}}”用作模型 ID",
+  "modelDiscoveryNotInstalled": "Kandev 无法使用该命令行工具。",
+  "modelDiscoveryNotLoggedIn": "该命令行工具尚未登录。",
+  "modelDiscoveryTimeout": "模型列表请求超时。",
+  "modelSourceCli": "CLI",
+  "modelSourceAcp": "ACP"
 }

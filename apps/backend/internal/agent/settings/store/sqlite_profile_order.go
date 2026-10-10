@@ -108,11 +108,9 @@ func (r *sqliteRepository) updateAgentProfileWithMembershipLocks(
 			_ = tx.Rollback()
 			continue
 		}
-		if actualAgentID != profile.AgentID || actualWorkspaceID != profile.WorkspaceID {
-			if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE agent_profiles SET sort_order = 0 WHERE id = ?`), profile.ID); err != nil {
-				_ = tx.Rollback()
-				return err
-			}
+		if err := resetProfileOrderOnMembershipMove(ctx, tx, profile, actualAgentID, actualWorkspaceID); err != nil {
+			_ = tx.Rollback()
+			return err
 		}
 		committedEnabled, err := r.updateAgentProfile(ctx, tx, profile, enabled)
 		if err == nil && updateExtra != nil {
@@ -129,6 +127,19 @@ func (r *sqliteRepository) updateAgentProfileWithMembershipLocks(
 		return nil
 	}
 	return ErrProfileChanged
+}
+
+func resetProfileOrderOnMembershipMove(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	profile *models.AgentProfile,
+	agentID, workspaceID string,
+) error {
+	if agentID == profile.AgentID && workspaceID == profile.WorkspaceID {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE agent_profiles SET sort_order = 0 WHERE id = ?`), profile.ID)
+	return err
 }
 
 func (r *sqliteRepository) lockProfileUpdate(

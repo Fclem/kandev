@@ -36,9 +36,9 @@ func TestTurnTimingBindsSyntheticTurnAtFirstOutputOnce(t *testing.T) {
 	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
 	firstOutput := started.Add(125 * time.Millisecond)
 
-	svc.startTurnTiming("session", "", started)
-	svc.recordTurnFirstOutput("session", "turn-a", firstOutput)
-	svc.recordTurnFirstOutput("session", "turn-b", firstOutput.Add(time.Second))
+	svc.startTurnTiming("session", "execution", 0, "", started)
+	svc.recordTurnFirstOutput("session", "execution", 0, "turn-a", firstOutput)
+	svc.recordTurnFirstOutput("session", "execution", 0, "turn-b", firstOutput.Add(time.Second))
 
 	svc.turnTimingMu.Lock()
 	got := svc.turnTimings["session"]
@@ -50,12 +50,12 @@ func TestTurnTimingBindsSyntheticTurnAtFirstOutputOnce(t *testing.T) {
 func TestTurnTimingRepeatedStartReplacesPriorTurn(t *testing.T) {
 	svc := &Service{}
 	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
-	svc.startTurnTiming("session", "turn-a", started)
-	svc.recordTurnFirstOutput("session", "turn-a", started.Add(time.Second))
+	svc.startTurnTiming("session", "execution", 0, "turn-a", started)
+	svc.recordTurnFirstOutput("session", "execution", 0, "turn-a", started.Add(time.Second))
 
 	nextStart := started.Add(2 * time.Second)
-	svc.startTurnTiming("session", "turn-b", nextStart)
-	svc.closeTurnTiming("session", "turn-a", nextStart.Add(time.Second))
+	svc.startTurnTiming("session", "execution", 0, "turn-b", nextStart)
+	svc.closeTurnTiming("session", "execution", 0, "turn-a", nextStart.Add(time.Second))
 
 	svc.turnTimingMu.Lock()
 	got := svc.turnTimings["session"]
@@ -63,4 +63,66 @@ func TestTurnTimingRepeatedStartReplacesPriorTurn(t *testing.T) {
 	require.Equal(t, "turn-b", got.turnID)
 	require.True(t, got.firstOutputAt.IsZero())
 	require.True(t, got.completedAt.IsZero())
+}
+func TestTurnTimingRejectsMismatchedCloseMark(t *testing.T) {
+	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name        string
+		sessionID   string
+		executionID string
+		promptGen   uint64
+		turnID      string
+	}{
+		{name: "session", sessionID: "other-session", executionID: "execution", promptGen: 2, turnID: "turn"},
+		{name: "execution", sessionID: "session", executionID: "other-execution", promptGen: 2, turnID: "turn"},
+		{name: "prompt generation", sessionID: "session", executionID: "execution", promptGen: 1, turnID: "turn"},
+		{name: "turn", sessionID: "session", executionID: "execution", promptGen: 2, turnID: "other-turn"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &Service{}
+			svc.startTurnTiming("session", "execution", 2, "turn", started)
+			svc.recordTurnFirstOutput("session", "execution", 2, "turn", started.Add(time.Second))
+
+			svc.closeTurnTiming(tt.sessionID, tt.executionID, tt.promptGen, tt.turnID, started.Add(2*time.Second))
+
+			svc.turnTimingMu.Lock()
+			got := svc.turnTimings["session"]
+			svc.turnTimingMu.Unlock()
+			require.True(t, got.completedAt.IsZero())
+		})
+	}
+}
+
+func TestTurnTimingUsesTerminalCloseBoundary(t *testing.T) {
+	svc := &Service{}
+	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
+	firstOutput := started.Add(time.Second)
+	terminalClose := started.Add(4 * time.Second)
+	svc.startTurnTiming("session", "execution", 2, "turn", started)
+	svc.recordTurnFirstOutput("session", "execution", 2, "turn", firstOutput)
+
+	svc.closeTurnTiming("session", "execution", 2, "turn", terminalClose)
+
+	svc.turnTimingMu.Lock()
+	got := svc.turnTimings["session"]
+	svc.turnTimingMu.Unlock()
+	measurement, ok := got.measurement("turn", got.completedAt, false)
+	require.True(t, ok)
+	require.Equal(t, int64(3000), measurement["generation_ms"])
+}
+
+func TestTurnTimingPreservesReadyCloseMark(t *testing.T) {
+	svc := &Service{}
+	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
+	readyClosed := started.Add(3 * time.Second)
+	svc.startTurnTiming("session", "execution", 2, "turn", started)
+	svc.recordTurnFirstOutput("session", "execution", 2, "turn", started.Add(time.Second))
+	svc.closeTurnTiming("session", "execution", 2, "turn", readyClosed)
+	svc.closeTurnTiming("session", "execution", 2, "turn", started.Add(10*time.Second))
+
+	svc.turnTimingMu.Lock()
+	got := svc.turnTimings["session"]
+	svc.turnTimingMu.Unlock()
+	require.Equal(t, readyClosed, got.completedAt)
 }

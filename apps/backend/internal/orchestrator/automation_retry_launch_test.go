@@ -2,12 +2,15 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
+	"github.com/kandev/kandev/internal/agentctl/journal"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/automation"
 	"github.com/kandev/kandev/internal/events"
@@ -23,6 +26,15 @@ import (
 type retryLaunchAgentManager struct {
 	*mockAgentManager
 	configured atomic.Bool
+	durable    bool
+}
+
+func (m *retryLaunchAgentManager) DurableDeliveryCapabilityForExecution(context.Context, string) (agentruntime.DurableDeliveryCapability, bool) {
+	return agentruntime.DurableDeliveryCapability{Version: journal.CurrentVersion, Durable: m.durable}, m.durable
+}
+
+func TestAutomationRetryDurableInitialPromptUsesReservedCanonicalSubmission(t *testing.T) {
+	assertAutomationRetryInitialStart(t, false, false, false, true)
 }
 
 func (m *retryLaunchAgentManager) IsAgentCommandConfigured(string) bool { return m.configured.Load() }
@@ -70,6 +82,7 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	require.NoError(t, base.repo.UpdateTask(ctx, task))
 	tasks := newMockTaskRepo()
 	seedMockTaskState(tasks, taskID, v1.TaskStateInProgress)
+	durable := len(terminalFailure) > 2 && terminalFailure[2]
 	var launches, starts atomic.Int32
 	accepted := make(chan error, 1)
 	manager := &mockAgentManager{}
@@ -91,6 +104,23 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 		return &executor.LaunchAgentResponse{AgentExecutionID: "owned-execution"}, nil
 	}
 	manager.startAgentProcessFunc = func(context.Context, string) error {
+		if durable {
+			launch, err := base.autoStore.GetRetryLaunch(ctx, "owned-run")
+			if err != nil {
+				accepted <- err
+				return err
+			}
+			stored, err := base.repo.GetAgentDeliverySubmission(ctx, launch.SubmissionID)
+			if err != nil {
+				accepted <- err
+				return err
+			}
+			if stored.State != models.DeliverySubmissionDispatching || stored.DispatchAttemptID != launch.SubmissionID {
+				err := errors.New("provider started before canonical reserved submission admission")
+				accepted <- err
+				return err
+			}
+		}
 		starts.Add(1)
 		manager.mu.Lock()
 		before, onAccepted := manager.initialPromptAdmissionCallback, manager.initialPromptDispatchCallback
@@ -108,7 +138,7 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 		accepted <- nil
 		return nil
 	}
-	runtime := &retryLaunchAgentManager{mockAgentManager: manager}
+	runtime := &retryLaunchAgentManager{mockAgentManager: manager, durable: durable}
 	runtime.configured.Store(!restoredWorkspace)
 	svc := createTestServiceWithScheduler(base.repo, newMockStepGetter(), tasks, runtime)
 	svc.executor.SetOnSessionStateTransition(svc.transitionTaskSessionState)
@@ -199,6 +229,25 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	turn, err := base.repo.GetActiveTurn(ctx, launch.SessionID)
 	require.NoError(t, err)
 	require.Equal(t, launch.TurnID, turn.ID)
+	if durable {
+		stored, err := base.repo.GetAgentDeliverySubmission(ctx, launch.SubmissionID)
+		require.NoError(t, err)
+		require.Equal(t, launch.SubmissionID, stored.ID)
+		require.Equal(t, launch.SubmissionID, stored.DispatchAttemptID)
+		require.Equal(t, launch.SessionID, stored.SessionID)
+		require.Equal(t, models.DeliverySubmissionDispatching, stored.State)
+		var payload agentDeliveryPromptPayload
+		require.NoError(t, json.Unmarshal(stored.Payload, &payload))
+		require.Equal(t, "retry prompt", payload.Text)
+	}
+	for _, action := range []string{recoveryActionResume, recoveryActionFreshStart, recoveryActionContinueHistory} {
+		_, recoveryErr := svc.RecoverSessionWithOptions(ctx, taskID, launch.SessionID, action, RecoverSessionOptions{SettingsPolicy: executor.ResumeSettingsPolicyStrict})
+		require.ErrorIs(t, recoveryErr, automation.ErrRetryLaunchUncertain)
+		currentTurn, turnErr := base.repo.GetActiveTurn(ctx, launch.SessionID)
+		require.NoError(t, turnErr)
+		require.Equal(t, launch.TurnID, currentTurn.ID, "recovery must preserve uncertain retry ownership before settlement")
+		require.EqualValues(t, 1, launches.Load())
+	}
 	submission, found, err := models.LoadInitialPromptSubmission(session.Metadata)
 	require.NoError(t, err)
 	require.True(t, found)

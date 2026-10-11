@@ -208,7 +208,7 @@ func reserveRetryLaunchTuple(ctx context.Context, tx *sqlx.Tx, run *AutomationRu
 		sessionID = uuid.NewString()
 	}
 	now := time.Now().UTC()
-	launch := &RetryLaunch{RunID: runID, AutomationID: run.AutomationID, Generation: run.RetryGroupGeneration, TaskID: taskID, SessionID: sessionID, TurnID: uuid.NewString(), SubmissionID: uuid.NewString(), State: RetryLaunchPrepared, CreatedAt: now, UpdatedAt: now}
+	launch := &RetryLaunch{RunID: runID, AutomationID: run.AutomationID, Generation: run.RetryGroupGeneration, TaskID: taskID, SessionID: sessionID, TurnID: uuid.NewString(), SubmissionID: "prompt:retry:" + uuid.NewString(), State: RetryLaunchPrepared, CreatedAt: now, UpdatedAt: now}
 	_, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO automation_retry_launches (`+retryLaunchColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), launch.RunID, launch.AutomationID, launch.Generation, launch.TaskID, launch.SessionID, launch.TurnID, launch.SubmissionID, launch.State, "", "", false, now, now)
 	if err != nil {
 		return nil, err

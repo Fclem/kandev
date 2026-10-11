@@ -1678,7 +1678,10 @@ func TestLaunchPreparedSession_CommandlessExistingWorkspace_PromotesBeforeStart(
 		StartAgent:           true,
 		TurnID:               "reserved-turn",
 		DeliverySubmissionID: "reserved-submission",
-		BeforeAgentStart: func(_ context.Context, executionID string) error {
+		BeforeAgentStart: func(_ context.Context, executionID, dispatchPrompt string) error {
+			if dispatchPrompt != "implement the approved plan" {
+				return errors.New("promotion lost final prompt")
+			}
 			if !commandConfigured.Load() || executionID != "exec-workspace-only" {
 				return errors.New("admission did not belong to promoted execution")
 			}

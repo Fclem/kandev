@@ -105,8 +105,15 @@ func (s *Service) configureRetryInitialLaunch(ctx context.Context, sessionID, tu
 		return automation.ErrRetryLaunchUncertain
 	}
 	opts.DeliverySubmissionID = launch.SubmissionID
-	opts.BeforeAgentStart = func(admissionCtx context.Context, executionID string) error {
-		return owner.AdmitRetryLaunch(admissionCtx, launch, executionID)
+	opts.BeforeAgentStart = func(admissionCtx context.Context, executionID, dispatchPrompt string) error {
+		if err := owner.AdmitRetryLaunch(admissionCtx, launch, executionID); err != nil {
+			return err
+		}
+		session, err := s.repo.GetTaskSession(admissionCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		return s.prepareInitialAgentDeliverySubmission(admissionCtx, session, executionID, dispatchPrompt, opts.Attachments, promptTaskOptions{deliverySubmissionID: launch.SubmissionID})
 	}
 	opts.BeforeInitialPromptDispatch = func(executionID string) error {
 		receiptCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)

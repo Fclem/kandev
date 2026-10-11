@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,7 @@ func TestRetryLaunchClaimRetainsImmutableIdentityAcrossQueueAndInstances(t *test
 	require.NotEmpty(t, identity.SessionID)
 	require.NotEmpty(t, identity.TurnID)
 	require.NotEmpty(t, identity.SubmissionID)
+	require.True(t, strings.HasPrefix(identity.SubmissionID, "prompt:retry:"), "reserve the canonical submission identity before delivery normalization")
 	claim, err := store.ClaimRetryLaunch(ctx, run.ID)
 	require.NoError(t, err)
 	other := &Store{db: store.db, ro: store.ro}

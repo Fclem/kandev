@@ -26,7 +26,7 @@ func TestOrdinaryOriginRetryOwnerFencesSilentRecoveryBeforeCleanupQueueAndCheckp
 	require.NoError(t, err)
 	queueBefore := fixture.service.messageQueue.GetStatus(ctx, fixture.session.ID)
 	require.True(t, queueBefore.AutoRun)
-	raw := sqlx.NewDb(fixture.repo.DB(), "sqlite")
+	raw := sqlx.NewDb(fixture.repo.DB(), "sqlite3")
 	store, err := automation.NewStore(raw, raw)
 	require.NoError(t, err)
 	a := &automation.Automation{WorkspaceID: task.WorkspaceID, Name: "ordinary retry continuation", Enabled: true}

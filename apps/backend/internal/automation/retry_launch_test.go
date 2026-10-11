@@ -335,8 +335,9 @@ func TestQueuedRetryDropCannotSettleAClaimedOrAcceptedLaunch(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, store.DeferRetryLaunch(ctx, claim))
 			if claimed {
-				claim, err = store.ClaimRetryLaunch(ctx, run.ID)
-				require.NoError(t, err)
+				reclaimed, claimErr := store.ClaimRetryLaunch(ctx, run.ID)
+				require.NoError(t, claimErr)
+				require.NotEqual(t, claim.Token, reclaimed.Token)
 			}
 			svc := NewService(store, nil, nil)
 			handled, err := svc.CancelQueuedRetryLaunch(ctx, run.ID)

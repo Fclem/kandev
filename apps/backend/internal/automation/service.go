@@ -990,12 +990,12 @@ func (s *Service) stopAutomationRun(ctx context.Context, run *AutomationRun) err
 	if run != nil && run.RetryGroupID != "" && !retryRunIsTerminal(run) {
 		return s.cancelRetryRunForStop(ctx, run)
 	}
-	originallyUnbound := run != nil && (run.TaskID == "" || run.SessionID == "" || run.TurnID == "")
+	originallyUnbound := run != nil && retryRunBindingIncomplete(run)
 	boundRun, err := s.retryRunWithOperationBinding(ctx, run)
 	if err != nil {
 		return err
 	}
-	if boundRun == nil || boundRun.TaskID == "" || boundRun.SessionID == "" || boundRun.TurnID == "" || s.runStopper == nil {
+	if retryRunBindingIncomplete(boundRun) || s.runStopper == nil {
 		return nil
 	}
 	stopped, stopErr := s.runStopper.StopAutomationRun(ctx, boundRun.TaskID, boundRun.SessionID, boundRun.TurnID)
@@ -1003,13 +1003,7 @@ func (s *Service) stopAutomationRun(ctx context.Context, run *AutomationRun) err
 		return fmt.Errorf("stop automation run %s: %w", run.ID, stopErr)
 	}
 	if stopped {
-		markErr := s.store.MarkRunTerminal(ctx, run.ID, boundRun.SessionID, boundRun.TurnID, RunStatusFailed, "automation deleted")
-		if markErr != nil && originallyUnbound {
-			markErr = s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "automation deleted")
-		}
-		if markErr != nil {
-			return fmt.Errorf("mark automation run %s failed: %w", run.ID, markErr)
-		}
+		return s.markStoppedAutomationRun(ctx, run, boundRun, originallyUnbound)
 	}
 	return nil
 }
@@ -1175,9 +1169,7 @@ func (s *Service) retryRunWithOperationBinding(ctx context.Context, run *Automat
 	if operation.ExternalTaskID == "" || operation.ExternalSessionID == "" || operation.ExternalTurnID == "" {
 		return run, nil
 	}
-	if (run.TaskID != "" && run.TaskID != operation.ExternalTaskID) ||
-		(run.SessionID != "" && run.SessionID != operation.ExternalSessionID) ||
-		(run.TurnID != "" && run.TurnID != operation.ExternalTurnID) {
+	if retryOperationBindingConflicts(run, operation) {
 		return nil, ErrRetryGenerationMismatch
 	}
 	bound := *run
@@ -1195,53 +1187,17 @@ func (s *Service) stopBoundRetryRun(ctx context.Context, run *AutomationRun) err
 	if launch != nil && launch.State == RetryLaunchStopped {
 		return nil
 	}
-	if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
-		if run.RetryGroupID != "" {
-			var modern int
-			if err := s.store.ro.GetContext(ctx, &modern, s.store.ro.Rebind(`SELECT COUNT(*) FROM automation_retry_launch_protocols WHERE run_id = ? AND version = 1`), run.ID); err != nil {
-				return err
-			}
-			if modern != 1 {
-				return ErrRetryLaunchUncertain
-			}
-		}
-		return nil
+	if retryRunBindingIncomplete(run) {
+		return s.requireUnboundRetryStopProvenance(ctx, run)
 	}
 	if s.runStopper == nil {
 		return ErrRetryLaunchUncertain
 	}
-	var stopped bool
-	var err error
-	if definitive, ok := s.runStopper.(interface {
-		StopAutomationRunDefinitively(context.Context, string, string, string) (bool, error)
-	}); ok {
-		stopped, err = definitive.StopAutomationRunDefinitively(ctx, run.TaskID, run.SessionID, run.TurnID)
-	} else {
-		stopped, err = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
-		if err == nil && run.RetryGroupID != "" {
-			return ErrRetryLaunchUncertain
-		}
-	}
+	stopped, err := s.stopRetryExecution(ctx, run)
 	if err != nil {
 		return err
 	}
-	if launch != nil {
-		if !stopped {
-			current, err := s.store.GetRetryLaunch(ctx, run.ID)
-			if err == nil && current.State == RetryLaunchStopped {
-				return nil
-			}
-			return errors.Join(ErrRetryLaunchUncertain, err)
-		}
-		return s.store.CompleteRetryLaunchStop(ctx, launch)
-	}
-	if !stopped {
-		return ErrRetryLaunchUncertain
-	}
-	if run.RetryGroupID != "" {
-		return s.store.recordLegacyRetryStop(ctx, run)
-	}
-	return nil
+	return s.finishRetryStop(ctx, run, launch, stopped)
 }
 
 func (s *Service) cancelRetryRunForStop(ctx context.Context, run *AutomationRun) error {
@@ -2585,4 +2541,74 @@ func (s *Service) GetWebhookSecret(ctx context.Context, id string) (string, erro
 		return "", err
 	}
 	return a.WebhookSecret, nil
+}
+
+func retryRunBindingIncomplete(run *AutomationRun) bool {
+	return run == nil || run.TaskID == "" || run.SessionID == "" || run.TurnID == ""
+}
+
+func (s *Service) markStoppedAutomationRun(ctx context.Context, run, boundRun *AutomationRun, originallyUnbound bool) error {
+	markErr := s.store.MarkRunTerminal(ctx, run.ID, boundRun.SessionID, boundRun.TurnID, RunStatusFailed, "automation deleted")
+	if markErr != nil && originallyUnbound {
+		markErr = s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "automation deleted")
+	}
+	if markErr != nil {
+		return fmt.Errorf("mark automation run %s failed: %w", run.ID, markErr)
+	}
+	return nil
+}
+
+func retryOperationBindingConflicts(run *AutomationRun, operation *RetryOperation) bool {
+	return (run.TaskID != "" && run.TaskID != operation.ExternalTaskID) ||
+		(run.SessionID != "" && run.SessionID != operation.ExternalSessionID) ||
+		(run.TurnID != "" && run.TurnID != operation.ExternalTurnID)
+}
+
+func (s *Service) requireUnboundRetryStopProvenance(ctx context.Context, run *AutomationRun) error {
+	if run.RetryGroupID != "" {
+		var modern int
+		if err := s.store.ro.GetContext(ctx, &modern, s.store.ro.Rebind(`SELECT COUNT(*) FROM automation_retry_launch_protocols WHERE run_id = ? AND version = 1`), run.ID); err != nil {
+			return err
+		}
+		if modern != 1 {
+			return ErrRetryLaunchUncertain
+		}
+	}
+	return nil
+}
+
+func (s *Service) stopRetryExecution(ctx context.Context, run *AutomationRun) (bool, error) {
+	var stopped bool
+	var err error
+	if definitive, ok := s.runStopper.(interface {
+		StopAutomationRunDefinitively(context.Context, string, string, string) (bool, error)
+	}); ok {
+		stopped, err = definitive.StopAutomationRunDefinitively(ctx, run.TaskID, run.SessionID, run.TurnID)
+	} else {
+		stopped, err = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+		if err == nil && run.RetryGroupID != "" {
+			return false, ErrRetryLaunchUncertain
+		}
+	}
+	return stopped, err
+}
+
+func (s *Service) finishRetryStop(ctx context.Context, run *AutomationRun, launch *RetryLaunch, stopped bool) error {
+	if launch != nil {
+		if !stopped {
+			current, err := s.store.GetRetryLaunch(ctx, run.ID)
+			if err == nil && current.State == RetryLaunchStopped {
+				return nil
+			}
+			return errors.Join(ErrRetryLaunchUncertain, err)
+		}
+		return s.store.CompleteRetryLaunchStop(ctx, launch)
+	}
+	if !stopped {
+		return ErrRetryLaunchUncertain
+	}
+	if run.RetryGroupID != "" {
+		return s.store.recordLegacyRetryStop(ctx, run)
+	}
+	return nil
 }

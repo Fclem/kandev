@@ -9,6 +9,11 @@ import (
 	"github.com/kandev/kandev/internal/db/dialect"
 )
 
+const (
+	retrySessionCreationKind = "session"
+	retryTurnCreationKind    = "turn"
+)
+
 const retryRetainedAdmissionPredicate = `
  EXISTS (SELECT 1 FROM automation_retry_launch_protocols p
   WHERE p.task_id = NEW.task_id OR p.run_id = __TASK_RUN_OWNER__
@@ -33,9 +38,9 @@ func retryRetainedAdmissionCondition(driver string, turn bool) string {
 	if turn {
 		exact = "l.session_id = NEW.task_session_id AND l.turn_id = NEW.id"
 	}
-	kind := "session"
+	kind := retrySessionCreationKind
 	if turn {
-		kind = "turn"
+		kind = retryTurnCreationKind
 	}
 	manual := "EXISTS (SELECT 1 FROM task_creation_authorizations mc WHERE mc.kind = '" + kind + "' AND mc.creation_id=NEW.id AND mc.task_id=NEW.task_id)"
 
@@ -44,9 +49,9 @@ func retryRetainedAdmissionCondition(driver string, turn bool) string {
 
 func installRetryRetainedAdmissionGuards(ctx context.Context, tx *sqlx.Tx) error {
 	for _, turn := range []bool{false, true} {
-		table, kind := "task_sessions", "session"
+		table, kind := "task_sessions", retrySessionCreationKind
 		if turn {
-			table, kind = "task_session_turns", "turn"
+			table, kind = "task_session_turns", retryTurnCreationKind
 		}
 		name := "automation_retry_retired_" + kind + "_identity"
 		condition := retryRetainedAdmissionCondition(tx.DriverName(), turn)

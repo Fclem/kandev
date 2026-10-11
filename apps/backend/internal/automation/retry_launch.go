@@ -187,21 +187,8 @@ func reserveRetryLaunchTuple(ctx context.Context, tx *sqlx.Tx, run *AutomationRu
 	if err := retryLaunchLive(ctx, tx, runID, run.RetryGroupGeneration); err != nil {
 		return nil, err
 	}
-	var sessions int
-	if sessionID == "" {
-		if err := tx.GetContext(ctx, &sessions, tx.Rebind(`SELECT COUNT(*) FROM task_sessions WHERE task_id = ?`), taskID); err != nil {
-			return nil, err
-		}
-		if sessions != 0 {
-			return nil, ErrRetryLaunchUncertain
-		}
-	} else {
-		if err := tx.GetContext(ctx, &sessions, tx.Rebind(`SELECT COUNT(*) FROM task_sessions WHERE task_id = ? AND id = ?`), taskID, sessionID); err != nil {
-			return nil, err
-		}
-		if sessions != 1 {
-			return nil, ErrRetryGenerationMismatch
-		}
+	if err := validateRetryLaunchSession(ctx, tx, taskID, sessionID); err != nil {
+		return nil, err
 	}
 
 	if sessionID == "" {
@@ -576,13 +563,11 @@ func (s *Service) dispatchRetryLaunch(ctx context.Context, run *AutomationRun, d
 	}
 	if dispatchErr == nil && result.TaskID == launch.TaskID && result.SessionID == launch.SessionID && result.TurnID == launch.TurnID {
 		accepted, err := s.store.GetRetryLaunch(receiptCtx, run.ID)
-		if err == nil {
-			if accepted.State == RetryLaunchAccepted {
-				return nil
-			}
-			if accepted.State == RetryLaunchDispatching {
-				return ErrRetryLaunchUncertain
-			}
+		if err == nil && accepted.State == RetryLaunchAccepted {
+			return nil
+		}
+		if err == nil && accepted.State == RetryLaunchDispatching {
+			return ErrRetryLaunchUncertain
 		}
 	}
 	if err := s.store.MarkRetryLaunchUncertain(receiptCtx, launch); err != nil {
@@ -645,4 +630,24 @@ func (s *Store) RecordLegacyRetryLaunchUncertainty(ctx context.Context, runID st
 	}
 	affected, err := result.RowsAffected()
 	return affected != 0, err
+}
+
+func validateRetryLaunchSession(ctx context.Context, tx *sqlx.Tx, taskID, sessionID string) error {
+	query := `SELECT COUNT(*) FROM task_sessions WHERE task_id = ?`
+	args := []any{taskID}
+	if sessionID != "" {
+		query += ` AND id = ?`
+		args = append(args, sessionID)
+	}
+	var sessions int
+	if err := tx.GetContext(ctx, &sessions, tx.Rebind(query), args...); err != nil {
+		return err
+	}
+	if sessionID == "" && sessions != 0 {
+		return ErrRetryLaunchUncertain
+	}
+	if sessionID != "" && sessions != 1 {
+		return ErrRetryGenerationMismatch
+	}
+	return nil
 }

@@ -156,3 +156,26 @@ func (s *Service) failQueuedAutomationRun(ctx context.Context, payload map[strin
 		return false
 	}
 }
+
+// Replay identity excludes a claim's mutable state. Admission always reloads
+// the current tuple and token from the durable launch ledger.
+func automationRunForCeilingPayload(run *automationRunLaunch) *automationRunLaunch {
+	if run == nil {
+		return nil
+	}
+	copyOfRun := *run
+	if run.Launch != nil {
+		launch := run.Launch
+		copyOfRun.Launch = &automation.RetryLaunch{
+			RunID: launch.RunID, AutomationID: launch.AutomationID, Generation: launch.Generation,
+			TaskID: launch.TaskID, SessionID: launch.SessionID, TurnID: launch.TurnID, SubmissionID: launch.SubmissionID,
+		}
+	}
+	return &copyOfRun
+}
+
+func normalizeCeilingAutomationRun(payload map[string]interface{}) {
+	if run := automationRunFromCeilingPayload(payload); run != nil {
+		payload[ceilingPayloadAutomationRunKey] = automationRunForCeilingPayload(run)
+	}
+}

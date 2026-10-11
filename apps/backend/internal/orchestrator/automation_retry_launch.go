@@ -57,22 +57,18 @@ func (s *Service) retryLaunchContext(ctx context.Context, run *automationRunLaun
 	}
 	launch, err := owner.GetRetryLaunch(ctx, run.RunID)
 	if errors.Is(err, sql.ErrNoRows) {
-		binding, ok := s.automationService.(automationRunBinding)
-		if !ok {
-			return ctx, automation.ErrRetryLaunchUncertain
-		}
-		firing, readErr := binding.GetRun(ctx, run.RunID)
+		ordinary, readErr := s.retryLaunchIsOrdinaryRun(ctx, run.RunID)
 		if readErr != nil {
 			return ctx, readErr
 		}
-		if firing != nil && firing.RetryGroupID == "" {
+		if ordinary {
 			return ctx, nil
 		}
 	}
 	if err != nil {
 		return ctx, errors.Join(automation.ErrRetryLaunchUncertain, err)
 	}
-	if launch.RunID == "" || launch.Generation <= 0 || launch.SessionID == "" || launch.TurnID == "" || launch.SubmissionID == "" || launch.Token == "" || launch.TaskID != taskID || launch.State != automation.RetryLaunchPreparing || launch.CancelRequested {
+	if !retryLaunchClaimMatches(launch, taskID) {
 		return ctx, automation.ErrRetryLaunchUncertain
 	}
 	if run.Launch != nil && !sameRetryLaunchIdentity(run.Launch, launch) {
@@ -160,28 +156,7 @@ func (s *Service) recoverReservedRetryLaunch(ctx context.Context, evt *automatio
 	if launch.State != automation.RetryLaunchPrepared {
 		return true
 	}
-	snapshot, err := automation.DecodeRetryLaunchConfigSnapshot(run.RetryLaunchConfigSnapshot, run.RetryLaunchConfigVersion)
-	if err != nil {
-		return true
-	}
-	task, err := s.repo.GetTask(ctx, launch.TaskID)
-	if err != nil || task == nil {
-		return true
-	}
-	a := automationFromRetrySnapshot(snapshot)
-	if run.ThreadAction == automation.ThreadActionResumed {
-		session, err := s.repo.GetTaskSession(ctx, launch.SessionID)
-		if err != nil || session == nil {
-			return true
-		}
-		prompt := snapshot.ResolvedPrompt
-		s.dispatchAutomationRun(ctx, a.ID, task.ID, session.ID, run.ID, run.ThreadAction, run.ThreadReason, "recovered continuation", func() (automation.RunDispatch, error) {
-			return s.promptAutomationContinuation(ctx, task, session, prompt, run.ID, nil)
-		}, nil, true)
-		return true
-	}
-	s.autoStartAutomationTaskForRun(ctx, a, task, task.WorkflowStepID, run.ID, run.ThreadAction, run.ThreadReason, true, nil)
-	return true
+	return s.dispatchReservedRetryLaunch(ctx, run, launch)
 }
 
 func (s *Service) retryContinuationAdmission(ctx context.Context, sessionID string) error {
@@ -354,23 +329,9 @@ func (s *Service) StopAutomationRunDefinitively(ctx context.Context, taskID, ses
 }
 
 func (s *Service) retryStopExecutionIdentity(ctx context.Context, taskID, sessionID, turnID string) (string, error) {
-	session, valid, err := s.loadAutomationCoordinatorSession(ctx, taskID, sessionID, false)
-	if err != nil || !valid {
+	session, err := s.retryStopSession(ctx, taskID, sessionID, turnID)
+	if err != nil || session == nil {
 		return "", err
-	}
-	active, err := s.turnService.GetActiveTurn(ctx, sessionID)
-	if err != nil {
-		return "", err
-	}
-	if active != nil && active.ID != turnID {
-		return "", automation.ErrRetryGenerationMismatch
-	}
-	turn, err := s.turnService.GetTurn(ctx, turnID)
-	if err != nil {
-		return "", err
-	}
-	if turn == nil || turn.TaskID != taskID || turn.TaskSessionID != sessionID {
-		return "", automation.ErrRetryGenerationMismatch
 	}
 	lookup, ok := s.automationService.(automationOpenRunLookup)
 	if !ok {
@@ -395,13 +356,82 @@ func (s *Service) retryStopExecutionIdentity(ctx context.Context, taskID, sessio
 		if err != nil {
 			return "", err
 		}
-		if !launch.CancelRequested || launch.TaskID != taskID || launch.SessionID != sessionID || launch.TurnID != turnID {
-			return "", automation.ErrRetryGenerationMismatch
-		}
-		if session.AgentExecutionID != "" && session.AgentExecutionID != launch.ExecutionID {
-			return "", automation.ErrRetryGenerationMismatch
-		}
-		return launch.ExecutionID, nil
+		return retryStopOwnedExecution(session, launch, taskID, sessionID, turnID)
 	}
 	return "", automation.ErrRetryLaunchUncertain
+}
+
+func (s *Service) retryLaunchIsOrdinaryRun(ctx context.Context, runID string) (bool, error) {
+	binding, ok := s.automationService.(automationRunBinding)
+	if !ok {
+		return false, automation.ErrRetryLaunchUncertain
+	}
+	firing, err := binding.GetRun(ctx, runID)
+	if err != nil {
+		return false, err
+	}
+	return firing != nil && firing.RetryGroupID == "", nil
+}
+
+func retryLaunchClaimMatches(launch *automation.RetryLaunch, taskID string) bool {
+	return launch.RunID != "" && launch.Generation > 0 && launch.SessionID != "" && launch.TurnID != "" &&
+		launch.SubmissionID != "" && launch.Token != "" && launch.TaskID == taskID &&
+		launch.State == automation.RetryLaunchPreparing && !launch.CancelRequested
+}
+
+func (s *Service) dispatchReservedRetryLaunch(ctx context.Context, run *automation.AutomationRun, launch *automation.RetryLaunch) bool {
+	snapshot, err := automation.DecodeRetryLaunchConfigSnapshot(run.RetryLaunchConfigSnapshot, run.RetryLaunchConfigVersion)
+	if err != nil {
+		return true
+	}
+	task, err := s.repo.GetTask(ctx, launch.TaskID)
+	if err != nil || task == nil {
+		return true
+	}
+	a := automationFromRetrySnapshot(snapshot)
+	if run.ThreadAction == automation.ThreadActionResumed {
+		session, err := s.repo.GetTaskSession(ctx, launch.SessionID)
+		if err != nil || session == nil {
+			return true
+		}
+		prompt := snapshot.ResolvedPrompt
+		s.dispatchAutomationRun(ctx, a.ID, task.ID, session.ID, run.ID, run.ThreadAction, run.ThreadReason, "recovered continuation", func() (automation.RunDispatch, error) {
+			return s.promptAutomationContinuation(ctx, task, session, prompt, run.ID, nil)
+		}, nil, true)
+		return true
+	}
+	s.autoStartAutomationTaskForRun(ctx, a, task, task.WorkflowStepID, run.ID, run.ThreadAction, run.ThreadReason, true, nil)
+	return true
+}
+
+func (s *Service) retryStopSession(ctx context.Context, taskID, sessionID, turnID string) (*models.TaskSession, error) {
+	session, valid, err := s.loadAutomationCoordinatorSession(ctx, taskID, sessionID, false)
+	if err != nil || !valid {
+		return nil, err
+	}
+	active, err := s.turnService.GetActiveTurn(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if active != nil && active.ID != turnID {
+		return nil, automation.ErrRetryGenerationMismatch
+	}
+	turn, err := s.turnService.GetTurn(ctx, turnID)
+	if err != nil {
+		return nil, err
+	}
+	if turn == nil || turn.TaskID != taskID || turn.TaskSessionID != sessionID {
+		return nil, automation.ErrRetryGenerationMismatch
+	}
+	return session, nil
+}
+
+func retryStopOwnedExecution(session *models.TaskSession, launch *automation.RetryLaunch, taskID, sessionID, turnID string) (string, error) {
+	if !launch.CancelRequested || launch.TaskID != taskID || launch.SessionID != sessionID || launch.TurnID != turnID {
+		return "", automation.ErrRetryGenerationMismatch
+	}
+	if session.AgentExecutionID != "" && session.AgentExecutionID != launch.ExecutionID {
+		return "", automation.ErrRetryGenerationMismatch
+	}
+	return launch.ExecutionID, nil
 }

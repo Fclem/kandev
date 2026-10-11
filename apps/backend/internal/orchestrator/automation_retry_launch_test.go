@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -84,6 +85,7 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	seedMockTaskState(tasks, taskID, v1.TaskStateInProgress)
 	durable := len(terminalFailure) > 2 && terminalFailure[2]
 	var launches, starts atomic.Int32
+	var providerPrompt string
 	accepted := make(chan error, 1)
 	manager := &mockAgentManager{}
 	manager.getExecutionIDForSessionFunc = func(context.Context, string) (string, error) {
@@ -94,6 +96,7 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	}
 	manager.launchAgentFunc = func(_ context.Context, req *executor.LaunchAgentRequest) (*executor.LaunchAgentResponse, error) {
 		launches.Add(1)
+		providerPrompt = req.TaskDescription
 		launch, err := base.autoStore.GetRetryLaunch(ctx, "owned-run")
 		if err != nil {
 			return nil, err
@@ -238,7 +241,10 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 		require.Equal(t, models.DeliverySubmissionDispatching, stored.State)
 		var payload agentDeliveryPromptPayload
 		require.NoError(t, json.Unmarshal(stored.Payload, &payload))
-		require.Equal(t, "retry prompt", payload.Text)
+		require.NotEmpty(t, providerPrompt)
+		require.Equal(t, providerPrompt, payload.Text)
+		require.Contains(t, providerPrompt, "Kandev Task ID: "+taskID)
+		require.True(t, strings.HasSuffix(providerPrompt, "\n\nretry prompt"))
 	}
 	for _, action := range []string{recoveryActionResume, recoveryActionFreshStart, recoveryActionContinueHistory} {
 		_, recoveryErr := svc.RecoverSessionWithOptions(ctx, taskID, launch.SessionID, action, RecoverSessionOptions{SettingsPolicy: executor.ResumeSettingsPolicyStrict})

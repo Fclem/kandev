@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 type retryGroupTriggerIdentity struct {
@@ -156,31 +157,8 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 	if group.State == "" {
 		group.State = RetryGroupLive
 	}
-	var existingGroups []retryGroupTriggerIdentity
-	if err := tx.SelectContext(ctx, &existingGroups, tx.Rebind(`
-		SELECT rg.id, rg.trigger_id, rg.trigger_ids,
-			COALESCE((
-				SELECT ar.dedup_key FROM automation_runs ar
-				WHERE ar.retry_group_id = rg.id AND ar.attempt_number = 1
-				LIMIT 1
-			), '') AS dedup_key
-		FROM automation_retry_groups rg
-		WHERE rg.automation_id = ? AND rg.state = ? AND rg.id != ?`),
-		group.AutomationID, RetryGroupLive, group.ID); err != nil {
+	if err := supersedeMatchingRetryGroups(ctx, tx, run, group, now); err != nil {
 		return err
-	}
-	for _, existing := range existingGroups {
-		if existing.DedupKey != run.DedupKey ||
-			!sameRetryTriggerSet(existing.TriggerIDsJSON, existing.TriggerID, group.TriggerIDsJSON, group.TriggerID) {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, tx.Rebind(`
-			UPDATE automation_retry_groups
-			SET generation = generation + 1, state = ?, superseded_by_run_id = ?, updated_at = ?
-			WHERE id = ? AND state = ?`),
-			RetryGroupSuperseded, run.ID, now, existing.ID, RetryGroupLive); err != nil {
-			return err
-		}
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_launches SET cancel_requested = TRUE, state = CASE WHEN state IN (?, ?) THEN ? ELSE state END, updated_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE retry_group_id IN (SELECT id FROM automation_retry_groups WHERE superseded_by_run_id = ?))`), RetryLaunchPrepared, RetryLaunchQueued, RetryLaunchStopped, now, run.ID); err != nil {
 		return err
@@ -298,4 +276,34 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 		return err
 	}
 	return tx.Commit()
+}
+
+func supersedeMatchingRetryGroups(ctx context.Context, tx *sqlx.Tx, run *AutomationRun, group *RetryGroup, now time.Time) error {
+	var existingGroups []retryGroupTriggerIdentity
+	if err := tx.SelectContext(ctx, &existingGroups, tx.Rebind(`
+		SELECT rg.id, rg.trigger_id, rg.trigger_ids,
+			COALESCE((
+				SELECT ar.dedup_key FROM automation_runs ar
+				WHERE ar.retry_group_id = rg.id AND ar.attempt_number = 1
+				LIMIT 1
+			), '') AS dedup_key
+		FROM automation_retry_groups rg
+		WHERE rg.automation_id = ? AND rg.state = ? AND rg.id != ?`),
+		group.AutomationID, RetryGroupLive, group.ID); err != nil {
+		return err
+	}
+	for _, existing := range existingGroups {
+		if existing.DedupKey != run.DedupKey ||
+			!sameRetryTriggerSet(existing.TriggerIDsJSON, existing.TriggerID, group.TriggerIDsJSON, group.TriggerID) {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`
+			UPDATE automation_retry_groups
+			SET generation = generation + 1, state = ?, superseded_by_run_id = ?, updated_at = ?
+			WHERE id = ? AND state = ?`),
+			RetryGroupSuperseded, run.ID, now, existing.ID, RetryGroupLive); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -477,6 +477,7 @@ grep -q "2026-09-22-plugin-facet-selection-persistence.md" docs/public/plugins-a
 cd apps/backend && go test ./internal/user/... ./internal/backendapp/... ./internal/task/repository/sqlite/... ./internal/task/handlers/...
 make -C apps/backend lint
 make build-backend
+make -C apps/backend build-e2e-delivery-fixture
 cd apps/web && pnpm run build:e2e
 make -C apps/backend e2e-plugin-package
 cd apps/web && pnpm e2e:run --no-build tests/plugins/task-list-facet.spec.ts
@@ -633,6 +634,23 @@ persistence. The host contract satisfies that bundle with no plugin-side change;
 running the installed package in an isolated instance is not part of the
 automated suite.
 
+Rebase addendum (2026-10-11): the change was rebased onto the current main tip
+`e8c1761cb5` (13 incoming commits) without conflicts, and re-verified on the
+rebased commit: focused facet Vitest 10 files / 103 tests, `pnpm run typecheck`,
+`pnpm --filter @kandev/web lint`, `make -C apps/backend build`, and both
+Playwright specs (desktop 2 passed, mobile 1 passed) against a freshly rebuilt
+backend, web bundle, and fixture package.
+
+Two pre-existing failures at the new base, both independent of this change:
+`internal/task/handlers` fails five repository-discovery cases
+(`TestHTTPCreateDirectoryCreatesFolder`,
+`TestHTTPInitializeLocalRepositoryCreatesRepository`, and siblings) with and
+without this commit, confirmed by running them at `e8c1761cb5` in a scratch
+worktree; and `internal/task/repository/sqlite` cannot finish because main's
+`TestDeliveryRetentionStorage` (`#4407`, `SQLite/1024_bytes`) hangs past a
+20-minute timeout. This change touches only `task.go` and `task_order_test.go` in
+that package, and its order-by tests pass.
+
 ## Port deviations from the design package
 
 - Section building stays in `apps/web/lib/tasks/task-list-sections.ts` (main's
@@ -655,3 +673,9 @@ automated suite.
   than in `service_test.go`: that file is already 2350 lines, and `make lint`
   rejects any change to it through revive's `file-length-limit` under
   `issues.new: true`.
+- Playwright global setup now also requires
+  `apps/backend/bin/e2e-delivery-fixture` (main's delivery-retention work), which
+  neither `make build-backend` nor the e2e README's prerequisite list builds.
+  The verification block above adds
+  `make -C apps/backend build-e2e-delivery-fixture`; without it every e2e run in
+  this package aborts in global setup before any spec.

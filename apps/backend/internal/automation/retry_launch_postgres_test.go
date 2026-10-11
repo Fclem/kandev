@@ -75,13 +75,11 @@ func secondPostgresRetryStore(t *testing.T, first *sqlx.DB) *Store {
 	var schema string
 	require.NoError(t, first.Get(&schema, `SELECT current_schema()`))
 	require.Regexp(t, regexp.MustCompile(`^kandev_test_[a-z0-9]+$`), schema)
-	database, err := sqlx.Open("pgx", testutil.PostgresDSNFromEnv(t))
+	database, err := sqlx.Open("pgx", testutil.PostgresDSNWithSearchPath(t, testutil.PostgresDSNFromEnv(t), schema))
 	require.NoError(t, err)
 	database.SetMaxOpenConns(1)
 	database.SetMaxIdleConns(1)
 	t.Cleanup(func() { _ = database.Close() })
-	_, err = database.Exec("SET search_path TO " + schema)
-	require.NoError(t, err)
 	var backendFirst, backendSecond int
 	require.NoError(t, first.Get(&backendFirst, `SELECT pg_backend_pid()`))
 	require.NoError(t, database.Get(&backendSecond, `SELECT pg_backend_pid()`))

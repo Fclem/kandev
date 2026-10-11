@@ -343,7 +343,7 @@
   "retryInfiniteTitle": "성공할 때까지 재시도",
   "retryInfiniteDescription": "실행이 성공하거나 자동화를 중지할 때까지 계속 재시도합니다.",
   "retryMaxLabel": "추가 시도 횟수",
-  "retryMaxHelp": "10진 정수로 입력하세요. 무한 모드에서는 이 값을 사용하지 않습니다.",
+  "retryMaxHelp": "정수를 입력하세요. 무한 모드에서는 이 값을 사용하지 않습니다.",
   "retryDelayLabel": "지연 시간(초)",
   "retryBackoffLabel": "재시도 간격 방식",
   "retryBackoffFixed": "고정 간격",

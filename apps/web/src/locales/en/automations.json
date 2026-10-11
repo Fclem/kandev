@@ -343,7 +343,7 @@
   "retryInfiniteTitle": "Retry until it succeeds",
   "retryInfiniteDescription": "Keep retrying until the run succeeds or you stop the automation.",
   "retryMaxLabel": "Additional attempts",
-  "retryMaxHelp": "Use a decimal number. Infinite mode ignores this value.",
+  "retryMaxHelp": "Use a whole number. Infinite mode ignores this value.",
   "retryDelayLabel": "Delay in seconds",
   "retryBackoffLabel": "Backoff",
   "retryBackoffFixed": "Fixed delay",

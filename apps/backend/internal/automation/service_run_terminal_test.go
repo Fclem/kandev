@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -196,6 +197,11 @@ func TestRetrySuccessWinsAgainstDisableAtAutomationLock(t *testing.T) {
 			disableDone <- svc.DisableAutomation(ctx, a.ID)
 		}()
 		<-disableStarted
+		select {
+		case err := <-disableDone:
+			t.Fatalf("disable completed while retry success held the lock: %v", err)
+		case <-time.After(100 * time.Millisecond):
+		}
 		return svc.MarkAutomationRetrySucceeded(locked, run.ID, 1)
 	}))
 	require.NoError(t, <-disableDone)
@@ -422,7 +428,7 @@ func TestWithRetryRunLockSerializesAndSupportsNestedDispatch(t *testing.T) {
 	select {
 	case <-secondEntered:
 		t.Fatal("second retry operation entered while first lock was held")
-	default:
+	case <-time.After(100 * time.Millisecond):
 	}
 	close(release)
 	require.NoError(t, <-firstDone)

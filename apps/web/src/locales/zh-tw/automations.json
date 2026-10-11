@@ -343,7 +343,7 @@
   "retryInfiniteTitle": "一直重試直到成功",
   "retryInfiniteDescription": "持續重試，直到執行成功或你停止自動化。",
   "retryMaxLabel": "額外嘗試次數",
-  "retryMaxHelp": "請輸入十進位制數字。無限模式會忽略此值。",
+  "retryMaxHelp": "請輸入整數。無限模式會忽略此值。",
   "retryDelayLabel": "延遲秒數",
   "retryBackoffLabel": "退避方式",
   "retryBackoffFixed": "固定延遲",

@@ -343,7 +343,7 @@
   "retryInfiniteTitle": "成功するまで再試行",
   "retryInfiniteDescription": "実行が成功するか、自動化を停止するまで再試行します。",
   "retryMaxLabel": "追加試行回数",
-  "retryMaxHelp": "整数を入力します。無制限モードではこの値は無視されます。",
+  "retryMaxHelp": "整数を入力してください。無制限モードではこの値は無視されます。",
   "retryDelayLabel": "待機時間（秒）",
   "retryBackoffLabel": "間隔の方式",
   "retryBackoffFixed": "固定間隔",

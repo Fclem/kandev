@@ -31,9 +31,11 @@ import { MobileTasksActions } from "./mobile-tasks-actions";
 import {
   parseTasksListGroup,
   parseTasksListSort,
+  isTaskListFacetOption,
+  resolveTasksListApiSort,
   sortTasksForList,
-  type TasksListGroup,
-  type TasksListSort,
+  type TasksListGroupPreference,
+  type TasksListSortPreference,
 } from "@/lib/tasks/tasks-list-options";
 
 interface TasksPageClientProps {
@@ -43,8 +45,8 @@ interface TasksPageClientProps {
   initialTasks: Task[];
   initialTotal: number;
   initialDataLoaded?: boolean;
-  initialSort: TasksListSort;
-  initialGroup: TasksListGroup;
+  initialSort: TasksListSortPreference;
+  initialGroup: TasksListGroupPreference;
 }
 
 type UseTaskOperationsParams = {
@@ -54,7 +56,7 @@ type UseTaskOperationsParams = {
   pagination: PaginationState;
   debouncedQuery: string;
   showArchived: boolean;
-  tasksListSort: TasksListSort;
+  tasksListSort: TasksListSortPreference;
   setTasks: (tasks: Task[]) => void;
   setTotal: (total: number) => void;
 };
@@ -112,7 +114,7 @@ function useTaskOperations({
           includeArchived: showArchived,
           workflowId: activeWorkflowId,
           repositoryId: selectedRepositoryId,
-          sort: tasksListSort,
+          sort: resolveTasksListApiSort(tasksListSort),
         });
         if (!shouldCommit()) return;
         setTasks(result.tasks);
@@ -236,16 +238,16 @@ function useTasksPageViewState({
   initialRepositories: Repository[];
   initialTasks: Task[];
   initialTotal: number;
-  initialSort: TasksListSort;
-  initialGroup: TasksListGroup;
+  initialSort: TasksListSortPreference;
+  initialGroup: TasksListGroupPreference;
   storeRepositories: Repository[];
 }) {
   const repositories = storeRepositories.length > 0 ? storeRepositories : initialRepositories;
   const [tasks, setTasks] = useState(initialTasks);
   const [total, setTotal] = useState(initialTotal);
   const [searchQuery, setSearchQuery] = useState("");
-  const [tasksListSort, setTasksListSort] = useState<TasksListSort>(initialSort);
-  const [tasksListGroup, setTasksListGroup] = useState<TasksListGroup>(initialGroup);
+  const [tasksListSort, setTasksListSort] = useState<TasksListSortPreference>(initialSort);
+  const [tasksListGroup, setTasksListGroup] = useState<TasksListGroupPreference>(initialGroup);
   const [showArchived, setShowArchived] = useState(false);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 });
 
@@ -398,10 +400,10 @@ function useTasksListPreferenceSync({
   setTasks,
   setPagination,
 }: {
-  tasksListSort: TasksListSort;
-  setTasksListSort: (sort: TasksListSort) => void;
-  tasksListGroup: TasksListGroup;
-  setTasksListGroup: (group: TasksListGroup) => void;
+  tasksListSort: TasksListSortPreference;
+  setTasksListSort: (sort: TasksListSortPreference) => void;
+  tasksListGroup: TasksListGroupPreference;
+  setTasksListGroup: (group: TasksListGroupPreference) => void;
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setPagination: (next: PaginationState | ((prev: PaginationState) => PaginationState)) => void;
 }) {
@@ -410,7 +412,7 @@ function useTasksListPreferenceSync({
   const store = useAppStoreApi();
 
   const persistPreferences = useCallback(
-    (sort: TasksListSort, group: TasksListGroup) => {
+    (sort: TasksListSortPreference, group: TasksListGroupPreference) => {
       const current = store.getState().userSettings;
       const setUserSettings = store.getState().setUserSettings;
       if (current.tasksListSort === sort && current.tasksListGroup === group) {
@@ -444,7 +446,7 @@ function useTasksListPreferenceSync({
       : tasksListGroup;
     if (nextSort !== tasksListSort) {
       setTasksListSort(nextSort);
-      setTasks((prev) => sortTasksForList(prev, nextSort));
+      if (!isTaskListFacetOption(nextSort)) setTasks((prev) => sortTasksForList(prev, nextSort));
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
     }
     if (nextGroup !== tasksListGroup) {
@@ -463,7 +465,7 @@ function useTasksListPreferenceSync({
   ]);
 
   const writeUrl = useCallback(
-    (sort: TasksListSort, group: TasksListGroup) => {
+    (sort: TasksListSortPreference, group: TasksListGroupPreference) => {
       const params = new URLSearchParams(window.location.search);
       params.set("sort", sort);
       params.set("group", group);
@@ -474,9 +476,9 @@ function useTasksListPreferenceSync({
   );
 
   const handleSortChange = useCallback(
-    (sort: TasksListSort) => {
+    (sort: TasksListSortPreference) => {
       setTasksListSort(sort);
-      setTasks((prev) => sortTasksForList(prev, sort));
+      if (!isTaskListFacetOption(sort)) setTasks((prev) => sortTasksForList(prev, sort));
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
       writeUrl(sort, tasksListGroup);
       persistPreferences(sort, tasksListGroup);
@@ -485,7 +487,7 @@ function useTasksListPreferenceSync({
   );
 
   const handleGroupChange = useCallback(
-    (group: TasksListGroup) => {
+    (group: TasksListGroupPreference) => {
       setTasksListGroup(group);
       writeUrl(tasksListSort, group);
       persistPreferences(tasksListSort, group);
@@ -542,12 +544,12 @@ export function TasksPageClient(props: TasksPageClientProps) {
   });
   const { displayedTasks, sort, group, selectSort, selectGroup } = useTaskListFacetSelection({
     facetKeys: facetOptions.map((facet) => facet.value),
-    coreSort: s.tasksListSort,
-    coreGroup: s.tasksListGroup,
+    requestedSort: s.tasksListSort,
+    requestedGroup: s.tasksListGroup,
     tasks: s.tasks,
     facetValues,
-    onCoreSortChange: handleSortChange,
-    onCoreGroupChange: handleGroupChange,
+    onSortChange: handleSortChange,
+    onGroupChange: handleGroupChange,
   });
   const stepMetadata = useTasksListStepRefresh(s, displayedTasks, group);
 

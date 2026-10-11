@@ -41,6 +41,8 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+const TASK_FILTER_LABEL = "Task filter";
+
 type MockAppState = typeof mocks.appState & {
   toggleSidebarGroupCollapsed: typeof mocks.toggleSidebarGroupCollapsed;
 };
@@ -103,7 +105,7 @@ it("keeps the Tasks drawer as the sole modal during confirmation and restores it
     return (
       <TaskSwitcherDrawer open onOpenChange={vi.fn()}>
         <DrawerTitle>Tasks</DrawerTitle>
-        <input aria-label="Task filter" defaultValue="Work in progress" />
+        <input aria-label={TASK_FILTER_LABEL} defaultValue="Work in progress" />
         <button onClick={() => setConfirm(true)}>Archive target</button>
         <MobileActionConfirmation
           open={confirm}
@@ -121,13 +123,13 @@ it("keeps the Tasks drawer as the sole modal during confirmation and restores it
   const view = render(<Tasks />);
   try {
     const drawer = screen.getByRole("dialog", { name: "Tasks" });
-    const input = screen.getByRole("textbox", { name: "Task filter" });
+    const input = screen.getByRole("textbox", { name: TASK_FILTER_LABEL });
     fireEvent.click(screen.getByRole("button", { name: "Archive target" }));
     expect(screen.getByRole("dialog", { name: "Archive task?" })).toBe(drawer);
     expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
-    expect(screen.queryByRole("textbox", { name: "Task filter" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: TASK_FILTER_LABEL })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.getByRole("textbox", { name: "Task filter" })).toBe(input);
+    expect(screen.getByRole("textbox", { name: TASK_FILTER_LABEL })).toBe(input);
   } finally {
     view.unmount();
     Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
@@ -136,6 +138,8 @@ it("keeps the Tasks drawer as the sole modal during confirmation and restores it
 
 it("keeps the Tasks modal through workspace changes and releases its pointer lock on close", async () => {
   const originalPointerEvents = document.body.style.pointerEvents;
+  const workspaceA = "workspace-a";
+  const workspaceB = "workspace-b";
   function picker(workspaceId: string, open: boolean) {
     return (
       <TaskPickerSurface
@@ -145,28 +149,28 @@ it("keeps the Tasks modal through workspace changes and releases its pointer loc
         onOpenChange={vi.fn()}
       >
         <DrawerTitle>Tasks</DrawerTitle>
-        <input aria-label="Task filter" defaultValue="Current filter" />
+        <input aria-label={TASK_FILTER_LABEL} defaultValue="Current filter" />
       </TaskPickerSurface>
     );
   }
-  const view = render(picker("workspace-a", true));
+  const view = render(picker(workspaceA, true));
   try {
     const modal = screen.getByRole("dialog", { name: "Tasks" });
-    const input = screen.getByRole("textbox", { name: "Task filter" });
+    const input = screen.getByRole("textbox", { name: TASK_FILTER_LABEL });
     fireEvent.change(input, { target: { value: "Retained input" } });
-    view.rerender(picker("workspace-a", true));
-    expect(screen.getByRole("textbox", { name: "Task filter" })).toBe(input);
+    view.rerender(picker(workspaceA, true));
+    expect(screen.getByRole("textbox", { name: TASK_FILTER_LABEL })).toBe(input);
     expect((input as HTMLInputElement).value).toBe("Retained input");
-    view.rerender(picker("workspace-b", true));
+    view.rerender(picker(workspaceB, true));
     expect(screen.getByRole("dialog", { name: "Tasks" })).toBe(modal);
-    const nextInput = screen.getByRole("textbox", { name: "Task filter" });
+    const nextInput = screen.getByRole("textbox", { name: TASK_FILTER_LABEL });
     expect(nextInput).not.toBe(input);
     expect((nextInput as HTMLInputElement).value).toBe("Current filter");
-    view.rerender(picker("workspace-b", false));
+    view.rerender(picker(workspaceB, false));
     await waitFor(() => expect(document.body.style.pointerEvents).not.toBe("none"));
-    view.rerender(picker("workspace-a", true));
+    view.rerender(picker(workspaceA, true));
     expect(screen.getByRole("dialog", { name: "Tasks" })).toBeDefined();
-    view.rerender(picker("workspace-a", false));
+    view.rerender(picker(workspaceA, false));
     await waitFor(() => expect(document.body.style.pointerEvents).not.toBe("none"));
   } finally {
     view.unmount();

@@ -328,11 +328,8 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [statusFilter, setStatusFilter] = useState<RunStatus | "all">("all");
-  const { runs, loading, refresh, deleteRun, deleteAllRuns, stopRun, deleting } = useAutomationRuns(
-    automationId,
-    workspaceId,
-    historyMode,
-  );
+  const { runs, loading, refresh, deleteRun, deleteAllRuns, stopRun, deleting, stopping } =
+    useAutomationRuns(automationId, workspaceId, historyMode);
   const router = useRouter();
   const projectedRuns = projectAutomationHistory(runs, historyMode);
   const visibleRuns =
@@ -414,7 +411,7 @@ export function RunsSection({ automationId, workspaceId, historyMode }: RunsSect
                   <RunRow
                     key={run.id}
                     run={run}
-                    stopping={deleting}
+                    stopping={deleting || stopping}
                     onStop={stopRun}
                     deleting={deleting}
                     onDelete={deleteRun}

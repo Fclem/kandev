@@ -21,6 +21,11 @@ func (s runStopperStub) StopAutomationRun(context.Context, string, string, strin
 	return s.stopped, s.err
 }
 
+// The synthetic stopper acknowledges termination only when its stopped result is true.
+func (s runStopperStub) StopAutomationRunDefinitively(ctx context.Context, taskID, sessionID, turnID string) (bool, error) {
+	return s.StopAutomationRun(ctx, taskID, sessionID, turnID)
+}
+
 type runLivenessStub struct {
 	live bool
 	err  error
@@ -176,13 +181,12 @@ func TestRetrySuccessWinsAgainstDisableAtAutomationLock(t *testing.T) {
 	group := &RetryGroup{
 		ID: "group-success-disable", AutomationID: a.ID, Generation: 1, State: RetryGroupLive,
 	}
-	require.NoError(t, svc.store.CreateRetryGroup(ctx, group))
 	run := &AutomationRun{
 		AutomationID: a.ID, TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
 		TaskID: "task-success-disable", SessionID: "session-success-disable", TurnID: "turn-success-disable",
 		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
 	}
-	require.NoError(t, svc.store.CreateRun(ctx, run))
+	require.NoError(t, svc.store.CreateRetryAdmission(ctx, run, group))
 
 	disableStarted := make(chan struct{})
 	disableDone := make(chan error, 1)
@@ -208,6 +212,10 @@ type recordingRunStopper struct {
 func (s *recordingRunStopper) StopAutomationRun(_ context.Context, taskID, sessionID, turnID string) (bool, error) {
 	s.taskID, s.sessionID, s.turnID = taskID, sessionID, turnID
 	return true, nil
+}
+
+func (s *recordingRunStopper) StopAutomationRunDefinitively(ctx context.Context, taskID, sessionID, turnID string) (bool, error) {
+	return s.StopAutomationRun(ctx, taskID, sessionID, turnID)
 }
 
 func TestDisableAutomationStopsBoundRetryRunBeforeTerminalizing(t *testing.T) {
@@ -250,6 +258,7 @@ func TestUpdateAutomationDisableCancelsRetryGroups(t *testing.T) {
 		RetryGroupID: group.ID, RetryGroupGeneration: 1, RetryState: RetryStateScheduled,
 	}
 	require.NoError(t, svc.store.CreateRun(ctx, run))
+	recordSyntheticRetryAdmission(t, svc.store, run)
 	enabled := false
 
 	_, err := svc.UpdateAutomation(ctx, a.ID, &UpdateAutomationRequest{Enabled: &enabled})
@@ -285,7 +294,11 @@ func TestDisableAutomationPreservesRetriesWhenStoppingRunFails(t *testing.T) {
 	require.Equal(t, RetryStateTriggered, stored.RetryState)
 	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
 	require.NoError(t, err)
-	require.Equal(t, RetryGroupLive, storedGroup.State)
+	require.Equal(t, RetryGroupCancelled, storedGroup.State)
+	require.Greater(t, storedGroup.Generation, run.RetryGroupGeneration)
+	require.NotEmpty(t, stored.ErrorMessage)
+	require.NoError(t, svc.EnableAutomation(ctx, a.ID))
+	require.ErrorIs(t, svc.store.VerifyRetryTaskOperation(ctx, run.ID, run.RetryGroupGeneration, "stale-worker"), ErrRetryGenerationMismatch)
 }
 
 func TestUpdateAutomationDisablePreservesRetriesWhenStoppingRunFails(t *testing.T) {
@@ -478,7 +491,7 @@ func TestReconcileOpenRetryRunsChecksExactTurnLiveness(t *testing.T) {
 		live       bool
 		wantStatus RunStatus
 	}{
-		{name: "stale acknowledged turn settles", live: false, wantStatus: RunStatusFailed},
+		{name: "stale legacy turn retains unresolved acceptance", live: false, wantStatus: RunStatusTaskCreated},
 		{name: "live acknowledged turn stays open", live: true, wantStatus: RunStatusTaskCreated},
 	}
 	for _, tt := range tests {
@@ -506,13 +519,13 @@ func TestReconcileOpenRetryRunsChecksExactTurnLiveness(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tt.wantStatus, stored.Status)
 			if !tt.live {
-				require.Equal(t, "automation attempt failed", stored.ErrorMessage)
+				require.Equal(t, ErrRetryLaunchUncertain.Error(), stored.ErrorMessage)
 			}
 		})
 	}
 }
 
-func TestReconcileStaleRetryRunSchedulesConfiguredRecovery(t *testing.T) {
+func TestReconcileStaleLegacyRetryRunCannotScheduleWithoutTerminalEvidence(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		policy string
@@ -543,13 +556,14 @@ func TestReconcileStaleRetryRunSchedulesConfiguredRecovery(t *testing.T) {
 
 			stored, err := svc.store.GetRun(ctx, run.ID)
 			require.NoError(t, err)
-			require.Equal(t, RunStatusFailed, stored.Status)
-			require.Equal(t, RetryStateCompleted, stored.RetryState)
+			require.Equal(t, RunStatusTaskCreated, stored.Status)
+			require.Equal(t, RetryStateTriggered, stored.RetryState)
+			require.Equal(t, ErrRetryLaunchUncertain.Error(), stored.ErrorMessage)
 			runs, err := svc.store.ListRuns(ctx, automation.ID, 10)
 			require.NoError(t, err)
-			require.Len(t, runs, 2)
-			require.Equal(t, RunStatusScheduledRetry, runs[0].Status)
-			require.Equal(t, RetryStateScheduled, runs[0].RetryState)
+			require.Len(t, runs, 1)
+			require.Equal(t, RunStatusTaskCreated, runs[0].Status)
+			require.Equal(t, RetryStateTriggered, runs[0].RetryState)
 		})
 	}
 }
@@ -623,6 +637,7 @@ func TestDeleteRunRemovesSupersededRetryRuns(t *testing.T) {
 				RetryState: RetryStateTriggered,
 			}
 			require.NoError(t, svc.store.CreateRun(ctx, run))
+			recordSyntheticRetryAdmission(t, svc.store, run)
 
 			require.NoError(t, svc.DeleteRun(ctx, run.ID))
 			deleted, err := svc.store.GetRun(ctx, run.ID)
@@ -677,10 +692,12 @@ func TestStopRunRetryStopperErrorLeavesRetryLive(t *testing.T) {
 	require.Equal(t, RetryStateTriggered, storedRun.RetryState)
 	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
 	require.NoError(t, err)
-	require.Equal(t, RetryGroupLive, storedGroup.State)
+	require.Equal(t, RetryGroupCancelled, storedGroup.State)
+	require.Greater(t, storedGroup.Generation, run.RetryGroupGeneration)
+	require.NotEmpty(t, storedRun.ErrorMessage)
 }
 
-func TestStopRunStaleRetryTurnStillCancelsRetry(t *testing.T) {
+func TestStopRunMissingRetryExecutionRetainsUncertainOwnership(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	automation := &Automation{
@@ -703,16 +720,17 @@ func TestStopRunStaleRetryTurnStillCancelsRetry(t *testing.T) {
 	require.NoError(t, svc.store.CreateRun(ctx, run))
 	svc.SetRunStopper(runStopperStub{})
 
-	stopped, err := svc.StopRun(ctx, automation.ID, run.ID)
-	require.NoError(t, err)
-	require.Equal(t, RunStatusCancelled, stopped.Status)
-	require.Equal(t, RetryStateCancelled, stopped.RetryState)
+	_, err := svc.StopRun(ctx, automation.ID, run.ID)
+	require.ErrorIs(t, err, ErrRetryLaunchUncertain)
 
 	storedRun, err := svc.store.GetRun(ctx, run.ID)
 	require.NoError(t, err)
-	require.Equal(t, RunStatusFailed, storedRun.Status)
-	require.Equal(t, RetryStateCancelled, storedRun.RetryState)
+	require.Equal(t, RunStatusTaskCreated, storedRun.Status)
+	require.Equal(t, RetryStateTriggered, storedRun.RetryState)
+	require.Equal(t, ErrRetryLaunchUncertain.Error(), storedRun.ErrorMessage)
 	storedGroup, err := svc.store.GetRetryGroup(ctx, group.ID)
 	require.NoError(t, err)
 	require.Equal(t, RetryGroupCancelled, storedGroup.State)
+	require.Greater(t, storedGroup.Generation, run.RetryGroupGeneration)
+	require.ErrorIs(t, svc.DeleteRun(ctx, run.ID), ErrRetryLaunchUncertain)
 }

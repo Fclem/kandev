@@ -238,6 +238,7 @@ func TestRetryAdmissionSupersedesCommittedUnboundRunBeforeRecovery(t *testing.T)
 		RetryGroupID: oldGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
 	}
 	require.NoError(t, store.CreateRun(ctx, oldRun))
+	recordSyntheticRetryAdmission(t, store, oldRun)
 	intent := &RetryTaskIntent{ID: "old-committed-intent", RunID: oldRun.ID,
 		GroupGeneration: 1, State: retryIntentCreated, TaskID: "committed-task"}
 	require.NoError(t, store.CreateRetryIntent(ctx, intent))
@@ -293,6 +294,7 @@ func TestSupersededActiveRetryCanCompleteWithoutReplacingLiveGroup(t *testing.T)
 		RetryPolicySnapshot: `{"mode":"finite","max_retries":"2","delay_seconds":"0","backoff":"fixed"}`,
 	}
 	require.NoError(t, store.CreateRun(ctx, activeRun))
+	recordSyntheticRetryAdmission(t, store, activeRun)
 	replacement := &AutomationRun{
 		ID: "replacement-completion-run", AutomationID: a.ID, TriggerID: "trigger-a",
 		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
@@ -340,6 +342,7 @@ func TestSupersededActiveRetryCanSucceedWithoutReplacingLiveGroup(t *testing.T) 
 		RetryGroupID: oldGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
 	}
 	require.NoError(t, store.CreateRun(ctx, activeRun))
+	recordSyntheticRetryAdmission(t, store, activeRun)
 	replacement := &AutomationRun{
 		ID: "replacement-success-run", AutomationID: a.ID, TriggerID: "trigger-a",
 		TriggerType: TriggerTypeManual, Status: RunStatusTriggered,
@@ -427,6 +430,7 @@ func TestRetryAdmissionSupersedesUnstartedTriggeredRetry(t *testing.T) {
 		RetryGroupGeneration: 1, RetryState: RetryStateTriggered,
 	}
 	require.NoError(t, store.CreateRun(ctx, oldRun))
+	recordSyntheticRetryAdmission(t, store, oldRun)
 	intent := &RetryTaskIntent{
 		ID: "old-unstarted-intent", RunID: oldRun.ID,
 		GroupGeneration: 1, State: retryIntentAdmitted,

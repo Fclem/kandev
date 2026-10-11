@@ -327,6 +327,7 @@ func TestService_DeleteRunAfterPreBindFailureDoesNotBreakRetryRecovery(t *testin
 		RetryPolicySnapshot:  `{"mode":"finite","max_retries":"1","delay_seconds":"1","backoff":"fixed"}`,
 	}
 	require.NoError(t, svc.store.CreateRun(ctx, parent))
+	recordSyntheticRetryAdmission(t, svc.store, parent)
 	require.NoError(t, svc.store.CreateRetryOutbox(ctx, &RetryOutbox{
 		EventID: "run-delete-prebind:initial",
 		RunID:   parent.ID,

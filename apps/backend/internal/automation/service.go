@@ -913,6 +913,11 @@ func (s *Service) DeleteAutomation(ctx context.Context, id string) error {
 	if err := s.authorizeAutomation(ctx, id); err != nil {
 		return err
 	}
+	disabled := false
+	if err := s.store.UpdateAutomation(ctx, id, &UpdateAutomationRequest{Enabled: &disabled}); err != nil {
+		return err
+	}
+
 	unlock := s.automationRunLock(id)
 	defer unlock()
 	cleanupTaskIDs, err := s.hiddenAutomationTaskIDs(ctx, id)
@@ -982,6 +987,9 @@ func (s *Service) DeleteAutomationsByWorkspace(ctx context.Context, workspaceID 
 	return deleted, nil
 }
 func (s *Service) stopAutomationRun(ctx context.Context, run *AutomationRun) error {
+	if run != nil && run.RetryGroupID != "" && !retryRunIsTerminal(run) {
+		return s.cancelRetryRunForStop(ctx, run)
+	}
 	originallyUnbound := run != nil && (run.TaskID == "" || run.SessionID == "" || run.TurnID == "")
 	boundRun, err := s.retryRunWithOperationBinding(ctx, run)
 	if err != nil {
@@ -1007,9 +1015,12 @@ func (s *Service) stopAutomationRun(ctx context.Context, run *AutomationRun) err
 }
 
 // stopOpenAutomationRuns quiesces live bound turns before their automation
-// references are removed. An admitted row without a binding has no runtime
-// to stop and is safely removed by the deletion transaction.
+// references are removed. Future admissions are revoked first; unresolved
+// launches retain their records until exact termination evidence arrives.
 func (s *Service) stopOpenAutomationRuns(ctx context.Context, automationID string) error {
+	if err := s.store.RevokeRetryAdmissions(ctx, automationID, ""); err != nil {
+		return err
+	}
 	runs, err := s.store.ListOpenRuns(ctx, automationID)
 	if err != nil {
 		return fmt.Errorf("list open automation runs: %w", err)
@@ -1023,10 +1034,9 @@ func (s *Service) stopOpenAutomationRuns(ctx context.Context, automationID strin
 }
 
 // ReconcileOpenRuns settles rows left open by a process stop. Admission rows
-// without a binding are never guessed into a task and fail immediately unless
-// their durable retry outbox still makes them eligible for startup replay.
-// Bound rows are settled only when the orchestrator confirms that their exact
-// turn is no longer live or blocked.
+// without a binding are never guessed into a task. Retry acceptance that cannot
+// be resolved remains visible and owned. Bound retry rows require definitive
+// terminal evidence; absence from the local executor is insufficient.
 func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 	runs, err := s.store.ListAllOpenRuns(ctx)
 	if err != nil {
@@ -1066,6 +1076,11 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 				}
 			}
 			if err := s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "backend stopped before the automation turn was bound"); err != nil {
+				if errors.Is(err, ErrRetryLaunchUncertain) {
+					if recordErr := s.store.RecordRetryLaunchUncertainty(ctx, run.ID); recordErr != nil {
+						s.logger.Warn("failed to record unresolved retry acceptance", zap.String("run_id", run.ID), zap.Error(recordErr))
+					}
+				}
 				s.logger.Warn("failed to reconcile unbound automation run", zap.String("run_id", run.ID), zap.Error(err))
 			}
 			continue
@@ -1084,6 +1099,11 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 					ctx, run.ID, run.RetryGroupGeneration,
 					errors.New("automation turn was stale after backend recovery"), "completion",
 				); finalizeErr != nil {
+					if errors.Is(finalizeErr, ErrRetryLaunchUncertain) {
+						if recordErr := s.store.RecordRetryLaunchUncertainty(ctx, run.ID); recordErr != nil {
+							s.logger.Warn("failed to record unresolved retry acceptance", zap.String("run_id", run.ID), zap.Error(recordErr))
+						}
+					}
 					s.logger.Warn("failed to finalize stale automation retry",
 						zap.String("run_id", run.ID), zap.Error(finalizeErr))
 				}
@@ -1141,6 +1161,11 @@ func (s *Service) retryRunWithOperationBinding(ctx context.Context, run *Automat
 	if operation.ExternalTaskID == "" || operation.ExternalSessionID == "" || operation.ExternalTurnID == "" {
 		return run, nil
 	}
+	if (run.TaskID != "" && run.TaskID != operation.ExternalTaskID) ||
+		(run.SessionID != "" && run.SessionID != operation.ExternalSessionID) ||
+		(run.TurnID != "" && run.TurnID != operation.ExternalTurnID) {
+		return nil, ErrRetryGenerationMismatch
+	}
 	bound := *run
 	bound.TaskID = operation.ExternalTaskID
 	bound.SessionID = operation.ExternalSessionID
@@ -1149,37 +1174,81 @@ func (s *Service) retryRunWithOperationBinding(ctx context.Context, run *Automat
 }
 
 func (s *Service) stopBoundRetryRun(ctx context.Context, run *AutomationRun) error {
+	launch, launchErr := s.store.RequestRetryLaunchStop(ctx, run.ID)
+	if launchErr != nil && !errors.Is(launchErr, sql.ErrNoRows) {
+		return launchErr
+	}
+	if launch != nil && launch.State == RetryLaunchStopped {
+		return nil
+	}
 	if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
+		if run.RetryGroupID != "" {
+			var modern int
+			if err := s.store.ro.GetContext(ctx, &modern, s.store.ro.Rebind(`SELECT COUNT(*) FROM automation_retry_launch_protocols WHERE run_id = ? AND version = 1`), run.ID); err != nil {
+				return err
+			}
+			if modern != 1 {
+				return ErrRetryLaunchUncertain
+			}
+		}
 		return nil
 	}
 	if s.runStopper == nil {
-		return errors.New("automation run stopper is not configured")
+		return ErrRetryLaunchUncertain
 	}
-	_, err := s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
-	return err
+	var stopped bool
+	var err error
+	if definitive, ok := s.runStopper.(interface {
+		StopAutomationRunDefinitively(context.Context, string, string, string) (bool, error)
+	}); ok {
+		stopped, err = definitive.StopAutomationRunDefinitively(ctx, run.TaskID, run.SessionID, run.TurnID)
+	} else {
+		stopped, err = s.runStopper.StopAutomationRun(ctx, run.TaskID, run.SessionID, run.TurnID)
+		if err == nil && run.RetryGroupID != "" {
+			return ErrRetryLaunchUncertain
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if launch != nil {
+		if !stopped {
+			current, err := s.store.GetRetryLaunch(ctx, run.ID)
+			if err == nil && current.State == RetryLaunchStopped {
+				return nil
+			}
+			return errors.Join(ErrRetryLaunchUncertain, err)
+		}
+		return s.store.CompleteRetryLaunchStop(ctx, launch)
+	}
+	if !stopped {
+		return ErrRetryLaunchUncertain
+	}
+	if run.RetryGroupID != "" {
+		return s.store.recordLegacyRetryStop(ctx, run)
+	}
+	return nil
 }
 
 func (s *Service) cancelRetryRunForStop(ctx context.Context, run *AutomationRun) error {
-	group, err := s.store.GetRetryGroup(ctx, run.RetryGroupID)
-	if err != nil {
+	if err := s.store.RevokeRetryAdmissions(ctx, run.AutomationID, run.RetryGroupID); err != nil {
 		return err
 	}
 	boundRun, err := s.retryRunWithOperationBinding(ctx, run)
 	if err != nil {
 		return err
 	}
+	current, err := s.store.GetRun(ctx, run.ID)
+	if err != nil {
+		return err
+	}
+	if current != nil && retryRunIsTerminal(current) {
+		return nil
+	}
 	if err := s.stopBoundRetryRun(ctx, boundRun); err != nil {
 		return err
 	}
-	superseded := group != nil && group.State == RetryGroupSuperseded &&
-		group.Generation != run.RetryGroupGeneration
-	if superseded {
-		return s.store.CancelRetryRun(ctx, run.ID, run.RetryGroupGeneration)
-	}
-	if err := s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration); err != nil {
-		return err
-	}
-	return nil
+	return s.store.CancelRetryRun(ctx, run.ID, run.RetryGroupGeneration)
 }
 
 // StopRun cancels one open automation run. The stored binding is authoritative;
@@ -1189,6 +1258,19 @@ func (s *Service) StopRun(ctx context.Context, automationID, runID string) (*Aut
 	if err := s.authorizeAutomation(ctx, automationID); err != nil {
 		return nil, err
 	}
+	observed, readErr := s.store.GetRun(ctx, runID)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if observed == nil || observed.AutomationID != automationID {
+		return nil, ErrAutomationNotFound
+	}
+	if observed.RetryGroupID != "" {
+		if _, err := s.store.RequestRetryLaunchStop(ctx, runID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+
 	unlock := s.automationRunLock(automationID)
 	defer unlock()
 
@@ -1578,6 +1660,9 @@ func (s *Service) DispatchRun(
 	if run == nil {
 		return ErrAutomationRunNotDispatchable
 	}
+	if run.RetryGroupID != "" {
+		return s.dispatchRetryLaunch(ctx, run, dispatch)
+	}
 	var unlock func()
 	lockedCtx := ctx
 	if !retryRunLockHeld(ctx, run.AutomationID) {
@@ -1665,15 +1750,17 @@ func (s *Service) createRunLocked(ctx context.Context, run *AutomationRun) error
 }
 
 func (s *Service) cancelRetryGroupForDelete(ctx context.Context, run *AutomationRun) error {
-	group, err := s.store.GetRetryGroup(ctx, run.RetryGroupID)
+	if err := s.store.RevokeRetryAdmissions(ctx, run.AutomationID, run.RetryGroupID); err != nil {
+		return err
+	}
+	current, err := s.store.GetRun(ctx, run.ID)
 	if err != nil {
 		return err
 	}
-	if group != nil && group.State == RetryGroupSuperseded &&
-		group.Generation != run.RetryGroupGeneration {
-		return s.store.CancelRetryRun(ctx, run.ID, run.RetryGroupGeneration)
+	if current != nil && retryRunIsTerminal(current) {
+		return nil
 	}
-	return s.store.CancelRetryGroup(ctx, run.RetryGroupID, run.RetryGroupGeneration)
+	return s.store.CancelRetryRun(ctx, run.ID, run.RetryGroupGeneration)
 }
 
 // DeleteRun removes a single run and its associated task (if any).
@@ -2225,6 +2312,10 @@ func (s *Service) finishAdmissionWrite(
 	if admissionErr == nil {
 		return false, nil
 	}
+	if errors.Is(admissionErr, ErrRetryCapacityReached) {
+		s.recordSkippedTrigger(ctx, a, triggerID, triggerType, triggerData, dedupKey, "", admissionErr.Error(), a.MaxConcurrentRuns)
+		return true, nil
+	}
 	if s.recordDuplicateAdmissionConflict(ctx, a, triggerID, triggerType, triggerData, dedupKey, admissionErr) {
 		return true, nil
 	}
@@ -2375,7 +2466,17 @@ func (s *Service) MarkRunTerminalByBinding(ctx context.Context, taskID, sessionI
 	return s.store.MarkRunTerminalByBinding(ctx, taskID, sessionID, turnID, status, errMsg)
 }
 func (s *Service) ListOpenRunsByTaskID(ctx context.Context, taskID string) ([]*AutomationRun, error) {
-	return s.store.ListOpenRunsByTaskID(ctx, taskID)
+	runs, err := s.store.ListOpenRunsByTaskID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	for i, run := range runs {
+		runs[i], err = s.retryRunWithOperationBinding(ctx, run)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return runs, nil
 }
 func (s *Service) ReleaseRetryClaim(ctx context.Context, runID, token string, generation int64) error {
 	return s.store.ReleaseRetryClaim(ctx, runID, token, generation)

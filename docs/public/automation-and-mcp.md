@@ -160,6 +160,12 @@ identity. The history view returns a bounded page, an opaque continuation
 cursor, and a high-water mark so clients can continue paging without losing
 newly-created retry groups.
 
+### Automatic retries
+
+Task automations can disable retries, retry a finite number of times, or keep retrying without a count limit. Fixed delay keeps the same interval; exponential delay increases the interval between attempts. Attempts and timeline views retain the original firing and its related history.
+
+A retry keeps one task, session, turn and submission identity through queued starts and backend recovery. If provider acceptance cannot be established, the run remains pending with an error and is not automatically sent again. It continues to occupy capacity until its exact turn completes or the observed execution is confirmed stopped. Stop, disable and delete can therefore report pending ownership instead of silently releasing a possibly live run. Retrying a failed Stop targets that same execution. Older retries without sufficient acceptance evidence also remain pending.
+
 ### Schedule
 
 The scheduler checks every 30 seconds and computes each expression's next calendar fire time in its configured timezone. A schedule created part-way through the day first fires at its next scheduled occurrence after creation (not immediately). A schedule missed while the backend was stopped fires once on the next check rather than once per missed occurrence.
@@ -274,7 +280,7 @@ Trigger payloads are untrusted input. Do not let a PR body or webhook field sile
 
 ## Concurrency, history, and cleanup
 
-Maximum concurrent runs defaults to 1 and cannot be less than 1. An admitted `triggered` run and a bound `task_created` run are both open until their exact turn is settled. A run counts as active while its task is neither deleted, archived, nor explicitly cancelled, the same definition the UI uses when it says an automation will not fire because a run is still open, so the reason shown and the cap causing it cannot disagree. `reuse_thread` requires `max_concurrent_runs = 1`. When the cap is reached, Kandev records a `skipped` run and advances the schedule's evaluation time rather than retrying every 30 seconds.
+Maximum concurrent runs defaults to 1 and cannot be less than 1. An admitted `triggered` run and a bound `task_created` run are both open until their exact turn is settled. An unresolved retry launch continues to count as active even if its task is archived or cancellation was requested. Other runs count as active while their task is neither deleted, archived, nor explicitly cancelled, the same definition the UI uses when it says an automation will not fire because a run is still open, so the reason shown and the cap causing it cannot disagree. `reuse_thread` requires `max_concurrent_runs = 1`. When the cap is reached, Kandev records a `skipped` run and advances the schedule's evaluation time rather than retrying every 30 seconds.
 
 Run history can report `triggered`, `task_created`, `succeeded`, `failed`, `skipped`, `archived`, or `cancelled`. `triggered` means that admission succeeded but task/session/turn binding is not complete. When the instance session limit delays a run's start, Kandev keeps the run `triggered` and retries the start automatically; the run holds its concurrency slot for as long as the limit stays full. Stopping the run cancels the waiting start. A delayed start does not survive a backend restart: startup marks the unbound run `failed` and the start is dropped. If the task is deleted while its start waits, Kandev marks the unbound run `failed` and releases its slot. The last two are derived at read time, not stored: a `task_created` run whose task was deleted or whose primary session was cancelled reads as `cancelled`, and one whose task was archived reads as `archived`. That derivation is defined once and shared by every view, so two surfaces cannot disagree about the same run.
 

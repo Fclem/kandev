@@ -1,6 +1,6 @@
 ---
 created: 2026-09-29
-status: complete
+status: in-progress
 requirements:
   - REQ-OFFICE-AUTOMATION-RETRIES-001
 system_design:
@@ -127,6 +127,7 @@ a pixel specification.
 ## Work orders
 
 - [x] [Task 01: Deliver the durable retry lifecycle](task-01-durable-retry-lifecycle.md)
+- [ ] [Task 02: Close retry delivery and launch ownership gaps](task-02-retry-delivery-ownership.md)
 
 ## Verification strategy
 
@@ -137,6 +138,8 @@ a pixel specification.
 - Run specification validation, specification lint, and public documentation validation.
 
 ## Verification results
+
+Task 02 is in progress. The PR review reproduced production routing, duplicate-dispatch, incomplete-binding Stop, and policy normalization failures with synthetic boundary fixtures, and exact-binding replacement with original SQL in private SQLite. Those proofs do not establish full-application or PostgreSQL correctness. The historical results below belong to Task 01; they do not certify the remaining launch protocol or current main integration.
 
 AC-OFFICE-AUTOMATION-RETRIES-001.7 and .8 passed: retry payload unit tests (19/19), frontend typecheck and focused ESLint, backend E2E seeder package compile, desktop Chromium E2E (1/1), and mobile E2E (4/4). Public-doc validation passed (62 tests; 47 published pages); specification validation and lint passed (339 decisions, 1287 specifications). E2E ran under Node 22.22.3 although the workspace declares Node 24. Existing retry-lifecycle results remain in Task 01.
 

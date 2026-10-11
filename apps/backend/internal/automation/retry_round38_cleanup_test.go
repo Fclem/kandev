@@ -35,6 +35,8 @@ func ambiguousCleanupFixture(t *testing.T, name string) (*Service, *Automation, 
 		ExternalTaskID: "accepted-bulk-task", ExternalSessionID: "accepted-session",
 		ExternalTurnID: "accepted-turn",
 	}))
+	// Accepted but unprojected ownership can be deleted only after exact synthetic termination evidence.
+	svc.SetRunStopper(&recordingRunStopper{})
 	return svc, a, deleter
 }
 

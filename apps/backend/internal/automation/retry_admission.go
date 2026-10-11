@@ -94,6 +94,15 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockRetryAutomation(ctx, tx, run.AutomationID); err != nil {
+		return err
+	}
+	if err := checkRetryAdmissionCapacity(ctx, tx, run.AutomationID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO automation_retry_launch_protocols (run_id, task_id, version) VALUES (?, ?, 1)`), run.ID, run.TaskID); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	triggerIDs := canonicalRetryTriggerIDs(group.TriggerIDsJSON, group.TriggerID)
 	encodedTriggerIDs, _ := json.Marshal(triggerIDs)
@@ -173,6 +182,14 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 			return err
 		}
 	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_launches SET cancel_requested = TRUE, state = CASE WHEN state IN (?, ?) THEN ? ELSE state END, updated_at = ? WHERE run_id IN (SELECT id FROM automation_runs WHERE retry_group_id IN (SELECT id FROM automation_retry_groups WHERE superseded_by_run_id = ?))`), RetryLaunchPrepared, RetryLaunchQueued, RetryLaunchStopped, now, run.ID); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET status = ?, retry_state = ?, retry_cancelled_at = ? WHERE retry_group_id IN (SELECT id FROM automation_retry_groups WHERE superseded_by_run_id = ?) AND status IN (?, ?) AND EXISTS (SELECT 1 FROM automation_retry_launches l WHERE l.run_id = automation_runs.id AND l.state = ?)`), RunStatusFailed, RetryStateSuperseded, now, run.ID, RunStatusTriggered, RunStatusTaskCreated, RetryLaunchStopped); err != nil {
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_runs
 		SET status = ?, retry_state = ?, retry_cancelled_at = ?,
@@ -190,6 +207,7 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 		WHERE retry_group_id IN (
 			SELECT id FROM automation_retry_groups WHERE superseded_by_run_id = ?
 		) AND status = ? AND retry_state = ? AND task_id = ''
+		AND EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id = automation_runs.id AND p.version = 1)
 		AND EXISTS (
 			SELECT 1 FROM automation_run_operations o
 			WHERE o.run_id = automation_runs.id
@@ -207,6 +225,7 @@ func (s *Store) CreateRetryAdmission(ctx context.Context, run *AutomationRun, gr
 		WHERE retry_group_id IN (
 			SELECT id FROM automation_retry_groups WHERE superseded_by_run_id = ?
 		) AND status = ? AND retry_state = ? AND task_id = ''
+		AND EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id = automation_runs.id AND p.version = 1)
 		AND EXISTS (
 			SELECT 1 FROM automation_run_operations o
 			WHERE o.run_id = automation_runs.id

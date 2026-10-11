@@ -765,6 +765,11 @@ func (s *Service) claimLaunchAttachments(ctx context.Context, req *LaunchSession
 // the prompt — eagerly launching here would spawn a promptless PTY and the
 // later start would be rejected against the now-running session.
 func (s *Service) launchPrepare(ctx context.Context, req *LaunchSessionRequest) (*LaunchSessionResponse, error) {
+	manualTaskID := ""
+	if launchOriginForActivation(req) == launchOriginManual && retryLaunchInContext(ctx) == nil {
+		manualTaskID = req.TaskID
+	}
+	ctx = models.WithExplicitManualCreation(ctx, manualTaskID)
 	prepareCtx := withInitialPromptPreview(ctx, req.InitialPromptPreview)
 	prepareCtx = withInitialPromptSubmission(prepareCtx, req.InitialPromptSubmission)
 	if s.shouldUpgradePassthroughPrepare(ctx, req) {

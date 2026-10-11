@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "@/lib/i18n";
 import { toast } from "@/lib/toast/sonner";
 import {
@@ -45,6 +45,7 @@ function mergeAutomationRuns(
 }
 
 const COULD_NOT_REFRESH_RUNS = "automations:couldNotRefreshRuns";
+const pendingStopsByStore = new WeakMap<object, Set<string>>();
 
 /**
  * Latest in-flight list request per (store instance, automation). `fetchRuns`
@@ -143,6 +144,7 @@ function revertAfterFailedDelete(
     getEpoch: store.getEpoch,
     setRunsLoading: store.setRunsLoading,
     setRuns: store.setRuns,
+    historyMode: store.getHistoryMode(),
     onError: () => {
       store.setRuns(automationId, fallbackRuns);
       toast.error(t(COULD_NOT_REFRESH_RUNS));
@@ -153,6 +155,7 @@ function revertAfterFailedDelete(
 
 type DeleteStore = {
   storeApi: object;
+  getHistoryMode: () => RetryHistoryMode;
   getEpoch: () => number;
   bumpEpoch: () => void;
   clearRuns: (automationId: string) => void;
@@ -196,6 +199,7 @@ function executeDeleteAll(
           getEpoch: store.getEpoch,
           setRunsLoading: store.setRunsLoading,
           setRuns: store.setRuns,
+          historyMode: store.getHistoryMode(),
           // Surface a failed reconciliation instead of silently keeping the
           // optimistic state; the delete itself already succeeded.
           onError: () => toast.error(t(COULD_NOT_REFRESH_RUNS)),
@@ -226,6 +230,7 @@ function executeDeleteAll(
         getEpoch: store.getEpoch,
         setRunsLoading: store.setRunsLoading,
         setRuns: store.setRuns,
+        historyMode: store.getHistoryMode(),
         // Surface a failed reconciliation instead of silently keeping the
         // optimistic state; the deletes themselves already succeeded.
         onError: () => toast.error(t(COULD_NOT_REFRESH_RUNS)),
@@ -293,6 +298,7 @@ function executeDeleteRun(
         getEpoch: store.getEpoch,
         setRunsLoading: store.setRunsLoading,
         setRuns: store.setRuns,
+        historyMode: store.getHistoryMode(),
         onError: () => {
           // The recovery refresh also failed — the store would otherwise
           // stay permanently missing this row even though the delete never
@@ -327,6 +333,8 @@ export function useAutomationRuns(
   const clearRuns = useAppStore((state) => state.clearAutomationRuns);
   const restoreRun = useAppStore((state) => state.restoreAutomationRun);
   const storeApi = useAppStoreApi();
+  const historyModeRef = useRef(historyMode);
+  const [stoppingRuns, setStoppingRuns] = useState<Map<string, string>>(() => new Map());
 
   // Destructive mutations are serialized per automation in shared store
   // state: only one may be in flight, so a recovery can never race a newer
@@ -346,7 +354,9 @@ export function useAutomationRuns(
   );
 
   useEffect(() => {
-    if (!automationId || loading) return;
+    const modeChanged = historyModeRef.current !== historyMode;
+    historyModeRef.current = historyMode;
+    if (!automationId || (loading && !modeChanged)) return;
     // A delete owns the store while it is in flight: its reconciliation or
     // recovery is the only list request, so it can never be superseded by a
     // mount fetch whose failure would skip the recovery's snapshot restore.
@@ -407,6 +417,7 @@ export function useAutomationRuns(
   const makeStore = useCallback(
     (end: () => void): DeleteStore => ({
       storeApi,
+      getHistoryMode: () => historyModeRef.current,
       getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId ?? ""] ?? 0,
       bumpEpoch: () => storeApi.getState().advanceAutomationRunEpoch(automationId ?? ""),
       clearRuns,
@@ -460,11 +471,44 @@ export function useAutomationRuns(
   const stopRun = useCallback(
     async (runId: string) => {
       if (!automationId) return;
-      await stopAutomationRun(automationId, runId);
-      refresh();
+      let pending = pendingStopsByStore.get(storeApi);
+      if (!pending) {
+        pending = new Set();
+        pendingStopsByStore.set(storeApi, pending);
+      }
+      if (pending.has(runId)) return;
+      pending.add(runId);
+      setStoppingRuns((current) => new Map(current).set(runId, automationId));
+      try {
+        await stopAutomationRun(automationId, runId);
+        refresh();
+      } catch (error) {
+        toast.error(
+          t("automations:failedToStopRun", {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      } finally {
+        pending.delete(runId);
+        if (pending.size === 0) pendingStopsByStore.delete(storeApi);
+        setStoppingRuns((current) => {
+          const remaining = new Map(current);
+          remaining.delete(runId);
+          return remaining;
+        });
+      }
     },
-    [automationId, refresh],
+    [automationId, refresh, storeApi],
   );
 
-  return { runs, loading, refresh, deleteRun, deleteAllRuns, stopRun, deleting };
+  return {
+    runs,
+    loading,
+    refresh,
+    deleteRun,
+    deleteAllRuns,
+    stopRun,
+    deleting,
+    stopping: [...stoppingRuns.values()].includes(automationId ?? ""),
+  };
 }

@@ -84,6 +84,9 @@ test.describe("Automation deletion confirmation on mobile", () => {
     await expect(testPage.getByTestId("automation-editor")).toBeVisible({ timeout: 15_000 });
 
     const finite = testPage.getByRole("radio", { name: "Retry a fixed number of times" });
+    await expect(
+      testPage.getByRole("radiogroup", { name: "Automatic retries", exact: true }),
+    ).toBeVisible();
     await finite.tap();
     await expect(finite).toBeChecked();
     await expect(testPage.locator('label[for="automation-retry-finite"]')).toHaveClass(

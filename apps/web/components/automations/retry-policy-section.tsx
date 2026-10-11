@@ -23,6 +23,7 @@ function RetryModeSelector({ policy, updateField }: Pick<Props, "policy" | "upda
   return (
     <RadioGroup
       data-testid="automation-retry-modes"
+      aria-label={t("automations:retryTitle")}
       value={policy.mode}
       onValueChange={(value) =>
         updateField("retryPolicy", retryPolicyAfterModeChange(policy, value as RetryPolicy["mode"]))

@@ -15,6 +15,12 @@ func NormalizeRetryPolicy(policy RetryPolicy) (RetryPolicy, error) {
 	if policy.Mode == "" {
 		policy.Mode = RetryModeDisabled
 	}
+	if policy.Mode == RetryModeDisabled {
+		return RetryPolicy{
+			Mode: RetryModeDisabled, MaxRetries: "0", DelaySeconds: "0",
+			Backoff: RetryBackoffFixed, HistoryMode: RetryHistoryAttempts,
+		}, nil
+	}
 	if policy.Backoff == "" {
 		policy.Backoff = RetryBackoffFixed
 	}
@@ -28,13 +34,6 @@ func NormalizeRetryPolicy(policy RetryPolicy) (RetryPolicy, error) {
 	delay, err := parseRetryDecimal(policy.DelaySeconds)
 	if err != nil {
 		return RetryPolicy{}, fmt.Errorf("invalid retry delay: %w", err)
-	}
-	if policy.Mode == RetryModeDisabled {
-		policy.MaxRetries = "0"
-		policy.DelaySeconds = "0"
-		policy.Backoff = RetryBackoffFixed
-		policy.HistoryMode = RetryHistoryAttempts
-		return policy, nil
 	}
 	if policy.Mode == RetryModeFinite {
 		maxRetries, parseErr := parseRetryDecimal(policy.MaxRetries)

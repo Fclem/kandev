@@ -22,6 +22,13 @@ func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_retry_launches SET state = ?, updated_at = ? WHERE state IN (?, ?)`), RetryLaunchUncertain, now, RetryLaunchPreparing, RetryLaunchDispatching); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET error_message = ? WHERE EXISTS (SELECT 1 FROM automation_retry_launches l WHERE l.run_id = automation_runs.id AND l.state = ?)`), ErrRetryLaunchUncertain.Error(), RetryLaunchUncertain); err != nil {
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`
 		UPDATE automation_runs
 		SET retry_state = ?, retry_claimed_at = NULL, retry_claim_expires_at = NULL, retry_claim_token = ''
@@ -41,6 +48,9 @@ func (s *Store) RecoverRetryLedger(ctx context.Context, now time.Time) error {
 		SET state = ?, lease_token = '', lease_expires_at = NULL, updated_at = ?
 		WHERE state = ? AND (lease_expires_at IS NULL OR lease_expires_at <= ?)`),
 		retryOutboxPending, now, retryOutboxLeased, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automation_runs SET error_message=? WHERE retry_group_id<>'' AND status IN ('triggered','task_created') AND NOT EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id=automation_runs.id AND p.version IN (1,-1))`), ErrRetryLaunchUncertain.Error()); err != nil {
 		return err
 	}
 	// Admitted intents are already scheduler-visible. Only an unstarted

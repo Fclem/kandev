@@ -65,3 +65,20 @@ func TestNormalizeRetryPolicyDisabledIgnoresRetryOnlyValues(t *testing.T) {
 		t.Fatalf("normalized disabled policy = %#v, want %#v", policy, want)
 	}
 }
+
+func TestNormalizeRetryPolicyDisabledDiscardsInvalidInactiveValues(t *testing.T) {
+	for _, mode := range []RetryMode{"", RetryModeDisabled} {
+		policy, err := NormalizeRetryPolicy(RetryPolicy{
+			Mode: mode, MaxRetries: "invalid", DelaySeconds: "-1",
+			Backoff: "invalid", HistoryMode: "invalid",
+		})
+		if err != nil {
+			t.Fatalf("disabled policy rejected discarded fields: %v", err)
+		}
+		want := RetryPolicy{Mode: RetryModeDisabled, MaxRetries: "0", DelaySeconds: "0",
+			Backoff: RetryBackoffFixed, HistoryMode: RetryHistoryAttempts}
+		if policy != want {
+			t.Fatalf("normalized policy = %#v, want %#v", policy, want)
+		}
+	}
+}

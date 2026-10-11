@@ -20,6 +20,7 @@ type automationRunLaunch struct {
 	RunID        string                  `json:"run_id"`
 	ThreadAction automation.ThreadAction `json:"thread_action"`
 	ThreadReason string                  `json:"thread_reason"`
+	Launch       *automation.RetryLaunch `json:"launch,omitempty"`
 }
 
 // automationRunFromCeilingPayload returns the run a queued start serves, or
@@ -100,6 +101,17 @@ func (s *Service) automationRunAwaitsLaunch(ctx context.Context, runID string) b
 	if err != nil {
 		return true
 	}
+	if run != nil && run.RetryGroupID != "" {
+		owner, ok := s.automationService.(automationRetryLaunchOwner)
+		if !ok {
+			return true
+		}
+		launch, err := owner.GetRetryLaunch(ctx, runID)
+		if err != nil {
+			return true
+		}
+		return !launch.CancelRequested && (launch.State == automation.RetryLaunchPrepared || launch.State == automation.RetryLaunchQueued)
+	}
 	return run != nil && run.Status == automation.RunStatusTriggered
 }
 
@@ -114,6 +126,17 @@ func (s *Service) failQueuedAutomationRun(ctx context.Context, payload map[strin
 	dispatcher, ok := s.automationService.(automationRunDispatcher)
 	if run == nil || !ok {
 		return true
+	}
+	if owner, ok := s.automationService.(interface {
+		CancelQueuedRetryLaunch(context.Context, string) (bool, error)
+	}); ok {
+		handled, err := owner.CancelQueuedRetryLaunch(ctx, run.RunID)
+		if handled {
+			return err == nil
+		}
+		if err != nil {
+			return false
+		}
 	}
 	dropped := errors.New(reason)
 	err := dispatcher.DispatchRun(ctx, run.RunID, run.ThreadAction, run.ThreadReason, func() (automation.RunDispatch, error) {

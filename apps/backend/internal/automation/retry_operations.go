@@ -52,12 +52,7 @@ func (s *Store) BeginRetryTaskOperation(ctx context.Context, runID string, gener
 		runID, generation, retryTaskOperationKind); err != nil {
 		return nil, err
 	}
-	if operation.State == retryOperationCommitted {
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
-		return &operation, nil
-	}
+
 	if operation.State == retryOperationAbandoned {
 		return nil, ErrRetryGenerationMismatch
 	}
@@ -68,15 +63,21 @@ func (s *Store) BeginRetryTaskOperation(ctx context.Context, runID string, gener
 		JOIN automation_retry_groups rg ON rg.id = ar.retry_group_id
 		JOIN automations a ON a.id = ar.automation_id
 		WHERE ar.id = ? AND ar.retry_group_generation = ?
-			AND ar.status = ? AND ar.retry_state = ?
+			AND ar.status IN (?, ?) AND ar.retry_state = ?
 			AND rg.generation = ? AND rg.state = ? AND a.enabled = TRUE`),
-		runID, generation, RunStatusTriggered, RetryStateTriggered, generation, RetryGroupLive); err != nil {
+		runID, generation, RunStatusTriggered, RunStatusTaskCreated, RetryStateTriggered, generation, RetryGroupLive); err != nil {
 		return nil, err
 	}
 	if live != 1 {
 		return nil, ErrRetryGenerationMismatch
 	}
 
+	if operation.State == retryOperationCommitted {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return &operation, nil
+	}
 	now := time.Now().UTC()
 	if operation.State == retryOperationLeased && operation.LeaseExpiresAt != nil && operation.LeaseExpiresAt.After(now) {
 		return nil, ErrRetryOperationUndispatchable

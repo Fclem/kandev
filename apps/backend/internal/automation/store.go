@@ -22,8 +22,9 @@ import (
 
 // Store provides SQLite persistence for automations.
 type Store struct {
-	db *sqlx.DB // writer
-	ro *sqlx.DB // reader
+	db                   *sqlx.DB // writer
+	ro                   *sqlx.DB // reader
+	launchIdentityGuards bool
 }
 
 // NewStore creates a new automation store and initializes the schema.
@@ -356,7 +357,7 @@ const automationColumns = `id, workspace_id, name, description, workflow_id, wor
 	execution_mode = 'task' AS legacy_board_card`
 
 func (s *Store) initSchema() error {
-	if _, err := s.db.Exec(schemaSQLForDriver(createTablesSQL+pluginWebhookTablesSQL, s.db.DriverName())); err != nil {
+	if _, err := s.db.Exec(schemaSQLForDriver(createTablesSQL+pluginWebhookTablesSQL+retryLaunchTablesSQL, s.db.DriverName())); err != nil {
 		return err
 	}
 	migrate := db.NewRequiredMigrateLogger(s.db, nil)
@@ -452,6 +453,9 @@ func (s *Store) initSchema() error {
 	}
 	if _, err := s.db.Exec(schemaSQLForDriver(migrateRunDedupUniqueIndexSQL, s.db.DriverName())); err != nil {
 		return fmt.Errorf("create automation_runs dedup unique index: %w", err)
+	}
+	if err := s.installRetryIdentityGuards(context.Background()); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1109,8 +1113,21 @@ func repositoryIDs(repositories []AutomationRepository) []string {
 
 // DeleteAutomation removes an automation and its triggers/runs (CASCADE).
 func (s *Store) DeleteAutomation(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM automations WHERE id = ?`), id)
-	return err
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automations SET id = id WHERE id = ?`), id); err != nil {
+		return err
+	}
+	if err := requireResolvedRetryLaunches(ctx, tx, "automation_id", id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`DELETE FROM automations WHERE id = ?`), id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // AutomationTaskCleanupJob is durable ownership for a hidden task whose
@@ -1142,15 +1159,19 @@ func (s *Store) ListOpenRuns(ctx context.Context, automationID string) ([]*Autom
 	return runs, err
 }
 
-// ListOpenRunsByTaskID returns every open run bound to one task. Callers must
-// use the returned session and turn identities for terminal writes.
+// ListOpenRunsByTaskID includes observed task-operation ownership before binding.
+// Operation identities remain evidence, not accepted launch or terminal receipts.
 func (s *Store) ListOpenRunsByTaskID(ctx context.Context, taskID string) ([]*AutomationRun, error) {
 	var runs []*AutomationRun
 	err := s.ro.SelectContext(ctx, &runs, s.ro.Rebind(`
-		SELECT * FROM automation_runs
-		WHERE task_id = ? AND status IN (?, ?)
-		ORDER BY created_at ASC, id ASC`),
-		taskID, string(RunStatusTriggered), string(RunStatusTaskCreated))
+		SELECT ar.* FROM automation_runs ar
+		WHERE ar.status IN (?, ?) AND (ar.task_id = ? OR
+		 (ar.retry_group_id <> '' AND COALESCE(ar.task_id,'') = '' AND EXISTS (
+		  SELECT 1 FROM automation_run_operations o WHERE o.run_id=ar.id
+		  AND o.group_generation=ar.retry_group_generation AND o.operation_kind=?
+		  AND o.external_task_id=?)))
+		ORDER BY ar.created_at ASC, ar.id ASC`),
+		string(RunStatusTriggered), string(RunStatusTaskCreated), taskID, retryTaskOperationKind, taskID)
 	for _, run := range runs {
 		run.TriggerData = json.RawMessage(run.TriggerDataJSON)
 	}
@@ -1188,6 +1209,13 @@ func (s *Store) DeleteAutomationWithCleanup(ctx context.Context, id string, clea
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automations SET id = id WHERE id = ?`), id); err != nil {
+		return nil, err
+	}
+	if err := requireResolvedRetryLaunches(ctx, tx, "automation_id", id); err != nil {
+		return nil, err
+	}
 
 	owner, found, err := loadAutomationCleanupOwner(ctx, tx, id)
 	if err != nil {
@@ -1672,8 +1700,15 @@ func (s *Store) SetContinuationTaskID(ctx context.Context, automationID, taskID 
 func (s *Store) BindRun(ctx context.Context, runID, taskID, sessionID, turnID string, action ThreadAction, reason string) error {
 	res, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE automation_runs
-		SET task_id = ?, session_id = ?, turn_id = ?, thread_action = ?, thread_reason = ?, status = ?
-		WHERE id = ? AND status IN (?, ?) AND (
+		SET task_id = ?, session_id = ?, turn_id = ?,
+			thread_action = CASE WHEN status = ? THEN ? ELSE thread_action END,
+			thread_reason = CASE WHEN status = ? THEN ? ELSE thread_reason END,
+			status = ?
+		WHERE id = ? AND (
+			(status = ? AND (task_id = '' OR task_id = ?)
+				AND (session_id = '' OR session_id = ?) AND (turn_id = '' OR turn_id = ?))
+			OR (status = ? AND task_id = ? AND session_id = ? AND turn_id = ?)
+		) AND (
 			retry_group_id = '' OR EXISTS (
 				SELECT 1 FROM automation_retry_groups rg
 				JOIN automations a ON a.id = automation_runs.automation_id
@@ -1682,8 +1717,10 @@ func (s *Store) BindRun(ctx context.Context, runID, taskID, sessionID, turnID st
 					AND rg.state = ? AND a.enabled = TRUE
 			)
 		)`),
-		taskID, sessionID, turnID, action, reason, string(RunStatusTaskCreated),
-		runID, string(RunStatusTriggered), string(RunStatusTaskCreated), RetryGroupLive)
+		taskID, sessionID, turnID, string(RunStatusTriggered), action,
+		string(RunStatusTriggered), reason, string(RunStatusTaskCreated),
+		runID, string(RunStatusTriggered), taskID, sessionID, turnID, string(RunStatusTaskCreated),
+		taskID, sessionID, turnID, RetryGroupLive)
 	if err != nil {
 		return err
 	}
@@ -1717,7 +1754,8 @@ func (s *Store) MarkRunTerminal(ctx context.Context, runID, sessionID, turnID st
 			WHEN ? = ? AND trigger_type = ? AND COALESCE(task_id, '') = ''
 			THEN '' ELSE dedup_key
 		END
-		WHERE id = ? AND status IN (?, ?)`
+		WHERE id = ? AND status IN (?, ?)
+  AND (retry_group_id = '' OR EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id = automation_runs.id AND p.version IN (1, -1)))`
 	args := []any{
 		string(status), errMsg,
 		string(status), string(RunStatusFailed), string(TriggerTypeWebhook),
@@ -1731,6 +1769,11 @@ func (s *Store) MarkRunTerminal(ctx context.Context, runID, sessionID, turnID st
 		query += ` AND turn_id = ?`
 		args = append(args, turnID)
 	}
+	{
+		query += ` AND NOT EXISTS (SELECT 1 FROM automation_retry_launches l WHERE l.run_id = automation_runs.id AND l.state <> ?)`
+		args = append(args, RetryLaunchStopped)
+	}
+
 	res, err := s.db.ExecContext(ctx, s.db.Rebind(query), args...)
 	if err != nil {
 		return err
@@ -1750,7 +1793,7 @@ func (s *Store) MarkRunTerminalByBinding(ctx context.Context, taskID, sessionID,
 	}
 	res, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE automation_runs SET status = ?, error_message = ?
-		WHERE task_id = ? AND session_id = ? AND turn_id = ? AND status = ?`),
+		WHERE task_id = ? AND session_id = ? AND turn_id = ? AND status = ? AND NOT EXISTS (SELECT 1 FROM automation_retry_launches l WHERE l.run_id = automation_runs.id AND l.state <> 'stopped') AND (retry_group_id = '' OR EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id = automation_runs.id AND p.version IN (1, -1)))`),
 		string(status), errMsg, taskID, sessionID, turnID, string(RunStatusTaskCreated))
 	if err != nil {
 		return err
@@ -1758,6 +1801,7 @@ func (s *Store) MarkRunTerminalByBinding(ctx context.Context, taskID, sessionID,
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return fmt.Errorf("no open automation run matches task/session/turn binding")
 	}
+
 	return nil
 }
 
@@ -1779,7 +1823,7 @@ func (s *Store) MarkDeferredRunFailedByTaskID(ctx context.Context, taskID, errMs
 	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		UPDATE automation_runs SET status = ?, error_message = ?
 		WHERE task_id = ? AND status = ?
-			AND COALESCE(session_id, '') = '' AND COALESCE(turn_id, '') = ''`),
+			AND COALESCE(session_id, '') = '' AND COALESCE(turn_id, '') = '' AND (retry_group_id = '' OR EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id = automation_runs.id AND p.version IN (1, -1)))`),
 		string(RunStatusFailed), errMsg, taskID, string(RunStatusTriggered))
 	return err
 }
@@ -1801,6 +1845,7 @@ func (s *Store) updateRunTerminalStatus(ctx context.Context, taskID string, stat
 		WHERE id = (
 			SELECT id FROM automation_runs
 			WHERE task_id = ? AND status = ?
+   AND NOT EXISTS (SELECT 1 FROM automation_retry_launches l WHERE l.run_id = automation_runs.id AND l.state <> 'stopped') AND (retry_group_id = '' OR EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id = automation_runs.id AND p.version IN (1, -1)))
 			ORDER BY created_at DESC LIMIT 1
 		)`),
 		string(status), errMsg, taskID, string(RunStatusTaskCreated))
@@ -2455,7 +2500,9 @@ func (s *Store) CountActiveRuns(ctx context.Context, automationID string) (int, 
 // signal, and why NOT EXISTS rather than a LEFT JOIN.
 
 const openRunPredicateSQL = `(
-		ar.status = ?
+  EXISTS (SELECT 1 FROM automation_retry_launches l WHERE l.run_id = ar.id AND l.state <> 'stopped')
+  OR (ar.retry_group_id <> '' AND ar.status IN ('triggered', 'task_created') AND NOT EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id = ar.id AND p.version IN (1, -1)))
+  OR ar.status = ?
 		OR (ar.status = ? AND t.id IS NOT NULL AND t.archived_at IS NULL
 			AND NOT EXISTS (
 			SELECT 1 FROM task_sessions ts
@@ -2523,8 +2570,21 @@ func (s *Store) GetRun(ctx context.Context, id string) (*AutomationRun, error) {
 
 // DeleteRun removes a single run row.
 func (s *Store) DeleteRun(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM automation_runs WHERE id = ?`), id)
-	return err
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automations SET id = id WHERE id = (SELECT automation_id FROM automation_runs WHERE id = ?)`), id); err != nil {
+		return err
+	}
+	if err := requireResolvedRetryLaunches(ctx, tx, "run_id", id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`DELETE FROM automation_runs WHERE id = ?`), id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // GetCommittedRetryTaskID returns the provider task identity committed for one
@@ -2576,6 +2636,13 @@ func (s *Store) ClearContinuationAndDeleteAllRuns(ctx context.Context, automatio
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockRetryAutomation(ctx, tx, automationID); err != nil {
+		return err
+	}
+	if err := requireResolvedRetryLaunches(ctx, tx, "automation_id", automationID); err != nil {
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx, tx.Rebind(
 		`UPDATE automations SET continuation_task_id = '', updated_at = ? WHERE id = ?`), time.Now().UTC(), automationID); err != nil {
 		return err
@@ -2614,25 +2681,37 @@ func (s *Store) ClearContinuationAndDeleteAllRuns(ctx context.Context, automatio
 // DeleteAutomationsByWorkspace removes all automations (and their triggers/runs) for a workspace.
 // Used by e2e reset.
 func (s *Store) DeleteAutomationsByWorkspace(ctx context.Context, workspaceID string) (int, error) {
-	// Get automation IDs first for cascade cleanup.
-	var ids []string
-	if err := s.ro.SelectContext(ctx, &ids, s.ro.Rebind(
-		`SELECT id FROM automations WHERE workspace_id = ?`), workspaceID); err != nil {
-		return 0, err
-	}
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	for _, id := range ids {
-		_, _ = s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM automation_triggers WHERE automation_id = ?`), id)
-		_, _ = s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM automation_runs WHERE automation_id = ?`), id)
-	}
-	res, err := s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM automations WHERE workspace_id = ?`), workspaceID)
+	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE automations SET id = id WHERE workspace_id = ?`), workspaceID); err != nil {
+		return 0, err
+	}
+	var ids []string
+	if err := tx.SelectContext(ctx, &ids, tx.Rebind(`SELECT id FROM automations WHERE workspace_id = ? ORDER BY id`), workspaceID); err != nil {
+		return 0, err
+	}
+	for _, id := range ids {
+		if err := requireResolvedRetryLaunches(ctx, tx, "automation_id", id); err != nil {
+			return 0, err
+		}
+		for _, query := range []string{`DELETE FROM automation_triggers WHERE automation_id = ?`, `DELETE FROM automation_runs WHERE automation_id = ?`} {
+			if _, err := tx.ExecContext(ctx, tx.Rebind(query), id); err != nil {
+				return 0, err
+			}
+		}
+	}
+	result, err := tx.ExecContext(ctx, tx.Rebind(`DELETE FROM automations WHERE workspace_id = ?`), workspaceID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), tx.Commit()
 }
 
 func schemaSQLForDriver(schema, driver string) string {

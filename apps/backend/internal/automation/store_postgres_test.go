@@ -213,6 +213,7 @@ func TestPostgresRetryConcurrencyContracts(t *testing.T) {
 	if err := store.CreateRun(ctx, parent); err != nil {
 		t.Fatalf("create parent run: %v", err)
 	}
+	recordSyntheticRetryAdmission(t, store, parent)
 	child, err := store.FinalizeRetryFailure(ctx, parent.ID, 1, errors.New("provider failed"), "launch")
 	if err != nil {
 		t.Fatalf("finalize retry: %v", err)
@@ -257,14 +258,11 @@ func TestPostgresRetryConcurrencyContracts(t *testing.T) {
 
 	cancelGroup := &RetryGroup{ID: "pg-cancel-group", AutomationID: a.ID,
 		Generation: 1, State: RetryGroupLive}
-	if err := store.CreateRetryGroup(ctx, cancelGroup); err != nil {
-		t.Fatalf("create cancel group: %v", err)
-	}
 	cancelRun := &AutomationRun{ID: "pg-cancel-run", AutomationID: a.ID,
 		TriggerType: TriggerTypeManual, Status: RunStatusTaskCreated,
 		TaskID: "pg-cancel-task", SessionID: "pg-cancel-session", TurnID: "pg-cancel-turn",
-		RetryGroupID: cancelGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered}
-	if err := store.CreateRun(ctx, cancelRun); err != nil {
+		RetryGroupID: cancelGroup.ID, RetryGroupGeneration: 1, RetryState: RetryStateTriggered, DedupKey: "independent-cancel"}
+	if err := store.CreateRetryAdmission(ctx, cancelRun, cancelGroup); err != nil {
 		t.Fatalf("create cancel run: %v", err)
 	}
 	if err := store.CancelRetryGroup(ctx, cancelGroup.ID, 1); err != nil {

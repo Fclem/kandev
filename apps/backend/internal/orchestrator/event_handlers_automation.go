@@ -352,6 +352,8 @@ func (s *Service) handleAutomationTriggered(ctx context.Context, event *bus.Even
 	if !ok {
 		return nil
 	}
+	resolved := *evt
+	evt = &resolved
 
 	s.logger.Info("automation trigger received",
 		zap.String("automation_id", evt.AutomationID),
@@ -361,12 +363,12 @@ func (s *Service) handleAutomationTriggered(ctx context.Context, event *bus.Even
 		s.logger.Warn("automation service not configured")
 		return nil
 	}
-	if reader, ok := s.automationService.(automationDispatchReader); ok {
-		a, loadErr := reader.GetAutomationForDispatch(ctx, evt.AutomationID)
-		if loadErr != nil {
-			s.logger.Warn("failed to inspect automation destination", zap.String("automation_id", evt.AutomationID), zap.Error(loadErr))
-			return loadErr
-		}
+	a, inspected, loadErr := s.automationDestinationForEvent(ctx, evt)
+	if loadErr != nil {
+		s.logger.Warn("failed to inspect automation destination", zap.String("automation_id", evt.AutomationID), zap.Error(loadErr))
+		return loadErr
+	}
+	if inspected {
 		if a == nil {
 			return nil
 		}
@@ -417,6 +419,39 @@ func (s *Service) handleAutomationTriggered(ctx context.Context, event *bus.Even
 	return nil
 }
 
+func (s *Service) automationDestinationForEvent(
+	ctx context.Context, evt *automation.AutomationTriggeredEvent,
+) (*automation.Automation, bool, error) {
+	if binding, ok := s.automationService.(automationRunBinding); ok && evt.RunID != "" {
+		run, err := binding.GetRun(ctx, evt.RunID)
+		if err != nil {
+			return nil, true, err
+		}
+		if run != nil && run.RetryGroupID != "" {
+			snapshot, err := automation.DecodeRetryLaunchConfigSnapshot(run.RetryLaunchConfigSnapshot, run.RetryLaunchConfigVersion)
+			if err != nil {
+				return nil, true, err
+			}
+			if run.ID != evt.RunID || snapshot.AutomationID != run.AutomationID {
+				return nil, true, errors.New("retry launch snapshot does not match its run owner")
+			}
+			evt.AutomationID = snapshot.AutomationID
+			evt.TriggerID = snapshot.TriggerID
+			evt.TriggerType = snapshot.TriggerType
+			evt.DedupKey = snapshot.DedupKey
+			evt.RetryGroupGeneration = run.RetryGroupGeneration
+			evt.RetryExternalID = automation.RetryTaskExternalID(run.ID, run.RetryGroupGeneration)
+			evt.SnapshotVersion = snapshot.Version
+			return automationFromRetrySnapshot(snapshot), true, nil
+		}
+	}
+	if reader, ok := s.automationService.(automationDispatchReader); ok {
+		a, err := reader.GetAutomationForDispatch(ctx, evt.AutomationID)
+		return a, true, err
+	}
+	return nil, false, nil
+}
+
 func (s *Service) createAutomationTask(ctx context.Context, evt *automation.AutomationTriggeredEvent) {
 	if evt.RunID != "" {
 		if locker, ok := s.automationService.(automationRetryRunLock); ok {
@@ -444,6 +479,9 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 		candidate, _ := binding.GetRun(ctx, evt.RunID)
 		if candidate != nil && candidate.RetryGroupID != "" {
 			retryRun = candidate
+			if s.recoverReservedRetryLaunch(ctx, evt, candidate) {
+				return
+			}
 			if evt.RetryClaimToken != "" {
 				retryBinding, retryOK := s.automationService.(automationRetryBinding)
 				if !retryOK {
@@ -462,6 +500,13 @@ func (s *Service) createAutomationTaskLocked(ctx context.Context, evt *automatio
 					}
 				}
 				if err := retryBinding.PromoteClaimedRetry(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration); err != nil {
+					if errors.Is(err, automation.ErrRetryCapacityReached) {
+						if deferer, ok := s.automationService.(automationRetryCapacityDefer); ok {
+							if deferErr := deferer.DeferRetryClaimForCapacity(ctx, evt.RunID, evt.RetryClaimToken, evt.RetryGroupGeneration); deferErr != nil {
+								s.logger.Warn("retry capacity deferral remains pending", zap.String("run_id", evt.RunID), zap.Error(deferErr))
+							}
+						}
+					}
 					return
 				}
 			}
@@ -1238,6 +1283,11 @@ func (s *Service) dispatchAutomationRun(
 	if !ok {
 		return false
 	}
+	if err := s.reserveAutomationRetryLaunch(ctx, runID, taskID, sessionID, action, reason); err != nil {
+		s.logger.Warn("retry launch reservation remains pending", zap.String("run_id", runID), zap.Error(err))
+		return true
+	}
+
 	if err := dispatcher.DispatchRun(ctx, runID, action, reason, dispatch); err == nil {
 		return true
 	} else if errors.Is(err, automation.ErrRunDeferred) {
@@ -1248,6 +1298,11 @@ func (s *Service) dispatchAutomationRun(
 			zap.String("task_id", taskID), zap.String("run_id", runID))
 		return true
 	} else {
+		if errors.Is(err, automation.ErrRetryLaunchUncertain) {
+			s.logger.Warn("retry launch acceptance remains pending", zap.String("run_id", runID), zap.Error(err))
+			return true
+		}
+
 		if isSessionRecoveryRequiredError(err) {
 			s.logger.Info("parked automation run for explicit session recovery",
 				zap.String("operation", operation), zap.String("automation_id", automationID),
@@ -1462,9 +1517,44 @@ func (s *Service) promptAutomationContinuation(
 	runID string,
 	operation *automation.RetryOperation,
 ) (automation.RunDispatch, error) {
+	var launchErr error
+	ctx, launchErr = s.retryLaunchContext(ctx, &automationRunLaunch{RunID: runID}, task.ID)
+	if launchErr != nil {
+		return automation.RunDispatch{}, launchErr
+	}
+	launch := retryLaunchInContext(ctx)
+
 	var acceptanceErr error
 	result, err := s.promptTask(ctx, task.ID, session.ID, prompt, "", false, nil, true, launchOriginAutomatic, promptTaskOptions{
+		beforeProviderAdmission: func() error { return s.retryContinuationAdmission(ctx, session.ID) },
+		disableDispatchRetry:    launch != nil,
+		deliverySubmissionID: func() string {
+			if launch != nil {
+				return launch.SubmissionID
+			}
+			return ""
+		}(),
+
 		onAccepted: func(turnID string) {
+			if launch != nil {
+				if turnID != launch.TurnID {
+					acceptanceErr = automation.ErrRetryGenerationMismatch
+					return
+				}
+				owner := s.automationService.(automationRetryLaunchOwner)
+				receiptCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptFailureCleanupTimeout)
+				defer cancel()
+				current, readErr := owner.GetRetryLaunch(receiptCtx, runID)
+				if readErr != nil {
+					acceptanceErr = readErr
+					return
+				}
+				acceptanceErr = owner.AcceptRetryLaunch(receiptCtx, launch, current.ExecutionID)
+				if acceptanceErr != nil {
+					return
+				}
+			}
+
 			if operation == nil {
 				return
 			}
@@ -1523,6 +1613,16 @@ func (s *Service) retryRunHasExactBinding(ctx context.Context, runID string) boo
 	if runID == "" {
 		return true
 	}
+	if owner, ok := s.automationService.(automationRetryLaunchOwner); ok {
+		launch, err := owner.GetRetryLaunch(ctx, runID)
+		if err == nil {
+			return launch.State == automation.RetryLaunchAccepted
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return false
+		}
+	}
+
 	binding, ok := s.automationService.(automationRunBinding)
 	if !ok {
 		return false
@@ -1931,6 +2031,25 @@ func (s *Service) recordFailedRun(ctx context.Context, evt *automation.Automatio
 // safer than falling back to repository deletion, which would strand workspace
 // group state and cleanup metadata.
 func (s *Service) deleteAbandonedTask(ctx context.Context, automationID, taskID string) {
+	if s.repo != nil {
+		task, err := s.repo.GetTask(ctx, taskID)
+		if err != nil {
+			s.logger.Warn("task cleanup ownership read failed", zap.String("task_id", taskID), zap.Error(err))
+			return
+		}
+		if task != nil && task.Metadata != nil {
+			if runID, _ := task.Metadata[retryAutomationRunIDMetadataKey].(string); runID != "" {
+				if binding, ok := s.automationService.(automationRunBinding); ok {
+					run, readErr := binding.GetRun(ctx, runID)
+					if readErr != nil || (run != nil && run.RetryGroupID != "") {
+						s.logger.Warn("retry task remains owned by its durable ledger", zap.String("task_id", taskID), zap.String("run_id", runID))
+						return
+					}
+				}
+			}
+		}
+	}
+
 	s.clearAbandonedContinuation(ctx, automationID, taskID)
 	if s.taskLifecycleDeleter == nil {
 		s.logger.Error("task lifecycle deleter is not configured for abandoned automation task",
@@ -2045,6 +2164,7 @@ func (s *Service) handleAutomationTurnCompleteForTurn(
 	if err != nil || task == nil {
 		return false
 	}
+
 	if task.Origin == models.TaskOriginAutomationTask {
 		return s.handleVisibleAutomationTurnComplete(ctx, taskID, sessionID, turnID, stopReason, isError, errMsg)
 	}

@@ -28,6 +28,9 @@ test.describe("Automation settings page", () => {
     );
     const automations = new AutomationsPage(testPage, seedData.workspaceId);
     await automations.gotoNew();
+    await expect(
+      testPage.getByRole("radiogroup", { name: "Automatic retries", exact: true }),
+    ).toBeVisible();
     const finite = testPage.getByRole("radio", { name: "Retry a fixed number of times" });
     await finite.check();
     await testPage.locator("#automation-retry-max").fill("5");

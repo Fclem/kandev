@@ -53,12 +53,11 @@ func TestFinalizeRetrySchedulingOverflowDoesNotEnqueueOutbox(t *testing.T) {
 			DelaySeconds: "9223372036854775807", Backoff: RetryBackoffExponential}}
 	require.NoError(t, store.CreateAutomation(ctx, a))
 	group := &RetryGroup{ID: "group-overflow", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
-	require.NoError(t, store.CreateRetryGroup(ctx, group))
 	run := &AutomationRun{ID: "run-overflow", AutomationID: a.ID, TriggerType: TriggerTypeManual,
 		Status: RunStatusTriggered, RetryGroupID: group.ID, AttemptNumber: 2,
 		RetryState: RetryStateTriggered, RetryGroupGeneration: 1,
 		RetryPolicySnapshot: `{"mode":"finite","max_retries":"3","delay_seconds":"9223372036854775807","backoff":"exponential"}`}
-	require.NoError(t, store.CreateRun(ctx, run))
+	require.NoError(t, store.CreateRetryAdmission(ctx, run, group))
 
 	child, err := store.FinalizeRetryFailure(ctx, run.ID, 1, errors.New("provider failed"), "launch")
 	require.NoError(t, err)
@@ -76,16 +75,22 @@ func TestFinalizedRetryChildCanBeClaimedAndPromoted(t *testing.T) {
 	a := &Automation{ID: "automation-child-claim", WorkspaceID: "ws-child-claim", Name: "child claim", Enabled: true}
 	require.NoError(t, store.CreateAutomation(ctx, a))
 	group := &RetryGroup{ID: "group-child-claim", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
-	require.NoError(t, store.CreateRetryGroup(ctx, group))
 	parent := &AutomationRun{
 		ID: "run-child-claim", AutomationID: a.ID, TriggerType: TriggerTypeManual,
 		Status: RunStatusTriggered, RetryGroupID: group.ID, RetryGroupGeneration: 1,
 		AttemptNumber: 1, RetryState: RetryStateTriggered,
 		RetryPolicySnapshot: `{"mode":"finite","max_retries":"2","delay_seconds":"0","backoff":"fixed"}`,
 	}
-	require.NoError(t, store.CreateRun(ctx, parent))
+	snapshot, err := buildRetryLaunchConfigSnapshot(a, "child-trigger", TriggerTypeManual, nil, "", time.Now().UTC())
+	require.NoError(t, err)
+	parent.RetryLaunchConfigSnapshot, err = encodeRetryLaunchConfigSnapshot(snapshot)
+	require.NoError(t, err)
+	require.NoError(t, store.CreateRetryAdmission(ctx, parent, group))
 	child, err := store.FinalizeRetryFailure(ctx, parent.ID, 1, errors.New("attempt failed"), "launch")
 	require.NoError(t, err)
+	var launchProtocol int
+	require.NoError(t, store.db.Get(&launchProtocol, `SELECT version FROM automation_retry_launch_protocols WHERE run_id=?`, child.ID))
+	require.Equal(t, 1, launchProtocol, "a fresh retry child must inherit modern admission even with an existing task intent")
 
 	claimed, token, err := store.ClaimDueRetry(ctx, time.Now().UTC().Add(time.Second), time.Minute)
 	require.NoError(t, err)
@@ -193,11 +198,10 @@ func TestBindRunTaskRejectsCancelledRetryGeneration(t *testing.T) {
 	a := &Automation{WorkspaceID: "ws-fence", Name: "fence", Enabled: true}
 	require.NoError(t, store.CreateAutomation(ctx, a))
 	group := &RetryGroup{ID: "group-fence", AutomationID: a.ID, Generation: 1, State: RetryGroupLive}
-	require.NoError(t, store.CreateRetryGroup(ctx, group))
 	run := &AutomationRun{ID: "run-fence", AutomationID: a.ID, TriggerType: TriggerTypeManual,
 		Status: RunStatusTriggered, RetryGroupID: group.ID, RetryGroupGeneration: 1,
 		RetryState: RetryStateTriggered}
-	require.NoError(t, store.CreateRun(ctx, run))
+	require.NoError(t, store.CreateRetryAdmission(ctx, run, group))
 	require.NoError(t, store.CancelRetryGroup(ctx, group.ID, 1))
 
 	require.ErrorIs(t, store.BindRunTask(ctx, run.ID, "task-created", ""), ErrRetryGenerationMismatch)
@@ -323,11 +327,10 @@ func TestRetryFailureSanitizesSecretsAndCreatesOneChild(t *testing.T) {
 		RetryPolicy: RetryPolicy{Mode: RetryModeFinite, MaxRetries: "2", DelaySeconds: "0"}}
 	require.NoError(t, store.CreateAutomation(ctx, a))
 	group := &RetryGroup{ID: "group-1", AutomationID: a.ID, TriggerID: "trigger-1", Generation: 1, State: RetryGroupLive}
-	require.NoError(t, store.CreateRetryGroup(ctx, group))
 	run := &AutomationRun{ID: "run-1", AutomationID: a.ID, TriggerID: "trigger-1", TriggerType: TriggerTypeManual,
 		Status: RunStatusTriggered, RetryGroupID: group.ID, AttemptNumber: 1, RetryState: RetryStateTriggered,
 		RetryGroupGeneration: 1, RetryBaseTitle: "Root", RetryPolicySnapshot: `{"mode":"finite","max_retries":"2","delay_seconds":"0","backoff":"fixed","history_mode":"attempts"}`}
-	require.NoError(t, store.CreateRun(ctx, run))
+	require.NoError(t, store.CreateRetryAdmission(ctx, run, group))
 
 	child, err := store.FinalizeRetryFailure(ctx, run.ID, 1, errors.New("token=secret prompt=private /home/user"), "launch")
 	require.NoError(t, err)
@@ -599,11 +602,12 @@ func TestBeginRetryTaskOperationRejectsCancelledGeneration(t *testing.T) {
 	require.NoError(t, store.CreateAutomation(ctx, a))
 	group := &RetryGroup{ID: "group-cancelled-operation", AutomationID: a.ID,
 		Generation: 1, State: RetryGroupLive}
-	require.NoError(t, store.CreateRetryGroup(ctx, group))
 	run := &AutomationRun{ID: "run-cancelled-operation", AutomationID: a.ID,
 		Status: RunStatusTriggered, RetryGroupID: group.ID,
 		RetryGroupGeneration: 1, RetryState: RetryStateTriggered}
+	require.NoError(t, store.CreateRetryGroup(ctx, group))
 	require.NoError(t, store.CreateRun(ctx, run))
+	recordSyntheticRetryAdmission(t, store, run)
 	intent := &RetryTaskIntent{ID: "intent-cancelled-operation", RunID: run.ID,
 		GroupGeneration: 1, State: retryIntentAdmitted}
 	require.NoError(t, store.CreateRetryIntent(ctx, intent))

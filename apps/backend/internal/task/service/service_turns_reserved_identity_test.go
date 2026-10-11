@@ -10,9 +10,12 @@ import (
 
 func TestStartTurnUsesReservedLaunchIdentityAtPersistenceBoundary(t *testing.T) {
 	svc, _, repo := createTestService(t)
-	sessionID := setupTestSession(t, repo)
-	session, err := repo.GetTaskSession(context.Background(), sessionID)
-	require.NoError(t, err)
+	setupTestTask(t, repo)
+	session := &models.TaskSession{
+		ID: "reserved-session", TaskID: "task-123", AgentProfileID: "profile-123", State: models.TaskSessionStateStarting,
+	}
+	require.NoError(t, repo.CreateTaskSession(context.Background(), session))
+	sessionID := session.ID
 	identity := models.ReservedLaunchIdentity{TaskID: session.TaskID, SessionID: sessionID, TurnID: "reserved-retry-turn", SubmissionID: "reserved-submission"}
 	ctx := models.WithReservedLaunchIdentity(context.Background(), identity)
 	turn, err := svc.StartTurn(ctx, sessionID)

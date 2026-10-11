@@ -2,11 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { listSecrets } from "@/lib/api/domains/secrets-api";
-import { useAppStore } from "@/components/state-provider";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import type { SecretListItem, SecretScope } from "@/lib/types/http-secrets";
 
 export function filterGlobalSecrets(items: SecretListItem[]): SecretListItem[] {
   return items.filter((item) => item.scope !== "workspace");
+}
+
+function selectSecretItems(
+  scope: SecretScope,
+  scopedCurrent: boolean,
+  globalItems: SecretListItem[],
+  scopedItems: SecretListItem[],
+): SecretListItem[] {
+  if (scope === "global") return filterGlobalSecrets(globalItems);
+  return scopedCurrent ? scopedItems : [];
 }
 
 export function useSecrets(
@@ -14,6 +24,7 @@ export function useSecrets(
   workspaceId?: string,
   initialItems?: SecretListItem[],
 ) {
+  const store = useAppStoreApi();
   const globalItems = useAppStore((state) => state.secrets.items);
   const globalLoaded = useAppStore((state) => state.secrets.loaded);
   const globalLoading = useAppStore((state) => state.secrets.loading);
@@ -32,12 +43,18 @@ export function useSecrets(
 
   useEffect(() => {
     if (scope !== "global" || globalLoaded || globalLoading) return;
+    const currentState = store.getState().secrets;
+    if (currentState.loaded || currentState.loading) return;
+    const initialItems = currentState.items;
     setSecretsLoading(true);
     listSecrets({ cache: "no-store" })
-      .then((response) => setSecrets(response ?? []))
+      .then((response) => {
+        const currentItems = store.getState().secrets.items;
+        setSecrets(currentItems === initialItems ? (response ?? []) : currentItems);
+      })
       .catch(() => setSecrets([]))
       .finally(() => setSecretsLoading(false));
-  }, [scope, globalLoaded, globalLoading, setSecrets, setSecretsLoading]);
+  }, [scope, globalLoaded, globalLoading, setSecrets, setSecretsLoading, store]);
 
   useEffect(() => {
     if (scope === "global") return;
@@ -79,12 +96,7 @@ export function useSecrets(
   }, [initialItems, scope, scopedKey, workspaceId]);
 
   const scopedCurrent = loadedScopedKey === scopedKey;
-  let items: SecretListItem[] = [];
-  if (scope === "global") {
-    items = filterGlobalSecrets(globalItems);
-  } else if (scopedCurrent) {
-    items = scopedItems;
-  }
+  const items = selectSecretItems(scope, scopedCurrent, globalItems, scopedItems);
   const loaded = scope === "global" ? globalLoaded : scopedCurrent && scopedLoaded;
   const loading = scope === "global" ? globalLoading : scopedCurrent && scopedLoading;
 

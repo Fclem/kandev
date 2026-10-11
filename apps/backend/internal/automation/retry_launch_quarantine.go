@@ -70,6 +70,6 @@ func installRetryLegacyQuarantine(ctx context.Context, tx *sqlx.Tx) error {
  CREATE TRIGGER automation_retry_operation_quarantine_insert AFTER INSERT ON automation_run_operations FOR EACH ROW EXECUTE FUNCTION automation_retry_operation_quarantine_guard();
  CREATE TRIGGER automation_retry_operation_quarantine_update AFTER UPDATE OF external_task_id ON automation_run_operations FOR EACH ROW EXECUTE FUNCTION automation_retry_operation_quarantine_guard();`
 	}
-	_, err := tx.ExecContext(ctx, operationGuards)
+	_, err = tx.ExecContext(ctx, operationGuards)
 	return err
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	internaldb "github.com/kandev/kandev/internal/db"
-	"github.com/kandev/kandev/internal/db/dialect"
 )
 
 var ErrRetryLaunchUncertain = errors.New("retry launch ownership or acceptance is unresolved; automatic relaunch is blocked")

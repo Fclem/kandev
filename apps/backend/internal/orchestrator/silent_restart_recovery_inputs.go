@@ -2,7 +2,9 @@ package orchestrator
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
@@ -134,6 +136,10 @@ func (s *Service) loadSilentRestoreSession(
 	if err != nil || session == nil || session.TaskID != taskID || !silentRestoreSessionEligible(session) {
 		return nil, models.AgentDeliveryRecovery{}, false, err
 	}
+	session, err = s.repairRestartRecoveryPresentation(ctx, session)
+	if err != nil {
+		return nil, models.AgentDeliveryRecovery{}, false, err
+	}
 	recovery, ok := models.LoadAgentDeliveryRecovery(session.Metadata)
 	if !ok || !silentRestoreRecoveryPhase(recovery.Phase) || !silentRestoreRecoveryMatchesSession(recovery, session) {
 		return nil, models.AgentDeliveryRecovery{}, false, nil
@@ -236,7 +242,10 @@ func (s *Service) restoreSilentRestartCandidate(
 	if err != nil || inputs == nil {
 		return err
 	}
-	attemptID := silentRestoreAttemptID(inputs.session.ID, inputs.recovery.IncarnationID, inputs.generation.Generation)
+	attemptID, err := silentRestoreIncidentAttemptID(ctx, store, inputs)
+	if err != nil {
+		return err
+	}
 	attempt, err := s.ensureSilentRestoreAttempt(ctx, store, attemptID, inputs)
 	if err != nil || attempt == nil || attempt.Checkpoint == nil {
 		return err
@@ -257,6 +266,9 @@ func (s *Service) restoreSilentRestartCandidate(
 			return err
 		}
 		inputs.ownerCtx = ownerCtx
+		if restored, err := s.finishAlreadyResumedRestartRecovery(ownerCtx, inputs); err != nil || restored {
+			return err
+		}
 	}
 	return s.ensureSilentRestoreCandidate(inputs.ownerCtx, store, attemptID, checkpoint, inputs)
 }
@@ -343,9 +355,9 @@ func (s *Service) reconcileSilentRestoreSource(ctx context.Context, inputs *sile
 	}
 	result := s.runSessionDeliveryRecovery(ctx, identity)
 	if result.outcome != SessionDeliveryRecoveryUncertain || !result.processTerminated {
-		return errors.New("interrupted durable owner is not proven terminated")
+		return fmt.Errorf("interrupted durable owner is not proven terminated: outcome=%s reason=%s terminated=%t", result.outcome, result.reason, result.processTerminated)
 	}
-	return nil
+	return s.reconcileRestartSubmissionStates(ctx, inputs)
 }
 
 func (s *Service) revalidateSilentRestoreInputs(
@@ -524,4 +536,17 @@ func silentRestoreSessionEligible(session *models.TaskSession) bool {
 	default:
 		return false
 	}
+}
+
+func silentRestoreIncidentAttemptID(ctx context.Context, store taskrepo.SilentRestoreRepository, inputs *silentRestoreInputs) (string, error) {
+	legacyID := silentRestoreAttemptID(inputs.session.ID, inputs.recovery.IncarnationID, inputs.generation.Generation)
+	legacy, err := store.GetRestoreAttempt(ctx, legacyID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if legacy != nil && legacy.Checkpoint != nil && legacy.Checkpoint.SourceRecovery.SubmissionID == inputs.recovery.SubmissionID {
+		return legacyID, nil
+	}
+	return silentRestoreAttemptID(inputs.session.ID, inputs.recovery.IncarnationID, inputs.generation.Generation) + "-" +
+		silentRestoreAttemptID(inputs.recovery.SubmissionID, inputs.recovery.AgentExecutionID, inputs.generation.Generation), nil
 }

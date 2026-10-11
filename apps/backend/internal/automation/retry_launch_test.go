@@ -28,13 +28,11 @@ func recordSyntheticRetryAdmission(t *testing.T, store *Store, run *AutomationRu
 func admittedLaunchRun(t *testing.T, store *Store, id string, continuation ...string) *AutomationRun {
 	t.Helper()
 	ctx := context.Background()
-	_, err := store.db.Exec(`CREATE TABLE IF NOT EXISTS task_creation_authorizations(kind TEXT,creation_id TEXT,task_id TEXT,PRIMARY KEY(kind,creation_id));CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, metadata TEXT DEFAULT '{}', archived_at TIMESTAMP);CREATE TABLE IF NOT EXISTS task_sessions(id TEXT PRIMARY KEY,task_id TEXT,is_primary INTEGER DEFAULT 0,state TEXT DEFAULT 'RUNNING',metadata TEXT DEFAULT '{}');CREATE TABLE IF NOT EXISTS task_session_turns(id TEXT PRIMARY KEY,task_id TEXT,task_session_id TEXT,metadata TEXT DEFAULT '{}')`)
-	require.NoError(t, err)
-	require.NoError(t, store.installRetryIdentityGuards(ctx))
+	installRetryLaunchTestTables(t, store)
 	a := &Automation{ID: "launch-automation-" + id, WorkspaceID: "workspace", Name: "launch", Enabled: true, MaxConcurrentRuns: 1}
 	require.NoError(t, store.CreateAutomation(ctx, a))
 	if len(continuation) > 0 {
-		_, err = store.db.Exec(`INSERT INTO task_sessions(id,task_id) VALUES (?,?)`, continuation[0], "task-"+id)
+		_, err := store.db.Exec(`INSERT INTO task_sessions(id,task_id) VALUES (?,?)`, continuation[0], "task-"+id)
 		require.NoError(t, err)
 	}
 	run := &AutomationRun{ID: "launch-run-" + id, AutomationID: a.ID, Status: RunStatusTriggered, RetryGroupID: "launch-group-" + id, RetryGroupGeneration: 1, RetryState: RetryStateTriggered, TaskID: "task-" + id}
@@ -475,4 +473,47 @@ func assertLegacyStopOperationTuple(t *testing.T, store *Store, run *AutomationR
 	require.NoError(t, store.DeleteRun(ctx, run.ID))
 	_, err = store.db.Exec(store.db.Rebind(`INSERT INTO task_sessions(id,task_id) VALUES (?,?)`), "delayed-after-operation-stop", run.TaskID)
 	require.Error(t, err, "resolved acceptance must retain admission revocation")
+}
+
+func assertRetrySchemaProbeCoverage(t *testing.T, store *Store) {
+	t.Helper()
+	ctx := context.Background()
+	present, err := retryRequiredTablesPresent(ctx, store.db, "tasks", "task_sessions")
+	require.NoError(t, err)
+	require.True(t, present)
+	present, err = retryRequiredTablesPresent(ctx, store.db, "tasks", "missing_retry_fixture_table")
+	require.NoError(t, err)
+	require.False(t, present, "partial schema cannot authorize retry guards")
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	present, err = retryRequiredTablesPresent(cancelled, store.db, "tasks")
+	require.ErrorIs(t, err, context.Canceled)
+	require.False(t, present, "unavailable schema evidence must fail closed")
+}
+
+func TestRetrySchemaProbesRespectMissingTablesAndCancellation(t *testing.T) {
+	store := setupTestStore(t)
+	admittedLaunchRun(t, store, "schema-probes")
+	assertRetrySchemaProbeCoverage(t, store)
+}
+
+func installRetryLaunchTestTables(t *testing.T, store *Store) {
+	t.Helper()
+	_, err := store.db.Exec(`CREATE TABLE IF NOT EXISTS task_creation_authorizations(kind TEXT,creation_id TEXT,task_id TEXT,PRIMARY KEY(kind,creation_id));CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, metadata TEXT DEFAULT '{}', archived_at TIMESTAMP);CREATE TABLE IF NOT EXISTS task_sessions(id TEXT PRIMARY KEY,task_id TEXT,is_primary INTEGER DEFAULT 0,state TEXT DEFAULT 'RUNNING',metadata TEXT DEFAULT '{}');CREATE TABLE IF NOT EXISTS task_session_turns(id TEXT PRIMARY KEY,task_id TEXT,task_session_id TEXT,metadata TEXT DEFAULT '{}')`)
+	require.NoError(t, err)
+	require.NoError(t, store.installRetryIdentityGuards(context.Background()))
+}
+
+func reserveFiredRetryLaunch(t *testing.T, svc *Service, runID, taskID, sessionID string, action ThreadAction) *RetryLaunch {
+	t.Helper()
+	ctx := context.Background()
+	installRetryLaunchTestTables(t, svc.store)
+	if sessionID != "" {
+		_, err := svc.store.db.Exec(`INSERT INTO task_sessions(id,task_id) VALUES (?,?)`, sessionID, taskID)
+		require.NoError(t, err)
+	}
+	require.NoError(t, svc.store.BindRunTask(ctx, runID, taskID, ""))
+	launch, err := svc.ReserveRetryLaunch(ctx, runID, taskID, sessionID, action, "fixture")
+	require.NoError(t, err)
+	return launch
 }

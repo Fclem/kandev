@@ -122,15 +122,11 @@ DO $$ BEGIN
 END; $$;`
 
 func (s *Store) installRetryIdentityGuards(ctx context.Context) error {
-	var tables int
-	query := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('tasks', 'task_sessions', 'task_session_turns', 'task_creation_authorizations')`
-	if dialect.IsPostgres(s.db.DriverName()) {
-		query = `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('tasks', 'task_sessions', 'task_session_turns', 'task_creation_authorizations')`
-	}
-	if err := s.db.GetContext(ctx, &tables, query); err != nil {
+	tables, err := retryRequiredTablesPresent(ctx, s.db, "tasks", "task_sessions", "task_session_turns", "task_creation_authorizations")
+	if err != nil {
 		return err
 	}
-	if tables != 4 {
+	if !tables {
 		return nil
 	}
 	tx, err := s.db.BeginTxx(ctx, nil)

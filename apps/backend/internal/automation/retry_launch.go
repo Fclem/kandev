@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	internaldb "github.com/kandev/kandev/internal/db"
 	"github.com/kandev/kandev/internal/db/dialect"
 )
 
@@ -41,8 +42,8 @@ const retryLaunchTablesSQL = `
   token TEXT NOT NULL DEFAULT '',
   execution_id TEXT NOT NULL DEFAULT '',
   cancel_requested BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
+  created_at {{timestamp}} NOT NULL,
+  updated_at {{timestamp}} NOT NULL
  );
  CREATE INDEX IF NOT EXISTS idx_automation_retry_launches_owner ON automation_retry_launches(automation_id, state);
 `
@@ -535,15 +536,17 @@ func checkRetryCapacityLimit(ctx context.Context, tx *sqlx.Tx, automationID stri
 }
 
 func retryCapacityTaskTablesPresent(ctx context.Context, tx *sqlx.Tx) (bool, error) {
-	query := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('tasks', 'task_sessions')`
-	if dialect.IsPostgres(tx.DriverName()) {
-		query = `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('tasks', 'task_sessions')`
+	return retryRequiredTablesPresent(ctx, tx, "tasks", "task_sessions")
+}
+
+func retryRequiredTablesPresent(ctx context.Context, conn internaldb.ContextSchemaQuerier, tables ...string) (bool, error) {
+	for _, table := range tables {
+		present, err := internaldb.TableExistsContext(ctx, conn, table)
+		if err != nil || !present {
+			return false, err
+		}
 	}
-	var count int
-	if err := tx.GetContext(ctx, &count, query); err != nil {
-		return false, err
-	}
-	return count == 2, nil
+	return true, nil
 }
 
 func retryLaunchLiveForClaim(ctx context.Context, tx *sqlx.Tx, runID string, generation int64) error {
@@ -629,4 +632,18 @@ func (s *Store) recordLegacyRetryStop(ctx context.Context, run *AutomationRun) e
 func (s *Store) RecordRetryLaunchUncertainty(ctx context.Context, runID string) error {
 	_, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE automation_runs SET error_message=? WHERE id=? AND retry_group_id<>'' AND status IN ('triggered','task_created')`), ErrRetryLaunchUncertain.Error(), runID)
 	return err
+}
+
+// RecordLegacyRetryLaunchUncertainty preserves unbound identity while surfacing
+// missing launch provenance. An outbox or task ID cannot establish acceptance.
+func (s *Store) RecordLegacyRetryLaunchUncertainty(ctx context.Context, runID string) (bool, error) {
+	result, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE automation_runs SET error_message=?
+ WHERE id=? AND retry_group_id<>'' AND status IN (?,?)
+ AND NOT EXISTS (SELECT 1 FROM automation_retry_launch_protocols p WHERE p.run_id=automation_runs.id AND p.version IN (1,-1))`),
+		ErrRetryLaunchUncertain.Error(), runID, RunStatusTriggered, RunStatusTaskCreated)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected != 0, err
 }

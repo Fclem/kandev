@@ -31,15 +31,11 @@ func retryLegacyQuarantineQuery(driver, filter string) string {
 }
 
 func installRetryLegacyQuarantine(ctx context.Context, tx *sqlx.Tx) error {
-	query := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('session_recovery_blocks', 'harness_session_generations')`
-	if dialect.IsPostgres(tx.DriverName()) {
-		query = `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('session_recovery_blocks', 'harness_session_generations')`
-	}
-	var tables int
-	if err := tx.GetContext(ctx, &tables, query); err != nil {
+	tables, err := retryRequiredTablesPresent(ctx, tx, "session_recovery_blocks", "harness_session_generations")
+	if err != nil {
 		return err
 	}
-	if tables != 2 {
+	if !tables {
 		return nil
 	}
 	backfill := retryLegacyQuarantineQuery(tx.DriverName(), "")

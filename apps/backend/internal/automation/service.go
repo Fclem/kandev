@@ -1063,25 +1063,8 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 			}
 		}
 		if run.TaskID == "" || run.SessionID == "" || run.TurnID == "" {
-			if run.RetryGroupID != "" {
-				replayable, replayErr := s.store.RetryRunHasReplayableOutbox(
-					ctx, run.ID, run.RetryGroupGeneration)
-				if replayErr != nil {
-					s.logger.Warn("failed to inspect unbound retry recovery",
-						zap.String("run_id", run.ID), zap.Error(replayErr))
-					continue
-				}
-				if replayable {
-					continue
-				}
-			}
-			if err := s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "backend stopped before the automation turn was bound"); err != nil {
-				if errors.Is(err, ErrRetryLaunchUncertain) {
-					if recordErr := s.store.RecordRetryLaunchUncertainty(ctx, run.ID); recordErr != nil {
-						s.logger.Warn("failed to record unresolved retry acceptance", zap.String("run_id", run.ID), zap.Error(recordErr))
-					}
-				}
-				s.logger.Warn("failed to reconcile unbound automation run", zap.String("run_id", run.ID), zap.Error(err))
+			if err := s.reconcileUnboundRun(ctx, run); err != nil {
+				return err
 			}
 			continue
 		}
@@ -1113,6 +1096,37 @@ func (s *Service) ReconcileOpenRuns(ctx context.Context) error {
 				s.logger.Warn("failed to reconcile stale automation run", zap.String("run_id", run.ID), zap.Error(err))
 			}
 		}
+	}
+	return nil
+}
+
+func (s *Service) reconcileUnboundRun(ctx context.Context, run *AutomationRun) error {
+	if run.RetryGroupID != "" {
+		unresolved, recordErr := s.store.RecordLegacyRetryLaunchUncertainty(ctx, run.ID)
+		if recordErr != nil {
+			return recordErr
+		}
+		if unresolved {
+			return nil
+		}
+		replayable, replayErr := s.store.RetryRunHasReplayableOutbox(
+			ctx, run.ID, run.RetryGroupGeneration)
+		if replayErr != nil {
+			s.logger.Warn("failed to inspect unbound retry recovery",
+				zap.String("run_id", run.ID), zap.Error(replayErr))
+			return nil
+		}
+		if replayable {
+			return nil
+		}
+	}
+	if err := s.store.MarkRunTerminal(ctx, run.ID, "", "", RunStatusFailed, "backend stopped before the automation turn was bound"); err != nil {
+		if errors.Is(err, ErrRetryLaunchUncertain) {
+			if recordErr := s.store.RecordRetryLaunchUncertainty(ctx, run.ID); recordErr != nil {
+				s.logger.Warn("failed to record unresolved retry acceptance", zap.String("run_id", run.ID), zap.Error(recordErr))
+			}
+		}
+		s.logger.Warn("failed to reconcile unbound automation run", zap.String("run_id", run.ID), zap.Error(err))
 	}
 	return nil
 }
@@ -1636,13 +1650,11 @@ func (s *Service) automationRunLock(automationID string) func() {
 	return mu.Unlock
 }
 
-// DispatchRun serializes the fallible agent dispatch with exact-run stop and
-// deletion. The callback is invoked only while the admitted run is still
-// open; its exact task/session/turn identity is bound before the lock is
-// released, so a stop can never settle a different firing. A callback that
-// returns ErrRunDeferred leaves the run open for a later dispatch; any other
-// callback error fails the run and is returned unchanged once that failure is
-// recorded, or wrapped when recording it fails.
+// DispatchRun claims durable retry ownership before invoking its callback.
+// Ordinary runs serialize dispatch with stop and deletion and bind the exact
+// returned task/session/turn tuple before releasing their lock. Deferred work
+// remains open. A failed retry callback retains uncertainty until exact
+// termination evidence permits separate failure finalization.
 func (s *Service) DispatchRun(
 	ctx context.Context,
 	runID string,

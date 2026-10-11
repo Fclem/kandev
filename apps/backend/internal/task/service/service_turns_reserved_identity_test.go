@@ -18,14 +18,14 @@ func TestStartTurnUsesReservedLaunchIdentityAtPersistenceBoundary(t *testing.T) 
 	turn, err := svc.StartTurn(ctx, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, identity.TurnID, turn.ID)
-	stored, err := repo.GetActiveTurn(context.Background(), sessionID)
+	stored, err := repo.GetActiveTurnBySessionID(context.Background(), sessionID)
 	require.NoError(t, err)
 	require.Equal(t, identity.TurnID, stored.ID)
 	identity.TaskID = "other-task"
 	identity.TurnID = "conflicting-turn"
 	_, err = svc.StartTurn(models.WithReservedLaunchIdentity(context.Background(), identity), sessionID)
 	require.Error(t, err)
-	stored, err = repo.GetActiveTurn(context.Background(), sessionID)
+	stored, err = repo.GetActiveTurnBySessionID(context.Background(), sessionID)
 	require.NoError(t, err)
 	require.Equal(t, turn.ID, stored.ID)
 }

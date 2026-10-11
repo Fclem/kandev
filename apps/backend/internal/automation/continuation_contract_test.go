@@ -381,7 +381,7 @@ func TestDispatchRunLeavesDeferredRecoveryOpen(t *testing.T) {
 	require.Empty(t, got.TaskID)
 }
 
-func TestDispatchRunFailureSchedulesRetryChild(t *testing.T) {
+func TestDispatchRunDefinitiveTerminationSchedulesRetryChild(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	a := &Automation{
@@ -394,10 +394,31 @@ func TestDispatchRunFailureSchedulesRetryChild(t *testing.T) {
 	fire, err := svc.FireTrigger(ctx, a.ID, trigger.ID, trigger.Type, json.RawMessage(`{"delivery_id":"d1"}`), DedupKey("dispatch-d1"))
 	require.NoError(t, err)
 
-	originalErr := errors.New("provider rejected dispatch")
+	reserved := reserveFiredRetryLaunch(t, svc, fire.RunID, "dispatch-task", "", ThreadActionCreated)
+	originalErr := errors.New("provider terminated dispatch")
+	calls := 0
 	require.ErrorIs(t, svc.DispatchRun(ctx, fire.RunID, ThreadActionCreated, "created", func() (RunDispatch, error) {
+		calls++
+		claimed, err := svc.GetRetryLaunch(ctx, fire.RunID)
+		require.NoError(t, err)
+		require.Equal(t, reserved.TurnID, claimed.TurnID)
+		require.NoError(t, svc.AdmitRetryLaunch(ctx, claimed, "terminated-execution"))
+		// The deterministic provider supplies exact terminal evidence separately
+		// from the failed dispatch response.
+		require.NoError(t, svc.ObserveRetryLaunchTerminal(ctx, claimed.TaskID, claimed.SessionID, claimed.TurnID, "terminated-execution"))
 		return RunDispatch{}, originalErr
 	}), originalErr)
+	require.Equal(t, 1, calls)
+	before, err := svc.store.ListRuns(ctx, a.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, before, 1, "the failed response alone never schedules a child")
+	child, err := svc.FinalizeAutomationRetryFailure(ctx, fire.RunID, reserved.Generation, originalErr, "launch")
+	require.NoError(t, err)
+	replayed, err := svc.FinalizeAutomationRetryFailure(ctx, fire.RunID, reserved.Generation, originalErr, "launch")
+	require.NoError(t, err)
+	require.NotNil(t, child)
+	require.NotNil(t, replayed)
+	require.Equal(t, child.ID, replayed.ID)
 	runs, err := svc.store.ListRuns(ctx, a.ID, 10)
 	require.NoError(t, err)
 	require.Len(t, runs, 2)
@@ -424,21 +445,38 @@ func TestDispatchRunKeepsAmbiguousAcceptedContinuationOpen(t *testing.T) {
 	require.NoError(t, err)
 	leased, err := svc.store.BeginRetryTaskOperation(ctx, run.ID, 1)
 	require.NoError(t, err)
-	require.NoError(t, svc.store.MarkRetryOperationAmbiguous(ctx, run.ID, 1, leased.LeaseToken, RunDispatch{
-		TaskID: "accepted-task", SessionID: "accepted-session", TurnID: "accepted-turn",
-	}))
-
+	reserved := reserveFiredRetryLaunch(t, svc, run.ID, "accepted-task", "accepted-session", ThreadActionResumed)
 	dispatchErr := errors.New("accepted turn identity commit failed")
+	calls := 0
 	require.ErrorIs(t, svc.DispatchRun(ctx, run.ID, ThreadActionResumed, "continuation", func() (RunDispatch, error) {
+		calls++
+		claimed, err := svc.GetRetryLaunch(ctx, run.ID)
+		require.NoError(t, err)
+		require.NoError(t, svc.AdmitRetryLaunch(ctx, claimed, "ambiguous-execution"))
+		require.NoError(t, svc.store.MarkRetryOperationAmbiguous(ctx, run.ID, 1, leased.LeaseToken, RunDispatch{
+			TaskID: reserved.TaskID, SessionID: reserved.SessionID, TurnID: reserved.TurnID,
+		}))
 		return RunDispatch{}, dispatchErr
 	}), dispatchErr)
+	require.Equal(t, 1, calls)
+	require.ErrorIs(t, svc.DispatchRun(ctx, run.ID, ThreadActionResumed, "continuation", func() (RunDispatch, error) {
+		calls++
+		return RunDispatch{}, nil
+	}), ErrRetryLaunchUncertain)
+	require.Equal(t, 1, calls, "uncertain acceptance cannot invoke a second dispatch")
+	retained, err := svc.GetRetryLaunch(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, RetryLaunchUncertain, retained.State)
+	require.Equal(t, reserved.SubmissionID, retained.SubmissionID)
+	_, err = svc.FinalizeAutomationRetryFailure(ctx, run.ID, 1, dispatchErr, "launch")
+	require.ErrorIs(t, err, ErrRetryLaunchUncertain)
 
 	operation, err := svc.store.GetRetryTaskOperation(ctx, run.ID, 1)
 	require.NoError(t, err)
 	require.Equal(t, retryOperationAmbiguous, operation.State)
 	require.Equal(t, "accepted-task", operation.ExternalTaskID)
 	require.Equal(t, "accepted-session", operation.ExternalSessionID)
-	require.Equal(t, "accepted-turn", operation.ExternalTurnID)
+	require.Equal(t, reserved.TurnID, operation.ExternalTurnID)
 	runs, err := svc.store.ListRuns(ctx, a.ID, 10)
 	require.NoError(t, err)
 	require.Len(t, runs, 1)

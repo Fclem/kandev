@@ -236,3 +236,8 @@ func TestPostgresRetryUnprojectedOperationCapturesOwnerAndWarmQuarantine(t *test
 	require.Empty(t, stored.SessionID)
 	require.Empty(t, stored.TurnID)
 }
+
+func TestPostgresRetrySchemaProbesRespectMissingTablesAndCancellation(t *testing.T) {
+	store, _ := postgresRetryLaunchStore(t)
+	assertRetrySchemaProbeCoverage(t, store)
+}

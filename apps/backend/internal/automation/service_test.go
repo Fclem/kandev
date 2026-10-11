@@ -250,6 +250,8 @@ func TestService_DeleteRun_DeletesCommittedRetryTaskBeforeBind(t *testing.T) {
 	svc := newTestService(t)
 	deleter := &fakeTaskDeleter{}
 	svc.SetTaskDeleter(deleter)
+	stopper := &recordingRunStopper{}
+	svc.SetRunStopper(stopper)
 	ctx := context.Background()
 	a := &Automation{WorkspaceID: "ws-delete-committed", Name: "delete committed", Enabled: true}
 	require.NoError(t, svc.store.CreateAutomation(ctx, a))
@@ -265,17 +267,22 @@ func TestService_DeleteRun_DeletesCommittedRetryTaskBeforeBind(t *testing.T) {
 	require.NoError(t, svc.store.CreateRetryOperation(ctx, &RetryOperation{
 		ID: "delete-committed-operation", IntentID: intent.ID, RunID: run.ID,
 		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationCommitted,
-		ExternalTaskID: "committed-task",
+		ExternalTaskID: "committed-task", ExternalSessionID: "committed-session", ExternalTurnID: "committed-turn",
 	}))
 
 	require.NoError(t, svc.DeleteRun(ctx, run.ID))
 	require.Equal(t, []string{"committed-task"}, deleter.deleted)
+	require.Equal(t, "committed-task", stopper.taskID)
+	require.Equal(t, "committed-session", stopper.sessionID)
+	require.Equal(t, "committed-turn", stopper.turnID)
 }
 
 func TestService_DeleteAllRuns_DeletesCommittedRetryTaskBeforeBind(t *testing.T) {
 	svc := newTestService(t)
 	deleter := &fakeTaskDeleter{}
 	svc.SetTaskDeleter(deleter)
+	stopper := &recordingRunStopper{}
+	svc.SetRunStopper(stopper)
 	ctx := context.Background()
 	a := &Automation{WorkspaceID: "ws-delete-all-committed", Name: "delete all committed", Enabled: true}
 	require.NoError(t, svc.store.CreateAutomation(ctx, a))
@@ -291,11 +298,14 @@ func TestService_DeleteAllRuns_DeletesCommittedRetryTaskBeforeBind(t *testing.T)
 	require.NoError(t, svc.store.CreateRetryOperation(ctx, &RetryOperation{
 		ID: "delete-all-committed-operation", IntentID: intent.ID, RunID: run.ID,
 		GroupGeneration: 1, Kind: retryTaskOperationKind, State: retryOperationCommitted,
-		ExternalTaskID: "committed-task-all",
+		ExternalTaskID: "committed-task-all", ExternalSessionID: "committed-session-all", ExternalTurnID: "committed-turn-all",
 	}))
 
 	require.NoError(t, svc.DeleteAllRuns(ctx, a.ID))
 	require.Equal(t, []string{"committed-task-all"}, deleter.deleted)
+	require.Equal(t, "committed-task-all", stopper.taskID)
+	require.Equal(t, "committed-session-all", stopper.sessionID)
+	require.Equal(t, "committed-turn-all", stopper.turnID)
 }
 
 func TestService_DeleteRunAfterPreBindFailureDoesNotBreakRetryRecovery(t *testing.T) {

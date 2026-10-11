@@ -226,7 +226,7 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	session, err := base.repo.GetTaskSession(ctx, launch.SessionID)
 	require.NoError(t, err)
 	require.Equal(t, taskID, session.TaskID)
-	turn, err := base.repo.GetActiveTurn(ctx, launch.SessionID)
+	turn, err := base.repo.GetActiveTurnBySessionID(ctx, launch.SessionID)
 	require.NoError(t, err)
 	require.Equal(t, launch.TurnID, turn.ID)
 	if durable {
@@ -243,7 +243,7 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	for _, action := range []string{recoveryActionResume, recoveryActionFreshStart, recoveryActionContinueHistory} {
 		_, recoveryErr := svc.RecoverSessionWithOptions(ctx, taskID, launch.SessionID, action, RecoverSessionOptions{SettingsPolicy: executor.ResumeSettingsPolicyStrict})
 		require.ErrorIs(t, recoveryErr, automation.ErrRetryLaunchUncertain)
-		currentTurn, turnErr := base.repo.GetActiveTurn(ctx, launch.SessionID)
+		currentTurn, turnErr := base.repo.GetActiveTurnBySessionID(ctx, launch.SessionID)
 		require.NoError(t, turnErr)
 		require.Equal(t, launch.TurnID, currentTurn.ID, "recovery must preserve uncertain retry ownership before settlement")
 		require.EqualValues(t, 1, launches.Load())
@@ -480,7 +480,7 @@ func TestLegacyWarmContinuationIsQuarantinedBeforeReusingAnExistingTurn(t *testi
 	// It can reuse the existing turn, so INSERT guards cannot enforce this boundary.
 	_, _, _, _, _, _, err = base.svc.claimSessionRunningForPrompt(ctx, taskID, session.ID, "", false, nil, nil, "", false)
 	require.True(t, isSessionRecoveryRequiredError(err), "older warm admission must stop at the recovery block: %v", err)
-	active, err := base.repo.GetActiveTurn(ctx, session.ID)
+	active, err := base.repo.GetActiveTurnBySessionID(ctx, session.ID)
 	require.NoError(t, err)
 	require.Equal(t, turn.ID, active.ID)
 	// Schema replay/backfill retains the same canonical block without fabricating evidence.

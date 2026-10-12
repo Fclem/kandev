@@ -11,6 +11,7 @@ import (
 	"github.com/kandev/kandev/internal/orchestrator/executor"
 	"github.com/kandev/kandev/internal/orchestrator/watcher"
 	"github.com/kandev/kandev/internal/task/models"
+	v1 "github.com/kandev/kandev/pkg/api/v1"
 	"go.uber.org/zap"
 )
 
@@ -100,21 +101,29 @@ func (s *Service) configureRetryInitialLaunch(ctx context.Context, sessionID, tu
 	if !ok {
 		return automation.ErrRetryLaunchUncertain
 	}
-	opts.DeliverySubmissionID = launch.SubmissionID
+	session, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return automation.ErrRetryLaunchUncertain
+	}
+	opts.BeforeInitialPromptDispatch = func(admissionCtx context.Context, executionID, _ string, _ []v1.MessageAttachment) error {
+		return owner.VerifyRetryLaunch(admissionCtx, launch, executionID)
+	}
+	s.configureInitialDeliveryAdmission(session, startCreatedSessionOptions{deliverySubmissionID: launch.SubmissionID}, opts)
+	bindIdentity := opts.BeforeAgentStart
+	admitPrepared := opts.BeforeInitialPromptDispatch
 	opts.BeforeAgentStart = func(admissionCtx context.Context, executionID, dispatchPrompt string) error {
 		if err := owner.AdmitRetryLaunch(admissionCtx, launch, executionID); err != nil {
 			return err
 		}
-		session, err := s.repo.GetTaskSession(admissionCtx, sessionID)
-		if err != nil {
-			return err
-		}
-		return s.prepareInitialAgentDeliverySubmission(admissionCtx, session, executionID, dispatchPrompt, opts.Attachments, promptTaskOptions{deliverySubmissionID: launch.SubmissionID})
+		return bindIdentity(admissionCtx, executionID, dispatchPrompt)
 	}
-	opts.BeforeInitialPromptDispatch = func(executionID string) error {
-		receiptCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	opts.BeforeInitialPromptDispatch = func(admissionCtx context.Context, executionID, finalPrompt string, finalAttachments []v1.MessageAttachment) error {
+		receiptCtx, cancel := context.WithTimeout(admissionCtx, 5*time.Second)
 		defer cancel()
-		if err := owner.VerifyRetryLaunch(receiptCtx, launch, executionID); err != nil {
+		if err := admitPrepared(receiptCtx, executionID, finalPrompt, finalAttachments); err != nil {
 			return err
 		}
 		return s.transitionInitialSubmissionToDispatching(receiptCtx, sessionID, executionID, launch.SubmissionID)

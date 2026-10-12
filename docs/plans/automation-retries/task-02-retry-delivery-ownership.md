@@ -147,3 +147,20 @@ All recovered `627b5bdc` failure logs and structured artifacts were inspected. T
 Hosted `732c96a5` verification compiled the integrated application, passed desktop smoke and the PostgreSQL 18 gate, and exposed three orchestrator regressions plus 15 style findings. The queue regression identified mutable launch claim fields in the serialized deferral identity. Deferred starts now serialize only the immutable run/automation/generation/task/session/turn/submission tuple, and admission comparison applies the same normalization to retained older payloads. Replay still reloads the current SQL claim and preserves every existing token/state/generation/cancellation gate; payload equivalence grants no launch authority. An exact comparator/JSON normalization proof fails against the prior source and passes with both legacy-wire and current typed payloads, unchanged inputs, and rejection of every conflicting tuple field and prompt. The permanent actual queue-release/replay regression retains its original timeout and single-provider assertions; replacement hosted execution is pending.
 
 The durable prompt fixture compares the complete final provider prompt with the persisted submission, including task identity and the original prompt suffix. The silent-recovery fixture now uses the repository's supported SQLite dialect label. Reported style findings are addressed by extracting existing binding, provenance, exact stop evidence, snapshot hydration and transactional supersession helpers, while retaining all SQL gates, assertions and limits. No lint threshold or waiver was added. Full replacement unit, race, PostgreSQL, lint and browser verification remains required.
+
+### Hosted queue ownership and fixture race correction
+
+At `aa7925a7`, hosted shard 2 passed canonical submission, commandless
+workspace fallback, two-service blocked launch, legacy persistence fences
+and ordinary-origin silent recovery tests, but its queued
+launch test reported a fixture race while replacing the Stop callback during
+detached cancellation. Queued dispatch was also cancelling a returned
+execution after retry acceptance became uncertain. That cancellation is not
+termination evidence and conflicts with retained ownership: the queue wrapper
+now returns the pending error while retaining the execution. Ordinary binding
+failure still stops its execution. An actual queue-entrypoint regression has
+a reachable ordinary-stop control, and the fixture callback setter shares the
+mock manager mutex with its reader. Exact queue wrapper/converter proof
+failed with one unexpected cancellation on old source; replacement proof and
+full hosted race verification are recorded separately. Helper moves to small
+files preserve the file-length gate and add no waiver.

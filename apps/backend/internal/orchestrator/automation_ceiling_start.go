@@ -60,7 +60,8 @@ var errCeilingAutomationRunClosed = errors.New("orchestrator: queued start's aut
 
 // startQueuedAutomationRun replays a queued start through the run dispatcher,
 // so the replayed launch binds its run or fails it. A launch whose run is not
-// bound is stopped, because no completion would settle that run. A run that
+// bound is stopped for ordinary dispatch failures. Retry acceptance uncertainty
+// retains its execution until its owner has definitive evidence. A run that
 // closed before dispatch is reported as errCeilingAutomationRunClosed without
 // launching. A start that serves no run, or a service without the dispatcher,
 // launches unbound.
@@ -82,6 +83,8 @@ func (s *Service) startQueuedAutomationRun(
 		return nil, ErrCeilingLaunchDeferred
 	case errors.Is(err, automation.ErrAutomationRunNotDispatchable):
 		return nil, errCeilingAutomationRunClosed
+	case errors.Is(err, automation.ErrRetryLaunchUncertain):
+		return execution, err
 	case err != nil && execution != nil && execution.SessionID != "":
 		s.cancelAutomationDispatch(ctx, taskID, execution.SessionID)
 	}

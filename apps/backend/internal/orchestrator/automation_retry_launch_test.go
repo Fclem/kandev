@@ -229,6 +229,13 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	session, err := base.repo.GetTaskSession(ctx, launch.SessionID)
 	require.NoError(t, err)
 	require.Equal(t, taskID, session.TaskID)
+	if queuedStart {
+		require.NotEqual(t, models.TaskSessionStateCancelled, session.State, "queue acceptance uncertainty must retain its owned session")
+		manager.mu.Lock()
+		cancellations := len(manager.stopAgentWithReasonArgs)
+		manager.mu.Unlock()
+		require.Zero(t, cancellations, "an acceptance error must not stop the reserved execution")
+	}
 	turn, err := base.repo.GetActiveTurnBySessionID(ctx, launch.SessionID)
 	require.NoError(t, err)
 	require.Equal(t, launch.TurnID, turn.ID)
@@ -307,12 +314,14 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 	}
 	base.autoSvc.SetRunStopper(svc)
 	var stopCalls atomic.Int32
+	manager.mu.Lock()
 	manager.stopAgentWithReasonFunc = func(context.Context, string, string, bool) error {
 		if stopCalls.Add(1) == 1 {
 			return errors.New("stop acknowledgment unavailable")
 		}
 		return nil
 	}
+	manager.mu.Unlock()
 	_, err = base.autoSvc.StopRun(ctx, a.ID, run.ID)
 	require.Error(t, err)
 	retained, err := base.autoStore.GetRetryLaunch(ctx, run.ID)

@@ -167,11 +167,15 @@ it("keeps the Tasks modal through workspace changes and releases its pointer loc
     expect(nextInput).not.toBe(input);
     expect((nextInput as HTMLInputElement).value).toBe("Current filter");
     view.rerender(picker(workspaceB, false));
+    expect(screen.queryByRole("dialog", { name: "Tasks", hidden: true })).toBeNull();
     await waitFor(() => expect(document.body.style.pointerEvents).not.toBe("none"));
+    expect(document.body.hasAttribute("data-scroll-locked")).toBe(false);
     view.rerender(picker(workspaceA, true));
     expect(screen.getByRole("dialog", { name: "Tasks" })).toBeDefined();
     view.rerender(picker(workspaceA, false));
+    expect(screen.queryByRole("dialog", { name: "Tasks", hidden: true })).toBeNull();
     await waitFor(() => expect(document.body.style.pointerEvents).not.toBe("none"));
+    expect(document.body.hasAttribute("data-scroll-locked")).toBe(false);
   } finally {
     view.unmount();
     document.body.style.pointerEvents = originalPointerEvents;

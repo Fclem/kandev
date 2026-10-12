@@ -164,3 +164,19 @@ mock manager mutex with its reader. Exact queue wrapper/converter proof
 failed with one unexpected cancellation on old source; replacement proof and
 full hosted race verification are recorded separately. Helper moves to small
 files preserve the file-length gate and add no waiver.
+
+### Current-main recovery integration
+
+Main `bc0d3b904` adds loaded native-delivery retirement to shared admission and
+restart presentation repair. These boundaries must consult durable retry
+ownership before invoking retirement or changing recovery presentation, even
+for an ordinary-origin task. The existing ordinary-origin regression now
+asserts no loaded-retirement callback and unchanged block, source execution,
+queue and restore checkpoint. Existing native recovery tests preserve ordinary
+non-retry restoration. An extracted exact loaded-recovery function with small
+repository/runtime seams failed with one unauthorized callback before the
+fence and passed with zero callbacks after it; the ordinary positive control
+still invokes the runtime boundary. This is a contained causal proof, not full
+Go/SQL/provider execution. The first proof compile failed because its repository
+seam was concrete rather than an interface; that setup failure is not RED.
+Final integrated full Go/race/PG/UI verification remains hosted.

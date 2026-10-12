@@ -169,3 +169,16 @@ The first attempt also failed its task-route assertion; no first-attempt trace
 was retained, so that symptom is not claimed resolved by the modal correction.
 Full component and browser verification belongs to hosted CI; no local Vite
 install, build, browser, or live backend instance was executed.
+
+### Tasks dismissal follow-up
+
+Hosted CI at retry PR head `5115a271` reproduces the retained lock in both the
+actual drawer close/reopen component regression and the phone shared-context
+scenario (all four attempts). Keeping the open modal stable is necessary but
+does not settle a closing portal waiting on Presence animation completion.
+The Tasks drawer now removes its content portal when `open` becomes false,
+using Radix unmount cleanup for pointer/scroll locks and focus. Dismissal is
+immediate; entry motion, open geometry, workspace-keyed contents and the sole
+confirmation host are unchanged. The existing assertions and timeouts remain;
+close coverage also checks portal disposal and scroll-lock release. Full
+frontend/browser verification of this follow-up is pending hosted CI.

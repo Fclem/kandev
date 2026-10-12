@@ -11,6 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type retryOwnedLoadedRecoveryManager struct {
+	*mockAgentManager
+	calls int
+}
+
+func (m *retryOwnedLoadedRecoveryManager) ReconcileLoadedNativeDelivery(context.Context, string) (*models.NativeResumeDeliveryEvidence, error) {
+	m.calls++
+	return nil, nil
+}
+
 func TestOrdinaryOriginRetryOwnerFencesSilentRecoveryBeforeCleanupQueueAndCheckpoint(t *testing.T) {
 	fixture := newSilentRestoreCheckpointFixtureWithLaunching(t, false)
 	ctx := fixture.ctx
@@ -42,6 +52,20 @@ func TestOrdinaryOriginRetryOwnerFencesSilentRecoveryBeforeCleanupQueueAndCheckp
 	require.NoError(t, err)
 	checkpointBefore, err := fixture.store.GetRestoreAttempt(ctx, fixture.attemptID)
 	require.NoError(t, err)
+	loaded := &retryOwnedLoadedRecoveryManager{mockAgentManager: fixture.manager}
+	fixture.service.agentManager = loaded
+	blockBefore, err := fixture.repo.GetSessionRecoveryBlock(ctx, fixture.inputs.block.ID)
+	require.NoError(t, err)
+	resolved, err := fixture.service.finishLoadedNativeDeliveryBlock(ctx, blockBefore)
+	require.NoError(t, err)
+	require.False(t, resolved)
+	require.Zero(t, loaded.calls, "generic recovery must not retire retry-owned delivery history")
+	_, err = fixture.service.repairRestartRecoveryPresentation(ctx, fixture.session)
+	require.NoError(t, err)
+	require.Zero(t, loaded.calls, "presentation repair cannot bypass retry ownership")
+	blockAfter, err := fixture.repo.GetSessionRecoveryBlock(ctx, fixture.inputs.block.ID)
+	require.NoError(t, err)
+	require.Equal(t, blockBefore, blockAfter)
 	_, eligible, err = fixture.service.loadSilentRestoreOwner(ctx, candidate)
 	require.NoError(t, err)
 	require.False(t, eligible, "task origin cannot authorize recovery of retry-owned work")

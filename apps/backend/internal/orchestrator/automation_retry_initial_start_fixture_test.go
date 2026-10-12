@@ -104,6 +104,7 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 			accepted <- err
 			return err
 		}
+		var admitted *models.AgentDeliverySubmission
 		if durable {
 			stored, err := base.repo.GetAgentDeliverySubmission(ctx, launch.SubmissionID)
 			if err != nil || stored.State != models.DeliverySubmissionDispatching || stored.DispatchAttemptID != launch.SubmissionID {
@@ -111,18 +112,19 @@ func assertAutomationRetryInitialStart(t *testing.T, restoredWorkspace bool, ter
 				accepted <- err
 				return err
 			}
-			if prepared {
-				if err := before(ctx, providerPrompt+" changed", providerAttachments); err == nil {
-					err = errors.New("duplicate admission rewrote an immutable payload")
-					accepted <- err
-					return err
-				}
-				after, err := base.repo.GetAgentDeliverySubmission(ctx, launch.SubmissionID)
-				if err != nil || !bytes.Equal(stored.Payload, after.Payload) || stored.PayloadHash != after.PayloadHash {
-					err = errors.Join(err, errors.New("rejected duplicate changed canonical payload evidence"))
-					accepted <- err
-					return err
-				}
+			admitted = stored
+		}
+		if durable && prepared {
+			if err := before(ctx, providerPrompt+" changed", providerAttachments); err == nil {
+				err = errors.New("duplicate admission rewrote an immutable payload")
+				accepted <- err
+				return err
+			}
+			after, err := base.repo.GetAgentDeliverySubmission(ctx, launch.SubmissionID)
+			if err != nil || !bytes.Equal(admitted.Payload, after.Payload) || admitted.PayloadHash != after.PayloadHash {
+				err = errors.Join(err, errors.New("rejected duplicate changed canonical payload evidence"))
+				accepted <- err
+				return err
 			}
 		}
 		dispatches.Add(1)

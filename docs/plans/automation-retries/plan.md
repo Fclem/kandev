@@ -1,6 +1,6 @@
 ---
 created: 2026-09-29
-status: in-progress
+status: done
 requirements:
   - REQ-OFFICE-AUTOMATION-RETRIES-001
 system_design:
@@ -38,7 +38,7 @@ Deliver a durable retry lifecycle for workspace automations, from persisted poli
 
 ## Technical approach
 
-Use the Office automation store as the durable source of ownership and due timestamps. Each original firing owns one retry group; each attempt stores its own run row and exact scheduled time. The lifecycle worker claims due rows transactionally, creates or resumes through a persisted task intent and operation lease, and publishes retry events only while holding the matching outbox token. Recovery preserves active leases and resumes expired operations by idempotent identity. History APIs keep paging bounded; the UI composes groups before status filters and follows due timestamps rather than polling the entire history every second.
+Use the Office automation store as the durable source of ownership and due timestamps. Each original firing owns one retry group; each attempt stores its own run row and exact scheduled time. The lifecycle worker claims due rows transactionally, creates or resumes through a persisted task intent and operation lease, and publishes retry events only while holding the matching outbox token. Recovery preserves active preparation leases and can reclaim expired task-only operations by their persisted identity. Provider launch has separate, non-expiring ownership: preparing, dispatching and uncertain acceptance cannot authorize another launch merely because a lease expired. Only definitively deferred work can be re-admitted, with its original task/session/turn/submission tuple. History APIs keep paging bounded; the UI composes groups before status filters and follows due timestamps rather than polling the entire history every second.
 
 For managed targets, the editor resets the retry draft to canonical disabled
 values, retains an older persisted policy as the dirty baseline until an
@@ -127,7 +127,7 @@ a pixel specification.
 ## Work orders
 
 - [x] [Task 01: Deliver the durable retry lifecycle](task-01-durable-retry-lifecycle.md)
-- [ ] [Task 02: Close retry delivery and launch ownership gaps](task-02-retry-delivery-ownership.md)
+- [x] [Task 02: Close retry delivery and launch ownership gaps](task-02-retry-delivery-ownership.md)
 
 ## Verification strategy
 
@@ -139,7 +139,11 @@ a pixel specification.
 
 ## Verification results
 
-Task 02 is in progress. The PR review reproduced production routing, duplicate-dispatch, incomplete-binding Stop, and policy normalization failures with synthetic boundary fixtures, and exact-binding replacement with original SQL in private SQLite. Those proofs do not establish full-application or PostgreSQL correctness. The historical results below belong to Task 01; they do not certify the remaining launch protocol or current main integration.
+Task 02 implementation is complete. Hosted remediation head `6cf6050a3a846b61489bb3595935e536df449e7f` passed Backend Tests, including unit, race, PostgreSQL 16/18 and platform checks, and Frontend Tests. Actual backend test artifacts include reserved initial submission, commandless workspace promotion before admission, two-service ownership, queued replay, legacy persistence fences, retained uncertain acceptance, pre-binding deletion and ordinary-origin recovery regressions. The current-main recovery fences are included in those results.
+
+Head `10bf0f42dca2cf2d000349b45817ef21a36d3b6c` passed full Frontend Tests and E2E Tests, including normal, container, Kubernetes and desktop jobs. Its PostgreSQL 16 retention fixture exceeded the unchanged 250 ms production deadline while holding a test-only precommit pause across three reader queries. Head `22ce943e3113fe656b518a74692f86634ecd15d1` replaces that pause with one captured MVCC snapshot, preserving old/committed-state assertions and timeouts. Its full hosted verification is pending as this implementation record is written. These records establish implementation completion, not final-head delivery clearance; the final PR receipt must record all required checks on the delivered head.
+
+Only small deterministic synthetic proofs and explicit formatting/docs validation ran locally, in the isolated credential-free sandbox. No live automation or provider was used. The historical Task 01 results below remain separate from the later hosted remediation results.
 
 AC-OFFICE-AUTOMATION-RETRIES-001.7 and .8 passed: retry payload unit tests (19/19), frontend typecheck and focused ESLint, backend E2E seeder package compile, desktop Chromium E2E (1/1), and mobile E2E (4/4). Public-doc validation passed (62 tests; 47 published pages); specification validation and lint passed (339 decisions, 1287 specifications). E2E ran under Node 22.22.3 although the workspace declares Node 24. Existing retry-lifecycle results remain in Task 01.
 

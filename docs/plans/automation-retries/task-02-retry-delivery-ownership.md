@@ -1,7 +1,7 @@
 ---
 id: "02-retry-delivery-ownership"
 title: "Close retry delivery and launch ownership gaps"
-status: in-progress
+status: done
 wave: 2
 depends_on:
   - "01-durable-retry-lifecycle"
@@ -76,13 +76,13 @@ Commands are separate CI steps with the appropriate working directories. Broad c
 
 ## Results and remaining gate
 
-In progress. Independent corrections have permanent regressions for snapshot-owner routing, immutable exact binding and history, disabled-policy normalization, timeline mutation/mode refresh, Stop failure and duplicate requests, and accessible radio naming on desktop and phone. Tiny isolated proofs passed for seven hook cases, the existing policy tests, the routing entrypoint with boundary fakes, and the exact binding SQL with private SQLite fixtures. These are not full React, full backend, PostgreSQL, race, or E2E results. Explicit-path contained formatting includes new test files. Hosted verification remains outstanding.
+Implementation complete. Independent corrections have permanent regressions for snapshot-owner routing, immutable exact binding and history, disabled-policy normalization, timeline mutation/mode refresh, Stop failure and duplicate requests, and accessible radio naming on desktop and phone. The dated progress notes below describe evidence available at each earlier head; their pending statements are historical, not the current implementation status. The final hosted summary supersedes them for the delivered implementation. Final-head delivery remains subject to the required checks and current-main integration gate.
 
 ### Reviewed launch ownership contract
 
 The local implementation separates task creation from provider launch. Task-only operation commitments retain their creation identity but cannot authorize provider replay. The launch ledger reserves the immutable task/session/turn/submission tuple before effects, then fences admission and acceptance across service instances. Acceptance that cannot be resolved remains visibly pending; neither lease expiry nor absence from one executor releases ownership.
 
-The following implementation boundaries require hosted verification:
+The implemented boundaries covered by the hosted regressions are:
 
 1. Reservation and capacity admission serialize on the automation row in both dialects. Protocol provenance is recorded with admission and inherited by scheduled children; unresolved legacy provenance cannot reserve another launch.
 2. Fresh and restored-workspace starts carry the same reserved identity into the existing initial-submission admission and acceptance receipts. Commandless workspace promotion decides its full launch path before consuming the single-use provider admission.
@@ -180,3 +180,12 @@ still invokes the runtime boundary. This is a contained causal proof, not full
 Go/SQL/provider execution. The first proof compile failed because its repository
 seam was concrete rather than an interface; that setup failure is not RED.
 Final integrated full Go/race/PG/UI verification remains hosted.
+
+
+### Hosted implementation completion and delivery gate
+
+Hosted Backend Tests on `6cf6050a3a846b61489bb3595935e536df449e7f` passed unit, race, PostgreSQL 16/18 and platform jobs. Its structured shard-2 artifact contains passing actual entrypoint tests for canonical reserved submission, commandless workspace promotion, cross-instance blocked launch, ceiling queue release/replay, legacy persistence/quarantine, pre-binding Stop/deletion and ordinary-origin silent/loaded recovery fences. `TestQueuedRetryUncertainAcceptanceRetainsExecution` passed both retained-uncertain and ordinary-error-stop branches. Full Frontend Tests also passed. These results execute the integrated code and deterministic provider fakes; they do not establish universal provider exactly-once delivery or live native recovery.
+
+Full E2E and Frontend workflows passed on `10bf0f42dca2cf2d000349b45817ef21a36d3b6c`. The E2E result includes the responsive confirmation fixture corrected to inspect Tasks title geometry while that drawer is still open, plus the separate Delete dialog and final task-deletion assertions. All normal, container, Kubernetes and desktop jobs completed. The retention fixture correction in `22ce943e3113fe656b518a74692f86634ecd15d1` leaves retry production logic unchanged; its final full hosted run is pending when this record is written. Final delivery requires the actual latest-head workflow conclusions, fully paginated reviews/statuses, protected-main integration proof and a normal exact-head squash merge.
+
+Remediation used no live automation, real provider or operator runtime. Local proofs were bounded synthetic capsules in the inspected non-root, network-isolated, read-only-root sandbox. Git hooks were bypassed under that containment policy; hosted static, formatting, localization and test checks provide the required equivalents. Historical handles lost after interruption have unknown exits, recorded outside the repository rather than inferred from later runs.

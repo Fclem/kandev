@@ -650,16 +650,16 @@ cat "${FAKE_DOCKER_MANIFEST}"
     def test_authenticated_suite_runs_in_a_dedicated_gated_job(self) -> None:
         workflow = E2E_WORKFLOW.read_text(encoding="utf-8")
 
-        # Appended after `e2e-gate` so every block sliced by this file keeps its
-        # asserted contents; `job_block` cannot slice the last job, so partition
-        # instead.
+        # Appended after `e2e-report`, the single gate, so every block sliced by
+        # this file keeps its asserted contents; `job_block` cannot slice the
+        # last job, so partition instead.
         _, separator, auth_job = workflow.partition("\n  e2e-auth:\n")
         self.assertTrue(separator, "workflow must declare an e2e-auth job")
-        # Placement contract: `e2e-gate` precedes it and no other job follows it,
-        # so the (desktop-e2e -> e2e-report), (e2e-report -> e2e-gate) and
-        # gate-to-end slices above keep exactly the blocks they assert.
+        # Placement contract: `e2e-report` precedes it and no other job follows
+        # it, so the (desktop-e2e -> e2e-report) slice above keeps exactly the
+        # block it asserts.
         self.assertLess(
-            workflow.index("  e2e-gate:\n"),
+            workflow.index("  e2e-report:\n"),
             workflow.index("  e2e-auth:\n"),
         )
         self.assertEqual(re.findall(r"^  [a-z0-9-]+:$", auth_job, re.MULTILINE), [])
@@ -686,17 +686,15 @@ cat "${FAKE_DOCKER_MANIFEST}"
         ):
             self.assertNotIn(forbidden, auth_job)
 
-        report_job = job_block(workflow, "e2e-report", "e2e-gate")
+        report_job = job_block(workflow, "e2e-report", "e2e-auth")
         self.assertIn(
-            "needs: [changes, e2e, e2e-containers, desktop-e2e, e2e-auth]",
+            "needs: [changes, build, playwright_image, e2e, e2e-containers,"
+            " e2e-kubernetes-compatibility, desktop-e2e, e2e-auth]",
             report_job,
         )
         self.assertIn("pattern: blob-report-*", report_job)
-
-        _, gate_separator, gate_job = workflow.partition("  e2e-gate:\n")
-        self.assertTrue(gate_separator, "workflow must keep the e2e-gate job")
-        self.assertIn("E2E_AUTH_RESULT: ${{ needs['e2e-auth'].result }}", gate_job)
-        self.assertIn('"e2e-auth:${E2E_AUTH_RESULT}"', gate_job)
+        self.assertIn("E2E_AUTH_RESULT: ${{ needs['e2e-auth'].result }}", report_job)
+        self.assertIn('"e2e-auth:${E2E_AUTH_RESULT}"', report_job)
 
     def test_image_digest_resolver_hashes_raw_manifest_bytes(self) -> None:
         self.assertTrue(IMAGE_DIGEST_RESOLVER.exists())

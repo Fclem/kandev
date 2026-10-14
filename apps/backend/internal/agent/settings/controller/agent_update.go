@@ -328,6 +328,11 @@ type RuntimeUpdater interface {
 	) (hostutility.AgentCapabilities, error)
 }
 
+// RuntimeTreeUpdater bounds automatic in-place updates and their subprocesses.
+type RuntimeTreeUpdater interface {
+	RunUpdateTree(context.Context, agents.Command, func(string)) error
+}
+
 // RuntimeVersionMetadata is the trusted npm catalogue used to authorize an
 // exact target after the browser preview has been shown.
 type RuntimeVersionMetadata struct {
@@ -398,6 +403,7 @@ type hostRuntimeUpdater struct {
 type directCommandExecutor interface {
 	Output(ctx context.Context, command agents.Command) (string, error)
 	Stream(ctx context.Context, command agents.Command, onChunk func(string)) error
+	StreamTree(ctx context.Context, command agents.Command, onChunk func(string)) error
 }
 
 type execDirectCommandExecutor struct{}
@@ -415,6 +421,10 @@ func (execDirectCommandExecutor) Stream(
 	onChunk func(string),
 ) error {
 	return runDirectCommand(ctx, command, onChunk)
+}
+
+func (execDirectCommandExecutor) StreamTree(ctx context.Context, command agents.Command, onChunk func(string)) error {
+	return runDirectCommand(ctx, command, onChunk, true)
 }
 
 func (u *hostRuntimeUpdater) CurrentCapabilities(agentName string) (hostutility.AgentCapabilities, bool) {
@@ -553,6 +563,10 @@ func (u *hostRuntimeUpdater) RunUpdate(
 	return u.executor.Stream(ctx, command, onChunk)
 }
 
+func (u *hostRuntimeUpdater) RunUpdateTree(ctx context.Context, command agents.Command, onChunk func(string)) error {
+	return u.executor.StreamTree(ctx, command, onChunk)
+}
+
 func (u *hostRuntimeUpdater) npxCacheRoot(ctx context.Context) (string, error) {
 	args := append(managedruntime.NPMProjectPrefixArgs(), "config", "get", "cache")
 	output, err := u.executor.Output(ctx, agents.NewCommand(append([]string{"npm"}, args...)...))
@@ -626,7 +640,10 @@ func (u *hostRuntimeUpdater) InvalidateCapabilities(agentName string) {
 	u.host.InvalidateCapabilities(agentName)
 }
 
-func runDirectCommand(ctx context.Context, command agents.Command, onChunk func(string)) error {
+func runDirectCommand(ctx context.Context, command agents.Command, onChunk func(string), tree ...bool) error {
+	if len(tree) > 0 && tree[0] {
+		return runDirectCommandTree(ctx, command, onChunk)
+	}
 	argv := command.Args()
 	if len(argv) == 0 {
 		return errors.New("runtime update command is empty")

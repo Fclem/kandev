@@ -44,6 +44,7 @@ export default mergeConfig(
           extends: true,
           test: {
             name: "node",
+            maxWorkers,
             include: [...projectDefinitions.node.include],
             exclude: [...projectDefinitions.node.exclude],
             setupFiles: ["./vitest.setup.node.ts"],
@@ -55,6 +56,7 @@ export default mergeConfig(
           extends: true,
           test: {
             name: "browser",
+            maxWorkers,
             include: [...projectDefinitions.browser.include],
             exclude: [...projectDefinitions.browser.exclude],
             setupFiles: ["./vitest.setup.ts"],
@@ -75,6 +77,7 @@ export default mergeConfig(
           extends: true,
           test: {
             name: "browser-locales",
+            maxWorkers,
             include: [...projectDefinitions["browser-locales"].include],
             exclude: [...projectDefinitions["browser-locales"].exclude],
             setupFiles: ["./vitest.setup.ts", "./vitest.setup.locales.ts"],

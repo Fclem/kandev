@@ -11,8 +11,84 @@ import { settingsActionClassName } from "./settings-control";
 import { useSettingsTargetRegistration } from "./settings-target-provider";
 import { useRuntimeAutoUpdatePolicy } from "./use-runtime-auto-update-policy";
 
+const RUNTIME_UNKNOWN_KEY = "agents:runtimeUnknown";
+
+function runtimeManageKey(harnessControl: boolean, managedFallback?: boolean): string {
+  if (harnessControl) return "agents:runtimeOMPManageUpdate";
+  if (managedFallback) return "agents:runtimeFallbackManage";
+  return "agents:runtimeManage";
+}
+
+function hasManagedControl(status: AgentUpdateStatus, hasControl: boolean, canManage: boolean) {
+  return (
+    (status.management === "managed" || status.managed_fallback) &&
+    status.available &&
+    status.enabled &&
+    hasControl &&
+    canManage
+  );
+}
+
+function harnessOutcomeKey(status: AgentUpdateStatus): string {
+  if (status.auto_update_paused) return "agents:runtimeOMPPausedBody";
+  const outcome = status.last_outcome;
+  if (outcome?.status === "running") return "agents:runtimeOMPRunning";
+  if (outcome?.status === "succeeded") {
+    if (outcome.operation === "update") return "agents:runtimeOMPChangedBody";
+    if (outcome.operation === "repair") return "agents:runtimeOMPRepairedBody";
+    return "agents:runtimeOMPNoChangeBody";
+  }
+  if (!status.auto_update) return "agents:runtimeOMPIncompleteBody";
+  return outcome?.status === "interrupted"
+    ? "agents:runtimeOMPInterruptedBody"
+    : "agents:runtimeOMPRetryBody";
+}
+
+function HarnessRuntimeOutcome({ status }: { status: AgentUpdateStatus }) {
+  const { t } = useTranslation();
+  const outcome = status.last_outcome;
+  const change = status.last_change;
+  const hasOutput =
+    outcome?.output_excerpt &&
+    (outcome.operation === "up_to_date" ||
+      outcome.status === "failed" ||
+      outcome.status === "interrupted");
+  return (
+    <div className="min-w-0 space-y-2">
+      {change && (
+        <p className="text-sm">
+          {t("agents:runtimeOMPLastChange", {
+            previous: change.previous_version,
+            version: change.observed_version,
+          })}
+        </p>
+      )}
+      {(outcome || status.auto_update_paused) && (
+        <p className="text-sm" role="status">
+          {t(harnessOutcomeKey(status), {
+            agent: status.display_name,
+            previous: outcome?.previous_version || t(RUNTIME_UNKNOWN_KEY),
+            version: outcome?.observed_version || t(RUNTIME_UNKNOWN_KEY),
+          })}
+        </p>
+      )}
+      {hasOutput && (
+        <details className="min-w-0">
+          <summary className="cursor-pointer text-sm max-md:min-h-11 [@media(pointer:coarse)]:min-h-11">
+            {t("agents:runtimeOMPOutput")}
+          </summary>
+          <pre className="max-w-full whitespace-pre-wrap break-words text-xs">
+            {outcome.output_excerpt}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function RuntimeOutcome({ status }: { status: AgentUpdateStatus }) {
   const { t } = useTranslation();
+  if (status.update_mode === "self_update") return <HarnessRuntimeOutcome status={status} />;
   const outcome = status.last_outcome;
   if (!outcome) return null;
   const values = {
@@ -34,18 +110,18 @@ function RuntimeOutcome({ status }: { status: AgentUpdateStatus }) {
 function RuntimeAction({ status, hasControl }: { status: AgentUpdateStatus; hasControl: boolean }) {
   const { t } = useTranslation();
   const canManage = useIsAdmin();
-  const managedControl =
-    (status.management === "managed" || status.managed_fallback) &&
-    status.available &&
-    status.enabled &&
+  const managedControl = hasManagedControl(status, hasControl, canManage);
+  const harnessControl =
+    status.update_mode === "self_update" &&
+    (status.auto_update_supported || status.auto_update) &&
     hasControl &&
     canManage;
   return (
     <div className="flex flex-col gap-2 md:flex-row md:flex-wrap">
-      {managedControl && (
+      {(managedControl || harnessControl) && (
         <Button asChild variant="outline" className={settingsActionClassName("shrink-0")}>
           <a href={`#installed-agent-${status.agent_name}`}>
-            {t(status.managed_fallback ? "agents:runtimeFallbackManage" : "agents:runtimeManage")}
+            {t(runtimeManageKey(harnessControl, status.managed_fallback))}
           </a>
         </Button>
       )}
@@ -75,13 +151,18 @@ function RuntimeVersionSummary({ status }: { status: AgentUpdateStatus }) {
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>
             {t(managed ? "agents:runtimeSelected" : "agents:runtimeObserved", {
-              version: status.effective_version || t("agents:runtimeUnknown"),
+              version: status.effective_version || t(RUNTIME_UNKNOWN_KEY),
             })}
           </span>
           <span>
-            {t("agents:runtimeLatest", {
-              version: status.latest_version || t("agents:runtimeUnknown"),
-            })}
+            {t(
+              status.update_mode === "self_update"
+                ? "agents:stableLatestReference"
+                : "agents:runtimeLatest",
+              {
+                version: status.latest_version || t(RUNTIME_UNKNOWN_KEY),
+              },
+            )}
           </span>
         </div>
       </div>
@@ -106,9 +187,14 @@ function RuntimePolicyRow({
   const canManage = useIsAdmin();
   const { draft, setDraft, isDirty } = useRuntimeAutoUpdatePolicy(status);
   const managed = status.management === "managed";
+  const showAutomatic = managed || status.auto_update_supported || status.auto_update;
+  const harnessAutomatic = status.update_mode === "self_update" && showAutomatic;
   const targetId = `runtime-update-${status.agent_name}`;
   const registerTarget = useSettingsTargetRegistration(targetId);
   const controlId = `runtime-automatic-${status.agent_name}`;
+  let descriptionId: string | undefined;
+  if (managed) descriptionId = "runtime-automatic-help";
+  if (harnessAutomatic) descriptionId = `${controlId}-help`;
   return (
     <div
       id={targetId}
@@ -120,7 +206,7 @@ function RuntimePolicyRow({
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
         <RuntimeVersionSummary status={status} />
         <div className="flex flex-col gap-2 md:shrink-0 md:flex-row md:items-center md:gap-3">
-          {managed && (
+          {showAutomatic && (
             <SettingsRow
               label={t("agents:runtimeAutomatic")}
               controlId={controlId}
@@ -131,10 +217,10 @@ function RuntimePolicyRow({
               control={
                 <Switch
                   id={controlId}
-                  aria-describedby="runtime-automatic-help"
+                  aria-describedby={descriptionId}
                   checked={draft}
                   onCheckedChange={setDraft}
-                  disabled={!canManage || (!status.auto_update_supported && !draft)}
+                  disabled={!canManage || (!status.auto_update_supported && !status.auto_update)}
                 />
               }
             />
@@ -145,7 +231,12 @@ function RuntimePolicyRow({
       {(!status.available || !status.enabled) && (
         <p className="text-xs text-muted-foreground">{t("agents:runtimeNotAvailable")}</p>
       )}
-      {!managed && (
+      {harnessAutomatic && (
+        <p id={descriptionId} className="text-xs text-muted-foreground">
+          {t("agents:runtimeOMPAutomaticHelp")}
+        </p>
+      )}
+      {!managed && !harnessAutomatic && (
         <p className="text-xs text-muted-foreground">
           {t(
             status.management === "manual"

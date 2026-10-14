@@ -210,3 +210,44 @@ describe("useUpdateAvailableToast occurrence behavior", () => {
     );
   });
 });
+
+describe("OMP automatic outcome notifications", () => {
+  beforeEach(resetUpdateToastHook);
+  it("reports an observed change without exact-pin recovery claims", () => {
+    mockNotification = {
+      ...runtimeNotification(),
+      agent_name: "omp-acp",
+      display_name: "Oh My Pi",
+      update_mode: "self_update",
+      runtime_update_status: "succeeded",
+      previous_version: "1.0.0",
+      version: "1.2.0",
+    };
+    renderHook(() => useUpdateAvailableToast());
+    const toast = mockToast.mock.calls[0]?.[0];
+    expect(toast.description).toContain("1.0.0");
+    expect(toast.description).toContain("1.2.0");
+    expect(toast.description).not.toMatch(/select an older|Kandev default/i);
+    expect(toast.action.href).toBe("/settings/agents#runtime-update-omp-acp");
+  });
+
+  it("delivers versionless paused recovery on both in-app and native paths", () => {
+    mockNotification = {
+      ...runtimeNotification(),
+      agent_name: "omp-acp",
+      display_name: "Oh My Pi",
+      update_mode: "self_update",
+      runtime_update_status: "failed",
+      previous_version: "",
+      version: "",
+    };
+    mockNativeIsAvailable.mockReturnValue(true);
+    renderHook(() => useUpdateAvailableToast());
+    const toast = mockToast.mock.calls[0]?.[0];
+    expect(toast.description).toMatch(/off.*save.*on.*save/i);
+    expect(toast.description).not.toMatch(/preserved your selection|Kandev default/i);
+    expect(mockNativeShow).toHaveBeenCalledWith(
+      expect.objectContaining({ body: toast.description }),
+    );
+  });
+});

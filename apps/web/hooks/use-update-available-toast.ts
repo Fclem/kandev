@@ -19,7 +19,12 @@ function summaryNotificationCopy(notification: UpdateAvailableNotification) {
   };
 }
 
-function runtimeCopyKey(status: UpdateAvailableNotification["runtime_update_status"]) {
+function runtimeCopyKey(notification: UpdateAvailableNotification) {
+  const status = notification.runtime_update_status;
+  if (notification.update_mode === "self_update") {
+    if (status === "succeeded") return "runtimeOMPChanged";
+    if (status === "failed" || status === "interrupted") return "runtimeOMPPaused";
+  }
   switch (status) {
     case "succeeded":
       return "runtimeSucceeded";
@@ -33,7 +38,7 @@ function runtimeCopyKey(status: UpdateAvailableNotification["runtime_update_stat
 }
 
 function runtimeNotificationCopy(notification: UpdateAvailableNotification) {
-  const copyKey = runtimeCopyKey(notification.runtime_update_status);
+  const copyKey = runtimeCopyKey(notification);
   const values = {
     agent: notification.display_name || notification.agent_name,
     runtime: notification.runtime_id,

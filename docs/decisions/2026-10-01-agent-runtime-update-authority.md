@@ -1,6 +1,6 @@
 # ADR-2026-10-01-agent-runtime-update-authority: Scope Automatic Updates to Verified Runtime Activation
 
-**Status:** accepted
+**Status:** accepted (amended by 2026-10-10-periodic-omp-self-updates)
 **Date:** 2026-10-01
 **Area:** backend, frontend, protocol
 

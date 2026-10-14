@@ -35,6 +35,12 @@ capabilities only after the probe succeeds. It cannot undo an in-place update
 if that probe fails; it retains the prior capability catalogue and reports the
 failure. See [ADR-2026-09-26](../../../decisions/2026-09-26-harness-owned-runtime-updates.md).
 
+The [OMP automation design](omp-automatic-updates.md) extends this
+manual operation with explicit consent and periodic channel checks. Only its
+automatic jobs accept a healthy unchanged-version probe as a no-change result;
+manual unchanged-version failures below remain unchanged. Its trusted, consented
+background path is the only other Kandev path that runs `omp update`.
+
 ## Requirement mapping
 
 | Requirement | Design section |
@@ -199,7 +205,8 @@ ACP probe command. The HTTP request remains limited to the agent name and
 existing request fields; harness mode rejects version selection and default
 reset. Commands are direct argv with no shell interpolation. The public status
 lookup is read-only; it does not execute the harness updater. The explicit
-maintenance action is the only Kandev path that runs `omp update`.
+maintenance action, and the opt-in background path in the OMP automation
+design, are the only Kandev paths that run `omp update`.
 
 ## Observability
 

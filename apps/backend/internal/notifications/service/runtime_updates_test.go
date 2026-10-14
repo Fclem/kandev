@@ -45,3 +45,26 @@ func TestInterruptedRuntimeNoticeDoesNotGuessActivation(t *testing.T) {
 		t.Fatalf("interrupted result must be unknown: %s", body)
 	}
 }
+
+func TestOMPAutomaticVersionlessPauseDeliveryDeduplicates(t *testing.T) {
+	log, _ := logger.NewFromZap(zap.NewNop())
+	repo := &notificationTestRepository{providers: []*models.Provider{{ID: "local", Type: models.ProviderTypeLocal, Enabled: true}}, subscriptions: map[string][]*models.Subscription{"local": {{ProviderID: "local", EventType: EventSystemUpdateAvailable, Enabled: true}}}}
+	local := &captureProvider{}
+	makeService := func() *Service {
+		s := NewService(repo, nil, nil, log, nil)
+		s.providers[models.ProviderTypeLocal] = local
+		return s
+	}
+	notice := agents.RuntimeUpdateNotice{AgentID: "omp-acp", RuntimeID: "omp-acp", DisplayName: "OMP", UpdateMode: "self_update", Status: "failed", OccurrenceID: "attempt"}
+	makeService().HandleAgentRuntimeUpdate(context.Background(), notice)
+	makeService().HandleAgentRuntimeUpdate(context.Background(), notice)
+	if len(local.messages) != 1 {
+		t.Fatalf("versionless pausing deliveries = %d", len(local.messages))
+	}
+	if local.messages[0].Payload["update_mode"] != "self_update" {
+		t.Fatalf("external mode lost: %+v", local.messages[0])
+	}
+	if strings.Contains(local.messages[0].Body, "Kandev default") || strings.Contains(local.messages[0].Body, "preserved your selection") {
+		t.Fatal("in-place update claimed pin recovery")
+	}
+}

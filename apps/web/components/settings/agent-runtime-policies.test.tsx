@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentUpdateStatus } from "@/lib/api";
 import { AgentRuntimePolicies } from "./agent-runtime-policies";
@@ -6,7 +6,7 @@ import { SettingsTargetProvider } from "./settings-target-provider";
 
 const disclosureSelector = "#runtime-updates details";
 
-const { status, snapshot } = vi.hoisted(() => ({
+const { status, snapshot, session } = vi.hoisted(() => ({
   status: {
     agent_name: "opencode-acp",
     display_name: "OpenCode",
@@ -18,15 +18,21 @@ const { status, snapshot } = vi.hoisted(() => ({
     guidance_url: "https://opencode.ai/docs/cli/",
   } as AgentUpdateStatus,
   snapshot: { statuses: {} as Record<string, AgentUpdateStatus> },
+  session: { canManage: true },
 }));
-vi.mock("@/hooks/domains/auth/use-is-admin", () => ({ useIsAdmin: () => true }));
+vi.mock("@/hooks/domains/auth/use-is-admin", () => ({ useIsAdmin: () => session.canManage }));
 vi.mock("@/hooks/domains/settings/use-agent-runtime-update-statuses", () => ({
   useAgentRuntimeUpdateStatuses: () => ({ statusByAgent: snapshot.statuses }),
 }));
 vi.mock("./use-runtime-auto-update-policy", () => ({
-  useRuntimeAutoUpdatePolicy: () => ({ draft: false, isDirty: false, setDraft: vi.fn() }),
+  useRuntimeAutoUpdatePolicy: (value: AgentUpdateStatus) => ({
+    draft: value.auto_update ?? false,
+    isDirty: false,
+    setDraft: vi.fn(),
+  }),
 }));
 beforeEach(() => {
+  session.canManage = true;
   snapshot.statuses = { "opencode-acp": status };
 });
 afterEach(() => {
@@ -114,5 +120,141 @@ describe("runtime control destinations", () => {
     expect(
       screen.getByRole("link", { name: "Manage fallback versions" }).getAttribute("href"),
     ).toBe("#installed-agent-opencode-acp");
+  });
+});
+
+function ompStatus(overrides: Partial<AgentUpdateStatus> = {}): AgentUpdateStatus {
+  return {
+    ...status,
+    agent_name: "omp-acp",
+    display_name: "Oh My Pi",
+    runtime_id: "omp-acp",
+    update_mode: "self_update",
+    managed_fallback: false,
+    owner: "external",
+    current_version: "1.2.0",
+    effective_version: "1.2.0",
+    latest_version: "1.1.0",
+    auto_update_supported: true,
+    auto_update: false,
+    guidance_url: "https://github.com/can1357/oh-my-pi",
+    ...overrides,
+  };
+}
+
+describe("OMP automatic consent and retained evidence", () => {
+  // @covers AC-AGENTS-RUNTIME-NOTIFY-004.1, AC-AGENTS-RUNTIME-NOTIFY-004.11
+  it("exposes opt-in with its own cadence and risk description and both update destinations", () => {
+    snapshot.statuses = { "omp-acp": ompStatus() };
+    const view = render(policies());
+    expand(view);
+    const row = screen.getByTestId("runtime-policy-omp-acp");
+    const control = within(row).getByRole("switch");
+    expect(control.getAttribute("aria-checked")).toBe("false");
+    const descriptionId = control.getAttribute("aria-describedby");
+    expect(descriptionId).not.toBe("runtime-automatic-help");
+    const description = document.getElementById(descriptionId!);
+    expect(row.contains(description)).toBe(true);
+    expect(description?.textContent).toMatch(/15/);
+    expect(description?.textContent).toMatch(/channel/i);
+    expect(description?.textContent).toMatch(/roll.?back/i);
+    expect(row.querySelector('a[href="#installed-agent-omp-acp"]')).toBeTruthy();
+    expect(row.querySelector('a[href="https://github.com/can1357/oh-my-pi"]')).toBeTruthy();
+  });
+
+  it("keeps saved unavailable consent withdrawable and respects operator permissions", () => {
+    snapshot.statuses = {
+      "omp-acp": ompStatus({ available: false, auto_update_supported: false, auto_update: true }),
+    };
+    const view = render(policies());
+    expand(view);
+    const control = screen
+      .getByTestId("runtime-policy-omp-acp")
+      .querySelector<HTMLButtonElement>('[role="switch"]');
+    expect(control?.getAttribute("aria-checked")).toBe("true");
+    expect(control?.disabled).toBe(false);
+    session.canManage = false;
+    view.rerender(policies());
+    expect(control?.disabled).toBe(true);
+  });
+
+  it("does not grant unrelated external runtimes an automatic switch", () => {
+    snapshot.statuses = {
+      "opencode-acp": { ...status, auto_update_supported: false, auto_update: false },
+    };
+    const view = render(policies());
+    expand(view);
+    expect(
+      screen.getByTestId("runtime-policy-opencode-acp").querySelector('[role="switch"]'),
+    ).toBeNull();
+  });
+});
+
+describe("OMP retained evidence and pause recovery", () => {
+  it("retains the last change separately from a neutral no-change check and collapsed plain-text output", () => {
+    snapshot.statuses = {
+      "omp-acp": ompStatus({
+        last_change: {
+          id: "changed",
+          previous_version: "1.0.0",
+          observed_version: "1.2.0",
+          finished_at: "2026-10-10T12:00:00Z",
+        },
+        last_outcome: {
+          id: "same",
+          status: "succeeded",
+          update_mode: "self_update",
+          operation: "up_to_date",
+          previous_version: "1.2.0",
+          target_version: "",
+          observed_version: "1.2.0",
+          output_excerpt: "channel declined\n<script>not markup</script>",
+          finished_at: "2026-10-10T12:15:00Z",
+        },
+      }),
+    };
+    const view = render(policies());
+    expand(view);
+    const row = screen.getByTestId("runtime-policy-omp-acp");
+    expect(
+      within(row).getByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          Boolean(element.textContent?.includes("1.0.0") && element.textContent?.includes("1.2.0")),
+      ),
+    ).toBeTruthy();
+    const result = within(row).getByRole("status");
+    expect(result.textContent).toContain("1.2.0");
+    expect(result.textContent).not.toMatch(/up.?to.?date|updated successfully/i);
+    const disclosure = row.querySelector<HTMLDetailsElement>("details");
+    expect(disclosure?.open).toBe(false);
+    expect(disclosure?.querySelector("pre")?.textContent).toBe(
+      "channel declined\n<script>not markup</script>",
+    );
+    expect(disclosure?.querySelector("script")).toBeNull();
+  });
+
+  it("uses derived pause state and removes recovery guidance after saved recovery", () => {
+    const retained = ompStatus({
+      auto_update: true,
+      auto_update_paused: true,
+      last_outcome: {
+        id: "failed",
+        status: "failed",
+        update_mode: "self_update",
+        previous_version: "1.2.0",
+        target_version: "",
+        output_excerpt: "probe failed",
+        finished_at: "2026-10-10T12:00:00Z",
+      },
+    });
+    snapshot.statuses = { "omp-acp": retained };
+    const view = render(policies());
+    expand(view);
+    expect(screen.getByRole("status").textContent).toMatch(/paused/i);
+    expect(screen.getByRole("status").textContent).toMatch(/off.*save.*on.*save/i);
+    snapshot.statuses = { "omp-acp": { ...retained, auto_update_paused: false } };
+    view.rerender(policies());
+    expect(screen.getByRole("status").textContent).not.toMatch(/paused|off.*save.*on.*save/i);
   });
 });

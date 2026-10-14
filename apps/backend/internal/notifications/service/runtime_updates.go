@@ -12,13 +12,16 @@ import (
 	"go.uber.org/zap"
 )
 
+const runtimeSelfUpdateMode = "self_update"
+
 func (s *Service) HandleAgentRuntimeUpdate(ctx context.Context, notice agents.RuntimeUpdateNotice) {
-	if notice.AgentID == "" || notice.RuntimeID == "" || notice.Version == "" || notice.OccurrenceID == "" {
+	if notice.AgentID == "" || notice.RuntimeID == "" || (notice.Version == "" && notice.UpdateMode != runtimeSelfUpdateMode) || notice.OccurrenceID == "" {
 		return
 	}
 	s.handleSemanticOccurrence(ctx, "", "", notice.OccurrenceID, EventSystemUpdateAvailable, map[string]string{
 		"agent_name": notice.AgentID, "runtime_id": notice.RuntimeID, "display_name": notice.DisplayName,
 		"previous_version": notice.PreviousVersion, "version": notice.Version, "runtime_update_status": notice.Status, "url": notice.URL,
+		"update_mode": notice.UpdateMode,
 	})
 }
 
@@ -112,6 +115,7 @@ func runtimeUpdateBatchMessage(notices []agents.RuntimeUpdateNotice) notificatio
 			"agent_name": notice.AgentID, "runtime_id": notice.RuntimeID, "display_name": notice.DisplayName,
 			"previous_version": notice.PreviousVersion, "version": notice.Version,
 			"runtime_update_status": notice.Status, "url": notice.URL,
+			"update_mode": notice.UpdateMode,
 		}
 		title, body := runtimeUpdateMessage(payload)
 		return notificationPayload{
@@ -145,6 +149,12 @@ func runtimeUpdateBatchMessage(notices []agents.RuntimeUpdateNotice) notificatio
 
 func runtimeUpdateMessage(payload map[string]string) (string, string) {
 	name, previous, target := payload["display_name"], payload["previous_version"], payload["version"]
+	if payload["update_mode"] == runtimeSelfUpdateMode && payload["runtime_update_status"] != "available" {
+		if payload["runtime_update_status"] == "succeeded" {
+			return fmt.Sprintf("%s runtime updated", name), fmt.Sprintf("%s reported a change from %s to %s for future sessions. The installation was updated in place; Kandev cannot roll back.", name, previous, target)
+		}
+		return fmt.Sprintf("%s automatic checks paused", name), fmt.Sprintf("%s automatic checks are paused. The installation may have changed; Kandev cannot roll back. Open Settings > Agents, turn automatic updates off and save, then on and save to resume.", name)
+	}
 	switch payload["runtime_update_status"] {
 	case "succeeded":
 		return fmt.Sprintf("%s runtime updated", name), fmt.Sprintf("%s runtime updated from %s to %s for future sessions. Open Settings > Agents > Runtime updates to select another version or return to the Kandev default.", name, previous, target)

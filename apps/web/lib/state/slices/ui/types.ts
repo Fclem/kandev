@@ -1,3 +1,4 @@
+import type { AgentUpdateMode } from "@/lib/api/domains/agent-update-api";
 import type { ConnectionIssueSeverity, ConnectionStatus } from "@/lib/types/connection";
 import type { HealthCheckSummary, HealthIssue, SystemHealthResponse } from "@/lib/types/health";
 import type { SettingsMenuMode } from "@/lib/settings/settings-menu-mode";
@@ -238,6 +239,7 @@ export type UpdateAvailableNotification = {
   runtime_updates?: RuntimeUpdateSummaryMember[];
   agent_name?: string;
   runtime_id?: string;
+  update_mode?: AgentUpdateMode;
   display_name?: string;
   previous_version?: string;
   runtime_update_status?: "available" | "succeeded" | "failed" | "interrupted";

@@ -8,6 +8,18 @@ import type { BackendContext } from "../../fixtures/backend";
 const SUMMARY_EVENT = "system.update_available";
 const SUMMARY_TIMEOUT_MS = 75_000;
 
+function availableRuntimeIdentities(statuses: AgentUpdateStatus[]): string[] {
+  return statuses
+    .filter(
+      (status) =>
+        status.available &&
+        status.enabled &&
+        status.check_state === "update_available" &&
+        status.latest_version === "99.0.0",
+    )
+    .map((status) => `${status.agent_name}:${status.runtime_id}`);
+}
+
 export async function backendRuntimeUpdateSummary(
   page: Page,
   backend: BackendContext,
@@ -44,6 +56,10 @@ export async function backendRuntimeUpdateSummary(
     timeoutAfter: restart,
   });
   await Promise.all([restart, reconnectSubscription]);
+  const beforeWindowResponse = await apiClient.rawRequest("GET", "/api/v1/agent-update/status");
+  expect(beforeWindowResponse.ok).toBe(true);
+  const beforeWindow = (await beforeWindowResponse.json()) as { statuses: AgentUpdateStatus[] };
+  const observedIdentities = availableRuntimeIdentities(beforeWindow.statuses);
 
   const outcomeEvent = ws.waitForEvent(SUMMARY_EVENT, {
     timeout: 15_000,
@@ -65,32 +81,6 @@ export async function backendRuntimeUpdateSummary(
     .filter({ hasText: "Gemini runtime update failed" });
   await expect(outcomeToast).toHaveCount(1);
 
-  const statusResponse = await apiClient.rawRequest("GET", "/api/v1/agent-update/status");
-  expect(statusResponse.ok).toBe(true);
-  const { statuses } = (await statusResponse.json()) as { statuses: AgentUpdateStatus[] };
-  const available = statuses.filter(
-    (status) =>
-      status.available &&
-      status.enabled &&
-      status.check_state === "update_available" &&
-      status.latest_version === "99.0.0",
-  );
-  expect(
-    available.length,
-    JSON.stringify(
-      statuses.map(
-        ({ agent_name, runtime_id, available, enabled, latest_version, check_state }) => ({
-          agent_name,
-          runtime_id,
-          available,
-          enabled,
-          latest_version,
-          check_state,
-        }),
-      ),
-    ),
-  ).toBeGreaterThan(1);
-
   if (Date.now() - availabilityWindowCheckStartedAt < 30_000) {
     expect(summaryReceived.value).toBe(false);
     await expect(
@@ -99,13 +89,24 @@ export async function backendRuntimeUpdateSummary(
   }
 
   const summary = await summaryEvent;
+  const statusResponse = await apiClient.rawRequest("GET", "/api/v1/agent-update/status");
+  expect(statusResponse.ok).toBe(true);
+  const { statuses } = (await statusResponse.json()) as { statuses: AgentUpdateStatus[] };
+  const availableIdentities = availableRuntimeIdentities(statuses);
   const members = summary.payload.runtime_updates as Array<{
     occurrence_id: string;
     agent_name: string;
     runtime_id: string;
     version: string;
   }>;
-  expect(members).toHaveLength(available.length);
+  const memberIdentities = members.map((member) => `${member.agent_name}:${member.runtime_id}`);
+  expect(memberIdentities).toEqual(
+    expect.arrayContaining(
+      observedIdentities.filter((identity) => availableIdentities.includes(identity)),
+    ),
+  );
+  expect(availableIdentities).toEqual(expect.arrayContaining(memberIdentities));
+  expect(new Set(memberIdentities).size).toBe(members.length);
   expect(new Set(members.map((member) => member.occurrence_id)).size).toBe(members.length);
   expect(members.every((member) => member.version === "99.0.0")).toBe(true);
 

@@ -91,6 +91,10 @@ func (a *OmpACP) HarnessUpdate() HarnessUpdateSpec {
 	}
 }
 
+func (a *OmpACP) AutomaticHarnessUpdate() HarnessUpdateSpec {
+	return a.HarnessUpdate()
+}
+
 func (a *OmpACP) Runtime() *RuntimeConfig {
 	canRecover := true
 	return &RuntimeConfig{

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { AgentUpdateJob, AgentUpdatePreview } from "@/lib/api";
 import {
+  automaticHarnessResultKey,
   resolveRuntimeActiveVersion,
   resolveRuntimeEffectiveVersion,
   resolveRuntimeOperation,
@@ -15,36 +16,49 @@ function updateExplainerKey(preview: AgentUpdatePreview): string {
   return "agents:runtimeUpdateExplainer";
 }
 
-export function RuntimeVersionSummary({
-  agentName,
-  preview,
-  job,
-}: {
+type VersionSummaryProps = {
   agentName: string;
   preview: AgentUpdatePreview;
   job?: AgentUpdateJob;
-}) {
+};
+
+function HarnessVersionSummary({ agentName, preview, job }: VersionSummaryProps) {
+  const { t } = useTranslation();
+  const automatic = job?.automatic && job.update_mode === "self_update";
+  const current =
+    (automatic ? job.effective_version : undefined) ||
+    job?.current_version ||
+    preview.current_version ||
+    t("common:unknown");
+  return (
+    <div className="space-y-2" data-testid={`agent-update-version-summary-${agentName}`}>
+      <p className="font-medium" role={automatic ? "status" : undefined}>
+        {automatic
+          ? t(automaticHarnessResultKey(job), {
+              previous: job.previous_version || job.current_version || t("common:unknown"),
+              version: current,
+            })
+          : t(runtimeOperationLabelKey(resolveRuntimeOperation(preview, job)))}
+      </p>
+      <p className="text-xs text-muted-foreground">{t("agents:harnessUpdateChannelNotice")}</p>
+      <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+        <p data-testid={`agent-update-current-${agentName}`}>
+          {t("agents:installedRuntimeVersion", { version: current })}
+        </p>
+        <p data-testid={`agent-update-stable-reference-${agentName}`}>
+          {t("agents:stableLatestReference", {
+            version: preview.stable_latest_version || t("common:unknown"),
+          })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function RuntimeVersionSummary({ agentName, preview, job }: VersionSummaryProps) {
   const { t } = useTranslation();
   if (preview.update_mode === "self_update") {
-    const current = job?.current_version || preview.current_version || t("common:unknown");
-    return (
-      <div className="space-y-2" data-testid={`agent-update-version-summary-${agentName}`}>
-        <p className="font-medium">
-          {t(runtimeOperationLabelKey(resolveRuntimeOperation(preview, job)))}
-        </p>
-        <p className="text-xs text-muted-foreground">{t("agents:harnessUpdateChannelNotice")}</p>
-        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-          <p data-testid={`agent-update-current-${agentName}`}>
-            {t("agents:installedRuntimeVersion", { version: current })}
-          </p>
-          <p data-testid={`agent-update-stable-reference-${agentName}`}>
-            {t("agents:stableLatestReference", {
-              version: preview.stable_latest_version || t("common:unknown"),
-            })}
-          </p>
-        </div>
-      </div>
-    );
+    return <HarnessVersionSummary agentName={agentName} preview={preview} job={job} />;
   }
   const { currentVersion, targetVersion } = resolveRuntimeVersionPair(preview, job);
   const activeVersion = resolveRuntimeActiveVersion(preview, job);

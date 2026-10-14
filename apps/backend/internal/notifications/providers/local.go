@@ -41,6 +41,7 @@ func (p *LocalProvider) Send(_ context.Context, message Message) error {
 		"display_name":          message.Payload["display_name"],
 		"previous_version":      message.Payload["previous_version"],
 		"runtime_update_status": message.Payload["runtime_update_status"],
+		"update_mode":           message.Payload["update_mode"],
 		"notification_kind":     message.Payload["notification_kind"],
 	}
 	if payload["version"] == "" {

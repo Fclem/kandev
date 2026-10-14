@@ -145,6 +145,7 @@ func (c *Controller) SetRuntimeUpdateNotifier(notifier RuntimeUpdateNotifier) {
 
 func (c *Controller) publishRuntimeStatus(ctx context.Context, status dto.AgentUpdateStatusDTO) {
 	notice := agents.RuntimeUpdateNotice{AgentID: status.AgentName, RuntimeID: status.RuntimeID, DisplayName: status.DisplayName, URL: "/settings/agents#runtime-update-" + url.PathEscape(status.AgentName)}
+	notice.UpdateMode = string(status.UpdateMode)
 	available := status.Available && status.Enabled && status.CheckState == dto.AgentUpdateCheckStateUpdateAvailable && c.trustedRuntimeUpdateIdentity(status.AgentName, status.RuntimeID)
 	var availabilityNotice *agents.RuntimeUpdateNotice
 	if available {
@@ -154,7 +155,9 @@ func (c *Controller) publishRuntimeStatus(ctx context.Context, status dto.AgentU
 		availabilityNotice = &copy
 	}
 	if c.runtimeUpdateNotifier != nil {
-		if outcome := status.LastOutcome; outcome != nil && (outcome.Status == managedruntime.UpdateOutcomeSucceeded || outcome.Status == managedruntime.UpdateOutcomeFailed || outcome.Status == managedruntime.UpdateOutcomeInterrupted) {
+		if status.UpdateMode == dto.AgentUpdateModeSelfUpdate {
+			c.publishAutomaticHarnessNotices(ctx, status, notice)
+		} else if outcome := status.LastOutcome; outcome != nil && (outcome.Status == managedruntime.UpdateOutcomeSucceeded || outcome.Status == managedruntime.UpdateOutcomeFailed || outcome.Status == managedruntime.UpdateOutcomeInterrupted) {
 			notice.PreviousVersion, notice.Version, notice.Status = outcome.PreviousVersion, outcome.TargetVersion, outcome.Status
 			notice.OccurrenceID = runtimeNoticeKey(status.AgentName, status.RuntimeID, outcome.TargetVersion, outcome.Status, outcome.ID)
 			c.runtimeUpdateNotifier.HandleAgentRuntimeUpdate(ctx, notice)
@@ -164,6 +167,19 @@ func (c *Controller) publishRuntimeStatus(ctx context.Context, status dto.AgentU
 		c.observeRuntimeAvailability(ctx, status.AgentName, status.RuntimeID, availabilityNotice)
 	} else {
 		c.observeRuntimeAvailability(ctx, status.AgentName, status.RuntimeID, nil)
+	}
+}
+
+func (c *Controller) publishAutomaticHarnessNotices(ctx context.Context, status dto.AgentUpdateStatusDTO, notice agents.RuntimeUpdateNotice) {
+	if change := status.LastChange; change != nil {
+		notice.PreviousVersion, notice.Version, notice.Status = change.PreviousVersion, change.ObservedVersion, managedruntime.UpdateOutcomeSucceeded
+		notice.OccurrenceID = runtimeNoticeKey(status.AgentName, status.RuntimeID, change.ObservedVersion, notice.Status, change.ID)
+		c.runtimeUpdateNotifier.HandleAgentRuntimeUpdate(ctx, notice)
+	}
+	if outcome := status.LastOutcome; status.AutoUpdatePaused && outcome != nil {
+		notice.PreviousVersion, notice.Version, notice.Status = outcome.PreviousVersion, outcome.PreviousVersion, outcome.Status
+		notice.OccurrenceID = runtimeNoticeKey(status.AgentName, status.RuntimeID, notice.Version, notice.Status, outcome.ID)
+		c.runtimeUpdateNotifier.HandleAgentRuntimeUpdate(ctx, notice)
 	}
 }
 

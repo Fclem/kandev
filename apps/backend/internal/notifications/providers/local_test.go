@@ -164,4 +164,21 @@ func TestLocalProviderForwardsUpdatePayloadToSubscribedClient(t *testing.T) {
 	if summary.Version != "" || summary.NotificationKind != "agent_runtime_summary" || summary.URL != "/settings/agents#runtime-updates" || len(summary.RuntimeUpdates) != 2 || summary.RuntimeUpdates[0] != members[0] || summary.RuntimeUpdates[1] != members[1] {
 		t.Fatalf("summary payload = %+v", summary)
 	}
+	if err := provider.Send(context.Background(), Message{EventType: "system.update_available", OccurrenceID: "omp-pause", UserID: "user-1", Payload: map[string]string{"agent_name": "omp-acp", "runtime_id": "omp-acp", "update_mode": "self_update", "runtime_update_status": "failed"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err = conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &message); err != nil {
+		t.Fatal(err)
+	}
+	var selfUpdate map[string]any
+	if err := message.ParsePayload(&selfUpdate); err != nil {
+		t.Fatal(err)
+	}
+	if selfUpdate["update_mode"] != "self_update" || selfUpdate["runtime_update_status"] != "failed" {
+		t.Fatalf("versionless self-update notice lost semantics: %+v", selfUpdate)
+	}
 }

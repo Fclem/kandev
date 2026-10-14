@@ -405,6 +405,8 @@
         "apps/backend/internal/task/handlers/task_usage_handlers.go",
         "apps/backend/internal/agent/agents/runtime_update_capability.go",
         "apps/backend/internal/agent/settings/controller/agent_autoupdate.go",
+        "apps/backend/internal/agent/settings/controller/omp_autoupdate.go",
+        "apps/backend/internal/agent/settings/controller/omp_autoupdate_outcome.go",
         "apps/web/components/settings/agent-runtime-policies.tsx",
         "apps/web/components/update-available-toast-bridge.tsx"
       ],
@@ -429,6 +431,9 @@
         "apps/web/lib/api/domains/conversation-usage-api.test.ts",
         "apps/backend/internal/agent/registry/runtime_update_coverage_test.go",
         "apps/backend/internal/agent/settings/controller/agent_autoupdate_test.go",
+        "apps/backend/internal/agent/settings/controller/omp_autoupdate_outcomes_test.go",
+        "apps/backend/internal/agent/settings/controller/omp_autoupdate_shutdown_test.go",
+        "apps/web/components/settings/agent-runtime-policies.test.tsx",
         "apps/web/e2e/tests/settings/agent-runtime-notifications.spec.ts",
         "apps/web/e2e/tests/settings/mobile-agent-runtime-notifications.spec.ts"
       ],

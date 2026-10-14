@@ -2,6 +2,7 @@ import { test } from "../../fixtures/test-base";
 import { managedFallbackAwareness } from "./agent-runtime-fallback-helpers";
 import { backendRuntimeUpdateSummary } from "./agent-runtime-summary-backend-helpers";
 import { runtimeAwareness } from "./agent-runtime-notifications-helpers";
+import { ompAutomaticConsent, ompAutomaticOutcomeRecovery } from "./omp-automatic-update-helpers";
 
 test("backend startup and reconnect deliver one delayed runtime summary", async ({
   testPage,
@@ -36,4 +37,18 @@ test("native host keeps managed fallback version controls reachable", async ({
   prCapture,
 }) => {
   await managedFallbackAwareness(testPage, false, prCapture);
+});
+
+test("OMP consent survives Save, reload and failed writes and stays withdrawable", async ({
+  testPage,
+  prCapture,
+}) => {
+  await ompAutomaticConsent(testPage, false, prCapture);
+});
+
+test("OMP checks retain truthful results and recover from a saved pause", async ({
+  testPage,
+  prCapture,
+}) => {
+  await ompAutomaticOutcomeRecovery(testPage, false, prCapture);
 });

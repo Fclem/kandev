@@ -130,6 +130,10 @@ func (e *recordingCommandExecutor) Stream(
 	return nil
 }
 
+func (e *recordingCommandExecutor) StreamTree(context.Context, agents.Command, func(string)) error {
+	return nil
+}
+
 func TestHostRuntimeUpdaterResolvesTargetWithDirectNPMArgv(t *testing.T) {
 	executor := &recordingCommandExecutor{output: "\"1.2.3\"\n"}
 	updater := &hostRuntimeUpdater{executor: executor}

@@ -167,8 +167,19 @@ export async function updateAgentUseDefault(
 export type AgentRuntimeOutcome = {
   id: string;
   status: "running" | "succeeded" | "failed" | "interrupted";
+  update_mode?: AgentUpdateMode;
+  operation?: AgentUpdateOperation;
+  observed_version?: string;
+  output_excerpt?: string;
   previous_version: string;
   target_version: string;
+  finished_at: string;
+};
+
+export type AgentRuntimeChange = {
+  id: string;
+  previous_version: string;
+  observed_version: string;
   finished_at: string;
 };
 
@@ -188,6 +199,8 @@ export type AgentUpdateStatus = {
   auto_update_supported: boolean;
   auto_update: boolean;
   last_outcome?: AgentRuntimeOutcome;
+  auto_update_paused?: boolean;
+  last_change?: AgentRuntimeChange;
   agent_name: string;
   package: string;
   default_version: string;

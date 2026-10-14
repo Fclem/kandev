@@ -428,5 +428,19 @@
   "modelDiscoveryNotLoggedIn": "A ferramenta de linha de comandos não tem sessão iniciada.",
   "modelDiscoveryTimeout": "O pedido da lista de modelos excedeu o tempo limite.",
   "modelSourceCli": "CLI",
-  "modelSourceAcp": "ACP"
+  "modelSourceAcp": "ACP",
+  "runtimeOMPManageUpdate": "Gerir atualização",
+  "runtimeOMPAutomaticHelp": "Verifica o canal configurado aproximadamente a cada 15 minutos. As atualizações alteram a instalação no local. O Kandev não pode reverter a atualização.",
+  "runtimeOMPRunning": "A verificar o canal configurado.",
+  "runtimeOMPChangedTitle": "A versão de {{agent}} mudou",
+  "runtimeOMPChangedBody": "O OMP comunicou uma alteração de versão de {{previous}} para {{version}}.",
+  "runtimeOMPRepairedBody": "Última verificação: o OMP validou a versão {{version}}.",
+  "runtimeOMPNoChangeBody": "Última verificação: o OMP não comunicou alterações de versão. Versão: {{version}}.",
+  "runtimeOMPLastChange": "Última alteração: de {{previous}} para {{version}}.",
+  "runtimeOMPRetryBody": "A última verificação não foi concluída. As verificações automáticas voltarão a tentar no próximo intervalo elegível.",
+  "runtimeOMPInterruptedBody": "A última verificação foi interrompida. As verificações automáticas voltarão a tentar no próximo intervalo elegível.",
+  "runtimeOMPIncompleteBody": "A última verificação não foi concluída. A instalação pode ter mudado. O Kandev não pode reverter a atualização.",
+  "runtimeOMPPausedTitle": "Verificações automáticas de {{agent}} em pausa",
+  "runtimeOMPPausedBody": "As verificações automáticas estão em pausa. A instalação pode ter mudado. O Kandev não pode reverter a atualização. Para retomar, desative e guarde, depois ative e guarde.",
+  "runtimeOMPOutput": "Saída do atualizador"
 }

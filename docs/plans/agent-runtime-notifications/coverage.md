@@ -2,7 +2,7 @@
 
 Base inventory: `Registry.LoadDefaults` on main `517249b5e609`, 2026-10-01. Agents owns these runtime capabilities. This is a delivery evidence matrix; the living contract is the [owning design](../../specs/agents/system-design/runtime-update-notifications.md).
 
-`Managed` means exact package staging, protocol candidate validation, selection activation and older-version/default recovery. `Manual` means read-only release discovery when verifiable and vendor/package guidance; Kandev does not advertise safe automatic activation. Current version is a successful host capability observation or the exact managed selection. Non-SemVer, absent, or mismatched observations remain unknown. Latest failure stays unknown. Disabled/unavailable entries do not contact sources or update.
+`Managed` means exact package staging, protocol candidate validation, selection activation and older-version/default recovery. `Manual` means externally owned installation with vendor/package guidance and read-only release discovery when verifiable. Built-in OMP alone declares an opt-in, in-place automatic harness recipe; that exception does not establish candidate isolation or rollback. Current version is a successful host capability observation or the exact managed selection. Non-SemVer, absent, or mismatched observations remain unknown. Latest failure stays unknown. Disabled/unavailable entries do not contact sources or update.
 
 | Registered identity | Runtime/source and owner | Current/latest discovery | Update/activation | Rollback and dependencies |
 | --- | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ Base inventory: `Registry.LoadDefaults` on main `517249b5e609`, 2026-10-01. Agen
 | kiro-acp | kiro-cli-chat; external vendor binary | Host observation; latest unknown | Manual vendor guidance | No verified safe Kandev updater/rollback. |
 | qoder-acp | qodercli; external vendor binary | Host observation; latest unknown | Manual vendor guidance | No verified safe Kandev updater/rollback. |
 | trae-acp | traecli; external vendor binary | Host observation; latest unknown | Manual vendor guidance | No verified safe Kandev updater/rollback. |
-| omp-acp | omp, @oh-my-pi/pi-coding-agent; external bun installation | Host observation / npm stable latest | Manual package guidance | Runtime package ownership remains external; no validated rollback. |
+| omp-acp | omp, @oh-my-pi/pi-coding-agent; external installation | Host observation / npm stable latest as a reference only | Trusted `omp update`; manual or opt-in periodic configured-channel checks, followed by ACP validation | No target selection or rollback. May change the host ACP and passthrough executable in place; failed validation retains capabilities, not the old executable. |
 | devin-acp | devin; external vendor binary | Host observation; latest unknown | Manual vendor guidance | No verified safe Kandev updater/rollback. |
 | grok-acp | grok, @xai-official/grok; external native installation | Host observation / npm stable latest | Manual package/vendor guidance | Built-in command uses --no-auto-update; no Kandev isolated activation. |
 | hermes-acp | hermes; external vendor installation | Host observation / verified GitHub stable release | Verified vendor update guidance, manual | Vendor update is installation-aware (git/Docker/Nix); Kandev cannot assume its owner or restore it. |
@@ -48,4 +48,4 @@ Base inventory: `Registry.LoadDefaults` on main `517249b5e609`, 2026-10-01. Agen
 
 ## Validation evidence
 
-The registry coverage test enumerates all 28 default registrations and asserts their managed/manual/unsupported modes, so new registrations require a deliberate coverage decision. Owning-package race suites and the live-process/rollback/default tests passed. Desktop and phone browser evidence and source-failure/deduplication checks are recorded in work orders 01–03. External native installations have no automatic activation claim.
+The registry coverage test enumerates default registrations and asserts their managed/manual/unsupported modes; `TestOnlyOMPDeclaresAutomaticHarnessAuthority` separately proves that only built-in OMP supplies the automatic harness recipe while remaining external/manual. New registrations require a deliberate coverage decision. Owning-package race suites and live-process/rollback/default tests passed. Desktop and phone evidence for the original notification delivery is recorded in work orders 01–03; periodic OMP execution, real-controller smoke and consent/outcome UI evidence belong to the [OMP work package](../omp-automatic-updates/plan.md#verification-results). Other external native installations have no automatic activation claim.

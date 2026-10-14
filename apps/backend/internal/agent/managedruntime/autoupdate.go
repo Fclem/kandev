@@ -21,13 +21,28 @@ type UpdateOutcome struct {
 	PreviousVersion string    `json:"previous_version"`
 	TargetVersion   string    `json:"target_version"`
 	FinishedAt      time.Time `json:"finished_at"`
+	UpdateMode      string    `json:"update_mode,omitempty"`
+	Operation       Operation `json:"operation,omitempty"`
+	ObservedVersion string    `json:"observed_version,omitempty"`
+	OutputExcerpt   string    `json:"output_excerpt,omitempty"`
+}
+
+type UpdateChange struct {
+	ID              string    `json:"id"`
+	PreviousVersion string    `json:"previous_version"`
+	ObservedVersion string    `json:"observed_version"`
+	FinishedAt      time.Time `json:"finished_at"`
 }
 
 type AutoUpdatePolicy struct {
-	RuntimeID        string         `json:"runtime_id"`
-	Enabled          bool           `json:"enabled"`
-	AttemptedVersion string         `json:"attempted_version,omitempty"`
-	Outcome          *UpdateOutcome `json:"outcome,omitempty"`
+	RuntimeID            string         `json:"runtime_id"`
+	Enabled              bool           `json:"enabled"`
+	AttemptedVersion     string         `json:"attempted_version,omitempty"`
+	Outcome              *UpdateOutcome `json:"outcome,omitempty"`
+	LastAttemptStartedAt time.Time      `json:"last_attempt_started_at,omitempty"`
+	ConsecutiveFailures  int            `json:"consecutive_failures,omitempty"`
+	Paused               bool           `json:"paused,omitempty"`
+	LastChange           *UpdateChange  `json:"last_change,omitempty"`
 }
 
 type AutoUpdateStore struct{ settings SettingsStore }

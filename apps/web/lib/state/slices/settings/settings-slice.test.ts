@@ -512,3 +512,40 @@ describe("folder opener discovery", () => {
     expect(store.getState().editors.folderOpeningAvailable).toBe(false);
   });
 });
+
+describe("automatic update adoption lifecycle", () => {
+  it.each(["upsert", "snapshot", "clear"] as const)(
+    "removes replaced adoption through %s without resetting runtime activation",
+    (action) => {
+      const store = makeStore();
+      store.setState({
+        updateJobs: {
+          byAgent: {
+            [AGENT_NAME]: {
+              update_mode: "self_update",
+              job_id: "adopted",
+              agent_name: AGENT_NAME,
+              automatic: true,
+              status: "succeeded",
+              started_at: TIMESTAMP,
+            },
+          },
+          adoptedUpdateJobIds: { adopted: true },
+          runtimeActivationByAgent: { [AGENT_NAME]: 2 },
+        },
+      });
+      const next = {
+        update_mode: "self_update" as const,
+        job_id: "manual",
+        agent_name: AGENT_NAME,
+        status: "queued" as const,
+        started_at: NEWER_TIMESTAMP,
+      };
+      if (action === "upsert") store.getState().upsertAgentUpdateJob(next);
+      if (action === "snapshot") store.getState().setAgentUpdateJobs([next]);
+      if (action === "clear") store.getState().clearAgentUpdateJob(AGENT_NAME);
+      expect(store.getState().updateJobs.adoptedUpdateJobIds).toEqual({});
+      expect(store.getState().updateJobs.runtimeActivationByAgent[AGENT_NAME]).toBe(2);
+    },
+  );
+});

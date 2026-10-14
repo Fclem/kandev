@@ -29,6 +29,7 @@ type AgentUpdateJob struct {
 	activationGuard  runtimeActivationGuard
 	beforeStart      func() error
 	context          context.Context
+	automaticResult  automaticHarnessResult
 	ID               string
 	AgentName        string
 	Package          string
@@ -65,6 +66,7 @@ type AgentUpdateJobStore struct {
 	maintenance             *maintenanceCoordinator
 	onRefresh               func()
 	onFinished              func(dto.AgentUpdateJobDTO)
+	onAutomaticFinished     func(dto.AgentUpdateJobDTO, automaticHarnessResult)
 	selectionStore          managedruntime.SelectionStore
 	onStatusInvalidated     func(string)
 	openCodeSelectionReader managedruntime.OpenCodeSelectionReader
@@ -1064,7 +1066,14 @@ func (s *AgentUpdateJobStore) scheduleEviction(jobID string) {
 }
 
 func (s *AgentUpdateJobStore) complete(payload dto.AgentUpdateJobDTO) {
-	if s.onFinished != nil {
+	if payload.Automatic && payload.UpdateMode == dto.AgentUpdateModeSelfUpdate {
+		s.mu.Lock()
+		result := s.jobs[payload.JobID].automaticResult
+		s.mu.Unlock()
+		if s.onAutomaticFinished != nil {
+			s.onAutomaticFinished(payload, result)
+		}
+	} else if s.onFinished != nil {
 		s.onFinished(payload)
 	}
 	if payload.Automatic {

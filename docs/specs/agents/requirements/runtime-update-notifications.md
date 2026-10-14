@@ -2,7 +2,7 @@
 status: active
 system: agents
 created: 2026-10-01
-updated: 2026-10-06
+updated: 2026-10-14
 owners:
   - Kandev
 ---
@@ -29,19 +29,21 @@ Operators need to discover updates while working and optionally authorize Kandev
 ### REQ-AGENTS-RUNTIME-NOTIFY-002: Opt-in verified automatic updates
 
 - **AC-AGENTS-RUNTIME-NOTIFY-002.1:** Automatic updates shall be disabled initially. Only an operator with agent configuration permission shall enable an install-wide per-runtime policy, and that policy shall persist across restart with its trusted runtime identity.
-- **AC-AGENTS-RUNTIME-NOTIFY-002.2:** Automation shall use a supported staging, validation, and activation path. External installations without verified ownership, candidate isolation, and recovery shall expose manual guidance and shall never run guessed install/update commands.
-- **AC-AGENTS-RUNTIME-NOTIFY-002.3:** Automatic activation shall occur only after the exact stable published candidate passes the same runtime validation as a manual update. Failed preparation, validation, or persistence shall preserve the prior selection and capabilities. Current and candidate versions shall not be confused in outcomes.
-- **AC-AGENTS-RUNTIME-NOTIFY-002.4:** Running sessions and executor-owned installations shall remain unchanged. Managed selection affects subsequent launches according to the existing managed-runtime contract; backend preparation shall not claim to modify remote installations, native dependency CLIs, login data, or passthrough runtimes.
+- **AC-AGENTS-RUNTIME-NOTIFY-002.2:** Automation for Kandev-managed runtimes shall use a supported staging, validation, and activation path. External installations without verified ownership, candidate isolation, and recovery shall not use that managed automation path; manual guidance shall remain available and Kandev shall never run guessed install/update commands.
+- **AC-AGENTS-RUNTIME-NOTIFY-002.3:** For Kandev-managed runtimes, automatic activation shall occur only after the exact stable published candidate passes the same runtime validation as a manual update. Failed preparation, validation, or persistence shall preserve the prior selection and capabilities. Current and candidate versions shall not be confused in outcomes.
+- **AC-AGENTS-RUNTIME-NOTIFY-002.4:** For Kandev-managed runtime updates, running sessions and executor-owned installations shall remain unchanged. Managed selection affects subsequent launches according to the existing managed-runtime contract; backend preparation shall not claim to modify remote installations, native dependency CLIs, login data, or passthrough runtimes.
 - **AC-AGENTS-RUNTIME-NOTIFY-002.5:** Manual version selection, rollback, and return-to-default shall remain available for managed runtimes. A manual selection shall stop automatic updates. Opt-out or an intervening selection shall prevent a staged automatic candidate from activating.
-- **AC-AGENTS-RUNTIME-NOTIFY-002.6:** Success and failure outcomes shall persist, name the agent and runtime, include old and target versions, and provide recovery through manual version selection or vendor guidance. A failed target shall not be attempted repeatedly; explicit re-enablement can authorize another attempt.
+- **AC-AGENTS-RUNTIME-NOTIFY-002.6:** Kandev-managed runtime success and failure outcomes shall persist, name the agent and runtime, include old and target versions, and provide recovery through manual version selection or vendor guidance. A failed target shall not be attempted repeatedly; explicit re-enablement can authorize another attempt.
 - **AC-AGENTS-RUNTIME-NOTIFY-002.7:** Settings controls and outcomes shall be localized in every shipped locale, usable on desktop and phone, and retain authoritative saved state on failure.
 
 ## Exclusions
 
-Model discovery, vendor credential/configuration migrations, hot-swapping sessions, arbitrary package or command input, changing vendor auto-update settings, and inventing rollback for external installations are excluded. Native/vendor mechanisms without safe verified activation remain manual capabilities, with explicit limitations rather than successful-update claims.
+Model discovery, vendor credential/configuration migrations, hot-swapping sessions, arbitrary package or command input, changing vendor auto-update settings, and inventing rollback for external installations are excluded. Within the Kandev-managed runtime path, native/vendor mechanisms without safe verified activation remain manual capabilities, with explicit limitations rather than successful-update claims. The separately trusted in-place OMP exception follows [periodic OMP updates](omp-periodic-updates.md); it does not authorize other native/vendor updaters.
 
 ## Design and implementation
 
 The [availability summary requirements](runtime-update-summary.md) extend startup and reconnect delivery under REQ-AGENTS-RUNTIME-NOTIFY-003.
+
+The [periodic OMP requirements](omp-periodic-updates.md) define the opt-in configured-channel exception to managed staging and exact-target guarantees, with [its own design](../system-design/omp-automatic-updates.md).
 
 See [runtime update notifications design](../system-design/runtime-update-notifications.md), [original delivery plan](../../../plans/agent-runtime-notifications/plan.md), and [compact settings follow-up plan](../../../plans/agent-runtime-settings-compact/plan.md), [floating indicator removal plan](../../../plans/remove-agent-runtime-update-indicator/plan.md), and [managed fallback current version fix plan](../../../plans/managed-fallback-current-version/plan.md).

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -65,12 +65,22 @@ describe("seed origin ownership", () => {
     });
   });
 
-  it("preserves Git failure evidence when an explicit refresh fails", () => {
+  it("reports the failed tracking ref without disturbing its concurrent writer lock", () => {
     withSeedRepository((seed) => {
       const lock = path.join(seed.repositoryPath, ".git", "refs", "remotes", "origin", "main.lock");
       mkdirSync(path.dirname(lock), { recursive: true });
       writeFileSync(lock, "owned concurrent fetch\n");
-      expect(() => restoreSeedRepositoryOrigin(seed)).toThrow(/cannot lock ref/);
+      let failure: unknown;
+      try {
+        restoreSeedRepositoryOrigin(seed);
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toMatchObject({ stderr: expect.any(Buffer) });
+      const gitFailure = failure as { status: number; stderr: Buffer };
+      expect(gitFailure.status).not.toBe(0);
+      expect(gitFailure.stderr.toString()).toContain("refs/remotes/origin/main");
+      expect(readFileSync(lock, "utf8")).toBe("owned concurrent fetch\n");
     });
   });
 });

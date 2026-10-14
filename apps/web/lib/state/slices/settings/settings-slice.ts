@@ -22,7 +22,7 @@ export const defaultSettingsState: SettingsSliceState = {
   availableAgents: { items: [], tools: [], loading: false, loaded: false },
   agentProfiles: { items: [], version: 0 },
   installJobs: { byAgent: {} },
-  updateJobs: { byAgent: {} },
+  updateJobs: { byAgent: {}, adoptedUpdateJobIds: {}, runtimeActivationByAgent: {} },
   agentRuntimeUpdates: { byAgent: {}, checkedAt: 0, loading: false },
   editors: { items: [], loaded: false, loading: false },
   prompts: { items: [], loaded: false, loading: false },
@@ -134,9 +134,23 @@ function createAgentUpdateJobActions(
   set: ImmerSet,
 ): Pick<
   SettingsSlice,
-  "setAgentUpdateJobs" | "upsertAgentUpdateJob" | "appendAgentUpdateOutput" | "clearAgentUpdateJob"
+  | "setAgentUpdateJobs"
+  | "upsertAgentUpdateJob"
+  | "appendAgentUpdateOutput"
+  | "clearAgentUpdateJob"
+  | "adoptAgentUpdateJob"
+  | "bumpAgentRuntimeActivation"
 > {
   return {
+    adoptAgentUpdateJob: (jobId) =>
+      set((draft) => {
+        draft.updateJobs.adoptedUpdateJobIds[jobId] = true;
+      }),
+    bumpAgentRuntimeActivation: (agentName) =>
+      set((draft) => {
+        draft.updateJobs.runtimeActivationByAgent[agentName] =
+          (draft.updateJobs.runtimeActivationByAgent[agentName] ?? 0) + 1;
+      }),
     setAgentUpdateJobs: (jobs) =>
       set((draft) => {
         const byAgent: Record<string, (typeof jobs)[number]> = {};
@@ -153,6 +167,11 @@ function createAgentUpdateJobActions(
             byAgent[job.agent_name] = snapshot;
           }
         }
+        for (const agentName in draft.updateJobs.byAgent) {
+          const previous = draft.updateJobs.byAgent[agentName];
+          if (byAgent[agentName]?.job_id !== previous.job_id)
+            delete draft.updateJobs.adoptedUpdateJobIds[previous.job_id];
+        }
         draft.updateJobs.byAgent = byAgent;
       }),
     upsertAgentUpdateJob: (job) =>
@@ -166,6 +185,7 @@ function createAgentUpdateJobActions(
           return;
         }
         if (!current || current.job_id !== job.job_id) {
+          if (current) delete draft.updateJobs.adoptedUpdateJobIds[current.job_id];
           draft.updateJobs.byAgent[job.agent_name] = job;
           return;
         }
@@ -184,6 +204,8 @@ function createAgentUpdateJobActions(
       }),
     clearAgentUpdateJob: (agentName) =>
       set((draft) => {
+        const job = draft.updateJobs.byAgent[agentName];
+        if (job) delete draft.updateJobs.adoptedUpdateJobIds[job.job_id];
         delete draft.updateJobs.byAgent[agentName];
       }),
   };

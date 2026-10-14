@@ -49,6 +49,10 @@ export function useProfileModelCapabilities(
     (state) => state.updateJobs.byAgent[agentName],
     undefined,
   );
+  const runtimeActivation = useOptionalAppStore(
+    (state) => state.updateJobs.runtimeActivationByAgent[agentName] ?? 0,
+    0,
+  );
   const discovery = useProfileCapabilityDiscovery(agentName, profile, {
     ...options,
     supportsDynamicModels: modelConfig.supports_dynamic_models,
@@ -75,7 +79,7 @@ export function useProfileModelCapabilities(
     configIsLoading: modelOptions.configIsLoading,
   });
 
-  useRuntimeActivationRefresh(agentName, runtimeUpdateJob, discovery.refresh);
+  useRuntimeActivationRefresh(agentName, runtimeUpdateJob, runtimeActivation, discovery.refresh);
 
   return {
     capabilities,
@@ -99,27 +103,34 @@ type RuntimeUpdateJobSnapshot = {
 function useRuntimeActivationRefresh(
   agentName: string,
   job: RuntimeUpdateJobSnapshot | undefined,
+  activation: number,
   refresh: () => Promise<void>,
 ) {
-  const previousJob = useRef<{ agentName: string; jobId?: string; status?: string } | null>(null);
+  const previousJob = useRef<{
+    agentName: string;
+    jobId?: string;
+    status?: string;
+    activation: number;
+  } | null>(null);
   const refreshedJobs = useRef(new Set<string>());
 
   useEffect(() => {
     const previous = previousJob.current;
     if (!previous || previous.agentName !== agentName) {
-      previousJob.current = { agentName, jobId: job?.job_id, status: job?.status };
+      previousJob.current = { agentName, jobId: job?.job_id, status: job?.status, activation };
       return;
     }
 
     const isNewSuccess =
       job?.status === "succeeded" &&
       (previous.jobId !== job.job_id || previous.status !== "succeeded");
-    previousJob.current = { agentName, jobId: job?.job_id, status: job?.status };
-    if (!isNewSuccess || refreshedJobs.current.has(job.job_id)) return;
+    const isNewActivation = activation > previous.activation;
+    previousJob.current = { agentName, jobId: job?.job_id, status: job?.status, activation };
+    if (!isNewActivation && (!isNewSuccess || refreshedJobs.current.has(job.job_id))) return;
 
-    refreshedJobs.current.add(job.job_id);
+    if (isNewSuccess) refreshedJobs.current.add(job.job_id);
     void refresh();
-  }, [agentName, job, refresh]);
+  }, [agentName, job, activation, refresh]);
 }
 
 type BuildProfileCapabilitiesInput = {

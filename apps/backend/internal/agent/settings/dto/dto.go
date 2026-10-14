@@ -400,6 +400,8 @@ type AgentUpdateStatusDTO struct {
 	ManagedFallback     bool                          `json:"managed_fallback,omitempty"`
 	AutoUpdate          bool                          `json:"auto_update"`
 	LastOutcome         *managedruntime.UpdateOutcome `json:"last_outcome,omitempty"`
+	AutoUpdatePaused    bool                          `json:"auto_update_paused"`
+	LastChange          *managedruntime.UpdateChange  `json:"last_change,omitempty"`
 	DisplayName         string                        `json:"display_name"`
 	RuntimeID           string                        `json:"runtime_id"`
 	Owner               string                        `json:"owner"`

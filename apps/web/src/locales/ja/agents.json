@@ -428,5 +428,19 @@
   "modelDiscoveryNotLoggedIn": "コマンドラインツールにサインインしていません。",
   "modelDiscoveryTimeout": "モデル一覧のリクエストがタイムアウトしました。",
   "modelSourceCli": "CLI",
-  "modelSourceAcp": "ACP"
+  "modelSourceAcp": "ACP",
+  "runtimeOMPManageUpdate": "更新を管理",
+  "runtimeOMPAutomaticHelp": "設定されたチャネルを約15分ごとに確認します。更新は現在のインストールを直接変更します。Kandevはロールバックできません。",
+  "runtimeOMPRunning": "設定されたチャネルを確認しています。",
+  "runtimeOMPChangedTitle": "{{agent}}のバージョンが変更されました",
+  "runtimeOMPChangedBody": "OMPがバージョンの変更を報告しました。{{previous}}から{{version}}に変更されました。",
+  "runtimeOMPRepairedBody": "前回の確認：OMPがバージョン{{version}}を検証しました。",
+  "runtimeOMPNoChangeBody": "前回の確認：OMPはバージョンの変更なしと報告しました。バージョン：{{version}}。",
+  "runtimeOMPLastChange": "前回の変更：{{previous}}から{{version}}。",
+  "runtimeOMPRetryBody": "前回の確認は完了しませんでした。自動確認は次の実行可能な間隔で再試行します。",
+  "runtimeOMPInterruptedBody": "前回の確認は中断されました。自動確認は次の実行可能な間隔で再試行します。",
+  "runtimeOMPIncompleteBody": "前回の確認は完了しませんでした。インストールが変更された可能性があります。Kandevはロールバックできません。",
+  "runtimeOMPPausedTitle": "{{agent}}の自動確認が一時停止されました",
+  "runtimeOMPPausedBody": "自動確認は一時停止されています。インストールが変更された可能性があります。Kandevはロールバックできません。再開するには、オフにして保存し、その後オンにして保存してください。",
+  "runtimeOMPOutput": "更新ツールの出力"
 }

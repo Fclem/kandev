@@ -322,7 +322,15 @@ describe("runtime update job baselines", () => {
   it("ignores historical, failed, and unrelated runtime update jobs", async () => {
     const historical = updateJob({ job_id: "historical" });
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <StateProvider initialState={{ updateJobs: { byAgent: { [MOCK_AGENT_NAME]: historical } } }}>
+      <StateProvider
+        initialState={{
+          updateJobs: {
+            byAgent: { [MOCK_AGENT_NAME]: historical },
+            adoptedUpdateJobIds: {},
+            runtimeActivationByAgent: {},
+          },
+        }}
+      >
         <StoreCapture />
         {children}
       </StateProvider>
@@ -494,5 +502,37 @@ describe("draft profile capability discovery", () => {
       },
     });
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("ignored automatic runtime activation", () => {
+  it("refreshes an open profile catalogue when activation changes without a card job", async () => {
+    probeAgentProfileMock
+      .mockResolvedValueOnce(
+        capabilityResponse([{ id: SAVED_MODEL_ID, name: SAVED_MODEL_NAME }], REVISION_A, "1.0.0"),
+      )
+      .mockResolvedValueOnce(
+        capabilityResponse([{ id: "updated-model", name: "Updated model" }], REVISION_B, "1.2.0"),
+      );
+    const { result } = renderHook(
+      () =>
+        useProfileModelCapabilities(MOCK_AGENT_NAME, initialProfile, modelConfig, vi.fn(), {
+          profileId: PROFILE_ID_A,
+          savedLaunchSettings,
+        }),
+      { wrapper: profileStoreWrapper },
+    );
+    await waitFor(() => expect(result.current.discoveryState).toBe("ready"));
+    await act(async () => {
+      profileStore!.getState().bumpAgentRuntimeActivation(MOCK_AGENT_NAME);
+    });
+    await waitFor(() =>
+      expect(result.current.capabilities.models).toEqual([
+        { id: "updated-model", name: "Updated model" },
+      ]),
+    );
+    expect(profileStore!.getState().updateJobs.byAgent[MOCK_AGENT_NAME]).toBeUndefined();
+    expect(result.current.runtimeInfo?.components[0]?.observed_version).toBe("1.2.0");
+    expect(probeAgentProfileMock).toHaveBeenCalledTimes(2);
   });
 });

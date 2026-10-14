@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import {
   canApproveAgentRuntimeUpdate,
+  automaticHarnessResultKey,
   resolveRuntimeOperation,
   runtimeOperationLabelKey,
 } from "@/lib/agent-runtime-update";
@@ -53,9 +54,28 @@ function updatePhase(t: TFunction, status: AgentUpdateJob["status"] | undefined)
   return key ? t(key) : null;
 }
 
+function AutomaticHarnessResult({ agentName, job }: { agentName: string; job: AgentUpdateJob }) {
+  const { t } = useTranslation();
+  return (
+    <p
+      className="break-words text-muted-foreground"
+      role={job.status === "failed" ? "alert" : "status"}
+      data-testid={`agent-update-result-${agentName}`}
+    >
+      {t(automaticHarnessResultKey(job), {
+        previous: job.previous_version || job.current_version || t("common:unknown"),
+        version: job.effective_version || job.current_version || t("common:unknown"),
+      })}
+    </p>
+  );
+}
+
 function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdateJob }) {
   const { t } = useTranslation();
   if (!job) return null;
+  if (job.automatic && job.update_mode === "self_update") {
+    return <AutomaticHarnessResult agentName={agentName} job={job} />;
+  }
   const isUpToDate = job.operation === "up_to_date";
   if (job.status === "succeeded" && job.refresh_error) {
     return (
@@ -346,7 +366,8 @@ function UpdateFooter({
     starting,
     installInFlight,
   });
-  const showApprove = !job || canRetry;
+  const showApprove =
+    !job || canRetry || (job.automatic && job.update_mode === "self_update" && !updateInFlight);
   const content = (
     <>
       <Button type="button" variant="outline" onClick={onClose}>

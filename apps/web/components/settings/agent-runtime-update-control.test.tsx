@@ -490,31 +490,6 @@ describe("AgentRuntimeUpdateControl self-update", () => {
   );
 });
 
-describe("AgentRuntimeUpdateControl self-update trigger", () => {
-  it("does not describe the stable reference as the guaranteed update target", () => {
-    render(
-      <AgentRuntimeUpdateControl
-        agentName="omp-acp"
-        displayName="omp"
-        runtimeUpdate={{
-          supported: true,
-          update_mode: "self_update",
-          package: OMP_PACKAGE,
-        }}
-        runtimeUpdateStatus={ompStatus({
-          latest_version: "1.1.0",
-          check_state: "update_available",
-        })}
-        onPreview={vi.fn()}
-        onUpdate={vi.fn()}
-      />,
-    );
-    expect(screen.getByTestId("agent-update-trigger-omp-acp").getAttribute("aria-label")).toBe(
-      "Update omp",
-    );
-  });
-});
-
 describe("AgentRuntimeUpdateControl self-update results", () => {
   it("keeps a metadata-unknown trigger usable and shows a preview error without inventing a job", async () => {
     const onPreview = vi.fn().mockRejectedValue(new Error("Registry unavailable"));
@@ -540,47 +515,52 @@ describe("AgentRuntimeUpdateControl self-update results", () => {
     expect(screen.queryByTestId("agent-update-result-omp-acp")).toBeNull();
     expect(onUpdate).not.toHaveBeenCalled();
   });
+});
 
-  it("shows an empty-ID up-to-date result locally even when status refresh is pending elsewhere", async () => {
-    const terminal: AgentUpdateJob = {
-      update_mode: "self_update",
-      agent_name: "omp-acp",
-      job_id: "",
-      operation: "up_to_date",
-      status: "succeeded",
-      started_at: "2026-09-26T12:00:00Z",
-    };
-    render(
-      <AgentRuntimeUpdateControl
-        agentName="omp-acp"
-        displayName="omp"
-        runtimeUpdate={{
-          supported: true,
-          update_mode: "self_update",
-          package: OMP_PACKAGE,
-        }}
-        onPreview={vi.fn().mockResolvedValue({
-          agent_name: "omp-acp",
-          update_mode: "self_update",
-          package: OMP_PACKAGE,
-          current_version: "1.1.0",
-          target_version: "",
-          stable_latest_version: "1.1.0",
-          operation: "repair",
-          available_versions: [],
-          command: ["omp", "update"],
-          command_string: "omp update",
-        } satisfies AgentUpdatePreview)}
-        onUpdate={vi.fn().mockResolvedValue(terminal)}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("agent-update-trigger-omp-acp"));
-    const confirm = await screen.findByTestId("agent-update-confirm-omp-acp");
-    await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(confirm);
-    expect((await screen.findByTestId("agent-update-result-omp-acp")).textContent).toContain(
-      "already up to date",
-    );
-    expect(screen.queryByTestId("agent-update-confirm-omp-acp")).toBeNull();
-  });
+describe("adopted periodic OMP results", () => {
+  it.each(["up_to_date", "repair"] as const)(
+    "keeps manual update available and reports a neutral %s result",
+    async (operation) => {
+      const job: AgentUpdateJob = {
+        job_id: "automatic",
+        agent_name: "omp-acp",
+        update_mode: "self_update",
+        automatic: true,
+        status: "succeeded",
+        operation,
+        effective_version: "1.2.0",
+        current_version: "1.0.0",
+        started_at: "2026-10-10T12:00:00Z",
+      };
+      render(
+        <AgentRuntimeUpdateControl
+          agentName="omp-acp"
+          displayName="Oh My Pi"
+          runtimeUpdate={{ supported: true, update_mode: "self_update", package: OMP_PACKAGE }}
+          runtimeUpdateStatus={ompStatus({ auto_update_supported: true, auto_update: true })}
+          job={job}
+          onPreview={vi.fn().mockResolvedValue(
+            preview({
+              agent_name: "omp-acp",
+              update_mode: "self_update",
+              package: OMP_PACKAGE,
+              operation: "update",
+              target_version: "",
+              current_version: "1.0.0",
+            }),
+          )}
+          onUpdate={vi.fn().mockResolvedValue(job)}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("agent-update-trigger-omp-acp"));
+      const initialConfirm = await screen.findByTestId("agent-update-confirm-omp-acp");
+      await waitFor(() => expect((initialConfirm as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(initialConfirm);
+      const result = await screen.findByTestId("agent-update-result-omp-acp");
+      expect(result.textContent).not.toMatch(/up.?to.?date|updated successfully/i);
+      expect(result.textContent).toContain("1.2.0");
+      const confirm = await screen.findByTestId("agent-update-confirm-omp-acp");
+      await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
+    },
+  );
 });

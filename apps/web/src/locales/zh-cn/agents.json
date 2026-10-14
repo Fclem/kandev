@@ -428,5 +428,19 @@
   "modelDiscoveryNotLoggedIn": "该命令行工具尚未登录。",
   "modelDiscoveryTimeout": "模型列表请求超时。",
   "modelSourceCli": "CLI",
-  "modelSourceAcp": "ACP"
+  "modelSourceAcp": "ACP",
+  "runtimeOMPManageUpdate": "管理更新",
+  "runtimeOMPAutomaticHelp": "约每 15 分钟检查一次已配置的渠道。更新会直接修改现有安装。Kandev 无法回滚。",
+  "runtimeOMPRunning": "正在检查已配置的渠道。",
+  "runtimeOMPChangedTitle": "{{agent}} 版本已变更",
+  "runtimeOMPChangedBody": "OMP 报告版本已从 {{previous}} 变更为 {{version}}。",
+  "runtimeOMPRepairedBody": "上次检查：OMP 已验证版本 {{version}}。",
+  "runtimeOMPNoChangeBody": "上次检查：OMP 报告版本未变更。版本：{{version}}。",
+  "runtimeOMPLastChange": "上次变更：{{previous}} 到 {{version}}。",
+  "runtimeOMPRetryBody": "上次检查未完成。自动检查将在下一个符合条件的间隔重试。",
+  "runtimeOMPInterruptedBody": "上次检查已中断。自动检查将在下一个符合条件的间隔重试。",
+  "runtimeOMPIncompleteBody": "上次检查未完成。现有安装可能已被修改。Kandev 无法回滚。",
+  "runtimeOMPPausedTitle": "{{agent}} 自动检查已暂停",
+  "runtimeOMPPausedBody": "自动检查已暂停。现有安装可能已被修改。Kandev 无法回滚。要恢复，请先关闭并保存，然后打开并保存。",
+  "runtimeOMPOutput": "更新程序输出"
 }

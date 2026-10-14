@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kandev/kandev/internal/agent/agents"
 	"github.com/kandev/kandev/internal/agent/discovery"
 	agentdto "github.com/kandev/kandev/internal/agent/dto"
 	"github.com/kandev/kandev/internal/agent/hostcli"
@@ -93,6 +94,7 @@ type Controller struct {
 	runtimeUpdateStatusCache    map[string]runtimeUpdateStatusCacheEntry
 	runtimeUpdateStatusNow      func() time.Time
 	runtimeUpdateStatusResolver RuntimeUpdateStatusResolver
+	runtimeAgentAvailable       func(context.Context, agents.Agent) (bool, error)
 	runtimeUpdateStatusLookup   chan struct{}
 	runtimeUpdateStatusFlight   singleflight.Group
 	runtimeAutoUpdateStore      *managedruntime.AutoUpdateStore
@@ -492,6 +494,7 @@ func (c *Controller) initializeUpdateJobStore() {
 	}
 	c.updateJobStore.SetOpenCodeMigrationGuard(c.openCodeMigrationGuard)
 	c.updateJobStore.onFinished = c.retainAutomaticOutcome
+	c.updateJobStore.onAutomaticFinished = c.retainAutomaticHarnessOutcome
 }
 
 // BroadcastAvailableAgents fetches the current available-agents snapshot and

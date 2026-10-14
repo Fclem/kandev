@@ -45,6 +45,10 @@ func (c *maintenanceCoordinator) claim(
 ) (MaintenanceJobRef, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.claimLocked(agentName, kind, jobID)
+}
+
+func (c *maintenanceCoordinator) claimLocked(agentName string, kind MaintenanceKind, jobID string) (MaintenanceJobRef, bool, error) {
 	if active, ok := c.byAgent[agentName]; ok {
 		if active.Kind == kind {
 			return active, false, nil

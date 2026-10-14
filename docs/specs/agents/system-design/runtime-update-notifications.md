@@ -5,7 +5,7 @@ requirements:
   - REQ-AGENTS-RUNTIME-NOTIFY-001
   - REQ-AGENTS-RUNTIME-NOTIFY-002
 created: 2026-10-01
-updated: 2026-10-06
+updated: 2026-10-14
 owners:
   - Kandev
 ---
@@ -22,6 +22,11 @@ Agents owns runtime identities, supported activation, and install-wide policy. N
 
 This design extends [managed updates](runtime-updates-01.md) without changing its exact-version selection or executor ownership. It supersedes that design's settings-only check placement and automatic-update exclusion. [ADR on automatic runtime ownership](../../../decisions/2026-10-01-agent-runtime-update-authority.md) records the authority boundary.
 
+The [periodic OMP extension](omp-automatic-updates.md) is a narrow
+in-place exception to the pinned candidate path below. It leaves external
+ownership explicit and does not extend automatic eligibility to arbitrary
+native installations.
+
 ## Capabilities and source coverage
 
 A shared capability resolver consumes trusted registered agent metadata. ManagedNPMRuntimeAgent supplies exact package/default metadata. Unmanaged structured npm commands supply only read-only package release discovery; custom commands never authorize installers. Native agents declare verified release sources and vendor guidance through an optional metadata capability. Unknown/custom/virtual cases return explicit unsupported capability. No provider-ID switch controls automatic eligibility.
@@ -29,6 +34,8 @@ A shared capability resolver consumes trusted registered agent metadata. Managed
 Status adds display name, runtime identity, owner, mechanism, enabled/available flags, management capability, guidance URL, current version, automatic eligibility/policy, and last outcome to the existing AgentUpdateStatusDTO. Existing check_state and managed version fields remain compatible. Current unknown and source unknown are independent; a latest version alone never proves up_to_date. External npm runtimes compare a host observation only when it matches a published stable package version; an unmatched vendor/adapter observation remains unknown while the raw current and latest values remain independently available.
 
 Only enabled, available runtimes query sources or automate. Registered but unavailable/disabled runtimes remain in status with no current claim. Strict stable SemVer comparison fails closed. Npm uses the existing RuntimeUpdater metadata boundary. Verified native GitHub releases use a bounded unauthenticated request to a trusted repository and reject drafts/prereleases/invalid versions. Opaque vendor channels expose guidance with no guessed latest release.
+
+OMP's stable source comparison is read-only reference information. Its automatic eligibility, configured-channel cadence, observed-version outcomes and pause recovery follow the separate [OMP design](omp-automatic-updates.md), not stable candidate availability.
 
 See the complete [coverage matrix](../../../plans/agent-runtime-notifications/coverage.md). The eight existing managed packages include Codex app-server as well as ACP adapters. Native OpenCode selected by PATH is external: npm ownership cannot be inferred, and its host version comes from the host probe rather than the npm default. The native host uses vendor guidance. A separately named managed fallback control remains available for remote/container package selections, including older-version/default recovery. It stages and validates only the managed package and never publishes that candidate as the native host capability observation; remote native installations keep their own update owner.
 
@@ -46,18 +53,18 @@ One controller-owned scheduler waits for the initial host utility probes, then r
 
 The existing install-wide SystemSettings store persists one namespaced JSON policy per registered runtime identity, with enabled=false by default. Policy includes the trusted source identity, last attempted target, previous version, job/outcome identity and terminal result. A source change does not inherit consent. Settings uses an org.config.manage-gated PATCH endpoint, strict single-document JSON decoding, and the existing mutation interlock; status GET cannot change policy or enqueue a job.
 
-A serialized automatic pass rechecks availability, capability, policy, and selection immediately before enqueue. It records the attempted target before mutation, so a restart or source failure cannot create repeated failed attempts. Existing maintenance admission prevents overlap with installs or manual updates. Explicit disable/re-enable clears the prior attempt. Manual update/default requests disable automation before changing the version.
+All automatic modes recheck availability, capability and policy immediately before admission. For Kandev-managed runtimes, a serialized pass also rechecks selection and records the attempted target before mutation, so a restart or source failure cannot create repeated failed attempts. Existing maintenance admission prevents overlap with installs or manual updates. Explicit disable/re-enable clears the prior attempt. Manual managed update/default requests disable automation before changing the version.
 
-Jobs carry the original runtime identity, automatic origin and previous version, immutable for a job ID. Terminal persistence and recovery notices use that original identity even when a host installation changes while validation runs. The frontend preserves these fields when same-job live updates or readiness snapshots omit them, and clears them for a replacement job. Automatic jobs require RuntimeCandidateUpdater, the verified RuntimeVersionResolver catalogue, and durable selection and never use the legacy Refresh-only/global-install path. A guard rechecks consent and the observed selection before preparation and under the same policy mutex as the activation commit. Opt-out or an intervening selection rejects activation. Candidate validation and selection persistence precede capability publication. Terminal observation persists outcomes outside the job-output retention window. Validation/admission failures before job creation also persist and announce their result immediately, after releasing the policy lock. A backend interrupted job is recorded as interrupted on restart. Its notice says the activation result could not be confirmed: a crash between selection persistence and outcome persistence must not imply success or failure.
+Jobs carry the original runtime identity, automatic origin and previous version, immutable for a job ID. Terminal persistence and recovery notices use that original identity even when a host installation changes while validation runs. The frontend preserves these fields when same-job live updates or readiness snapshots omit them, and clears them for a replacement job. Managed automatic jobs require RuntimeCandidateUpdater, the verified RuntimeVersionResolver catalogue, and durable selection and never use the legacy Refresh-only/global-install path. A managed candidate guard rechecks consent and the observed selection before preparation and under the same policy mutex as the activation commit. Opt-out or an intervening selection rejects activation. Managed candidate validation and selection persistence must complete before capability publication; failed persistence cannot publish or retain the candidate selection.
 
 ## Notifications and recovery
 
 The [availability summary design](runtime-update-summary.md) defines fixed-window grouping and per-runtime delivery claims.
 Its [delivery package](../../../plans/agent-runtime-update-summary/plan.md) records the implementation and targeted regression checks.
 
-Reuse notification service semantic delivery, update subscriptions (system.update_available), per-user provider ownership, and persistent delivery claims. Runtime payload identifies agent, display name, runtime source, previous/target versions, and outcome. Occurrence identity combines those identities with available/success/failure and target or job identity; Kandev release occurrence IDs remain independent. Local delivery preserves structured runtime payload so the frontend resolves copy at render time; native/external providers receive concrete agent/runtime copy.
+Reuse notification service semantic delivery, update subscriptions (system.update_available), per-user provider ownership, and persistent delivery claims. Runtime payload identifies agent, display name, runtime source, update mode and outcome. Managed outcomes carry previous/target versions; OMP changed outcomes carry observed versions and paused notices need no target version. Occurrence identity combines those identities with available/success/failure and target or job identity; Kandev release occurrence IDs remain independent. Local delivery preserves structured runtime payload so the frontend resolves copy at render time; native/external providers receive concrete agent/runtime copy.
 
-Available updates and terminal outcomes are retried for disconnected local subscribers using persisted status/policy, while delivery claims suppress repeats. Source failures produce no notification. Failed automatic updates retain the old version and expose the existing version dialog for retry, rollback, or return-to-default. No automatic rollback after a later launch failure is introduced.
+Available updates and terminal outcomes are retried for disconnected local subscribers using persisted status/policy, while delivery claims suppress repeats. Source failures produce no notification. Failed automatic Kandev-managed updates retain the old version and expose the existing version dialog for retry, rollback, or return-to-default. No automatic rollback after a later launch failure is introduced. OMP no-change checks produce no notice; a pausing failure warns of possible in-place mutation and directs saved off/on recovery without implying rollback.
 
 ## Responsive UI
 

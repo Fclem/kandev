@@ -32,3 +32,17 @@ func TestEveryDefaultRegistrationHasAnExplicitRuntimeUpdateCapability(t *testing
 		}
 	}
 }
+
+// @covers AC-AGENTS-RUNTIME-NOTIFY-004.1
+func TestOnlyOMPDeclaresAutomaticHarnessAuthority(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	reg := NewRegistry(newTestLogger())
+	reg.LoadDefaults()
+	for _, ag := range reg.List() {
+		cap := agents.RuntimeUpdateCapabilities(ag)
+		hasRecipe := cap.AutomaticHarness != nil
+		if hasRecipe != (ag.ID() == "omp-acp") {
+			t.Errorf("%s automatic harness authority = %v", ag.ID(), hasRecipe)
+		}
+	}
+}

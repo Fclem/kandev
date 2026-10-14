@@ -2,6 +2,7 @@ package managedruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -45,5 +46,30 @@ func TestAutomaticRuntimePolicyFailsClosedOnPersistenceFailure(t *testing.T) {
 	}
 	if err := store.Save(context.Background(), "agent", AutoUpdatePolicy{RuntimeID: "npm:package", Enabled: true}); err == nil {
 		t.Fatal("failed save reported success")
+	}
+}
+
+// @covers AC-AGENTS-RUNTIME-NOTIFY-004.1, AC-AGENTS-RUNTIME-NOTIFY-004.2
+func TestOMPAutomaticPolicyPreservesDurableFieldsAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	raw := []byte(`{"runtime_id":"omp-acp","enabled":true,"last_attempt_started_at":"2026-10-10T12:00:00Z","consecutive_failures":2,"paused":true,"last_change":{"id":"changed","previous_version":"1.0.0","observed_version":"1.1.0","finished_at":"2026-10-10T12:01:00Z"},"outcome":{"id":"check","status":"succeeded","update_mode":"self_update","operation":"up_to_date","observed_version":"1.1.0","output_excerpt":"declined\nchannel"}}`)
+	settings := &memorySettings{values: map[string][]byte{"agent_runtime.auto.omp-acp": raw}}
+	policy, err := NewAutoUpdateStore(settings).Get(ctx, "omp-acp", "omp-acp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NewAutoUpdateStore(settings).Save(ctx, "omp-acp", policy); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(settings.values["agent_runtime.auto.omp-acp"], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["last_attempt_started_at"] != "2026-10-10T12:00:00Z" || got["consecutive_failures"] != float64(2) || got["paused"] != true || got["last_change"] == nil {
+		t.Fatalf("durable check policy lost on restart: %+v", got)
+	}
+	outcome := got["outcome"].(map[string]any)
+	if outcome["update_mode"] != "self_update" || outcome["operation"] != "up_to_date" || outcome["observed_version"] != "1.1.0" || outcome["output_excerpt"] != "declined\nchannel" {
+		t.Fatalf("durable observation lost: %+v", outcome)
 	}
 }

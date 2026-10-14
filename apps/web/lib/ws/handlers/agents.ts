@@ -11,6 +11,8 @@ import {
 } from "@/lib/state/slices/settings/types";
 import { normalizeAgentProfile } from "@/lib/api/domains/agent-profile-normalize";
 import type { AgentProfile } from "@/lib/types/agent-profile";
+import type { AgentUpdateJob } from "@/lib/api";
+import { refreshRuntimeUpdateStatuses } from "@/lib/agents/runtime-update-statuses";
 
 function buildProfileEntry(profile: unknown): AgentProfile {
   return normalizeAgentProfile(profile);
@@ -244,6 +246,26 @@ function applyProfileUpdatedEvent(
   }));
 }
 
+function handleUpdateJobEvent(store: StoreApi<AppState>, job: AgentUpdateJob, finished: boolean) {
+  const state = store.getState();
+  const ignored =
+    job.automatic &&
+    job.update_mode === "self_update" &&
+    !state.updateJobs.adoptedUpdateJobIds[job.job_id] &&
+    state.updateJobs.byAgent[job.agent_name]?.job_id !== job.job_id;
+  if (!ignored) {
+    state.upsertAgentUpdateJob(job);
+    return;
+  }
+  void refreshRuntimeUpdateStatuses(store, true);
+  if (
+    finished &&
+    job.status === "succeeded" &&
+    (job.operation === "update" || job.operation === "repair")
+  )
+    store.getState().bumpAgentRuntimeActivation(job.agent_name);
+}
+
 export function registerAgentsHandlers(store: StoreApi<AppState>): WsHandlers {
   return {
     "agent.available.updated": (message) => {
@@ -284,14 +306,14 @@ export function registerAgentsHandlers(store: StoreApi<AppState>): WsHandlers {
       store.getState().upsertInstallJob(message.payload);
     },
     "agent.update.started": (message) => {
-      store.getState().upsertAgentUpdateJob(message.payload);
+      handleUpdateJobEvent(store, message.payload, false);
     },
     "agent.update.output": (message) => {
       const { agent_name, job_id, chunk } = message.payload;
       store.getState().appendAgentUpdateOutput(agent_name, job_id, chunk);
     },
     "agent.update.finished": (message) => {
-      store.getState().upsertAgentUpdateJob(message.payload);
+      handleUpdateJobEvent(store, message.payload, true);
     },
     "agent.updated": (message) => {
       store.setState((state) => ({

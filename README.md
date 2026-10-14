@@ -116,9 +116,11 @@ Connect Kandev to GitHub, GitLab, Jira, Linear, Sentry, and Azure DevOps to pull
 Managed npm runtimes have reviewed defaults. To fetch a selected upstream
 release, use **Update agent** in **Settings > Agents**. Kandev refreshes its
 advertised models and modes for future sessions without restarting active
-sessions. Background notices cover enabled, available registered runtimes, with optional automatic
-updates for supported managed installations and manual guidance for external CLIs.
-See [Agents and Profiles](docs/public/agents-and-profiles.md#update-a-managed-agent-runtime).
+sessions. Background notices cover enabled, available registered runtimes.
+Optional automatic updates support Kandev-managed installations and OMP's
+configured-channel, in-place updater; other external CLIs retain manual guidance.
+See [managed runtime updates](docs/public/agents-and-profiles.md#update-a-managed-agent-runtime)
+and [OMP updates and opt-in checks](docs/public/agents-and-profiles.md#update-oh-my-pi-on-the-kandev-host).
 
 Fresh OpenCode installs use managed v2 (`@opencode/cli`). Existing v1
 selections remain on `opencode-ai` until you choose the explicit migration

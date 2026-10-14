@@ -209,6 +209,41 @@ Kandev runs OMP's own updater as the Kandev service user on the host, streams
 its output, and refreshes ACP capabilities only after a successful probe.
 Active sessions are not restarted.
 
+To opt in to periodic checks, expand **Agent runtime updates** at the bottom of
+**Settings > Agents**, find Oh My Pi, and review the warning beside **Automatic
+updates**. Updates change the installation in place; **Kandev cannot roll back**.
+Turn the option on and save. Consent is installation-wide, off by default, and
+requires an administrator.
+
+While OMP is enabled, available and opted in, Kandev runs `omp update` on the first
+eligible background pass and about every 15 minutes thereafter. Each run follows
+OMP's configured channel, even when the stable reference is unknown, equal to,
+or older than the installed version. Restarting or saving off then on does not
+make checks run sooner.
+
+Settings keeps the latest result and the last reported version change separately.
+**No version change** means OMP reported the same version after validation, not
+that it installed a release or proved it is up to date. Expand **Updater output**
+to read the retained plain-text excerpt, including installation-method declines.
+
+An updater error, timeout or interruption retries at the normal interval and
+pauses after three consecutive failures. A failed ACP validation, including an
+authentication-required result or missing version, pauses immediately. The
+installation may already have changed even though Kandev retains its last
+validated capabilities.
+
+To resume paused checks:
+
+1. Inspect the updater output and repair the host installation using **Manage
+   update** or OMP's vendor guidance.
+2. Turn **Automatic updates** off and save.
+3. Turn it on and save again.
+
+A manual OMP update does not change consent or clear a pause. Saved opt-out stops
+later checks but cannot undo an updater already running. During shutdown, POSIX
+hosts stop the updater's process group except detached descendants; Windows
+stops only the updater process.
+
 OMP detects whether its installation is managed by Homebrew, mise, Bun, npm,
 or a standalone binary and updates through that method. A Nix-managed
 installation cannot be updated by this action. OMP follows its already
@@ -221,9 +256,9 @@ picker, Kandev pin, or rollback for OMP.
 The update affects only the host installation, not task containers or remote
 executors. If OMP's updater or the follow-up ACP probe fails, Settings reports
 the error and retains the previous capability catalogue; Kandev cannot
-restore an executable that OMP already changed. When metadata is unavailable,
-the update icon remains available, but a preview must resolve the stable
-reference before the update can start.
+restore an executable that OMP already changed. When stable metadata is
+unavailable, the update icon and trusted command remain available; the stable
+reference is shown as unknown rather than blocking the update.
 
 ### Update a managed agent runtime
 
@@ -400,13 +435,14 @@ and disabled registrations remain listed separately, without background checks.
 Offline and source failures do not create error notifications.
 
 Automatic updates are off by default. An administrator can enable **Automatic
-updates** for each eligible managed runtime, then select the shared **Save changes**
-action. This consent applies to the Kandev installation and survives reloads.
-Kandev checks on startup and every 15 minutes; successful release lookups are
-cached for six hours and failed lookups for 15 minutes.
+updates** for each eligible Kandev-managed runtime or Oh My Pi, then select the
+shared save action. Consent applies to the Kandev installation and survives
+reloads. Release discovery runs after startup and every 15 minutes, with
+successful lookups cached for six hours and failed lookups for 15 minutes.
+OMP's periodic updater checks are independent of those cached stable lookups.
 
-An automatic update prepares a stable exact version and validates it before
-activating it for future launches. Running sessions keep their existing process
+For Kandev-managed runtimes, an automatic update prepares a stable exact version
+and validates it before activating it for future launches. Running sessions keep their existing process
 and version. The retained result records the old and target versions. If
 preparation, validation, or activation fails, that attempt preserves the previous
 selection. Kandev reports the failure and does not repeatedly retry that target. An interrupted
@@ -418,11 +454,18 @@ so Kandev does not undo your choice. Disabling automatic updates also prevents a
 candidate still being prepared from activating. To retry automatically after a
 failure, turn the option off and save, then turn it on and save again.
 
-Externally managed npm packages and native CLIs show **Manual update guidance**
-when vendor documentation is available. Their supported vendor or package-manager
-updates remain owned by the operator. Kandev does not infer update authority from
-`PATH` or run an unverified global updater. Custom commands, virtual agents, and
-other runtimes without a supported updater explicitly show the unsupported state.
+OMP instead uses its opt-in in-place updater, with no selected target or rollback.
+Changed results and pausing failures create individual notices; validated-version,
+no-change and non-pausing failures remain in Settings. See
+[Update Oh My Pi on the Kandev host](#update-oh-my-pi-on-the-kandev-host) for
+consent, retained output and saved off/on recovery.
+
+Other externally managed npm packages and native CLIs show **Manual update
+guidance** when vendor documentation is available. Their supported vendor or
+package-manager updates remain owned by the operator. Kandev does not infer
+update authority from `PATH` or guess a global updater. Custom commands, virtual
+agents and runtimes without a supported updater explicitly show the unsupported
+state.
 
 <details>
 <summary>Add a custom terminal agent</summary>

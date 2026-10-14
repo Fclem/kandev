@@ -6,6 +6,7 @@ const api = vi.fn();
 const refresh = vi.fn();
 let contributor: SettingsSaveContributor;
 let authoritative = true;
+let agentName = "gemini";
 vi.mock("@/lib/api", () => ({ setAgentAutomaticUpdates: (...args: unknown[]) => api(...args) }));
 vi.mock("@/lib/agents/runtime-update-statuses", () => ({
   refreshRuntimeUpdateStatuses: (...args: unknown[]) => refresh(...args),
@@ -18,7 +19,7 @@ vi.mock("./settings-save-provider", () => ({
 vi.mock("@/components/state-provider", () => ({ useAppStoreApi: () => store }));
 const store = {
   getState: () => ({
-    agentRuntimeUpdates: { byAgent: { gemini: { auto_update: authoritative } } },
+    agentRuntimeUpdates: { byAgent: { [agentName]: { auto_update: authoritative } } },
   }),
 };
 import { useRuntimeAutoUpdatePolicy } from "./use-runtime-auto-update-policy";
@@ -29,6 +30,7 @@ const status = {
 } as AgentUpdateStatus;
 beforeEach(() => {
   vi.clearAllMocks();
+  agentName = "gemini";
   api.mockResolvedValue(undefined);
   refresh.mockResolvedValue(true);
   authoritative = true;
@@ -64,7 +66,7 @@ describe("saved automatic runtime consent", () => {
     const { result } = renderHook(() => useRuntimeAutoUpdatePolicy(status));
     act(() => result.current.setDraft(true));
     await act(async () => {
-      await expect(contributor.save(1)).rejects.toThrow("Unable to save automatic updates");
+      await expect(contributor.save(1)).rejects.not.toThrow("sensitive internal detail");
     });
     expect(result.current.isDirty).toBe(true);
     act(() => {
@@ -83,5 +85,28 @@ describe("saved automatic runtime consent", () => {
     expect(result.current.isDirty).toBe(false);
     expect(contributor.id).not.toBe(firstIdentity);
     expect(contributor.id).toContain("native:gemini");
+  });
+});
+
+describe("OMP authoritative consent baseline", () => {
+  it("uses refreshed saved consent after Save and reload, then discards against that baseline", async () => {
+    agentName = "omp-acp";
+    authoritative = false;
+    const omp = { ...status, agent_name: "omp-acp", runtime_id: "omp-acp" };
+    const { result, rerender } = renderHook(({ value }) => useRuntimeAutoUpdatePolicy(value), {
+      initialProps: { value: omp },
+    });
+    act(() => result.current.setDraft(true));
+    await act(async () => {
+      await contributor.save(1);
+    });
+    expect(result.current.draft).toBe(false);
+    expect(result.current.isDirty).toBe(false);
+    rerender({ value: { ...omp, auto_update: true } });
+    expect(result.current.draft).toBe(true);
+    act(() => result.current.setDraft(false));
+    act(() => contributor.discard());
+    expect(result.current.draft).toBe(true);
+    expect(result.current.isDirty).toBe(false);
   });
 });

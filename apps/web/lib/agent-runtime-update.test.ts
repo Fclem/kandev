@@ -229,3 +229,34 @@ describe("missing current version under a non-English locale", () => {
     expect(pair.versionsMatch).toBe(false);
   });
 });
+
+describe("adopted automatic OMP checks", () => {
+  it("keeps the manual updater actionable after a no-change automatic check", () => {
+    const ompPreview = preview({
+      update_mode: "self_update",
+      operation: "update",
+      target_version: "",
+    });
+    const automatic = job({
+      update_mode: "self_update",
+      automatic: true,
+      status: "succeeded",
+      operation: "up_to_date",
+    });
+    expect(resolveRuntimeOperation(ompPreview, automatic)).toBe("update");
+    expect(
+      canApproveAgentRuntimeUpdate({
+        preview: ompPreview,
+        job: automatic,
+        previewError: null,
+        loading: false,
+        updateInFlight: false,
+        starting: false,
+        installInFlight: false,
+      }),
+    ).toBe(true);
+    expect(resolveRuntimeOperation(ompPreview, { ...automatic, automatic: false })).toBe(
+      "up_to_date",
+    );
+  });
+});

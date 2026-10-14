@@ -428,5 +428,19 @@
   "modelDiscoveryNotLoggedIn": "The command-line tool is not signed in.",
   "modelDiscoveryTimeout": "The model list request timed out.",
   "modelSourceCli": "CLI",
-  "modelSourceAcp": "ACP"
+  "modelSourceAcp": "ACP",
+  "runtimeOMPManageUpdate": "Manage update",
+  "runtimeOMPAutomaticHelp": "Checks the configured channel about every 15 minutes. Updates change the installation in place. Kandev cannot roll back.",
+  "runtimeOMPRunning": "Checking the configured channel.",
+  "runtimeOMPChangedTitle": "{{agent}} version changed",
+  "runtimeOMPChangedBody": "OMP reported a version change from {{previous}} to {{version}}.",
+  "runtimeOMPRepairedBody": "Last check: OMP validated version {{version}}.",
+  "runtimeOMPNoChangeBody": "Last check: OMP reported no version change. Version: {{version}}.",
+  "runtimeOMPLastChange": "Last change: {{previous}} to {{version}}.",
+  "runtimeOMPRetryBody": "The last check did not complete. Automatic checks will retry on the next eligible interval.",
+  "runtimeOMPInterruptedBody": "The last check was interrupted. Automatic checks will retry on the next eligible interval.",
+  "runtimeOMPIncompleteBody": "The last check did not complete. The installation may have changed. Kandev cannot roll back.",
+  "runtimeOMPPausedTitle": "{{agent}} automatic checks paused",
+  "runtimeOMPPausedBody": "Automatic checks are paused. The installation may have changed. Kandev cannot roll back. To resume, turn off and save, then turn on and save.",
+  "runtimeOMPOutput": "Updater output"
 }

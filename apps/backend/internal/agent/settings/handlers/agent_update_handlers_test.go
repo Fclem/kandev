@@ -136,6 +136,8 @@ func newAgentUpdateRouter(
 	updater controller.RuntimeUpdater,
 ) (*gin.Engine, *controller.Controller, <-chan dto.AgentUpdateJobDTO) {
 	t.Helper()
+	t.Setenv("KANDEV_E2E_MOCK", "true")
+	t.Setenv("PATH", t.TempDir())
 	gin.SetMode(gin.TestMode)
 	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json"})
 	if err != nil {

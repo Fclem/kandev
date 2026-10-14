@@ -352,6 +352,8 @@ export type InstallJobsState = {
 
 export type AgentUpdateJobsState = {
   byAgent: Record<string, AgentUpdateJob>;
+  adoptedUpdateJobIds: Record<string, true>;
+  runtimeActivationByAgent: Record<string, number>;
 };
 
 export type EditorsState = {
@@ -547,6 +549,8 @@ export type SettingsSliceActions = {
   upsertAgentUpdateJob: (job: AgentUpdateJob) => void;
   appendAgentUpdateOutput: (agentName: string, jobId: string, chunk: string) => void;
   clearAgentUpdateJob: (agentName: string) => void;
+  adoptAgentUpdateJob: (jobId: string) => void;
+  bumpAgentRuntimeActivation: (agentName: string) => void;
   setEditors: (editors: EditorsState["items"], folderOpeningAvailable?: boolean) => void;
   setEditorsLoading: (loading: boolean) => void;
   setPrompts: (prompts: PromptsState["items"]) => void;

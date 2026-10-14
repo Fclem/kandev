@@ -81,6 +81,7 @@ export function useAgentRuntimeUpdates() {
   const hydrateConflict = useCallback(
     async (agentName: string, conflict: MaintenanceConflict): Promise<AgentUpdateJob> => {
       if (conflict.active_kind === "update") {
+        store.getState().adoptAgentUpdateJob(conflict.active_job_id);
         const job = await getAgentUpdateJob(conflict.active_job_id, { cache: "no-store" });
         store.getState().upsertAgentUpdateJob(job);
         return job;

@@ -1,11 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { waitFor } from "@testing-library/react";
 import { create, type StoreApi } from "zustand";
 import { immer } from "zustand/middleware/immer";
 
 import { createSettingsSlice } from "@/lib/state/slices/settings/settings-slice";
 import type { SettingsSlice } from "@/lib/state/slices/settings/types";
 import type { AppState } from "@/lib/state/store";
+import type * as AgentUpdateApi from "@/lib/api/domains/agent-update-api";
 import { registerAgentsHandlers } from "./agents";
+
+const runtimeStatusApi = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/lib/api/domains/agent-update-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof AgentUpdateApi>()),
+  listAgentUpdateStatuses: (...args: unknown[]) => runtimeStatusApi.list(...args),
+}));
+beforeEach(() => {
+  runtimeStatusApi.list.mockReset().mockResolvedValue({ statuses: [] });
+});
 
 function makeStore() {
   return create<SettingsSlice>()(
@@ -142,8 +153,8 @@ describe("agent update job websocket handlers", () => {
         chunk: "downloaded\n",
       }),
     );
-    handlers["agent.update.finished"](
-      message("agent.update.finished", {
+    handlers[UPDATE_FINISHED](
+      message(UPDATE_FINISHED, {
         ...snapshot,
         status: "succeeded",
         output: "downloaded\n",
@@ -559,5 +570,118 @@ describe("agent profile event ordering", () => {
       ),
     );
     expect(store.getState().agentProfiles.items).toHaveLength(0);
+  });
+});
+
+const UPDATE_FINISHED = "agent.update.finished";
+
+const manual = {
+  job_id: "manual",
+  agent_name: "omp-acp",
+  update_mode: "self_update" as const,
+  status: "succeeded" as const,
+  started_at: TIMESTAMP,
+  effective_version: "1.1.0",
+};
+const automatic = {
+  ...manual,
+  job_id: "automatic",
+  automatic: true,
+  started_at: NEWER_TIMESTAMP,
+};
+
+describe("automatic OMP job events", () => {
+  it("preserves a finished manual result while an ignored start refreshes current policy despite the TTL", async () => {
+    const store = makeStore();
+    store.getState().upsertAgentUpdateJob(manual);
+    store.getState().setAgentRuntimeUpdateStatuses([], Date.now());
+    runtimeStatusApi.list.mockResolvedValueOnce({
+      statuses: [
+        {
+          agent_name: "omp-acp",
+          runtime_id: "omp-acp",
+          auto_update: true,
+          last_outcome: { id: "automatic", status: "running" },
+        },
+      ],
+    });
+    handlersFor(store)["agent.update.started"]!(
+      message("agent.update.started", { ...automatic, status: "updating" }),
+    );
+    expect(store.getState().updateJobs.byAgent["omp-acp"].job_id).toBe("manual");
+    await waitFor(() =>
+      expect(store.getState().agentRuntimeUpdates.byAgent["omp-acp"]?.last_outcome?.status).toBe(
+        "running",
+      ),
+    );
+  });
+
+  it.each(["update", "repair", "up_to_date", "failed"] as const)(
+    "refreshes ignored %s evidence and activates only changed or repaired catalogues",
+    async (operation) => {
+      const store = makeStore();
+      store.getState().upsertAgentUpdateJob(manual);
+      store.getState().setAgentRuntimeUpdateStatuses([], Date.now());
+      runtimeStatusApi.list.mockResolvedValueOnce({
+        statuses: [
+          {
+            agent_name: "omp-acp",
+            runtime_id: "omp-acp",
+            auto_update: true,
+            auto_update_paused: operation === "failed",
+            last_outcome: {
+              id: "automatic",
+              status: operation === "failed" ? "failed" : "succeeded",
+              operation,
+            },
+          },
+        ],
+      });
+      handlersFor(store)[UPDATE_FINISHED]!(
+        message(UPDATE_FINISHED, {
+          ...automatic,
+          status: operation === "failed" ? "failed" : "succeeded",
+          operation: operation === "failed" ? "" : operation,
+        }),
+      );
+      expect(store.getState().updateJobs.byAgent["omp-acp"].job_id).toBe("manual");
+      await waitFor(() =>
+        expect(store.getState().agentRuntimeUpdates.byAgent["omp-acp"]?.last_outcome?.id).toBe(
+          "automatic",
+        ),
+      );
+      expect(store.getState().updateJobs.runtimeActivationByAgent?.["omp-acp"] ?? 0).toBe(
+        operation === "update" || operation === "repair" ? 1 : 0,
+      );
+      expect(store.getState().agentRuntimeUpdates.byAgent["omp-acp"]?.auto_update_paused).toBe(
+        operation === "failed",
+      );
+    },
+  );
+
+  it("retains an adopted finish that arrives before the HTTP job snapshot", () => {
+    const store = makeStore();
+    store.getState().adoptAgentUpdateJob?.("automatic");
+    handlersFor(store)[UPDATE_FINISHED]!(
+      message(UPDATE_FINISHED, { ...automatic, operation: "up_to_date" }),
+    );
+    store.getState().upsertAgentUpdateJob({ ...automatic, status: "updating" });
+    expect(store.getState().updateJobs.byAgent["omp-acp"]).toMatchObject({
+      job_id: "automatic",
+      status: "succeeded",
+      operation: "up_to_date",
+    });
+  });
+
+  it("continues showing a held automatic job without explicit adoption", () => {
+    const store = makeStore();
+    store.getState().upsertAgentUpdateJob({ ...automatic, status: "updating" });
+    handlersFor(store)[UPDATE_FINISHED]!(
+      message(UPDATE_FINISHED, { ...automatic, operation: "repair" }),
+    );
+    expect(store.getState().updateJobs.byAgent["omp-acp"]).toMatchObject({
+      status: "succeeded",
+      operation: "repair",
+    });
   });
 });

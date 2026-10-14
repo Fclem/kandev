@@ -91,3 +91,39 @@ func (n *runtimeNoticeCapture) snapshot() ([]agents.RuntimeUpdateNotice, [][]age
 	}
 	return individual, batches
 }
+
+func TestOMPAutomaticChangedNoticeReplaysAfterLaterNoChangeCheck(t *testing.T) {
+	c, _, _ := newOMPAutomaticController(t, &autoMemorySettings{})
+	n := &runtimeNoticeCapture{}
+	c.SetRuntimeUpdateNotifier(n)
+	status := dto.AgentUpdateStatusDTO{
+		AgentName: "omp-acp", RuntimeID: "omp-acp", UpdateMode: dto.AgentUpdateModeSelfUpdate,
+		LastChange:  &managedruntime.UpdateChange{ID: "changed", PreviousVersion: "1.0.0", ObservedVersion: "1.1.0"},
+		LastOutcome: &managedruntime.UpdateOutcome{ID: "later", Status: "succeeded", UpdateMode: "self_update", Operation: managedruntime.OperationUpToDate},
+	}
+	c.publishRuntimeStatus(context.Background(), status)
+	notices, _ := n.snapshot()
+	if len(notices) != 1 || notices[0].Version != "1.1.0" || notices[0].OccurrenceID != runtimeNoticeKey("omp-acp", "omp-acp", "1.1.0", "succeeded", "changed") {
+		t.Fatalf("no-change erased changed replay: %+v", notices)
+	}
+}
+
+func TestOMPAutomaticNoticesSuppressRepairNoChangeAndNonPausingFailure(t *testing.T) {
+	c, _, _ := newOMPAutomaticController(t, &autoMemorySettings{})
+	n := &runtimeNoticeCapture{}
+	c.SetRuntimeUpdateNotifier(n)
+	for _, outcome := range []*managedruntime.UpdateOutcome{
+		{ID: "repair", Status: "succeeded", UpdateMode: "self_update", Operation: managedruntime.OperationRepair},
+		{ID: "same", Status: "succeeded", UpdateMode: "self_update", Operation: managedruntime.OperationUpToDate},
+		{ID: "retry", Status: "failed", UpdateMode: "self_update"},
+	} {
+		c.publishRuntimeStatus(context.Background(), dto.AgentUpdateStatusDTO{AgentName: "omp-acp", RuntimeID: "omp-acp", UpdateMode: dto.AgentUpdateModeSelfUpdate, LastOutcome: outcome})
+	}
+	if n.count() != 0 {
+		t.Fatal("automatic check generated noisy outcome notice")
+	}
+	c.publishRuntimeStatus(context.Background(), dto.AgentUpdateStatusDTO{AgentName: "omp-acp", RuntimeID: "omp-acp", UpdateMode: dto.AgentUpdateModeSelfUpdate, AutoUpdatePaused: true, LastOutcome: &managedruntime.UpdateOutcome{ID: "pause", Status: "failed", UpdateMode: "self_update"}})
+	if n.count() != 1 {
+		t.Fatal("versionless pausing failure was dropped")
+	}
+}

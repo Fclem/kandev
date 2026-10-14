@@ -2,6 +2,7 @@ import { test } from "../../fixtures/test-base";
 import { managedFallbackAwareness } from "./agent-runtime-fallback-helpers";
 import { backendRuntimeUpdateSummary } from "./agent-runtime-summary-backend-helpers";
 import { runtimeAwareness } from "./agent-runtime-notifications-helpers";
+import { ompAutomaticConsent, ompAutomaticOutcomeRecovery } from "./omp-automatic-update-helpers";
 
 test("backend runtime summary reconnect replay stays deduplicated on phone", async ({
   testPage,
@@ -24,4 +25,18 @@ test("native host keeps managed fallback version controls reachable", async ({
   prCapture,
 }) => {
   await managedFallbackAwareness(testPage, true, prCapture);
+});
+
+test("phone OMP consent uses touch-sized Save, discard and unavailable opt-out", async ({
+  testPage,
+  prCapture,
+}) => {
+  await ompAutomaticConsent(testPage, true, prCapture);
+});
+
+test("phone OMP output and saved pause recovery retain one page scroll owner", async ({
+  testPage,
+  prCapture,
+}) => {
+  await ompAutomaticOutcomeRecovery(testPage, true, prCapture);
 });

@@ -426,7 +426,21 @@
   "useCustomModelId": "將「{{model}}」用作模型 ID",
   "modelDiscoveryNotInstalled": "Kandev 無法使用該命令列工具。",
   "modelDiscoveryNotLoggedIn": "該命令列工具尚未登入。",
-  "modelDiscoveryTimeout": "模型清單請求逾時。",
+  "modelDiscoveryTimeout": "模型清單請求超時。",
   "modelSourceCli": "CLI",
-  "modelSourceAcp": "ACP"
+  "modelSourceAcp": "ACP",
+  "runtimeOMPManageUpdate": "管理更新",
+  "runtimeOMPAutomaticHelp": "約每 15 分鐘檢查一次已設定的渠道。更新會直接修改現有安裝。Kandev 無法回滾。",
+  "runtimeOMPRunning": "正在檢查已設定的渠道。",
+  "runtimeOMPChangedTitle": "{{agent}} 版本已變更",
+  "runtimeOMPChangedBody": "OMP 報告版本已從 {{previous}} 變更為 {{version}}。",
+  "runtimeOMPRepairedBody": "上次檢查：OMP 已驗證版本 {{version}}。",
+  "runtimeOMPNoChangeBody": "上次檢查：OMP 報告版本未變更。版本：{{version}}。",
+  "runtimeOMPLastChange": "上次變更：{{previous}} 到 {{version}}。",
+  "runtimeOMPRetryBody": "上次檢查未完成。自動檢查將在下一個符合條件的間隔重試。",
+  "runtimeOMPInterruptedBody": "上次檢查已中斷。自動檢查將在下一個符合條件的間隔重試。",
+  "runtimeOMPIncompleteBody": "上次檢查未完成。現有安裝可能已被修改。Kandev 無法回滾。",
+  "runtimeOMPPausedTitle": "{{agent}} 自動檢查已暫停",
+  "runtimeOMPPausedBody": "自動檢查已暫停。現有安裝可能已被修改。Kandev 無法回滾。要恢復，請先關閉並儲存，然後開啟並儲存。",
+  "runtimeOMPOutput": "更新程式輸出"
 }

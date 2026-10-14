@@ -8,6 +8,7 @@ type RuntimeUpdateNotice struct {
 	PreviousVersion string
 	Version         string
 	Status          string
+	UpdateMode      string
 	OccurrenceID    string
 	URL             string
 }

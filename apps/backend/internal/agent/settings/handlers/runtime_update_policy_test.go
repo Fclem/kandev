@@ -44,6 +44,10 @@ func (verifiedPolicyUpdater) ResolveVersions(context.Context, string) (controlle
 	return controller.RuntimeVersionMetadata{Latest: "9.0.0", Versions: []string{"9.0.0"}}, nil
 }
 
+func (u verifiedPolicyUpdater) RunUpdateTree(ctx context.Context, command agents.Command, output func(string)) error {
+	return u.RunUpdate(ctx, command, output)
+}
+
 // @covers AC-AGENTS-RUNTIME-NOTIFY-002.1
 func TestAutomaticPolicyEndpointPersistsConsentAndFailsTruthfully(t *testing.T) {
 	router, ctrl, _ := newAgentUpdateRouter(t, verifiedPolicyUpdater{&handlerRuntimeUpdater{}})
@@ -56,6 +60,8 @@ func TestAutomaticPolicyEndpointPersistsConsentAndFailsTruthfully(t *testing.T) 
 	}{
 		{`{"enabled":true}`, "gemini", 200},
 		{`{"enabled":false}`, "gemini", 200},
+		{`{"enabled":true}`, "omp-acp", 200},
+		{`{"enabled":false}`, "omp-acp", 200},
 		{`{}`, "gemini", 400},
 		{`{"enabled":"yes"}`, "gemini", 400},
 		{`{"enabled":true} {"enabled":false}`, "gemini", 400},

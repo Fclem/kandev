@@ -63,7 +63,16 @@ export function resolveRuntimeOperation(
   preview: AgentUpdatePreview | null,
   job?: AgentUpdateJob,
 ): AgentUpdateOperation | undefined {
+  if (job?.automatic && job.update_mode === "self_update") return preview?.operation;
   return job?.operation || preview?.operation;
+}
+
+export function automaticHarnessResultKey(job: AgentUpdateJob): string {
+  if (job.status === "failed") return "agents:runtimeOMPIncompleteBody";
+  if (job.status !== "succeeded") return "agents:runtimeOMPRunning";
+  if (job.operation === "repair") return "agents:runtimeOMPRepairedBody";
+  if (job.operation === "up_to_date") return "agents:runtimeOMPNoChangeBody";
+  return "agents:runtimeOMPChangedBody";
 }
 
 export function runtimeOperationLabelKey(operation: AgentUpdateOperation | undefined): string {

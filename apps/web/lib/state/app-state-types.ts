@@ -303,6 +303,8 @@ export type AppState = KanbanSlice & {
   upsertAgentUpdateJob: (job: AgentUpdateJob) => void;
   appendAgentUpdateOutput: (agentName: string, jobId: string, chunk: string) => void;
   clearAgentUpdateJob: (agentName: string) => void;
+  adoptAgentUpdateJob: SettingsSliceTypes.SettingsSliceActions["adoptAgentUpdateJob"];
+  bumpAgentRuntimeActivation: SettingsSliceTypes.SettingsSliceActions["bumpAgentRuntimeActivation"];
   setSSHReachability: (record: SSHReachabilityRecord) => void;
   setRepositories: (workspaceId: string, repositories: Repository[]) => void;
   upsertRepository: (workspaceId: string, repository: Repository) => void;

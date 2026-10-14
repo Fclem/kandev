@@ -16,7 +16,15 @@ func (c *Controller) SetRuntimeAutoUpdateStore(store *managedruntime.AutoUpdateS
 }
 
 func (c *Controller) automaticUpdateSupported(cap agents.RuntimeUpdateCapability) bool {
-	return cap.Managed != nil && c.verifiedManagedActivation() && c.runtimeAutoUpdateStore != nil && c.updateJobStore != nil
+	if c.runtimeAutoUpdateStore == nil || c.updateJobStore == nil {
+		return false
+	}
+	if cap.AutomaticHarness != nil {
+		_, candidate := c.runtimeUpdater.(RuntimeCandidateUpdater)
+		_, tree := c.runtimeUpdater.(RuntimeTreeUpdater)
+		return candidate && tree
+	}
+	return cap.Managed != nil && c.verifiedManagedActivation()
 }
 
 // SetAgentAutomaticUpdates binds install-wide consent to the trusted runtime.
@@ -41,6 +49,9 @@ func (c *Controller) setAgentAutomaticUpdatesLocked(ctx context.Context, name st
 	}
 	if policy.Enabled != enabled {
 		policy.AttemptedVersion = ""
+		if enabled && capability.AutomaticHarness != nil {
+			policy.Paused, policy.ConsecutiveFailures = false, 0
+		}
 	}
 	policy.Enabled = enabled
 	return c.runtimeAutoUpdateStore.Save(ctx, name, policy)
@@ -50,6 +61,7 @@ func (c *Controller) setAgentAutomaticUpdatesLocked(ctx context.Context, name st
 func (c *Controller) RunRuntimeUpdatePass(ctx context.Context) error {
 	c.runtimeUpdatePassMu.Lock()
 	defer c.runtimeUpdatePassMu.Unlock()
+	passStart := c.runtimeUpdateStatusTime()
 	response, err := c.ListAgentUpdateStatuses(ctx)
 	if err != nil {
 		return err
@@ -60,6 +72,12 @@ func (c *Controller) RunRuntimeUpdatePass(ctx context.Context) error {
 		}
 		c.settleInterruptedAutomaticUpdate(ctx, &status)
 		c.publishRuntimeStatus(ctx, status)
+		if status.UpdateMode == dto.AgentUpdateModeSelfUpdate {
+			if err := c.enqueueAutomaticHarness(ctx, status, passStart); err != nil {
+				c.logger.Debug("automatic harness update deferred")
+			}
+			continue
+		}
 		if !status.Available || !status.Enabled || !status.AutoUpdateSupported || status.CheckState != dto.AgentUpdateCheckStateUpdateAvailable {
 			continue
 		}
@@ -170,7 +188,7 @@ func (c *Controller) automaticActivationGuard(name, runtimeID string, spec agent
 }
 
 func (c *Controller) retainAutomaticOutcome(job dto.AgentUpdateJobDTO) {
-	if !job.Automatic || c.runtimeAutoUpdateStore == nil {
+	if !job.Automatic || job.UpdateMode == dto.AgentUpdateModeSelfUpdate || c.runtimeAutoUpdateStore == nil {
 		return
 	}
 	c.runtimeAutoUpdateMu.Lock()
@@ -219,7 +237,12 @@ func (c *Controller) settleInterruptedAutomaticUpdate(ctx context.Context, statu
 		return
 	}
 	policy.Outcome.Status, policy.Outcome.FinishedAt = managedruntime.UpdateOutcomeInterrupted, time.Now().UTC()
+	if policy.Outcome.UpdateMode == string(dto.AgentUpdateModeSelfUpdate) {
+		policy.ConsecutiveFailures++
+		policy.Paused = policy.Paused || policy.ConsecutiveFailures >= 3
+	}
 	if err := c.runtimeAutoUpdateStore.Save(ctx, status.AgentName, policy); err == nil {
 		status.LastOutcome = policy.Outcome
+		status.AutoUpdatePaused, status.LastChange = policy.Enabled && policy.Paused, policy.LastChange
 	}
 }

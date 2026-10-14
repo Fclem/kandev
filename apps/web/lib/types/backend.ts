@@ -4,7 +4,7 @@ import type {
   TaskPlanRevisionEventPayload,
 } from "./task-plan-events";
 import type { CaptureRequest } from "@/lib/logger/capture";
-import type { AgentUpdateJob } from "@/lib/api/domains/agent-update-api";
+import type { AgentUpdateJob, AgentUpdateMode } from "@/lib/api/domains/agent-update-api";
 
 export const SYSTEM_AGENT_RUNTIME_STATUS_CHANGED = "system.agent_runtime.status_changed" as const;
 
@@ -242,6 +242,7 @@ export type UpdateAvailablePayload = {
   runtime_updates?: RuntimeUpdateSummaryMember[];
   agent_name?: string;
   runtime_id?: string;
+  update_mode?: AgentUpdateMode;
   display_name?: string;
   previous_version?: string;
   runtime_update_status?: "available" | "succeeded" | "failed" | "interrupted";

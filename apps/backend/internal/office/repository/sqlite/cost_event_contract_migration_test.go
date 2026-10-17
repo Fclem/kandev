@@ -86,6 +86,20 @@ func TestCostEventContractMigration_LegacyRowsGetNullColumns(t *testing.T) {
 			t.Errorf("legacy row %s = %v, want NULL (never 0)", col, *got)
 		}
 	}
+	var unavailable bool
+	if err := db.Get(&unavailable, `SELECT usage_unavailable FROM office_cost_events WHERE id = 'legacy-1'`); err != nil {
+		t.Fatalf("read legacy amount presence: %v", err)
+	}
+	if unavailable {
+		t.Fatal("migration changed a measured legacy row into unavailable coverage")
+	}
+	var inputMissing bool
+	if err := db.Get(&inputMissing, `SELECT tokens_in_missing FROM office_cost_events WHERE id = 'legacy-1'`); err != nil {
+		t.Fatalf("read migrated legacy input presence: %v", err)
+	}
+	if inputMissing {
+		t.Fatal("migration erased a legacy input measurement")
+	}
 
 	// tokens_cached_in itself must be untouched by the migration: it stays
 	// the pre-existing sum, not backfilled or reinterpreted.

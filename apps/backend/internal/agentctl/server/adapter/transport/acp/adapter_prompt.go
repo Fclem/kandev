@@ -463,6 +463,7 @@ func fallbackUsageForNilTypedUsage(delta, costSubcents int64, costPresent bool) 
 	}
 	return &streams.PromptUsage{
 		InputTokens:                  delta,
+		InputTokensPresent:           delta > 0,
 		Estimated:                    true,
 		ProviderReportedCostSubcents: costSubcents,
 		ProviderReportedCostPresent:  costPresent,

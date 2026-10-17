@@ -1,6 +1,8 @@
 import type { Message, Turn } from "@/lib/types/http";
 import { messageAdapterRendersActions } from "@/components/task/chat/message-adapter-matchers";
-import type { UsageTurn } from "@/lib/types/conversation-usage";
+import type { UsageTokenBreakdown, UsageTurn } from "@/lib/types/conversation-usage";
+import { parseStrictRfc3339Timestamp } from "@/lib/utils/strict-timestamp";
+import { usageTokenCount } from "@/lib/utils/conversation-usage";
 const qualifyingMessageCache = new WeakMap<Message[], WeakMap<Turn, string | null>>();
 
 export function lastQualifyingMessageId(messages: Message[], turn: Turn): string | null {
@@ -47,6 +49,7 @@ export type TurnMetrics = {
   outputTokens: number | null;
   cachedReadTokens: number | null;
   cachedWriteTokens: number | null;
+  lastResponseReportedCacheWriteTokens: number | null;
   reasoningTokens: number | null;
   costSubcents: string | null;
   costSources: string[];
@@ -64,21 +67,26 @@ function timingValue(turn: Turn, key: "ttft_ms" | "generation_ms"): number | nul
 
 function wallTime(turn: Turn): number | null {
   if (!turn.completed_at) return null;
-  const startedAt = Date.parse(turn.started_at);
-  const completedAt = Date.parse(turn.completed_at);
-  if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt < startedAt) {
+  const startedAt = parseStrictRfc3339Timestamp(turn.started_at);
+  const completedAt = parseStrictRfc3339Timestamp(turn.completed_at);
+  if (startedAt === null || completedAt === null || completedAt < startedAt) {
     return null;
   }
-  return completedAt - startedAt;
+  return Number(completedAt - startedAt) / 1_000_000;
 }
 
 function directOutputRate(turn: Turn, usage: UsageTurn | null): number | null {
-  if (!usage || usage.completeness === "estimated" || usage.completeness === "partial") {
+  if (
+    !usage ||
+    usage.direct.overflow ||
+    usage.completeness === "estimated" ||
+    usage.completeness === "partial"
+  ) {
     return null;
   }
   const generationMs = timingValue(turn, "generation_ms");
-  const outputTokens = nonNegativeNumber(usage.direct.output_tokens);
-  const thoughtTokens = nonNegativeNumber(usage.direct.thought_tokens);
+  const outputTokens = usageTokenCount(usage.direct.output_tokens);
+  const thoughtTokens = usageTokenCount(usage.direct.thought_tokens);
   if (
     !usage.direct.output_complete ||
     usage.direct.event_count === 0 ||
@@ -89,21 +97,10 @@ function directOutputRate(turn: Turn, usage: UsageTurn | null): number | null {
   ) {
     return null;
   }
-  const generatedTokens = outputTokens + thoughtTokens;
-  return generatedTokens > 0 ? (generatedTokens * 1000) / generationMs : null;
-}
-
-function reasoningTokenCount(usage: UsageTurn): number {
-  const responseCounts = usage.responses
-    ?.filter((response) => response.scope !== "child")
-    .map((response) => response.reasoning_output_tokens)
-    .filter(
-      (value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0,
-    );
-  if (responseCounts && responseCounts.length > 0) {
-    return responseCounts.reduce((total, value) => total + value, 0);
-  }
-  return usage.direct.thought_tokens;
+  const generatedTokens = usageTokenCount(outputTokens + thoughtTokens);
+  if (generatedTokens === null || generatedTokens === 0) return null;
+  const rate = generatedTokens / (generationMs / 1000);
+  return Number.isFinite(rate) ? rate : null;
 }
 
 function measuredUsage(usage: UsageTurn | null): UsageTurn | null {
@@ -116,10 +113,9 @@ function pricedCost(usage: UsageTurn | null): string | null {
   return usage.total.cost_subcents ?? null;
 }
 
-function totalOutputTokens(usage: UsageTurn | null): number | null {
-  if (!usage) return null;
-  if (!usage.total.output_complete && usage.total.output_tokens === 0) return null;
-  return usage.total.output_tokens;
+function totalOutputTokens(total: UsageTokenBreakdown | null): number | null {
+  if (!total?.output_complete) return null;
+  return usageTokenCount(total.output_tokens);
 }
 
 function costSources(usage: UsageTurn | null, cost: string | null): string[] {
@@ -128,16 +124,26 @@ function costSources(usage: UsageTurn | null, cost: string | null): string[] {
 
 export function deriveTurnMetrics(turn: Turn, usage: UsageTurn | null): TurnMetrics {
   const measured = measuredUsage(usage);
+  const total = measured && !measured.total.overflow ? measured.total : null;
   const cost = pricedCost(measured);
   return {
     wallTimeMs: wallTime(turn),
     ttftMs: timingValue(turn, "ttft_ms"),
     tokensPerSecond: directOutputRate(turn, usage),
-    inputTokens: measured?.total.input_tokens ?? null,
-    outputTokens: totalOutputTokens(measured),
-    cachedReadTokens: measured?.total.cached_read_tokens ?? null,
-    cachedWriteTokens: measured?.total.cached_write_tokens ?? null,
-    reasoningTokens: measured ? reasoningTokenCount(measured) : null,
+    inputTokens: total?.input_complete ? usageTokenCount(total.input_tokens) : null,
+    outputTokens: totalOutputTokens(total),
+    cachedReadTokens: total?.cached_read_tokens_present
+      ? usageTokenCount(total.cached_read_tokens)
+      : null,
+    cachedWriteTokens: total?.cached_write_tokens_present
+      ? usageTokenCount(total.cached_write_tokens)
+      : null,
+    lastResponseReportedCacheWriteTokens: usageTokenCount(
+      measured?.last_response?.reported_cache_write_tokens,
+    ),
+    reasoningTokens: measured?.direct.overflow
+      ? null
+      : usageTokenCount(measured?.direct.reasoning_tokens),
     costSubcents: cost,
     costSources: costSources(measured, cost),
   };

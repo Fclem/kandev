@@ -369,14 +369,15 @@ func TestGetRunDetail_HappyPathWithCosts(t *testing.T) {
 	if resp.AgentID != "agent-1" {
 		t.Errorf("agent id mismatch: %s", resp.AgentID)
 	}
-	if resp.Costs.InputTokens != 100 || resp.Costs.OutputTokens != 200 {
+	if resp.Costs.InputTokens == nil || *resp.Costs.InputTokens != 100 ||
+		resp.Costs.OutputTokens == nil || *resp.Costs.OutputTokens != 200 {
 		t.Errorf("costs mismatch: %+v", resp.Costs)
 	}
-	if resp.Costs.CachedTokens != 5 {
-		t.Errorf("cached tokens mismatch: %d", resp.Costs.CachedTokens)
+	if resp.Costs.CachedTokens == nil || *resp.Costs.CachedTokens != 5 {
+		t.Errorf("cached tokens mismatch: %v", resp.Costs.CachedTokens)
 	}
-	if resp.Costs.CostSubcents != 42 {
-		t.Errorf("cost subcents mismatch: %d", resp.Costs.CostSubcents)
+	if resp.Costs.CostSubcents == nil || *resp.Costs.CostSubcents != 42 {
+		t.Errorf("cost subcents mismatch: %v", resp.Costs.CostSubcents)
 	}
 	if len(resp.TasksTouched) != 1 || resp.TasksTouched[0] != "task-1" {
 		t.Errorf("want primary task in tasks_touched, got %v", resp.TasksTouched)

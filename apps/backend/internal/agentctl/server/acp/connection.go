@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"bufio"
 	"io"
 	"log/slog"
 
@@ -20,7 +21,7 @@ func NewClientSideConnectionWithLogger(
 ) *acpsdk.ClientSideConnection {
 	output := &loggerReadyReader{
 		ready:  make(chan struct{}),
-		reader: peerOutput,
+		reader: &usagePresenceReader{reader: bufio.NewReader(peerOutput)},
 	}
 	conn := acpsdk.NewClientSideConnection(client, peerInput, output, opts...)
 	if logger != nil {

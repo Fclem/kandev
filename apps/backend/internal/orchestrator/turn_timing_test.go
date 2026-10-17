@@ -38,9 +38,9 @@ func TestTurnTimingBindsSyntheticTurnAtFirstOutputOnce(t *testing.T) {
 	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
 	firstOutput := started.Add(125 * time.Millisecond)
 
-	svc.startTurnTiming("session", "execution", "", started)
-	svc.recordTurnFirstOutput("session", "execution", "turn-a", firstOutput)
-	svc.recordTurnFirstOutput("session", "execution", "turn-b", firstOutput.Add(time.Second))
+	svc.startTurnTiming("session", "execution", "", 0, started)
+	svc.recordTurnFirstOutput("session", "execution", "turn-a", 0, firstOutput)
+	svc.recordTurnFirstOutput("session", "execution", "turn-b", 0, firstOutput.Add(time.Second))
 
 	svc.turnTimingMu.Lock()
 	got := svc.turnTimings["session"]
@@ -52,12 +52,12 @@ func TestTurnTimingBindsSyntheticTurnAtFirstOutputOnce(t *testing.T) {
 func TestTurnTimingRepeatedStartReplacesPriorTurn(t *testing.T) {
 	svc := &Service{}
 	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
-	svc.startTurnTiming("session", "execution", "turn-a", started)
-	svc.recordTurnFirstOutput("session", "execution", "turn-a", started.Add(time.Second))
+	svc.startTurnTiming("session", "execution", "turn-a", 0, started)
+	svc.recordTurnFirstOutput("session", "execution", "turn-a", 0, started.Add(time.Second))
 
 	nextStart := started.Add(2 * time.Second)
-	svc.startTurnTiming("session", "execution", "turn-b", nextStart)
-	svc.closeTurnTiming("session", "execution", "turn-a", nextStart.Add(time.Second))
+	svc.startTurnTiming("session", "execution", "turn-b", 0, nextStart)
+	svc.closeTurnTiming("session", "execution", "turn-a", 0, nextStart.Add(time.Second))
 
 	svc.turnTimingMu.Lock()
 	got := svc.turnTimings["session"]
@@ -81,10 +81,10 @@ func TestTurnTimingRejectsMismatchedCloseMark(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &Service{}
-			svc.startTurnTiming("session", "execution", "turn", started)
-			svc.recordTurnFirstOutput("session", "execution", "turn", started.Add(time.Second))
+			svc.startTurnTiming("session", "execution", "turn", 0, started)
+			svc.recordTurnFirstOutput("session", "execution", "turn", 0, started.Add(time.Second))
 
-			svc.closeTurnTiming(tt.sessionID, tt.executionID, tt.turnID, started.Add(2*time.Second))
+			svc.closeTurnTiming(tt.sessionID, tt.executionID, tt.turnID, 0, started.Add(2*time.Second))
 
 			svc.turnTimingMu.Lock()
 			got := svc.turnTimings["session"]
@@ -99,10 +99,10 @@ func TestTurnTimingUsesTerminalCloseBoundary(t *testing.T) {
 	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
 	firstOutput := started.Add(time.Second)
 	terminalClose := started.Add(4 * time.Second)
-	svc.startTurnTiming("session", "execution", "turn", started)
-	svc.recordTurnFirstOutput("session", "execution", "turn", firstOutput)
+	svc.startTurnTiming("session", "execution", "turn", 0, started)
+	svc.recordTurnFirstOutput("session", "execution", "turn", 0, firstOutput)
 
-	svc.closeTurnTiming("session", "execution", "turn", terminalClose)
+	svc.closeTurnTiming("session", "execution", "turn", 0, terminalClose)
 
 	svc.turnTimingMu.Lock()
 	got := svc.turnTimings["session"]
@@ -116,10 +116,10 @@ func TestTurnTimingPreservesReadyCloseMark(t *testing.T) {
 	svc := &Service{}
 	started := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
 	readyClosed := started.Add(3 * time.Second)
-	svc.startTurnTiming("session", "execution", "turn", started)
-	svc.recordTurnFirstOutput("session", "execution", "turn", started.Add(time.Second))
-	svc.closeTurnTiming("session", "execution", "turn", readyClosed)
-	svc.closeTurnTiming("session", "execution", "turn", started.Add(10*time.Second))
+	svc.startTurnTiming("session", "execution", "turn", 0, started)
+	svc.recordTurnFirstOutput("session", "execution", "turn", 0, started.Add(time.Second))
+	svc.closeTurnTiming("session", "execution", "turn", 0, readyClosed)
+	svc.closeTurnTiming("session", "execution", "turn", 0, started.Add(10*time.Second))
 
 	svc.turnTimingMu.Lock()
 	got := svc.turnTimings["session"]

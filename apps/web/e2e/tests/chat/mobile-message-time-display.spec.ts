@@ -68,7 +68,10 @@ test("mobile message timestamps remain contained and open their counterpart", as
   });
 
   for (const option of OPTIONS) {
-    await apiClient.saveUserSettings({ message_time_display: option.value });
+    await apiClient.saveUserSettings({
+      message_time_display: option.value,
+      message_metadata_fields: ["timestamp", "duration"],
+    });
     await testPage.goto(`/t/${task.id}`);
     const session = new SessionPage(testPage);
     await session.waitForLoad();

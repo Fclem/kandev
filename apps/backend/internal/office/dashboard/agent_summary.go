@@ -102,10 +102,10 @@ type AgentRecentTaskDTO struct {
 // AgentCostAggregateDTO is the all-time cost rollup for the agent.
 // TotalCostSubcents stores hundredths of a cent (UI divides by 10000).
 type AgentCostAggregateDTO struct {
-	InputTokens       int64 `json:"input_tokens"`
-	OutputTokens      int64 `json:"output_tokens"`
-	CachedTokens      int64 `json:"cached_tokens"`
-	TotalCostSubcents int64 `json:"total_cost_subcents"`
+	InputTokens       *int64 `json:"input_tokens"`
+	OutputTokens      *int64 `json:"output_tokens"`
+	CachedTokens      *int64 `json:"cached_tokens"`
+	TotalCostSubcents *int64 `json:"total_cost_subcents"`
 }
 
 // AgentRunCostDTO is one row of the per-run costs table.
@@ -120,9 +120,9 @@ type AgentRunCostDTO struct {
 	RunID        string `json:"run_id"`
 	RunIDShort   string `json:"run_id_short"`
 	Date         string `json:"date"`
-	InputTokens  int64  `json:"input_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
-	CostSubcents int64  `json:"cost_subcents"`
+	InputTokens  *int64 `json:"input_tokens"`
+	OutputTokens *int64 `json:"output_tokens"`
+	CostSubcents *int64 `json:"cost_subcents"`
 }
 
 // AgentSummaryRepository is the slim repository surface the

@@ -148,10 +148,12 @@ func GrokContextWindow(
 }
 
 // GrokReasoningTokens reads Grok's nested prompt usage extension.
-func GrokReasoningTokens(meta map[string]any) int64 {
+func GrokReasoningTokens(meta map[string]any) (int64, bool) {
 	usage, _ := meta["usage"].(map[string]any)
-	value, _ := nonNegativeInt64(usage, "reasoningTokens")
-	return value
+	if value, ok := usage["reasoningTokens"].(float64); ok && value >= math.Exp2(53) {
+		return 0, false
+	}
+	return nonNegativeInt64(usage, "reasoningTokens")
 }
 
 func buildModelOption(models []Model, currentModelID string) *streams.ConfigOption {

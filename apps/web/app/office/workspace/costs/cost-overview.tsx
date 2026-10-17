@@ -25,7 +25,8 @@ import { t as staticT } from "@/lib/i18n";
 type DateRange = "mtd" | "30d";
 
 type CostOverviewData = {
-  totalSubcents: number;
+  totalSubcents: number | null;
+  coverageDegraded: boolean;
   byAgent: CostBreakdownItem[];
   byProject: CostBreakdownItem[];
   byModel: CostBreakdownItem[];
@@ -33,7 +34,8 @@ type CostOverviewData = {
 };
 
 const EMPTY_COST_OVERVIEW: CostOverviewData = {
-  totalSubcents: 0,
+  totalSubcents: null,
+  coverageDegraded: false,
   byAgent: [],
   byProject: [],
   byModel: [],
@@ -42,7 +44,8 @@ const EMPTY_COST_OVERVIEW: CostOverviewData = {
 
 export function CostOverview({ workspaceId }: { workspaceId: string }) {
   const [range, setRange] = useState<DateRange>("mtd");
-  const [totalSubcents, setTotalSubcents] = useState(0);
+  const [totalSubcents, setTotalSubcents] = useState<number | null>(null);
+  const [coverageDegraded, setCoverageDegraded] = useState(false);
   const [byAgent, setByAgent] = useState<CostBreakdownItem[]>([]);
   const [byProject, setByProject] = useState<CostBreakdownItem[]>([]);
   const [byModel, setByModel] = useState<CostBreakdownItem[]>([]);
@@ -63,11 +66,12 @@ export function CostOverview({ workspaceId }: { workspaceId: string }) {
         if (current !== requestId.current) return;
         setLoadedWorkspaceId(workspaceId);
         setLoadedRange(range);
-        setTotalSubcents(res.total_subcents ?? 0);
-        setByAgent((res.by_agent ?? []) as CostBreakdownItem[]);
-        setByProject((res.by_project ?? []) as CostBreakdownItem[]);
-        setByModel((res.by_model ?? []) as CostBreakdownItem[]);
-        setByProvider((res.by_provider ?? []) as CostBreakdownItem[]);
+        setTotalSubcents(res.total_subcents);
+        setCoverageDegraded(res.coverage_degraded);
+        setByAgent(res.by_agent);
+        setByProject(res.by_project);
+        setByModel(res.by_model);
+        setByProvider(res.by_provider);
       })
       .catch((err) => {
         if (current !== requestId.current) return;
@@ -89,7 +93,7 @@ export function CostOverview({ workspaceId }: { workspaceId: string }) {
   // A pending or failed selection cannot display another window's spending.
   const displayData =
     loadedWorkspaceId === workspaceId && loadedRange === range
-      ? { totalSubcents, byAgent, byProject, byModel, byProvider }
+      ? { totalSubcents, coverageDegraded, byAgent, byProject, byModel, byProvider }
       : EMPTY_COST_OVERVIEW;
 
   return <CostOverviewContent range={range} onRangeChange={setRange} {...displayData} />;
@@ -104,6 +108,7 @@ function CostOverviewContent({
   range,
   onRangeChange,
   totalSubcents,
+  coverageDegraded,
   byAgent,
   byProject,
   byModel,
@@ -136,6 +141,7 @@ function CostOverviewContent({
           icon={IconCurrencyDollar}
           label={t("office:totalSpend")}
           value={formatDollars(totalSubcents)}
+          description={coverageDegraded ? t("office:costCoverageIncomplete") : undefined}
         />
         <MetricCard
           icon={IconRobot}

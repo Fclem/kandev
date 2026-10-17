@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"math"
 	"testing"
 
@@ -77,8 +79,79 @@ func TestPromptUsage_CacheSplitRecordedWhenNotEstimated(t *testing.T) {
 	}
 	// tokens_cached_in keeps its original sum semantics for existing
 	// consumers (e.g. the tree-holds rollup and card 2faa29da).
-	if row.TokensCachedIn != 100 {
-		t.Errorf("TokensCachedIn = %d, want 100 (read+write, unchanged semantics)", row.TokensCachedIn)
+	if row.TokensCachedIn == nil || *row.TokensCachedIn != 100 {
+		t.Errorf("TokensCachedIn = %v, want 100", row.TokensCachedIn)
+	}
+}
+
+func TestPromptUsageCachedMergeOverflowPreservesIndependentMeasurements(t *testing.T) {
+	for _, read := range []int64{math.MaxInt64, 40, 0} {
+		t.Run(fmt.Sprint(read), func(t *testing.T) {
+			svc, eb := newTestServiceWithBus(t)
+			ctx := context.Background()
+			createTestAgent(t, svc, "ws-1", "worker-overflow")
+			insertTestTask(t, svc, "task-overflow", "ws-1")
+			setTestTaskAssignee(t, svc, "task-overflow", "worker-overflow")
+			write := int64(1)
+			if read == 0 {
+				write = 0
+			}
+			event := bus.NewEvent(events.SessionPromptUsageUpdated, "test", map[string]interface{}{
+				"task_id": "task-overflow", "session_id": "session-overflow", "agent_id": "claude-acp",
+				"model": "sonnet", "usage": map[string]interface{}{
+					"input_tokens": 100, "cached_read_tokens": read, "cached_write_tokens": write,
+					"output_tokens": 20, "provider_reported_cost_subcents": 123,
+					"provider_reported_cost_present": true,
+				},
+			})
+			if err := eb.Publish(ctx, events.BuildSessionPromptUsageSubject("session-overflow"), event); err != nil {
+				t.Fatal(err)
+			}
+			rows, err := svc.ListCostEvents(ctx, "ws-1")
+			if err != nil || len(rows) != 1 {
+				t.Fatalf("independent priced row lost: rows=%+v error=%v", rows, err)
+			}
+			row := rows[0]
+			if row.CostSubcents != 123 || row.TokensOut == nil || *row.TokensOut != 20 {
+				t.Fatalf("cache overflow corrupted independent cost/output: %+v", row)
+			}
+			if read != 0 && (row.TokensCachedRead == nil || *row.TokensCachedRead != read ||
+				row.TokensCachedWrite == nil || *row.TokensCachedWrite != write) {
+				t.Fatalf("independent cache split lost: %+v", row)
+			}
+			encoded, err := json.Marshal(row)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(encoded, &fields); err != nil {
+				t.Fatal(err)
+			}
+			want := "null"
+			if read != math.MaxInt64 {
+				want = fmt.Sprint(read + write)
+			}
+			if string(fields["tokens_cached_in"]) != want {
+				t.Fatalf("merged cache count=%s, want %s; row=%s", fields["tokens_cached_in"], want, encoded)
+			}
+			if read == math.MaxInt64 {
+				agent, err := svc.RepoForTest().CostAggregateForAgent(ctx, row.AgentProfileID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				tree, err := svc.RepoForTest().GetSubtreeCostSummary(ctx, "task-overflow")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if agent.CachedTokens != nil || tree.TokensCachedIn != nil ||
+					agent.TotalCostSubcents == nil || *agent.TotalCostSubcents != 123 ||
+					tree.CostSubcents == nil || *tree.CostSubcents != 123 ||
+					agent.OutputTokens == nil || *agent.OutputTokens != 20 ||
+					tree.TokensOut == nil || *tree.TokensOut != 20 {
+					t.Fatalf("incomplete cached total corrupted independent aggregates: agent=%+v tree=%+v", agent, tree)
+				}
+			}
+		})
 	}
 }
 
@@ -176,8 +249,8 @@ func TestPromptUsage_CacheSplitPersistedWhenEstimatedWithCacheData(t *testing.T)
 	if row.TokensCachedWrite == nil || *row.TokensCachedWrite != 0 {
 		t.Errorf("TokensCachedWrite = %v, want 0 (explicit, not nil)", row.TokensCachedWrite)
 	}
-	if row.TokensCachedIn != 22272 {
-		t.Errorf("TokensCachedIn = %d, want 22272 (read+write, unchanged semantics)", row.TokensCachedIn)
+	if row.TokensCachedIn == nil || *row.TokensCachedIn != 22272 {
+		t.Errorf("TokensCachedIn = %v, want 22272", row.TokensCachedIn)
 	}
 }
 
@@ -317,9 +390,6 @@ func TestPromptUsage_CostSourceModelsDevList(t *testing.T) {
 	}
 	if row.PricingCatalogVersion == nil || *row.PricingCatalogVersion != "2026-08-12T00:00:00Z" {
 		t.Errorf("PricingCatalogVersion = %v, want the fake's version", row.PricingCatalogVersion)
-	}
-	if row.CostContractVersion == nil || *row.CostContractVersion != 3 {
-		t.Errorf("CostContractVersion = %v, want 3 (in-band activation point)", row.CostContractVersion)
 	}
 }
 
@@ -627,9 +697,6 @@ func TestPromptUsage_TokensOutNullWhenUnmeasured(t *testing.T) {
 	}
 	if row.CostSubcents != 76700 {
 		t.Fatalf("cost_subcents = %d, want 76700 (real money on an unmeasured-output row)", row.CostSubcents)
-	}
-	if row.CostContractVersion == nil || *row.CostContractVersion != 3 {
-		t.Errorf("CostContractVersion = %v, want 3 (v2→v3: tokens_out nullability)", row.CostContractVersion)
 	}
 	// Asserting the negative directly, per the card's regression bullet: no
 	// row may present real money against an unmeasured zero.

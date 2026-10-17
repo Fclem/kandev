@@ -4,6 +4,7 @@ import { deriveTurnMetrics } from "@/lib/turn-metrics";
 import { formatUsageCost, formatUsageTokens } from "@/lib/utils/conversation-usage";
 import type { MessageMetadataField } from "@/lib/message-metadata-fields";
 import type { Turn } from "@/lib/types/http";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 
 const USAGE_TEXT = "min-w-0 max-w-full break-words text-[10px] text-muted-foreground/60 font-mono";
 
@@ -19,9 +20,7 @@ export function MessageMetadataUsageItems({
   fields: readonly MessageMetadataField[];
 }) {
   const { t, i18n } = useTranslation();
-  const { usageTurn } = useSessionUsageTurn(taskId, sessionId, turn.id, {
-    fallbackToSingleTurn: true,
-  });
+  const { usageTurn } = useSessionUsageTurn(taskId, sessionId, turn.id);
   const metrics = deriveTurnMetrics(turn, usageTurn);
   const tokenBreakdown = [
     metrics.inputTokens === null
@@ -50,15 +49,16 @@ export function MessageMetadataUsageItems({
   return (
     <>
       {fields.includes("tps") && metrics.tokensPerSecond !== null && (
-        <span
-          className={USAGE_TEXT}
-          data-testid="message-metadata-tps"
-          title={t("task:turnMetrics.tokensPerSecondHelp")}
-        >
-          {t("task:turnMetrics.rateValue", {
-            value: rateFormatter.format(metrics.tokensPerSecond),
-          })}
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} className={USAGE_TEXT} data-testid="message-metadata-tps">
+              {t("task:turnMetrics.rateValue", {
+                value: rateFormatter.format(metrics.tokensPerSecond),
+              })}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{t("task:turnMetrics.tokensPerSecondHelp")}</TooltipContent>
+        </Tooltip>
       )}
       {fields.includes("tokens") && tokenBreakdown && (
         <span className={USAGE_TEXT} data-testid="message-metadata-tokens">

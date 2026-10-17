@@ -485,7 +485,7 @@ func computeDuration(startedAt string, completedAt *string, now time.Time) int64
 type dashboardQueryBundle struct {
 	agents           []*models.AgentInstance
 	pendingApprovals int
-	monthSpend       int64
+	monthSpend       models.CostSummary
 	activity         []*models.ActivityEntry
 	taskCount        int
 	skillCount       int
@@ -594,19 +594,20 @@ func (s *DashboardService) GetDashboardData(ctx context.Context, wsID string) (*
 
 	agentCounts := countAgentsByStatus(b.agents)
 	return &models.DashboardData{
-		AgentCount:         len(b.agents),
-		RunningCount:       agentCounts.running,
-		PausedCount:        agentCounts.paused,
-		ErrorCount:         agentCounts.errors,
-		MonthSpendSubcents: b.monthSpend,
-		PendingApprovals:   b.pendingApprovals,
-		RecentActivity:     b.activity,
-		TaskCount:          b.taskCount,
-		SkillCount:         b.skillCount,
-		RoutineCount:       b.routineCount,
-		RunActivity:        b.runActivity,
-		TaskBreakdown:      b.taskBreakdown,
-		RecentTasks:        b.recentTasks,
+		AgentCount:                 len(b.agents),
+		RunningCount:               agentCounts.running,
+		PausedCount:                agentCounts.paused,
+		ErrorCount:                 agentCounts.errors,
+		MonthSpendSubcents:         b.monthSpend.TotalSubcents,
+		MonthSpendCoverageDegraded: b.monthSpend.CoverageDegraded,
+		PendingApprovals:           b.pendingApprovals,
+		RecentActivity:             b.activity,
+		TaskCount:                  b.taskCount,
+		SkillCount:                 b.skillCount,
+		RoutineCount:               b.routineCount,
+		RunActivity:                b.runActivity,
+		TaskBreakdown:              b.taskBreakdown,
+		RecentTasks:                b.recentTasks,
 	}, nil
 }
 

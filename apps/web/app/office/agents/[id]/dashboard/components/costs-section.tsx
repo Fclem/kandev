@@ -16,7 +16,8 @@ type Props = {
  * the table stays narrow without losing meaning. Falls back to the
  * raw integer for smaller values.
  */
-function formatTokens(n: number): string {
+function formatTokens(n: number | null): string {
+  if (n === null) return "-";
   if (!Number.isFinite(n) || n === 0) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;

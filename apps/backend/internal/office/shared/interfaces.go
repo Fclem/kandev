@@ -123,12 +123,10 @@ type ActivityLogger interface {
 	LogActivityWithRun(ctx context.Context, wsID, actorType, actorID, action, targetType, targetID, details, runID, sessionID string)
 }
 
-// CostChecker reads cost data for budget and dashboard features.
-// Implemented by the costs feature (and transitionally by office/service.Service).
+// CostChecker reads recorded money and price coverage for dashboard features.
+// Implemented by the costs feature.
 type CostChecker interface {
-	// GetCostSummary returns the total spend in subcents (hundredths of a
-	// cent) for a workspace.
-	GetCostSummary(ctx context.Context, wsID string) (int64, error)
+	GetCostSummary(ctx context.Context, wsID string) (models.CostSummary, error)
 }
 
 // BudgetChecker evaluates budget policies before or after execution.

@@ -76,19 +76,23 @@ func (w *Writer) buildRow(ctx context.Context, p *usageEventPayload, occurredAt 
 	}
 
 	event.TokensIn = usage.InputTokens
-	cachedRead := usage.CachedReadTokens
-	cachedWrite := usage.CachedWriteTokens
-	thought := usage.ThoughtTokens
-	event.TokensCachedRead = &cachedRead
-	event.TokensCachedWrite = &cachedWrite
-	event.TokensThought = &thought
+	event.TokensInMissing = !usage.InputTokensPresent && usage.InputTokens == 0
+	if usage.CachedReadTokensPresent || usage.CachedReadTokens != 0 {
+		event.TokensCachedRead = &usage.CachedReadTokens
+	}
+	if usage.CachedWriteTokensPresent || usage.CachedWriteTokens != 0 {
+		event.TokensCachedWrite = &usage.CachedWriteTokens
+	}
+	if usage.ThoughtTokensPresent || usage.ThoughtTokens != 0 {
+		event.TokensThought = &usage.ThoughtTokens
+	}
 	if usage.OutputTokensPresent {
 		out := usage.OutputTokens
 		event.TokensOut = &out
 	}
 	var ok bool
 	event.TokensTotal, ok = sumTokenCounts(
-		event.TokensIn, cachedRead, cachedWrite, optionalInt64(event.TokensOut), thought,
+		event.TokensIn, usage.CachedReadTokens, usage.CachedWriteTokens, optionalInt64(event.TokensOut), usage.ThoughtTokens,
 	)
 	if !ok {
 		return nil
@@ -129,7 +133,7 @@ func (w *Writer) resolveCost(ctx context.Context, event *models.TaskUsageEvent, 
 		event.CostSource = CostSourceProviderReported
 		return
 	}
-	if w.pricing == nil {
+	if w.pricing == nil || event.TokensInMissing || event.TokensOut == nil {
 		event.CostSource = CostSourceUnpriced
 		return
 	}

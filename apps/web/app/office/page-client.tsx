@@ -31,13 +31,6 @@ import { UtilizationBars } from "./components/utilization-bars";
 import { formatDollars } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
-// formatMonthSpend renders the subcents value from /office dashboard
-// as USD. The shared formatDollars helper owns the unit boundary; this
-// is a local alias for readability.
-function formatMonthSpend(subcents: number): string {
-  return formatDollars(subcents);
-}
-
 type OfficePageClientProps = {
   initialDashboard?: DashboardData | null;
   initialWorkspaceId?: string | null;
@@ -49,7 +42,8 @@ const EMPTY_METRICS = {
   paused: 0,
   errors: 0,
   tasksInProgress: 0,
-  monthSpend: 0,
+  monthSpend: null,
+  monthSpendCoverageDegraded: false,
   pendingApprovals: 0,
   recentActivity: [] as DashboardData["recent_activity"],
   taskBreakdown: { open: 0, in_progress: 0, blocked: 0, done: 0 },
@@ -64,6 +58,7 @@ function extractMetrics(dashboard: DashboardData | null) {
     errors: dashboard.error_count,
     tasksInProgress: dashboard.tasks_in_progress,
     monthSpend: dashboard.month_spend_subcents,
+    monthSpendCoverageDegraded: dashboard.month_spend_coverage_degraded,
     pendingApprovals: dashboard.pending_approvals,
     recentActivity: (dashboard.recent_activity ?? []).map(normalizeActivityEntry),
     taskBreakdown: dashboard.task_breakdown ?? { open: 0, in_progress: 0, blocked: 0, done: 0 },
@@ -98,9 +93,13 @@ function MetricsGrid({ m }: { m: ReturnType<typeof extractMetrics> }) {
       <Link href="/office/workspace/costs" className="cursor-pointer">
         <MetricCard
           icon={IconCurrencyDollar}
-          value={formatMonthSpend(m.monthSpend)}
+          value={formatDollars(m.monthSpend)}
           label={t("office:monthSpend")}
-          description={t("office:totalApiCostsThisBillingPeriod")}
+          description={
+            m.monthSpendCoverageDegraded
+              ? t("office:costCoverageIncomplete")
+              : t("office:totalApiCostsThisBillingPeriod")
+          }
         />
       </Link>
       <Link href="/office/inbox" className="cursor-pointer">

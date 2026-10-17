@@ -26,6 +26,8 @@ type Repository interface {
 	GetCostsByProviderInWindow(ctx context.Context, workspaceID string, start, before time.Time) ([]*CostBreakdown, error)
 	SumCostsInWindow(ctx context.Context, workspaceID string, start, before time.Time) (int64, error)
 	SumCosts(ctx context.Context, workspaceID string) (int64, error)
+	GetCostSummary(ctx context.Context, workspaceID string) (models.CostSummary, error)
+	GetCostSummaryInWindow(ctx context.Context, workspaceID string, start, before time.Time) (models.CostSummary, error)
 	SumCostsSince(ctx context.Context, workspaceID string, since time.Time) (int64, error)
 	GetCostForAgent(ctx context.Context, agentID string) (int64, error)
 	GetCostForAgentSince(ctx context.Context, agentID string, since time.Time) (int64, error)
@@ -109,7 +111,7 @@ func (s *CostService) RecordCostEvent(
 		Model:               model,
 		Provider:            provider,
 		TokensIn:            tokensIn,
-		TokensCachedIn:      tokensCachedIn,
+		TokensCachedIn:      &tokensCachedIn,
 		TokensOut:           tokensOut,
 		CostSubcents:        costSubcents,
 		Estimated:           estimated,
@@ -129,10 +131,10 @@ func (s *CostService) RecordCostEvent(
 	return event, nil
 }
 
-// GetCostSummary returns total spend in subcents for a workspace.
+// GetCostSummary returns recorded spend and its price coverage for a workspace.
 // Implements shared.CostChecker.
-func (s *CostService) GetCostSummary(ctx context.Context, wsID string) (int64, error) {
-	return s.repo.SumCosts(ctx, wsID)
+func (s *CostService) GetCostSummary(ctx context.Context, wsID string) (models.CostSummary, error) {
+	return s.repo.GetCostSummary(ctx, wsID)
 }
 
 // ListCostEvents returns cost events for a workspace.
@@ -160,25 +162,17 @@ func (s *CostService) GetCostsByProvider(ctx context.Context, wsID string) ([]*C
 	return s.repo.GetCostsByProvider(ctx, wsID)
 }
 
-// GetCostsBreakdown bundles the four cost views surfaced on the costs
-// overview page (total + by-agent / by-project / by-model). All four
-// aggregations run concurrently via errgroup so total wall time tracks the
-// slowest query rather than the sum (Stream D of office optimization).
-//
-// Each underlying repo call uses its own DB connection from the shared
-// read-only pool. SQLite WAL mode gives concurrent readers a consistent
-// snapshot of the cost_events table at query time, so the four views are
-// drift-free for the typical sub-second query latency without an explicit
-// BEGIN/COMMIT block.
+// GetCostsBreakdown reads the workspace summary and four grouped views concurrently.
+// Each query has its own database snapshot; there is no cross-view snapshot guarantee.
 func (s *CostService) GetCostsBreakdown(
 	ctx context.Context, wsID string,
-) (total int64, byAgent, byProject, byModel, byProvider []*CostBreakdown, err error) {
+) (total models.CostSummary, byAgent, byProject, byModel, byProvider []*CostBreakdown, err error) {
 	return s.getCostsBreakdown(ctx, wsID, nil)
 }
 
 func (s *CostService) getCostsBreakdown(
 	ctx context.Context, wsID string, window *costWindow,
-) (total int64, byAgent, byProject, byModel, byProvider []*CostBreakdown, err error) {
+) (total models.CostSummary, byAgent, byProject, byModel, byProvider []*CostBreakdown, err error) {
 	sum, readers := s.breakdownReaders(wsID, window)
 	var groups [4][]*CostBreakdown
 	g, gctx := errgroup.WithContext(ctx)
@@ -199,7 +193,7 @@ func (s *CostService) getCostsBreakdown(
 		})
 	}
 	if err = g.Wait(); err != nil {
-		return 0, nil, nil, nil, nil, err
+		return models.CostSummary{}, nil, nil, nil, nil, err
 	}
 	for i := range groups {
 		if groups[i] == nil {

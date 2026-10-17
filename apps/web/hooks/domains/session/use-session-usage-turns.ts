@@ -1,14 +1,14 @@
 "use client";
 import type { Dispatch, SetStateAction } from "react";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { ApiError } from "@/lib/api/client";
 import {
   getSessionUsageTurn,
   listSessionUsageTurns,
 } from "@/lib/api/domains/conversation-usage-api";
-import type { UsageTurn } from "@/lib/types/conversation-usage";
+import type { UsageTurn, UsageTurnsPage } from "@/lib/types/conversation-usage";
 
 type UsageStore = ReturnType<typeof useAppStoreApi>;
 
@@ -17,12 +17,11 @@ const MAX_PAGES_PER_DEMAND = 3;
 
 type UsageReadState = {
   key: string;
-  status: "loading" | "available" | "not_found" | "unavailable";
-  turn?: UsageTurn;
+  status: "loading" | "not_found" | "unavailable";
 };
 
-const pageRequests = new Map<string, Promise<void>>();
-const turnRequests = new Map<string, Promise<UsageTurn>>();
+const pageRequests = new Map<string, Promise<UsageTurnsPage>>();
+const turnRequests = new Map<string, Promise<void>>();
 
 function usageKey(taskId: string, sessionId: string, turnId: string) {
   return `${taskId}\u0000${sessionId}\u0000${turnId}`;
@@ -43,43 +42,104 @@ function requestTurnPage(
   sessionId: string,
   cursor: string | undefined,
   mode: "append" | "refresh",
-): Promise<void> {
+): Promise<UsageTurnsPage> {
   const requestKey = `${taskId}\u0000${sessionId}\u0000${cursor ?? "<newest>"}\u0000${mode}`;
   const existing = pageRequests.get(requestKey);
   if (existing) return existing;
-  const request = listSessionUsageTurns(taskId, sessionId, {
-    limit: USAGE_TURN_PAGE_SIZE,
-    ...(cursor ? { cursor } : {}),
-  })
-    .then((page) => {
-      store.getState().setSessionUsageTurnPage(sessionId, page, mode);
-    })
-    .finally(() => pageRequests.delete(requestKey));
+  // Keep the newest-page read in flight until it covers every observed invalidation.
+  const request = (async () => {
+    let refreshedInvalidation: number;
+    let page: UsageTurnsPage;
+    do {
+      refreshedInvalidation = store.getState().usageInvalidation.bySessionId[sessionId] ?? 0;
+      page = await listSessionUsageTurns(taskId, sessionId, {
+        limit: USAGE_TURN_PAGE_SIZE,
+        ...(cursor ? { cursor } : {}),
+      });
+      store.getState().setSessionUsageTurnPage(sessionId, page, mode, refreshedInvalidation);
+    } while (
+      !cursor &&
+      (store.getState().usageInvalidation.bySessionId[sessionId] ?? 0) !== refreshedInvalidation
+    );
+    return page;
+  })().finally(() => pageRequests.delete(requestKey));
   pageRequests.set(requestKey, request);
   return request;
 }
 
-function requestSingleTurn(taskId: string, sessionId: string, turnId: string): Promise<UsageTurn> {
+function requestSingleTurn(
+  store: UsageStore,
+  taskId: string,
+  sessionId: string,
+  turnId: string,
+): Promise<void> {
   const requestKey = usageKey(taskId, sessionId, turnId);
   const existing = turnRequests.get(requestKey);
   if (existing) return existing;
-  const request = getSessionUsageTurn(taskId, sessionId, turnId).finally(() =>
-    turnRequests.delete(requestKey),
-  );
+  const request = (async () => {
+    let refreshedInvalidation: number;
+    do {
+      refreshedInvalidation = store.getState().usageInvalidation.bySessionId[sessionId] ?? 0;
+      try {
+        const turn = await getSessionUsageTurn(taskId, sessionId, turnId);
+        store.getState().setSessionUsageTurn(sessionId, turn, refreshedInvalidation);
+      } catch (error) {
+        const state = store.getState();
+        const index = state.usageTurns.bySessionId[sessionId];
+        if (
+          !(error instanceof ApiError && error.status === 404) ||
+          (state.usageInvalidation.bySessionId[sessionId] ?? 0) === refreshedInvalidation ||
+          (index?.exhausted && !index.byTurnId[turnId])
+        ) {
+          throw error;
+        }
+      }
+    } while (
+      (store.getState().usageInvalidation.bySessionId[sessionId] ?? 0) !== refreshedInvalidation
+    );
+  })().finally(() => turnRequests.delete(requestKey));
   turnRequests.set(requestKey, request);
   return request;
 }
 
+function indexedTurnIsStale(store: UsageStore, sessionId: string, turnId: string): boolean {
+  const state = store.getState();
+  const index = state.usageTurns.bySessionId[sessionId];
+  return (
+    !!index?.byTurnId[turnId] &&
+    (index.refreshedInvalidationByTurnId?.[turnId] ?? 0) <
+      (state.usageInvalidation.bySessionId[sessionId] ?? 0)
+  );
+}
+
+/**
+ * A demanded turn missing from the index is most likely newer than the indexed pages, so the
+ * newest page is refreshed once before the cursor walks to older pages. `exhausted` only
+ * means older history is fully loaded; it never short-circuits this refresh.
+ */
 async function indexUntilTurn(
   store: UsageStore,
   taskId: string,
   sessionId: string,
   turnId: string,
 ): Promise<void> {
-  for (let pageNumber = 0; pageNumber < MAX_PAGES_PER_DEMAND; pageNumber += 1) {
-    const index = store.getState().usageTurns.bySessionId[sessionId];
-    if (index?.byTurnId[turnId] || index?.exhausted) return;
-    await requestTurnPage(store, taskId, sessionId, index?.nextCursor, "append");
+  const readIndex = () => store.getState().usageTurns.bySessionId[sessionId];
+  if (readIndex()?.byTurnId[turnId]) {
+    if (!indexedTurnIsStale(store, sessionId, turnId)) return;
+    const invalidation = store.getState().usageInvalidation.bySessionId[sessionId] ?? 0;
+    if (readIndex()?.refreshedInvalidation !== invalidation) {
+      await requestTurnPage(store, taskId, sessionId, undefined, "refresh");
+    }
+    if (indexedTurnIsStale(store, sessionId, turnId)) {
+      await requestSingleTurn(store, taskId, sessionId, turnId);
+    }
+    return;
+  }
+  await requestTurnPage(store, taskId, sessionId, undefined, "refresh");
+  for (let pageNumber = 1; pageNumber < MAX_PAGES_PER_DEMAND; pageNumber += 1) {
+    const index = readIndex();
+    if (index?.byTurnId[turnId] || index?.exhausted || !index?.nextCursor) return;
+    await requestTurnPage(store, taskId, sessionId, index.nextCursor, "append");
   }
 }
 
@@ -94,18 +154,19 @@ type ReadUsageTurnOptions = {
 };
 
 async function readSingleTurnFallback({
+  store,
   taskId,
   sessionId,
   turnId,
   requestKey,
   isActive,
   setReadState,
-}: Omit<ReadUsageTurnOptions, "store" | "fallbackToSingleTurn"> & {
+}: Omit<ReadUsageTurnOptions, "fallbackToSingleTurn"> & {
   requestKey: string;
 }): Promise<void> {
   try {
-    const turn = await requestSingleTurn(taskId, sessionId, turnId);
-    if (isActive()) setReadState({ key: requestKey, status: "available", turn });
+    await requestSingleTurn(store, taskId, sessionId, turnId);
+    if (isActive()) setReadState(null);
   } catch (error) {
     if (!isActive()) return;
     const notFound = error instanceof ApiError && error.status === 404;
@@ -128,11 +189,15 @@ async function readUsageTurn({
     if (!isActive()) return;
     const index = store.getState().usageTurns.bySessionId[sessionId];
     if (index?.byTurnId[turnId]) {
-      setReadState(null);
+      if (indexedTurnIsStale(store, sessionId, turnId)) {
+        await requestSingleTurn(store, taskId, sessionId, turnId);
+      }
+      if (isActive()) setReadState(null);
       return;
     }
     if (fallbackToSingleTurn && !index?.exhausted) {
       await readSingleTurnFallback({
+        store,
         taskId,
         sessionId,
         turnId,
@@ -148,11 +213,21 @@ async function readUsageTurn({
   }
 }
 
-function isMissingIndexedTurn(
+function projectUsageTurnRead(
+  store: UsageStore,
+  sessionId: string | null,
+  turnId: string | null,
   indexedTurn: UsageTurn | undefined,
-  indexExhausted: boolean,
-): boolean {
-  return !indexedTurn && indexExhausted;
+  readState: UsageReadState | null,
+) {
+  const stale = !!(sessionId && turnId && indexedTurnIsStale(store, sessionId, turnId));
+  const usageTurn = stale ? null : (indexedTurn ?? null);
+  return {
+    usageTurn,
+    isLoading: readState?.status === "loading" || (stale && !readState),
+    isUnavailable: !usageTurn && readState?.status === "unavailable",
+    isNotFound: !usageTurn && readState?.status === "not_found",
+  };
 }
 
 export function useSessionUsageTurn(
@@ -168,15 +243,64 @@ export function useSessionUsageTurn(
   const invalidation = useAppStore((state) =>
     sessionId ? (state.usageInvalidation.bySessionId[sessionId] ?? 0) : 0,
   );
+  const connectionStatus = useAppStore((state) => state.connection.status);
   const [readState, setReadState] = useState<UsageReadState | null>(null);
-  const lastInvalidation = useRef(invalidation);
+  const wasConnected = useRef(connectionStatus === "connected");
   const key = usageReadKey(taskId, sessionId, turnId);
   const indexedTurn = turnId ? index?.byTurnId[turnId] : undefined;
+  const activeKey = useRef(key);
+
+  const refreshNewestPage = useCallback(
+    (forceHistorical = false) => {
+      if (!taskId || !sessionId) return;
+      if (turnId && indexedTurnIsStale(store, sessionId, turnId)) {
+        setReadState({ key: usageKey(taskId, sessionId, turnId), status: "loading" });
+      }
+      void requestTurnPage(store, taskId, sessionId, undefined, "refresh")
+        .then(async (page) => {
+          if (activeKey.current !== usageReadKey(taskId, sessionId, turnId)) return;
+          if (!turnId) return;
+          const index = store.getState().usageTurns.bySessionId[sessionId];
+          if (!index?.byTurnId[turnId]) {
+            if (fallbackToSingleTurn && !index?.exhausted) {
+              const requestKey = usageKey(taskId, sessionId, turnId);
+              await readSingleTurnFallback({
+                store,
+                taskId,
+                sessionId,
+                turnId,
+                requestKey,
+                isActive: () => activeKey.current === requestKey,
+                setReadState,
+              });
+            }
+            return;
+          }
+          if (
+            !page.turns.some((turn) => turn.turn_id === turnId) &&
+            (forceHistorical || indexedTurnIsStale(store, sessionId, turnId))
+          ) {
+            await requestSingleTurn(store, taskId, sessionId, turnId);
+          }
+          if (activeKey.current === usageReadKey(taskId, sessionId, turnId)) {
+            setReadState(null);
+          }
+        })
+        .catch(() => {
+          if (activeKey.current !== usageReadKey(taskId, sessionId, turnId)) return;
+          if (turnId) {
+            setReadState({ key: usageKey(taskId, sessionId, turnId), status: "unavailable" });
+          }
+        });
+    },
+    [fallbackToSingleTurn, sessionId, store, taskId, turnId],
+  );
 
   useEffect(() => {
     if (!taskId || !sessionId || !turnId) return;
     let active = true;
     const requestKey = usageKey(taskId, sessionId, turnId);
+    activeKey.current = requestKey;
     setReadState({ key: requestKey, status: "loading" });
     void readUsageTurn({
       store,
@@ -189,26 +313,27 @@ export function useSessionUsageTurn(
     });
     return () => {
       active = false;
+      activeKey.current = "";
     };
   }, [taskId, sessionId, turnId, fallbackToSingleTurn, store]);
 
+  // The index remembers the invalidation counter its newest page was refreshed at, so a hook
+  // mounting after turns completed while the view was unmounted refreshes too. A session with
+  // no index yet is loaded by the demand read above.
   useEffect(() => {
-    if (!taskId || !sessionId || lastInvalidation.current === invalidation) return;
-    lastInvalidation.current = invalidation;
-    void requestTurnPage(store, taskId, sessionId, undefined, "refresh").catch(() => {
-      if (turnId && !store.getState().usageTurns.bySessionId[sessionId]?.byTurnId[turnId]) {
-        setReadState({ key: usageKey(taskId, sessionId, turnId), status: "unavailable" });
-      }
-    });
-  }, [invalidation, sessionId, store, taskId, turnId]);
+    if (!sessionId) return;
+    const entry = store.getState().usageTurns.bySessionId[sessionId];
+    if (entry && entry.refreshedInvalidation !== invalidation) refreshNewestPage();
+  }, [invalidation, refreshNewestPage, sessionId, store]);
+
+  // Invalidations published while the socket was down never arrive; refresh on reconnect.
+  useEffect(() => {
+    const connected = connectionStatus === "connected";
+    const reconnected = connected && !wasConnected.current;
+    wasConnected.current = connected;
+    if (reconnected) refreshNewestPage(true);
+  }, [connectionStatus, refreshNewestPage]);
 
   const currentReadState = readState?.key === key ? readState : null;
-  return {
-    usageTurn: indexedTurn ?? currentReadState?.turn ?? null,
-    isLoading: currentReadState?.status === "loading",
-    isUnavailable: currentReadState?.status === "unavailable",
-    isNotFound:
-      currentReadState?.status === "not_found" ||
-      isMissingIndexedTurn(indexedTurn, index?.exhausted === true),
-  };
+  return projectUsageTurnRead(store, sessionId, turnId, indexedTurn, currentReadState);
 }

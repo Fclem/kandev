@@ -57,22 +57,23 @@ type AgentSummariesResponse struct {
 
 // DashboardResponse wraps the full dashboard data.
 type DashboardResponse struct {
-	AgentCount         int                     `json:"agent_count"`
-	RunningCount       int                     `json:"running_count"`
-	PausedCount        int                     `json:"paused_count"`
-	ErrorCount         int                     `json:"error_count"`
-	TasksInProgress    int                     `json:"tasks_in_progress"`
-	OpenTasks          int                     `json:"open_tasks"`
-	BlockedTasks       int                     `json:"blocked_tasks"`
-	MonthSpendSubcents int64                   `json:"month_spend_subcents"`
-	PendingApprovals   int                     `json:"pending_approvals"`
-	RecentActivity     []*models.ActivityEntry `json:"recent_activity"`
-	TaskCount          int                     `json:"task_count"`
-	SkillCount         int                     `json:"skill_count"`
-	RoutineCount       int                     `json:"routine_count"`
-	RunActivity        []RunActivityDay        `json:"run_activity"`
-	TaskBreakdown      TaskBreakdown           `json:"task_breakdown"`
-	RecentTasks        []RecentTaskDTO         `json:"recent_tasks"`
+	AgentCount                 int                     `json:"agent_count"`
+	RunningCount               int                     `json:"running_count"`
+	PausedCount                int                     `json:"paused_count"`
+	ErrorCount                 int                     `json:"error_count"`
+	TasksInProgress            int                     `json:"tasks_in_progress"`
+	OpenTasks                  int                     `json:"open_tasks"`
+	BlockedTasks               int                     `json:"blocked_tasks"`
+	MonthSpendSubcents         *int64                  `json:"month_spend_subcents"`
+	MonthSpendCoverageDegraded bool                    `json:"month_spend_coverage_degraded"`
+	PendingApprovals           int                     `json:"pending_approvals"`
+	RecentActivity             []*models.ActivityEntry `json:"recent_activity"`
+	TaskCount                  int                     `json:"task_count"`
+	SkillCount                 int                     `json:"skill_count"`
+	RoutineCount               int                     `json:"routine_count"`
+	RunActivity                []RunActivityDay        `json:"run_activity"`
+	TaskBreakdown              TaskBreakdown           `json:"task_breakdown"`
+	RecentTasks                []RecentTaskDTO         `json:"recent_tasks"`
 	// AgentSummaries is the per-agent card payload, embedded in the
 	// dashboard response so the dashboard renders in a single round-trip
 	// (Stream A + G of office optimization). Always non-nil; empty array
@@ -113,20 +114,21 @@ func NewDashboardResponse(data *models.DashboardData, summaries []AgentSummary) 
 	}
 
 	return DashboardResponse{
-		AgentCount:         data.AgentCount,
-		RunningCount:       data.RunningCount,
-		PausedCount:        data.PausedCount,
-		ErrorCount:         data.ErrorCount,
-		TasksInProgress:    data.TasksInProgress,
-		OpenTasks:          data.OpenTasks,
-		BlockedTasks:       data.BlockedTasks,
-		MonthSpendSubcents: data.MonthSpendSubcents,
-		PendingApprovals:   data.PendingApprovals,
-		RecentActivity:     data.RecentActivity,
-		TaskCount:          data.TaskCount,
-		SkillCount:         data.SkillCount,
-		RoutineCount:       data.RoutineCount,
-		RunActivity:        runActivity,
+		AgentCount:                 data.AgentCount,
+		RunningCount:               data.RunningCount,
+		PausedCount:                data.PausedCount,
+		ErrorCount:                 data.ErrorCount,
+		TasksInProgress:            data.TasksInProgress,
+		OpenTasks:                  data.OpenTasks,
+		BlockedTasks:               data.BlockedTasks,
+		MonthSpendSubcents:         data.MonthSpendSubcents,
+		MonthSpendCoverageDegraded: data.MonthSpendCoverageDegraded,
+		PendingApprovals:           data.PendingApprovals,
+		RecentActivity:             data.RecentActivity,
+		TaskCount:                  data.TaskCount,
+		SkillCount:                 data.SkillCount,
+		RoutineCount:               data.RoutineCount,
+		RunActivity:                runActivity,
 		TaskBreakdown: TaskBreakdown{
 			Open:       data.TaskBreakdown.Open,
 			InProgress: data.TaskBreakdown.InProgress,
@@ -224,10 +226,10 @@ type AgentRunsListResponse struct {
 // RunCostSummaryDTO is the per-run token + cost rollup surfaced in
 // the run detail header. CostSubcents stores hundredths of a cent.
 type RunCostSummaryDTO struct {
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
-	CachedTokens int64 `json:"cached_tokens"`
-	CostSubcents int64 `json:"cost_subcents"`
+	InputTokens  *int64 `json:"input_tokens"`
+	OutputTokens *int64 `json:"output_tokens"`
+	CachedTokens *int64 `json:"cached_tokens"`
+	CostSubcents *int64 `json:"cost_subcents"`
 }
 
 // RunInvocationDTO carries the per-run invocation details: the

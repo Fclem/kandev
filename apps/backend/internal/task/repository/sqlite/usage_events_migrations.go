@@ -39,6 +39,7 @@ func (r *Repository) migrateTaskUsageObservationColumns() {
 		{"measurement_source", `ALTER TABLE task_usage_events ADD COLUMN measurement_source TEXT NOT NULL DEFAULT ''`},
 		{"usage_completeness", `ALTER TABLE task_usage_events ADD COLUMN usage_completeness TEXT NOT NULL DEFAULT ''`},
 		{"usage_schema_version", `ALTER TABLE task_usage_events ADD COLUMN usage_schema_version INTEGER NOT NULL DEFAULT 0`},
+		{"tokens_in_missing", `ALTER TABLE task_usage_events ADD COLUMN tokens_in_missing INTEGER NOT NULL DEFAULT 0`},
 		{"reasoning_output_tokens", `ALTER TABLE task_usage_events ADD COLUMN reasoning_output_tokens BIGINT`},
 		{"reported_cache_write_tokens", `ALTER TABLE task_usage_events ADD COLUMN reported_cache_write_tokens BIGINT`},
 		{"reported_total_tokens", `ALTER TABLE task_usage_events ADD COLUMN reported_total_tokens BIGINT`},

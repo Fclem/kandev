@@ -8,10 +8,14 @@ const USAGE_EVENT_ID = "e2e-usage-response";
 
 const breakdown = {
   input_tokens: 400,
+  input_complete: true,
   cached_read_tokens: 600,
   cached_write_tokens: 0,
+  cached_read_tokens_present: true,
+  cached_write_tokens_present: true,
   output_tokens: 200,
   thought_tokens: 0,
+  reasoning_tokens: 80,
   total_tokens: 1200,
   output_complete: true,
   event_count: 1,
@@ -31,6 +35,7 @@ const response = {
   model: "gpt-5.6-sol",
   provider: "openai",
   input_tokens: 400,
+  input_tokens_present: true,
   cached_read_tokens: 600,
   cached_write_tokens: 0,
   output_tokens: 200,
@@ -50,8 +55,11 @@ const turn = {
   direct: breakdown,
   child: {
     input_tokens: 0,
+    input_complete: true,
     cached_read_tokens: 0,
     cached_write_tokens: 0,
+    cached_read_tokens_present: false,
+    cached_write_tokens_present: false,
     output_tokens: 0,
     thought_tokens: 0,
     total_tokens: 0,
@@ -86,6 +94,8 @@ function totals(sessionId: string) {
     estimated_event_count: 1,
     unpriced_event_count: 0,
     output_tokens_complete: true,
+    input_tokens_complete: true,
+    total_tokens_complete: true,
     first_event_at: response.occurred_at,
     last_event_at: response.occurred_at,
   };

@@ -162,7 +162,7 @@ func TestListTaskSessionUsageTurns_AuthorizesAndPagesByTurn(t *testing.T) {
 		t.Fatalf("second usage turn page = %#v, err %v; want older turn-a", page, err)
 	}
 	rows, err := svc.GetTaskSessionUsageTurn(ctxAs("user-b"), "task-b", "sess-b", "turn-a")
-	if err != nil || len(rows) != 1 || rows[0].TurnID != "turn-a" {
+	if err != nil || len(rows.Events) != 1 || rows.Events[0].TurnID != "turn-a" {
 		t.Fatalf("turn detail = %#v, err %v; want one authorized row", rows, err)
 	}
 }

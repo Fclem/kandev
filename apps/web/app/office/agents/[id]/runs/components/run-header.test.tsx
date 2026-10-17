@@ -80,6 +80,23 @@ describe("RunHeader", () => {
     expect(text).toContain("200");
   });
 
+  it.each([
+    { cached: null, expected: "-" },
+    { cached: 0, expected: "0" },
+  ])(
+    "distinguishes unavailable cached totals from measured zero ($cached)",
+    ({ cached, expected }) => {
+      render(
+        <RunHeader run={{ ...baseRun, costs: { ...baseRun.costs, cached_tokens: cached } }} />,
+      );
+      const tokens = screen.getByTestId("run-tokens");
+      expect(tokens.lastElementChild?.textContent?.trim().split(/\s+/).at(-1)).toBe(expected);
+      expect(tokens.textContent).toContain("100");
+      expect(tokens.textContent).toContain("200");
+      expect(screen.getByTestId("run-cost").textContent).toContain("$0.42");
+    },
+  );
+
   it("shows resume + start fresh actions on FAILED runs with a session id", () => {
     const failed: RunDetail = {
       ...baseRun,
@@ -104,6 +121,37 @@ describe("RunHeader", () => {
     expect(screen.queryByTestId("run-cancel-button")).toBeNull();
   });
 });
+it.each([
+  { name: "gap-only", cost: null, input: null, output: null, expectedCost: "-" },
+  { name: "mixed coverage", cost: 12500, input: null, output: null, expectedCost: "$1.25" },
+  { name: "measured zero", cost: 0, input: 0, output: 0, expectedCost: "$0.00" },
+])(
+  "distinguishes unavailable run amounts from measured zero ($name)",
+  ({ cost, input, output, expectedCost }) => {
+    render(
+      <RunHeader
+        run={{
+          ...baseRun,
+          costs: {
+            input_tokens: input,
+            output_tokens: output,
+            cached_tokens: input,
+            cost_subcents: cost,
+          },
+        }}
+      />,
+    );
+    const tokens = [...screen.getByTestId("run-tokens").children].map((entry) =>
+      entry.textContent?.trim().split(/\s+/).at(-1),
+    );
+    expect(tokens).toEqual([
+      input === null ? "-" : "0",
+      output === null ? "-" : "0",
+      input === null ? "-" : "0",
+    ]);
+    expect(screen.getByTestId("run-cost").textContent).toBe(expectedCost);
+  },
+);
 
 describe("RunHeader routing strip", () => {
   it("omits the routing strip on legacy concrete-profile runs", () => {

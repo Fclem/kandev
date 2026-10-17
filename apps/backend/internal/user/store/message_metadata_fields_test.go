@@ -30,3 +30,28 @@ func TestMessageMetadataFieldsDefaultAndStoredValues(t *testing.T) {
 	require.Equal(t, []string{"ttft"}, got.Interface())
 
 }
+
+func TestMessageMetadataFieldsMarshalScanRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"nil uses default", nil, []string{"session_config", "timestamp", "duration"}},
+		{"explicit empty stays empty", []string{}, []string{}},
+		{"populated", []string{"ttft", "tokens"}, []string{"ttft", "tokens"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := defaultUserSettings(DefaultUserID)
+			settings.MessageMetadataFields = tc.in
+			raw, err := marshalUserSettingsPayload(settings)
+			require.NoError(t, err)
+			stored, err := scanUserSettings(settingsScanner{raw: string(raw)}, DefaultUserID)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, stored.MessageMetadataFields)
+		})
+	}
+	stored, err := scanUserSettings(settingsScanner{raw: `{"message_metadata_fields":null}`}, DefaultUserID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"session_config", "timestamp", "duration"}, stored.MessageMetadataFields)
+}

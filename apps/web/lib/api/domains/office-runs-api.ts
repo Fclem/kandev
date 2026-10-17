@@ -32,10 +32,10 @@ export type AgentRunsListPage = {
 };
 
 export type RunCostSummary = {
-  input_tokens: number;
-  output_tokens: number;
-  cached_tokens: number;
-  cost_subcents: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cached_tokens: number | null;
+  cost_subcents: number | null;
 };
 
 export type RunInvocationDetail = {
@@ -205,19 +205,19 @@ export type AgentRecentTask = {
 };
 
 export type AgentCostAggregate = {
-  input_tokens: number;
-  output_tokens: number;
-  cached_tokens: number;
-  total_cost_subcents: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cached_tokens: number | null;
+  total_cost_subcents: number | null;
 };
 
 export type AgentRunCost = {
   run_id: string;
   run_id_short: string;
   date: string;
-  input_tokens: number;
-  output_tokens: number;
-  cost_subcents: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_subcents: number | null;
 };
 
 export type AgentSummaryResponse = {

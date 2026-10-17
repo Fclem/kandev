@@ -13,6 +13,8 @@ export type TaskUsageTotalsDTO = {
   event_count: number;
   estimated_event_count: number;
   unpriced_event_count: number;
+  input_tokens_complete: boolean;
+  total_tokens_complete: boolean;
   output_tokens_complete: boolean;
   first_event_at: string | null;
   last_event_at: string | null;

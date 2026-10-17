@@ -123,8 +123,18 @@ func normalizeGrokPromptUsage(
 	usage *streams.PromptUsage,
 	meta map[string]any,
 ) *streams.PromptUsage {
-	if usage != nil && usage.ThoughtTokens == 0 {
-		usage.ThoughtTokens = acpcompat.GrokReasoningTokens(meta)
+	if usage != nil && usage.ThoughtTokensPresent {
+		return usage
+	}
+	thoughtTokens, present := acpcompat.GrokReasoningTokens(meta)
+	if !present {
+		return usage
+	}
+	if usage == nil {
+		usage = &streams.PromptUsage{}
+	}
+	if usage.ThoughtTokens == 0 {
+		usage.ThoughtTokens, usage.ThoughtTokensPresent = thoughtTokens, true
 	}
 	return usage
 }

@@ -2,6 +2,7 @@ package sqlite_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -345,23 +346,9 @@ func TestCostAggregateForAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CostAggregateForAgent: %v", err)
 	}
-	want := sqlite.AgentCostAggregate{
-		InputTokens: 300, OutputTokens: 60, CachedTokens: 30, TotalCostSubcents: 12,
-	}
-	if got != want {
-		t.Errorf("aggregate = %+v, want %+v", got, want)
-	}
-}
-
-func TestCostAggregateForAgent_NoEventsReturnsZeroValue(t *testing.T) {
-	repo := newTestRepo(t)
-
-	got, err := repo.CostAggregateForAgent(context.Background(), "agent-silent")
-	if err != nil {
-		t.Fatalf("CostAggregateForAgent: %v", err)
-	}
-	if got != (sqlite.AgentCostAggregate{}) {
-		t.Errorf("aggregate = %+v, want the zero value", got)
+	if got.InputTokens == nil || *got.InputTokens != 300 || got.OutputTokens == nil || *got.OutputTokens != 60 ||
+		got.CachedTokens == nil || *got.CachedTokens != 30 || got.TotalCostSubcents == nil || *got.TotalCostSubcents != 12 {
+		t.Errorf("aggregate = %+v, want input 300 / output 60 / cached 30 / cost 12", got)
 	}
 }
 
@@ -403,19 +390,14 @@ func TestRecentRunCostsForAgent(t *testing.T) {
 	if rows[0].RequestedAt != "2026-01-02T09:00:00Z" {
 		t.Errorf("RequestedAt = %q, want 2026-01-02T09:00:00Z", rows[0].RequestedAt)
 	}
-	wantR1 := sqlite.AgentRunCostRow{
-		RunID: "r-1", RequestedAt: "2026-01-01T09:00:00Z",
-		InputTokens: 300, OutputTokens: 30, CostSubcents: 7,
+	if rows[1].RequestedAt != "2026-01-01T09:00:00Z" ||
+		rows[1].InputTokens == nil || *rows[1].InputTokens != 300 ||
+		rows[1].OutputTokens == nil || *rows[1].OutputTokens != 30 || rows[1].CostSubcents == nil || *rows[1].CostSubcents != 7 {
+		t.Errorf("r-1 = %+v, want input 300 / output 30 / cost 7 (only in-window events)", rows[1])
 	}
-	if rows[1] != wantR1 {
-		t.Errorf("r-1 = %+v, want %+v (only the in-window events)", rows[1], wantR1)
-	}
-	wantR2 := sqlite.AgentRunCostRow{
-		RunID: "r-2", RequestedAt: "2026-01-02T09:00:00Z",
-		InputTokens: 50, OutputTokens: 5, CostSubcents: 1,
-	}
-	if rows[0] != wantR2 {
-		t.Errorf("r-2 = %+v, want %+v", rows[0], wantR2)
+	if rows[0].InputTokens == nil || *rows[0].InputTokens != 50 ||
+		rows[0].OutputTokens == nil || *rows[0].OutputTokens != 5 || rows[0].CostSubcents == nil || *rows[0].CostSubcents != 1 {
+		t.Errorf("r-2 = %+v, want input 50 / output 5 / cost 1", rows[0])
 	}
 }
 
@@ -436,7 +418,8 @@ func TestRecentRunCostsForAgent_UnclaimedRunHasNoLowerBound(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d, want 1: %+v", len(rows), rows)
 	}
-	if rows[0].InputTokens != 11 || rows[0].OutputTokens != 22 || rows[0].CostSubcents != 33 {
+	if rows[0].InputTokens == nil || *rows[0].InputTokens != 11 ||
+		rows[0].OutputTokens == nil || *rows[0].OutputTokens != 22 || rows[0].CostSubcents == nil || *rows[0].CostSubcents != 33 {
 		t.Errorf("row = %+v, want the pre-claim event counted", rows[0])
 	}
 }
@@ -546,5 +529,101 @@ func TestLatestRunForAgent_NoRunsReturnsNilNil(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("got %+v, want nil", got)
+	}
+}
+
+// @covers AC-OFFICE-COSTS-001.9
+func TestAgentCostRollupsWithholdUnavailableUsage(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		measured bool
+		wantCost int64
+	}{
+		{name: "gap_only"},
+		{name: "mixed", measured: true, wantCost: 12500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newTestRepo(t)
+			ctx := context.Background()
+			seedSummaryRun(t, repo, "run-gap", "agent-gap", "finished",
+				"2026-01-01 09:00:00", "2026-01-01 10:00:00", "2026-01-01 12:00:00", `{"task_id":"task-gap"}`)
+			if tc.measured {
+				seedCostEvent(t, repo, "measured", "agent-gap", "task-gap", "2026-01-01 10:30:00", 100, 0, 20, 12500)
+			}
+			if _, err := repo.ExecRaw(ctx, `
+				INSERT INTO office_cost_events
+					(id, session_id, task_id, agent_profile_id, project_id, model, provider,
+					 tokens_in, tokens_out, tokens_cached_in, cost_subcents, cost_source, usage_unavailable,
+					 occurred_at, created_at)
+				VALUES ('gap', 'native-session', 'task-gap', 'agent-gap', '', 'native', 'openai',
+				        0, ?, ?, 0, 'unpriced', 1, '2026-01-01 11:00:00', '2026-01-01 11:00:00')
+			`, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+			agg, err := repo.CostAggregateForAgent(ctx, "agent-gap")
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertUnavailableRollupTokens(t, agg)
+			if tc.measured && (agg.TotalCostSubcents == nil || *agg.TotalCostSubcents != tc.wantCost) {
+				t.Fatalf("independent priced spend changed: %+v", agg)
+			}
+			rows, err := repo.RecentRunCostsForAgent(ctx, "agent-gap", 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 1 || rows[0].RunID != "run-gap" {
+				t.Fatalf("run coverage missing: %+v", rows)
+			}
+			assertUnavailableRollupTokens(t, rows[0])
+			if tc.measured && (rows[0].CostSubcents == nil || *rows[0].CostSubcents != tc.wantCost) {
+				t.Fatalf("independent run spend changed: %+v", rows[0])
+			}
+		})
+	}
+}
+
+func assertUnavailableRollupTokens(t *testing.T, value any) {
+	t.Helper()
+	wire, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(wire, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"InputTokens", "OutputTokens"} {
+		if string(fields[field]) != "null" {
+			t.Errorf("%s = %s, want unavailable null", field, fields[field])
+		}
+	}
+}
+
+func TestAgentCostRollupsMissingOutputKeepKnownInput(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	seedSummaryRun(t, repo, "run-output", "agent-output", "finished",
+		"2026-01-01 09:00:00", "2026-01-01 10:00:00", "2026-01-01 12:00:00", `{"task_id":"task-output"}`)
+	seedCostEvent(t, repo, "known", "agent-output", "task-output", "2026-01-01 10:30:00", 100, 0, 20, 12500)
+	seedCostEvent(t, repo, "missing-output", "agent-output", "task-output", "2026-01-01 11:00:00", 5, 0, 0, 0)
+	if _, err := repo.ExecRaw(ctx, `UPDATE office_cost_events SET tokens_out=NULL WHERE id='missing-output'`); err != nil {
+		t.Fatal(err)
+	}
+	agg, err := repo.CostAggregateForAgent(ctx, "agent-output")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agg.InputTokens == nil || *agg.InputTokens != 105 || agg.OutputTokens != nil ||
+		agg.TotalCostSubcents == nil || *agg.TotalCostSubcents != 12500 {
+		t.Fatalf("aggregate lost completeness or independent amounts: %+v", agg)
+	}
+	rows, err := repo.RecentRunCostsForAgent(ctx, "agent-output", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].InputTokens == nil || *rows[0].InputTokens != 105 ||
+		rows[0].OutputTokens != nil || rows[0].CostSubcents == nil || *rows[0].CostSubcents != 12500 {
+		t.Fatalf("run lost completeness or independent amounts: %+v", rows)
 	}
 }

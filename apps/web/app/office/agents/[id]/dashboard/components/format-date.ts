@@ -49,7 +49,8 @@ export function formatShortDate(iso: string): string {
  * carry float drift; the formatter just divides by 10000 at the edge.
  * See docs/specs/office/requirements/costs.md for the unit contract.
  */
-export function formatSubcents(subcents: number): string {
+export function formatSubcents(subcents: number | null): string {
+  if (subcents === null) return "-";
   if (!Number.isFinite(subcents)) return "$0.00";
   return `$${(subcents / 10000).toFixed(2)}`;
 }

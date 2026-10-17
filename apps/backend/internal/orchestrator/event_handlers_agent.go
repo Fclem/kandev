@@ -2910,7 +2910,7 @@ func (s *Service) finishAgentCompleted(
 	}
 	closingTurnID := s.completedEventClosingTurn(ctx, data)
 	completionCtx := withWorkflowEffect(context.WithoutCancel(ctx), workflowEffectForCompletion(data, closingTurnID))
-	s.closeTurnTiming(data.SessionID, data.AgentExecutionID, s.currentTurnIDForSession(ctx, data.SessionID), s.timingNow())
+	s.closeTurnTiming(data.SessionID, data.AgentExecutionID, s.currentTurnIDForSession(ctx, data.SessionID), data.PromptGeneration, s.timingNow())
 	if data.TurnID != "" {
 		fixedResourceKey := s.fixedResourceForCleanCompletion(completionCtx, data, data.TurnID)
 		if err := s.completeTurnForTaskSessionCheckedOwned(

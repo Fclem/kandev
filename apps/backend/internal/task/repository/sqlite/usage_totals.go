@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -35,6 +36,7 @@ const usageTotalsAggregateQuery = `
 		COALESCE(SUM(CASE WHEN estimated = 1 THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN cost_source = ? THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN tokens_out IS NULL THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN tokens_in_missing = 1 THEN 1 ELSE 0 END), 0),
 		MIN(occurred_at),
 		MAX(occurred_at)
 	  FROM task_usage_events
@@ -74,6 +76,7 @@ func (r *Repository) scanUsageTotals(ctx context.Context, scopeColumn, scopeValu
 		rawLastEventAt             interface{}
 		unpricedEventCount         sql.NullInt64
 		outputIncompleteEventCount sql.NullInt64
+		inputIncompleteEventCount  sql.NullInt64
 	)
 	err := r.ro.QueryRowxContext(ctx, query, costSourceUnpriced, scopeValue).Scan(
 		&totals.EventCount,
@@ -87,6 +90,7 @@ func (r *Repository) scanUsageTotals(ctx context.Context, scopeColumn, scopeValu
 		&totals.EstimatedEventCount,
 		&unpricedEventCount,
 		&outputIncompleteEventCount,
+		&inputIncompleteEventCount,
 		&rawFirstEventAt,
 		&rawLastEventAt,
 	)
@@ -95,7 +99,13 @@ func (r *Repository) scanUsageTotals(ctx context.Context, scopeColumn, scopeValu
 	}
 
 	totals.UnpricedEventCount = unpricedEventCount.Int64
-	totals.OutputTokensComplete = outputIncompleteEventCount.Int64 == 0
+	gap, err := r.usageTotalsCoverageGap(ctx, scopeColumn, scopeValue)
+	if err != nil {
+		return nil, err
+	}
+	totals.OutputTokensComplete = outputIncompleteEventCount.Int64 == 0 && !gap
+	totals.InputTokensComplete = inputIncompleteEventCount.Int64 == 0 && !gap
+	totals.TotalTokensComplete = totals.InputTokensComplete && totals.OutputTokensComplete
 
 	firstEventAt, err := parseUsageTotalsTimestamp(rawFirstEventAt)
 	if err != nil {
@@ -125,4 +135,38 @@ func parseUsageTotalsTimestamp(raw interface{}) (*time.Time, error) {
 		return nil, err
 	}
 	return &parsed, nil
+}
+
+func (r *Repository) usageTotalsCoverageGap(ctx context.Context, scopeColumn, scopeValue string) (bool, error) {
+	if scopeColumn == "task_id" {
+		var gap bool
+		err := r.ro.QueryRowxContext(ctx, r.ro.Rebind(`SELECT EXISTS (
+			SELECT 1 FROM task_usage_coverage WHERE task_id = ?
+		)`), scopeValue).Scan(&gap)
+		return gap, err
+	}
+	query := r.ro.Rebind(`
+		SELECT t.metadata FROM task_session_turns t
+		JOIN task_sessions s ON s.id = t.task_session_id AND s.task_id = t.task_id
+		WHERE t.task_session_id = ? AND t.metadata LIKE ?
+	`)
+	rows, err := r.ro.QueryxContext(ctx, query, scopeValue, "%native_usage_gap_%")
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var encoded string
+		if err := rows.Scan(&encoded); err != nil {
+			return false, err
+		}
+		var metadata map[string]interface{}
+		if err := json.Unmarshal([]byte(encoded), &metadata); err != nil {
+			return false, err
+		}
+		if hasNativeUsageGap(metadata) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }

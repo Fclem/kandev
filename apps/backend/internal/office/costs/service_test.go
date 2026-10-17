@@ -206,55 +206,8 @@ func TestGetCostSummary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCostSummary: %v", err)
 	}
-	if total != 900 {
-		t.Errorf("total = %d, want 900", total)
-	}
-}
-
-// GetCostsBreakdown runs four sub-queries concurrently via errgroup. Verify
-// the closure wiring is correct (each Go func writes to the right field) and
-// that nil byAgent/byProject/byModel slices get normalised to empty slices.
-func TestGetCostsBreakdown_ReturnsAllViews(t *testing.T) {
-	svc, execSQL := newTestCostService(t)
-	ctx := context.Background()
-
-	// GetCostsByProject attributes by the task's live project_id, not the
-	// event snapshot, so each task must carry the assignment it is meant to
-	// group under.
-	execSQL(`INSERT OR IGNORE INTO tasks (id, workspace_id, project_id) VALUES ('task-1', 'ws-1', 'proj-X')`)
-	execSQL(`INSERT OR IGNORE INTO tasks (id, workspace_id, project_id) VALUES ('task-2', 'ws-1', 'proj-Y')`)
-
-	_, _ = svc.RecordCostEvent(ctx,
-		"sess-1", "task-1", "agent-A", "proj-X",
-		"claude-sonnet-4", "anthropic",
-		int64(1_000_000), int64(0), int64Ptr(0), int64(300),
-		false,
-	)
-	_, _ = svc.RecordCostEvent(ctx,
-		"sess-2", "task-2", "agent-B", "proj-Y",
-		"claude-sonnet-4", "anthropic",
-		int64(2_000_000), int64(0), int64Ptr(0), int64(600),
-		false,
-	)
-
-	total, byAgent, byProject, byModel, byProvider, err := svc.GetCostsBreakdown(ctx, "ws-1")
-	if err != nil {
-		t.Fatalf("GetCostsBreakdown: %v", err)
-	}
-	if total != 900 {
-		t.Errorf("total = %d, want 900", total)
-	}
-	if len(byAgent) != 2 {
-		t.Errorf("byAgent rows = %d, want 2", len(byAgent))
-	}
-	if len(byProject) != 2 {
-		t.Errorf("byProject rows = %d, want 2", len(byProject))
-	}
-	if len(byModel) != 1 {
-		t.Errorf("byModel rows = %d, want 1", len(byModel))
-	}
-	if len(byProvider) != 1 || byProvider[0].GroupLabel != "Claude" {
-		t.Errorf("byProvider = %+v, want one row labelled Claude", byProvider)
+	if total.TotalSubcents == nil || *total.TotalSubcents != 900 {
+		t.Errorf("recorded spend = %+v, want 900", total)
 	}
 }
 
@@ -293,26 +246,5 @@ func TestRecordCostEvent_PersistsRoutedProviderAndModel(t *testing.T) {
 	if events[0].Provider != "anthropic" || events[0].Model != "claude-sonnet-4" {
 		t.Errorf("persisted event = (%q,%q), want (anthropic,claude-sonnet-4)",
 			events[0].Provider, events[0].Model)
-	}
-}
-
-// Empty workspace must return zero total and empty (non-nil) slices.
-func TestGetCostsBreakdown_EmptyWorkspace(t *testing.T) {
-	svc, _ := newTestCostService(t)
-	ctx := context.Background()
-
-	total, byAgent, byProject, byModel, byProvider, err := svc.GetCostsBreakdown(ctx, "ws-empty")
-	if err != nil {
-		t.Fatalf("GetCostsBreakdown: %v", err)
-	}
-	if total != 0 {
-		t.Errorf("total = %d, want 0", total)
-	}
-	if byAgent == nil || byProject == nil || byModel == nil || byProvider == nil {
-		t.Error("expected empty (non-nil) slices for empty workspace")
-	}
-	if len(byAgent) != 0 || len(byProject) != 0 || len(byModel) != 0 || len(byProvider) != 0 {
-		t.Errorf("expected empty slices, got %d/%d/%d/%d",
-			len(byAgent), len(byProject), len(byModel), len(byProvider))
 	}
 }

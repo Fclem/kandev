@@ -95,7 +95,7 @@ func (h *Handler) costSummary(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"total_subcents": total})
+	c.JSON(http.StatusOK, total)
 }
 
 func (h *Handler) costsByModel(c *gin.Context) {
@@ -137,11 +137,12 @@ func (h *Handler) costsBreakdown(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, CostBreakdownComposedResponse{
-		TotalSubcents: total,
-		ByAgent:       byAgent,
-		ByProject:     byProject,
-		ByModel:       byModel,
-		ByProvider:    byProvider,
+		TotalSubcents:    total.TotalSubcents,
+		CoverageDegraded: total.CoverageDegraded,
+		ByAgent:          byAgent,
+		ByProject:        byProject,
+		ByModel:          byModel,
+		ByProvider:       byProvider,
 	})
 }
 

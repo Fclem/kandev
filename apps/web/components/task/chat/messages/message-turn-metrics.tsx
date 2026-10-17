@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { formatPromptDuration } from "@/lib/turn-duration";
+import { formatPromptDuration, formatTtft } from "@/lib/turn-duration";
 import { useSessionUsageTurn } from "@/hooks/domains/session/use-session-usage-turns";
 import type { Turn } from "@/lib/types/http";
 import { deriveTurnMetrics, type TurnMetrics } from "@/lib/turn-metrics";
@@ -12,7 +12,8 @@ type MessageTurnMetricsProps = {
   sessionId: string;
 };
 
-function MetricRow({ label, value, help }: { label: string; value: string; help?: string }) {
+function MetricRow({ label, value, help }: { label: string; value: string | null; help?: string }) {
+  if (value === null) return null;
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
       <dt className="min-w-0 text-muted-foreground break-words">{label}</dt>
@@ -56,7 +57,7 @@ function MetricRows({
       {metrics.ttftMs !== null && (
         <MetricRow
           label={t("task:turnMetrics.ttft")}
-          value={durationLabel(metrics.ttftMs, units)}
+          value={formatTtft(metrics.ttftMs, units)}
           help={t("task:turnMetrics.ttftHelp")}
         />
       )}
@@ -91,6 +92,12 @@ function MetricRows({
           value={formatUsageTokens(metrics.cachedWriteTokens)}
         />
       )}
+      {metrics.lastResponseReportedCacheWriteTokens !== null && (
+        <MetricRow
+          label={`${t("task:conversationUsage.lastResponse")}: ${t("task:conversationUsage.cachedWrite")}`}
+          value={formatUsageTokens(metrics.lastResponseReportedCacheWriteTokens)}
+        />
+      )}
       {metrics.reasoningTokens !== null && (
         <MetricRow
           label={t("task:conversationUsage.reasoning")}
@@ -108,25 +115,27 @@ function MetricRows({
   );
 }
 
-type UsageStatus = "pending" | "unavailable" | "none" | null;
+type UsageStatus = "pending" | "unavailable" | "none" | "partial" | "estimated" | null;
 
 function getUsageStatus({
   usageTurn,
-  metrics,
   isLoading,
   isUnavailable,
   isNotFound,
   completedAt,
 }: {
   usageTurn: ReturnType<typeof useSessionUsageTurn>["usageTurn"];
-  metrics: TurnMetrics;
   isLoading: boolean;
   isUnavailable: boolean;
   isNotFound: boolean;
   completedAt: Turn["completed_at"];
 }): UsageStatus {
   if (usageTurn) {
-    return metrics.inputTokens === null && metrics.outputTokens === null ? "none" : null;
+    if (usageTurn.completeness === "partial") {
+      return usageTurn.total.event_count === 0 ? "unavailable" : "partial";
+    }
+    if (usageTurn.completeness === "estimated") return "estimated";
+    return usageTurn.total.event_count === 0 ? "none" : null;
   }
   if (isUnavailable) return "unavailable";
   if (isLoading || !completedAt) return "pending";
@@ -139,6 +148,8 @@ function UsageNotice({ status, t }: { status: UsageStatus; t: TFunction }) {
     pending: t("task:conversationUsage.pending"),
     unavailable: t("task:turnMetrics.usageUnavailable"),
     none: t("task:turnMetrics.noUsage"),
+    partial: t("task:conversationUsage.partial"),
+    estimated: t("task:conversationUsage.estimated"),
   };
   return (
     <p className="text-xs text-muted-foreground" role="status">
@@ -160,7 +171,6 @@ export function MessageTurnMetrics({ turn, taskId, sessionId }: MessageTurnMetri
   };
   const status = getUsageStatus({
     usageTurn: usageState.usageTurn,
-    metrics,
     isLoading: usageState.isLoading,
     isUnavailable: usageState.isUnavailable,
     isNotFound: usageState.isNotFound,

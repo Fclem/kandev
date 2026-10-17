@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/kandev/kandev/internal/office/costs"
@@ -35,7 +36,7 @@ type costResolution struct {
 // and cost_source=unpriced already carries the second one — see
 // models.CostContractVersion's contract history.
 func (s *Service) resolveCostForUsage(ctx context.Context, data PromptUsageData) costResolution {
-	if data.Usage.PriceSuppressed {
+	if data.UsageUnavailable || data.Usage.PriceSuppressed {
 		return costResolution{estimated: data.Usage.Estimated, source: models.CostSourceUnpriced}
 	}
 	if data.Usage.ProviderReportedCostPresent || data.Usage.ProviderReportedCostSubcents > 0 {
@@ -44,6 +45,9 @@ func (s *Service) resolveCostForUsage(ctx context.Context, data PromptUsageData)
 			estimated:    data.Usage.Estimated,
 			source:       models.CostSourceProviderReported,
 		}
+	}
+	if (!data.Usage.InputTokensPresent && data.Usage.InputTokens == 0) || !outputTokensObserved(data.Usage) {
+		return costResolution{estimated: data.Usage.Estimated, source: models.CostSourceUnpriced}
 	}
 	if s.pricingLookup == nil || data.Model == "" {
 		return costResolution{estimated: data.Usage.Estimated, source: models.CostSourceUnpriced}
@@ -120,10 +124,8 @@ func (s *Service) lookupPricingWithVersion(
 // Estimated=true (it's scoped to the last model request of the turn, not
 // the whole turn — see normalizeCodexPromptUsage in dialect_codex.go) but
 // does carry real cache numbers, and discarding them would silently NULL a
-// value we actually have. TokensCachedIn keeps its original read+write sum
-// on every row regardless — a definite total whether or not the split is
-// known — so existing consumers (the tree-holds rollup, card 2faa29da's
-// task_sessions fix) are unaffected.
+// value we actually have. The merged cache count is NULL if read+write
+// overflows; independently recorded split counts and cost remain usable.
 //
 // TokensOut uses OutputTokensPresent to keep an observed zero distinct from
 // an absent sample. For events written before the presence flag existed, a
@@ -139,32 +141,38 @@ func buildCostEvent(
 		agentProfileID = fields.AssigneeAgentProfileID
 	}
 	event := &models.CostEvent{
-		SessionID:      data.SessionID,
-		TaskID:         data.TaskID,
-		AgentProfileID: agentProfileID,
-		ProjectID:      projectID,
-		Model:          data.Model,
-		Provider:       provider,
-		TokensIn:       data.Usage.InputTokens,
-		TokensCachedIn: data.Usage.CachedReadTokens + data.Usage.CachedWriteTokens,
-		CostSubcents:   resolution.costSubcents,
-		Estimated:      resolution.estimated,
-		CostSource:     &resolution.source,
-		OccurredAt:     time.Now().UTC(),
+		SessionID:        data.SessionID,
+		TaskID:           data.TaskID,
+		AgentProfileID:   agentProfileID,
+		ProjectID:        projectID,
+		Model:            data.Model,
+		Provider:         provider,
+		CostSubcents:     resolution.costSubcents,
+		Estimated:        resolution.estimated,
+		UsageUnavailable: data.UsageUnavailable,
+		CostSource:       &resolution.source,
+		OccurredAt:       time.Now().UTC(),
 	}
 	contractVersion := models.CostContractVersion
 	event.CostContractVersion = &contractVersion
 
-	if outputTokensObserved(data.Usage) {
-		outputTokens := data.Usage.OutputTokens
-		event.TokensOut = &outputTokens
-	}
-
-	if data.Usage.CachedReadTokens != 0 || data.Usage.CachedWriteTokens != 0 {
-		cachedRead := data.Usage.CachedReadTokens
-		cachedWrite := data.Usage.CachedWriteTokens
-		event.TokensCachedRead = &cachedRead
-		event.TokensCachedWrite = &cachedWrite
+	if !data.UsageUnavailable {
+		event.TokensIn = data.Usage.InputTokens
+		event.TokensInMissing = !data.Usage.InputTokensPresent && data.Usage.InputTokens == 0
+		if read, write := data.Usage.CachedReadTokens, data.Usage.CachedWriteTokens; read <= math.MaxInt64-write {
+			cached := read + write
+			event.TokensCachedIn = &cached
+		}
+		if outputTokensObserved(data.Usage) {
+			outputTokens := data.Usage.OutputTokens
+			event.TokensOut = &outputTokens
+		}
+		if data.Usage.CachedReadTokens != 0 || data.Usage.CachedWriteTokens != 0 {
+			cachedRead := data.Usage.CachedReadTokens
+			cachedWrite := data.Usage.CachedWriteTokens
+			event.TokensCachedRead = &cachedRead
+			event.TokensCachedWrite = &cachedWrite
+		}
 	}
 	if resolution.rates != nil {
 		event.RateInputPerMillion = &resolution.rates.InputPerMillion

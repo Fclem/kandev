@@ -184,6 +184,9 @@ func (r *Repository) insertUsageEventAndRollup(ctx context.Context, event *model
 			return err
 		}
 	}
+	if err := r.indexUsageTurnTx(ctx, tx, event.SessionID, event.TurnID); err != nil {
+		return err
+	}
 
 	return tx.Commit()
 }
@@ -205,18 +208,18 @@ func (r *Repository) insertUsageEventRowTx(ctx context.Context, tx *sqlx.Tx, eve
 			agent_profile_id, agent_type, model, provider,
 			provider_thread_id, provider_turn_id, provider_response_id,
 			native_scope, measurement_source, usage_completeness, usage_schema_version,
-			tokens_in, tokens_cached_read, tokens_cached_write, tokens_out, tokens_thought,
+			tokens_in, tokens_in_missing, tokens_cached_read, tokens_cached_write, tokens_out, tokens_thought,
 			reasoning_output_tokens, reported_cache_write_tokens, reported_total_tokens,
 			tokens_total, cost_subcents, cost_source, estimated,
 			rate_input_per_million, rate_cached_read_per_million,
 			rate_cached_write_per_million, rate_output_per_million,
 			pricing_catalog_version, contract_version, occurred_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`), event.UsageEventID, event.TaskID, nullableString(event.SessionID), nullableString(event.TurnID),
 		event.AgentProfileID, event.AgentType, event.Model, event.Provider,
 		event.ProviderThreadID, event.ProviderTurnID, event.ProviderResponseID,
 		event.NativeScope, event.MeasurementSource, event.UsageCompleteness, event.UsageSchemaVersion,
-		event.TokensIn, event.TokensCachedRead, event.TokensCachedWrite, event.TokensOut, event.TokensThought,
+		event.TokensIn, dialect.BoolToInt(event.TokensInMissing), event.TokensCachedRead, event.TokensCachedWrite, event.TokensOut, event.TokensThought,
 		event.ReasoningOutputTokens, event.ReportedCacheWriteTokens, event.ReportedTotalTokens,
 		event.TokensTotal, event.CostSubcents, event.CostSource, dialect.BoolToInt(event.Estimated),
 		event.RateInputPerMillion, event.RateCachedReadPerMillion,
@@ -236,7 +239,7 @@ func (r *Repository) ListTaskUsageEvents(ctx context.Context, taskID string, lim
 		       agent_profile_id, agent_type, model, provider,
 		       provider_thread_id, provider_turn_id, provider_response_id,
 		       native_scope, measurement_source, usage_completeness, usage_schema_version,
-		       tokens_in, tokens_cached_read, tokens_cached_write, tokens_out, tokens_thought,
+		       tokens_in, tokens_in_missing, tokens_cached_read, tokens_cached_write, tokens_out, tokens_thought,
 		       reasoning_output_tokens, reported_cache_write_tokens, reported_total_tokens,
 		       tokens_total, cost_subcents, cost_source, estimated,
 		       rate_input_per_million, rate_cached_read_per_million,
@@ -277,14 +280,22 @@ func (r *Repository) ListSessionUsageTurnCursors(ctx context.Context, sessionID 
 		limit = 50
 	}
 	rows, err := r.ro.QueryxContext(ctx, r.ro.Rebind(`
-		SELECT turn_id, MIN(id) AS cursor_id
-		  FROM task_usage_events
-		 WHERE session_id = ? AND turn_id IS NOT NULL AND turn_id <> ''
-	 GROUP BY turn_id
-		HAVING (? = 0 OR MIN(id) < ?)
-	 ORDER BY MIN(id) DESC
-	 LIMIT ?
-	`), sessionID, afterID, afterID, limit)
+		SELECT i.turn_id, i.id
+		FROM task_usage_turn_index i
+		LEFT JOIN task_session_turns t ON t.id = i.turn_id AND t.task_session_id = i.session_id
+		LEFT JOIN task_usage_turn_index anchor ON anchor.id = ? AND anchor.session_id = i.session_id
+		LEFT JOIN task_session_turns anchor_turn ON anchor_turn.id = anchor.turn_id AND anchor_turn.task_session_id = anchor.session_id
+		WHERE i.session_id = ? AND (? = 0 OR (
+			anchor.id IS NOT NULL AND (
+				t.created_at < anchor_turn.created_at
+				OR (t.created_at = anchor_turn.created_at AND i.id < anchor.id)
+				OR (t.created_at IS NULL AND anchor_turn.created_at IS NOT NULL)
+				OR (t.created_at IS NULL AND anchor_turn.created_at IS NULL AND i.id < anchor.id)
+			)
+		))
+		ORDER BY (t.created_at IS NULL) ASC, t.created_at DESC, i.id DESC
+		LIMIT ?
+	`), afterID, sessionID, afterID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -304,18 +315,20 @@ func (r *Repository) ListSessionUsageTurnCursors(ctx context.Context, sessionID 
 	return turns, nil
 }
 
+const usageEventProjectionColumns = `id, usage_event_id, task_id, session_id, turn_id,
+	agent_profile_id, agent_type, model, provider,
+	provider_thread_id, provider_turn_id, provider_response_id,
+	native_scope, measurement_source, usage_completeness, usage_schema_version,
+	tokens_in, tokens_in_missing, tokens_cached_read, tokens_cached_write, tokens_out, tokens_thought,
+	reasoning_output_tokens, reported_cache_write_tokens, reported_total_tokens,
+	tokens_total, cost_subcents, cost_source, estimated,
+	rate_input_per_million, rate_cached_read_per_million,
+	rate_cached_write_per_million, rate_output_per_million,
+	pricing_catalog_version, contract_version, occurred_at, created_at`
+
 func (r *Repository) ListSessionUsageEventsByTurn(ctx context.Context, sessionID, turnID string) ([]*models.TaskUsageEvent, error) {
 	rows, err := r.ro.QueryxContext(ctx, r.ro.Rebind(`
-		SELECT id, usage_event_id, task_id, session_id, turn_id,
-		       agent_profile_id, agent_type, model, provider,
-		       provider_thread_id, provider_turn_id, provider_response_id,
-		       native_scope, measurement_source, usage_completeness, usage_schema_version,
-		       tokens_in, tokens_cached_read, tokens_cached_write, tokens_out, tokens_thought,
-		       reasoning_output_tokens, reported_cache_write_tokens, reported_total_tokens,
-		       tokens_total, cost_subcents, cost_source, estimated,
-		       rate_input_per_million, rate_cached_read_per_million,
-		       rate_cached_write_per_million, rate_output_per_million,
-		       pricing_catalog_version, contract_version, occurred_at, created_at
+		SELECT `+usageEventProjectionColumns+`
 		  FROM task_usage_events
 		 WHERE session_id = ? AND turn_id = ?
 		 ORDER BY id ASC
@@ -352,7 +365,7 @@ func scanTaskUsageEventRow(row *sqlx.Rows) (*models.TaskUsageEvent, error) {
 		&event.AgentProfileID, &event.AgentType, &event.Model, &event.Provider,
 		&event.ProviderThreadID, &event.ProviderTurnID, &event.ProviderResponseID,
 		&event.NativeScope, &event.MeasurementSource, &event.UsageCompleteness, &event.UsageSchemaVersion,
-		&event.TokensIn, &tokensCachedRead, &tokensCachedWrite, &tokensOut, &tokensThought,
+		&event.TokensIn, &event.TokensInMissing, &tokensCachedRead, &tokensCachedWrite, &tokensOut, &tokensThought,
 		&reasoningOutputTokens, &reportedCacheWriteTokens, &reportedTotalTokens,
 		&event.TokensTotal, &event.CostSubcents, &event.CostSource, &event.Estimated,
 		&rateInput, &rateCachedRead, &rateCachedWrite, &rateOutput,

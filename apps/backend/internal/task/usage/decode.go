@@ -47,24 +47,55 @@ type nativeUsageObservationPayload struct {
 	PriceSuppressed          bool   `json:"price_suppressed,omitempty"`
 }
 
-// promptUsagePayload mirrors streams.PromptUsage's JSON shape (AC-30).
-// OutputTokensPresent is always serialized by the producer, which is what
-// makes an unsampled output-token count distinguishable from a measured
-// zero; CachedReadTokens, CachedWriteTokens and ThoughtTokens are plain
-// omitempty ints, so for those three an absent field and a measured zero
-// are indistinguishable on the wire by design (AC-30).
+// Optional numeric fields retain their wire presence; producer presence bits
+// also preserve measured zero when the numeric field is omitted.
 type promptUsagePayload struct {
-	InputTokens                  int64 `json:"input_tokens"`
+	InputTokens                  int64 `json:"input_tokens,omitempty"`
+	InputTokensPresent           bool  `json:"input_tokens_present"`
 	OutputTokens                 int64 `json:"output_tokens"`
 	OutputTokensPresent          bool  `json:"output_tokens_present"`
 	CachedReadTokens             int64 `json:"cached_read_tokens,omitempty"`
 	CachedWriteTokens            int64 `json:"cached_write_tokens,omitempty"`
 	ThoughtTokens                int64 `json:"thought_tokens,omitempty"`
+	CachedReadTokensPresent      bool  `json:"cached_read_tokens_present,omitempty"`
+	CachedWriteTokensPresent     bool  `json:"cached_write_tokens_present,omitempty"`
+	ThoughtTokensPresent         bool  `json:"thought_tokens_present,omitempty"`
 	TotalTokens                  int64 `json:"total_tokens,omitempty"`
 	ProviderReportedCostSubcents int64 `json:"provider_reported_cost_subcents,omitempty"`
 	ProviderReportedCostPresent  bool  `json:"provider_reported_cost_present,omitempty"`
 	Estimated                    bool  `json:"estimated,omitempty"`
 	PriceSuppressed              bool  `json:"price_suppressed,omitempty"`
+}
+
+func (u *promptUsagePayload) UnmarshalJSON(data []byte) error {
+	type payload promptUsagePayload
+	decoded := struct {
+		*payload
+		InputTokens       *int64 `json:"input_tokens"`
+		CachedReadTokens  *int64 `json:"cached_read_tokens"`
+		CachedWriteTokens *int64 `json:"cached_write_tokens"`
+		ThoughtTokens     *int64 `json:"thought_tokens"`
+	}{payload: (*payload)(u)}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	if decoded.InputTokens != nil {
+		u.InputTokens = *decoded.InputTokens
+		u.InputTokensPresent = true
+	}
+	if decoded.CachedReadTokens != nil {
+		u.CachedReadTokens = *decoded.CachedReadTokens
+		u.CachedReadTokensPresent = true
+	}
+	if decoded.CachedWriteTokens != nil {
+		u.CachedWriteTokens = *decoded.CachedWriteTokens
+		u.CachedWriteTokensPresent = true
+	}
+	if decoded.ThoughtTokens != nil {
+		u.ThoughtTokens = *decoded.ThoughtTokens
+		u.ThoughtTokensPresent = true
+	}
+	return nil
 }
 
 // decodePayload extracts a typed usageEventPayload from a bus event via a

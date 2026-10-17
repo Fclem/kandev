@@ -3,7 +3,7 @@ import { deriveTurnMetrics } from "@/lib/turn-metrics";
 import type { MessageMetadataField } from "@/lib/message-metadata-fields";
 import type { Message, Turn } from "@/lib/types/http";
 import { MessageMetadataUsageItems } from "@/components/task/chat/messages/message-metadata-usage-items";
-import { formatPromptDuration } from "@/lib/turn-duration";
+import { formatTtft } from "@/lib/turn-duration";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 
 const USAGE_FIELDS: readonly MessageMetadataField[] = ["tps", "tokens", "cost"];
@@ -43,7 +43,7 @@ export function MessageMetadataTurnItems({
           <TooltipTrigger asChild>
             <span tabIndex={0} className={METADATA_TEXT} data-testid="message-metadata-ttft">
               {t("task:turnMetrics.ttft")}:{" "}
-              {formatPromptDuration(ttftMs / 1000, {
+              {formatTtft(ttftMs, {
                 s: t("task:durationUnitSeconds"),
                 m: t("task:durationUnitMinutes"),
                 h: t("task:durationUnitHours"),

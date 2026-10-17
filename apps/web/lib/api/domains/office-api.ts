@@ -4,6 +4,7 @@ import type {
   AgentProfile,
   Project,
   CostSummary,
+  CostBreakdownItem,
   Approval,
   InboxItem,
   OfficeMeta,
@@ -390,28 +391,28 @@ export const getCosts = (workspaceId: string, options?: ApiRequestOptions) =>
   fetchJson<CostSummary>(`${BASE}/workspaces/${workspaceId}/costs`, options);
 
 export function getCostSummary(workspaceId: string, options?: ApiRequestOptions) {
-  return fetchJson<{ total_subcents: number }>(
+  return fetchJson<{ total_subcents: number | null; coverage_degraded: boolean }>(
     `${BASE}/workspaces/${workspaceId}/costs/summary`,
     options,
   );
 }
 
 export function getCostsByAgent(workspaceId: string, options?: ApiRequestOptions) {
-  return fetchJson<CostSummary["byAgent"]>(
+  return fetchJson<{ breakdown: CostBreakdownItem[] }>(
     `${BASE}/workspaces/${workspaceId}/costs/by-agent`,
     options,
   );
 }
 
 export function getCostsByProject(workspaceId: string, options?: ApiRequestOptions) {
-  return fetchJson<CostSummary["byProject"]>(
+  return fetchJson<{ breakdown: CostBreakdownItem[] }>(
     `${BASE}/workspaces/${workspaceId}/costs/by-project`,
     options,
   );
 }
 
 export function getCostsByModel(workspaceId: string, options?: ApiRequestOptions) {
-  return fetchJson<CostSummary["byModel"]>(
+  return fetchJson<{ breakdown: CostBreakdownItem[] }>(
     `${BASE}/workspaces/${workspaceId}/costs/by-model`,
     options,
   );
@@ -419,9 +420,8 @@ export function getCostsByModel(workspaceId: string, options?: ApiRequestOptions
 
 /**
  * Composed costs view: total + by-agent / by-project / by-model / by-provider
- * in a single round-trip (Stream D of office optimization). The five
- * aggregations run concurrently on the backend with a snapshot-consistent
- * read, so the page reflects one moment in time.
+ * in a single round-trip. The backend runs five queries concurrently; each
+ * query has its own read snapshot.
  */
 export type CostDateRange = "mtd" | "30d";
 
@@ -432,20 +432,14 @@ export function getCostsBreakdown(
   const { range, ...requestOptions } = options ?? {};
   const query = range ? `?range=${encodeURIComponent(range)}` : "";
   return fetchJson<{
-    total_subcents: number;
-    by_agent: CostBreakdownItemRaw[];
-    by_project: CostBreakdownItemRaw[];
-    by_model: CostBreakdownItemRaw[];
-    by_provider: CostBreakdownItemRaw[];
+    total_subcents: number | null;
+    coverage_degraded: boolean;
+    by_agent: CostBreakdownItem[];
+    by_project: CostBreakdownItem[];
+    by_model: CostBreakdownItem[];
+    by_provider: CostBreakdownItem[];
   }>(`${BASE}/workspaces/${workspaceId}/costs/breakdown${query}`, requestOptions);
 }
-
-type CostBreakdownItemRaw = {
-  group_key: string;
-  group_label?: string;
-  count: number;
-  total_subcents: number;
-};
 
 // --- Built-in default spend ceiling (AC-OFFICE-BUDGET-003.5) ---
 

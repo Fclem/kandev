@@ -26,7 +26,7 @@ export function CostBreakdownTable({ title, items, labelPrefix }: Props) {
     );
   }
 
-  const maxSubcents = Math.max(...items.map((i) => i.total_subcents), 1);
+  const maxSubcents = Math.max(...items.map((i) => i.total_subcents ?? 0), 1);
 
   return (
     <Card>
@@ -42,7 +42,10 @@ export function CostBreakdownTable({ title, items, labelPrefix }: Props) {
             <span className="w-32" />
           </div>
           {items.map((item) => {
-            const pct = Math.round((item.total_subcents / maxSubcents) * 100);
+            const pct =
+              item.total_subcents === null
+                ? null
+                : Math.round((item.total_subcents / maxSubcents) * 100);
             const label = item.group_label || item.group_key || t("office:unassignedParen");
             const isFallbackToId = !item.group_label && Boolean(item.group_key);
             return (
@@ -53,9 +56,16 @@ export function CostBreakdownTable({ title, items, labelPrefix }: Props) {
                 <span className="w-20 text-right text-muted-foreground">{item.count}</span>
                 <span className="w-24 text-right font-medium">
                   {formatDollars(item.total_subcents)}
+                  {item.coverage_degraded && (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {t("office:costCoverageIncomplete")}
+                    </span>
+                  )}
                 </span>
                 <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                  {pct !== null && (
+                    <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                  )}
                 </div>
               </div>
             );

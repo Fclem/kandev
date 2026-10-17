@@ -27,6 +27,7 @@ type TaskUsageEvent struct {
 	UsageSchemaVersion int
 
 	TokensIn                 int64
+	TokensInMissing          bool
 	TokensCachedRead         *int64
 	TokensCachedWrite        *int64
 	TokensOut                *int64
@@ -56,10 +57,17 @@ type TaskUsageTurnCursor struct {
 	Cursor int64
 }
 
+const (
+	NativeUsageGapDirectPrefix = "native_usage_gap_direct:"
+	NativeUsageGapChildPrefix  = "native_usage_gap_child:"
+)
+
 type TaskUsageTurnEvents struct {
-	TurnID string
-	Cursor int64
-	Events []*TaskUsageEvent
+	TurnID           string
+	Cursor           int64
+	Events           []*TaskUsageEvent
+	DirectIncomplete bool
+	ChildIncomplete  bool
 }
 
 // UsageSum is the priced cost of a set of ledger rows. HasUnpriced reports

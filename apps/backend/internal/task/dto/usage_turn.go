@@ -13,20 +13,24 @@ const (
 )
 
 type UsageTokenBreakdownDTO struct {
-	InputTokens       int64   `json:"input_tokens"`
-	CachedReadTokens  int64   `json:"cached_read_tokens"`
-	CachedWriteTokens int64   `json:"cached_write_tokens"`
-	OutputTokens      int64   `json:"output_tokens"`
-	ThoughtTokens     int64   `json:"thought_tokens"`
-	TotalTokens       int64   `json:"total_tokens"`
-	OutputComplete    bool    `json:"output_complete"`
-	EventCount        int     `json:"event_count"`
-	UnpricedCount     int     `json:"unpriced_count"`
-	CostSubcents      *string `json:"cost_subcents"`
-	Overflow          bool    `json:"overflow"`
-	costSubcents      int64
-	costSeen          bool
-	costOverflow      bool
+	InputTokens              int64   `json:"input_tokens"`
+	InputComplete            bool    `json:"input_complete"`
+	CachedReadTokens         int64   `json:"cached_read_tokens"`
+	CachedWriteTokens        int64   `json:"cached_write_tokens"`
+	CachedReadTokensPresent  bool    `json:"cached_read_tokens_present"`
+	CachedWriteTokensPresent bool    `json:"cached_write_tokens_present"`
+	OutputTokens             int64   `json:"output_tokens"`
+	ThoughtTokens            int64   `json:"thought_tokens"`
+	ReasoningTokens          *int64  `json:"reasoning_tokens,omitempty"`
+	TotalTokens              int64   `json:"total_tokens"`
+	OutputComplete           bool    `json:"output_complete"`
+	EventCount               int     `json:"event_count"`
+	UnpricedCount            int     `json:"unpriced_count"`
+	CostSubcents             *string `json:"cost_subcents"`
+	Overflow                 bool    `json:"overflow"`
+	costSubcents             int64
+	costSeen                 bool
+	costOverflow             bool
 }
 
 type UsageResponseDTO struct {
@@ -40,6 +44,7 @@ type UsageResponseDTO struct {
 	Model                    string  `json:"model,omitempty"`
 	Provider                 string  `json:"provider,omitempty"`
 	InputTokens              int64   `json:"input_tokens"`
+	InputTokensPresent       bool    `json:"input_tokens_present"`
 	CachedReadTokens         *int64  `json:"cached_read_tokens,omitempty"`
 	CachedWriteTokens        *int64  `json:"cached_write_tokens,omitempty"`
 	OutputTokens             *int64  `json:"output_tokens,omitempty"`
@@ -73,6 +78,9 @@ type UsageTurnsPageDTO struct {
 
 func ToUsageTurnDTO(rows models.TaskUsageTurnEvents, includeResponses bool) UsageTurnDTO {
 	turn := UsageTurnDTO{TurnID: rows.TurnID, Completeness: "unknown", CostSources: []string{}}
+	turn.Direct.InputComplete = true
+	turn.Child.InputComplete = true
+	turn.Total.InputComplete = true
 	turn.Direct.OutputComplete = true
 	turn.Child.OutputComplete = true
 	turn.Total.OutputComplete = true
@@ -101,7 +109,28 @@ func ToUsageTurnDTO(rows models.TaskUsageTurnEvents, includeResponses bool) Usag
 	finalizeBucket(&turn.Direct)
 	finalizeBucket(&turn.Child)
 	finalizeBucket(&turn.Total)
+	if rows.DirectIncomplete || rows.ChildIncomplete {
+		turn.Completeness = usageCompletenessPartial
+		// A coverage gap leaves the latest upstream completion unproven.
+		turn.LastResponse = nil
+		withholdIncompleteUsage(&turn.Total)
+		if rows.DirectIncomplete {
+			withholdIncompleteUsage(&turn.Direct)
+		}
+		if rows.ChildIncomplete {
+			withholdIncompleteUsage(&turn.Child)
+		}
+	}
 	return turn
+}
+
+func withholdIncompleteUsage(bucket *UsageTokenBreakdownDTO) {
+	bucket.InputComplete = false
+	bucket.OutputComplete = false
+	bucket.CachedReadTokensPresent = false
+	bucket.CachedWriteTokensPresent = false
+	bucket.ReasoningTokens = nil
+	bucket.CostSubcents = nil
 }
 
 type usageTurnCompleteness struct {
@@ -140,10 +169,23 @@ func appendUsageTurnRow(
 func addUsageRow(bucket *UsageTokenBreakdownDTO, row *models.TaskUsageEvent) {
 	bucket.EventCount++
 	addTokenCount(bucket, &bucket.InputTokens, row.TokensIn)
+	bucket.InputComplete = bucket.InputComplete && !row.TokensInMissing
 	addTokenCount(bucket, &bucket.CachedReadTokens, int64Value(row.TokensCachedRead))
 	addTokenCount(bucket, &bucket.CachedWriteTokens, int64Value(row.TokensCachedWrite))
+	bucket.CachedReadTokensPresent = bucket.CachedReadTokensPresent || row.TokensCachedRead != nil
+	bucket.CachedWriteTokensPresent = bucket.CachedWriteTokensPresent || row.TokensCachedWrite != nil
 	addTokenCount(bucket, &bucket.OutputTokens, int64Value(row.TokensOut))
 	addTokenCount(bucket, &bucket.ThoughtTokens, int64Value(row.TokensThought))
+	reasoning := row.ReasoningOutputTokens
+	if reasoning == nil && row.NativeScope == "" {
+		reasoning = row.TokensThought
+	}
+	if reasoning != nil {
+		if bucket.ReasoningTokens == nil {
+			bucket.ReasoningTokens = new(int64)
+		}
+		addTokenCount(bucket, bucket.ReasoningTokens, *reasoning)
+	}
 	addTokenCount(bucket, &bucket.TotalTokens, row.TokensTotal)
 	if row.TokensOut == nil {
 		bucket.OutputComplete = false
@@ -188,7 +230,8 @@ func ToUsageResponseDTO(row *models.TaskUsageEvent) UsageResponseDTO {
 		ProviderThreadID: row.ProviderThreadID, ProviderTurnID: row.ProviderTurnID,
 		Scope: row.NativeScope, Source: row.MeasurementSource, Completeness: row.UsageCompleteness,
 		Model: row.Model, Provider: row.Provider, InputTokens: row.TokensIn,
-		CachedReadTokens: row.TokensCachedRead, CachedWriteTokens: row.TokensCachedWrite,
+		InputTokensPresent: !row.TokensInMissing,
+		CachedReadTokens:   row.TokensCachedRead, CachedWriteTokens: row.TokensCachedWrite,
 		OutputTokens: row.TokensOut, ThoughtTokens: row.TokensThought,
 		ReasoningOutputTokens: row.ReasoningOutputTokens, ReportedCacheWriteTokens: row.ReportedCacheWriteTokens,
 		ReportedTotalTokens: row.ReportedTotalTokens, TotalTokens: row.TokensTotal,

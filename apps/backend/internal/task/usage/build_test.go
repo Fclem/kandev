@@ -8,10 +8,72 @@ import (
 	"time"
 
 	commoncosts "github.com/kandev/kandev/internal/common/costs"
+	"github.com/kandev/kandev/internal/events/bus"
+	"github.com/kandev/kandev/internal/task/dto"
 	"github.com/kandev/kandev/internal/task/models"
 )
 
 var fixedOccurredAt = time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+
+func TestUsageCategoryPresenceSurvivesLedgerProjection(t *testing.T) {
+	tests := []struct {
+		name     string
+		optional map[string]any
+		present  bool
+		want     int64
+	}{
+		{name: "absent"},
+		{name: "null", optional: map[string]any{
+			"cached_read_tokens": nil, "cached_write_tokens": nil, "thought_tokens": nil,
+		}},
+		{name: "explicit zero", present: true, optional: map[string]any{
+			"cached_read_tokens": int64(0), "cached_write_tokens": int64(0), "thought_tokens": int64(0),
+		}},
+		{name: "producer measured zero", present: true, optional: map[string]any{
+			"cached_read_tokens_present": true, "cached_write_tokens_present": true, "thought_tokens_present": true,
+		}},
+		{name: "positive", present: true, want: 5, optional: map[string]any{
+			"cached_read_tokens": int64(5), "cached_write_tokens": int64(5), "thought_tokens": int64(5),
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			usage := map[string]any{
+				"input_tokens": int64(50), "output_tokens": int64(20), "output_tokens_present": true,
+			}
+			for key, value := range tt.optional {
+				usage[key] = value
+			}
+			p, err := decodePayload(&bus.Event{Data: map[string]any{
+				"task_id": "task-1", "turn_id": "turn-1", "usage_event_id": "event-1", "usage": usage,
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			row := (&Writer{}).buildRow(context.Background(), p, fixedOccurredAt)
+			if row == nil {
+				t.Fatal("valid usage was rejected")
+			}
+			turn := dto.ToUsageTurnDTO(models.TaskUsageTurnEvents{
+				TurnID: "turn-1", Events: []*models.TaskUsageEvent{row},
+			}, false)
+			if turn.Total.CachedReadTokensPresent != tt.present || turn.Total.CachedWriteTokensPresent != tt.present {
+				t.Fatalf("cache presence = %t/%t, want %t",
+					turn.Total.CachedReadTokensPresent, turn.Total.CachedWriteTokensPresent, tt.present)
+			}
+			if (turn.Direct.ReasoningTokens != nil) != tt.present {
+				t.Fatalf("reasoning = %v, want presence %t", turn.Direct.ReasoningTokens, tt.present)
+			}
+			if tt.present && (turn.Total.CachedReadTokens != tt.want ||
+				turn.Total.CachedWriteTokens != tt.want || *turn.Direct.ReasoningTokens != tt.want) {
+				t.Fatalf("measured categories = %+v, want %d", turn.Total, tt.want)
+			}
+			if row.TokensTotal != 70+3*tt.want {
+				t.Fatalf("ledger total = %d, want %d", row.TokensTotal, 70+3*tt.want)
+			}
+		})
+	}
+}
 
 // TestBuildRow_TokensTotal_SumsAllFiveClasses pins AC-23: tokens_total is
 // computed by the writer, never copied from the payload's own total_tokens.
@@ -245,7 +307,7 @@ func TestResolveCost_OverflowFallsBackToUnpriced(t *testing.T) {
 	w := &Writer{pricing: pricing}
 	p := &usageEventPayload{
 		UsageEventID: "evt-cost-overflow", TaskID: "task-1",
-		Usage: &promptUsagePayload{InputTokens: 2},
+		Usage: &promptUsagePayload{InputTokens: 2, OutputTokensPresent: true},
 	}
 	event := w.buildRow(context.Background(), p, fixedOccurredAt)
 	if event == nil {
@@ -277,7 +339,7 @@ func TestResolveCost_PricingNeverReturns_HonorsWriterOwnedDeadline(t *testing.T)
 	synctest.Test(t, func(t *testing.T) {
 		pricing := &fakePricingLookup{block: true}
 		w := &Writer{pricing: pricing}
-		p := &usageEventPayload{UsageEventID: "evt-1", TaskID: "task-1", Usage: &promptUsagePayload{InputTokens: 10}}
+		p := &usageEventPayload{UsageEventID: "evt-1", TaskID: "task-1", Usage: &promptUsagePayload{InputTokens: 10, OutputTokensPresent: true}}
 
 		done := make(chan *models.TaskUsageEvent, 1)
 		go func() {

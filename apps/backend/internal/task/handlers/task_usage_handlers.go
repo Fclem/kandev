@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kandev/kandev/internal/task/dto"
-	"github.com/kandev/kandev/internal/task/models"
 )
 
 // httpGetTaskUsageTotals serves GET /api/v1/tasks/:id/usage
@@ -86,10 +85,10 @@ func (h *TaskHandlers) httpGetTaskSessionUsageTurn(c *gin.Context) {
 		handleNotFound(c, h.logger, err, "task session not found")
 		return
 	}
-	if len(events) == 0 {
+	if len(events.Events) == 0 && !events.DirectIncomplete && !events.ChildIncomplete {
 		c.JSON(http.StatusNotFound, gin.H{"error": "usage turn not found"})
 		return
 	}
-	turn := dto.ToUsageTurnDTO(models.TaskUsageTurnEvents{TurnID: turnID, Events: events}, true)
+	turn := dto.ToUsageTurnDTO(events, true)
 	c.JSON(http.StatusOK, turn)
 }

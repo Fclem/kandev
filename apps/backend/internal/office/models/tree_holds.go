@@ -50,8 +50,9 @@ type SubtreeCostSummary struct {
 	RootTaskID         string `json:"task_id" db:"-"`
 	TaskCount          int    `json:"task_count" db:"task_count"`
 	IncludeDescendants bool   `json:"include_descendants" db:"-"`
-	CostSubcents       int64  `json:"cost_subcents" db:"cost_subcents"`
-	TokensIn           int64  `json:"tokens_in" db:"tokens_in"`
-	TokensCachedIn     int64  `json:"tokens_cached_in" db:"tokens_cached_in"`
-	TokensOut          int64  `json:"tokens_out" db:"tokens_out"`
+	CostSubcents       *int64 `json:"cost_subcents" db:"cost_subcents"`
+	CoverageDegraded   bool   `json:"coverage_degraded" db:"coverage_degraded"`
+	TokensIn           *int64 `json:"tokens_in" db:"tokens_in"`
+	TokensCachedIn     *int64 `json:"tokens_cached_in" db:"tokens_cached_in"`
+	TokensOut          *int64 `json:"tokens_out" db:"tokens_out"`
 }

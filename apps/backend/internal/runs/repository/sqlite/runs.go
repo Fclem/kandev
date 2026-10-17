@@ -933,23 +933,20 @@ func (r *Repository) ListRunsForAgentPaged(
 	return reqs, nil
 }
 
-// RunCostRollup carries the per-run aggregated token + cost numbers
-// returned by GetRunWithCosts. Cost rows are joined to the run via
-// the run payload's task_id; if the run has no cost rows yet the
-// fields are zero. CostSubcents stores hundredths of a cent (UI divides
-// by 10000).
+// RunCostRollup carries measured run amounts. Incomplete token aggregates and
+// unrecorded monetary amounts are nil. CostSubcents retains independently
+// recorded spend in hundredths of a cent.
 type RunCostRollup struct {
-	InputTokens  int64 `db:"input_tokens" json:"input_tokens"`
-	OutputTokens int64 `db:"output_tokens" json:"output_tokens"`
-	CachedTokens int64 `db:"cached_tokens" json:"cached_tokens"`
-	CostSubcents int64 `db:"cost_subcents" json:"cost_subcents"`
+	InputTokens  *int64 `db:"input_tokens" json:"input_tokens"`
+	OutputTokens *int64 `db:"output_tokens" json:"output_tokens"`
+	CachedTokens *int64 `db:"cached_tokens" json:"cached_tokens"`
+	CostSubcents *int64 `db:"cost_subcents" json:"cost_subcents"`
 }
 
 // GetRunWithCosts returns the run row plus a token + cost rollup
 // computed by joining office_cost_events on the task_id stored in
 // the run payload (json_extract). Returns sql.ErrNoRows when the run
-// id is unknown. The rollup may be all-zero when the run hasn't
-// produced cost events yet.
+// id is unknown. Runs without cost observations have unavailable amounts.
 func (r *Repository) GetRunWithCosts(
 	ctx context.Context, runID string,
 ) (*runmodels.Run, *RunCostRollup, error) {
@@ -963,10 +960,14 @@ func (r *Repository) GetRunWithCosts(
 	var rollup RunCostRollup
 	err = r.ro.QueryRowxContext(ctx, r.ro.Rebind(`
 		SELECT
-			COALESCE(SUM(tokens_in), 0)        AS input_tokens,
-			COALESCE(SUM(tokens_out), 0)       AS output_tokens,
-			COALESCE(SUM(tokens_cached_in), 0) AS cached_tokens,
-			COALESCE(SUM(cost_subcents), 0)    AS cost_subcents
+			CASE WHEN MAX(usage_unavailable) <> 0 OR MAX(tokens_in_missing) <> 0 THEN NULL
+			     ELSE SUM(tokens_in) END AS input_tokens,
+			CASE WHEN MAX(usage_unavailable) <> 0 OR COUNT(tokens_out) < COUNT(id) THEN NULL
+			     ELSE SUM(tokens_out) END AS output_tokens,
+			CASE WHEN MAX(usage_unavailable) <> 0 OR COUNT(tokens_cached_in) < COUNT(id) THEN NULL
+			     ELSE SUM(tokens_cached_in) END AS cached_tokens,
+			SUM(CASE WHEN usage_unavailable = 0 AND (cost_source IS NULL OR cost_source <> 'unpriced')
+			         THEN cost_subcents END) AS cost_subcents
 		FROM office_cost_events
 		WHERE (task_id != '' AND task_id = COALESCE(json_extract(?, '$.task_id'), ''))
           OR (task_id = '' AND session_id IN (SELECT id FROM office_run_sessions WHERE run_id = ?))

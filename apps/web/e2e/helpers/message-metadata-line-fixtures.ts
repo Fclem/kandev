@@ -56,8 +56,11 @@ function metricTurn(turnId: string, sessionId: string, taskId: string) {
 function metricUsageTurn(turnId: string) {
   const direct = {
     input_tokens: 1200,
+    input_complete: true,
     cached_read_tokens: 600,
     cached_write_tokens: 0,
+    cached_read_tokens_present: true,
+    cached_write_tokens_present: false,
     output_tokens: 42,
     thought_tokens: 0,
     total_tokens: 1242,
@@ -69,8 +72,11 @@ function metricUsageTurn(turnId: string) {
   };
   const empty = {
     input_tokens: 0,
+    input_complete: true,
     cached_read_tokens: 0,
     cached_write_tokens: 0,
+    cached_read_tokens_present: false,
+    cached_write_tokens_present: false,
     output_tokens: 0,
     thought_tokens: 0,
     total_tokens: 0,

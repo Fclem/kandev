@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/kandev/kandev/internal/office/models"
 )
 
 // ErrInvalidCostRange identifies unsupported composed-breakdown range values.
@@ -37,19 +39,19 @@ func costRangeWindow(value string, now time.Time) (*costWindow, error) {
 // An empty range retains the lifetime contract of GetCostsBreakdown.
 func (s *CostService) GetCostsBreakdownForRange(
 	ctx context.Context, wsID, value string,
-) (total int64, byAgent, byProject, byModel, byProvider []*CostBreakdown, err error) {
+) (total models.CostSummary, byAgent, byProject, byModel, byProvider []*CostBreakdown, err error) {
 	window, err := costRangeWindow(value, time.Now())
 	if err != nil {
-		return 0, nil, nil, nil, nil, err
+		return models.CostSummary{}, nil, nil, nil, nil, err
 	}
 	return s.getCostsBreakdown(ctx, wsID, window)
 }
 
 func (s *CostService) breakdownReaders(wsID string, window *costWindow) (
-	func(context.Context) (int64, error), []func(context.Context) ([]*CostBreakdown, error),
+	func(context.Context) (models.CostSummary, error), []func(context.Context) ([]*CostBreakdown, error),
 ) {
 	if window == nil {
-		return func(ctx context.Context) (int64, error) { return s.repo.SumCosts(ctx, wsID) },
+		return func(ctx context.Context) (models.CostSummary, error) { return s.repo.GetCostSummary(ctx, wsID) },
 			[]func(context.Context) ([]*CostBreakdown, error){
 				func(ctx context.Context) ([]*CostBreakdown, error) { return s.repo.GetCostsByAgent(ctx, wsID) },
 				func(ctx context.Context) ([]*CostBreakdown, error) { return s.repo.GetCostsByProject(ctx, wsID) },
@@ -57,8 +59,8 @@ func (s *CostService) breakdownReaders(wsID string, window *costWindow) (
 				func(ctx context.Context) ([]*CostBreakdown, error) { return s.repo.GetCostsByProvider(ctx, wsID) },
 			}
 	}
-	return func(ctx context.Context) (int64, error) {
-			return s.repo.SumCostsInWindow(ctx, wsID, window.start, window.before)
+	return func(ctx context.Context) (models.CostSummary, error) {
+			return s.repo.GetCostSummaryInWindow(ctx, wsID, window.start, window.before)
 		},
 		[]func(context.Context) ([]*CostBreakdown, error){
 			func(ctx context.Context) ([]*CostBreakdown, error) {

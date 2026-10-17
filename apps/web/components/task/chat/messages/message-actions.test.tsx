@@ -33,6 +33,10 @@ vi.mock("@/lib/utils/copy-to-clipboard", () => ({ copyToClipboard }));
 const MESSAGE_TIMESTAMP = "2026-07-20T10:15:00Z";
 const MESSAGE_TURN_DURATION_TEST_ID = "message-turn-duration";
 const TURN_COMPLETED_AT = "2026-07-20T10:15:05Z";
+const timestampSettings: AppState["userSettings"] = {
+  ...defaultState.userSettings,
+  messageMetadataFields: ["timestamp"],
+};
 
 function assistantMessage(overrides: Partial<Message> = {}): Message {
   return {
@@ -77,7 +81,11 @@ function StoreCapture() {
 
 function renderMessageActions(message: Message, messageTurn?: Turn, nativeCodexEnabled = false) {
   render(
-    <StateProvider>
+    <StateProvider
+      initialState={{
+        userSettings: { ...timestampSettings, messageMetadataFields: ["timestamp", "duration"] },
+      }}
+    >
       <StoreCapture />
       <MessageActions message={message} />
     </StateProvider>,
@@ -125,7 +133,7 @@ describe("MessageActions copy", () => {
 describe("MessageActions timestamp tooltip", () => {
   it("renders the relative timestamp as a <time> element with the absolute short form as its title", () => {
     const { container } = render(
-      <StateProvider>
+      <StateProvider initialState={{ userSettings: timestampSettings }}>
         <MessageActions message={assistantMessage()} />
       </StateProvider>,
     );
@@ -147,7 +155,7 @@ describe("MessageActions timestamp tooltip", () => {
     const { container } = render(
       <StateProvider
         initialState={{
-          userSettings: { ...defaultState.userSettings, messageTimeDisplay: display },
+          userSettings: { ...timestampSettings, messageTimeDisplay: display },
         }}
       >
         <MessageActions message={assistantMessage()} />
@@ -166,7 +174,7 @@ describe("MessageActions timestamp tooltip", () => {
 
   it("exposes both the visible timestamp and counterpart in its accessible name", () => {
     const { container } = render(
-      <StateProvider>
+      <StateProvider initialState={{ userSettings: timestampSettings }}>
         <MessageActions message={assistantMessage()} />
       </StateProvider>,
     );
@@ -183,7 +191,7 @@ describe("MessageActions timestamp tooltip", () => {
     "omits the timestamp affordance for invalid created_at value %j",
     (createdAt) => {
       const { container } = render(
-        <StateProvider>
+        <StateProvider initialState={{ userSettings: timestampSettings }}>
           <MessageActions message={assistantMessage({ created_at: createdAt })} />
         </StateProvider>,
       );
@@ -196,7 +204,7 @@ describe("MessageActions timestamp tooltip", () => {
 
   it("omits the timestamp element entirely when showTimestamp is false", () => {
     const { container } = render(
-      <StateProvider>
+      <StateProvider initialState={{ userSettings: timestampSettings }}>
         <MessageActions message={assistantMessage()} showTimestamp={false} />
       </StateProvider>,
     );
@@ -214,7 +222,7 @@ describe("MessageActions timestamp tooltip on touch devices", () => {
     }).format(new Date(MESSAGE_TIMESTAMP));
 
     render(
-      <StateProvider>
+      <StateProvider initialState={{ userSettings: timestampSettings }}>
         <MessageActions message={assistantMessage()} />
       </StateProvider>,
     );
@@ -292,7 +300,7 @@ describe("MessageActions metadata field selection", () => {
       store.getState().addTurn(
         turn({
           completed_at: TURN_COMPLETED_AT,
-          metadata: { timing: { ttft_ms: 800 } },
+          metadata: { timing: { ttft_ms: 350 } },
         }),
       );
       store.getState().setMessages("sess-1", [first, last]);
@@ -307,6 +315,7 @@ describe("MessageActions metadata field selection", () => {
     expect(screen.queryByTestId("message-metadata-tokens")).toBeNull();
     expect(screen.queryByTestId("message-metadata-cost")).toBeNull();
     const ttft = screen.getByTestId("message-metadata-ttft");
+    expect(ttft.textContent).toBe("Time to first token: 350 ms");
     expect(ttft.getAttribute("tabindex")).toBe("0");
     fireEvent.focus(ttft);
     expect((await screen.findByRole("tooltip")).textContent).toContain("turn_started");

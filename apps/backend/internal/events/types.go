@@ -366,7 +366,7 @@ const (
 
 const (
 	SessionPromptUsageUpdated = "session_prompt_usage.updated" // Prompt token usage updated
-	SessionUsageUpdated       = "session.usage_updated"        // A committed usage row changed session projections
+	SessionUsageUpdated       = "session.usage_updated"        // A committed usage row or coverage state changed session projections
 )
 
 // Event types for automations

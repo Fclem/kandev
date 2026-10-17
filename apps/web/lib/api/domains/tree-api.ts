@@ -31,10 +31,11 @@ export type TreeCostSummary = {
   task_id: string;
   task_count: number;
   include_descendants: boolean;
-  cost_subcents: number;
-  tokens_in: number;
-  tokens_cached_in: number;
-  tokens_out: number;
+  cost_subcents: number | null;
+  coverage_degraded: boolean;
+  tokens_in: number | null;
+  tokens_cached_in: number | null;
+  tokens_out: number | null;
 };
 
 export function previewTaskTree(taskId: string, options?: ApiRequestOptions) {

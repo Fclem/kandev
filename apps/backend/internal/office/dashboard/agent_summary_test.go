@@ -147,10 +147,6 @@ func TestGetAgentSummary_EmptyAgent(t *testing.T) {
 	if len(resp.SuccessRate) != 14 {
 		t.Errorf("success_rate length = %d, want 14", len(resp.SuccessRate))
 	}
-	if resp.CostAggregate.TotalCostSubcents != 0 {
-		t.Errorf("cost_aggregate.total_cost_subcents = %d, want 0",
-			resp.CostAggregate.TotalCostSubcents)
-	}
 	if len(resp.RecentTasks) != 0 {
 		t.Errorf("recent_tasks = %d, want 0", len(resp.RecentTasks))
 	}
@@ -377,10 +373,10 @@ func TestGetAgentSummary_RecentTasksAndCosts(t *testing.T) {
 		t.Errorf("task-b status = %q, want done", resp.RecentTasks[0].Status)
 	}
 
-	if resp.CostAggregate.InputTokens != 110 ||
-		resp.CostAggregate.OutputTokens != 220 ||
-		resp.CostAggregate.CachedTokens != 55 ||
-		resp.CostAggregate.TotalCostSubcents != 13 {
+	if resp.CostAggregate.InputTokens == nil || *resp.CostAggregate.InputTokens != 110 ||
+		resp.CostAggregate.OutputTokens == nil || *resp.CostAggregate.OutputTokens != 220 ||
+		resp.CostAggregate.CachedTokens == nil || *resp.CostAggregate.CachedTokens != 55 ||
+		resp.CostAggregate.TotalCostSubcents == nil || *resp.CostAggregate.TotalCostSubcents != 13 {
 		t.Errorf("cost_aggregate = %#v, want sums of seeded events", resp.CostAggregate)
 	}
 
@@ -391,10 +387,75 @@ func TestGetAgentSummary_RecentTasksAndCosts(t *testing.T) {
 	if rc.RunID != "run-cost-1" {
 		t.Errorf("run cost run_id = %q, want run-cost-1", rc.RunID)
 	}
-	if rc.InputTokens != 110 || rc.OutputTokens != 220 || rc.CostSubcents != 13 {
+	if rc.InputTokens == nil || *rc.InputTokens != 110 || rc.OutputTokens == nil || *rc.OutputTokens != 220 ||
+		rc.CostSubcents == nil || *rc.CostSubcents != 13 {
 		t.Errorf("run cost rollup = %#v, want 110/220/13", rc)
 	}
 	if rc.RunIDShort != "run-cost" {
 		t.Errorf("run_id_short = %q, want first 8 chars", rc.RunIDShort)
+	}
+}
+
+// @covers AC-OFFICE-COSTS-001.9
+func TestGetAgentSummary_UnavailableTokenRollups(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		gap        bool
+		measured   bool
+		wantTokens string
+		wantCost   int64
+	}{
+		{name: "gap_only", gap: true, wantTokens: "null"},
+		{name: "mixed", gap: true, measured: true, wantTokens: "null", wantCost: 12500},
+		{name: "measured_zero", measured: true, wantTokens: "0", wantCost: 12500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := newTestDeps(t)
+			at := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+			seedSummaryRun(t, deps.db, "run-token-coverage", summaryFixtureAgent, "finished", "task-coverage", at)
+			if tc.measured {
+				seedSummaryCost(t, deps.db, "known", summaryFixtureAgent, "task-coverage", 0, 0, 0, 12500, at.Add(time.Minute))
+			}
+			if tc.gap {
+				seedSummaryCost(t, deps.db, "gap", summaryFixtureAgent, "task-coverage", 0, 0, 0, 0, at.Add(2*time.Minute))
+				if _, err := deps.db.Exec(`UPDATE office_cost_events
+					SET usage_unavailable=1, tokens_out=NULL, tokens_cached_in=NULL, cost_source='unpriced'
+					WHERE id='gap'`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/office/agents/"+summaryFixtureAgent+"/summary", nil)
+			w := httptest.NewRecorder()
+			deps.router.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("summary status=%d: %s", w.Code, w.Body.String())
+			}
+			var result struct {
+				CostAggregate  map[string]json.RawMessage   `json:"cost_aggregate"`
+				RecentRunCosts []map[string]json.RawMessage `json:"recent_run_costs"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if len(result.RecentRunCosts) != 1 {
+				t.Fatalf("missing run coverage: %s", w.Body.String())
+			}
+			for _, rollup := range []map[string]json.RawMessage{result.CostAggregate, result.RecentRunCosts[0]} {
+				for _, field := range []string{"input_tokens", "output_tokens"} {
+					if string(rollup[field]) != tc.wantTokens {
+						t.Errorf("%s=%s, want %s", field, rollup[field], tc.wantTokens)
+					}
+				}
+			}
+			var summary dashboard.AgentDashboardSummary
+			if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+				t.Fatal(err)
+			}
+			if tc.measured && (summary.CostAggregate.TotalCostSubcents == nil ||
+				*summary.CostAggregate.TotalCostSubcents != tc.wantCost ||
+				summary.RecentRunCosts[0].CostSubcents == nil || *summary.RecentRunCosts[0].CostSubcents != tc.wantCost) {
+				t.Fatalf("independent priced spend changed: %+v", summary)
+			}
+		})
 	}
 }

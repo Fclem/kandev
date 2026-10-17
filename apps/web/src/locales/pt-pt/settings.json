@@ -657,7 +657,7 @@
   "systemLoad1Min": "Carga do sistema (1 min)",
   "messageMetadata": "Metadados da mensagem",
   "messageMetadataCost": "Custo",
-  "messageMetadataDescription": "Escolha os detalhes de utilização apresentados abaixo das mensagens do assistente.",
+  "messageMetadataDescription": "Escolha os detalhes de tempo, utilização e sessão apresentados abaixo das mensagens.",
   "messageMetadataDuration": "Duração",
   "messageMetadataSessionOptions": "Opções de modelo e sessão",
   "messageMetadataTimestamp": "Data e hora",

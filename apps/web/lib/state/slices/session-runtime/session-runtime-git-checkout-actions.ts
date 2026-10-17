@@ -1,4 +1,4 @@
-import type { ImmerSet } from "./session-runtime-slice";
+import type { ImmerSet } from "./session-usage-turn-actions";
 import type { SessionRuntimeSlice } from "./types";
 
 export function buildSessionGitCheckoutActions(

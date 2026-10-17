@@ -3449,3 +3449,10 @@ INSERT INTO executors (id, name, type, status, is_system, resumable, config, cre
 INSERT INTO executor_profiles (id, executor_id, name, created_at, updated_at) VALUES ('fixture-v0930-executor-profile', 'fixture-v0930-executor', 'Legacy shared profile', '2026-01-01 00:00:00', '2026-01-01 00:00:00');
 INSERT INTO executors (id, name, type, status, is_system, resumable, config, created_at, updated_at) VALUES ('exec-local', 'Local', 'local_pc', 'active', 1, 1, '{}', '2026-01-01 00:00:00', '2026-01-01 00:00:00');
 INSERT INTO executors (id, name, type, status, is_system, resumable, config, created_at, updated_at) VALUES ('exec-worktree', 'Worktree', 'worktree', 'active', 1, 1, '{}', '2026-01-01 00:00:00', '2026-01-01 00:00:00');
+INSERT INTO task_sessions (id, task_id, state, started_at, updated_at)
+VALUES ('fixture-v0930-usage-session', 'fixture-v0930-task', 'COMPLETED', '2024-01-02 03:04:05+00:00', '2024-01-02 03:04:05+00:00');
+INSERT INTO task_session_turns (id, task_session_id, task_id, started_at, created_at, updated_at)
+VALUES ('fixture-v0930-usage-turn', 'fixture-v0930-usage-session', 'fixture-v0930-task', '2024-01-02 03:04:05+00:00', '2024-01-02 03:04:05+00:00', '2024-01-02 03:04:05+00:00');
+INSERT INTO task_usage_events (id, usage_event_id, task_id, session_id, turn_id, tokens_in, tokens_out, tokens_total, cost_source, contract_version, occurred_at, created_at)
+VALUES (17, 'fixture-v0930-usage-event', 'fixture-v0930-task', 'fixture-v0930-usage-session', 'fixture-v0930-usage-turn', 5, 7, 12, 'unpriced', 1, '2024-01-02 03:04:05+00:00', '2024-01-02 03:04:05+00:00');
+SELECT setval('task_usage_events_id_seq', 17, true);

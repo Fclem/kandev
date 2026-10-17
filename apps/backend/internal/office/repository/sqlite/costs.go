@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/kandev/kandev/internal/db/dialect"
 	"github.com/kandev/kandev/internal/office/models"
 )
 
@@ -77,9 +78,9 @@ func (r *Repository) CreateCostEvent(ctx context.Context, event *models.CostEven
 			cost_subcents, estimated, turn_id, usage_event_id, cost_source,
 			rate_input_per_million, rate_cached_read_per_million,
 			rate_cached_write_per_million, rate_output_per_million,
-			pricing_catalog_version, cost_contract_version,
+			pricing_catalog_version, cost_contract_version, usage_unavailable, tokens_in_missing,
 			occurred_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`), event.ID, event.SessionID, event.TaskID, event.AgentProfileID,
 		event.ProjectID, event.Model, event.Provider, event.TokensIn,
 		event.TokensCachedIn, event.TokensCachedRead, event.TokensCachedWrite,
@@ -87,7 +88,8 @@ func (r *Repository) CreateCostEvent(ctx context.Context, event *models.CostEven
 		event.TurnID, event.UsageEventID, event.CostSource,
 		event.RateInputPerMillion, event.RateCachedReadPerMillion,
 		event.RateCachedWritePerMillion, event.RateOutputPerMillion,
-		event.PricingCatalogVersion, event.CostContractVersion,
+		event.PricingCatalogVersion, event.CostContractVersion, dialect.BoolToInt(event.UsageUnavailable),
+		dialect.BoolToInt(event.TokensInMissing),
 		event.OccurredAt, event.CreatedAt)
 	if err != nil && isUsageEventUniqueViolation(err) {
 		return ErrDuplicateUsageEvent
@@ -135,7 +137,9 @@ func (r *Repository) getCostsByAgentInWindow(
 	query := `
 		SELECT e.agent_profile_id AS group_key,
 			COALESCE(MAX(NULLIF(ap.name, '')), '') AS group_label,
-			SUM(e.cost_subcents) AS total_subcents,
+			SUM(CASE WHEN e.usage_unavailable = 0 AND (e.cost_source IS NULL OR e.cost_source <> 'unpriced')
+				THEN e.cost_subcents END) AS total_subcents,
+			MAX(CASE WHEN e.usage_unavailable = 1 OR e.cost_source = 'unpriced' OR e.cost_subcents IS NULL THEN 1 ELSE 0 END) AS coverage_degraded,
 			COUNT(*) AS count
 		FROM office_cost_events e
 		LEFT JOIN tasks t ON t.id = e.task_id
@@ -183,7 +187,9 @@ func (r *Repository) getCostsByProjectInWindow(
 	query := `
 		SELECT COALESCE(t.project_id, '') AS group_key,
 			COALESCE(MAX(NULLIF(op.name, '')), '') AS group_label,
-			SUM(e.cost_subcents) AS total_subcents,
+			SUM(CASE WHEN e.usage_unavailable = 0 AND (e.cost_source IS NULL OR e.cost_source <> 'unpriced')
+				THEN e.cost_subcents END) AS total_subcents,
+			MAX(CASE WHEN e.usage_unavailable = 1 OR e.cost_source = 'unpriced' OR e.cost_subcents IS NULL THEN 1 ELSE 0 END) AS coverage_degraded,
 			COUNT(*) AS count
 		FROM office_cost_events e
 		LEFT JOIN tasks t ON t.id = e.task_id
@@ -235,7 +241,9 @@ func (r *Repository) getCostsByModelInWindow(
 				WHEN 'google'    THEN 'Gemini - '  || COALESCE(NULLIF(e.model, ''), '(unknown)')
 				ELSE e.provider || ' - ' || COALESCE(NULLIF(e.model, ''), '(unknown)')
 			END AS group_label,
-			SUM(e.cost_subcents) AS total_subcents,
+			SUM(CASE WHEN e.usage_unavailable = 0 AND (e.cost_source IS NULL OR e.cost_source <> 'unpriced')
+				THEN e.cost_subcents END) AS total_subcents,
+			MAX(CASE WHEN e.usage_unavailable = 1 OR e.cost_source = 'unpriced' OR e.cost_subcents IS NULL THEN 1 ELSE 0 END) AS coverage_degraded,
 			COUNT(*) AS count
 		FROM office_cost_events e
 		LEFT JOIN tasks t ON t.id = e.task_id
@@ -285,7 +293,9 @@ func (r *Repository) getCostsByProviderInWindow(
 				WHEN 'unknown'   THEN '(unknown)'
 				ELSE COALESCE(NULLIF(e.provider, ''), 'unknown')
 			END AS group_label,
-			SUM(e.cost_subcents) AS total_subcents,
+			SUM(CASE WHEN e.usage_unavailable = 0 AND (e.cost_source IS NULL OR e.cost_source <> 'unpriced')
+				THEN e.cost_subcents END) AS total_subcents,
+			MAX(CASE WHEN e.usage_unavailable = 1 OR e.cost_source = 'unpriced' OR e.cost_subcents IS NULL THEN 1 ELSE 0 END) AS coverage_degraded,
 			COUNT(*) AS count
 		FROM office_cost_events e
 		LEFT JOIN tasks t ON t.id = e.task_id
@@ -302,6 +312,30 @@ func (r *Repository) getCostsByProviderInWindow(
 		results = []*models.CostBreakdown{}
 	}
 	return results, nil
+}
+
+// GetCostSummary projects measured money without treating unavailable rows as zero.
+func (r *Repository) GetCostSummary(ctx context.Context, workspaceID string) (models.CostSummary, error) {
+	return r.GetCostSummaryInWindow(ctx, workspaceID, time.Time{}, time.Time{})
+}
+
+// GetCostSummaryInWindow keeps monetary availability scoped to the selected event window.
+func (r *Repository) GetCostSummaryInWindow(
+	ctx context.Context, workspaceID string, start, before time.Time,
+) (models.CostSummary, error) {
+	var summary models.CostSummary
+	query := `
+		SELECT SUM(CASE WHEN e.usage_unavailable = 0 AND (e.cost_source IS NULL OR e.cost_source <> 'unpriced')
+			THEN e.cost_subcents END) AS total_subcents,
+			COALESCE(MAX(CASE WHEN e.usage_unavailable = 1 OR e.cost_source = 'unpriced' OR e.cost_subcents IS NULL THEN 1 ELSE 0 END), 0) AS coverage_degraded
+		FROM office_cost_events e
+		LEFT JOIN tasks t ON t.id = e.task_id
+		LEFT JOIN office_run_sessions rs ON e.task_id = '' AND rs.id = e.session_id
+		WHERE COALESCE(t.workspace_id, rs.workspace_id) = ?
+	`
+	query, args := costQueryWindow(query, workspaceID, start, before)
+	err := r.ro.GetContext(ctx, &summary, r.ro.Rebind(query), args...)
+	return summary, err
 }
 
 // SumCosts returns the total cost in subcents (hundredths of a cent) for a

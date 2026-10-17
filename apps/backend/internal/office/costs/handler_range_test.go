@@ -46,14 +46,17 @@ func TestCostsBreakdownRangeHTTP(t *testing.T) {
 			{"", 60000, 3}, {"?range=mtd", 10000, 1}, {"?range=30d", 40000, 2},
 		} {
 			got := readRangeBreakdown(t, router, "range-ws"+tc.query)
-			if got.TotalSubcents != tc.total {
-				t.Errorf("total = %d, want %d", got.TotalSubcents, tc.total)
+			if got.TotalSubcents == nil || *got.TotalSubcents != tc.total {
+				t.Errorf("total = %v, want %d", got.TotalSubcents, tc.total)
 			}
 			for name, items := range map[string][]*costs.CostBreakdown{"agent": got.ByAgent, "project": got.ByProject, "model": got.ByModel, "provider": got.ByProvider} {
 				var sum int64
 				var count int
 				for _, item := range items {
-					sum += item.TotalSubcents
+					if item.TotalSubcents == nil {
+						t.Fatalf("%s group has no measured cost", name)
+					}
+					sum += *item.TotalSubcents
 					count += item.Count
 				}
 				if len(items) != tc.groups || sum != tc.total || count != tc.groups {
@@ -62,8 +65,8 @@ func TestCostsBreakdownRangeHTTP(t *testing.T) {
 			}
 		}
 		empty := readRangeBreakdown(t, router, "empty-ws?range=mtd")
-		if empty.TotalSubcents != 0 || empty.ByAgent == nil || empty.ByProject == nil || empty.ByModel == nil || empty.ByProvider == nil || len(empty.ByAgent)+len(empty.ByProject)+len(empty.ByModel)+len(empty.ByProvider) != 0 {
-			t.Errorf("empty window = %+v, want zero and four empty arrays", empty)
+		if empty.TotalSubcents != nil || empty.ByAgent == nil || empty.ByProject == nil || empty.ByModel == nil || empty.ByProvider == nil || len(empty.ByAgent)+len(empty.ByProject)+len(empty.ByModel)+len(empty.ByProvider) != 0 {
+			t.Errorf("empty window = %+v, want unavailable cost and four empty arrays", empty)
 		}
 		for _, query := range []string{"?range=", "?range=year", "?range=MTD", "?range=mtd&range=30d", "?range=mtd&range=mtd"} {
 			rec := httptest.NewRecorder()

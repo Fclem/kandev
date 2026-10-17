@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { t } from "i18next";
 import type { UsageTurn } from "@/lib/types/conversation-usage";
 import type { Turn } from "@/lib/types/http";
 import { MessageTurnMetrics } from "./message-turn-metrics";
@@ -31,10 +32,14 @@ function turn(): Turn {
 function usageTurn(): UsageTurn {
   const direct = {
     input_tokens: 3,
+    input_complete: true,
     cached_read_tokens: 1,
     cached_write_tokens: 1,
+    cached_read_tokens_present: true,
+    cached_write_tokens_present: true,
     output_tokens: 2,
     thought_tokens: 1,
+    reasoning_tokens: 1,
     total_tokens: 8,
     output_complete: true,
     event_count: 1,
@@ -116,5 +121,97 @@ describe("MessageTurnMetrics", () => {
     expect(screen.getByText("No usage recorded")).toBeTruthy();
     expect(screen.queryByText("0")).toBeNull();
     expect(screen.queryByText("$0.00")).toBeNull();
+  });
+});
+
+describe("MessageTurnMetrics usage availability and formatting", () => {
+  it.each(["partial", "estimated"] as const)(
+    "discloses %s coverage alongside independently measured response values",
+    (completeness) => {
+      const usage = usageTurn();
+      usage.completeness = completeness;
+      if (completeness === "partial") {
+        usage.total.input_complete = false;
+        usage.total.output_complete = false;
+      }
+      USAGE_READ.usageTurn = usage;
+      render(<MessageTurnMetrics turn={turn()} taskId="task-1" sessionId="session-1" />);
+
+      expect(screen.getByRole("status").textContent).toBe(
+        t(`task:conversationUsage.${completeness}`),
+      );
+      expect(rowValue("Time to first token")).toBe("350 ms");
+      expect(rowValue(t("task:conversationUsage.reasoning"))).toBe("1");
+      expect(screen.getByText("$0.01")).toBeTruthy();
+      if (completeness === "partial") {
+        expect(screen.queryByText("Input", { exact: true })).toBeNull();
+        expect(screen.queryByText("Output", { exact: true })).toBeNull();
+      } else {
+        expect(rowValue("Input")).toBe("3");
+        expect(rowValue("Output")).toBe("52");
+      }
+    },
+  );
+
+  it("reports observed but unmeasured partial coverage as unavailable, not absent", () => {
+    const partial = usageTurn();
+    partial.completeness = "partial";
+    for (const bucket of [partial.direct, partial.child, partial.total]) {
+      bucket.event_count = 0;
+      bucket.input_complete = false;
+      bucket.output_complete = false;
+      bucket.cached_read_tokens_present = false;
+      bucket.cached_write_tokens_present = false;
+      delete bucket.cost_subcents;
+      delete bucket.reasoning_tokens;
+    }
+    USAGE_READ.usageTurn = partial;
+    render(<MessageTurnMetrics turn={turn()} taskId="task-1" sessionId="session-1" />);
+
+    expect(screen.getByRole("status").textContent).toBe("Usage data unavailable");
+    expect(screen.queryByText("No usage recorded")).toBeNull();
+    expect(screen.queryByText("Input", { exact: true })).toBeNull();
+    expect(screen.queryByText("Output", { exact: true })).toBeNull();
+    expect(screen.queryByText("$0.00")).toBeNull();
+  });
+
+  it("retains measurements without claiming a nonempty overflowed turn has no usage", () => {
+    const overflowed = usageTurn();
+    overflowed.completeness = "partial";
+    overflowed.total.overflow = true;
+    USAGE_READ.usageTurn = overflowed;
+    render(<MessageTurnMetrics turn={turn()} taskId="task-1" sessionId="session-1" />);
+
+    expect(screen.queryByText("No usage recorded")).toBeNull();
+    expect(screen.queryByText("Input", { exact: true })).toBeNull();
+    expect(screen.queryByText("Output", { exact: true })).toBeNull();
+    expect(rowValue("Reasoning (included in output)")).toBe("1");
+    expect(rowValue("Time to first token")).toBe("350 ms");
+    expect(screen.getByText("$0.01")).toBeTruthy();
+  });
+
+  it("omits unmeasured cache-write and reasoning rows", () => {
+    const codex = usageTurn();
+    codex.direct.cached_write_tokens = 0;
+    codex.direct.cached_write_tokens_present = false;
+    codex.direct.thought_tokens = 0;
+    delete codex.direct.reasoning_tokens;
+    codex.total.cached_write_tokens = 0;
+    codex.total.cached_write_tokens_present = false;
+    codex.total.thought_tokens = 0;
+    delete codex.total.reasoning_tokens;
+    USAGE_READ.usageTurn = codex;
+    render(<MessageTurnMetrics turn={turn()} taskId="task-1" sessionId="session-1" />);
+
+    expect(rowValue("Input")).toBe("3");
+    expect(screen.queryByText("Reasoning (included in output)")).toBeNull();
+    expect(screen.queryByText("Cache-write input")).toBeNull();
+  });
+
+  it("renders TTFT above one second with one decimal instead of flooring", () => {
+    const slow = { ...turn(), metadata: { timing: { ttft_ms: 1900, generation_ms: 2000 } } };
+    render(<MessageTurnMetrics turn={slow} taskId="task-1" sessionId="session-1" />);
+
+    expect(rowValue("Time to first token")).toBe("1.9s");
   });
 });

@@ -10,17 +10,14 @@ type CostBreakdownResponse struct {
 	Breakdown []*CostBreakdown `json:"breakdown"`
 }
 
-// CostBreakdownComposedResponse bundles the four cost views surfaced on the
-// costs overview page (total + by-agent / by-project / by-model breakdowns)
-// into a single response so the page renders in one round-trip — was four
-// parallel calls (Stream D of office optimization). Aggregations run inside
-// a single read transaction so the four views are snapshot-consistent.
+// CostBreakdownComposedResponse contains the summary and four grouped projections.
 type CostBreakdownComposedResponse struct {
-	TotalSubcents int64            `json:"total_subcents"`
-	ByAgent       []*CostBreakdown `json:"by_agent"`
-	ByProject     []*CostBreakdown `json:"by_project"`
-	ByModel       []*CostBreakdown `json:"by_model"`
-	ByProvider    []*CostBreakdown `json:"by_provider"`
+	TotalSubcents    *int64           `json:"total_subcents"`
+	CoverageDegraded bool             `json:"coverage_degraded"`
+	ByAgent          []*CostBreakdown `json:"by_agent"`
+	ByProject        []*CostBreakdown `json:"by_project"`
+	ByModel          []*CostBreakdown `json:"by_model"`
+	ByProvider       []*CostBreakdown `json:"by_provider"`
 }
 
 // CreateBudgetRequest is the request body for creating a budget policy.

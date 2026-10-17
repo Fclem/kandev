@@ -7,6 +7,44 @@ import (
 	"github.com/coder/acp-go-sdk"
 )
 
+func TestExtractUsageOptionalMeasurementPresence(t *testing.T) {
+	zero := 0
+	tests := []struct {
+		name    string
+		resp    *acp.PromptResponse
+		present bool
+	}{
+		{name: "typed absent", resp: &acp.PromptResponse{Usage: &acp.Usage{InputTokens: 10}}},
+		{name: "typed zero", present: true, resp: &acp.PromptResponse{Usage: &acp.Usage{
+			InputTokens: 10, CachedReadTokens: &zero, CachedWriteTokens: &zero, ThoughtTokens: &zero,
+		}}},
+		{name: "metadata absent", resp: &acp.PromptResponse{Meta: map[string]any{
+			"usage": map[string]any{"input_tokens": float64(10)},
+		}}},
+		{name: "metadata snake zero", present: true, resp: &acp.PromptResponse{Meta: map[string]any{
+			"usage": map[string]any{"input_tokens": float64(10),
+				"cached_read_tokens": float64(0), "cached_write_tokens": float64(0), "thought_tokens": float64(0)},
+		}}},
+		{name: "metadata camel zero", present: true, resp: &acp.PromptResponse{Meta: map[string]any{
+			"usage": map[string]any{"inputTokens": float64(10),
+				"cachedReadTokens": float64(0), "cachedWriteTokens": float64(0), "thoughtTokens": float64(0)},
+		}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractUsage(tt.resp)
+			if got == nil {
+				t.Fatal("input measurement disappeared")
+			}
+			if got.CachedReadTokensPresent != tt.present || got.CachedWriteTokensPresent != tt.present ||
+				got.ThoughtTokensPresent != tt.present {
+				t.Fatalf("optional presence = %t/%t/%t, want %t",
+					got.CachedReadTokensPresent, got.CachedWriteTokensPresent, got.ThoughtTokensPresent, tt.present)
+			}
+		})
+	}
+}
+
 // TestExtractUsage walks the three usage shapes observed in
 // /tmp/acp-probe-*.jsonl and confirms extractUsage picks each up.
 func TestExtractUsage(t *testing.T) {
@@ -141,13 +179,6 @@ func TestExtractUsage(t *testing.T) {
 			resp:    nil,
 			wantNil: true,
 		},
-		{
-			name: "all-zero typed usage falls through and yields nil",
-			resp: &acp.PromptResponse{
-				Usage: &acp.Usage{},
-			},
-			wantNil: true,
-		},
 	}
 
 	for _, tc := range tests {
@@ -273,6 +304,24 @@ func TestUsageTracker_ExplicitZeroCostIsPresent(t *testing.T) {
 	_, _, present = a.consumeUsageDeltaWithPresence(sess)
 	if present {
 		t.Fatal("consumed cost presence should not leak into the next turn")
+	}
+}
+
+func TestUsageTrackerRejectsNegativeProviderCost(t *testing.T) {
+	a := newTestAdapter()
+	t.Cleanup(func() { _ = a.Close() })
+	for _, amount := range []float64{-1, 0} {
+		a.convertUsageUpdate("negative-cost", usageUpdateWithCost(200_000, 100, amount, "USD"))
+		_, cost, present := a.consumeUsageDeltaWithPresence("negative-cost")
+		if cost != 0 || present != (amount == 0) {
+			t.Fatalf("amount %v yielded cost %d/present %t", amount, cost, present)
+		}
+	}
+	a.convertUsageUpdate("negative-cost", usageUpdateWithCost(200_000, 100, 0.05, "USD"))
+	a.convertUsageUpdate("negative-cost", usageUpdateWithCost(200_000, 100, -1, "USD"))
+	_, cost, present := a.consumeUsageDeltaWithPresence("negative-cost")
+	if cost != 500 || !present {
+		t.Fatalf("invalid sample erased independently valid cost: %d/%t", cost, present)
 	}
 }
 

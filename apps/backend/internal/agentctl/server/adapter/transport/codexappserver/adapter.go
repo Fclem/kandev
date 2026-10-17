@@ -3,6 +3,7 @@
 package codexappserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -95,15 +96,9 @@ type Adapter struct {
 	backgrounds              map[string]protocol.BackgroundTerminal
 	backgroundSnapshotLoaded bool
 	backgroundCancel         context.CancelFunc
-	latestTokenTotals        map[string]protocol.TokenUsageBreakdown
-	latestContextWindows     map[string]int64
-	turnTokenBaselines       map[string]protocol.TokenUsageBreakdown
-	turnHasTokenBaseline     map[string]bool
-	turnModels               map[string]string
-	turnGenerations          map[string]uint64
-	turnResponseObserved     map[string]bool
-	turnFallbackSelected     map[string]bool
-	completedProviderTurns   map[string]bool
+	turnAttributions         map[string]nativeTurnAttribution
+	turnAttributionKeys      [nativeTurnAttributionLimit]string
+	turnAttributionNext      int
 	updates                  chan streams.AgentEvent
 	updatesDone              chan struct{}
 	updatesMu                sync.RWMutex
@@ -115,24 +110,16 @@ func NewAdapter(cfg *shared.Config, log *logger.Logger) *Adapter {
 		cfg = &shared.Config{}
 	}
 	return &Adapter{
-		cfg:                    cfg,
-		log:                    log,
-		completed:              make(map[string]struct{}),
-		children:               make(map[string]childBinding),
-		childStatuses:          make(map[string]string),
-		earlyChildActivities:   make(map[string]string),
-		backgrounds:            make(map[string]protocol.BackgroundTerminal),
-		latestTokenTotals:      make(map[string]protocol.TokenUsageBreakdown),
-		latestContextWindows:   make(map[string]int64),
-		turnTokenBaselines:     make(map[string]protocol.TokenUsageBreakdown),
-		turnHasTokenBaseline:   make(map[string]bool),
-		turnModels:             make(map[string]string),
-		turnGenerations:        make(map[string]uint64),
-		turnResponseObserved:   make(map[string]bool),
-		turnFallbackSelected:   make(map[string]bool),
-		completedProviderTurns: make(map[string]bool),
-		updates:                make(chan streams.AgentEvent, maxQueuedUpdates),
-		updatesDone:            make(chan struct{}),
+		cfg:                  cfg,
+		log:                  log,
+		completed:            make(map[string]struct{}),
+		children:             make(map[string]childBinding),
+		childStatuses:        make(map[string]string),
+		earlyChildActivities: make(map[string]string),
+		backgrounds:          make(map[string]protocol.BackgroundTerminal),
+		turnAttributions:     make(map[string]nativeTurnAttribution, nativeTurnAttributionLimit),
+		updates:              make(chan streams.AgentEvent, maxQueuedUpdates),
+		updatesDone:          make(chan struct{}),
 	}
 }
 
@@ -218,6 +205,7 @@ func (a *Adapter) NewSession(ctx context.Context, servers []agenttypes.McpServer
 		return "", errors.New("start Codex thread: response omitted thread ID")
 	}
 	a.mu.Lock()
+	a.resetNativeAttributionLocked()
 	a.threadID = response.Thread.ID
 	a.turnID = ""
 	a.promptPending = false
@@ -263,6 +251,9 @@ func (a *Adapter) LoadSession(ctx context.Context, threadID string, servers []ag
 		return errors.New("resume Codex thread: provider returned a different thread ID")
 	}
 	a.mu.Lock()
+	if a.threadID != threadID {
+		a.resetNativeAttributionLocked()
+	}
 	a.threadID = threadID
 	a.turnID = ""
 	a.promptPending = false
@@ -485,8 +476,18 @@ func (a *Adapter) emitModelState() {
 }
 
 func (a *Adapter) handleNotification(_ context.Context, method string, raw json.RawMessage) {
+	// Cumulative snapshots have no final-count marker and cannot own turn amounts.
+	if method == protocol.NotificationTokenUsage {
+		return
+	}
 	var params map[string]any
-	if err := json.Unmarshal(raw, &params); err != nil {
+	if method == protocol.NotificationRawResponse {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&params); err != nil {
+			return
+		}
+	} else if err := json.Unmarshal(raw, &params); err != nil {
 		return
 	}
 	threadID := stringField(params, "threadId")
@@ -498,7 +499,7 @@ func (a *Adapter) handleNotification(_ context.Context, method string, raw json.
 	}
 	isRootThread := threadID == activeThreadID
 	rootThreadID, parentToolCallID, _ := a.eventScope(threadID)
-	if turnID != "" && isRootThread {
+	if turnID != "" && isRootThread && method != protocol.NotificationRawResponse {
 		a.mu.Lock()
 		a.turnID = turnID
 		a.promptPending = false
@@ -517,8 +518,6 @@ func (a *Adapter) handleNotification(_ context.Context, method string, raw json.
 		a.emitItem(params, rootThreadID, threadID, parentToolCallID, turnID, true)
 	case "turn/completed":
 		a.handleTurnCompleted(params, threadID, rootThreadID, turnID, isRootThread)
-	case protocol.NotificationTokenUsage:
-		a.handleTokenUsageNotification(params)
 	case protocol.NotificationRawResponse:
 		a.handleRawResponseCompleted(params)
 	}
@@ -561,7 +560,6 @@ func (a *Adapter) emitTextDelta(params map[string]any, rootThreadID, turnID, ite
 
 func (a *Adapter) handleTurnCompleted(params map[string]any, threadID, rootThreadID, turnID string, isRootThread bool) {
 	turn := decodedCompletedTurn(params, turnID)
-	a.finalizeProviderTurn(threadID, turn.ID)
 	if !isRootThread {
 		a.emitChildStatus(threadID, turn.Status)
 		return

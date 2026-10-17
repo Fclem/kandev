@@ -1571,7 +1571,7 @@ func (m *Manager) handleAgentEventState(execution *AgentExecution, event agentct
 		if event.TurnID == "" {
 			if event.PromptGeneration != 0 {
 				event.TurnID = execution.promptTurnIDForGeneration(event.PromptGeneration)
-			} else {
+			} else if event.UsageObservation == nil || event.UsageObservation.Scope != streams.NativeUsageScopeChild {
 				event.TurnID = execution.promptTurnIDForEvent(event)
 			}
 		}

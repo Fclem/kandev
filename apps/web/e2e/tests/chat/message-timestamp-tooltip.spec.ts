@@ -15,6 +15,10 @@ test.describe("Chat message timestamp tooltip", () => {
     seedData,
     prCapture,
   }) => {
+    await apiClient.saveUserSettings({
+      message_metadata_fields: ["timestamp"],
+      message_time_display: "relative",
+    });
     const task = await apiClient.createTask(seedData.workspaceId, "Timestamp Tooltip", {
       description: "seeded timestamp tooltip fixture",
       workflow_id: seedData.workflowId,

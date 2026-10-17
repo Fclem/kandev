@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
+import { Checkbox } from "@kandev/ui/checkbox";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { updateUserSettings } from "@/lib/api";
+import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
+import { isUserSettingsResponseCurrent } from "@/lib/settings/user-settings-revision";
 import {
   MESSAGE_METADATA_FIELDS,
   parseMessageMetadataFields,
@@ -12,7 +15,7 @@ import {
 } from "@/lib/message-metadata-fields";
 import { GENERAL_SETTINGS_TARGETS } from "@/lib/settings-discovery/catalog/preferences";
 import { SettingsCard } from "./settings-card";
-import { useSettingsSaveContributor } from "./settings-save-provider";
+import { SettingsSaveCancelledError, useSettingsSaveContributor } from "./settings-save-provider";
 
 const fieldLabelKeys: Record<MessageMetadataField, string> = {
   session_config: "settings:messageMetadataSessionOptions",
@@ -53,12 +56,20 @@ export function MessageMetadataSettings() {
     isDirty,
     save: async (revision) => {
       const submitted = parseMessageMetadataFields(String(revision).split(",").filter(Boolean));
-      await updateUserSettings({ message_metadata_fields: submitted });
+      const settingsAtSubmit = storeApi.getState().userSettings;
+      const response = await updateUserSettings({ message_metadata_fields: submitted });
+      const state = storeApi.getState();
+      if (
+        !isUserSettingsResponseCurrent(
+          response.settings.revision,
+          state.userSettings.revision,
+          state.userSettings === settingsAtSubmit,
+        )
+      ) {
+        throw new SettingsSaveCancelledError();
+      }
       setSaved(submitted);
-      setUserSettings({
-        ...storeApi.getState().userSettings,
-        messageMetadataFields: submitted,
-      });
+      setUserSettings(mapUserSettingsResponse(response, state.userSettings));
     },
     discard: () => setDraft(saved),
   });
@@ -82,21 +93,18 @@ export function MessageMetadataSettings() {
                 key={field}
                 className="flex min-h-11 min-w-0 cursor-pointer items-center gap-3 rounded-md px-2 py-2 [@media(pointer:coarse)]:min-h-11"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={checked}
-                  data-state={checked ? "checked" : "unchecked"}
                   data-settings-dirty={isDirty}
-                  onChange={(event) =>
+                  onCheckedChange={(next) =>
                     setDraft((current) =>
                       parseMessageMetadataFields(
-                        event.target.checked
+                        next === true
                           ? [...current, field]
                           : current.filter((selected) => selected !== field),
                       ),
                     )
                   }
-                  className="size-4 shrink-0 accent-primary"
                 />
                 <span className="min-w-0 break-words text-sm">{t(fieldLabelKeys[field])}</span>
               </label>

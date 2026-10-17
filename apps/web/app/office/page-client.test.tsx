@@ -49,6 +49,7 @@ function dashboard(): DashboardData {
     open_tasks: 0,
     blocked_tasks: 0,
     month_spend_subcents: 0,
+    month_spend_coverage_degraded: false,
     pending_approvals: 0,
     recent_activity: [],
     task_count: 2,

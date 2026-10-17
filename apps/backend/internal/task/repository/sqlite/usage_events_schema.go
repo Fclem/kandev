@@ -53,6 +53,7 @@ func (r *Repository) initTaskUsageEventsSchema() error {
 		usage_completeness TEXT NOT NULL DEFAULT '',
 		usage_schema_version INTEGER NOT NULL DEFAULT 0,
 		tokens_in BIGINT NOT NULL DEFAULT 0,
+		tokens_in_missing INTEGER NOT NULL DEFAULT 0,
 		tokens_cached_read BIGINT,
 		tokens_cached_write BIGINT,
 		tokens_out BIGINT,

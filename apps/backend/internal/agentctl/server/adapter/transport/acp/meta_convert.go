@@ -2,6 +2,7 @@ package acp
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/coder/acp-go-sdk"
 
@@ -229,30 +230,41 @@ func extractUsage(resp *acp.PromptResponse) *streams.PromptUsage {
 
 // fromTypedUsage converts the SDK's typed Usage (parsed from
 // result.usage on claude-acp / opencode-acp) to streams.PromptUsage.
-// Returns nil when every count is zero.
+// Returns nil when no supported measurement is present.
 func fromTypedUsage(u *acp.Usage) *streams.PromptUsage {
 	if u == nil {
 		return nil
 	}
+	inputPresent, outputPresent := acpclient.PromptUsageTokenPresence(u)
 	usage := &streams.PromptUsage{
-		InputTokens:         int64(u.InputTokens),
-		OutputTokens:        int64(u.OutputTokens),
-		OutputTokensPresent: true,
-		TotalTokens:         int64(u.TotalTokens),
+		InputTokens:         max(int64(u.InputTokens), 0),
+		InputTokensPresent:  inputPresent && u.InputTokens >= 0,
+		OutputTokens:        max(int64(u.OutputTokens), 0),
+		OutputTokensPresent: outputPresent && u.OutputTokens >= 0,
+		TotalTokens:         max(int64(u.TotalTokens), 0),
 	}
-	if u.CachedReadTokens != nil {
+	if u.CachedReadTokens != nil && *u.CachedReadTokens >= 0 {
 		usage.CachedReadTokens = int64(*u.CachedReadTokens)
+		usage.CachedReadTokensPresent = true
 	}
-	if u.CachedWriteTokens != nil {
+	if u.CachedWriteTokens != nil && *u.CachedWriteTokens >= 0 {
 		usage.CachedWriteTokens = int64(*u.CachedWriteTokens)
+		usage.CachedWriteTokensPresent = true
 	}
-	if u.ThoughtTokens != nil {
+	if u.ThoughtTokens != nil && *u.ThoughtTokens >= 0 {
 		usage.ThoughtTokens = int64(*u.ThoughtTokens)
+		usage.ThoughtTokensPresent = true
 	}
-	if usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.TotalTokens == 0 {
+	if !hasPromptUsageMeasurement(usage) {
 		return nil
 	}
 	return usage
+}
+
+func hasPromptUsageMeasurement(usage *streams.PromptUsage) bool {
+	return usage.InputTokensPresent || usage.OutputTokensPresent ||
+		usage.CachedReadTokensPresent || usage.CachedWriteTokensPresent ||
+		usage.ThoughtTokensPresent || usage.TotalTokens != 0
 }
 
 // fromGeminiQuotaMeta extracts gemini's `_meta.quota.token_count` shape.
@@ -298,12 +310,14 @@ func geminiTokenCount(raw any) *streams.PromptUsage {
 		return nil
 	}
 	outputTokens, outputTokensPresent := getInt64WithPresence(tc, "output_tokens")
+	inputTokens, inputTokensPresent := getInt64WithPresence(tc, "input_tokens")
 	usage := &streams.PromptUsage{
-		InputTokens:         getInt64(tc, "input_tokens"),
+		InputTokens:         inputTokens,
+		InputTokensPresent:  inputTokensPresent,
 		OutputTokens:        outputTokens,
 		OutputTokensPresent: outputTokensPresent,
 	}
-	if usage.InputTokens == 0 && usage.OutputTokens == 0 {
+	if !hasPromptUsageMeasurement(usage) {
 		return nil
 	}
 	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
@@ -331,34 +345,32 @@ func extractPromptUsage(meta any) *streams.PromptUsage {
 	if !outputTokensPresent {
 		outputTokens, outputTokensPresent = getInt64WithPresence(u, "outputTokens")
 	}
+	inputTokens, inputTokensPresent := getUsageTokenCount(u, "input_tokens", "inputTokens")
 	usage := &streams.PromptUsage{
-		InputTokens:         getInt64(u, "input_tokens"),
+		InputTokens:         inputTokens,
+		InputTokensPresent:  inputTokensPresent,
 		OutputTokens:        outputTokens,
 		OutputTokensPresent: outputTokensPresent,
-		CachedReadTokens:    getInt64(u, "cached_read_tokens"),
-		CachedWriteTokens:   getInt64(u, "cached_write_tokens"),
 		TotalTokens:         getInt64(u, "total_tokens"),
 	}
 	// Also check camelCase variants.
-	if usage.InputTokens == 0 {
-		usage.InputTokens = getInt64(u, "inputTokens")
-	}
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = getInt64(u, "totalTokens")
 	}
-	if usage.CachedReadTokens == 0 {
-		usage.CachedReadTokens = getInt64(u, "cachedReadTokens")
-	}
-	if usage.CachedWriteTokens == 0 {
-		usage.CachedWriteTokens = getInt64(u, "cachedWriteTokens")
-	}
-	if usage.ThoughtTokens == 0 {
-		usage.ThoughtTokens = getInt64(u, "thoughtTokens")
-	}
-	if usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.TotalTokens == 0 {
+	usage.CachedReadTokens, usage.CachedReadTokensPresent = getUsageTokenCount(u, "cached_read_tokens", "cachedReadTokens")
+	usage.CachedWriteTokens, usage.CachedWriteTokensPresent = getUsageTokenCount(u, "cached_write_tokens", "cachedWriteTokens")
+	usage.ThoughtTokens, usage.ThoughtTokensPresent = getUsageTokenCount(u, "thought_tokens", "thoughtTokens")
+	if !hasPromptUsageMeasurement(usage) {
 		return nil
 	}
 	return usage
+}
+
+func getUsageTokenCount(usage map[string]any, snake, camel string) (int64, bool) {
+	if value, present := getInt64WithPresence(usage, snake); present {
+		return value, true
+	}
+	return getInt64WithPresence(usage, camel)
 }
 
 // toStringMap converts any to map[string]any, handling the common JSON unmarshal case.
@@ -388,17 +400,21 @@ func getInt64(m map[string]any, key string) int64 {
 	return v
 }
 
-// getInt64WithPresence distinguishes an explicit numeric zero from a missing
-// or non-numeric field.
+// getInt64WithPresence admits nonnegative counts, restricting floats to safe integers.
 func getInt64WithPresence(m map[string]any, key string) (int64, bool) {
 	switch v := m[key].(type) {
 	case float64:
-		return int64(v), true
+		if v >= 0 && v < 0x1p53 && math.Trunc(v) == v {
+			return int64(v), true
+		}
 	case int64:
-		return v, true
+		if v >= 0 {
+			return v, true
+		}
 	case int:
-		return int64(v), true
-	default:
-		return 0, false
+		if v >= 0 {
+			return int64(v), true
+		}
 	}
+	return 0, false
 }

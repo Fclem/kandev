@@ -99,7 +99,10 @@ func assertCostsWindowQueries(t *testing.T, repo *sqlite.Repository) {
 		}
 		got := map[string]entry{}
 		for _, row := range rows {
-			got[row.GroupKey] = entry{row.GroupLabel, row.TotalSubcents, row.Count}
+			if row.TotalSubcents == nil {
+				t.Fatalf("%s/%s lost a measured amount", tc.name, row.GroupKey)
+			}
+			got[row.GroupKey] = entry{row.GroupLabel, *row.TotalSubcents, row.Count}
 		}
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s=%+v, want %+v", tc.name, got, tc.want)
@@ -112,5 +115,49 @@ func assertCostsWindowQueries(t *testing.T, repo *sqlite.Repository) {
 	empty, err := repo.SumCostsInWindow(ctx, "window-ws", before, before)
 	if err != nil || empty != 0 {
 		t.Errorf("empty total=%d/%v", empty, err)
+	}
+}
+
+func TestCostSummaryWindowPreservesMeasurementAvailability(t *testing.T) {
+	repo := newTestRepo(t)
+	seedTasksTable(t, repo, "summary-task", "summary-ws")
+	ctx := context.Background()
+	start := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	priced, unpriced := models.CostSourceProviderReported, models.CostSourceUnpriced
+	for _, event := range []*models.CostEvent{
+		{ID: "known", TaskID: "summary-task", CostSubcents: 12500, CostSource: &priced, OccurredAt: start.Add(time.Hour)},
+		{ID: "outside-gap", TaskID: "summary-task", UsageUnavailable: true, CostSource: &unpriced, OccurredAt: start.Add(-time.Hour)},
+	} {
+		if err := repo.CreateCostEvent(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	summary, err := repo.GetCostSummaryInWindow(ctx, "summary-ws", start, start.Add(24*time.Hour))
+	if err != nil || summary.TotalSubcents == nil || *summary.TotalSubcents != 12500 || summary.CoverageDegraded {
+		t.Fatalf("selected measured window = %+v/%v", summary, err)
+	}
+	lifetime, err := repo.GetCostSummary(ctx, "summary-ws")
+	if err != nil || !lifetime.CoverageDegraded {
+		t.Fatalf("lifetime gap lost: %+v/%v", lifetime, err)
+	}
+	if err := repo.CreateCostEvent(ctx, &models.CostEvent{ID: "inside-gap", TaskID: "summary-task",
+		UsageUnavailable: true, CostSource: &unpriced, OccurredAt: start.Add(2 * time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	mixed, err := repo.GetCostSummaryInWindow(ctx, "summary-ws", start, start.Add(24*time.Hour))
+	if err != nil || mixed.TotalSubcents == nil || *mixed.TotalSubcents != 12500 || !mixed.CoverageDegraded {
+		t.Fatalf("mixed selected window = %+v/%v", mixed, err)
+	}
+	gap, err := repo.GetCostSummaryInWindow(ctx, "summary-ws", start.Add(2*time.Hour), start.Add(3*time.Hour))
+	if err != nil || gap.TotalSubcents != nil || !gap.CoverageDegraded {
+		t.Fatalf("gap became free: %+v/%v", gap, err)
+	}
+	if err := repo.CreateCostEvent(ctx, &models.CostEvent{ID: "zero", TaskID: "summary-task",
+		CostSource: &priced, OccurredAt: start.Add(3 * time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	zero, err := repo.GetCostSummaryInWindow(ctx, "summary-ws", start.Add(3*time.Hour), start.Add(4*time.Hour))
+	if err != nil || zero.TotalSubcents == nil || *zero.TotalSubcents != 0 || zero.CoverageDegraded {
+		t.Fatalf("measured zero lost: %+v/%v", zero, err)
 	}
 }

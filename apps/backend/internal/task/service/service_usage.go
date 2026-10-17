@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/kandev/kandev/internal/task/models"
@@ -52,32 +54,52 @@ func (s *Service) ListTaskSessionUsageTurns(ctx context.Context, taskID, session
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
-	turns, err := reader.ListSessionUsageTurnCursors(ctx, sessionID, afterID, limit)
+	result, err := reader.ListSessionUsageTurnPage(ctx, taskID, sessionID, afterID, limit)
 	if err != nil {
 		return nil, afterID, err
 	}
-	result := make([]models.TaskUsageTurnEvents, 0, len(turns))
 	nextCursor := afterID
-	for _, turn := range turns {
-		events, err := reader.ListSessionUsageEventsByTurn(ctx, sessionID, turn.TurnID)
-		if err != nil {
-			return nil, afterID, err
-		}
-		result = append(result, models.TaskUsageTurnEvents{TurnID: turn.TurnID, Cursor: turn.Cursor, Events: events})
-		nextCursor = turn.Cursor
+	if len(result) > 0 {
+		nextCursor = result[len(result)-1].Cursor
 	}
 	return result, nextCursor, nil
 }
 
-func (s *Service) GetTaskSessionUsageTurn(ctx context.Context, taskID, sessionID, turnID string) ([]*models.TaskUsageEvent, error) {
+func (s *Service) GetTaskSessionUsageTurn(ctx context.Context, taskID, sessionID, turnID string) (models.TaskUsageTurnEvents, error) {
 	if err := s.AuthorizeTaskSessionAccess(ctx, taskID, sessionID); err != nil {
-		return nil, err
+		return models.TaskUsageTurnEvents{}, err
 	}
 	reader, ok := s.usage.(repository.UsageEventReader)
 	if !ok {
-		return nil, errUsageEventReaderUnavailable
+		return models.TaskUsageTurnEvents{}, errUsageEventReaderUnavailable
 	}
-	return reader.ListSessionUsageEventsByTurn(ctx, sessionID, turnID)
+	rows, err := reader.ListSessionUsageEventsByTurn(ctx, sessionID, turnID)
+	if err != nil {
+		return models.TaskUsageTurnEvents{}, err
+	}
+	return s.usageTurnProjection(ctx, taskID, sessionID, turnID, rows)
+}
+
+func (s *Service) usageTurnProjection(ctx context.Context, taskID, sessionID, turnID string, rows []*models.TaskUsageEvent) (models.TaskUsageTurnEvents, error) {
+	result := models.TaskUsageTurnEvents{TurnID: turnID, Events: rows}
+	turn, err := s.turns.GetTurn(ctx, turnID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, nil
+	}
+	if err != nil {
+		return models.TaskUsageTurnEvents{}, err
+	}
+	if turn == nil || turn.TaskSessionID != sessionID || turn.TaskID != taskID {
+		return models.TaskUsageTurnEvents{}, models.ErrTaskSessionNotFound
+	}
+	for key, value := range turn.Metadata {
+		if value != true {
+			continue
+		}
+		result.DirectIncomplete = result.DirectIncomplete || strings.HasPrefix(key, models.NativeUsageGapDirectPrefix)
+		result.ChildIncomplete = result.ChildIncomplete || strings.HasPrefix(key, models.NativeUsageGapChildPrefix)
+	}
+	return result, nil
 }
 
 // SumUsageForTasks sums the priced ledger cost of taskIDs over [from, to).

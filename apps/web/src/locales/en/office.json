@@ -1022,5 +1022,6 @@
   "failedToLoadRouteAttempts": "Failed to load route attempts",
   "failedToLoadRoutingConfig": "Failed to load routing config",
   "failedToLoadRoutingPreview": "Failed to load routing preview",
-  "failedToLoadTaskQuorum": "Failed to load task quorum"
+  "failedToLoadTaskQuorum": "Failed to load task quorum",
+  "costCoverageIncomplete": "Some usage is unpriced."
 }

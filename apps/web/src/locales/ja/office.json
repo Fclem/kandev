@@ -1022,5 +1022,6 @@
   "openSessionRecovery": "セッション復旧を開く",
   "sessionRecoveryDescription": "この実行はセッションが復旧されるまで保留されています。Kandev はプロンプトを自動的に再送信しません。",
   "sessionRecoveryReason": "理由: {{reason}}",
-  "sessionRecoveryRequired": "セッションの復旧が必要"
+  "sessionRecoveryRequired": "セッションの復旧が必要",
+  "costCoverageIncomplete": "一部の使用量の料金が不明です。"
 }

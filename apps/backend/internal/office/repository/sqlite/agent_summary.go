@@ -216,24 +216,29 @@ func (r *Repository) RecentTasksForAgent(
 // AgentCostAggregate is the all-time cost rollup for one agent.
 // TotalCostSubcents stores hundredths of a cent (UI divides by 10000).
 type AgentCostAggregate struct {
-	InputTokens       int64 `db:"input_tokens"`
-	OutputTokens      int64 `db:"output_tokens"`
-	CachedTokens      int64 `db:"cached_tokens"`
-	TotalCostSubcents int64 `db:"total_cost_subcents"`
+	InputTokens       *int64 `db:"input_tokens"`
+	OutputTokens      *int64 `db:"output_tokens"`
+	CachedTokens      *int64 `db:"cached_tokens"`
+	TotalCostSubcents *int64 `db:"total_cost_subcents"`
 }
 
 // CostAggregateForAgent returns the all-time cost rollup for an agent.
-// Aggregates over `office_cost_events.agent_profile_id`. Returns a
-// zero-value struct (not nil) when the agent has no cost events.
+// Aggregates over `office_cost_events.agent_profile_id`. Incomplete tokens
+// and absent monetary measurements are NULL; independently recorded spend remains.
 func (r *Repository) CostAggregateForAgent(
 	ctx context.Context, agentID string,
 ) (AgentCostAggregate, error) {
 	var agg AgentCostAggregate
 	err := r.ro.QueryRowxContext(ctx, r.ro.Rebind(`
-		SELECT COALESCE(SUM(tokens_in), 0)         AS input_tokens,
-		       COALESCE(SUM(tokens_out), 0)        AS output_tokens,
-		       COALESCE(SUM(tokens_cached_in), 0)  AS cached_tokens,
-		       COALESCE(SUM(cost_subcents), 0)     AS total_cost_subcents
+		SELECT CASE WHEN MAX(usage_unavailable) <> 0 OR MAX(tokens_in_missing) <> 0 THEN NULL
+		            ELSE COALESCE(SUM(tokens_in), 0) END AS input_tokens,
+		       CASE WHEN MAX(usage_unavailable) <> 0 OR COUNT(tokens_out) < COUNT(id) THEN NULL
+		            ELSE COALESCE(SUM(tokens_out), 0) END AS output_tokens,
+		       CASE WHEN COUNT(tokens_cached_in) < COUNT(id) THEN NULL
+		            ELSE COALESCE(SUM(tokens_cached_in), 0) END AS cached_tokens,
+		       SUM(CASE WHEN usage_unavailable = 0
+		                 AND (cost_source IS NULL OR cost_source <> 'unpriced')
+		                THEN cost_subcents END) AS total_cost_subcents
 		FROM office_cost_events
 		WHERE agent_profile_id = ?
 	`), agentID).StructScan(&agg)
@@ -251,9 +256,9 @@ func (r *Repository) CostAggregateForAgent(
 type AgentRunCostRow struct {
 	RunID        string `db:"run_id"`
 	RequestedAt  string `db:"requested_at"`
-	InputTokens  int64  `db:"input_tokens"`
-	OutputTokens int64  `db:"output_tokens"`
-	CostSubcents int64  `db:"cost_subcents"`
+	InputTokens  *int64 `db:"input_tokens"`
+	OutputTokens *int64 `db:"output_tokens"`
+	CostSubcents *int64 `db:"cost_subcents"`
 }
 
 // RecentRunCostsForAgent returns the `limit` most recent runs that
@@ -286,9 +291,13 @@ func (r *Repository) RecentRunCostsForAgent(
 		costs AS (
 			SELECT r.id AS run_id,
 			       r.requested_at,
-			       SUM(c.tokens_in)     AS input_tokens,
-			       SUM(c.tokens_out)    AS output_tokens,
-			       SUM(c.cost_subcents) AS cost_subcents
+			       CASE WHEN MAX(c.usage_unavailable) <> 0 OR MAX(c.tokens_in_missing) <> 0 THEN NULL
+			            ELSE SUM(c.tokens_in) END AS input_tokens,
+			       CASE WHEN MAX(c.usage_unavailable) <> 0 OR COUNT(c.tokens_out) < COUNT(c.id) THEN NULL
+			            ELSE SUM(c.tokens_out) END AS output_tokens,
+			       SUM(CASE WHEN c.usage_unavailable = 0
+			                 AND (c.cost_source IS NULL OR c.cost_source <> 'unpriced')
+			                THEN c.cost_subcents END) AS cost_subcents
 			FROM agent_runs r
 			JOIN office_cost_events c
 			  ON c.agent_profile_id = ?
@@ -299,9 +308,9 @@ func (r *Repository) RecentRunCostsForAgent(
 		)
 		SELECT run_id,
 		       requested_at,
-		       COALESCE(input_tokens, 0)   AS input_tokens,
-		       COALESCE(output_tokens, 0)  AS output_tokens,
-		       COALESCE(cost_subcents, 0)  AS cost_subcents
+		       input_tokens,
+		       output_tokens,
+		       cost_subcents
 		FROM costs
 		ORDER BY requested_at DESC
 		LIMIT ?

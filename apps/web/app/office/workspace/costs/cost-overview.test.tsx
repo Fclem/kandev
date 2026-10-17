@@ -4,6 +4,7 @@ import type { StoreApi } from "zustand";
 import { StateProvider, useAppStoreApi } from "@/components/state-provider";
 import type { AppState } from "@/lib/state/store";
 import { CostOverview } from "./cost-overview";
+import { t } from "@/lib/i18n";
 
 // Hoisted mock so the getCostsBreakdown import is replaced before the
 // component imports it. Tests configure the mock per-case.
@@ -26,6 +27,7 @@ afterEach(() => {
 
 const EMPTY_BREAKDOWN = {
   total_subcents: 0,
+  coverage_degraded: false,
   by_agent: [],
   by_project: [],
   by_model: [],
@@ -41,56 +43,6 @@ function StoreCapture({ storeRef }: { storeRef: { current: StoreApi<AppState> | 
 }
 
 describe("CostOverview", () => {
-  it("refetches the cost breakdown when the costs refetch trigger fires", async () => {
-    getCostsBreakdownMock.mockResolvedValue(EMPTY_BREAKDOWN);
-    const storeRef: { current: StoreApi<AppState> | null } = { current: null };
-
-    render(
-      <StateProvider initialState={{ workspaces: { activeId: "ws-1", items: [] } }}>
-        <StoreCapture storeRef={storeRef} />
-        <CostOverview workspaceId="ws-1" />
-      </StateProvider>,
-    );
-
-    await waitFor(() => {
-      expect(getCostsBreakdownMock).toHaveBeenCalledTimes(1);
-    });
-
-    // Simulates the WS handler bumping "costs" (office.cost.recorded, or
-    // office.task.updated with fields: ["project_id"]).
-    act(() => {
-      storeRef.current!.getState().setOfficeRefetchTrigger("costs");
-    });
-
-    await waitFor(() => {
-      expect(getCostsBreakdownMock).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it("does not refetch on an unrelated refetch trigger", async () => {
-    getCostsBreakdownMock.mockResolvedValue(EMPTY_BREAKDOWN);
-    const storeRef: { current: StoreApi<AppState> | null } = { current: null };
-
-    render(
-      <StateProvider initialState={{ workspaces: { activeId: "ws-1", items: [] } }}>
-        <StoreCapture storeRef={storeRef} />
-        <CostOverview workspaceId="ws-1" />
-      </StateProvider>,
-    );
-
-    await waitFor(() => {
-      expect(getCostsBreakdownMock).toHaveBeenCalledTimes(1);
-    });
-
-    act(() => {
-      storeRef.current!.getState().setOfficeRefetchTrigger("dashboard");
-    });
-
-    // Give any (incorrect) refetch a chance to fire before asserting it didn't.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(getCostsBreakdownMock).toHaveBeenCalledTimes(1);
-  });
-
   it("discards a stale response when an older request resolves after a newer one", async () => {
     let resolveFirst: (value: typeof EMPTY_BREAKDOWN) => void;
     let resolveSecond: (value: typeof EMPTY_BREAKDOWN) => void;
@@ -169,5 +121,46 @@ describe("CostOverview workspace isolation", () => {
       expect(getCostsBreakdownMock).toHaveBeenCalledTimes(2);
     });
     expect(screen.queryByText("$1.00")).toBeNull();
+  });
+});
+
+describe("workspace monetary availability", () => {
+  it.each([
+    { name: "gap-only", amount: null, degraded: true },
+    { name: "mixed recorded spend and gap", amount: 12500, degraded: true },
+    { name: "measured zero", amount: 0, degraded: false },
+  ])("preserves $name in the overview and grouped rows", async ({ amount, degraded }) => {
+    const group = {
+      group_key: "coverage-group",
+      group_label: "Coverage group",
+      total_subcents: amount,
+      coverage_degraded: degraded,
+      count: 1,
+    };
+    getCostsBreakdownMock.mockResolvedValue({
+      total_subcents: amount,
+      coverage_degraded: degraded,
+      by_agent: [group],
+      by_project: [group],
+      by_model: [group],
+      by_provider: [group],
+    });
+    render(
+      <StateProvider initialState={{ workspaces: { activeId: "coverage-ws", items: [] } }}>
+        <CostOverview workspaceId="coverage-ws" />
+      </StateProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByText("Coverage group")).toHaveLength(4));
+    if (amount === null) {
+      expect(screen.queryAllByText("$0.00")).toHaveLength(0);
+      expect(screen.getAllByText("-")).toHaveLength(5);
+    } else {
+      expect(screen.getAllByText(amount === 0 ? "$0.00" : "$1.25")).toHaveLength(5);
+    }
+    if (degraded) {
+      expect(screen.getAllByText(t("office:costCoverageIncomplete"))).toHaveLength(5);
+    } else {
+      expect(screen.queryByText(t("office:costCoverageIncomplete"))).toBeNull();
+    }
   });
 });

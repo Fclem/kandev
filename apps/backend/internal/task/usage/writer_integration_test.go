@@ -6,6 +6,7 @@ package usage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	dbutil "github.com/kandev/kandev/internal/db"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
+	"github.com/kandev/kandev/internal/task/dto"
 	"github.com/kandev/kandev/internal/task/models"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 )
@@ -88,5 +90,57 @@ func TestWriter_EndToEnd_RealRepoPreservesArrivalOrder(t *testing.T) {
 		if row.UsageEventID != want {
 			t.Errorf("row %d usage_event_id = %q, want %q (arrival order must survive the occurred_at+id ordering)", i, row.UsageEventID, want)
 		}
+	}
+}
+
+func TestWriterSessionTotalsPreserveRequiredCountCompleteness(t *testing.T) {
+	for _, missing := range []bool{true, false} {
+		t.Run(fmt.Sprint(missing), func(t *testing.T) {
+			ctx := context.Background()
+			conn, err := dbutil.OpenSQLite(filepath.Join(t.TempDir(), "totals.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			db := sqlx.NewDb(conn, "sqlite3")
+			t.Cleanup(func() { _ = db.Close() })
+			repo, err := sqliterepo.NewWithDB(db, db, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := repo.CreateTask(ctx, &models.Task{ID: "task", WorkspaceID: "ws-1", Title: "totals"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := repo.CreateTaskSession(ctx, &models.TaskSession{ID: "session", TaskID: "task"}); err != nil {
+				t.Fatal(err)
+			}
+			counts := map[string]any{"output_tokens": 20, "output_tokens_present": true}
+			if !missing {
+				counts["input_tokens"] = 0
+			}
+			payload, err := decodePayload(&bus.Event{Data: map[string]any{
+				"task_id": "task", "session_id": "session", "usage_event_id": "measured", "usage": counts,
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := NewWriter(repo, nil, nil)
+			w.processEvent(ctx, payload)
+			totals, err := repo.GetSessionUsageTotals(ctx, "session")
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := json.Marshal(dto.ToTaskUsageTotalsDTO(dto.TaskUsageTotalsScopeSession, "session", totals))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wire map[string]any
+			if err := json.Unmarshal(encoded, &wire); err != nil {
+				t.Fatal(err)
+			}
+			if wire["input_tokens_complete"] != !missing || wire["total_tokens_complete"] != !missing ||
+				wire["output_tokens_complete"] != true || wire["tokens_total"] != float64(20) {
+				t.Fatalf("missing=%t session completeness/arithmetic lost: %s", missing, encoded)
+			}
+		})
 	}
 }

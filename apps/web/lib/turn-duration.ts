@@ -1,41 +1,11 @@
 import type { Message, Turn } from "@/lib/types/http";
+import { parseStrictRfc3339Timestamp } from "@/lib/utils/strict-timestamp";
 
 export type PromptDurationUnits = {
   s: string;
   m: string;
   h: string;
 };
-
-/**
- * Parse an RFC3339/RFC3339Nano timestamp into a full BigInt epoch-nanosecond
- * key, returning `null` for missing or unparseable values. The variable-width
- * fraction is removed before whole-second parsing (Date.parse only has
- * millisecond precision and rounds the sub-ms remainder), then re-attached as
- * the digit run right-padded to nine digits — matching the backend's
- * `YYYY-MM-DD HH:MM:SS.ffffff` UTC microsecond key after floor division by
- * 1000n. Offsets (e.g. `+02:00`) are normalized by Date.parse to UTC; they
- * are whole seconds, so the fraction is preserved unchanged.
- */
-function epochNanoseconds(value: string | undefined): bigint | null {
-  if (!value) return null;
-  const dot = value.indexOf(".");
-  let wholePart = value;
-  let fractionDigits = "";
-  if (dot !== -1) {
-    const rest = value.slice(dot + 1);
-    const digitMatch = /^\d+/.exec(rest);
-    fractionDigits = digitMatch ? digitMatch[0] : "";
-    // Remove only the fraction digits; the zone suffix (Z or ±HH:MM) stays in
-    // the whole part so Date.parse still normalizes the offset to UTC.
-    wholePart = value.slice(0, dot) + rest.slice(fractionDigits.length);
-  }
-  const parsed = Date.parse(wholePart);
-  if (Number.isNaN(parsed)) return null;
-  // The whole part has no fraction, so the ms value is a whole second.
-  const seconds = BigInt(Math.floor(parsed / 1000));
-  const fractionNs = BigInt(fractionDigits.padEnd(9, "0").slice(0, 9) || "0");
-  return seconds * BigInt(1_000_000_000) + fractionNs;
-}
 
 /**
  * Return a completed user prompt turn's wall-clock duration in whole seconds.
@@ -55,8 +25,8 @@ export function messageTurnDurationSeconds(message: Message, turn: Turn | null):
     return null;
   }
 
-  const createdAt = epochNanoseconds(message.created_at);
-  const completedAt = epochNanoseconds(turn.completed_at);
+  const createdAt = parseStrictRfc3339Timestamp(message.created_at);
+  const completedAt = parseStrictRfc3339Timestamp(turn.completed_at);
   if (createdAt === null || completedAt === null) return null;
 
   const durationNs = completedAt - createdAt;
@@ -73,4 +43,17 @@ export function formatPromptDuration(seconds: number, units: PromptDurationUnits
   if (hours > 0) return `${hours}${units.h} ${minutes}${units.m} ${remainingSeconds}${units.s}`;
   if (minutes > 0) return `${minutes}${units.m} ${remainingSeconds}${units.s}`;
   return `${remainingSeconds}${units.s}`;
+}
+
+/**
+ * Format a time-to-first-token in milliseconds: whole milliseconds below one
+ * second, one decimal of seconds below one minute, then the compact `h m s`
+ * form. Sub-second values are never floored to `0s`.
+ */
+export function formatTtft(milliseconds: number, units: PromptDurationUnits): string {
+  const ms = Math.max(0, milliseconds);
+  if (Math.round(ms) < 1000) return `${Math.round(ms)} ms`; // i18n-exempt: SI unit symbol
+  const tenths = Math.round(ms / 100);
+  if (tenths < 600) return `${(tenths / 10).toFixed(1)}${units.s}`;
+  return formatPromptDuration(Math.round(ms / 1000), units);
 }

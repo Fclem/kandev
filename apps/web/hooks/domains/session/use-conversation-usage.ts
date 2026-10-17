@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/components/state-provider";
 import {
   getSessionUsageTotals,
@@ -8,12 +8,14 @@ import {
   listSessionUsageTurns,
 } from "@/lib/api/domains/conversation-usage-api";
 import type { SessionUsageTotals, UsageTurn } from "@/lib/types/conversation-usage";
-import { latestUsageTurn } from "@/lib/utils/conversation-usage";
+import { usageForCurrentTurn } from "@/lib/utils/conversation-usage";
+import { useSessionTurnsState } from "./use-session-turns";
 
 type UsageSummaryState = {
   key: string;
+  invalidation: number;
   totals: SessionUsageTotals | null;
-  latestTurn: UsageTurn | null;
+  turns: UsageTurn[];
   loading: boolean;
   error: boolean;
 };
@@ -21,6 +23,7 @@ type UsageSummaryState = {
 type UsageDetailState = {
   key: string;
   turnId: string;
+  invalidation: number;
   turn: UsageTurn | null;
   loading: boolean;
   error: boolean;
@@ -28,11 +31,17 @@ type UsageDetailState = {
 
 const emptySummary = (key: string): UsageSummaryState => ({
   key,
+  invalidation: -1,
   totals: null,
-  latestTurn: null,
+  turns: [],
   loading: false,
   error: false,
 });
+
+function projectUsageSummary(summary: UsageSummaryState, key: string, invalidation: number) {
+  const current = summary.key === key ? summary : emptySummary(key);
+  return current.invalidation === invalidation ? current : { ...current, totals: null, turns: [] };
+}
 
 export function useConversationUsage(
   taskId: string | null,
@@ -43,10 +52,12 @@ export function useConversationUsage(
   const invalidation = useAppStore((state) =>
     sessionId ? (state.usageInvalidation.bySessionId[sessionId] ?? 0) : 0,
   );
+  const { turns } = useSessionTurnsState(sessionId);
   const [summary, setSummary] = useState<UsageSummaryState>(() => emptySummary(""));
   const [detail, setDetail] = useState<UsageDetailState | null>(null);
   const summaryRequest = useRef(0);
   const detailRequest = useRef(0);
+  const detailDemand = useRef<{ key: string; turnId: string } | null>(null);
   const key = taskId && sessionId ? `${taskId}\u0000${sessionId}` : "";
 
   const refresh = useCallback(async () => {
@@ -66,8 +77,9 @@ export function useConversationUsage(
       if (request !== summaryRequest.current) return;
       setSummary({
         key: requestKey,
+        invalidation,
         totals,
-        latestTurn: latestUsageTurn(page.turns) ?? null,
+        turns: page.turns,
         loading: false,
         error: false,
       });
@@ -79,7 +91,7 @@ export function useConversationUsage(
           : { ...emptySummary(requestKey), error: true },
       );
     }
-  }, [detailActive, taskId, sessionId]);
+  }, [detailActive, taskId, sessionId, invalidation]);
 
   useEffect(() => {
     if (!detailActive || !taskId || !sessionId || connectionStatus !== "connected") return;
@@ -94,23 +106,43 @@ export function useConversationUsage(
       if (!detailActive || !taskId || !sessionId) return;
       const request = ++detailRequest.current;
       const requestKey = `${taskId}\u0000${sessionId}`;
-      setDetail({ key: requestKey, turnId, turn: null, loading: true, error: false });
+      detailDemand.current = { key: requestKey, turnId };
+      setDetail({ key: requestKey, turnId, invalidation, turn: null, loading: true, error: false });
       try {
         const turn = await getSessionUsageTurn(taskId, sessionId, turnId);
         if (request !== detailRequest.current) return;
-        setDetail({ key: requestKey, turnId, turn, loading: false, error: false });
+        setDetail({ key: requestKey, turnId, invalidation, turn, loading: false, error: false });
       } catch {
         if (request !== detailRequest.current) return;
-        setDetail({ key: requestKey, turnId, turn: null, loading: false, error: true });
+        setDetail({
+          key: requestKey,
+          turnId,
+          invalidation,
+          turn: null,
+          loading: false,
+          error: true,
+        });
       }
     },
-    [detailActive, taskId, sessionId],
+    [detailActive, taskId, sessionId, invalidation],
   );
 
-  const currentSummary = summary.key === key ? summary : emptySummary(key);
-  const currentDetail = detail?.key === key ? detail : null;
+  useEffect(() => {
+    const demand = detailDemand.current;
+    if (connectionStatus === "connected" && demand?.key === key) {
+      void loadTurnDetail(demand.turnId);
+    }
+    return () => {
+      detailRequest.current += 1;
+    };
+  }, [connectionStatus, invalidation, key, loadTurnDetail]);
+
+  const { turns: usageTurns, ...visibleState } = projectUsageSummary(summary, key, invalidation);
+  const latestTurn = useMemo(() => usageForCurrentTurn(usageTurns, turns), [usageTurns, turns]);
+  const currentDetail = detail?.key === key && detail.invalidation === invalidation ? detail : null;
   return {
-    ...currentSummary,
+    ...visibleState,
+    latestTurn,
     detail: currentDetail,
     refresh,
     loadTurnDetail,

@@ -34,6 +34,8 @@ type TaskUsageTotalsDTO struct {
 	EventCount           int64                `json:"event_count"`
 	EstimatedEventCount  int64                `json:"estimated_event_count"`
 	UnpricedEventCount   int64                `json:"unpriced_event_count"`
+	InputTokensComplete  bool                 `json:"input_tokens_complete"`
+	TotalTokensComplete  bool                 `json:"total_tokens_complete"`
 	OutputTokensComplete bool                 `json:"output_tokens_complete"`
 	FirstEventAt         *time.Time           `json:"first_event_at"`
 	LastEventAt          *time.Time           `json:"last_event_at"`
@@ -56,6 +58,8 @@ func ToTaskUsageTotalsDTO(scope TaskUsageTotalsScope, scopeID string, totals *mo
 		EventCount:           totals.EventCount,
 		EstimatedEventCount:  totals.EstimatedEventCount,
 		UnpricedEventCount:   totals.UnpricedEventCount,
+		InputTokensComplete:  totals.InputTokensComplete,
+		TotalTokensComplete:  totals.TotalTokensComplete,
 		OutputTokensComplete: totals.OutputTokensComplete,
 		FirstEventAt:         totals.FirstEventAt,
 		LastEventAt:          totals.LastEventAt,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/office/models"
 )
 
 // @covers AC-OFFICE-COSTS-001.2
@@ -58,9 +59,9 @@ func (r *windowCaptureRepo) capture(name string, start, before time.Time) {
 	defer r.mu.Unlock()
 	r.windows[name] = costWindow{start: start, before: before}
 }
-func (r *windowCaptureRepo) SumCostsInWindow(_ context.Context, _ string, start, before time.Time) (int64, error) {
+func (r *windowCaptureRepo) GetCostSummaryInWindow(_ context.Context, _ string, start, before time.Time) (models.CostSummary, error) {
 	r.capture("total", start, before)
-	return 0, nil
+	return models.CostSummary{}, nil
 }
 func (r *windowCaptureRepo) GetCostsByAgentInWindow(_ context.Context, _ string, start, before time.Time) ([]*CostBreakdown, error) {
 	r.capture("agent", start, before)

@@ -1,9 +1,15 @@
 import type { UsageTurn } from "@/lib/types/conversation-usage";
+import type { Turn } from "@/lib/types/http";
+import { parseStrictRfc3339Timestamp } from "./strict-timestamp";
 
 const integerFormatter = new Intl.NumberFormat();
 
-export function formatUsageTokens(value: number): string {
-  return integerFormatter.format(value);
+export function usageTokenCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+export function formatUsageTokens(value: number): string | null {
+  return usageTokenCount(value) === null ? null : integerFormatter.format(value);
 }
 
 /** Format ledger subcents (1/100 of a cent) without converting int64 to float. */
@@ -24,8 +30,22 @@ export function formatUsageCost(subcents?: string): string | null {
   return `${negative ? "-$" : "$"}${dollars.toLocaleString()}.${remainder}`;
 }
 
-export function latestUsageTurn(turns: UsageTurn[]): UsageTurn | undefined {
-  return turns[0];
+export function usageForCurrentTurn(usage: UsageTurn[], turns: Turn[]): UsageTurn | null {
+  let current: Turn | undefined;
+  let latestAt: bigint | undefined;
+  let ambiguous = false;
+  for (const turn of turns) {
+    const at = parseStrictRfc3339Timestamp(turn.created_at);
+    if (at === null) return null;
+    if (latestAt === undefined || at > latestAt) {
+      current = turn;
+      latestAt = at;
+      ambiguous = false;
+    } else if (at === latestAt && turn.id !== current?.id) {
+      ambiguous = true;
+    }
+  }
+  return ambiguous ? null : (usage.find((turn) => turn.turn_id === current?.id) ?? null);
 }
 
 export function usageDetailForTurn<T extends { turnId: string; turn: UsageTurn | null }>(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message, Turn } from "@/lib/types/http";
-import { formatPromptDuration, messageTurnDurationSeconds } from "./turn-duration";
+import { formatPromptDuration, formatTtft, messageTurnDurationSeconds } from "./turn-duration";
 
 const MESSAGE_ID = "message-1";
 const TURN_ID = "turn-1";
@@ -47,6 +47,62 @@ describe("formatPromptDuration", () => {
     [3723, "1h 2m 3s"],
   ])("formats %i seconds as %s", (seconds, expected) => {
     expect(formatPromptDuration(seconds, units)).toBe(expected);
+  });
+});
+
+describe("formatTtft", () => {
+  const units = { s: "s", m: "m", h: "h" };
+
+  it.each([
+    [0, "0 ms"],
+    [350, "350 ms"],
+    [999.4, "999 ms"],
+    [999.6, "1.0s"],
+    [1000, "1.0s"],
+    [1900, "1.9s"],
+    [12340, "12.3s"],
+    [59940, "59.9s"],
+    [59960, "1m 0s"],
+    [323000, "5m 23s"],
+  ])("formats %d ms as %s without flooring sub-second values", (milliseconds, expected) => {
+    expect(formatTtft(milliseconds, units)).toBe(expected);
+  });
+});
+
+describe("messageTurnDurationSeconds strict endpoints", () => {
+  it.each([
+    "0",
+    "2026-02-30T00:00:00Z",
+    "2025-02-29T00:00:00Z",
+    "2026-01-01T24:00:00Z",
+    "2026-01-01T00:00:00",
+    "2026-01-01T00:00:00+24:00",
+    "2026-01-01T00:00:00.1234567890Z",
+  ])("omits duration for invalid timestamp %s on either endpoint", (invalid) => {
+    expect(
+      messageTurnDurationSeconds(
+        message({ turn_id: TURN_ID, created_at: invalid }),
+        turn({ completed_at: FIVE_SECONDS_LATER }),
+      ),
+    ).toBeNull();
+    expect(
+      messageTurnDurationSeconds(message({ turn_id: TURN_ID }), turn({ completed_at: invalid })),
+    ).toBeNull();
+  });
+
+  it("preserves offsets and nanosecond precision at whole-second boundaries", () => {
+    expect(
+      messageTurnDurationSeconds(
+        message({ turn_id: TURN_ID, created_at: "2026-01-01T02:00:00.000000001+02:00" }),
+        turn({ completed_at: "2026-01-01T00:00:01Z" }),
+      ),
+    ).toBe(0);
+    expect(
+      messageTurnDurationSeconds(
+        message({ turn_id: TURN_ID, created_at: "2026-01-01T02:00:00.900000001+02:00" }),
+        turn({ completed_at: "2026-01-01T00:00:06Z" }),
+      ),
+    ).toBe(5);
   });
 });
 

@@ -498,8 +498,8 @@ type AgentEvent struct {
 	// Usage contains token usage stats from the prompt response.
 	Usage *PromptUsage `json:"usage,omitempty"`
 
-	// UsageObservation is one immutable native response measurement or a
-	// documented estimated turn fallback.
+	// UsageObservation identifies a native measurement, estimated fallback, or
+	// partial coverage gap. A gap carries no Usage and adds no ledger amount.
 	UsageObservation *NativeUsageObservation `json:"usage_observation,omitempty"`
 
 	// --- Background work fields (for "background_work_updated" and "background_work_output") ---
@@ -511,8 +511,15 @@ type AgentEvent struct {
 	BackgroundWorkOutput *WorkloadOutputChunk `json:"background_work_output,omitempty"`
 }
 
-// NativeUsageObservation identifies the native protocol scope for one usage
-// row. Provider identifiers never replace Kandev task, session, or turn IDs.
+const (
+	NativeUsageSourceResponse      = "response"
+	NativeUsageScopeDirect         = "direct"
+	NativeUsageScopeChild          = "child"
+	NativeUsageCompletenessPartial = "partial"
+)
+
+// NativeUsageObservation carries provider scope for a measurement or coverage gap.
+// Provider identifiers never replace Kandev task, session, or turn IDs.
 type NativeUsageObservation struct {
 	SchemaVersion            int    `json:"schema_version"`
 	Source                   string `json:"source"`
@@ -742,8 +749,9 @@ type ConfigOptionValue struct {
 // still count toward budget totals at face value per
 // docs/specs/office/requirements/costs.md.
 type PromptUsage struct {
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
+	InputTokens        int64 `json:"input_tokens,omitempty"`
+	InputTokensPresent bool  `json:"input_tokens_present"`
+	OutputTokens       int64 `json:"output_tokens"`
 
 	// OutputTokensPresent distinguishes an observed zero from a missing
 	// output-token sample. Adapters set it false when they cannot observe output
@@ -751,9 +759,13 @@ type PromptUsage struct {
 	// downstream consumers can distinguish false from a legacy missing field.
 	OutputTokensPresent bool `json:"output_tokens_present"`
 
-	CachedReadTokens             int64 `json:"cached_read_tokens,omitempty"`
-	CachedWriteTokens            int64 `json:"cached_write_tokens,omitempty"`
-	ThoughtTokens                int64 `json:"thought_tokens,omitempty"`
+	CachedReadTokens  int64 `json:"cached_read_tokens,omitempty"`
+	CachedWriteTokens int64 `json:"cached_write_tokens,omitempty"`
+	ThoughtTokens     int64 `json:"thought_tokens,omitempty"`
+	// Presence preserves measured zero across the optional numeric wire fields.
+	CachedReadTokensPresent      bool  `json:"cached_read_tokens_present,omitempty"`
+	CachedWriteTokensPresent     bool  `json:"cached_write_tokens_present,omitempty"`
+	ThoughtTokensPresent         bool  `json:"thought_tokens_present,omitempty"`
 	TotalTokens                  int64 `json:"total_tokens"`
 	ProviderReportedCostSubcents int64 `json:"provider_reported_cost_subcents,omitempty"`
 	// ProviderReportedCostPresent distinguishes an explicit provider-reported

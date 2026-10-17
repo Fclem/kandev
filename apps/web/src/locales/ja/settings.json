@@ -674,7 +674,7 @@
   "systemLoad1Min": "システム負荷(1分)",
   "messageMetadata": "メッセージメタデータ",
   "messageMetadataCost": "コスト",
-  "messageMetadataDescription": "アシスタントのメッセージの下に表示する使用状況の詳細を選択します。",
+  "messageMetadataDescription": "メッセージの下に表示する時間、使用状況、セッションの詳細を選択します。",
   "messageMetadataDuration": "所要時間",
   "messageMetadataSessionOptions": "モデルとセッションのオプション",
   "messageMetadataTimestamp": "タイムスタンプ",

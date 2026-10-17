@@ -658,6 +658,7 @@ export type AppState = KanbanSlice & {
   // Prompt usage actions
   setPromptUsage: (sessionId: string, usage: PromptUsageEntry) => void;
   setSessionUsageTurnPage: SessionRuntimeSliceActions["setSessionUsageTurnPage"];
+  setSessionUsageTurn: SessionRuntimeSliceActions["setSessionUsageTurn"];
   bumpSessionUsageInvalidation: (sessionId: string) => void;
   // Session todos actions
   setSessionTodos: (sessionId: string, entries: TodoEntry[]) => void;

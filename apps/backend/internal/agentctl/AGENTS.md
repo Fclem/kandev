@@ -84,6 +84,8 @@ Grok exposes some model, config, and usage surfaces through implementation-speci
 
 Grok ACP currently exposes neither per-turn cost nor subscription quota/reset values. Do not estimate them or treat the optional subscription tier label as usage data.
 
+Input/output, cache-read, cache-write, and thought counts preserve measurement presence in `PromptUsage`; observed zero is measured, absent/null is not. The ACP connection reader preserves required scalar input/output presence in private usage metadata before SDK decoding erases it. Task input absence persists as `tokens_in_missing`; historical rows keep the prior required-scalar interpretation. Missing required input/output forbids catalogue pricing, not provider-reported cost. Native reasoning remains an output subset, not an additive thought count. Keep normalization, serialization, and nullable ledger projection consistent.
+
 ## ACP Protocol
 
 JSON-RPC 2.0 over stdin/stdout between agentctl and agent process. Requests: `initialize`, `session/new`, `session/load`, `session/resume`, `session/prompt`, `session/cancel`, `session/close`. Notifications: `session/update` with types `message_chunk`, `tool_call`, `tool_update`, `complete`, `error`, `permission_request`, `context_window`.

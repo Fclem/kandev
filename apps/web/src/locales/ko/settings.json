@@ -674,7 +674,7 @@
   "systemLoad1Min": "시스템 부하 (1분)",
   "messageMetadata": "메시지 메타데이터",
   "messageMetadataCost": "비용",
-  "messageMetadataDescription": "어시스턴트 메시지 아래에 표시할 사용량 세부 정보를 선택합니다.",
+  "messageMetadataDescription": "메시지 아래에 표시할 시간, 사용량, 세션 세부 정보를 선택합니다.",
   "messageMetadataDuration": "소요 시간",
   "messageMetadataSessionOptions": "모델 및 세션 옵션",
   "messageMetadataTimestamp": "타임스탬프",

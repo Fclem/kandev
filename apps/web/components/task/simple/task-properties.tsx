@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Separator } from "@kandev/ui/separator";
-import { formatRelativeTime } from "@/lib/utils";
+import { formatDollars, formatRelativeTime } from "@/lib/utils";
 import { getTreeCostSummary, type TreeCostSummary } from "@/lib/api/domains/tree-api";
+import { formatUsageTokens } from "@/lib/utils/conversation-usage";
 import type { Task } from "@/app/office/tasks/[id]/types";
 import { PropertyRow } from "./components/property-row";
 import { StatusPicker } from "./components/status-picker";
@@ -35,17 +36,9 @@ function formatDate(dateStr: string): string {
   });
 }
 
-// formatCurrency converts subcents (hundredths of a cent — the office
-// cost storage unit per docs/specs/office/requirements/costs.md) to a USD string.
-function formatCurrency(subcents: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-  }).format(subcents / 10000);
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat().format(value);
+function formatNumber(value: number | null): string {
+  if (value === null) return "-";
+  return formatUsageTokens(value) ?? "-";
 }
 
 // A component rather than a module-level constant: `t()` at module scope
@@ -180,7 +173,14 @@ function TreeCostSection({ task }: { task: Task }) {
   return (
     <>
       <Separator className="my-2" />
-      <PropertyRow label={t("task:treeCost")}>{formatCurrency(summary.cost_subcents)}</PropertyRow>
+      <PropertyRow label={t("task:treeCost")}>
+        {formatDollars(summary.cost_subcents)}
+        {summary.coverage_degraded && (
+          <span className="block text-xs text-muted-foreground">
+            {t("office:costCoverageIncomplete")}
+          </span>
+        )}
+      </PropertyRow>
       <PropertyRow label={t("task:treeTasks")}>{summary.task_count}</PropertyRow>
       <PropertyRow label={t("task:inputTokens")}>{formatNumber(summary.tokens_in)}</PropertyRow>
       <PropertyRow label={t("task:cachedInput")}>

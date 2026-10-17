@@ -1376,12 +1376,12 @@ type Service struct {
 	// (on both the terminal and non-terminal path) instead of trusting live
 	// active-turn state or the terminal-execution marker: agent.ready is
 	// published before the complete-stream frame for the same completion
-	// (see markReadyTurn's doc comment for the ordering guarantee and its
+	// (see markReadyTurnAt's doc comment for the ordering guarantee and its
 	// NATS-deployment caveat), so both of those alternatives can already
 	// find the turn gone or stale by the time this runs. Entries are
 	// consumed on read and expire after the same grace window as
 	// completedExecutions so an unread entry cannot grow the map unbounded.
-	// This map is per-process — see markReadyTurn's doc comment for why a
+	// This map is per-process — see markReadyTurnAt's doc comment for why a
 	// horizontally-scaled NATS deployment can miss cross-instance.
 	readyTurnMarks sync.Map
 	turnTimingMu   sync.Mutex
@@ -1395,7 +1395,7 @@ type Service struct {
 	// one key per (session, execution) with no generation to disambiguate
 	// them — so entries queue FIFO here instead of occupying a single slot in
 	// readyTurnMarks. Guarded by readyTurnMarksZeroGenMu since sync.Map has no
-	// atomic append. See markReadyTurn's doc comment.
+	// atomic append. See markReadyTurnAt's doc comment.
 	readyTurnMarksZeroGenMu sync.Mutex
 	readyTurnMarksZeroGen   map[string][]readyTurnMark
 

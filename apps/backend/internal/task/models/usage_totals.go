@@ -6,10 +6,8 @@ import "time"
 // scope (a task, or a single session within a task) - docs/specs/task-cost-ledger/spec.md
 // AC-18, AC-19, AC-20. TokensTotal is the sum of each row's stored
 // tokens_total column, never recomputed from the per-kind sums at read time.
-// OutputTokensComplete is false when any contributing row has a nil
-// TokensOut (AC-12): the total is then a lower bound, not an exact count. A
-// scope with EventCount zero reports every sum as zero,
-// OutputTokensComplete true, and both timestamps nil (AC-20).
+// Required-token completeness distinguishes stored lower bounds from exact
+// counts. Empty scopes have complete zero sums and nil timestamps.
 type TaskUsageTotals struct {
 	TokensIn             int64
 	TokensCachedRead     int64
@@ -21,6 +19,8 @@ type TaskUsageTotals struct {
 	EventCount           int64
 	EstimatedEventCount  int64
 	UnpricedEventCount   int64
+	InputTokensComplete  bool
+	TotalTokensComplete  bool
 	OutputTokensComplete bool
 	FirstEventAt         *time.Time
 	LastEventAt          *time.Time

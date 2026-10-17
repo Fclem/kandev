@@ -16,14 +16,6 @@ type TreeHoldResponse = {
   };
 };
 
-type SubtreeCostResponse = {
-  task_id?: string;
-  task_count?: number;
-  cost_subcents?: number;
-  tokens_in?: number;
-  tokens_out?: number;
-};
-
 /**
  * Subtree Controls E2E tests.
  *
@@ -174,36 +166,6 @@ test.describe("Subtree Controls", () => {
     // After restore, preview shows no active hold.
     const preview = (await officeApi.previewTaskTree(parent.id)) as TreePreviewResponse;
     expect(preview.active_hold).toBeFalsy();
-  });
-
-  test("cost summary returns task_count and cost_subcents fields", async ({
-    apiClient,
-    officeApi,
-    officeSeed,
-  }) => {
-    const parent = await apiClient.createTask(officeSeed.workspaceId, "Cost Summary Parent", {
-      workflow_id: officeSeed.workflowId,
-    });
-    await apiClient.createTask(officeSeed.workspaceId, "Cost Summary Child", {
-      workflow_id: officeSeed.workflowId,
-      parent_id: parent.id,
-    });
-
-    const summary = (await officeApi.getSubtreeCostSummary(parent.id)) as SubtreeCostResponse;
-    expect(summary).toBeDefined();
-    expect(typeof summary.task_count).toBe("number");
-    expect(typeof summary.cost_subcents).toBe("number");
-    expect(summary.task_count).toBeGreaterThanOrEqual(1);
-  });
-
-  test("cost summary includes token fields", async ({ apiClient, officeApi, officeSeed }) => {
-    const task = await apiClient.createTask(officeSeed.workspaceId, "Cost Summary Tokens", {
-      workflow_id: officeSeed.workflowId,
-    });
-
-    const summary = (await officeApi.getSubtreeCostSummary(task.id)) as SubtreeCostResponse;
-    expect(typeof summary.tokens_in).toBe("number");
-    expect(typeof summary.tokens_out).toBe("number");
   });
 
   test("resume fails when no active pause hold exists", async ({

@@ -621,7 +621,7 @@ func (a *Adapter) recordUsageAndMaxSize(sessionID string, size, used int64, cost
 		tr.consumedUsed = used
 	}
 	tr.latestUsed = used
-	if cost != nil && strings.EqualFold(cost.Currency, "USD") {
+	if cost != nil && strings.EqualFold(cost.Currency, "USD") && cost.Amount >= 0 {
 		tr.costObserved = true
 		costSubcents := max(int64(cost.Amount*10000), 0)
 		if costSubcents < tr.latestCostSubcents {

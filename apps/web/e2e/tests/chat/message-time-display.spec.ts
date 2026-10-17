@@ -37,7 +37,10 @@ test("message time preference saves, persists, and appears in the transcript", a
     authorType: "user",
     createdAt: recentCreatedAt,
   });
-  await apiClient.saveUserSettings({ message_time_display: "absolute_long" });
+  await apiClient.saveUserSettings({
+    message_time_display: "absolute_long",
+    message_metadata_fields: ["timestamp"],
+  });
 
   await testPage.goto(`${SETTINGS_PATH}#setting-message-time-display`);
   const setting = testPage.getByRole("combobox", { name: "Message time" });

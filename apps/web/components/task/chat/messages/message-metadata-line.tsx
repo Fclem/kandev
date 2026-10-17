@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { IconHourglass } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { formatRelativeTime } from "@/lib/utils";
-import { parseStrictRfc3339Timestamp } from "@/lib/utils/strict-timestamp";
+import { useAppStore } from "@/components/state-provider";
+import { formatMessageTime } from "@/lib/i18n/message-time";
 import { formatPromptDuration } from "@/lib/turn-duration";
 import type { MessageMetadataField } from "@/lib/message-metadata-fields";
 import type { Message, Turn } from "@/lib/types/http";
@@ -31,19 +31,23 @@ type MessageMetadataLineProps = {
 
 function MessageTimestamp({ createdAt }: { createdAt: string }) {
   const { t } = useTranslation();
+  const messageTimeDisplay = useAppStore((state) => state.userSettings.messageTimeDisplay);
   const usesTouchDrawer = useTouchDrawer();
   const [open, setOpen] = useState(false);
-  if (parseStrictRfc3339Timestamp(createdAt) === null) return null;
-  const date = new Date(createdAt);
-  const absoluteTime = date.toLocaleString();
+  const formatted = formatMessageTime(createdAt, messageTimeDisplay);
+  if (!formatted) return null;
   const timeEl = (
     <time
       data-testid="message-metadata-timestamp"
       dateTime={createdAt}
-      title={absoluteTime}
-      className="text-[10px] text-muted-foreground/60 font-mono"
+      title={formatted.counterpart}
+      aria-label={t("task:messageTimestampAriaLabel", {
+        label: formatted.label,
+        counterpart: formatted.counterpart,
+      })}
+      className="min-w-0 max-w-full break-words text-[10px] text-muted-foreground/60 font-mono"
     >
-      {formatRelativeTime(createdAt)}
+      {formatted.label}
     </time>
   );
 
@@ -54,10 +58,13 @@ function MessageTimestamp({ createdAt }: { createdAt: string }) {
         <button
           type="button"
           data-testid="message-timestamp-trigger"
-          className="cursor-pointer border-0 bg-transparent p-0 text-left"
+          className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left max-md:min-h-11 max-md:min-w-11 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
           aria-haspopup="dialog"
           aria-expanded={open}
-          aria-label={t("task:showFullTimestamp", { absoluteTime })}
+          aria-label={t("task:messageTimestampAriaLabel", {
+            label: formatted.label,
+            counterpart: formatted.counterpart,
+          })}
         >
           {timeEl}
         </button>
@@ -65,7 +72,7 @@ function MessageTimestamp({ createdAt }: { createdAt: string }) {
       <DrawerContent data-testid="message-timestamp-drawer">
         <DrawerHeader>
           <DrawerTitle>{t("task:messageTime")}</DrawerTitle>
-          <DrawerDescription>{absoluteTime}</DrawerDescription>
+          <DrawerDescription>{formatted.counterpart}</DrawerDescription>
         </DrawerHeader>
       </DrawerContent>
     </Drawer>

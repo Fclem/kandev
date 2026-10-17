@@ -305,6 +305,32 @@ func TestUsageObservationUsesItsPromptGenerationTurnID(t *testing.T) {
 	}
 }
 
+func TestRestoredChildUsageCannotClaimSuccessorTurn(t *testing.T) {
+	execution := &AgentExecution{}
+	execution.setPromptTurnID("historical")
+	generation := beginExecutionPrompt(execution)
+	execution.setPromptTurnID("successor")
+	beginExecutionPrompt(execution)
+	manager := &Manager{}
+	for _, test := range []struct {
+		scope      string
+		generation uint64
+		wantTurn   string
+	}{
+		{scope: streams.NativeUsageScopeChild, wantTurn: ""},
+		{scope: streams.NativeUsageScopeChild, generation: generation, wantTurn: "historical"},
+		{scope: streams.NativeUsageScopeDirect, wantTurn: "successor"},
+	} {
+		event := manager.handleAgentEventState(execution, agentctl.AgentEvent{
+			Type: streams.EventTypeUsageObservation, PromptGeneration: test.generation,
+			UsageObservation: &streams.NativeUsageObservation{Scope: test.scope},
+		})
+		if event.TurnID != test.wantTurn {
+			t.Fatalf("scope=%s generation=%d turn=%q, want %q", test.scope, test.generation, event.TurnID, test.wantTurn)
+		}
+	}
+}
+
 // TestHandleAgentEvent_CompleteCarriesActingAgentOfficeIdentity pins that the
 // stream event's AgentProfileID is the acting agent's own office identity
 // (execution.officeProfileID()), not the concrete AgentProfileID the CLI

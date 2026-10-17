@@ -21,6 +21,10 @@ const kandevRendererKeys = [
   "ask_user_question",
   "show_walkthrough",
   "show_rich_output",
+  "propose_task",
+  "propose_resume",
+  "propose_message",
+  "propose_move",
 ] as const;
 
 export type KandevRendererKey = (typeof kandevRendererKeys)[number];

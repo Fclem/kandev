@@ -673,10 +673,6 @@ export class OfficeApiClient {
     return this.request("POST", `/tasks/${taskId}/tree/preview`);
   }
 
-  async getSubtreeCostSummary(taskId: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/tasks/${taskId}/tree/cost-summary`);
-  }
-
   // --- Settings ---
 
   async getWorkspaceSettings(wsId: string): Promise<Record<string, unknown>> {

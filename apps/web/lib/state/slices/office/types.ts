@@ -127,7 +127,8 @@ export type ActivityEntry = {
 export type CostBreakdownItem = {
   group_key: string;
   group_label?: string;
-  total_subcents: number;
+  total_subcents: number | null;
+  coverage_degraded: boolean;
   count: number;
 };
 
@@ -405,7 +406,8 @@ export type DashboardData = {
   tasks_in_progress: number;
   open_tasks: number;
   blocked_tasks: number;
-  month_spend_subcents: number;
+  month_spend_subcents: number | null;
+  month_spend_coverage_degraded: boolean;
   pending_approvals: number;
   recent_activity: ActivityEntry[];
   task_count: number;

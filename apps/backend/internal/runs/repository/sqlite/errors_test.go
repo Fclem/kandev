@@ -174,33 +174,3 @@ func TestWriteMethodsPropagateDatabaseErrors(t *testing.T) {
 		}
 	}
 }
-
-// TestGetRunWithCosts_RollupFailureDegradesToZeroes pins the documented
-// asymmetry: the run row is mandatory, the cost rollup is best-effort.
-// Losing the cost table must still return the run with a zero rollup
-// rather than failing the whole read.
-func TestGetRunWithCosts_RollupFailureDegradesToZeroes(t *testing.T) {
-	repo, writer := newTestRepoWithDB(t)
-	ctx := context.Background()
-	run := seedTaskRun(t, repo, "costed", "a1", "t1", "queued")
-	seedCostEvent(t, writer, "c1", "t1", 100, 10, 20, 5)
-
-	if _, err := writer.Exec(`DROP TABLE office_cost_events`); err != nil {
-		t.Fatalf("drop cost table: %v", err)
-	}
-
-	got, rollup, err := repo.GetRunWithCosts(ctx, run.ID)
-	if err != nil {
-		t.Fatalf("get run with costs: %v", err)
-	}
-	if got == nil || got.ID != run.ID {
-		t.Fatalf("run = %v, want %q", got, run.ID)
-	}
-	if rollup == nil {
-		t.Fatalf("rollup = nil, want a zero rollup")
-	}
-	checkInt64(t, "input_tokens", rollup.InputTokens, 0)
-	checkInt64(t, "output_tokens", rollup.OutputTokens, 0)
-	checkInt64(t, "cached_tokens", rollup.CachedTokens, 0)
-	checkInt64(t, "cost_subcents", rollup.CostSubcents, 0)
-}

@@ -253,6 +253,25 @@ func (r *Repository) GetTurn(ctx context.Context, id string) (*models.Turn, erro
 	return scanTurnRow(row)
 }
 
+// FindTurnIDByNativeCodexTurnID resolves only a unique task/session-owned binding.
+func (r *Repository) FindTurnIDByNativeCodexTurnID(ctx context.Context, taskID, sessionID, providerTurnID string) (string, error) {
+	driver := r.ro.DriverName()
+	metadata := "NULLIF(metadata, '')"
+	query := fmt.Sprintf(`
+		SELECT CASE WHEN COUNT(*) = 1 THEN MIN(id) ELSE '' END
+		FROM (
+			SELECT id FROM task_session_turns
+			WHERE task_id = ? AND task_session_id = ?
+			  AND %s AND %s = ?
+			LIMIT 2
+		) candidates
+	`, dialect.JSONTypeIsString(driver, metadata, models.TurnMetaKeyCodexNativeTurnID),
+		dialect.JSONExtract(driver, metadata, models.TurnMetaKeyCodexNativeTurnID))
+	var turnID string
+	err := r.ro.QueryRowContext(ctx, r.ro.Rebind(query), taskID, sessionID, providerTurnID).Scan(&turnID)
+	return turnID, err
+}
+
 // GetActiveTurnBySessionID gets the currently active (non-completed) turn for
 // a session. This is not the same query as "current turn": it keeps its own
 // completed_at IS NULL filter alongside currentTurnAuthority's predicate and
@@ -397,6 +416,11 @@ func (r *Repository) patchTurnMetadata(
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return false, nil, time.Time{}, fmt.Errorf("inspect active turn metadata update: %w", err)
+	}
+	if affected == 1 && hasNativeUsageGap(metadata) {
+		if err := r.indexCoverageTurnTx(ctx, tx, sessionID, turnID); err != nil {
+			return false, nil, time.Time{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return false, nil, time.Time{}, fmt.Errorf("commit active turn metadata update: %w", err)

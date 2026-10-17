@@ -1181,7 +1181,7 @@ type UsageRepository interface {
 // projection. It is separate from UsageRepository so aggregate-only readers
 // remain compatible.
 type UsageEventReader interface {
-	ListSessionUsageTurnCursors(ctx context.Context, sessionID string, afterID int64, limit int) ([]models.TaskUsageTurnCursor, error)
+	ListSessionUsageTurnPage(ctx context.Context, taskID, sessionID string, afterID int64, limit int) ([]models.TaskUsageTurnEvents, error)
 	ListSessionUsageEventsByTurn(ctx context.Context, sessionID, turnID string) ([]*models.TaskUsageEvent, error)
 }
 

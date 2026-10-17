@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 	"time"
@@ -61,5 +62,151 @@ func TestToUsageTurnDTOReportsZeroCostAndNoResponseRows(t *testing.T) {
 	}
 	if len(got.Responses) != 0 || got.LastResponse == nil {
 		t.Fatalf("response details = %#v and last response %#v, want summary-only with last response", got.Responses, got.LastResponse)
+	}
+}
+
+func TestToUsageTurnDTOPreservesCacheMeasurementPresence(t *testing.T) {
+	type cacheMeasurement struct {
+		Read         int64 `json:"cached_read_tokens"`
+		ReadPresent  bool  `json:"cached_read_tokens_present"`
+		Write        int64 `json:"cached_write_tokens"`
+		WritePresent bool  `json:"cached_write_tokens_present"`
+	}
+	tests := []struct {
+		name   string
+		events []*models.TaskUsageEvent
+		want   map[string]cacheMeasurement
+	}{
+		{
+			name: "missing read and measured-zero write",
+			events: []*models.TaskUsageEvent{
+				{TokensCachedWrite: ptrInt64(0), CostSource: "unpriced"},
+			},
+			want: map[string]cacheMeasurement{
+				"direct": {WritePresent: true}, "total": {WritePresent: true}, "child": {},
+			},
+		},
+		{
+			name: "measured-zero read and missing write",
+			events: []*models.TaskUsageEvent{
+				{TokensCachedRead: ptrInt64(0), CostSource: "unpriced"},
+			},
+			want: map[string]cacheMeasurement{
+				"direct": {ReadPresent: true}, "total": {ReadPresent: true}, "child": {},
+			},
+		},
+		{
+			name: "mixed direct and child cache measurements",
+			events: []*models.TaskUsageEvent{
+				{TokensCachedWrite: ptrInt64(2), CostSource: "unpriced"},
+				{NativeScope: "child", TokensCachedRead: ptrInt64(3), CostSource: "unpriced"},
+			},
+			want: map[string]cacheMeasurement{
+				"direct": {Write: 2, WritePresent: true},
+				"child":  {Read: 3, ReadPresent: true},
+				"total":  {Read: 3, ReadPresent: true, Write: 2, WritePresent: true},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ToUsageTurnDTO(models.TaskUsageTurnEvents{TurnID: "cache-turn", Events: tt.events}, false)
+			encoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var buckets map[string]json.RawMessage
+			if err := json.Unmarshal(encoded, &buckets); err != nil {
+				t.Fatal(err)
+			}
+			for name, want := range tt.want {
+				var measured cacheMeasurement
+				if err := json.Unmarshal(buckets[name], &measured); err != nil {
+					t.Fatal(err)
+				}
+				if measured != want {
+					t.Errorf("%s cache measurements = %#v, want %#v", name, measured, want)
+				}
+			}
+		})
+	}
+}
+
+func TestToUsageTurnDTOAggregatesMeasuredReasoningWithoutResponseDetails(t *testing.T) {
+	tests := []struct {
+		name   string
+		events []*models.TaskUsageEvent
+		want   map[string]*int64
+	}{
+		{
+			name: "multiple direct responses, ACP thoughts, and child work",
+			events: []*models.TaskUsageEvent{
+				{NativeScope: "direct", ReasoningOutputTokens: ptrInt64(10), TokensOut: ptrInt64(200), TokensTotal: 200},
+				{NativeScope: "direct", ReasoningOutputTokens: ptrInt64(20), TokensOut: ptrInt64(100), TokensTotal: 100},
+				{TokensThought: ptrInt64(7), TokensOut: ptrInt64(10), TokensTotal: 17},
+				{NativeScope: "child", ReasoningOutputTokens: ptrInt64(100), TokensOut: ptrInt64(400), TokensTotal: 400},
+			},
+			want: map[string]*int64{"direct": ptrInt64(37), "child": ptrInt64(100), "total": ptrInt64(137)},
+		},
+		{
+			name: "native reasoning missing despite normalized thought zero",
+			events: []*models.TaskUsageEvent{
+				{NativeScope: "direct", TokensThought: ptrInt64(0), TokensOut: ptrInt64(10), TokensTotal: 10},
+			},
+			want: map[string]*int64{"direct": nil, "child": nil, "total": nil},
+		},
+		{
+			name: "native measured zero",
+			events: []*models.TaskUsageEvent{
+				{NativeScope: "direct", ReasoningOutputTokens: ptrInt64(0), TokensOut: ptrInt64(10), TokensTotal: 10},
+			},
+			want: map[string]*int64{"direct": ptrInt64(0), "child": nil, "total": ptrInt64(0)},
+		},
+		{
+			name: "ACP measured zero",
+			events: []*models.TaskUsageEvent{
+				{TokensThought: ptrInt64(0), TokensOut: ptrInt64(10), TokensTotal: 10},
+			},
+			want: map[string]*int64{"direct": ptrInt64(0), "child": nil, "total": ptrInt64(0)},
+		},
+		{
+			name: "overflow saturates with the existing token aggregates",
+			events: []*models.TaskUsageEvent{
+				{NativeScope: "direct", ReasoningOutputTokens: ptrInt64(math.MaxInt64), TokensOut: ptrInt64(math.MaxInt64), TokensTotal: math.MaxInt64},
+				{NativeScope: "direct", ReasoningOutputTokens: ptrInt64(1), TokensOut: ptrInt64(1), TokensTotal: 1},
+			},
+			want: map[string]*int64{"direct": ptrInt64(math.MaxInt64), "child": nil, "total": ptrInt64(math.MaxInt64)},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ToUsageTurnDTO(models.TaskUsageTurnEvents{TurnID: "reasoning-turn", Events: tt.events}, false)
+			if len(got.Responses) != 0 {
+				t.Fatal("indexed turn unexpectedly included response detail")
+			}
+			encoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var buckets map[string]json.RawMessage
+			if err := json.Unmarshal(encoded, &buckets); err != nil {
+				t.Fatal(err)
+			}
+			for name, want := range tt.want {
+				var bucket struct {
+					Reasoning *int64 `json:"reasoning_tokens"`
+				}
+				if err := json.Unmarshal(buckets[name], &bucket); err != nil {
+					t.Fatal(err)
+				}
+				if want == nil {
+					if bucket.Reasoning != nil {
+						t.Errorf("%s fabricated reasoning measurement %d", name, *bucket.Reasoning)
+					}
+				} else if bucket.Reasoning == nil || *bucket.Reasoning != *want {
+					t.Errorf("%s reasoning = %v, want %d", name, bucket.Reasoning, *want)
+				}
+			}
+		})
 	}
 }

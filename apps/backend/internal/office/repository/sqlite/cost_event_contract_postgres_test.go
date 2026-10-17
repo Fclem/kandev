@@ -79,6 +79,13 @@ func TestPostgresCostEventContractMigration(t *testing.T) {
 			t.Errorf("legacy row %s = %v, want NULL (never 0)", col, *got)
 		}
 	}
+	var inputMissing int
+	if err := db.QueryRowContext(ctx, `SELECT tokens_in_missing FROM office_cost_events WHERE id = 'legacy-1'`).Scan(&inputMissing); err != nil {
+		t.Fatalf("read legacy input presence: %v", err)
+	}
+	if inputMissing != 0 {
+		t.Fatal("migration erased a legacy input measurement")
+	}
 
 	var indexName string
 	if err := db.QueryRowContext(ctx, `

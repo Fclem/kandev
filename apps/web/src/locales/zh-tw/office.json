@@ -1022,5 +1022,6 @@
   "failedToLoadRouteAttempts": "載入路由嘗試記錄失敗",
   "failedToLoadRoutingConfig": "載入路由設定失敗",
   "failedToLoadRoutingPreview": "載入路由預覽失敗",
-  "failedToLoadTaskQuorum": "載入任務法定人數失敗"
+  "failedToLoadTaskQuorum": "載入任務法定人數失敗",
+  "costCoverageIncomplete": "部分用量尚未定價。"
 }

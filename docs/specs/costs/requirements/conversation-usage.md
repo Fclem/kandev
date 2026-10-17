@@ -30,7 +30,7 @@ The [native Codex integration](../../agents/requirements/codex-app-server.md) su
 #### Acceptance criteria
 
 - **AC-COSTS-CONVERSATION-USAGE-001.1:** The system shall distinguish response, turn, session, and context-window usage. It shall never label last-response usage as whole-turn usage.
-- **AC-COSTS-CONVERSATION-USAGE-001.2:** Repeated observations, resume replay, and inherited fork history shall not increase recorded usage twice.
+- **AC-COSTS-CONVERSATION-USAGE-001.2:** Repeated observations, resume replay, and inherited fork history shall not increase recorded usage twice. Native cumulative totals shall not generate turn amounts without proven final boundaries.
 - **AC-COSTS-CONVERSATION-USAGE-001.3:** Cached input and reasoning output shall appear as breakdowns when the provider includes them in input/output totals. Totals shall not count those tokens twice.
 - **AC-COSTS-CONVERSATION-USAGE-001.4:** Missing, partial, estimated, pending, and measured-zero usage shall remain distinguishable after reload.
 - **AC-COSTS-CONVERSATION-USAGE-001.5:** Child usage shall retain its own thread and turn identity. Late child usage shall update the originating work, never the currently active unrelated turn.

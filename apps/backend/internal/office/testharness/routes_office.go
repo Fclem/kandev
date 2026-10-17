@@ -668,7 +668,7 @@ func seedCostEventHandler(repo *officesqlite.Repository, log *logger.Logger) gin
 			Model:               "test-model",
 			Provider:            "test",
 			TokensIn:            req.TokensIn,
-			TokensCachedIn:      req.TokensCachedIn,
+			TokensCachedIn:      &req.TokensCachedIn,
 			TokensOut:           req.TokensOut,
 			CostSubcents:        req.CostSubcents,
 			Estimated:           req.Estimated,

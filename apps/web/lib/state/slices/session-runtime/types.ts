@@ -555,7 +555,10 @@ export type BackgroundWorkState = {
 
 export type UsageTurnIndexEntry = {
   byTurnId: Record<string, UsageTurn>;
-  newestPageTurnIds: string[];
+  /** `usageInvalidation` counter the newest page was last refreshed at; unset = never refreshed. */
+  refreshedInvalidation?: number;
+  /** Each cached turn's accepted usage invalidation generation. */
+  refreshedInvalidationByTurnId?: Record<string, number>;
   nextCursor?: string;
   exhausted: boolean;
 };
@@ -684,7 +687,9 @@ export type SessionRuntimeSliceActions = {
     sessionId: string,
     page: UsageTurnsPage,
     mode?: "append" | "refresh",
+    refreshedInvalidation?: number,
   ) => void;
+  setSessionUsageTurn: (sessionId: string, turn: UsageTurn, refreshedInvalidation: number) => void;
   bumpSessionUsageInvalidation: (sessionId: string) => void;
   // Session todos actions
   setSessionTodos: (sessionId: string, entries: TodoEntry[]) => void;

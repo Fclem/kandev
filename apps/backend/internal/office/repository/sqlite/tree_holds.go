@@ -263,10 +263,17 @@ func (r *Repository) GetSubtreeCostSummary(
 		)
 		SELECT
 			COUNT(DISTINCT t.id) AS task_count,
-			COALESCE(SUM(e.cost_subcents), 0) AS cost_subcents,
-			COALESCE(SUM(e.tokens_in), 0) AS tokens_in,
-			COALESCE(SUM(e.tokens_cached_in), 0) AS tokens_cached_in,
-			COALESCE(SUM(e.tokens_out), 0) AS tokens_out
+			SUM(CASE WHEN e.usage_unavailable = 0
+			          AND (e.cost_source IS NULL OR e.cost_source <> 'unpriced')
+			         THEN e.cost_subcents END) AS cost_subcents,
+			COALESCE(MAX(CASE WHEN e.usage_unavailable <> 0 OR e.cost_source = 'unpriced'
+			                  THEN 1 ELSE 0 END), 0) AS coverage_degraded,
+			CASE WHEN MAX(e.usage_unavailable) <> 0 OR MAX(e.tokens_in_missing) <> 0 THEN NULL
+			     ELSE COALESCE(SUM(e.tokens_in), 0) END AS tokens_in,
+			CASE WHEN COUNT(e.tokens_cached_in) < COUNT(e.id) THEN NULL
+			     ELSE COALESCE(SUM(e.tokens_cached_in), 0) END AS tokens_cached_in,
+			CASE WHEN MAX(e.usage_unavailable) <> 0 OR COUNT(e.tokens_out) < COUNT(e.id) THEN NULL
+			     ELSE COALESCE(SUM(e.tokens_out), 0) END AS tokens_out
 		FROM subtree t
 		LEFT JOIN office_cost_events e ON e.task_id = t.id
 	`), rootTaskID).StructScan(&summary)

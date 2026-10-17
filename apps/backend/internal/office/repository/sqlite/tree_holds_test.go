@@ -2,6 +2,7 @@ package sqlite_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/kandev/kandev/internal/office/models"
@@ -128,10 +129,6 @@ func TestGetSubtreeCostSummary(t *testing.T) {
 		}
 	}
 
-	// A NULL tokens_out row (the "never measured" shape — see
-	// costContractVersion's v2→v3 doc comment in prompt_usage_cost.go) must
-	// be skipped by SUM exactly like a 0 would have been: the aggregate
-	// below must come out identical whether this row contributes NULL or 0.
 	_, err := repo.ExecRaw(ctx, `
 		INSERT INTO office_cost_events (
 			id, task_id, cost_subcents, tokens_in, tokens_cached_in, tokens_out, occurred_at, created_at
@@ -145,10 +142,80 @@ func TestGetSubtreeCostSummary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSubtreeCostSummary: %v", err)
 	}
-	if summary.TaskCount != 3 || summary.CostSubcents != 40 {
+	if summary.TaskCount != 3 || summary.CostSubcents == nil || *summary.CostSubcents != 40 {
 		t.Fatalf("summary = %+v, want 3 distinct tasks (extra row is a 2nd event on root) and 40 subcents", summary)
 	}
-	if summary.TokensIn != 400 || summary.TokensCachedIn != 80 || summary.TokensOut != 15 {
-		t.Fatalf("unexpected token totals: %+v, want tokens_out=15 (SUM skips the NULL row, same as adding 0)", summary)
+	if summary.TokensIn == nil || *summary.TokensIn != 400 ||
+		summary.TokensCachedIn == nil || *summary.TokensCachedIn != 80 {
+		t.Fatalf("unexpected input/cache totals: %+v", summary)
+	}
+	if summary.TokensOut != nil {
+		t.Fatalf("unmeasured output must withhold the aggregate, got %d", *summary.TokensOut)
+	}
+}
+
+func TestSubtreeTokenCompleteness(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		gap     bool
+		known   bool
+		missing bool
+		zero    bool
+		wantIn  interface{}
+		wantOut interface{}
+	}{
+		{name: "gap only", gap: true},
+		{name: "mixed measured and gap", gap: true, known: true},
+		{name: "missing output", known: true, missing: true, wantIn: float64(10)},
+		{name: "measured zero", known: true, zero: true, wantIn: float64(0), wantOut: float64(0)},
+		{name: "measured", known: true, wantIn: float64(10), wantOut: float64(20)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newTreeHoldTestRepo(t)
+			ctx := context.Background()
+			insertTreeTask(t, repo, "root", "", "TODO")
+			insertTreeTask(t, repo, "child", "root", "TODO")
+			var wantCost interface{}
+			if test.known {
+				input, output := int64(10), interface{}(int64(20))
+				if test.zero {
+					input, output = 0, int64(0)
+				}
+				if test.missing {
+					output = nil
+				}
+				_, err := repo.ExecRaw(ctx, `INSERT INTO office_cost_events
+					(id, task_id, tokens_in, tokens_out, cost_subcents, occurred_at, created_at)
+					VALUES ('measured', 'root', ?, ?, 12500, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, input, output)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantCost = float64(12500)
+			}
+			if test.gap {
+				_, err := repo.ExecRaw(ctx, `INSERT INTO office_cost_events
+					(id, task_id, tokens_in, tokens_out, tokens_cached_in, cost_subcents, usage_unavailable, occurred_at, created_at)
+					VALUES ('gap', 'child', 0, ?, ?, 0, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, nil, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			summary, err := repo.GetSubtreeCostSummary(ctx, "root")
+			if err != nil {
+				t.Fatal(err)
+			}
+			wire, err := json.Marshal(summary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var projection map[string]interface{}
+			if err := json.Unmarshal(wire, &projection); err != nil {
+				t.Fatal(err)
+			}
+			if projection["tokens_in"] != test.wantIn || projection["tokens_out"] != test.wantOut ||
+				projection["cost_subcents"] != wantCost || projection["task_count"] != float64(2) {
+				t.Fatalf("subtree projection = %s; want input=%v output=%v cost=%v", wire, test.wantIn, test.wantOut, wantCost)
+			}
+		})
 	}
 }

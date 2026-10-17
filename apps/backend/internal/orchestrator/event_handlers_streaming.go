@@ -40,6 +40,9 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 	if payload == nil || payload.Data == nil {
 		return
 	}
+	// The TTFT/receipt origin is backend receipt: stamp it before waiting on
+	// the per-session dispatch guard so guard contention is not excluded.
+	receivedAt := s.timingNow()
 	var streamGuard *lockedCancelInFlightGuard
 	if payload.SessionID != "" {
 		// Serialize stream side effects with cancellation/interrupt decisions.
@@ -60,7 +63,6 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		eventExecutionID = payload.AgentID
 	}
 	eventType := payload.Data.Type
-	receivedAt := s.timingNow()
 	if !s.resumeAttemptAllowsExecution(payload.SessionID, eventExecutionID, payload.AttemptID) {
 		s.logger.Debug("ignoring stream event from a stale resume attempt",
 			zap.String("task_id", payload.TaskID),
@@ -95,7 +97,7 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 	var observedOutput, observedEffect bool
 
 	if eventType == agentEventComplete {
-		if marker, ok := s.terminalExecutionMarker(sessionID, payload.ExecutionID); ok {
+		if marker, ok := s.terminalExecutionMarker(sessionID, eventExecutionID); ok {
 			if !marker.allowCompleteStream {
 				s.logger.Debug("ignoring complete stream event from terminal failed execution",
 					zap.String("task_id", taskID),
@@ -194,20 +196,13 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 
 	// Handle different event types
 	switch eventType {
-	case streams.EventTypeMessageChunk, streams.EventTypeReasoning:
-		return
-
 	case "message_streaming":
 		s.handleMessageStreamingEvent(ctx, payload)
-		if observedOutput {
-			s.recordTurnFirstOutput(sessionID, eventExecutionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
-		}
+		observedOutput = !payload.Data.ProviderDiagnosticCandidate && strings.TrimSpace(payload.Data.Text) != ""
 
 	case "thinking_streaming":
 		s.handleThinkingStreamingEvent(ctx, payload)
-		if observedOutput {
-			s.recordTurnFirstOutput(sessionID, eventExecutionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
-		}
+		observedOutput = !payload.Data.ProviderDiagnosticCandidate && strings.TrimSpace(payload.Data.Text) != ""
 
 	case streams.EventTypeResponseAttemptReset:
 		if !s.responseAttemptResetOwnsCurrentPrompt(payload) {
@@ -226,7 +221,9 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		s.handleCompleteStreamEventWithGuardRelease(ctx, payload, streamGuard)
 
 	case agentEventError:
-		s.discardTurnTiming(sessionID)
+		if !s.streamEventIsStalePrompt(payload) {
+			s.discardTurnTiming(sessionID, eventExecutionID, payload.Data.TurnID)
+		}
 		s.handleAgentErrorEvent(ctx, payload)
 
 	case "session_status":
@@ -292,7 +289,12 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		s.handleAgentLogEvent(ctx, payload)
 
 	case streams.EventTypeTurnStarted:
-		s.startTurnTiming(sessionID, eventExecutionID, s.nonCreatingActiveTurnID(ctx, sessionID), receivedAt)
+		if !s.streamEventIsStalePrompt(payload) {
+			turnID := s.nonCreatingActiveTurnID(ctx, sessionID)
+			if payload.Data.TurnID == "" || payload.Data.TurnID == turnID {
+				s.startTurnTiming(sessionID, eventExecutionID, turnID, payload.Data.PromptGeneration, receivedAt)
+			}
+		}
 		s.persistNativeCodexTurnID(ctx, payload)
 		s.retireCountedEmptyTurn(sessionID)
 		// D3: the single turn boundary for the whole feature. Clearing here,
@@ -323,10 +325,17 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 		}
 		cancel()
 	}
+	if observedOutput && !s.streamEventIsStalePrompt(payload) {
+		turnID := payload.Data.TurnID
+		if turnID == "" {
+			turnID = s.nonCreatingActiveTurnID(ctx, sessionID)
+		}
+		s.recordTurnFirstOutput(sessionID, eventExecutionID, turnID, payload.Data.PromptGeneration, receivedAt)
+	}
 }
 
 func (s *Service) persistNativeCodexTurnID(ctx context.Context, payload *lifecycle.AgentStreamEventPayload) {
-	if !s.config.CodexAppServerEnabled || s.repo == nil || s.turnService == nil || payload == nil || payload.Data == nil {
+	if !s.config.CodexAppServerEnabled || s.repo == nil || s.turnService == nil || payload == nil || payload.Data == nil || s.streamEventIsStalePrompt(payload) {
 		return
 	}
 	providerTurnID := strings.TrimSpace(payload.Data.OperationID)
@@ -343,7 +352,10 @@ func (s *Service) persistNativeCodexTurnID(ctx context.Context, payload *lifecyc
 			zap.String("session_id", payload.SessionID), zap.Error(err))
 		return
 	}
-	if turn == nil {
+	if turn == nil || payload.Data.TurnID != "" && payload.Data.TurnID != turn.ID {
+		return
+	}
+	if payload.Data.Type != streams.EventTypeTurnStarted && turn.Metadata[models.TurnMetaKeyCodexNativeTurnID] != nil {
 		return
 	}
 	if err := s.turnService.PatchTurnMetadata(ctx, payload.SessionID, turn.ID, map[string]interface{}{
@@ -846,6 +858,7 @@ func (s *Service) handleStreamingEventKind(
 		return
 	}
 	turnID := s.getActiveTurnID(payload.SessionID)
+	s.persistNativeCodexTurnID(ctx, payload)
 	s.createStreamingChunk(ctx, kind, messageID, payload.TaskID, payload.Data.Text, payload.SessionID, turnID, createFn)
 }
 
@@ -2245,8 +2258,10 @@ func (s *Service) markReadyTurnAt(sessionID, executionID string, promptGeneratio
 	if sessionID == "" || executionID == "" || turnID == "" {
 		return
 	}
-	s.closeTurnTiming(sessionID, executionID, turnID, closedAt)
-	expiresAt := closedAt.Add(completedExecutionRetention)
+	s.closeTurnTiming(sessionID, executionID, turnID, promptGeneration, closedAt)
+	// Expiry is wall-clock: it is compared against time.Now on take, never
+	// against the injectable timing clock that stamps closedAt.
+	expiresAt := time.Now().Add(completedExecutionRetention)
 	mark := readyTurnMark{turnID: turnID, expiresAt: expiresAt}
 	if promptGeneration == 0 {
 		s.pushZeroGenReadyTurnMark(sessionID, executionID, mark)
@@ -2259,7 +2274,7 @@ func (s *Service) markReadyTurnAt(sessionID, executionID string, promptGeneratio
 	})
 }
 
-// takeReadyTurnMark consumes (and removes) the turn ID markReadyTurn recorded
+// takeReadyTurnMark consumes (and removes) the turn ID markReadyTurnAt recorded
 // for this completion, if any. A miss is expected whenever the completion
 // never went through handleAgentReady's synchronous ready path (or the mark
 // already expired); the caller falls back to a live lookup or a terminal-
@@ -3265,7 +3280,11 @@ func (s *Service) handleCompleteStreamEventWithGuardRelease(
 	s.logger.Debug("handling complete stream event",
 		zap.String("task_id", payload.TaskID),
 		zap.String("session_id", payload.SessionID))
-	terminalMarker, terminalCompleteStream := s.terminalCompleteStreamMarker(payload.SessionID, payload.ExecutionID)
+	executionID := payload.ExecutionID
+	if executionID == "" {
+		executionID = payload.AgentID
+	}
+	terminalMarker, terminalCompleteStream := s.terminalCompleteStreamMarker(payload.SessionID, executionID)
 
 	// Load session once up front — used by storeResumeToken, state check, and setSessionWaitingForInput.
 	session, ok := s.loadCompleteEventSession(ctx, payload)
@@ -3389,7 +3408,11 @@ func (s *Service) resolveCompleteEventTurnID(
 	terminalCompleteStream bool,
 	terminalMarker terminalExecutionMarker,
 ) string {
-	markedTurnID, _ := s.takeReadyTurnMark(payload.SessionID, payload.ExecutionID, payload.Data.PromptGeneration)
+	executionID := payload.ExecutionID
+	if executionID == "" {
+		executionID = payload.AgentID
+	}
+	markedTurnID, _ := s.takeReadyTurnMark(payload.SessionID, executionID, payload.Data.PromptGeneration)
 	if payload.Data.TurnID != "" {
 		return payload.Data.TurnID
 	}
@@ -3408,7 +3431,7 @@ func (s *Service) flushTerminalCompleteStream(
 	session *models.TaskSession,
 	terminalTurnID string,
 ) {
-	s.persistTurnTiming(ctx, payload.SessionID, terminalTurnID, extractStopReason(payload) == stopReasonCancelled)
+	s.persistTurnTiming(ctx, payload, terminalTurnID)
 	s.saveAgentTextForTurn(ctx, payload, terminalTurnID)
 	s.publishAgentPlanForTurn(ctx, payload, terminalTurnID, false)
 	s.persistTurnPromptMetadataForTurn(ctx, payload, session, terminalTurnID)
@@ -3430,7 +3453,7 @@ func (s *Service) persistCompleteStreamOutput(
 	completionTurnID string,
 ) {
 	if completionTurnID != "" {
-		s.persistTurnTiming(ctx, payload.SessionID, completionTurnID, extractStopReason(payload) == stopReasonCancelled)
+		s.persistTurnTiming(ctx, payload, completionTurnID)
 		s.saveAgentTextForTurn(ctx, payload, completionTurnID)
 		s.publishAgentPlanForTurn(ctx, payload, completionTurnID, false)
 		s.persistTurnPromptMetadataForTurn(ctx, payload, session, completionTurnID)
@@ -3870,8 +3893,18 @@ func (s *Service) publishNativeUsageObservation(
 	if !ok {
 		return
 	}
-	usage := *payload.Data.Usage
-	usage.PriceSuppressed = usage.PriceSuppressed || observation.PriceSuppressed
+	var usage *streams.PromptUsage
+	usageEventID := nativeUsageEventIDFor(payload.SessionID, observation)
+	if payload.Data.Usage == nil {
+		if !s.persistNativeUsageCoverageGap(ctx, payload, turnID) {
+			return
+		}
+		usageEventID = "unavailable:" + usageEventID
+	} else {
+		normalized := *payload.Data.Usage
+		normalized.PriceSuppressed = normalized.PriceSuppressed || observation.PriceSuppressed
+		usage = &normalized
+	}
 	model := observation.Model
 	if model == "" && observation.Scope != "child" {
 		model = payload.Data.CurrentModelID
@@ -3883,11 +3916,11 @@ func (s *Service) publishNativeUsageObservation(
 		AgentProfileID:   session.AgentProfileID,
 		AgentType:        agentType,
 		Model:            model,
-		Usage:            &usage,
+		Usage:            usage,
 		UsageObservation: observation,
 		Timestamp:        time.Now().UTC().Format(time.RFC3339),
 		TurnID:           turnID,
-		UsageEventID:     nativeUsageEventIDFor(payload.SessionID, observation),
+		UsageEventID:     usageEventID,
 	}
 	subject := events.BuildSessionPromptUsageSubject(payload.SessionID)
 	if err := s.eventBus.Publish(ctx, subject, bus.NewEvent(events.SessionPromptUsageUpdated, "orchestrator", eventPayload)); err != nil {
@@ -3901,7 +3934,8 @@ func (s *Service) publishNativeUsageObservation(
 
 func nativeUsageObservationReady(s *Service, payload *lifecycle.AgentStreamEventPayload) bool {
 	return s != nil && s.eventBus != nil && payload != nil && payload.Data != nil &&
-		payload.Data.UsageObservation != nil && payload.Data.Usage != nil && payload.SessionID != ""
+		payload.Data.UsageObservation != nil && payload.SessionID != "" &&
+		(payload.Data.Usage != nil || payload.Data.UsageObservation.Completeness == streams.NativeUsageCompletenessPartial)
 }
 
 func (s *Service) resolveNativeUsageObservation(
@@ -3909,10 +3943,7 @@ func (s *Service) resolveNativeUsageObservation(
 	payload *lifecycle.AgentStreamEventPayload,
 ) (string, *models.TaskSession, string, bool) {
 	observation := payload.Data.UsageObservation
-	turnID := payload.Data.TurnID
-	if turnID == "" {
-		turnID = s.nonCreatingActiveTurnID(ctx, payload.SessionID)
-	}
+	turnID := s.nativeUsageTurnID(ctx, payload)
 	if turnID == "" || observation.ProviderThreadID == "" || observation.ProviderTurnID == "" {
 		return "", nil, "", false
 	}
@@ -4025,18 +4056,29 @@ func promptUsageMetadata(usage *streams.PromptUsage) map[string]interface{} {
 	if usage == nil {
 		return nil
 	}
-	return map[string]interface{}{
-		"input_tokens":                    usage.InputTokens,
-		"output_tokens":                   usage.OutputTokens,
-		"output_tokens_present":           usage.OutputTokensPresent,
-		"cached_read_tokens":              usage.CachedReadTokens,
-		"cached_write_tokens":             usage.CachedWriteTokens,
-		"thought_tokens":                  usage.ThoughtTokens,
-		"total_tokens":                    usage.TotalTokens,
-		"provider_reported_cost_subcents": usage.ProviderReportedCostSubcents,
-		"provider_reported_cost_present":  usage.ProviderReportedCostPresent,
-		"estimated":                       usage.Estimated,
+	metadata := map[string]interface{}{
+		"output_tokens_present":          usage.OutputTokensPresent,
+		"provider_reported_cost_present": usage.ProviderReportedCostPresent,
+		"estimated":                      usage.Estimated,
 	}
+	for _, count := range [...]struct {
+		key     string
+		value   int64
+		present bool
+	}{
+		{"input_tokens", usage.InputTokens, usage.InputTokensPresent},
+		{"output_tokens", usage.OutputTokens, usage.OutputTokensPresent},
+		{"cached_read_tokens", usage.CachedReadTokens, usage.CachedReadTokensPresent},
+		{"cached_write_tokens", usage.CachedWriteTokens, usage.CachedWriteTokensPresent},
+		{"thought_tokens", usage.ThoughtTokens, usage.ThoughtTokensPresent},
+		{"total_tokens", usage.TotalTokens, false},
+		{"provider_reported_cost_subcents", usage.ProviderReportedCostSubcents, usage.ProviderReportedCostPresent},
+	} {
+		if count.present || count.value > 0 {
+			metadata[count.key] = count.value
+		}
+	}
+	return metadata
 }
 
 func (s *Service) handleSessionInfoEvent(ctx context.Context, payload *lifecycle.AgentStreamEventPayload) {

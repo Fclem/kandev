@@ -296,6 +296,12 @@ func (r *Repository) runMigrations(ctx context.Context) error {
 	// the columns to widen before this ALTERs their type.
 	r.migrateTaskSessionsRollupColumnsToBigint()
 	r.migrateTaskUsageObservationColumns()
+	if err := r.migrateTaskUsageCoverage(); err != nil {
+		return err
+	}
+	if err := r.migrateUsageTurnIndex(); err != nil {
+		return err
+	}
 
 	// Office task extensions - net-new columns on existing main tables.
 	// Idempotent ALTERs; main upgrades pick them up at first boot.

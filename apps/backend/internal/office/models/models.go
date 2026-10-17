@@ -350,7 +350,8 @@ var ValidProjectStatuses = map[ProjectStatus]bool{
 // nullable and uses the normalized output-token presence signal to leave it
 // NULL when no output count was observed, so "never measured" is
 // unrepresentable as a number.
-const CostContractVersion int64 = 3
+// Contract v4 retains missing input independently from observed output.
+const CostContractVersion int64 = 4
 
 // CostEvent represents a cost tracking event.
 //
@@ -370,8 +371,12 @@ const CostContractVersion int64 = 3
 // per-output-token measure must see "unknown" rather than a fake zero-output
 // turn. The JSON cost-list representation includes this field as null so API
 // consumers can make the same distinction. NULL is never backfilled to 0;
-// TokensCachedIn keeps its original read+write sum semantics on every row so
-// existing consumers of that column are unaffected. See docs/specs/office/requirements/costs.md.
+// TokensCachedIn is the checked read+write sum. NULL means that sum is
+// unavailable; independently recorded split counts and cost remain usable.
+// UsageUnavailable marks amount-free native coverage. Scalar storage slots are
+// placeholders on these rows; JSON amounts are null and cost remains unpriced.
+// TokensInMissing makes the input storage placeholder unavailable in JSON and
+// aggregates without suppressing independently measured output or spend.
 type CostEvent struct {
 	ID                        string      `json:"id" db:"id"`
 	SessionID                 string      `json:"session_id" db:"session_id"`
@@ -381,12 +386,14 @@ type CostEvent struct {
 	Model                     string      `json:"model" db:"model"`
 	Provider                  string      `json:"provider" db:"provider"`
 	TokensIn                  int64       `json:"tokens_in" db:"tokens_in"`
-	TokensCachedIn            int64       `json:"tokens_cached_in" db:"tokens_cached_in"`
+	TokensInMissing           bool        `json:"-" db:"tokens_in_missing"`
+	TokensCachedIn            *int64      `json:"tokens_cached_in" db:"tokens_cached_in"`
 	TokensCachedRead          *int64      `json:"tokens_cached_read,omitempty" db:"tokens_cached_read"`
 	TokensCachedWrite         *int64      `json:"tokens_cached_write,omitempty" db:"tokens_cached_write"`
 	TokensOut                 *int64      `json:"tokens_out" db:"tokens_out"`
 	CostSubcents              int64       `json:"cost_subcents" db:"cost_subcents"`
 	Estimated                 bool        `json:"estimated" db:"estimated"`
+	UsageUnavailable          bool        `json:"usage_unavailable,omitempty" db:"usage_unavailable"`
 	TurnID                    *string     `json:"turn_id,omitempty" db:"turn_id"`
 	UsageEventID              *string     `json:"usage_event_id,omitempty" db:"usage_event_id"`
 	CostSource                *CostSource `json:"cost_source,omitempty" db:"cost_source"`
@@ -398,6 +405,26 @@ type CostEvent struct {
 	CostContractVersion       *int64      `json:"cost_contract_version,omitempty" db:"cost_contract_version"`
 	OccurredAt                time.Time   `json:"occurred_at" db:"occurred_at"`
 	CreatedAt                 time.Time   `json:"created_at" db:"created_at"`
+}
+
+// MarshalJSON keeps missing measurements distinct from measured zero.
+func (e *CostEvent) MarshalJSON() ([]byte, error) {
+	type costEvent CostEvent
+	if !e.UsageUnavailable && !e.TokensInMissing {
+		return json.Marshal((*costEvent)(e))
+	}
+	if !e.UsageUnavailable {
+		return json.Marshal(&struct {
+			*costEvent
+			TokensIn *int64 `json:"tokens_in"`
+		}{costEvent: (*costEvent)(e)})
+	}
+	return json.Marshal(&struct {
+		*costEvent
+		TokensIn       *int64 `json:"tokens_in"`
+		TokensCachedIn *int64 `json:"tokens_cached_in"`
+		CostSubcents   *int64 `json:"cost_subcents"`
+	}{costEvent: (*costEvent)(e)})
 }
 
 // BudgetPolicy represents a budget limit policy. LimitSubcents is
@@ -714,23 +741,24 @@ type RecentTask struct {
 
 // DashboardData represents aggregated dashboard information.
 type DashboardData struct {
-	AgentCount         int              `json:"agent_count"`
-	RunningCount       int              `json:"running_count"`
-	PausedCount        int              `json:"paused_count"`
-	ErrorCount         int              `json:"error_count"`
-	TasksInProgress    int              `json:"tasks_in_progress"`
-	OpenTasks          int              `json:"open_tasks"`
-	BlockedTasks       int              `json:"blocked_tasks"`
-	MonthSpendSubcents int64            `json:"month_spend_subcents"`
-	PendingApprovals   int              `json:"pending_approvals"`
-	RecentActivity     []*ActivityEntry `json:"recent_activity"`
-	RecentIssues       []interface{}    `json:"recent_issues,omitempty"`
-	TaskCount          int              `json:"task_count"`
-	SkillCount         int              `json:"skill_count"`
-	RoutineCount       int              `json:"routine_count"`
-	RunActivity        []RunActivityDay
-	TaskBreakdown      TaskBreakdown
-	RecentTasks        []RecentTask
+	AgentCount                 int              `json:"agent_count"`
+	RunningCount               int              `json:"running_count"`
+	PausedCount                int              `json:"paused_count"`
+	ErrorCount                 int              `json:"error_count"`
+	TasksInProgress            int              `json:"tasks_in_progress"`
+	OpenTasks                  int              `json:"open_tasks"`
+	BlockedTasks               int              `json:"blocked_tasks"`
+	MonthSpendSubcents         *int64           `json:"month_spend_subcents"`
+	MonthSpendCoverageDegraded bool             `json:"month_spend_coverage_degraded"`
+	PendingApprovals           int              `json:"pending_approvals"`
+	RecentActivity             []*ActivityEntry `json:"recent_activity"`
+	RecentIssues               []interface{}    `json:"recent_issues,omitempty"`
+	TaskCount                  int              `json:"task_count"`
+	SkillCount                 int              `json:"skill_count"`
+	RoutineCount               int              `json:"routine_count"`
+	RunActivity                []RunActivityDay
+	TaskBreakdown              TaskBreakdown
+	RecentTasks                []RecentTask
 }
 
 // InstructionFile represents an instruction file for an agent instance.
@@ -744,6 +772,12 @@ type InstructionFile struct {
 	UpdatedAt      string `json:"updated_at" db:"updated_at"`
 }
 
+// CostSummary retains recorded spend independently of incomplete price coverage.
+type CostSummary struct {
+	TotalSubcents    *int64 `json:"total_subcents" db:"total_subcents"`
+	CoverageDegraded bool   `json:"coverage_degraded" db:"coverage_degraded"`
+}
+
 // CostBreakdown represents an aggregated cost entry. TotalSubcents stores
 // hundredths of a cent (UI divides by 10000 for dollars). GroupKey is the
 // stable id used by the breakdown grouping (agent_profile_id, project_id,
@@ -751,8 +785,9 @@ type InstructionFile struct {
 // (e.g. agent profile name, project name); empty when no lookup applies
 // or when the id has no row in the source table.
 type CostBreakdown struct {
-	GroupKey      string `json:"group_key" db:"group_key"`
-	GroupLabel    string `json:"group_label" db:"group_label"`
-	TotalSubcents int64  `json:"total_subcents" db:"total_subcents"`
-	Count         int    `json:"count" db:"count"`
+	GroupKey         string `json:"group_key" db:"group_key"`
+	GroupLabel       string `json:"group_label" db:"group_label"`
+	TotalSubcents    *int64 `json:"total_subcents" db:"total_subcents"`
+	CoverageDegraded bool   `json:"coverage_degraded" db:"coverage_degraded"`
+	Count            int    `json:"count" db:"count"`
 }

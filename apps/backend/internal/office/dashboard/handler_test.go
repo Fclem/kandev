@@ -292,8 +292,8 @@ func (s *stubAgentReader) ListAgentInstancesByIDs(_ context.Context, ids []strin
 
 type stubCostChecker struct{}
 
-func (s *stubCostChecker) GetCostSummary(_ context.Context, _ string) (int64, error) {
-	return 0, nil
+func (s *stubCostChecker) GetCostSummary(_ context.Context, _ string) (models.CostSummary, error) {
+	return models.CostSummary{}, nil
 }
 
 // insertTestTask inserts a minimal task row for testing. The legacy

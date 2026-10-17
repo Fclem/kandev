@@ -428,6 +428,10 @@ func (r *Repository) backfillContinuationScopes() error {
 // set byte-identical to the inline CREATE TABLE in createCostTables so a
 // fresh database and a migrated one converge.
 func (r *Repository) migrateCostEventContract() {
+	_ = r.migrate.Apply("office_cost_events.usage_unavailable",
+		`ALTER TABLE office_cost_events ADD COLUMN usage_unavailable INTEGER NOT NULL DEFAULT 0`)
+	_ = r.migrate.Apply("office_cost_events.tokens_in_missing",
+		`ALTER TABLE office_cost_events ADD COLUMN tokens_in_missing INTEGER NOT NULL DEFAULT 0`)
 	r.migrate.Apply("office_cost_events.tokens_cached_read",
 		`ALTER TABLE office_cost_events ADD COLUMN tokens_cached_read INTEGER`)
 	r.migrate.Apply("office_cost_events.tokens_cached_write",

@@ -18,7 +18,7 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatDollars(subcents: number | null | undefined): string {
   if (subcents == null || !Number.isFinite(subcents)) {
-    return "$0.00";
+    return "-";
   }
   return `$${(subcents / 10000).toFixed(2)}`;
 }

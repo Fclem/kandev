@@ -674,7 +674,7 @@
   "systemLoad1Min": "System load (1 min)",
   "messageMetadata": "Message metadata",
   "messageMetadataCost": "Cost",
-  "messageMetadataDescription": "Choose which usage details appear beneath assistant messages.",
+  "messageMetadataDescription": "Choose which timing, usage, and session details appear beneath messages.",
   "messageMetadataDuration": "Duration",
   "messageMetadataSessionOptions": "Model and session options",
   "messageMetadataTimestamp": "Timestamp",

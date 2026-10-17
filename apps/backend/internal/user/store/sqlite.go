@@ -575,6 +575,10 @@ func applyPostgresTaskCreateLastUsedPatch(expr string, patch models.TaskCreateLa
 // marshalUserSettingsPayload serializes the settings model to the stored JSON
 // blob, normalizing enums and defaulting nil slices/maps.
 func marshalUserSettingsPayload(settings *models.UserSettings) ([]byte, error) {
+	messageMetadataFields := settings.MessageMetadataFields
+	if messageMetadataFields == nil {
+		messageMetadataFields = models.DefaultMessageMetadataFields()
+	}
 	lspAutoStart := settings.LspAutoStartLanguages
 	if lspAutoStart == nil {
 		lspAutoStart = []string{}
@@ -686,7 +690,7 @@ func marshalUserSettingsPayload(settings *models.UserSettings) ([]byte, error) {
 		"quick_chat_tab_order_by_workspace":        quickChatTabOrderByWorkspace,
 		"kanban_hidden_step_ids":                   settings.KanbanHiddenStepIDs,
 		"workflow_ids_with_auto_hide_empty_steps":  settings.WorkflowIDsWithAutoHideEmptySteps,
-		"message_metadata_fields":                  settings.MessageMetadataFields,
+		"message_metadata_fields":                  messageMetadataFields,
 		"kanban_sort":                              models.NormalizeKanbanSort(settings.KanbanSort),
 		"kanban_priority_filter_tokens":            settings.KanbanPriorityFilterTokens,
 	})
@@ -1090,7 +1094,7 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 	settings.AgentTabCloseBehavior = normalizeAgentTabCloseBehaviorStored(payload.AgentTabCloseBehavior)
 	settings.KanbanHiddenStepIDs = decodeKanbanHiddenStepIDs(payload.KanbanHiddenStepIDs)
 	settings.WorkflowIDsWithAutoHideEmptySteps = decodeStringIDs(payload.WorkflowIDsWithAutoHideEmptySteps)
-	if len(payload.MessageMetadataFields) != 0 {
+	if len(payload.MessageMetadataFields) != 0 && string(payload.MessageMetadataFields) != jsonNull {
 		settings.MessageMetadataFields = decodeMessageMetadataFields(payload.MessageMetadataFields)
 	}
 	settings.KanbanSort = models.NormalizeKanbanSort(payload.KanbanSort)

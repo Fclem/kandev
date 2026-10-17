@@ -283,7 +283,8 @@ func TestTasklessUsageDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, rollup, err := svc.RepoForTest().GetRunWithCosts(ctx, runs[0].ID)
-	if err != nil || rollup.CostSubcents != 123 || rollup.InputTokens != 7 {
+	if err != nil || rollup.CostSubcents == nil || *rollup.CostSubcents != 123 ||
+		rollup.InputTokens == nil || *rollup.InputTokens != 7 {
 		t.Errorf("rollup = %#v, err=%v", rollup, err)
 	}
 

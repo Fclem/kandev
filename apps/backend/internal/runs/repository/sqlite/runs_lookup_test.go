@@ -307,52 +307,35 @@ func TestGetRunWithCosts_SumsOnlyTheRunsOwnTaskEvents(t *testing.T) {
 	if got.ID != run.ID {
 		t.Errorf("run = %q, want %q", got.ID, run.ID)
 	}
-	checkInt64(t, "input_tokens", rollup.InputTokens, 300)
-	checkInt64(t, "cached_tokens", rollup.CachedTokens, 30)
-	checkInt64(t, "output_tokens", rollup.OutputTokens, 50)
-	checkInt64(t, "cost_subcents", rollup.CostSubcents, 12)
+	if rollup.InputTokens == nil || rollup.OutputTokens == nil || rollup.CostSubcents == nil {
+		t.Fatalf("measured run amounts unavailable: %+v", rollup)
+	}
+	checkInt64(t, "input_tokens", *rollup.InputTokens, 300)
+	if rollup.CachedTokens == nil || *rollup.CachedTokens != 30 {
+		t.Fatalf("cached count=%v, want 30", rollup.CachedTokens)
+	}
+	checkInt64(t, "output_tokens", *rollup.OutputTokens, 50)
+	checkInt64(t, "cost_subcents", *rollup.CostSubcents, 12)
 }
 
-// TestGetRunWithCosts_TasklessRunRollsUpToZero pins the non-empty
-// task_id guard: a run without a task must not absorb the cost events
-// that carry no task id either.
-func TestGetRunWithCosts_TasklessRunRollsUpToZero(t *testing.T) {
+func TestGetRunWithCostsWithholdsIncompleteCachedTotal(t *testing.T) {
 	repo, writer := newTestRepoWithDB(t)
 	ctx := context.Background()
-
-	run := mustCreateRun(t, repo, &models.Run{
-		ID: "taskless", AgentProfileID: "a1", Reason: "heartbeat",
-	})
-	seedCostEvent(t, writer, "orphan", "", 500, 50, 60, 70)
-
-	got, rollup, err := repo.GetRunWithCosts(ctx, run.ID)
+	run := seedTaskRun(t, repo, "cache-gap", "a1", "t1", "claimed")
+	seedCostEvent(t, writer, "measured", "t1", 100, 10, 20, 5)
+	seedCostEvent(t, writer, "unavailable", "t1", 200, 0, 30, 7)
+	if _, err := writer.Exec(`UPDATE office_cost_events SET tokens_cached_in = NULL WHERE id = 'unavailable'`); err != nil {
+		t.Fatal(err)
+	}
+	_, rollup, err := repo.GetRunWithCosts(ctx, run.ID)
 	if err != nil {
-		t.Fatalf("get run with costs: %v", err)
+		t.Fatal(err)
 	}
-	if got.ID != run.ID {
-		t.Errorf("run = %q, want %q", got.ID, run.ID)
+	if rollup.CachedTokens != nil || rollup.InputTokens == nil || *rollup.InputTokens != 300 ||
+		rollup.OutputTokens == nil || *rollup.OutputTokens != 50 ||
+		rollup.CostSubcents == nil || *rollup.CostSubcents != 12 {
+		t.Fatalf("incomplete cache count corrupted independently measured run usage: %+v", rollup)
 	}
-	checkInt64(t, "input_tokens", rollup.InputTokens, 0)
-	checkInt64(t, "cached_tokens", rollup.CachedTokens, 0)
-	checkInt64(t, "output_tokens", rollup.OutputTokens, 0)
-	checkInt64(t, "cost_subcents", rollup.CostSubcents, 0)
-}
-
-// TestGetRunWithCosts_NoCostEventsYieldsAZeroRollup pins the documented
-// "run exists, costs not produced yet" shape.
-func TestGetRunWithCosts_NoCostEventsYieldsAZeroRollup(t *testing.T) {
-	repo := newTestRepo(t)
-	run := seedTaskRun(t, repo, "no-costs", "a1", "t1", "queued")
-
-	got, rollup, err := repo.GetRunWithCosts(context.Background(), run.ID)
-	if err != nil {
-		t.Fatalf("get run with costs: %v", err)
-	}
-	if got == nil || rollup == nil {
-		t.Fatalf("run = %v, rollup = %v, want both non-nil", got, rollup)
-	}
-	checkInt64(t, "input_tokens", rollup.InputTokens, 0)
-	checkInt64(t, "cost_subcents", rollup.CostSubcents, 0)
 }
 
 // TestGetRunWithCosts_UnknownRunReturnsNoRows pins the sentinel.

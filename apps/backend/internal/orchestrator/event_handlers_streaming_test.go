@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -11,10 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
+	settingsstore "github.com/kandev/kandev/internal/agent/settings/store"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/automation"
+	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
+	officesqlite "github.com/kandev/kandev/internal/office/repository/sqlite"
+	officeservice "github.com/kandev/kandev/internal/office/service"
 	"github.com/kandev/kandev/internal/orchestrator/executor"
 	"github.com/kandev/kandev/internal/orchestrator/watcher"
 	"github.com/kandev/kandev/internal/task/models"
@@ -1018,6 +1023,40 @@ func TestPersistTurnPromptMetadata(t *testing.T) {
 	require.Equal(t, true, usage["estimated"])
 }
 
+func TestPersistPromptMetadataPreservesMissingAndMeasuredZero(t *testing.T) {
+	for _, present := range []bool{false, true} {
+		t.Run(fmt.Sprintf("present_%t", present), func(t *testing.T) {
+			ctx := context.Background()
+			repo := setupTestRepo(t)
+			seedSession(t, repo, "t1", "s1", "step1")
+			svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+			svc.turnService = &repoTurnService{repo: repo}
+			turn, err := svc.turnService.StartTurn(ctx, "s1")
+			require.NoError(t, err)
+			svc.persistTurnPromptMetadata(ctx, &lifecycle.AgentStreamEventPayload{
+				TaskID: "t1", SessionID: "s1",
+				Data: &lifecycle.AgentStreamEventData{Usage: &streams.PromptUsage{
+					InputTokensPresent: present, OutputTokens: 20, OutputTokensPresent: true,
+					CachedReadTokensPresent: present, CachedWriteTokensPresent: present,
+					ThoughtTokensPresent: present,
+				}},
+			}, &models.TaskSession{})
+			updated, err := repo.GetTurn(ctx, turn.ID)
+			require.NoError(t, err)
+			usage := updated.Metadata["prompt_usage"].(map[string]interface{})
+			require.Equal(t, float64(20), usage["output_tokens"])
+			for _, key := range []string{"input_tokens", "cached_read_tokens", "cached_write_tokens", "thought_tokens"} {
+				if present {
+					require.Equal(t, float64(0), usage[key], key)
+				} else {
+					require.NotContains(t, usage, key)
+				}
+			}
+			require.NotContains(t, usage, "total_tokens")
+		})
+	}
+}
+
 func TestPersistNativeCodexTurnIDBindsProviderTurnToActiveKandevTurn(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)
@@ -1754,7 +1793,7 @@ func TestMarkReadyTurn_ZeroGenerationQueuesFIFO(t *testing.T) {
 // is the integration-level regression test for R2-F3: the generation-0
 // (generation-less transport) sibling of
 // TestPublishPromptUsage_NonTerminalCompletionUsesReadyTurnSnapshot. Before
-// the fix, markReadyTurn no-op'd for promptGeneration==0, so this scenario
+// the fix, markReadyTurnAt no-op'd for promptGeneration==0, so this scenario
 // always stored turn_id NULL even though agent.ready closes the turn here
 // exactly as it does for a generation-tracked completion.
 func TestPublishPromptUsage_NonTerminalCompletionZeroGenerationUsesReadyTurnSnapshot(t *testing.T) {
@@ -1937,8 +1976,8 @@ func TestTerminalCompleteStreamPersistsTimingFromReadyMark(t *testing.T) {
 	turn, err := svc.turnService.StartTurn(ctx, "s1")
 	require.NoError(t, err)
 	started := time.Now().Add(-3 * time.Second)
-	svc.startTurnTiming("s1", "exec-1", turn.ID, started)
-	svc.recordTurnFirstOutput("s1", "exec-1", turn.ID, started.Add(time.Second))
+	svc.startTurnTiming("s1", "exec-1", turn.ID, 0, started)
+	svc.recordTurnFirstOutput("s1", "exec-1", turn.ID, 7, started.Add(time.Second))
 
 	svc.handleAgentReady(ctx, watcher.AgentEventData{
 		TaskID: "t1", SessionID: "s1", AgentExecutionID: "exec-1", PromptGeneration: 7,
@@ -2048,6 +2087,10 @@ func TestPublishNativeUsageObservationUsesStableProviderIdentity(t *testing.T) {
 	eb := &recordingEventBus{}
 	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
 	svc.eventBus = eb
+	require.NoError(t, repo.CreateTurn(ctx, &models.Turn{
+		ID: "turn-kandev-1", TaskID: "task-native-usage", TaskSessionID: "session-native-usage",
+		Metadata: map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: "native-turn"},
+	}))
 	cacheWrite := int64(7)
 	observation := &streams.NativeUsageObservation{
 		SchemaVersion: 1, Source: "response", ProviderThreadID: "native-root",
@@ -2094,6 +2137,292 @@ func TestPublishNativeUsageObservationUsesStableProviderIdentity(t *testing.T) {
 	if third.Model != "" || third.UsageEventID == first.UsageEventID {
 		t.Fatalf("child usage attribution model/id = %q/%q, want no inferred parent model and distinct identity", third.Model, third.UsageEventID)
 	}
+}
+
+// @covers AC-COSTS-CONVERSATION-USAGE-004.2
+func TestNativeUsageStreamResolvesDelayedProviderTurn(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		provider      string
+		gap           bool
+		ambiguous     bool
+		wrongCaptured bool
+		want          string
+	}{
+		{name: "delayed amount", provider: "provider-A", want: "A"},
+		{name: "delayed gap", provider: "provider-A", gap: true, want: "A"},
+		{name: "unbound amount", provider: "unknown"},
+		{name: "unbound gap", provider: "unknown", gap: true},
+		{name: "ambiguous amount", provider: "provider-A", ambiguous: true},
+		{name: "ambiguous gap", provider: "provider-A", ambiguous: true, gap: true},
+		{name: "conflicting amount", provider: "provider-A", wrongCaptured: true},
+		{name: "conflicting gap", provider: "provider-A", wrongCaptured: true, gap: true},
+		{name: "current amount", provider: "provider-B", want: "B"},
+		{name: "current gap", provider: "provider-B", gap: true, want: "B"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := setupTestRepo(t)
+			seedSession(t, repo, "task1", "session-native", "")
+			session, err := repo.GetTaskSession(ctx, "session-native")
+			require.NoError(t, err)
+			session.AgentProfileSnapshot = map[string]interface{}{"agent_id": codexAppServerAgentType}
+			require.NoError(t, repo.UpdateTaskSession(ctx, session))
+			manager := &mockAgentManager{currentPromptExecutionID: "execution"}
+			manager.currentPromptGeneration.Store(11)
+			svc := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), manager)
+			svc.config.CodexAppServerEnabled = true
+			svc.turnService = &repoTurnService{repo: repo}
+			eb := &recordingEventBus{}
+			svc.eventBus = eb
+			frame := &lifecycle.AgentStreamEventPayload{
+				TaskID: "task1", SessionID: "session-native", ExecutionID: "execution",
+				Data: &lifecycle.AgentStreamEventData{
+					Type: streams.EventTypeTurnStarted, OperationID: "provider-A", PromptGeneration: 11,
+				},
+			}
+			a, err := svc.turnService.StartTurn(ctx, frame.SessionID)
+			require.NoError(t, err)
+			svc.handleAgentStreamEvent(ctx, frame)
+			require.NoError(t, svc.turnService.CompleteTurn(ctx, a.ID))
+			manager.currentPromptGeneration.Store(12)
+			b, err := svc.turnService.StartTurn(ctx, frame.SessionID)
+			require.NoError(t, err)
+			frame.Data.OperationID, frame.Data.PromptGeneration = "provider-B", 12
+			svc.handleAgentStreamEvent(ctx, frame)
+			if test.ambiguous {
+				require.NoError(t, svc.turnService.PatchTurnMetadata(ctx, frame.SessionID, b.ID,
+					map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: "provider-A"}))
+			}
+			generation := uint64(11)
+			if test.provider == "provider-B" {
+				generation = 12
+			}
+			frame.Data = &lifecycle.AgentStreamEventData{
+				Type: streams.EventTypeUsageObservation, OperationID: test.provider, PromptGeneration: generation,
+				Usage: &streams.PromptUsage{InputTokens: 5, InputTokensPresent: true, OutputTokens: 20, OutputTokensPresent: true},
+				UsageObservation: &streams.NativeUsageObservation{
+					SchemaVersion: 1, Source: "response", Scope: "direct", Completeness: "exact",
+					ProviderThreadID: "thread", ProviderTurnID: test.provider, ProviderResponseID: "response",
+				},
+			}
+			if test.wrongCaptured {
+				frame.Data.TurnID = b.ID
+			}
+			if test.gap {
+				frame.Data.Usage = nil
+				frame.Data.UsageObservation.Completeness = "partial"
+			}
+			svc.handleAgentStreamEvent(ctx, frame)
+			published := findAllPromptUsageEvents(t, eb, frame.SessionID)
+			if test.want == "" {
+				require.Empty(t, published)
+			} else {
+				require.Len(t, published, 1)
+				want := a.ID
+				if test.want == "B" {
+					want = b.ID
+				}
+				require.Equal(t, want, published[0].TurnID)
+				if !test.gap {
+					require.Equal(t, int64(20), published[0].Usage.OutputTokens)
+				}
+			}
+			for _, turn := range []*models.Turn{a, b} {
+				stored, readErr := repo.GetTurn(ctx, turn.ID)
+				require.NoError(t, readErr)
+				wantGap := test.gap && (test.want == "A" && turn.ID == a.ID || test.want == "B" && turn.ID == b.ID)
+				gapKey := fmt.Sprintf("%s%q:%q", models.NativeUsageGapDirectPrefix, "thread", test.provider)
+				require.Equal(t, wantGap, stored.Metadata[gapKey] == true)
+			}
+		})
+	}
+}
+
+func TestNativeSelfResumeUsageBindsLazyTurn(t *testing.T) {
+	for _, kind := range []string{"message_streaming", "thinking_streaming"} {
+		t.Run(kind, func(t *testing.T) {
+			ctx := context.Background()
+			repo := setupTestRepo(t)
+			seedSession(t, repo, "task1", "session-native", "")
+			session, err := repo.GetTaskSession(ctx, "session-native")
+			require.NoError(t, err)
+			session.AgentProfileSnapshot = map[string]interface{}{"agent_id": codexAppServerAgentType}
+			require.NoError(t, repo.UpdateTaskSession(ctx, session))
+			manager := &mockAgentManager{currentPromptExecutionID: "execution"}
+			manager.currentPromptGeneration.Store(11)
+			svc := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), manager)
+			svc.config.CodexAppServerEnabled = true
+			svc.turnService = &repoTurnService{repo: repo}
+			svc.messageCreator = &mockMessageCreator{}
+			eb := &recordingEventBus{}
+			svc.eventBus = eb
+			frame := &lifecycle.AgentStreamEventPayload{
+				TaskID: "task1", SessionID: "session-native", ExecutionID: "execution",
+				Data: &lifecycle.AgentStreamEventData{
+					Type: streams.EventTypeTurnStarted, OperationID: "provider-A", PromptGeneration: 11,
+				},
+			}
+			svc.handleAgentStreamEvent(ctx, frame)
+			turn, err := svc.turnService.GetActiveTurn(ctx, frame.SessionID)
+			require.NoError(t, err)
+			require.Nil(t, turn)
+			frame.Data.Type, frame.Data.MessageID, frame.Data.Text = kind, "message-A", "resumed output"
+			svc.handleAgentStreamEvent(ctx, frame)
+			turn, err = svc.turnService.GetActiveTurn(ctx, frame.SessionID)
+			require.NoError(t, err)
+			require.NotNil(t, turn)
+			require.Equal(t, "provider-A", turn.Metadata[models.TurnMetaKeyCodexNativeTurnID])
+			frame.Data = &lifecycle.AgentStreamEventData{
+				Type: streams.EventTypeUsageObservation, OperationID: "provider-A", PromptGeneration: 11,
+				Usage: &streams.PromptUsage{InputTokens: 5, InputTokensPresent: true, OutputTokens: 20, OutputTokensPresent: true},
+				UsageObservation: &streams.NativeUsageObservation{
+					SchemaVersion: 1, Source: "response", Scope: "direct", Completeness: "exact",
+					ProviderThreadID: "thread", ProviderTurnID: "provider-A", ProviderResponseID: "amount",
+				},
+			}
+			svc.handleAgentStreamEvent(ctx, frame)
+			frame.Data.Usage, frame.Data.UsageObservation.Completeness = nil, "partial"
+			frame.Data.UsageObservation.ProviderResponseID = "gap"
+			svc.handleAgentStreamEvent(ctx, frame)
+			published := findAllPromptUsageEvents(t, eb, frame.SessionID)
+			require.Len(t, published, 2)
+			require.Equal(t, turn.ID, published[0].TurnID)
+			require.Equal(t, int64(20), published[0].Usage.OutputTokens)
+			require.Equal(t, turn.ID, published[1].TurnID)
+			stored, err := repo.GetTurn(ctx, turn.ID)
+			require.NoError(t, err)
+			gapKey := fmt.Sprintf("%s%q:%q", models.NativeUsageGapDirectPrefix, "thread", "provider-A")
+			require.Equal(t, true, stored.Metadata[gapKey])
+			require.NoError(t, svc.turnService.CompleteTurn(ctx, turn.ID))
+			svc.activeTurns.Delete(frame.SessionID)
+			manager.currentPromptGeneration.Store(12)
+			successor, err := svc.turnService.StartTurn(ctx, frame.SessionID)
+			require.NoError(t, err)
+			frame.Data = &lifecycle.AgentStreamEventData{
+				Type: streams.EventTypeTurnStarted, OperationID: "provider-B", PromptGeneration: 12,
+			}
+			svc.handleAgentStreamEvent(ctx, frame)
+			frame.Data.Type, frame.Data.OperationID = kind, "provider-A"
+			for _, generation := range []uint64{11, 12} {
+				frame.Data.PromptGeneration, frame.Data.MessageID, frame.Data.Text = generation, fmt.Sprint("late-A-", generation), "delayed output"
+				svc.handleAgentStreamEvent(ctx, frame)
+				stored, err = repo.GetTurn(ctx, successor.ID)
+				require.NoError(t, err)
+				require.Equal(t, "provider-B", stored.Metadata[models.TurnMetaKeyCodexNativeTurnID])
+				require.NotContains(t, stored.Metadata, gapKey)
+			}
+		})
+	}
+}
+
+func TestStaleNativeTurnStartPreservesSuccessorBinding(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "task1", "session-native", "")
+	session, err := repo.GetTaskSession(ctx, "session-native")
+	require.NoError(t, err)
+	session.AgentProfileSnapshot = map[string]interface{}{"agent_id": codexAppServerAgentType}
+	require.NoError(t, repo.UpdateTaskSession(ctx, session))
+	manager := &mockAgentManager{currentPromptExecutionID: "execution"}
+	manager.currentPromptGeneration.Store(12)
+	svc := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), manager)
+	svc.config.CodexAppServerEnabled = true
+	svc.turnService = &repoTurnService{repo: repo}
+	b, err := svc.turnService.StartTurn(ctx, "session-native")
+	require.NoError(t, err)
+	require.NoError(t, svc.turnService.PatchTurnMetadata(ctx, "session-native", b.ID,
+		map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: "provider-B"}))
+	for _, data := range []*lifecycle.AgentStreamEventData{
+		{Type: streams.EventTypeTurnStarted, OperationID: "provider-A", PromptGeneration: 11},
+		{Type: streams.EventTypeTurnStarted, OperationID: "provider-A", PromptGeneration: 12, TurnID: "predecessor"},
+	} {
+		svc.handleAgentStreamEvent(ctx, &lifecycle.AgentStreamEventPayload{
+			TaskID: "task1", SessionID: "session-native", ExecutionID: "execution", Data: data,
+		})
+	}
+	stored, err := repo.GetTurn(ctx, b.ID)
+	require.NoError(t, err)
+	require.Equal(t, "provider-B", stored.Metadata[models.TurnMetaKeyCodexNativeTurnID])
+}
+
+func TestUnprovenRestoredChildUsageDoesNotReachSuccessor(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedSession(t, repo, "task-child", "session-child", "")
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.turnService = &repoTurnService{repo: repo}
+	_, err := svc.turnService.StartTurn(ctx, "session-child")
+	require.NoError(t, err)
+	eb := &recordingEventBus{}
+	svc.eventBus = eb
+	frame := &lifecycle.AgentStreamEventPayload{
+		TaskID: "task-child", SessionID: "session-child",
+		Data: &lifecycle.AgentStreamEventData{
+			Type:  streams.EventTypeUsageObservation,
+			Usage: &streams.PromptUsage{InputTokens: 10, OutputTokens: 20},
+			UsageObservation: &streams.NativeUsageObservation{
+				SchemaVersion: 1, Source: "response", Scope: "child", Completeness: "exact",
+				ProviderThreadID: "restored-child", ProviderTurnID: "historical", ProviderResponseID: "delayed",
+			},
+		},
+	}
+	svc.publishNativeUsageObservation(ctx, frame)
+	require.Empty(t, findAllPromptUsageEvents(t, eb, "session-child"), "unproven child origin must not use the active successor")
+}
+
+func TestNativeCoverageGapPersistsTaskAndOfficeCoverage(t *testing.T) {
+	ctx := context.Background()
+	database, _ := orchestratorTestSQLiteTemplate.Open(t)
+	repo := sqliterepo.NewWithInitializedDB(database, database, nil)
+	seedSession(t, repo, "task-gap", "session-gap", "")
+	require.NoError(t, repo.CreateTurn(ctx, &models.Turn{
+		ID: "turn-gap", TaskID: "task-gap", TaskSessionID: "session-gap",
+		Metadata: map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: "native-turn"},
+	}))
+	_, _, err := settingsstore.Provide(database, database, nil)
+	require.NoError(t, err)
+	officeRepo, err := officesqlite.NewWithDB(database, database, nil)
+	require.NoError(t, err)
+	eb := bus.NewMemoryEventBus(logger.Default())
+	office := officeservice.NewService(officeservice.ServiceOptions{Repo: officeRepo, Logger: logger.Default()})
+	office.SetSyncHandlers(true)
+	require.NoError(t, office.RegisterEventSubscribers(eb))
+	svc := createTestService(repo, newMockStepGetter(), newMockTaskRepo())
+	svc.eventBus = eb
+	svc.turnService = &repoTurnService{repo: repo}
+	frame := &lifecycle.AgentStreamEventPayload{
+		TaskID: "task-gap", SessionID: "session-gap",
+		Data: &lifecycle.AgentStreamEventData{
+			Type: streams.EventTypeUsageObservation, TurnID: "turn-gap",
+			UsageObservation: &streams.NativeUsageObservation{
+				SchemaVersion: 1, Source: "response", Scope: "direct", Completeness: "partial",
+				ProviderThreadID: "thread", ProviderTurnID: "native-turn", ProviderResponseID: "missing",
+			},
+		},
+	}
+	svc.handleAgentStreamEvent(ctx, frame)
+	svc.handleAgentStreamEvent(ctx, frame)
+	turn, err := repo.GetTurn(ctx, "turn-gap")
+	require.NoError(t, err)
+	require.Equal(t, true, turn.Metadata[`native_usage_gap_direct:"thread":"native-turn"`])
+	rows, err := office.ListCostEvents(ctx, "ws1")
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "task-owned native gap must reach the durable Office ledger once")
+	require.True(t, rows[0].UsageUnavailable)
+	frame.Data.UsageObservation.Completeness = "exact"
+	frame.Data.Usage = &streams.PromptUsage{
+		InputTokens: 5, InputTokensPresent: true, OutputTokens: 20, OutputTokensPresent: true,
+		ProviderReportedCostSubcents: 123, ProviderReportedCostPresent: true,
+	}
+	svc.handleAgentStreamEvent(ctx, frame)
+	rows, err = office.ListCostEvents(ctx, "ws1")
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "gap identity must not suppress later measured work")
+	window, err := officeRepo.SpendWindowForAgent(ctx, "", time.Time{}, false, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	require.True(t, window.Degraded)
+	require.Equal(t, int64(123), window.PricedSubcents)
 }
 
 // TestPublishPromptUsage_RepublishedCompletionReusesUsageEventID is the

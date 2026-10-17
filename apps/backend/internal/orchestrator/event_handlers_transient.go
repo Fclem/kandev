@@ -37,6 +37,7 @@ const (
 	metaKeyVariant         = "variant"
 	metaKeySessionID       = "session_id"
 	metaKeyTaskID          = "task_id"
+	metaKeyTurnID          = "turn_id"
 	metaKeyAgentID         = "agent_id"
 	metaKeyNewState        = "new_state"
 	metaKeyAgentProfileID  = "agent_profile_id"

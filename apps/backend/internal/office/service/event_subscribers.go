@@ -247,6 +247,7 @@ type PromptUsageData struct {
 	Provider         string                          `json:"provider"`
 	Usage            UsageTokens                     `json:"usage"`
 	UsageObservation *streams.NativeUsageObservation `json:"usage_observation,omitempty"`
+	UsageUnavailable bool                            `json:"usage_unavailable,omitempty"`
 	TurnID           string                          `json:"turn_id,omitempty"`
 	UsageEventID     string                          `json:"usage_event_id,omitempty"`
 }
@@ -266,7 +267,8 @@ type PromptUsageData struct {
 // predate this field, so the subscriber can apply the old inference rule to
 // those events without overriding an explicit false from a new event.
 type UsageTokens struct {
-	InputTokens                  int64 `json:"input_tokens"`
+	InputTokens                  int64 `json:"input_tokens,omitempty"`
+	InputTokensPresent           bool  `json:"input_tokens_present"`
 	OutputTokens                 int64 `json:"output_tokens"`
 	OutputTokensPresent          *bool `json:"output_tokens_present,omitempty"`
 	CachedReadTokens             int64 `json:"cached_read_tokens"`
@@ -1144,16 +1146,47 @@ func (s *Service) handlePromptUsage(ctx context.Context, event *bus.Event) error
 	return nil
 }
 
+func runUsageEventID(payload *runtimeapi.AgentStreamEventPayload) string {
+	if observation := payload.Data.UsageObservation; observation != nil {
+		identity := observation.ProviderResponseID
+		if identity == "" {
+			identity = observation.Source
+		}
+		prefix := "run-native"
+		if payload.Data.Usage == nil {
+			prefix = "run-native-unavailable"
+		}
+		return fmt.Sprintf("%s:%q:%q:%q:%q", prefix, payload.RunSessionID,
+			observation.ProviderThreadID, observation.ProviderTurnID, identity)
+	}
+	return fmt.Sprintf("run:%s:%d", payload.ExecutionID, payload.Data.PromptGeneration)
+}
+
 // handleAgentStreamUsage bridges direct shared-runtime usage into the Office
 // cost ledger. Taskless executions do not have an orchestrator task session,
 // so the owner fields on the stream payload provide exact attribution.
 func (s *Service) handleAgentStreamUsage(ctx context.Context, event *bus.Event) error {
 	payload, err := decodeEventData[runtimeapi.AgentStreamEventPayload](event)
-	if err != nil || payload.OwnerKind != runtimeapi.ExecutionOwnerRun || payload.RunSessionID == "" || payload.Data == nil || payload.Data.Usage == nil {
+	if err != nil || payload.OwnerKind != runtimeapi.ExecutionOwnerRun || payload.RunSessionID == "" || payload.Data == nil {
 		return nil
 	}
 	usage := payload.Data.Usage
+	if usage == nil {
+		if !isNativeUnavailableResponse(payload.Data.UsageObservation) {
+			return nil
+		}
+		usage = &streams.PromptUsage{Estimated: true, PriceSuppressed: true}
+	}
 	outputPresent := usage.OutputTokensPresent
+	model := payload.Data.CurrentModelID
+	priceSuppressed := usage.PriceSuppressed
+	if observation := payload.Data.UsageObservation; observation != nil {
+		model = observation.Model
+		if model == "" && observation.Scope == "direct" {
+			model = payload.Data.CurrentModelID
+		}
+		priceSuppressed = priceSuppressed || observation.PriceSuppressed
+	}
 	return s.handlePromptUsage(ctx, bus.NewEvent(events.SessionPromptUsageUpdated, "office-service", PromptUsageData{
 		AgentExecutionID: payload.ExecutionID,
 		SessionID:        payload.RunSessionID,
@@ -1163,11 +1196,14 @@ func (s *Service) handleAgentStreamUsage(ctx context.Context, event *bus.Event) 
 		AgentID:          payload.AgentType,
 		AgentProfileID:   payload.AgentProfileID,
 		AgentType:        payload.AgentType,
-		Model:            payload.Data.CurrentModelID,
+		Model:            model,
 		TurnID:           payload.Data.TurnID,
-		UsageEventID:     fmt.Sprintf("run:%s:%d", payload.ExecutionID, payload.Data.PromptGeneration),
+		UsageEventID:     runUsageEventID(payload),
+		UsageObservation: payload.Data.UsageObservation,
+		UsageUnavailable: payload.Data.Usage == nil,
 		Usage: UsageTokens{
 			InputTokens:                  usage.InputTokens,
+			InputTokensPresent:           usage.InputTokensPresent,
 			OutputTokens:                 usage.OutputTokens,
 			OutputTokensPresent:          &outputPresent,
 			CachedReadTokens:             usage.CachedReadTokens,
@@ -1177,8 +1213,17 @@ func (s *Service) handleAgentStreamUsage(ctx context.Context, event *bus.Event) 
 			ProviderReportedCostSubcents: usage.ProviderReportedCostSubcents,
 			ProviderReportedCostPresent:  usage.ProviderReportedCostPresent,
 			Estimated:                    usage.Estimated,
+			PriceSuppressed:              priceSuppressed,
 		},
 	}))
+}
+
+func isNativeUnavailableResponse(observation *streams.NativeUsageObservation) bool {
+	return observation != nil && observation.Source == "response" &&
+		observation.Completeness == "partial" &&
+		(observation.Scope == "direct" || observation.Scope == "child") &&
+		observation.ProviderThreadID != "" && observation.ProviderTurnID != "" &&
+		observation.ProviderResponseID != ""
 }
 
 // publishCostRecorded emits the durable cost write as an Office notification.
@@ -1197,6 +1242,10 @@ func (s *Service) publishCostRecorded(ctx context.Context, workspaceID string, c
 		"model":            costEvent.Model,
 		"provider":         costEvent.Provider,
 		"cost_subcents":    costEvent.CostSubcents,
+	}
+	if costEvent.UsageUnavailable {
+		data["cost_subcents"] = nil
+		data["usage_unavailable"] = true
 	}
 	event := bus.NewEvent(events.OfficeCostRecorded, "office-service", data)
 	if err := s.eb.Publish(ctx, events.OfficeCostRecorded, event); err != nil {

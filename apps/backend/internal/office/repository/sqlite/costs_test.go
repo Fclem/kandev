@@ -214,7 +214,7 @@ func TestCostBreakdowns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("by agent: %v", err)
 	}
-	if len(byAgent) != 1 || byAgent[0].TotalSubcents != 15 {
+	if len(byAgent) != 1 || byAgent[0].TotalSubcents == nil || *byAgent[0].TotalSubcents != 15 {
 		t.Errorf("by agent: got %+v", byAgent)
 	}
 	if byAgent[0].GroupKey != "breakdown-agent-1" || byAgent[0].GroupLabel != "CEO" {
@@ -226,7 +226,7 @@ func TestCostBreakdowns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("by project: %v", err)
 	}
-	if len(byProject) != 1 || byProject[0].TotalSubcents != 15 {
+	if len(byProject) != 1 || byProject[0].TotalSubcents == nil || *byProject[0].TotalSubcents != 15 {
 		t.Errorf("by project: got %+v", byProject)
 	}
 	if byProject[0].GroupLabel != "Acme Migration" {
@@ -237,7 +237,7 @@ func TestCostBreakdowns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("by model: %v", err)
 	}
-	if len(byModel) != 1 || byModel[0].TotalSubcents != 15 {
+	if len(byModel) != 1 || byModel[0].TotalSubcents == nil || *byModel[0].TotalSubcents != 15 {
 		t.Errorf("by model: got %+v", byModel)
 	}
 	// Provider was empty on the seeded events; group_key is ":model", label
@@ -254,7 +254,7 @@ func TestCostBreakdowns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("by provider: %v", err)
 	}
-	if len(byProvider) != 1 || byProvider[0].TotalSubcents != 15 {
+	if len(byProvider) != 1 || byProvider[0].TotalSubcents == nil || *byProvider[0].TotalSubcents != 15 {
 		t.Errorf("by provider: got %+v", byProvider)
 	}
 	// Provider was empty on the seeded events; falls under the "unknown" bucket.
@@ -306,7 +306,7 @@ func TestGetCostsByProject_FollowsLiveReassignment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("by project (before assignment): %v", err)
 	}
-	if len(byProject) != 1 || byProject[0].GroupKey != "" || byProject[0].TotalSubcents != 2013 {
+	if len(byProject) != 1 || byProject[0].GroupKey != "" || byProject[0].TotalSubcents == nil || *byProject[0].TotalSubcents != 2013 {
 		t.Fatalf("before assignment: got %+v, want one unassigned row of 2013", byProject)
 	}
 
@@ -342,9 +342,8 @@ func TestGetCostsByProject_FollowsLiveReassignment(t *testing.T) {
 		t.Errorf("after assignment: got key=%q label=%q, want proj-reassign/Kandev",
 			byProject[0].GroupKey, byProject[0].GroupLabel)
 	}
-	if byProject[0].TotalSubcents != 2013 {
-		t.Errorf("after assignment: total = %d, want 2013 (unchanged, just re-attributed)",
-			byProject[0].TotalSubcents)
+	if byProject[0].TotalSubcents == nil || *byProject[0].TotalSubcents != 2013 {
+		t.Errorf("after assignment: monetary rollup = %+v, want 2013", byProject[0])
 	}
 
 	budgetTotal, err = repo.GetCostForProject(ctx, "proj-reassign")

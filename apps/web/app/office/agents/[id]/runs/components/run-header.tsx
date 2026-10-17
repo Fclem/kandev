@@ -44,12 +44,14 @@ function formatDuration(ms?: number): string {
 // value as a USD dollar string. Locally defined wrapper around the
 // shared formatDollars helper so this file's import surface stays
 // the same after the office-costs cost_cents -> cost_subcents rename.
-function formatCostSubcents(subcents: number): string {
+function formatCostSubcents(subcents: number | null): string {
+  if (subcents === null) return "-";
   if (subcents === 0) return "$0.00";
   return formatDollars(subcents);
 }
 
-function formatTokens(n: number): string {
+function formatTokens(n: number | null): string {
+  if (n === null) return "-";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);

@@ -1,9 +1,13 @@
 export type UsageTokenBreakdown = {
   input_tokens: number;
+  input_complete: boolean;
   cached_read_tokens: number;
   cached_write_tokens: number;
+  cached_read_tokens_present: boolean;
+  cached_write_tokens_present: boolean;
   output_tokens: number;
   thought_tokens: number;
+  reasoning_tokens?: number;
   total_tokens: number;
   output_complete: boolean;
   event_count: number;
@@ -23,6 +27,7 @@ export type UsageResponse = {
   model?: string;
   provider?: string;
   input_tokens: number;
+  input_tokens_present: boolean;
   cached_read_tokens?: number;
   cached_write_tokens?: number;
   output_tokens?: number;
@@ -68,6 +73,8 @@ export type SessionUsageTotals = {
   event_count: number;
   estimated_event_count: number;
   unpriced_event_count: number;
+  input_tokens_complete: boolean;
+  total_tokens_complete: boolean;
   output_tokens_complete: boolean;
   first_event_at: string | null;
   last_event_at: string | null;

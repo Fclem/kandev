@@ -4,10 +4,11 @@ system: office
 requirements:
   - REQ-OFFICE-COSTS-001
 created: 2026-04-25
-updated: 2026-10-13
+updated: 2026-10-14
 owners:
   - cfl
 ---
+
 # Office: Cost Tracking & Budget Management System Design Part 1
 
 ## Purpose and boundaries
@@ -24,11 +25,9 @@ This design preserves the technical source detail for `REQ-OFFICE-COSTS-001` dur
 
 ## Why
 
-Autonomous agents consume tokens on every turn, and when multiple agents run unattended across many tasks, spending can escalate without visibility. Kandev tracks analytics (task counts, turn counts, agent usage) but has no concept of monetary cost. Users have no way to know how much a task cost, which agent is most expensive, or to set guardrails that prevent runaway spending. Without cost tracking and budgets, autonomous operation is a financial black box.
+Office exposes agent spending and guardrails for unattended work through per-session estimates, agent/project/model aggregates, and budget alerts or hard stops.
 
-Office adds per-session cost estimation, aggregated views by agent/project/model, and budget policies that can alert or hard-stop agents when estimated limits are exceeded.
-
-**Important framing**: costs displayed in Office are **estimated costs** based on token usage and published model pricing. They may not reflect the user's actual bill - users on subscription plans (e.g. Claude Max, Copilot Enterprise) pay a flat fee regardless of token consumption. The cost explorer is a visibility and governance tool, not a billing system.
+**Costs are estimates, not billing.** Usage and public prices can differ from actual charges, particularly flat-fee subscriptions such as Claude Max or Copilot Enterprise. The explorer serves visibility and governance.
 
 ## What
 
@@ -47,31 +46,64 @@ Office adds per-session cost estimation, aggregated views by agent/project/model
 
 ### `office_cost_events`
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | string | PK, unique identifier |
-| `session_id` | string | FK -> `task_sessions.id` |
-| `task_id` | string | FK -> `tasks.id` |
-| `agent_instance_id` | string | null for non-office sessions |
-| `project_id` | string | write-time project snapshot, null if unassigned at event time |
-| `model` | string | e.g. `claude-sonnet-4-20250514` |
-| `provider` | string | e.g. `anthropic`, `openai` |
-| `tokens_in` | int64 | input token count |
-| `tokens_cached_in` | int64 | cached input tokens (prompt caching). Always `= tokens_cached_read + tokens_cached_write` when the split is known; kept for existing rollup consumers (see `TaskSession additions` below) |
-| `tokens_cached_read` | int64, nullable | cached-read portion of `tokens_cached_in`. NULL for legacy rows (pre-contract-v2) and when no cache data was reported - never `0`, since a missing split is not proof of zero cache usage |
-| `tokens_cached_write` | int64, nullable | cached-write portion of `tokens_cached_in`. Same NULL rule as `tokens_cached_read` - cache write and cache read price at different per-million rates, so the split matters |
-| `tokens_out` | int64, nullable | output token count. NULL means "never observed". New normalized prompt usage always carries `output_tokens_present` separately from the numeric value. Thus, an observed zero is stored as `0`, while the adapter_prompt.go context-occupancy fallback stores NULL because it cannot observe output tokens. For a legacy event without the presence field, the subscriber keeps the old rule: a non-estimated value or a nonzero value is observed. A downstream per-output-token measure can distinguish both states (contract v3) |
-| `cost_subcents` | int64 | hundredths of a cent (renamed from `cost_cents`). UI divides by 10000 |
-| `estimated` | bool | true when token counts are not authoritative for a complete turn: the adapter synthesised them (for example, codex-acp cumulative-delta inference), or the provider frame covers only part of the turn (for example, Codex's last request). Independent of `cost_source` |
-| `turn_id` | string, nullable | the turn this event was recorded at completion of. NULL when no turn could be resolved (e.g. an error/interrupt completion outside the normal ready path) |
-| `usage_event_id` | string, nullable | idempotency key derived from `(session_id, execution_id, prompt_generation)` at the publish site; unique when non-NULL (partial index) so a redelivered prompt-usage event does not double-insert or double-count the session rollup. NULL for legacy rows. Generation-less transports receive a random per-publish key, so those rows are intentionally not deduplicated |
-| `cost_source` | enum, nullable | `provider_reported` \| `models_dev_list` \| `unpriced`. Records which layer of the two-layer lookup below actually produced `cost_subcents` - distinct from `estimated`. NULL for legacy rows |
-| `rate_input_per_million` / `rate_cached_read_per_million` / `rate_cached_write_per_million` / `rate_output_per_million` | int64, nullable | the four models.dev rates actually applied, in subcents-per-million-tokens. Populated only when `cost_source = models_dev_list`; NULL otherwise (including `provider_reported`, where no rate table applies) |
-| `pricing_catalog_version` | string, nullable | the models.dev cache's "as-of" identifier (RFC3339 load/fetch time - the dataset has no version field of its own) that produced the applied rates. Populated only when `cost_source = models_dev_list` |
-| `cost_contract_version` | int64, nullable | in-band activation marker for this row's column semantics, since the point-in-time Rill extract has no schema versioning of its own. Current value `3` (v2 -> v3: `tokens_out` became nullable, normalized usage gained an explicit output-token presence signal, and partial-turn typed usage became estimated; v1 -> v2: the unpriced path stopped forcing `estimated=true`, see the `estimated` row above). NULL for legacy pre-contract rows - never backfilled |
-| `provider_event_id` | string | null for wire-side rows; non-null for disk-runner rows. Format `ccusage:<provider>:<session_id>:<model>` |
-| `provider_credits` | int64 | amp `credits` field (null elsewhere) |
-| `occurred_at` | timestamp | when the cost was incurred |
+| Field | Type |
+| --- | --- |
+| `id` | string |
+| `session_id` | string |
+| `task_id` | string |
+| `agent_instance_id` | string |
+| `project_id` | string |
+| `model` | string |
+| `provider` | string |
+| `tokens_in` | int64 |
+| `tokens_in_missing` | bool |
+| `tokens_cached_in` | int64, nullable |
+| `tokens_cached_read` | int64, nullable |
+| `tokens_cached_write` | int64, nullable |
+| `tokens_out` | int64, nullable |
+| `cost_subcents` | int64 |
+| `estimated` | bool |
+| `usage_unavailable` | bool |
+| `turn_id` | string, nullable |
+| `usage_event_id` | string, nullable |
+| `cost_source` | enum, nullable |
+| `rate_input_per_million` | int64, nullable |
+| `rate_cached_read_per_million` | int64, nullable |
+| `rate_cached_write_per_million` | int64, nullable |
+| `rate_output_per_million` | int64, nullable |
+| `pricing_catalog_version` | string, nullable |
+| `cost_contract_version` | int64, nullable |
+| `provider_event_id` | string |
+| `provider_credits` | int64 |
+| `occurred_at` | timestamp |
+
+- `id` is the unique primary key. `session_id` references `task_sessions.id`; `task_id` references `tasks.id`.
+- `agent_instance_id` is null for non-office sessions. `project_id` is the write-time project snapshot, null if unassigned at event time.
+- `model` identifies the model, for example `claude-sonnet-4-20250514`; `provider` identifies the provider, for example `anthropic` or `openai`.
+- `tokens_in` is the input storage count. `tokens_in_missing` makes its placeholder JSON NULL and unavailable in aggregates, independently of output and spend; measured zero stays `0`. `tokens_cached_in` is the checked cache-read/write sum, NULL on overflow or unavailable usage, never wrapped or saturated.
+- `tokens_cached_read` and `tokens_cached_write` split `tokens_cached_in`. They are NULL for legacy pre-contract-v2 rows and when no cache data was reported, never an inferred `0`: a missing split is not proof of zero cache usage. The split matters because cache read and write have different per-million rates.
+- `tokens_out` is the output token count; NULL means never observed. New normalized prompt usage carries `output_tokens_present` separately from the numeric value. An observed zero is stored as `0`; the adapter_prompt.go context-occupancy fallback stores NULL because it cannot observe output tokens. For legacy events without the presence field, the subscriber retains the old rule: a non-estimated or nonzero value is observed. Contract v3 lets downstream per-output-token measures distinguish these states.
+- `cost_subcents` stores hundredths of a cent, renamed from `cost_cents`. The UI divides by 10000.
+- `estimated` is true when token counts are not authoritative for a complete turn: synthesized counts such as codex-acp cumulative-delta inference, or a provider frame covering only part of the turn such as Codex's last request. It is independent of `cost_source`.
+- `usage_unavailable` marks native response coverage without amounts and defaults false for historical rows. True makes token/cost JSON fields null and keeps budgets degraded through `cost_source=unpriced`; scalar storage slots are placeholders, never measurements.
+- `turn_id` is the turn resolved at completion. It is NULL when no turn could be resolved, such as an error/interrupt completion outside the normal ready path.
+- `usage_event_id` is the publish-site idempotency key derived from `(session_id, execution_id, prompt_generation)`. A partial unique index on non-NULL values prevents redelivered prompt usage from double-inserting or double-counting rollups. It is NULL for legacy rows. Generation-less transports get a random per-publish key and intentionally are not deduplicated.
+- `cost_source` is `provider_reported`, `models_dev_list` or `unpriced`, recording which lookup layer produced `cost_subcents`, independently of `estimated`. It is NULL for legacy rows.
+- The four `rate_*_per_million` fields record the applied models.dev rates in subcents per million tokens. They are populated only for `cost_source=models_dev_list` and NULL otherwise, including provider-reported amounts without an applied rate table.
+- `pricing_catalog_version` is the models.dev cache's RFC3339 load/fetch-time identifier; the dataset has no version field of its own. It is populated only for `cost_source=models_dev_list`.
+- `cost_contract_version` is the in-band column-semantics marker for point-in-time Rill extracts. Current value `4` adds independent input presence; v3 added nullable output/presence and partial-frame estimation; v2 stopped forcing unpriced usage to be estimated. Legacy pre-contract markers remain NULL, never backfilled.
+- `provider_event_id` is null for wire rows and non-null for disk-runner rows, formatted `ccusage:<provider>:<session_id>:<model>`. `provider_credits` holds Amp credits and is null elsewhere.
+- `occurred_at` is when the cost was incurred.
+
+Agent, run and subtree cached-token aggregates are nullable. If any included event has an unavailable merged count, omit that aggregate rather than present a partial sum or zero as exact. Measured zero remains zero. The existing nullable SQLite column needs no migration for merge overflow.
+
+Agent, recent-run, run-detail and subtree input/output rollups are nullable. An included `usage_unavailable` row withholds both; `tokens_in_missing` withholds only input and NULL output only output. Never filter unknown rows into an apparently complete sum. JSON NULL reaches the existing desktop/phone unavailable marker; measured zero and independently priced spend survive.
+
+Agent, recent-run, run-detail, subtree, workspace summary/dashboard and grouped monetary views exclude unavailable and explicitly unpriced placeholders. Without a recorded monetary measurement their amounts are NULL, not measured zero. Historical rows with NULL `cost_source` retain recorded amounts; independently recorded spend remains visible alongside coverage gaps. Desktop and phone views render unavailable amounts as `-` and explicitly measured zero as `$0.00`.
+
+Workspace cost summary, composed breakdown, group rows and task-tree summaries expose `coverage_degraded`; the dashboard exposes `month_spend_coverage_degraded`. Unavailable, explicitly unpriced or NULL-cost events make coverage incomplete. Mixed groups retain known spend and show a translated incomplete-coverage notice rather than imply complete pricing. Empty workspaces and task trees have NULL monetary amounts without degraded coverage. Task-tree projections include active descendants and exclude archived descendants and unrelated tasks. These read projections do not change budget arithmetic, pricing, storage or spend-window degradation.
+
+Task-tree counts use the shared safe-integer formatter: invalid or unsafe browser numbers are omitted rather than formatted as exact counts, while measured zero and the safe boundary remain visible.
 
 Disk-runner rows are upserted by `(session_id, provider_event_id)`. For codex, after a successful aggregate row lands, the wire-side `estimated=true` rows for the same session are deleted to avoid double-counting.
 
@@ -86,15 +118,19 @@ Project cost attribution uses the current task assignment:
 define `estimated=true` for both synthesised totals and typed usage frames that
 cover only part of a turn.
 
+**Contract v4 semantics** add `tokens_in_missing INTEGER NOT NULL DEFAULT 0` through the idempotent shared migration. Absent input persists independently of measured output, is JSON NULL and withholds input aggregates. Legacy rows retain their scalar input meaning; erased historical presence cannot be reconstructed. Extracts must check this flag as well as full `usage_unavailable` coverage.
+
+Taskless native gaps retain run-session/thread/turn/response identity and deduplicate separately from amounts, admitting later measurements. Notifications are null; extracts omit `usage_unavailable` placeholders without reclassifying historical rows.
+
 ### `office_budget_policies`
 
 | Field | Type | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `id` | string | PK |
 | `scope_type` | enum | `agent` \| `project` \| `workspace` |
-| `scope_id` | string | the scoped entity ID |
+| `scope_id` | string | scoped entity ID |
 | `limit_cents` | int64 | hundredths of a cent |
-| `period` | enum | `monthly` (resets calendar month) \| `total` (lifetime) |
+| `period` | enum | `monthly` (calendar reset) \| `total` (lifetime) |
 | `alert_threshold_pct` | int | default 80 |
 | `action_on_exceed` | enum | `notify_only` \| `pause_agent` \| `block_new_tasks` |
 
@@ -102,7 +138,7 @@ Multiple policies can apply to the same scope (e.g. monthly + total).
 
 ### `TaskSession` additions
 
-`cost_subcents`, `tokens_in`, `tokens_out`, and `tokens_cached_in` are maintained by the task cost ledger writer, not this Office subscriber ([task-cost-ledger](../../task-cost-ledger/spec.md) AC-10/AC-21). They provide quick per-session totals without a scan of `task_usage_events`. An unknown ledger `tokens_out` value contributes zero to the numeric rollup, so the session output total is a lower bound when at least one ledger row has `tokens_out=NULL`. Consumers needing completeness must read the raw ledger. `tokens_cached_in` is in TaskSession and DTO, without a reader, so the rollup reconciles column-for-column against that ledger. The rollup consumes only the merged `tokens_cached_in` sum, not the `tokens_cached_read`/`tokens_cached_write` split, which exists solely on the ledger row for cost-per-token-type analysis (contract v2).
+The [task cost ledger writer](../../task-cost-ledger/spec.md) (AC-10/AC-21), not Office, maintains `TaskSession.cost_subcents`, `tokens_in`, `tokens_out` and `tokens_cached_in` without ledger scans. Unknown output contributes zero, making that numeric rollup a lower bound; completeness requires the ledger read. The session/DTO merged cache column has no independent reader and reconciles with the ledger. Read/write cache splits exist only on ledger rows for contract-v2 per-type analysis.
 
 ### Per-agent budget
 
@@ -112,21 +148,18 @@ Each agent instance has `budget_monthly_cents` set at creation (or inherited fro
 
 The `models.dev` dataset is fetched once per day to a workspace-local disk cache at `<data-dir>/cache/models-dev.json`. The file lives on disk full-fat; only queried models load into the in-memory map. Refresh runs in a background goroutine; refresh failures fall back to the existing on-disk file. Pricing is recorded per-million-tokens for input, cached read, cached write, and output separately (Anthropic charges different rates for cached read vs. cached write).
 
-Each client permits only one physical refresh at a time. Stale lookups return
-current data without waiting, while concurrent explicit `Refresh` callers wait
-for and share the same result. A failed or canceled refresh releases the guard
-so a later request can retry. Cache replacement uses a unique temporary file in
-the cache directory and an atomic rename. Failure removes that temporary file
-and leaves the last valid disk and memory data unchanged. The client marks the
-cache fresh only after the new file is committed and the in-memory indexes are
-replaced successfully.
+Refresh is single-flight per client: stale reads do not wait; explicit callers
+share the result. Failure/cancellation releases the guard for retry. Replace
+the cache by unique same-directory temporary file and atomic rename; on failure
+remove the temporary and retain prior disk/memory data. Mark fresh only after
+both disk commit and in-memory index replacement succeed.
 
 ### Per-CLI usage shapes (ACP wire)
 
 - **claude-acp**: `result.usage` (camelCase, `cachedRead`/`cachedWriteTokens`), plus cumulative `usage_update.cost.amount` in USD; the adapter emits its nonnegative turn delta when present. claude-acp uses logical aliases (`sonnet`, `haiku`); provider-reported cost is the only accurate signal.
 - **opencode-acp**: `result.usage` with `inputTokens`/`outputTokens`/`thoughtTokens` (no cached tokens). Optional `usage_update.cost.amount` (often `0` on BYOK).
 - **gemini**: `result._meta.quota.token_count.{input_tokens, output_tokens}` (snake_case, no cached, no cost).
-- **codex-acp**: 1.4.0+ emits a typed `result.usage` block on the prompt response, but its three response-construction sites (normal end_turn, cancelled, terminal failure) all hardcode it to the session's last model request, not a per-turn total — a turn making N requests reports only request N's counts. The adapter accepts this typed frame (input/output/cache split, when present) but always flags rows `estimated=true` until codex-acp emits a genuine per-turn total upstream. Prior to 1.4.0 (or if the frame is absent), the adapter falls back to nonnegative context-occupancy growth from `usage_update.used` as a per-turn estimate; that fallback cannot split input vs output and compaction or other decreases reset its baseline.
+- **codex-acp**: 1.4.0+ typed `result.usage` reports only the last model request on normal end_turn, cancellation and terminal failure. Accept its input/output/cache split but mark `estimated=true` until upstream supplies whole-turn totals. Older/absent frames use nonnegative `usage_update.used` occupancy growth as an unsplit per-turn estimate; compaction or other decreases reset that baseline.
 - **auggie**, **copilot-acp**: not tracked. `_meta.copilotUsage` is a billing multiplier; Copilot `/usage` would require scraping.
 
 ### Disk-runner provider coverage
@@ -156,6 +189,7 @@ Standalone Go binary built into the backend Docker image alongside `kandev` and 
 Spawns `npx -y @ccusage/<provider>@latest session --json`, reads stdout, emits normalized `CostEvent` records.
 
 Join key: `TaskSession.ACPSessionID == ccusage.sessionId`. Verified empirically:
+
 - codex: `session_meta.id` in rollout JSONL equals ACP session id equals rollout filename suffix.
 - amp: thread JSON top-level `id` equals agent's session id.
 
@@ -166,16 +200,19 @@ ccusage version policy: track `@latest`. Mitigations: schema-validate ccusage's 
 ### Cost aggregation queries
 
 Aggregated on read (not pre-computed):
+
 - **By agent instance**: total spend per agent over a time window.
 - **By project**: total across all tasks.
 - **By task**: total across all sessions.
 - **By model**: spend broken down by model.
 - **By time**: daily/weekly/monthly trends.
 
-SQL token aggregates skip NULL values. Thus, an aggregate output-token total
-is a lower bound if one or more source rows have unknown output counts. Cost
-totals still include those rows. Use the raw cost-list response when a consumer
-must determine if an output-token total is complete.
+Token aggregates are unavailable when an included row lacks the corresponding
+measurement; a known subtotal is not presented as a complete token count.
+Monetary projections retain independently recorded spend, including measured
+zero, but return null when no priced amount exists and flag degraded coverage
+for unpriced or unavailable observations. These rules apply within the selected
+Explorer window as well as lifetime reads; budget arithmetic remains separate.
 
 ### Costs Explorer request windows
 
@@ -204,8 +241,9 @@ range retains the historical unbounded query, including its existing treatment
 of future timestamps. The handler rejects a supplied empty value, repeated
 values (including duplicates), or anything outside `mtd`/`30d` with HTTP 400
 and the existing `{error: ...}` envelope before querying storage. Validation
-errors have a stable diagnostic; database errors remain HTTP 500. No request
-or response field beyond this query parameter is added.
+errors have a stable diagnostic; database errors remain HTTP 500. The window
+selection adds no request field beyond this query parameter. Response totals
+and groups retain the nullable monetary and coverage projection above.
 
 **Service boundary.** Preserve `CostService.GetCostsBreakdown(ctx, wsID)` for
 unfiltered callers. Add `GetCostsBreakdownForRange(ctx, wsID, range)` for the
@@ -219,9 +257,9 @@ does not promise a transaction-wide database snapshot: the existing concurrent
 read architecture is retained, so a write between queries has its existing
 visibility semantics.
 
-**Repository boundary.** Add narrow `SumCostsInWindow` and
-`GetCostsByAgentInWindow` / `GetCostsByProjectInWindow` /
-`GetCostsByModelInWindow` / `GetCostsByProviderInWindow` methods, each accepting
+**Repository boundary.** Use `GetCostSummaryInWindow` for nullable spend and
+coverage, alongside `GetCostsByAgentInWindow` / `GetCostsByProjectInWindow` /
+`GetCostsByModelInWindow` / `GetCostsByProviderInWindow`, each accepting
 `start, before time.Time`. Add these to the cost service's `Repository`
 interface. Share the existing query bodies through private per-query helpers
 so lifetime methods retain their signatures and no budget-facing `*Since`
@@ -238,8 +276,9 @@ identity, deleted-profile empty labels, live task project assignment (including
 unassigned/run-only groups), model grouping by `(provider, model)`, provider
 fallback labels, all event counts, integer subcent arithmetic and zero-cost
 rows. Each dimension includes every selected in-workspace event exactly once;
-its sum equals the selected total and its counts equal the selected event
-cardinality. Group count cards continue to count groups in their selected
+its known priced sum equals the selected known spend and its counts equal the
+selected event cardinality. Unknown-only groups remain unavailable rather than
+zero. Group count cards continue to count groups in their selected
 breakdown. No new event-count field is needed in the composed response.
 
 **Frontend boundary.** In `lib/api/domains/office-api.ts`, keep
@@ -256,27 +295,21 @@ empty view rather than another window's spending; same-range live refresh
 retains its current behavior. Do not fetch
 or filter raw lifetime rows in the browser.
 
-**Mobile and validation.** `CostOverview` already shares controls, selection,
-API consumption and tables across widths. This change is data normalization
-only: no layout, copy, touch target, navigation, breakpoint, drawer or scroll
-owner changes. Under the bounded mobile-parity exemption, actual component
-button actions through the real API wrapper/intercepted fetch plus HTTP/real
-SQL tests prove the shared result; no new phone layout, capture or browser
-build gate is required. Existing
-`e2e/tests/office/costs.spec.ts` uses `waitForHttp` with
-`/\/costs\/breakdown$/`; the helper compares `URL.pathname`, so the new query
-needs no matcher change. Its focused existing query-string unit test is the
-compatibility check.
+**Mobile and validation.** Shared `CostOverview` controls, API and tables retain
+their layout, copy, targets, navigation, breakpoints, drawer and scroll owner.
+Under the bounded mobile-parity exemption, actual component actions through the
+real API wrapper/intercepted fetch plus HTTP/SQL tests prove this data-only
+change; no new phone capture/browser-build gate is required. Existing
+`e2e/tests/office/costs.spec.ts` matches `URL.pathname` through `waitForHttp`;
+its query-string unit test protects compatibility.
 
-Regression coverage includes fixed month/year/leap-year and offset/DST
-instants; exact lower/upper bounds; old event/new ingestion and the reverse;
-empty windows; all dimensions and group counts; cross-workspace task and
-run-session rows; live project reassignment and deleted agent profiles.
-Use real SQLite for repository and service/Gin HTTP tests. Add env-gated real
-PostgreSQL query parity using `testutil.OpenIsolatedPostgres` and
-`PostgresDSNFromEnv`, initializing task then Office repositories as in the
-existing PostgreSQL fixture; never send SQLite-only fixture DDL to PostgreSQL.
-A missing DSN is an explicit skip, not proof of PostgreSQL execution.
+Regressions cover month/year/leap and offset/DST boundaries, exact endpoints,
+event-time versus ingestion-time ordering, empty windows, every group/count,
+workspace isolation, task/run-session rows, project reassignment and deleted
+profiles. Use real SQLite repository/service/Gin tests and env-gated PostgreSQL
+parity through `testutil.OpenIsolatedPostgres`/`PostgresDSNFromEnv`, initializing
+task then Office stores. Never use SQLite fixture DDL on PostgreSQL; no DSN
+means skipped, not executed.
 
 Implementation is tracked in the
 [cost range repair plan](../../../plans/office-cost-date-range/plan.md).
@@ -295,24 +328,24 @@ Implementation is tracked in the
 Budget enforcement transitions (per agent instance):
 
 | From | Trigger | To | Effect |
-|---|---|---|---|
-| `idle`/`running` | spend crosses `alert_threshold_pct` | (unchanged) | inbox item + `budget_alert` wakeup for CEO |
-| `idle`/`running` | spend exceeds `limit_cents` with `action_on_exceed=pause_agent` | `paused` (`pause_reason=budget_exceeded`) | pending wakeups marked `finished`; current turn completes; no further prompts |
-| `paused` (budget) | user increases budget | `idle` | wakeup processing resumes |
-| `paused` (budget) | monthly reset on 1st UTC | `idle` (if new month's spend within limits) | counters reset |
+| --- | --- | --- | --- |
+| `idle`/`running` | spend crosses `alert_threshold_pct` | unchanged | inbox item and CEO `budget_alert` wakeup |
+| `idle`/`running` | spend exceeds `limit_cents`, action `pause_agent` | `paused`, reason `budget_exceeded` | pending wakeups finished; current turn completes; no more prompts |
+| `paused` (budget) | user increases budget | `idle` | resume wakeups |
+| `paused` (budget) | first-of-month UTC reset | `idle` if within new limits | reset counters |
 
 Monthly reset is idempotent: backend restart mid-month does not refire.
 
 ## Permissions
 
-Cost data and budget policies are workspace-scoped. The same auth gate as the rest of the office HTTP surface applies (see [agents.md](../requirements/agents.md#permissions)): UI requests authenticated via the user session bypass as admin; agent JWT requests run through the office permission middleware.
+Cost and budget access is workspace-scoped under the [Office auth gate](../requirements/agents.md#permissions): user-session UI requests bypass as admin; agent JWTs use Office permission middleware.
 
-- **Read cost data** (`GET /workspaces/:wsId/costs*`): any caller with workspace access. CEO, worker, specialist, assistant, and reviewer agents can all read their workspace's cost rollups. There is no per-agent or per-project read scoping today - any agent in the workspace sees workspace-wide totals.
-- **Manage budget policies** (`POST /workspaces/:wsId/budgets`, `PATCH /budgets/:id`, `DELETE /budgets/:id`): UI / admin only. The CEO's `kandev-team-admin` skill is the agent-facing surface for budget checks and proposals; CEO agents do not call the budget HTTP endpoints directly, they raise proposals that the user actions through the inbox.
-- **Override pricing** (per-model overrides written into workspace settings): user only. Agents cannot mutate the pricing table.
-- **Trigger pause** (the side effect of `CheckBudget` when `action_on_exceed=pause_agent`): performed by the `system` actor inside the cost subscriber, not by any caller. The agent pause it produces is identical to a user-initiated pause; only the user can resume by raising the budget or waiting for the monthly reset.
+- **Read** (`GET /workspaces/:wsId/costs*`): every workspace member and agent role sees workspace-wide totals, without agent/project/field restrictions.
+- **Budgets** (`POST /workspaces/:wsId/budgets`, `PATCH/DELETE /budgets/:id`): UI/admin only. The CEO uses `kandev-team-admin` for checks and inbox proposals, not direct budget HTTP mutations.
+- **Pricing overrides** in workspace settings: user only; agents cannot mutate them.
+- **Pause** (`CheckBudget`, action `pause_agent`): the subscriber's `system` actor performs the same pause as a user. Only the user can resume by raising the budget or awaiting monthly reset.
 
-There is no per-field permission model. Conformance tests should assert that cost-read endpoints accept any authenticated workspace member, and that mutating budget endpoints either accept the admin / UI session or follow the same JWT-bypass rules used by the rest of the office API.
+Conformance tests cover authenticated workspace reads and budget mutations under the existing admin/UI and JWT-bypass rules.
 
 ## Failure modes
 

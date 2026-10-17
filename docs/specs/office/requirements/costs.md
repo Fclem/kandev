@@ -46,32 +46,15 @@ Office estimates agent spending from usage events, exposes cost aggregations, an
 #### Acceptance criteria
 
 - **AC-OFFICE-COSTS-001.1:** Every agent session generates cost events as it runs.
-- **AC-OFFICE-COSTS-001.2:** Cost events shall be aggregated on read by agent,
-  project, task, model and time window. For a selected Costs Explorer window,
-  the total and agent/project/model/provider breakdowns, including event counts
-  and group membership, shall use one event-time interval. MTD starts at 00:00 UTC on the first day of the
-  current UTC calendar month. Last 30 days starts exactly 720 hours before one
-  request instant. Both include the start and exclude that instant. Eligibility
-  uses when cost occurred, not ingestion time, independently of time zone/DST.
-  A window without events shall return total zero and empty breakdown arrays.
-  The breakdown API shall retain lifetime results when `range` is omitted,
-  accept only `mtd` and `30d` when supplied, and reject empty, repeated or
-  unsupported range values with HTTP 400.
+- **AC-OFFICE-COSTS-001.2:** Aggregate on read by agent, project, task, model and time window. A selected Costs Explorer window shall use one event-time interval for its total and all agent/project/model/provider groups and event counts. MTD starts at 00:00 UTC on the current month's first day; Last 30 days starts 720 hours before one request instant. Include the start, exclude that instant, and use occurrence rather than ingestion time, independent of zone/DST. Empty windows return unavailable spend and empty arrays. Omitted `range` retains lifetime results; accept only `mtd`/`30d`, rejecting empty, repeated or unsupported values with HTTP 400.
 - **AC-OFFICE-COSTS-001.3:** Budget policies SHALL enforce spending limits per agent, project, or workspace with `notify_only`, `pause_agent`, or `block_new_tasks` actions.
 - **AC-OFFICE-COSTS-001.4:** Cost is resolved per cost event via a two-layer lookup (provider-reported then `models.dev` cache); no static fallback table exists.
-- **AC-OFFICE-COSTS-001.5:** Stale `models.dev` pricing remains readable while one coalesced refresh runs per client. Concurrent background lookups and explicit refresh calls do not start duplicate network fetches.
-- **AC-OFFICE-COSTS-001.6:** For providers that emit token telemetry on the ACP wire (claude-acp, opencode-acp, gemini, codex-acp), cost events are populated from the `complete` event at end-of-turn.
-- **AC-OFFICE-COSTS-001.7:** For providers without usable wire telemetry (codex per-turn split, amp), a disk-runner subsystem reads on-disk session files via pinned `@ccusage/*` packages and feeds normalized cost events into the same pipeline.
-- **AC-OFFICE-COSTS-001.8:** The cost explorer UI shall surface aggregations
-  and budget policy management. On desktop and phone, its existing MTD default
-  and Last 30 days controls shall request and display the selected window for
-  the total and every breakdown. Live refresh shall use the currently selected
-  range. Selecting a display window shall not alter budget evaluation or the
-  recorded cost history.
-- **AC-OFFICE-COSTS-001.9:** Missing spend shall show neutral unknown status and
-  unavailable spend, percentage and remaining on desktop and phone. Retain
-  policy fields, controls and existing measured behavior for explicit values,
-  including zero.
+- **AC-OFFICE-COSTS-001.5:** Stale `models.dev` prices remain readable during one coalesced refresh per client. Concurrent background lookups and explicit refreshes shall not duplicate network fetches.
+- **AC-OFFICE-COSTS-001.6:** ACP wire telemetry (claude-acp, opencode-acp, gemini, codex-acp) populates cost events from end-of-turn `complete`.
+- **AC-OFFICE-COSTS-001.7:** For providers without usable wire telemetry (codex per-turn split, amp), a disk runner reads session files through pinned `@ccusage/*` packages into the same cost pipeline.
+- **AC-OFFICE-COSTS-001.8:** The desktop/phone cost explorer shall expose aggregations and budget policy management. Its MTD default, Last 30 days control and live refresh shall request/display the selected window for totals and every group, without changing budget evaluation or cost history.
+- **AC-OFFICE-COSTS-001.9:** Missing spend shall show neutral unknown status and unavailable spend, percentage and remaining on desktop/phone. Keep policy controls and measured values, including zero. Persist identified native responses without measurements as unavailable/unpriced coverage, including taskless runs; never fabricate zero tokens/cost. Retain independently priced spend with degraded budget coverage. Replay shall neither duplicate gaps nor discard later amounts.
+- **AC-OFFICE-COSTS-001.10:** Merged cache-read/write sums exceeding int64 shall remain unavailable in persistence/aggregates, never wrapped, saturated or zero. Retain known split counts, input/output and cost.
 
 ### REQ-OFFICE-COSTS-002: Budget notifications fire on crossings, not on every evaluation
 

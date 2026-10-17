@@ -25,10 +25,12 @@ type ConversationUsageDisplayProps = {
 };
 
 function UsageValue({ label, value }: { label: string; value: number }) {
+  const formatted = formatUsageTokens(value);
+  if (formatted === null) return null;
   return (
     <div className="flex items-baseline justify-between gap-3 text-sm">
       <span className="min-w-0 truncate text-muted-foreground">{label}</span>
-      <span className="shrink-0 font-medium tabular-nums">{formatUsageTokens(value)}</span>
+      <span className="shrink-0 font-medium tabular-nums">{formatted}</span>
     </div>
   );
 }
@@ -42,7 +44,9 @@ function UsageResponseDetails({ response }: { response?: UsageResponse }) {
   }
   return (
     <div className="space-y-1" data-testid="usage-last-response">
-      <UsageValue label={t("task:conversationUsage.input")} value={response.input_tokens} />
+      {response.input_tokens_present && (
+        <UsageValue label={t("task:conversationUsage.input")} value={response.input_tokens} />
+      )}
       {response.cached_read_tokens !== undefined && (
         <UsageValue
           label={t("task:conversationUsage.cachedRead")}
@@ -70,22 +74,45 @@ function UsageResponseDetails({ response }: { response?: UsageResponse }) {
 
 function UsageBreakdown({ label, usage }: { label: string; usage: UsageTokenBreakdown }) {
   const { t } = useTranslation();
+  if (usage.event_count === 0) return null;
+  const countsAvailable = !usage.overflow;
   return (
     <section className="space-y-1">
       <h3 className="text-xs font-semibold text-muted-foreground">{label}</h3>
-      <UsageValue label={t("task:conversationUsage.input")} value={usage.input_tokens} />
-      <UsageValue label={t("task:conversationUsage.cachedRead")} value={usage.cached_read_tokens} />
-      {usage.cached_write_tokens > 0 && (
-        <UsageValue
-          label={t("task:conversationUsage.cachedWrite")}
-          value={usage.cached_write_tokens}
-        />
+      {countsAvailable && (
+        <>
+          {usage.input_complete && (
+            <UsageValue label={t("task:conversationUsage.input")} value={usage.input_tokens} />
+          )}
+          {usage.cached_read_tokens_present && (
+            <UsageValue
+              label={t("task:conversationUsage.cachedRead")}
+              value={usage.cached_read_tokens}
+            />
+          )}
+          {usage.cached_write_tokens_present && (
+            <UsageValue
+              label={t("task:conversationUsage.cachedWrite")}
+              value={usage.cached_write_tokens}
+            />
+          )}
+          {usage.output_complete && (
+            <UsageValue label={t("task:conversationUsage.output")} value={usage.output_tokens} />
+          )}
+          {usage.reasoning_tokens !== undefined && (
+            <UsageValue
+              label={t("task:conversationUsage.reasoning")}
+              value={usage.reasoning_tokens}
+            />
+          )}
+          {usage.input_complete && usage.output_complete && (
+            <UsageValue
+              label={t("task:conversationUsage.totalTokens")}
+              value={usage.total_tokens}
+            />
+          )}
+        </>
       )}
-      <UsageValue label={t("task:conversationUsage.output")} value={usage.output_tokens} />
-      {usage.thought_tokens > 0 && (
-        <UsageValue label={t("task:conversationUsage.reasoning")} value={usage.thought_tokens} />
-      )}
-      <UsageValue label={t("task:conversationUsage.totalTokens")} value={usage.total_tokens} />
       {usage.overflow && (
         <p className="text-xs text-muted-foreground">{t("task:conversationUsage.partial")}</p>
       )}
@@ -164,7 +191,15 @@ function UsageTurnSummary({ turn }: { turn: UsageTurn | null }) {
       <h3 className="text-xs font-semibold text-muted-foreground">
         {t("task:conversationUsage.thisTurn")}
       </h3>
-      <UsageValue label={t("task:conversationUsage.totalTokens")} value={turn.total.total_tokens} />
+      {turn.total.event_count > 0 &&
+        !turn.total.overflow &&
+        turn.total.input_complete &&
+        turn.total.output_complete && (
+          <UsageValue
+            label={t("task:conversationUsage.totalTokens")}
+            value={turn.total.total_tokens}
+          />
+        )}
       <div className="flex items-baseline justify-between gap-3 text-sm">
         <span className="text-muted-foreground">{costLabel}</span>
         <span className="font-medium tabular-nums">
@@ -223,7 +258,7 @@ function UsageTurnDetails({ usage, turn }: { usage: ConversationUsage; turn: Usa
         </h3>
         <UsageResponseDetails response={response} />
       </section>
-      {responses.length > 1 && (
+      {(responses.length > 1 || (!response && responses.length > 0)) && (
         <section className="space-y-2 border-b pb-3">
           <h3 className="text-xs font-semibold text-muted-foreground">
             {t("task:conversationUsage.responseDetails")}
@@ -248,7 +283,7 @@ function UsageSessionSummary({ usage }: { usage: ConversationUsage }) {
   const { t } = useTranslation();
   const costUnavailable = useCostUnavailableLabel();
   const sessionCost =
-    usage.totals && usage.totals.unpriced_event_count === 0
+    usage.totals && usage.totals.event_count > 0 && usage.totals.unpriced_event_count === 0
       ? formatUsageCost(usage.totals.cost_subcents_decimal)
       : null;
   return (
@@ -256,12 +291,14 @@ function UsageSessionSummary({ usage }: { usage: ConversationUsage }) {
       <h3 className="text-xs font-semibold text-muted-foreground">
         {t("task:conversationUsage.sessionTotal")}
       </h3>
-      {usage.totals ? (
+      {usage.totals && usage.totals.event_count > 0 ? (
         <>
-          <UsageValue
-            label={t("task:conversationUsage.totalTokens")}
-            value={usage.totals.tokens_total}
-          />
+          {usage.totals.total_tokens_complete && (
+            <UsageValue
+              label={t("task:conversationUsage.totalTokens")}
+              value={usage.totals.tokens_total}
+            />
+          )}
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="text-muted-foreground">
               {t("task:conversationUsage.recordedCost")}
@@ -277,7 +314,9 @@ function UsageSessionSummary({ usage }: { usage: ConversationUsage }) {
           )}
         </>
       ) : (
-        <p className="text-sm text-muted-foreground">{t("task:conversationUsage.pending")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t(usage.totals ? "task:turnMetrics.usageUnavailable" : "task:conversationUsage.pending")}
+        </p>
       )}
     </section>
   );
@@ -346,6 +385,15 @@ function UsageDisclosure({ usage, close }: { usage: ConversationUsage; close: ()
   );
 }
 
+function hasUsageDisclosureContent(usage: ConversationUsage) {
+  return (
+    (usage.totals?.event_count ?? 0) > 0 ||
+    usage.latestTurn?.completeness === "partial" ||
+    usage.loading ||
+    usage.error
+  );
+}
+
 export function ConversationUsageDisplay({
   taskId,
   sessionId,
@@ -359,8 +407,7 @@ export function ConversationUsageDisplay({
   const touch = isMobile || touchDrawer;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const usage = useConversationUsage(taskId ?? null, sessionId, detailActive);
-  const hasUsage = (usage.totals?.event_count ?? 0) > 0;
-  if (!taskId || !sessionId || (!hasUsage && !usage.loading && !usage.error)) return null;
+  if (!taskId || !sessionId || !hasUsageDisclosureContent(usage)) return null;
 
   const openDisclosure = () => {
     setOpen(true);

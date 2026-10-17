@@ -3341,3 +3341,36 @@ func TestHasActiveTaskSessionsByEnvironmentKeysOffEnvironmentIDNotTaskEnvironmen
 		t.Error("HasActiveTaskSessionsByEnvironment = false for a value present in environment_id, want true")
 	}
 }
+
+func TestNativeCodexTurnLookupRequiresUniqueOwnedStringBinding(t *testing.T) {
+	ctx := context.Background()
+	repo := newRepoForSessionTests(t)
+	seedSessionForTurns(t, repo, "task-native", "session-native")
+	for _, turn := range []*models.Turn{
+		{ID: "known", TaskID: "task-native", TaskSessionID: "session-native",
+			Metadata: map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: "provider"}},
+		{ID: "ambiguous-1", TaskID: "task-native", TaskSessionID: "session-native",
+			Metadata: map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: "duplicate"}},
+		{ID: "ambiguous-2", TaskID: "task-native", TaskSessionID: "session-native",
+			Metadata: map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: "duplicate"}},
+		{ID: "numeric", TaskID: "task-native", TaskSessionID: "session-native",
+			Metadata: map[string]interface{}{models.TurnMetaKeyCodexNativeTurnID: 123}},
+	} {
+		if err := repo.CreateTurn(ctx, turn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, test := range []struct{ task, session, provider, want string }{
+		{"task-native", "session-native", "provider", "known"},
+		{"wrong-task", "session-native", "provider", ""},
+		{"task-native", "wrong-session", "provider", ""},
+		{"task-native", "session-native", "unknown", ""},
+		{"task-native", "session-native", "duplicate", ""},
+		{"task-native", "session-native", "123", ""},
+	} {
+		id, err := repo.FindTurnIDByNativeCodexTurnID(ctx, test.task, test.session, test.provider)
+		if err != nil || id != test.want {
+			t.Errorf("native lookup(%q,%q,%q) = %q, %v; want %q", test.task, test.session, test.provider, id, err, test.want)
+		}
+	}
+}

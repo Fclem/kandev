@@ -50,6 +50,12 @@ Kandev currently uses `@openai/codex` version `0.154.0` as its managed default. 
 
 Native sessions show response and turn token usage in the chat footer. A provider thread usage estimate may appear when Codex reports one. It is an estimate, not a promise of the billed charge. Kandev keeps provider estimates separate from calculated cost.
 
+The **This turn** usage section always refers to the latest conversation turn. If that turn has no measurement, it shows **Not available** instead of an older turn's values; session recorded totals remain separate.
+
+A native response without usable usage leaves partial coverage, not a measured zero. Office retains unavailable-cost coverage alongside independently priced work. Deleting a session does not make retained task-wide usage complete.
+
+Native usage attribution retains the latest 128 provider turns, including child turns. Responses arriving after that window are omitted rather than assigned to the current turn; already recorded usage is unchanged.
+
 After a completed turn, use **Fork conversation** to create another session through that turn. The new session keeps the task and executor, and files remain shared in the workspace. It does not create a branch or worktree. Native Codex subagents and background commands stay within the session; they do not become separate Kandev tasks.
 
 Codex questions sent through Kandev's `ask_user_question_kandev` MCP tool or through the native app-server `item/tool/requestUserInput` method use the normal clarification UI. Native options and permitted free-text answers map back to Codex's answer format. Secret questions fail closed because Kandev's clarification flow stores answers in the conversation. If Codex resolves a pending request, Kandev closes the corresponding clarification.

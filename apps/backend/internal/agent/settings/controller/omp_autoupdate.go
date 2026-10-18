@@ -80,9 +80,17 @@ func (c *Controller) prepareAutomaticHarness(ctx context.Context, status dto.Age
 		ID: uuid.NewString(), AgentName: ag.ID(), Package: cap.AutomaticHarness.Package,
 		RuntimeID: cap.RuntimeID, Automatic: true, UpdateMode: dto.AgentUpdateModeSelfUpdate,
 		Status: dto.AgentUpdateJobStatusQueued, Output: newRingBuffer(jobOutputRingSize),
-		StartedAt: started, PreviousVersion: status.CurrentVersion, context: ctx,
+		StartedAt: started, context: ctx,
 	}
 	ref, err := c.updateJobStore.admitAutomaticHarness(job, func() error {
+		// Read the previous version under the maintenance claim, not from the earlier status snapshot,
+		// so a manual update that finished in between is not reported as this check's change.
+		job.PreviousVersion = ""
+		if c.runtimeUpdater != nil {
+			if caps, found := c.runtimeUpdater.CurrentCapabilities(ag.ID()); found {
+				job.PreviousVersion = caps.AgentVersion
+			}
+		}
 		policy.LastAttemptStartedAt = started
 		policy.Outcome = &managedruntime.UpdateOutcome{ID: job.ID, Status: managedruntime.UpdateOutcomeRunning, UpdateMode: string(job.UpdateMode), PreviousVersion: job.PreviousVersion}
 		return c.runtimeAutoUpdateStore.Save(ctx, ag.ID(), policy)

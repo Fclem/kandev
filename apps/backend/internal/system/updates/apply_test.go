@@ -247,12 +247,7 @@ func TestService_ApplyRejectsUnsupportedInstall(t *testing.T) {
 	if err := persistence.WriteLatestVersion(pool.Writer(), "v1.0.1", "https://example/v1.0.1", time.Now().UTC()); err != nil {
 		t.Fatalf("write latest: %v", err)
 	}
-	svc := NewService(
-		pool, "v1.0.0", nil, logger.Default(),
-		WithJobs(jobs.NewTracker(nil, logger.Default())),
-		WithHomeDir(t.TempDir()),
-		WithEnvReader(func(string) string { return "" }),
-	)
+	svc := NewService(pool, "v1.0.0", nil, logger.Default(), WithJobs(jobs.NewTracker(nil, logger.Default())))
 
 	_, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1")
 	if !errors.Is(err, ErrApplyUnsupported) {

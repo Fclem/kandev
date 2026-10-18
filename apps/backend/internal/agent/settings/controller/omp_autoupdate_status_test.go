@@ -87,3 +87,31 @@ func TestOMPAutomaticNoChangeSkipsRefreshSideEffects(t *testing.T) {
 		t.Fatalf("no-change check refreshed=%d invalidated=%d", refreshes.Load(), invalidations.Load())
 	}
 }
+
+// A manual update can finish between the status snapshot and admission; the
+// automatic check must compare against the version current under the claim.
+func TestOMPAutomaticPreviousVersionIsReadUnderClaim(t *testing.T) {
+	c, u, hub := newOMPAutomaticController(t, &autoMemorySettings{})
+	ctx := context.Background()
+	if err := c.SetAgentAutomaticUpdates(ctx, "omp-acp", true); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KANDEV_E2E_MOCK", "true")
+	// Snapshot says 1.0.0, but a manual update already published 1.1.0; the automatic updater changes nothing.
+	u.current = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.1.0"}
+	u.refreshCaps = hostutility.AgentCapabilities{Status: hostutility.StatusOK, AgentVersion: "1.1.0"}
+	stale := dto.AgentUpdateStatusDTO{AgentName: "omp-acp", RuntimeID: "omp-acp", Available: true, Enabled: true, CurrentVersion: "1.0.0"}
+	if err := c.enqueueAutomaticHarness(ctx, stale, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	jobs := c.ListAgentUpdateJobs()
+	if len(jobs) != 1 {
+		t.Fatalf("jobs = %d", len(jobs))
+	}
+	waitForUpdateStatus(t, hub.completed, jobs[0].JobID, dto.AgentUpdateJobStatusSucceeded)
+	c.updateJobStore.automaticWorkers.Wait()
+	p, _ := c.runtimeAutoUpdateStore.Get(ctx, "omp-acp", "omp-acp")
+	if p.LastChange != nil || p.Outcome == nil || p.Outcome.Operation != managedruntime.OperationUpToDate || p.Outcome.PreviousVersion != "1.1.0" {
+		t.Fatalf("stale snapshot reported a change: %+v change=%+v", p.Outcome, p.LastChange)
+	}
+}

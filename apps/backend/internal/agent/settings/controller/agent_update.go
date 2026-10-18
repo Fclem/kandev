@@ -424,7 +424,7 @@ func (execDirectCommandExecutor) Stream(
 }
 
 func (execDirectCommandExecutor) StreamTree(ctx context.Context, command agents.Command, onChunk func(string)) error {
-	return runDirectCommand(ctx, command, onChunk, true)
+	return runDirectCommandTree(ctx, command, onChunk)
 }
 
 func (u *hostRuntimeUpdater) CurrentCapabilities(agentName string) (hostutility.AgentCapabilities, bool) {
@@ -640,10 +640,7 @@ func (u *hostRuntimeUpdater) InvalidateCapabilities(agentName string) {
 	u.host.InvalidateCapabilities(agentName)
 }
 
-func runDirectCommand(ctx context.Context, command agents.Command, onChunk func(string), tree ...bool) error {
-	if len(tree) > 0 && tree[0] {
-		return runDirectCommandTree(ctx, command, onChunk)
-	}
+func runDirectCommand(ctx context.Context, command agents.Command, onChunk func(string)) error {
 	argv := command.Args()
 	if len(argv) == 0 {
 		return errors.New("runtime update command is empty")

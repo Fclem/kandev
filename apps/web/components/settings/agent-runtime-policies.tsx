@@ -30,7 +30,6 @@ function hasManagedControl(status: AgentUpdateStatus, hasControl: boolean, canMa
 }
 
 function harnessOutcomeKey(status: AgentUpdateStatus): string {
-  if (status.auto_update_paused) return "agents:runtimeOMPPausedBody";
   const outcome = status.last_outcome;
   if (outcome?.status === "running") return "agents:runtimeOMPRunning";
   if (outcome?.status === "succeeded") {
@@ -38,7 +37,7 @@ function harnessOutcomeKey(status: AgentUpdateStatus): string {
     if (outcome.operation === "repair") return "agents:runtimeOMPRepairedBody";
     return "agents:runtimeOMPNoChangeBody";
   }
-  if (!status.auto_update) return "agents:runtimeOMPIncompleteBody";
+  if (!status.auto_update || status.auto_update_paused) return "agents:runtimeOMPIncompleteBody";
   return outcome?.status === "interrupted"
     ? "agents:runtimeOMPInterruptedBody"
     : "agents:runtimeOMPRetryBody";
@@ -63,13 +62,22 @@ function HarnessRuntimeOutcome({ status }: { status: AgentUpdateStatus }) {
           })}
         </p>
       )}
-      {(outcome || status.auto_update_paused) && (
+      {outcome && (
         <p className="text-sm" role="status">
           {t(harnessOutcomeKey(status), {
             agent: status.display_name,
-            previous: outcome?.previous_version || t(RUNTIME_UNKNOWN_KEY),
-            version: outcome?.observed_version || t(RUNTIME_UNKNOWN_KEY),
+            previous: outcome.previous_version || t(RUNTIME_UNKNOWN_KEY),
+            version: outcome.observed_version || t(RUNTIME_UNKNOWN_KEY),
           })}
+        </p>
+      )}
+      {status.auto_update_paused && (
+        <p
+          className="text-sm"
+          role="status"
+          data-testid={`runtime-omp-paused-${status.agent_name}`}
+        >
+          {t("agents:runtimeOMPPausedBody", { agent: status.display_name })}
         </p>
       )}
       {hasOutput && (

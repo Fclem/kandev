@@ -251,10 +251,18 @@ describe("OMP retained evidence and pause recovery", () => {
     snapshot.statuses = { "omp-acp": retained };
     const view = render(policies());
     expand(view);
-    expect(screen.getByRole("status").textContent).toMatch(/paused/i);
-    expect(screen.getByRole("status").textContent).toMatch(/off.*save.*on.*save/i);
+    const paused = screen.getByTestId("runtime-omp-paused-omp-acp");
+    expect(paused.textContent).toMatch(/paused/i);
+    expect(paused.textContent).toMatch(/off.*save.*on.*save/i);
+    // The latest result stays visible next to the pause explanation.
+    const statuses = screen.getAllByRole("status");
+    expect(statuses).toHaveLength(2);
+    expect(statuses[0].textContent).not.toMatch(/off.*save.*on.*save/i);
+    expect(statuses[0].textContent).toMatch(/did not complete/i);
+    expect(statuses[0].textContent).not.toMatch(/retry/i);
     snapshot.statuses = { "omp-acp": { ...retained, auto_update_paused: false } };
     view.rerender(policies());
+    expect(screen.queryByTestId("runtime-omp-paused-omp-acp")).toBeNull();
     expect(screen.getByRole("status").textContent).not.toMatch(/paused|off.*save.*on.*save/i);
   });
 });

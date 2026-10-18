@@ -146,7 +146,7 @@ describe("GoalSection saving", () => {
     putMock.mockRejectedValue(
       new ApiError("bad", 400, { error: "name is too long", field: "name" }),
     );
-    await act(async () => renderSection());
+    renderSection();
     fireEvent.change(await screen.findByTestId("goal-name"), { target: { value: "x" } });
     fireEvent.click(screen.getByTestId("goal-set"));
     expect(await screen.findByText("name is too long")).toBeTruthy();

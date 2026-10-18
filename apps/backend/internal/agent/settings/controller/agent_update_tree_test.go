@@ -1,3 +1,5 @@
+//go:build !windows
+
 package controller
 
 import (
@@ -5,8 +7,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -14,9 +17,6 @@ import (
 )
 
 func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX process groups")
-	}
 	updater := &hostRuntimeUpdater{executor: execDirectCommandExecutor{}}
 	tree, ok := any(updater).(interface {
 		RunUpdateTree(context.Context, agents.Command, func(string)) error
@@ -26,8 +26,11 @@ func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
 	}
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "escaped")
+	pidFile := filepath.Join(dir, "descendant.pid")
 	script := filepath.Join(dir, "updater")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n(trap '' TERM; sleep 8; echo survived > '"+marker+"') &\necho ready\nwait\n"), 0700); err != nil {
+	// Readiness is emitted from inside the TERM-ignoring descendant, after its trap is installed.
+	body := "#!/bin/sh\nsh -c \"trap '' TERM; echo \\$\\$ > '" + pidFile + "'; echo ready; exec sleep 20\" &\nwait\n"
+	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -55,18 +58,32 @@ func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
 		if err == nil {
 			t.Fatal("cancelled updater succeeded")
 		}
-	case <-time.After(7 * time.Second):
+	case <-time.After(12 * time.Second):
 		t.Fatal("descendant kept updater pipes open")
 	}
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("descendant pid unavailable: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The group SIGKILL must have removed the TERM-ignoring descendant, not just closed the pipes.
+	deadline := time.Now().Add(3 * time.Second)
+	for syscall.Kill(pid, 0) == nil && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if syscall.Kill(pid, 0) == nil {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatalf("descendant %d survived cancellation", pid)
+	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("descendant survived cancellation: %v", err)
+		t.Fatalf("descendant wrote marker after cancellation: %v", err)
 	}
 }
 
 func TestRunDirectCommandTreeCancelTreatsWaitDelayAfterZeroExitAsSuccess(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX fixture")
-	}
 	updater := &hostRuntimeUpdater{executor: execDirectCommandExecutor{}}
 	tree, ok := any(updater).(interface {
 		RunUpdateTree(context.Context, agents.Command, func(string)) error

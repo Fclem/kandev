@@ -88,6 +88,10 @@ func descendantAlive(pid int) bool {
 	}
 	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
+		// Without procfs a successful kill(pid, 0) is the only liveness evidence.
+		if _, statErr := os.Stat("/proc/self/stat"); statErr != nil {
+			return true
+		}
 		// Reaped between the signal probe and the read.
 		return false
 	}

@@ -176,12 +176,19 @@ export async function ompAutomaticConsent(page: Page, mobile: boolean, capture?:
     await expect(page).toHaveURL(/#installed-agent-omp-acp$/);
     await expect(page.locator("#installed-agent-omp-acp")).toBeInViewport();
     fixture.update({ available: false, auto_update_supported: false });
+    const unavailableStatus = page.waitForResponse(
+      (response) => response.url().includes("/agent-update/status") && response.ok(),
+    );
+    await page.goto("about:blank");
     await page.goto(POLICY_URL);
+    expect(JSON.stringify(await (await unavailableStatus).json())).toMatch(/"available":\s*false/);
+    await openOtherRegistrations(page);
     await expect(automatic).toBeChecked();
     await expect(automatic).toBeEnabled();
     await activate(touchTarget, mobile);
     await savePolicy(page, mobile);
     await page.reload();
+    await openOtherRegistrations(page);
     await expect(row).toBeVisible();
     await expect(automatic).toHaveCount(0);
     expect(fixture.writes()).toBe(2);
@@ -378,4 +385,17 @@ export async function ompAutomaticOutcomeRecovery(
   } finally {
     if (!page.isClosed()) await page.unrouteAll({ behavior: "wait" });
   }
+}
+
+// An unavailable runtime is listed under the collapsed "Other registered runtimes" disclosure.
+async function openOtherRegistrations(page: Page) {
+  const summary = page.getByText(/^Other registered runtimes? \(\d+\)$/);
+  const details = page.locator("details", { has: summary }).last();
+  // The group can remount while hydrating, which closes an already opened disclosure.
+  await expect(async () => {
+    if (!(await details.evaluate((element) => (element as HTMLDetailsElement).open))) {
+      await summary.click({ timeout: 2000 });
+    }
+    await expect(details).toHaveJSProperty("open", true, { timeout: 1000 });
+  }).toPass();
 }

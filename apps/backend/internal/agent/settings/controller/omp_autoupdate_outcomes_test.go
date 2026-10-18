@@ -130,7 +130,7 @@ func TestOMPAutomaticUpdaterErrorRetriesThenPausesAtThree(t *testing.T) {
 func TestOMPAutomaticExcerptKeepsNewlinesStripsEscapesAndCapsAtRuneBoundary(t *testing.T) {
 	c, u, hub := newOMPAutomaticController(t, &autoMemorySettings{})
 	u.refreshCaps = u.current
-	u.updateOutput = strings.Repeat("é", 1500) + "\x1b]0;secret\x07\r\nfinal\u0085\tline\x1b[0m"
+	u.updateOutput = strings.Repeat("é", 1500) + "\x1b]0;secret\x07\x1b(Bone\x1b7two\x1b8\x1bPq#0\x1b\\three\u009b31mred\r\nfinal\u0085\tline\x1b[0m"
 	ctx := context.Background()
 	if err := c.SetAgentAutomaticUpdates(ctx, "omp-acp", true); err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestOMPAutomaticExcerptKeepsNewlinesStripsEscapesAndCapsAtRuneBoundary(t *t
 	waitForUpdateStatus(t, hub.completed, c.ListAgentUpdateJobs()[0].JobID, dto.AgentUpdateJobStatusSucceeded)
 	p, _ := c.runtimeAutoUpdateStore.Get(ctx, "omp-acp", "omp-acp")
 	excerpt := p.Outcome.OutputExcerpt
-	if len(excerpt) > 2048 || !strings.HasSuffix(excerpt, "\nfinal\tline") || strings.Contains(excerpt, "secret") || strings.ContainsRune(excerpt, '�') {
+	if len(excerpt) > 2048 || !strings.HasSuffix(excerpt, "onetwothreered\nfinal\tline") || strings.Contains(excerpt, "secret") || strings.ContainsRune(excerpt, '�') {
 		t.Fatalf("bounded plain-text excerpt=%q (%d bytes)", excerpt, len(excerpt))
 	}
 }

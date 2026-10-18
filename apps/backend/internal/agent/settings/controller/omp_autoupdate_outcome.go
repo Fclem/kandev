@@ -32,7 +32,7 @@ type automaticHarnessResult struct {
 	OutputExcerpt   string
 }
 
-var updaterEscapePattern = regexp.MustCompile(`(?:\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$))|(?:\x1b\[[0-?]*[ -/]*[@-~])`)
+var updaterEscapePattern = regexp.MustCompile(`(?:\x1b[\]P^_X][^\x07\x1b]*(?:\x07|\x1b\\|$))|(?:\x1b\[[0-?]*[ -/]*[@-~])|(?:\x{9b}[0-?]*[ -/]*[@-~])|(?:\x1b[ -/]*[0-~])`)
 
 func updaterOutputExcerpt(output string) string {
 	output = strings.ReplaceAll(strings.ReplaceAll(output, "\r\n", "\n"), "\r", "\n")

@@ -343,3 +343,7 @@ git diff --check
 Results: 370 decisions and 1,515 specifications validated; specification-linter tests **36/36 PASS**; specification lint PASS; public-documentation tests **63/63 PASS**; 47 published pages validated; whitespace check PASS. Owned screenshot/test-result outputs were removed after visual inspection.
 
 The first normal commit attempt stopped before any hook ran: pre-commit could not write its SQLite configuration database because the separate `/home/clem/.cache` filesystem was 100% full (root still had 3.5 GB free). The retry uses task-owned `PRE_COMMIT_HOME=/var/tmp/o184-home/pre-commit` and `XDG_CACHE_HOME=/var/tmp/o184-home/.cache`; it retains normal pre-commit and commit-msg hooks and does not remove another task's cache or skip checks.
+
+### Review fix rounds (supersedes earlier claims in this Results section)
+
+See the "Review fix rounds" subsection of [plan.md](plan.md). It records that the `apps/backend/internal/system/updates/apply_test.go` isolation, Vitest `maxWorkers`, Sonner test removal, HTTP Git fixture and goal-section `act` changes described above were reverted and are not part of this change, that the final acceptance receipt above predates the reverts and the review fixes, and the verification actually run at HEAD e47ed0a6cb (backend targeted tests, Windows vet, lint, i18n, typecheck, vitest, and OMP E2E 8/8 desktop and 5/5 phone). `agent_update_tree_test.go` is now 104 lines, and `omp_autoupdate_status_test.go` (117 lines) is part of the changed test files.

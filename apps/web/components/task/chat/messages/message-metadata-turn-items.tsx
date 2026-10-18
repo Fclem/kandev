@@ -42,7 +42,7 @@ export function MessageMetadataTurnItems({
         <Tooltip>
           <TooltipTrigger asChild>
             <span tabIndex={0} className={METADATA_TEXT} data-testid="message-metadata-ttft">
-              {t("task:turnMetrics.ttft")}:{" "}
+              {t("settings:messageMetadataTTFT")}:{" "}
               {formatTtft(ttftMs, {
                 s: t("task:durationUnitSeconds"),
                 m: t("task:durationUnitMinutes"),

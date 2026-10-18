@@ -5,6 +5,7 @@ import { useSessionUsageTurn } from "@/hooks/domains/session/use-session-usage-t
 import type { Turn } from "@/lib/types/http";
 import { deriveTurnMetrics, type TurnMetrics } from "@/lib/turn-metrics";
 import { formatUsageCost, formatUsageTokens } from "@/lib/utils/conversation-usage";
+import { SettingsInfo } from "@/components/settings/settings-info";
 
 type MessageTurnMetricsProps = {
   turn: Turn;
@@ -12,11 +13,28 @@ type MessageTurnMetricsProps = {
   sessionId: string;
 };
 
-function MetricRow({ label, value, help }: { label: string; value: string | null; help?: string }) {
+function MetricRow({
+  label,
+  value,
+  help,
+  info,
+}: {
+  label: string;
+  value: string | null;
+  help?: string;
+  info?: string;
+}) {
   if (value === null) return null;
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-      <dt className="min-w-0 text-muted-foreground break-words">{label}</dt>
+      <dt className="min-w-0 flex items-center text-muted-foreground break-words">
+        {label}
+        {info && (
+          <SettingsInfo label={label} testId="message-ttft-info">
+            {info}
+          </SettingsInfo>
+        )}
+      </dt>
       <dd className="shrink-0 font-medium tabular-nums text-right">{value}</dd>
       {help && <dd className="order-last basis-full text-xs text-muted-foreground">{help}</dd>}
     </div>
@@ -58,7 +76,7 @@ function MetricRows({
         <MetricRow
           label={t("task:turnMetrics.ttft")}
           value={formatTtft(metrics.ttftMs, units)}
-          help={t("task:turnMetrics.ttftHelp")}
+          info={t("task:turnMetrics.ttftHelp")}
         />
       )}
       {metrics.tokensPerSecond !== null && (

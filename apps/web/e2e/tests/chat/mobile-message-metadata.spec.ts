@@ -1,5 +1,6 @@
 import { test, expect } from "../../fixtures/test-base";
 import { SessionPage } from "../../pages/session-page";
+import { waitForFiniteAnimations } from "../../helpers/animations";
 import {
   installMetadataMetricRoutes,
   MESSAGE_METADATA_PROMPT,
@@ -55,5 +56,23 @@ test.describe("chat message metadata line on mobile", () => {
     });
     expect(wrapped.wraps).toBe(true);
     expect(wrapped.documentFits).toBe(true);
+    await expect(responseRow.getByTestId("message-metadata-ttft")).toHaveText("TTFT: 350 ms");
+    await responseRow.getByRole("button", { name: "Show message metadata" }).click();
+    const metrics = testPage.getByTestId("message-turn-metrics");
+    await expect(metrics).toBeVisible();
+    await waitForFiniteAnimations(
+      testPage.getByRole("dialog", { name: "Message Metadata", exact: true }),
+    );
+    await expect(
+      testPage.getByText(/Backend-measured time from receipt of turn_started/),
+    ).not.toBeVisible();
+    const info = metrics.getByTestId("message-ttft-info");
+    const bounds = await info.boundingBox();
+    expect(bounds?.height).toBeGreaterThanOrEqual(44);
+    expect(bounds?.width).toBeGreaterThanOrEqual(44);
+    await info.tap();
+    const help = testPage.getByRole("dialog", { name: "Time to first token", exact: true });
+    await expect(help).toBeVisible();
+    await expect(help).toContainText("Backend-measured time from receipt of turn_started");
   });
 });

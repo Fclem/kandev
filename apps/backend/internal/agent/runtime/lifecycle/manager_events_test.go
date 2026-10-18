@@ -310,7 +310,7 @@ func TestRestoredChildUsageCannotClaimSuccessorTurn(t *testing.T) {
 	execution.setPromptTurnID("historical")
 	generation := beginExecutionPrompt(execution)
 	execution.setPromptTurnID("successor")
-	beginExecutionPrompt(execution)
+	successorGeneration := beginExecutionPrompt(execution)
 	manager := &Manager{}
 	for _, test := range []struct {
 		scope      string
@@ -319,7 +319,8 @@ func TestRestoredChildUsageCannotClaimSuccessorTurn(t *testing.T) {
 	}{
 		{scope: streams.NativeUsageScopeChild, wantTurn: ""},
 		{scope: streams.NativeUsageScopeChild, generation: generation, wantTurn: "historical"},
-		{scope: streams.NativeUsageScopeDirect, wantTurn: "successor"},
+		{scope: streams.NativeUsageScopeDirect, wantTurn: ""},
+		{scope: streams.NativeUsageScopeDirect, generation: successorGeneration, wantTurn: "successor"},
 	} {
 		event := manager.handleAgentEventState(execution, agentctl.AgentEvent{
 			Type: streams.EventTypeUsageObservation, PromptGeneration: test.generation,

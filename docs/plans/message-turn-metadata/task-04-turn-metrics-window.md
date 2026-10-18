@@ -13,6 +13,7 @@ acceptance_criteria:
   - AC-COSTS-CONVERSATION-USAGE-005.1
   - AC-COSTS-CONVERSATION-USAGE-005.5
   - AC-COSTS-CONVERSATION-USAGE-005.6
+  - AC-COSTS-CONVERSATION-USAGE-005.8
 system_design:
   - ../../specs/costs/system-design/conversation-usage.md
 ---
@@ -43,7 +44,12 @@ UI-01 window excerpt from the [full preview](plan.md#ascii-ui-preview), `AC-COST
 Message metadata
   Turn metrics: Wall time, TTFT, TPS, Input, Output (reasoning), Cached read/write, Cost + provenance
   raw entries below
+
 ```
+TTFT feedback refinement: desktop `Time to first token (i) 350 ms` reveals
+the definition only on icon hover/focus; phone uses the same row with a 44px
+information control opening the existing help drawer. The row value remains
+visible; measurement, scroll ownership and TPS help are unchanged.
 
 ## Acceptance
 
@@ -299,3 +305,13 @@ Measured-zero control: Input 0 | Output 0 (same independent spend).
 - Retain both existing task-linked and run-session-linked query ownership. Regress actual CreateCostEvent -> SQLite/GetRunWithCosts -> GetRunDetail -> JSON for gap-only, mixed, measured zero, missing output, unpriced and absent observations, including foreign-row exclusion. Delete incidental no-events-zero assertions; migrate positive-count/spend assertions without changing their expected values. Inventory DTO/client/render consumers through the existing nullable convention.
 - Reuse the existing safe-integer usage formatter in the subtree Properties number wrapper. Missing, negative, fractional and unsafe browser counts show the existing unavailable marker, never rounded integers; measured zero and MAX_SAFE_INTEGER survive. Render a raw JSON 2^53+1 response at the actual subtree sink to reproduce before repair.
 - Existing RunHeader and Properties desktop/phone composition remains unchanged; no new copy, controls, navigation, overlays or locale/default changes. This is state/data normalization inside shipped surfaces, so focused boundary/component tests and actual desktop/phone rendering satisfy the mobile exception without new layout-only E2E. Run affected Go race families and exact owning-package lint, affected web tests/lint/typecheck, a physical SQLite reload/JSON/runtime rendering smoke, then owning docs validation. Historical broad-suite/provider/E2E limits remain independent.
+
+### User feedback: TTFT disclosure and abbreviated line
+
+- AC-COSTS-CONVERSATION-USAGE-005.8: reuse the shared `SettingsInfo` circled icon for popup TTFT help. The definition is absent until desktop hover/focus or touch disclosure; the measured value stays visible. The message line reuses the localized `TTFT` setting label. TPS help and all measurement eligibility remain unchanged.
+- Two disclosure regressions failed before implementation. The final formatted metadata-window/action suites passed 37 tests. The real secondary phone surface showed initially hidden help, a 44x44 target, a working help drawer and no horizontal overflow; the user confirmed the presentation.
+- The managed production-build desktop Playwright case passed. The initial phone run was flaky because the geometry assertion sampled the opening scale animation at 43.57px. Reusing the existing finite-animation helper retained the 44px requirement; the final phone run passed twice with retries disabled.
+- `make fmt` passed with a writable invocation-owned Go cache. The requested `make typecheck test lint` advanced into backend tests, where disk-full passthrough failures, a Unix-socket path limit, cross-device fixture renames, process/lifecycle failures and a lifecycle timeout occurred. It was stopped before rebase; full test/lint success is not claimed.
+- That run also exposed a stale native-attribution test expecting an unowned zero-generation direct event to inherit a successor. The current resolver deliberately requires dispatch ownership. The regression now asserts no inherited owner for that event and uses the captured successor generation for its admitted control; no production ownership guard was weakened.
+- Historical broad-suite and provider/PostgreSQL limits remain unchanged. The isolated secondary instance and the three unrelated user edits are preserved; this follow-up does not restart the closed 40-round review loop.
+- The corrected generation-ownership regressions passed (`TestUsageObservationUsesItsPromptGenerationTurnID` and `TestRestoredChildUsageCannotClaimSuccessorTurn`); Go formatting was clean. Exact changed-file ESLint passed without warnings. Catalog validation passed for 386 decisions and 1626 specifications; all specification-file guards passed.

@@ -138,16 +138,22 @@ test.describe("chat message metadata line", () => {
     seedData,
   }) => {
     const fixture = await seedCompletedMetadataTurn(apiClient, seedData, "Metadata window values");
+    await apiClient.saveUserSettings({ message_metadata_fields: ["ttft"] });
     await installMetadataMetricRoutes(testPage, fixture);
     await testPage.goto(`/t/${fixture.taskId}`);
     await new SessionPage(testPage).waitForLoad();
 
     const responseRow = messageActionsRow(testPage, MESSAGE_METADATA_RESPONSE);
+    await expect(responseRow.getByTestId("message-metadata-ttft")).toHaveText("TTFT: 350 ms");
     await responseRow.getByRole("button", { name: "Show message metadata" }).click();
     const metrics = testPage.getByRole("dialog").getByTestId("message-turn-metrics");
     await expect(metrics).toBeVisible();
     await expect(metrics).toContainText("350 ms");
     await expect(metrics).toContainText("1,200");
+    const help = testPage.getByText(/Backend-measured time from receipt of turn_started/);
+    await expect(help).not.toBeVisible();
+    await metrics.getByTestId("message-ttft-info").hover();
+    await expect(testPage.getByRole("tooltip").filter({ hasText: "turn_started" })).toBeVisible();
   });
 
   test("shows live TTFT for a slow mock turn without reloading", async ({

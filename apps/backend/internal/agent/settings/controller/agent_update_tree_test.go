@@ -71,10 +71,12 @@ func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
 	// The group SIGKILL must have removed the TERM-ignoring descendant, not just closed the pipes.
 	// A zombie counts as dead: an init-less container may never reap the orphan.
 	deadline := time.Now().Add(3 * time.Second)
-	for descendantAlive(pid) && time.Now().Before(deadline) {
+	alive := descendantAlive(pid)
+	for alive && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
+		alive = descendantAlive(pid)
 	}
-	if descendantAlive(pid) {
+	if alive {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 		t.Fatalf("descendant %d survived cancellation", pid)
 	}
@@ -86,7 +88,8 @@ func descendantAlive(pid int) bool {
 	}
 	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
-		return true
+		// Reaped between the signal probe and the read.
+		return false
 	}
 	if end := bytes.LastIndexByte(raw, ')'); end >= 0 && end+2 < len(raw) {
 		return raw[end+2] != 'Z'

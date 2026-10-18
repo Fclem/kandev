@@ -85,8 +85,6 @@ function ChatContent({ panelId, params }: { panelId: string; params: Record<stri
     sessionId ? state.taskSessions.items[sessionId]?.is_passthrough === true : false,
   );
   useChatSessionTitle(panelId, sessionId);
-  const isFocused = usePanelActive(panelId, true);
-  useSessionUserActivity(sessionId ?? null, isFocused);
 
   if (isPassthrough) {
     return (
@@ -310,6 +308,21 @@ const PANEL_RENDERERS: Record<string, PanelRenderer> = {
   "background-work": (panelId, params) => <BackgroundWorkPanel panelId={panelId} params={params} />,
 };
 
+function SessionPanelActivity({
+  panelId,
+  params,
+  children,
+}: {
+  panelId: string;
+  params: Record<string, unknown>;
+  children: React.ReactNode;
+}) {
+  const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const sessionId = typeof params.sessionId === "string" ? params.sessionId : activeSessionId;
+  useSessionUserActivity(sessionId ?? null, usePanelActive(panelId, true));
+  return children;
+}
+
 /** Render a dockview panel's portal content by looking up its (alias-resolved)
  *  component renderer; falls back to an "unknown panel" placeholder. */
 export function renderPanel(
@@ -317,7 +330,16 @@ export function renderPanel(
   component: string,
   params: Record<string, unknown>,
 ): React.ReactNode {
-  const renderer = PANEL_RENDERERS[resolveComponent(component)];
-  if (renderer) return renderer(panelId, params);
+  const resolved = resolveComponent(component);
+  const renderer = PANEL_RENDERERS[resolved];
+  if (renderer) {
+    const content = renderer(panelId, params);
+    if (resolved === "sidebar" || resolved === "canvas") return content;
+    return (
+      <SessionPanelActivity panelId={panelId} params={params}>
+        {content}
+      </SessionPanelActivity>
+    );
+  }
   return <div className="p-4 text-muted-foreground">{t("common:unknownPanel", { component })}</div>;
 }

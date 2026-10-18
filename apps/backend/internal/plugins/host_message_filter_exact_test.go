@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -33,5 +34,31 @@ func TestMessageListAuthorTypesFilterExactBound(t *testing.T) {
 	}
 	if messages.calls != 0 {
 		t.Fatalf("message data calls = %d, want 0 for an over-bound filter", messages.calls)
+	}
+}
+
+func TestExactMessageDerivedTaskBoundIsIndependentOfCallerFilters(t *testing.T) {
+	tasks := make([]*taskmodels.Task, maxMessageFilterValues)
+	for i := range tasks {
+		tasks[i] = &taskmodels.Task{ID: fmt.Sprintf("task-%03d", i), WorkspaceID: "workspace-one"}
+	}
+	data := &fakeTaskDataSource{
+		workspaces:       []*taskmodels.Workspace{{ID: "workspace-one"}},
+		tasksByWorkspace: map[string][]*taskmodels.Task{"workspace-one": tasks},
+	}
+	host := newExactReadHost(t, data, []string{"messages"}, []string{"host.v2.read:messages"})
+	host.messageData = &fakeMessageDataSource{messages: []*taskmodels.Message{{
+		ID: "human-message", TaskID: tasks[0].ID, AuthorType: taskmodels.MessageAuthorUser,
+		Type: taskmodels.MessageTypeMessage, Content: "Question",
+	}}}
+	page, err := host.ListSanitizedMessages(context.Background(), pluginsdk.ExactMessageQuery{
+		RequestID: "workspace-human-messages", WorkspaceID: "workspace-one",
+		Filter: pluginsdk.MessageFilter{Types: []string{"message"}, AuthorTypes: []string{"user"}},
+	})
+	if err != nil {
+		t.Fatalf("400 derived workspace tasks plus caller filters must remain valid: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Message.ID != "human-message" {
+		t.Fatalf("human message missing from bounded workspace query: %+v", page.Items)
 	}
 }

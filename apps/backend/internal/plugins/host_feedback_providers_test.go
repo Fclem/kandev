@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/common/logger"
 	githubsvc "github.com/kandev/kandev/internal/github"
 	"github.com/kandev/kandev/internal/gitlab"
@@ -17,16 +18,35 @@ import (
 )
 
 type feedbackGitHubStub struct {
-	reviews  []githubsvc.PRReview
-	comments []githubsvc.PRComment
-	err      error
+	reviews     []githubsvc.PRReview
+	comments    []githubsvc.PRComment
+	err         error
+	scopedUsers []string
 }
 
-func (s *feedbackGitHubStub) ListPRReviews(context.Context, string, string, int) ([]githubsvc.PRReview, error) {
-	return s.reviews, s.err
+func (s *feedbackGitHubStub) GetPRFeedbackItemsForWorkspace(_ context.Context, workspace, user, owner, repo string, _ int) (*githubsvc.PRFeedback, error) {
+	if workspace != "workspace-one" || owner != "acme" || repo != "repo" {
+		return nil, errors.New("incorrect GitHub workspace association")
+	}
+	s.scopedUsers = append(s.scopedUsers, user)
+	return &githubsvc.PRFeedback{Reviews: s.reviews, Comments: s.comments}, s.err
 }
-func (s *feedbackGitHubStub) ListPRComments(context.Context, string, string, int, *time.Time) ([]githubsvc.PRComment, error) {
-	return s.comments, s.err
+
+func TestFeedbackUsesCurrentWorkspaceGitHubCredentials(t *testing.T) {
+	host, gh, _ := linkedFeedbackHost(t)
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "reviewer"})
+	first, err := host.ListChangeRequestFeedback(ctx, feedbackQuery())
+	require.NoError(t, err)
+	require.Len(t, first.Items[0].Items, 2)
+	require.Equal(t, []string{"reviewer"}, gh.scopedUsers)
+	gh.err = errors.New("credentials revoked")
+	q := feedbackQuery()
+	q.RequestID = "after-revocation"
+	next, err := host.ListChangeRequestFeedback(ctx, q)
+	require.NoError(t, err)
+	require.Equal(t, []string{"reviewer", "reviewer"}, gh.scopedUsers)
+	require.Len(t, next.Items[0].Items, 1)
+	require.Equal(t, "gitlab", next.Items[0].Items[0].Provider)
 }
 
 type feedbackGitLabStub struct {
@@ -80,6 +100,7 @@ func TestFeedbackProviderFailureIsPerProvider(t *testing.T) {
 						require.Equal(t, provider.Provider, page.Items[0].Items[0].Provider)
 					}
 				}
+				require.NotEmpty(t, logs.All(), "feedback reads must emit bounded outcome diagnostics")
 				for _, entry := range logs.All() {
 					encoded, err := json.Marshal(entry.ContextMap())
 					require.NoError(t, err)
@@ -126,7 +147,10 @@ func TestListChangeRequestFeedbackExactCommentKinds(t *testing.T) {
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	gh.comments = []githubsvc.PRComment{{ID: 3, CommentType: "review", Author: "comment-bot", AuthorIsBot: true, Body: "inline reply", CreatedAt: at}}
 	gl.feedback.Approvals = nil
-	gl.feedback.Discussions = []gitlab.MRDiscussion{{Resolvable: true, Resolved: false, Notes: []gitlab.MRNote{{ID: 3, Author: "human", Body: "discussion", CreatedAt: at, System: true}}}}
+	gl.feedback.Discussions = []gitlab.MRDiscussion{{Resolvable: true, Resolved: false, Notes: []gitlab.MRNote{
+		{ID: 3, Author: "human", Body: "discussion", CreatedAt: at},
+		{ID: 4, Author: "human", Body: "added commits", CreatedAt: at, System: true},
+	}}}
 	page, err := host.ListChangeRequestFeedback(context.Background(), feedbackQuery())
 	require.NoError(t, err)
 	require.Len(t, page.Items[0].Items, 2)

@@ -393,10 +393,10 @@ func TestIsTopLevelTaskAction(t *testing.T) {
 	}
 }
 
-func TestUserActivityBeatDefersSessionAuthorizationToHandler(t *testing.T) {
+func TestUserActivityBeatRequiresGatewaySessionAuthorization(t *testing.T) {
 	f := newDispatchScopeFixture(t, realIdentity())
 	f.dispatchAs(t, ws.ActionSessionUserActivityBeat, `{"session_id":"sess-b"}`)
-	if !*f.handled {
-		t.Fatal("user-activity beat was denied by the gateway backstop instead of reaching the uniform handler rejection")
+	if *f.handled {
+		t.Fatal("out-of-scope activity beat reached the handler")
 	}
 }

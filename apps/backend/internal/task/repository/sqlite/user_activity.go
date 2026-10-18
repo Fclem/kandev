@@ -171,7 +171,7 @@ func userActivityDurationExpression(driverName string) string {
 	if dialect.IsPostgres(driverName) {
 		return `CAST(SUM(EXTRACT(EPOCH FROM (a.ended_at - a.started_at)) * 1000) AS BIGINT)`
 	}
-	return `CAST(SUM((julianday(a.ended_at) - julianday(a.started_at)) * 86400000) AS BIGINT)`
+	return `CAST(ROUND(SUM((julianday(a.ended_at) - julianday(a.started_at)) * 86400000)) AS BIGINT)`
 }
 
 func (r *Repository) sumUserActivityBatch(

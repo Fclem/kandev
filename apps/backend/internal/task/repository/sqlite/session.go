@@ -1322,7 +1322,11 @@ func (r *Repository) createTaskSession(ctx context.Context, exec taskSessionExec
 	if err != nil {
 		return err
 	}
-	return r.clearManualCreation(ctx, exec, "session", session.ID, session.TaskID)
+	if err := r.clearManualCreation(ctx, exec, "session", session.ID, session.TaskID); err != nil {
+		return err
+	}
+	session.Metadata = metadata
+	return nil
 }
 
 // verifyTaskRunnerResolutionTx rejects a session built from a task snapshot

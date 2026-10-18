@@ -590,7 +590,7 @@ func (h *pluginHost) ListSanitizedMessages(ctx context.Context, q pluginsdk.Exac
 				return nil, status.Error(codes.InvalidArgument, "message filter contains a task outside the workspace")
 			}
 		}
-		if len(taskIDs)+len(filter.SessionIDs)+len(filter.Types)+len(filter.AuthorTypes) > maxMessageFilterValues {
+		if len(filter.TaskIDs)+len(filter.SessionIDs)+len(filter.Types)+len(filter.AuthorTypes) > maxMessageFilterValues {
 			return nil, status.Error(codes.ResourceExhausted, "message filter exceeds the bounded size")
 		}
 		allowedSessions := make(map[string]bool)

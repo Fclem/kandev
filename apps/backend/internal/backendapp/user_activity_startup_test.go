@@ -3,11 +3,13 @@ package backendapp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/kandev/kandev/internal/common/config"
 	"github.com/kandev/kandev/internal/task/models"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFlagOverrideStampsNewActivitySession(t *testing.T) {
@@ -57,5 +59,32 @@ func TestFlagOverrideStampsNewActivitySession(t *testing.T) {
 	}
 	if stamped, _ := values["user_activity_capture"].(bool); !stamped {
 		t.Fatalf("session metadata = %s, want user_activity_capture=true", metadata)
+	}
+}
+
+func TestStartupCaptureFailureDisablesOnlyTelemetry(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			ctx := context.Background()
+			cfg := &config.Config{HomeDir: t.TempDir(), Database: config.DatabaseConfig{Driver: "sqlite"}}
+			cfg.Features.SessionUserActivity = enabled
+			_, repos, cleanups, err := provideRepositories(ctx, cfg, newTestLogger(), "test-activity-startup-failure")
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				for i := len(cleanups) - 1; i >= 0; i-- {
+					if cleanups[i] != nil {
+						require.NoError(t, cleanups[i]())
+					}
+				}
+			})
+			_, err = repos.Task.DB().ExecContext(ctx, `INSERT INTO kandev_meta(key,value) VALUES ('user_activity_capture','invalid-json')`)
+			require.NoError(t, err)
+			initializeUserActivityCapture(ctx, cfg, repos.Task, newTestLogger())
+			require.False(t, cfg.Features.SessionUserActivity, "clients must see capture disabled when its state cannot be persisted")
+			require.NoError(t, repos.Task.CreateTask(ctx, &models.Task{ID: "startup-task", Title: "Still available"}))
+			s := &models.TaskSession{ID: "startup-session", TaskID: "startup-task"}
+			require.NoError(t, repos.Task.CreateTaskSession(ctx, s))
+			require.NotEqual(t, true, s.Metadata["user_activity_capture"])
+		})
 	}
 }

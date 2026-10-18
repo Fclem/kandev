@@ -55,6 +55,10 @@ export async function seedEffortFeedback(
   repositoryId: string,
   taskId: string,
 ) {
+  await api.mockGitHubSetWorkspaceConnection(workspaceId, {
+    source: "legacy_shared",
+    status: "active",
+  });
   await api.mockGitHubAssociateTaskPR({
     task_id: taskId,
     workspace_id: workspaceId,

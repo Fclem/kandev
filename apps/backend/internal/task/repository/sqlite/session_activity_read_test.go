@@ -12,7 +12,10 @@ func TestSessionUserActivityRead(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
 	base := time.Date(2026, 5, 2, 3, 4, 5, 0, time.UTC)
-	if err := repo.CreateTask(ctx, &models.Task{ID: "activity-read-task", Title: "activity read"}); err != nil {
+	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "activity-read-workspace", Name: "Activity reads"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CreateTask(ctx, &models.Task{ID: "activity-read-task", WorkspaceID: "activity-read-workspace", Title: "activity read"}); err != nil {
 		t.Fatal(err)
 	}
 	repo.SetUserActivityCapture(true)
@@ -63,7 +66,7 @@ func TestSessionUserActivityRead(t *testing.T) {
 		byID[summary.SessionID] = summary
 	}
 	measured := byID["a-measured"]
-	if !measured.ActivityMeasured || measured.IntervalCount != 2 || measured.ActiveMS < 19998 || measured.ActiveMS > 20002 {
+	if !measured.ActivityMeasured || measured.IntervalCount != 2 || measured.ActiveMS != 20000 {
 		t.Fatalf("multi-actor summary = %+v, want two intervals totaling 20000ms", measured)
 	}
 	if !measured.FirstAt.Equal(base.Add(10*time.Second)) || !measured.LastAt.Equal(base.Add(20*time.Second)) {
@@ -82,7 +85,10 @@ func TestSessionTurnsRead(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
 	base := time.Date(2026, 5, 3, 3, 4, 5, 0, time.UTC)
-	if err := repo.CreateTask(ctx, &models.Task{ID: "turn-read-task", Title: "turn read"}); err != nil {
+	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "turn-read-workspace", Name: "Turn reads"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CreateTask(ctx, &models.Task{ID: "turn-read-task", WorkspaceID: "turn-read-workspace", Title: "turn read"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.CreateTaskSession(ctx, &models.TaskSession{ID: "turn-read-session", TaskID: "turn-read-task", StartedAt: base}); err != nil {

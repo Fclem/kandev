@@ -92,7 +92,29 @@ test("AC-PLUGINS-EFFORT-SIGNALS-005.2: fresh Host activity stops under emulated 
     await testPage.evaluate(() => window.setEffortHidden(false));
     await session.activeChat().dispatchEvent("pointerdown");
     await expect.poll(() => beats).toBeGreaterThan(hiddenBeats);
+    const beforeChanges = beats;
+    await session.clickTab("Changes");
+    const changes = testPage.locator('[data-testid="changes-panel"]:visible');
+    await expect(changes).toHaveCount(1);
+    await changes.dispatchEvent("pointerdown");
+    await expect.poll(() => beats).toBeGreaterThan(beforeChanges);
+    const changesEngaged = beats;
+    await expect.poll(() => beats, { timeout: 20000 }).toBeGreaterThan(changesEngaged);
+    expect((await readEffort(apiClient, seedData.workspaceId, task.id)).active_ms).toBeGreaterThan(
+      baseline.active_ms,
+    );
     await checkEffortRoute(testPage, task.id);
+    await apiClient.mockGitHubSetWorkspaceConnectionStatus(seedData.workspaceId, "revoked");
+    await testPage.getByTestId("effort-summary").click();
+    await expect(
+      testPage.getByTestId("effort-provider").filter({ hasText: "github: unavailable" }),
+    ).toBeVisible();
+    await expect(testPage.getByTestId("effort-feedback-item")).toHaveCount(0);
+    await apiClient.mockGitHubSetWorkspaceConnectionStatus(seedData.workspaceId, "active");
+    await testPage.getByTestId("effort-summary").click();
+    await expect(testPage.getByTestId("effort-feedback-item")).toHaveText(
+      "Fixture review feedback",
+    );
     await testPage.screenshot({ path: test.info().outputPath("effort-desktop.png") });
     await testPage.goto(`/t/${task.id}`);
     await session.waitForLoad();

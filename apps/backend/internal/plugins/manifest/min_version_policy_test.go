@@ -59,7 +59,8 @@ func TestSessionActivityMinimumVersion(t *testing.T) {
 	}{
 		{name: "session activity requires a floor", resource: "session_activity", wantReject: true},
 		{name: "released host without signals rejected", resource: "session_activity", minimum: "0.97.0", wantReject: true},
-		{name: "equal floor accepted", resource: "session_activity", minimum: "0.97.1"},
+		{name: "patch without signals rejected", resource: "session_activity", minimum: "0.97.1", wantReject: true},
+		{name: "equal floor accepted", resource: "session_activity", minimum: "0.98.0"},
 		{name: "sessions-only plugins remain unaffected", resource: "sessions"},
 	}
 	for _, test := range tests {

@@ -35,15 +35,15 @@ func feedbackBody(body string) (string, bool) {
 	}
 	return body[:end], true
 }
-func githubFeedbackItems(ctx context.Context, reader githubFeedbackReader, pr *githubsvc.TaskPR) ([]pluginsdk.ChangeRequestFeedbackItem, error) {
-	reviews, err := reader.ListPRReviews(ctx, pr.Owner, pr.Repo, pr.PRNumber)
+func githubFeedbackItems(ctx context.Context, reader githubFeedbackReader, workspaceID, userID string, pr *githubsvc.TaskPR) ([]pluginsdk.ChangeRequestFeedbackItem, error) {
+	feedback, err := reader.GetPRFeedbackItemsForWorkspace(ctx, workspaceID, userID, pr.Owner, pr.Repo, pr.PRNumber)
 	if err != nil {
 		return nil, err
 	}
-	comments, err := reader.ListPRComments(ctx, pr.Owner, pr.Repo, pr.PRNumber, nil)
-	if err != nil {
-		return nil, err
+	if feedback == nil {
+		return nil, fmt.Errorf("GitHub feedback unavailable")
 	}
+	reviews, comments := feedback.Reviews, feedback.Comments
 	items := make([]pluginsdk.ChangeRequestFeedbackItem, 0, len(reviews)+len(comments))
 	base := pluginsdk.ChangeRequestFeedbackItem{Provider: taskmodels.RemoteContributionProviderGitHub, RepositoryID: pr.RepositoryID, RepositoryOwner: pr.Owner, RepositoryName: pr.Repo, Number: int64(pr.PRNumber)}
 	for _, review := range reviews {
@@ -113,6 +113,9 @@ func gitlabFeedbackItems(mr *gitlab.TaskMR, feedback *gitlab.MRFeedback) ([]plug
 	}
 	for _, discussion := range feedback.Discussions {
 		for _, note := range discussion.Notes {
+			if note.System {
+				continue
+			}
 			item := base
 			item.ItemID = strconv.FormatInt(note.ID, 10)
 			item.Kind = "discussion_note"

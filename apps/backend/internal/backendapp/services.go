@@ -129,7 +129,7 @@ func provideServices(ctx context.Context, cfg *config.Config, log *logger.Logger
 	}
 	if pluginsSvc != nil {
 		if providers.github != nil {
-			pluginsSvc.SetChangeRequestFeedbackReaders(providers.github.Client(), providers.gitlab)
+			pluginsSvc.SetChangeRequestFeedbackReaders(providers.github, providers.gitlab)
 		} else {
 			pluginsSvc.SetChangeRequestFeedbackReaders(nil, providers.gitlab)
 		}

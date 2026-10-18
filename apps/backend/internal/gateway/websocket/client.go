@@ -260,15 +260,13 @@ func (c *Client) handleMessage(msg *ws.Message) {
 	// Per-user scoping backstop: refuse before the handler runs if the payload
 	// names a task or session this client may not touch. See dispatch_scope.go
 	// for why this lives here and not only in each handler.
-	if msg.Action != ws.ActionSessionUserActivityBeat {
-		if err := c.authorizeAction(dispatchCtx, msg.Action, msg.Payload); err != nil {
-			c.logger.Debug("denied out-of-scope action",
-				zap.String("action", msg.Action),
-				zap.String("user_id", c.identity.UserID),
-				zap.Error(err))
-			c.sendError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "not found", nil)
-			return
-		}
+	if err := c.authorizeAction(dispatchCtx, msg.Action, msg.Payload); err != nil {
+		c.logger.Debug("denied out-of-scope action",
+			zap.String("action", msg.Action),
+			zap.String("user_id", c.identity.UserID),
+			zap.Error(err))
+		c.sendError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "not found", nil)
+		return
 	}
 
 	response, err := c.hub.dispatcher.Dispatch(dispatchCtx, msg)

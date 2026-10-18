@@ -8,6 +8,7 @@ import (
 	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/user/store"
 	ws "github.com/kandev/kandev/pkg/websocket"
+	"go.uber.org/zap"
 )
 
 const sessionUserActivityAcknowledgementEnabledKey = "enabled"
@@ -39,6 +40,7 @@ func (h *TaskHandlers) wsSessionUserActivityBeat(ctx context.Context, msg *ws.Me
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Unable to record session activity", nil)
 	}
 	sessionUserActivityBeatsTotal.Add(outcome, 1)
+	h.logger.Debug("session user activity beat", zap.String("session_id", req.SessionID))
 	if outcome == userActivityOutcomeRejected {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "Task session not found", map[string]interface{}{"outcome": userActivityOutcomeRejected})
 	}

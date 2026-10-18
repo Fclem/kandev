@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
-	"time"
 
+	"github.com/kandev/kandev/internal/auth/authn"
 	githubsvc "github.com/kandev/kandev/internal/github"
 	"github.com/kandev/kandev/internal/gitlab"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/pkg/pluginsdk"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -66,7 +67,7 @@ func (h *pluginHost) ListChangeRequestFeedback(ctx context.Context, q pluginsdk.
 		result := make([]pluginsdk.ChangeRequestFeedbackTask, 0, len(unique))
 		for _, id := range unique {
 			row := pluginsdk.ChangeRequestFeedbackTask{TaskID: id, Items: []pluginsdk.ChangeRequestFeedbackItem{}}
-			gh, items := h.githubFeedback(ctx, id)
+			gh, items := h.githubFeedback(ctx, q.WorkspaceID, id)
 			row.Providers = append(row.Providers, gh)
 			row.Items = append(row.Items, items...)
 			gl, items := h.gitlabFeedback(ctx, q.WorkspaceID, id)
@@ -81,10 +82,30 @@ func (h *pluginHost) ListChangeRequestFeedback(ctx context.Context, q pluginsdk.
 		boundFeedbackBytes(result)
 		return result, nil
 	})
+	h.logFeedbackRead(rows, err)
 	return pluginsdk.ExactChangeRequestFeedbackPage{Items: rows, PageInfo: info}, err
 }
 
-func (h *pluginHost) githubFeedback(ctx context.Context, taskID string) (pluginsdk.ChangeRequestFeedbackProviderResult, []pluginsdk.ChangeRequestFeedbackItem) {
+func (h *pluginHost) logFeedbackRead(rows []pluginsdk.ChangeRequestFeedbackTask, err error) {
+	if h.log == nil {
+		return
+	}
+	outcome := "available"
+	if err != nil {
+		outcome = "failed"
+	} else {
+		for _, row := range rows {
+			for _, provider := range row.Providers {
+				if provider.ProviderState != feedbackStateAvailable {
+					outcome = "partial"
+				}
+			}
+		}
+	}
+	h.log.Debug("plugin feedback read", zap.Int("task_count", len(rows)), zap.String("outcome", outcome))
+}
+
+func (h *pluginHost) githubFeedback(ctx context.Context, workspaceID, taskID string) (pluginsdk.ChangeRequestFeedbackProviderResult, []pluginsdk.ChangeRequestFeedbackItem) {
 	result := pluginsdk.ChangeRequestFeedbackProviderResult{Provider: taskmodels.RemoteContributionProviderGitHub, ProviderState: feedbackStateAvailable}
 	source := h.taskPRs
 	if h.taskPRsDep != nil {
@@ -98,6 +119,7 @@ func (h *pluginHost) githubFeedback(ctx context.Context, taskID string) (plugins
 		return feedbackUnavailable(result), nil
 	}
 	reader := h.feedbackReaders().github
+	identity, _ := authn.IdentityFromContext(ctx)
 	var items []pluginsdk.ChangeRequestFeedbackItem
 	for _, pr := range rows[taskID] {
 		if pr == nil {
@@ -107,7 +129,7 @@ func (h *pluginHost) githubFeedback(ctx context.Context, taskID string) (plugins
 			result.ProviderState = feedbackStateUnsupported
 			return result, nil
 		}
-		next, err := githubFeedbackItems(ctx, reader, pr)
+		next, err := githubFeedbackItems(ctx, reader, workspaceID, identity.UserID, pr)
 		if err != nil {
 			return feedbackUnavailable(result), nil
 		}
@@ -238,8 +260,7 @@ func boundFeedbackBytes(rows []pluginsdk.ChangeRequestFeedbackTask) {
 
 // Narrow provider contracts retain native credential and host resolution.
 type githubFeedbackReader interface {
-	ListPRReviews(context.Context, string, string, int) ([]githubsvc.PRReview, error)
-	ListPRComments(context.Context, string, string, int, *time.Time) ([]githubsvc.PRComment, error)
+	GetPRFeedbackItemsForWorkspace(context.Context, string, string, string, string, int) (*githubsvc.PRFeedback, error)
 }
 type gitlabFeedbackReader interface {
 	GetMRFeedbackForWorkspace(context.Context, string, string, string, int) (*gitlab.MRFeedback, error)

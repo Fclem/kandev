@@ -947,7 +947,7 @@ subscription vocabulary and wildcard rules are in the
 | Managed conversation input | `EnqueueInput`, `GetInput`, `ListInputs`, `CancelInput`, `Dispatch`                                                              | Reads use `api_read: managed_agent_conversations`; writes use `api_write: managed_agent_conversations`, plus the matching Host v2 workspace grant | Durable FIFO receipts, bounded sequence reads, exact active cancellation, and immediate dispatch whose `busy` result never queues                                                                                                                                                         |
 | Managed conversation schedules | `HostManagedConversationSchedules(host)`: `List`, `Create`, `Update`, `SetEnabled`, `Delete`                              | Reads require `api_read: automations` plus `host.v2.read:automations`; writes require `api_write: automations` plus `host.v2.write:automations` | Installation-owned schedules use revisioned commands and durable receipts; delivery reauthorizes the retained destination and retries by occurrence ID                                                                                                                                   |
 | Sessions                   | Sessions().List, Sessions().CodeStats                                                                                            | api_read: sessions                                                                                                                                | Typed session and computed code-stat records                                                                                                                                                                                                                                              |
-| Session activity and turns  | Sessions().UserActivity, Sessions().Turns                                                                                         | api_read: session_activity                                                                                                                        | Measured person-time summaries distinguish unmeasured capture from measured zero; turn DTOs expose IDs and lifecycle timestamps only. Requires min_kandev_version 0.97.1 or later.                                                                                                       |
+| Session activity and turns  | Sessions().UserActivity, Sessions().Turns                                                                                         | api_read: session_activity                                                                                                                        | Measured person-time summaries distinguish unmeasured capture from measured zero; turn DTOs expose IDs and lifecycle timestamps only. Requires min_kandev_version 0.98.0 or later.                                                                                                       |
 | Workspaces                 | Workspaces().List                                                                                                                | api_read: workspaces                                                                                                                              | Instance-visible workspaces                                                                                                                                                                                                                                                               |
 | Workflows                  | Workflows().List, Workflows().ListSteps                                                                                          | api_read: workflows                                                                                                                               | List steps by workflow id                                                                                                                                                                                                                                                                 |
 | Agent profiles             | AgentProfiles().List                                                                                                             | api_read: agent_profiles                                                                                                                          | Global agent profiles exposed by the Host data API                                                                                                                                                                                                                                        |
@@ -968,7 +968,7 @@ call them reserved.
 
 ### Effort signal reads
 
-Declare `api_read: session_activity` with `min_kandev_version: "0.97.1"`
+Declare `api_read: session_activity` with `min_kandev_version: "0.98.0"`
 or later to depend on the complete effort-signal contract. Existing plugins
 declaring only `sessions` do not acquire activity access or a new version floor.
 
@@ -988,14 +988,20 @@ workspace grant. Each activity/turn filter accepts at most 400 combined
 `SessionIDs` and `TaskIDs`; larger filters return `InvalidArgument`.
 Activity session selection is ordered by `(started_at, session_id)` and turns
 by `(started_at, id)`, using opaque stable keyset cursors.
+Both reads exclude internal configuration tasks and sessions whose workspace
+no longer exists, matching ordinary session enumeration.
 
 `SessionUserActivity` reports session/task IDs, `ActiveMS`, `IntervalCount`,
 first/last activity times, and `ActivityMeasured`. Unmeasured rows have zero
 totals and `ActivityMeasured=false`; measured zero has `ActivityMeasured=true`.
 Concurrent actors contribute summed person-time, so this is not wall time.
-`SessionTurn` exposes only IDs and start/completion timestamps, not metadata.
+`SessionTurn` exposes only IDs and start/completion timestamps, not metadata;
+synthetic lifecycle-only turns and pending reservations are excluded.
 Disabled capture or a runtime capture-start boundary can make historical rows
 unmeasured; do not interpret those rows as measured inactivity.
+On desktop, capture follows the globally focused session-owned task panel, including
+Changes, diff, file, and terminal panels, not just chat. Capture-state persistence
+failures disable telemetry without preventing backend startup.
 
 New message origins are `human`, `peer_task`, `plugin`, `automation`,
 `workflow`, and `agent`. `AuthorTypes` and the combined 400-value filter cap
@@ -1081,12 +1087,15 @@ result while paging.
   history. Their ID is `approval:<numeric-user-id>`, stable across username
   changes and reapproval by the same user. They have kind `review`, state
   `APPROVED`, unknown author kind, and an empty body. Timestamps retain the
-  provider reader's supplied semantics. Discussion notes report resolution
-  only when the discussion is resolvable.
+  provider reader's supplied semantics. System-generated discussion notes are
+  excluded; other notes report resolution only when the discussion is resolvable.
 
-Feedback is fetched live on each first page under the existing provider
-credentials. GitLab reads use the approved workspace's connection and verify
-the linked host; the ambient global connection is not used.
+Feedback reads resolve credentials for the approved workspace on each first
+page. GitHub uses the calling user's personal-read client and the workspace's
+repository boundary; reviews and comments bypass the UI feedback cache and do
+not synchronize PR aggregates. Token rotation or removal takes effect on the next read.
+GitLab uses the workspace's connection and verifies the linked host.
+Neither provider uses a boot-captured ambient client.
 
 ### Build an independent coordination policy
 

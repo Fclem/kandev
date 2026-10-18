@@ -25,7 +25,12 @@ func (r *Repository) ListUserActivitySessions(
 	if err != nil {
 		return models.SessionActivitySessionsPage{}, err
 	}
-	query := `SELECT id, task_id, started_at FROM task_sessions WHERE 1 = 1`
+	query := fmt.Sprintf(`SELECT id, task_id, started_at FROM task_sessions
+		WHERE EXISTS (
+			SELECT 1 FROM tasks visible_task
+			JOIN workspaces visible_workspace ON visible_workspace.id = visible_task.workspace_id
+			WHERE visible_task.id = task_sessions.task_id AND %s
+		)`, excludeConfigModePredicate(r.ro.DriverName(), "visible_task.metadata"))
 	args := make([]interface{}, 0, 4)
 	if len(filter.SessionIDs) > 0 {
 		query += ` AND id IN (?)`
@@ -85,7 +90,13 @@ func (r *Repository) ListSessionTurns(
 	query := fmt.Sprintf(`
 		SELECT turn_row.id, turn_row.task_session_id, turn_row.task_id, turn_row.started_at, turn_row.completed_at
 		FROM task_session_turns turn_row
-		WHERE %s`, turnHistoryPredicate(r.ro.DriverName(), "turn_row"))
+		WHERE %s AND NOT (%s) AND EXISTS (
+			SELECT 1 FROM tasks visible_task
+			JOIN workspaces visible_workspace ON visible_workspace.id = visible_task.workspace_id
+			WHERE visible_task.id = turn_row.task_id AND %s
+		)`, turnHistoryPredicate(r.ro.DriverName(), "turn_row"),
+		turnLifecycleOnlyPredicate(r.ro.DriverName(), "turn_row"),
+		excludeConfigModePredicate(r.ro.DriverName(), "visible_task.metadata"))
 	args := make([]interface{}, 0, 4)
 	if len(filter.SessionIDs) > 0 {
 		query += ` AND turn_row.task_session_id IN (?)`

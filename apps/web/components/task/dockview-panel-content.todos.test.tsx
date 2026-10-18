@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // unit test targeting the Office-layout copy stays green.
 const mockAppState = vi.hoisted(() => ({
   tasks: { activeSessionId: "session-1", activeTaskId: "task-1" },
+  features: { sessionUserActivity: false },
   sessionTodos: {
     bySessionId: {} as Record<string, Array<{ description: string; status: string }>>,
   },

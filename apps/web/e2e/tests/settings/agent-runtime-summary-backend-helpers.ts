@@ -60,6 +60,7 @@ export async function backendRuntimeUpdateSummary(
   expect(beforeWindowResponse.ok).toBe(true);
   const beforeWindow = (await beforeWindowResponse.json()) as { statuses: AgentUpdateStatus[] };
   const observedIdentities = availableRuntimeIdentities(beforeWindow.statuses);
+  expect(observedIdentities.length).toBeGreaterThan(1);
 
   const outcomeEvent = ws.waitForEvent(SUMMARY_EVENT, {
     timeout: 15_000,

@@ -63,7 +63,11 @@ function HarnessRuntimeOutcome({ status }: { status: AgentUpdateStatus }) {
         </p>
       )}
       {outcome && (
-        <p className="text-sm" role="status">
+        <p
+          className="text-sm"
+          role="status"
+          data-testid={`runtime-omp-result-${status.agent_name}`}
+        >
           {t(harnessOutcomeKey(status), {
             agent: status.display_name,
             previous: outcome.previous_version || t(RUNTIME_UNKNOWN_KEY),

@@ -29,7 +29,8 @@ func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
 	pidFile := filepath.Join(dir, "descendant.pid")
 	script := filepath.Join(dir, "updater")
 	// Readiness is emitted from inside the TERM-ignoring descendant, after its trap is installed.
-	body := "#!/bin/sh\nsh -c \"trap '' TERM; echo \\$\\$ > '" + pidFile + "'; echo ready; exec sleep 20\" &\nwait\n"
+	// The descendant ignores TERM and would write the marker well after cancellation unless the group SIGKILL removes it.
+	body := "#!/bin/sh\nsh -c \"trap '' TERM; echo \\$\\$ > '" + pidFile + "'; echo ready; sleep 9; echo survived > '" + marker + "'\" &\nwait\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -78,6 +79,7 @@ func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 		t.Fatalf("descendant %d survived cancellation", pid)
 	}
+	time.Sleep(7 * time.Second)
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("descendant wrote marker after cancellation: %v", err)
 	}

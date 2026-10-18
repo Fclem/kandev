@@ -222,7 +222,7 @@ export async function ompAutomaticOutcomeRecovery(
   try {
     await page.goto(POLICY_URL);
     const { row, automatic, touchTarget } = await inspectOMPControls(page, mobile);
-    const latest = row.getByRole("status");
+    const latest = row.getByTestId("runtime-omp-result-omp-acp");
     await expect(latest).toContainText(/reported no version change/i);
     await expect(latest).not.toContainText(/up to date|installed|activate|rollback|default/i);
     await expect(row.getByText(/Last change:/)).toContainText("1.0.0");
@@ -336,7 +336,9 @@ export async function ompAutomaticOutcomeRecovery(
     });
     await refreshed;
     await expect(latest).toContainText(/installation may (?:already )?have changed/i);
-    await expect(latest).toContainText(/off.*save.*on.*save/i);
+    await expect(row.getByTestId("runtime-omp-paused-omp-acp")).toContainText(
+      /off.*save.*on.*save/i,
+    );
     await expect(output).not.toHaveAttribute("open");
     await expect(row.getByText(/Last change:/)).toContainText("1.3.0");
     await row.scrollIntoViewIfNeeded();
@@ -362,12 +364,12 @@ export async function ompAutomaticOutcomeRecovery(
     await activate(touchTarget, mobile);
     await savePolicy(page, mobile);
     await expect(automatic).not.toBeChecked();
-    await expect(latest).not.toContainText(/off.*save.*on.*save/i);
+    await expect(row.getByTestId("runtime-omp-paused-omp-acp")).toHaveCount(0);
     await activate(touchTarget, mobile);
     await savePolicy(page, mobile);
     await page.reload();
     await expect(automatic).toBeChecked();
-    await expect(latest).not.toContainText(/off.*save.*on.*save/i);
+    await expect(row.getByTestId("runtime-omp-paused-omp-acp")).toHaveCount(0);
     await expect(latest).toContainText(/next eligible interval/i);
     await inspectOMPScroll(page, row, mobile);
     expect(fixture.writes()).toBe(2);

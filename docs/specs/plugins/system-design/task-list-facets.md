@@ -241,11 +241,15 @@ so re-sorting the loaded rows with a facet value would rewrite the very order th
 facet sort preserves for equal labels. With the re-sort skipped, the order the
 facet sort preserves is the order the rows were loaded in, which is the order the
 API resolved for the request — for a facet that is `TasksListSortDefault`, because
-`resolveTasksListApiSort` maps a facet to it. Two remaining paths do pass a facet
-value to the built-in sorter and are harmless there: the boot-row projection in
-`apps/web/src/spa-routes.tsx` and the query-param sync in
-`apps/web/app/tasks/tasks-page-client.tsx`, both of which see rows already in that
-default order. Facet ordering is owned solely by `sortTasksByFacet` at render.
+`resolveTasksListApiSort` maps a facet to it. The boot-row projection in
+`apps/web/src/spa-routes.tsx` must copy the incoming rows without a local re-sort
+when the requested sort is a facet. SQLite `COLLATE NOCASE` and JavaScript
+`localeCompare` can order tied titles differently, so applying the built-in
+default again would change the incoming order even for rows already sorted by
+the API. The query-param sync and selection handlers in
+`apps/web/app/tasks/tasks-page-client.tsx` likewise skip the built-in sorter for
+facets. Built-in requests retain their existing local sort. Facet ordering is
+owned solely by `sortTasksByFacet` at render.
 
 ## Control flow
 

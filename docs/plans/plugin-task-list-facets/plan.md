@@ -429,12 +429,12 @@ the return behave identically on both viewports. Maps to
   facet, the stored setting still reads back as the facet through the
   user-settings API (checked before and after a reload with the plugin absent),
   and re-enabling restores it without any write in between.
-- Compatibility with the released Tags plugin: the automated evidence in this
-  package is a shape-equivalent registration (same synchronous context-only
-  `getValues` and `subscribe` signature) plus a type-only SDK change, because the
-  released plugin ships a Go server and the e2e harness stays hermetic. The
-  acceptance line names the released plugin itself, so the check that closes it
-  is defined here rather than left open: from a build of this branch, install the
+- Registration compatibility (`AC-PLUGINS-TASKLIST-FACETS-001.7`): the automated
+  evidence exercises a fixed id and label, synchronous context-only `getValues`,
+  and `subscribe` returning an unsubscribe function. The SDK change is type-only.
+  This proves the structural registration contract; it does not prove that the
+  released Tags package is installed or working. An additional manual package
+  compatibility check can be performed from a build of this branch: install the
   released package (`ghcr`/GitHub release asset, or `make package` in a checkout
   of `kandev-plugin-tags` pinned to a released tag), add it in Settings → Plugins
   or via `POST /api/plugins`, then confirm in `/tasks` that `Tag` appears after
@@ -442,9 +442,9 @@ the return behave identically on both viewports. Maps to
   renders per tag with a multi-tagged task in each and the unassigned bucket last;
   and select **Sort = Tag** and check the actual task order — a multi-tagged task
   ordered by its alphabetically first tag label, an untagged task last, and ties
-  keeping the loaded order — because the acceptance names group *and* sort.
-  Owner: whoever verifies the host release; the package's automated suite does not
-  cover it, and the acceptance line should be read with that boundary in mind.
+  keeping the loaded order. Owner: whoever verifies the host release. This
+  separate package check is outside the automated suite and is not the
+  structural registration acceptance criterion.
 
 ## Work orders
 

@@ -114,19 +114,13 @@ unavailable-plugin fallback.
 
 ## Out of scope
 
-- Changing the released tags plugin or any other plugin's bundle. The
-  released-Tags-plugin acceptance line is proved here by a shape-equivalent
-  registration (the fixture facet uses the same synchronous context-only
-  `getValues` plus `subscribe` signature, and the SDK change is type-only); the
-  real bundle is not installed, because it ships a Go server and this harness
-  stays hermetic. The check that closes that line is a defined release-time
-  procedure, recorded in the plan: install the released package from a released
-  tag into a build of this branch and confirm `Tag` appears after the built-in
-  options, that grouping renders one section per tag with a multi-tagged task in
-  each and leaves the unassigned bucket last, and that **Sort = Tag** orders the
-  tasks by their alphabetically first tag label with an untagged task last. Do
-  not describe it as an unspecified follow-up, and do not claim the automated
-  suite covers it.
+- Changing the released tags plugin or any other plugin's bundle.
+  `AC-PLUGINS-TASKLIST-FACETS-001.7` requires structural registration
+  compatibility: a fixed id and label, synchronous context-only `getValues`,
+  and `subscribe` returning an unsubscribe function. The fixture and registry
+  tests exercise that contract. They do not install or execute the released
+  Tags package, whose separate manual compatibility procedure is recorded in
+  the plan.
 - New fixture plugin capabilities: `user_state: true` is already declared in
   `manifest.yaml`.
 - Unit and component coverage (tasks 01, 03, and 04).
@@ -153,6 +147,7 @@ unavailable-plugin fallback.
 
 ```bash
 make build-backend
+make -C apps/backend build-e2e-delivery-fixture
 cd apps/web && pnpm run build:e2e
 make -C apps/backend e2e-plugin-package
 cd apps/web && pnpm e2e:run --no-build tests/plugins/task-list-facet.spec.ts

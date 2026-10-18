@@ -559,6 +559,9 @@ describe("adopted periodic OMP results", () => {
       const result = await screen.findByTestId("agent-update-result-omp-acp");
       expect(result.textContent).not.toMatch(/up.?to.?date|updated successfully/i);
       expect(result.textContent).toContain("1.2.0");
+      // The neutral sentence is announced once: one live region carries it.
+      const sentence = result.textContent ?? "";
+      expect(screen.getAllByText(sentence)).toHaveLength(1);
       const confirm = await screen.findByTestId("agent-update-confirm-omp-acp");
       await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
     },

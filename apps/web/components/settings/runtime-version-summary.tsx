@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { AgentUpdateJob, AgentUpdatePreview } from "@/lib/api";
 import {
-  automaticHarnessResultKey,
   resolveRuntimeActiveVersion,
   resolveRuntimeEffectiveVersion,
   resolveRuntimeOperation,
@@ -32,13 +31,8 @@ function HarnessVersionSummary({ agentName, preview, job }: VersionSummaryProps)
     t("common:unknown");
   return (
     <div className="space-y-2" data-testid={`agent-update-version-summary-${agentName}`}>
-      <p className="font-medium" role={automatic ? "status" : undefined}>
-        {automatic
-          ? t(automaticHarnessResultKey(job), {
-              previous: job.previous_version || job.current_version || t("common:unknown"),
-              version: current,
-            })
-          : t(runtimeOperationLabelKey(resolveRuntimeOperation(preview, job)))}
+      <p className="font-medium">
+        {t(runtimeOperationLabelKey(resolveRuntimeOperation(preview, job)))}
       </p>
       <p className="text-xs text-muted-foreground">{t("agents:harnessUpdateChannelNotice")}</p>
       <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">

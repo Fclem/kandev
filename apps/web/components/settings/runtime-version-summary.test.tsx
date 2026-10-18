@@ -35,10 +35,11 @@ describe("automatic OMP version summaries", () => {
     expect(screen.getByTestId("agent-update-stable-reference-omp-acp").textContent).toContain(
       "1.1.0",
     );
-    const summary = screen.getByRole("status");
-    expect(summary.textContent).toContain("1.0.0");
-    expect(summary.textContent).toContain("1.2.0");
-    expect(summary.textContent).not.toMatch(/up.?to.?date|updated successfully/i);
+    // The result sentence lives in the update dialog's single live region, not in this heading.
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByTestId("agent-update-version-summary-omp-acp").textContent).not.toMatch(
+      /up.?to.?date|updated successfully/i,
+    );
   });
 
   it("reports an adopted no-change check without treating the stable reference as an update target", () => {
@@ -54,8 +55,9 @@ describe("automatic OMP version summaries", () => {
       started_at: "2026-10-10T12:00:00Z",
     };
     render(<RuntimeVersionSummary agentName="omp-acp" preview={preview} job={job} />);
-    expect(screen.getByRole("status").textContent).toContain("1.2.0");
-    expect(screen.getByRole("status").textContent).not.toMatch(
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByTestId("agent-update-current-omp-acp").textContent).toContain("1.2.0");
+    expect(screen.getByTestId("agent-update-version-summary-omp-acp").textContent).not.toMatch(
       /up.?to.?date|updated successfully/i,
     );
   });

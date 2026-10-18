@@ -3,8 +3,10 @@
 package controller
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"fmt"
+	"github.com/kandev/kandev/internal/agent/agents"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,8 +14,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/kandev/kandev/internal/agent/agents"
 )
 
 func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
@@ -25,12 +25,10 @@ func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
 		t.Fatal("host automatic updater cannot bound descendant cancellation")
 	}
 	dir := t.TempDir()
-	marker := filepath.Join(dir, "escaped")
 	pidFile := filepath.Join(dir, "descendant.pid")
 	script := filepath.Join(dir, "updater")
 	// Readiness is emitted from inside the TERM-ignoring descendant, after its trap is installed.
-	// The descendant ignores TERM and would write the marker well after cancellation unless the group SIGKILL removes it.
-	body := "#!/bin/sh\nsh -c \"trap '' TERM; echo \\$\\$ > '" + pidFile + "'; echo ready; sleep 9; echo survived > '" + marker + "'\" &\nwait\n"
+	body := "#!/bin/sh\nsh -c \"trap '' TERM; echo \\$\\$ > '" + pidFile + "'; echo ready; exec sleep 20\" &\nwait\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -71,18 +69,29 @@ func TestRunDirectCommandTreeCancelKillsGroupAndReleasesPipes(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The group SIGKILL must have removed the TERM-ignoring descendant, not just closed the pipes.
+	// A zombie counts as dead: an init-less container may never reap the orphan.
 	deadline := time.Now().Add(3 * time.Second)
-	for syscall.Kill(pid, 0) == nil && time.Now().Before(deadline) {
+	for descendantAlive(pid) && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
-	if syscall.Kill(pid, 0) == nil {
+	if descendantAlive(pid) {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 		t.Fatalf("descendant %d survived cancellation", pid)
 	}
-	time.Sleep(7 * time.Second)
-	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("descendant wrote marker after cancellation: %v", err)
+}
+
+func descendantAlive(pid int) bool {
+	if syscall.Kill(pid, 0) != nil {
+		return false
 	}
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return true
+	}
+	if end := bytes.LastIndexByte(raw, ')'); end >= 0 && end+2 < len(raw) {
+		return raw[end+2] != 'Z'
+	}
+	return true
 }
 
 func TestRunDirectCommandTreeCancelTreatsWaitDelayAfterZeroExitAsSuccess(t *testing.T) {

@@ -567,3 +567,48 @@ describe("adopted periodic OMP results", () => {
     },
   );
 });
+
+describe("adopted in-flight periodic OMP check", () => {
+  it("announces one status region while the automatic check runs", async () => {
+    const job: AgentUpdateJob = {
+      job_id: "automatic-running",
+      agent_name: "omp-acp",
+      update_mode: "self_update",
+      automatic: true,
+      status: "updating",
+      current_version: "1.0.0",
+      started_at: "2026-10-10T12:00:00Z",
+    };
+    render(
+      <AgentRuntimeUpdateControl
+        agentName="omp-acp"
+        displayName="Oh My Pi"
+        runtimeUpdate={{ supported: true, update_mode: "self_update", package: OMP_PACKAGE }}
+        runtimeUpdateStatus={ompStatus({ auto_update_supported: true, auto_update: true })}
+        job={job}
+        onPreview={vi.fn().mockResolvedValue(
+          preview({
+            agent_name: "omp-acp",
+            update_mode: "self_update",
+            package: OMP_PACKAGE,
+            operation: "update",
+            target_version: "",
+            current_version: "1.0.0",
+          }),
+        )}
+        onUpdate={vi.fn().mockResolvedValue(job)}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("agent-update-trigger-omp-acp"));
+    const confirm = await screen.findByTestId("agent-update-confirm-omp-acp");
+    await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(confirm);
+    await screen.findByTestId("agent-update-result-omp-acp");
+    expect(screen.queryByTestId("agent-update-phase-omp-acp")).toBeNull();
+    expect(
+      screen
+        .getAllByRole("status")
+        .filter((region) => /checking the configured channel/i.test(region.textContent ?? "")),
+    ).toHaveLength(1);
+  });
+});

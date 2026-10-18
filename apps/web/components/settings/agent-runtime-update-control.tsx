@@ -251,7 +251,9 @@ function UpdateBody({
   isMobile,
 }: UpdateBodyProps) {
   const { t } = useTranslation();
-  const phase = updatePhase(t, job?.status);
+  // An adopted automatic OMP check announces its own running sentence; a second manual-style phase line would duplicate it.
+  const phase =
+    job?.automatic && job.update_mode === "self_update" ? null : updatePhase(t, job?.status);
   return (
     <div
       className="max-h-[calc(92dvh-10rem)] min-h-0 space-y-2 overflow-y-auto overscroll-contain px-4 py-2 text-xs/normal sm:max-h-[calc(92dvh-8rem)]"

@@ -68,6 +68,7 @@ export function resolveTaskFacetValues(
               (value) =>
                 value &&
                 typeof value.value === "string" &&
+                value.value.length > 0 &&
                 typeof value.label === "string" &&
                 value.label.length > 0,
             )

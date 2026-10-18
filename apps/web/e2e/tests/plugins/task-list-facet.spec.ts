@@ -190,4 +190,45 @@ test.describe("Plugin task-list facet", () => {
     settings = (await apiClient.getUserSettings()).settings;
     expect([settings.tasks_list_sort, settings.tasks_list_group]).toEqual([FACET, FACET]);
   });
+
+  test("re-reads the workspace document after a same-tab disable and re-enable", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    test.setTimeout(120_000);
+    await installFixturePlugin(testPage);
+    const ids = await seedTasks(apiClient, seedData);
+    await putValues(apiClient, seedData.workspaceId, {
+      [ids.multi]: [{ value: "alpha", label: "Alpha" }],
+    });
+    await testPage.goto(`/tasks?group=${FACET}`);
+    const sections = testPage.getByTestId("tasks-list-section");
+    await expect(sections.first()).toContainText("Alpha");
+
+    // Navigate in the SPA, not with goto: a reload would discard the loaded bundle and
+    // its facet cache, which is exactly the state this test must keep alive.
+    const navigate = (path: string) =>
+      testPage.evaluate((to) => {
+        window.history.pushState({}, "", to);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }, path);
+    const row = testPage.getByTestId(`plugin-row-${PLUGIN_ID}`);
+    await navigate("/settings/plugins");
+    await row.getByRole("button", { name: "Disable" }).click();
+    await expect(row.getByText("Disabled", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await row.getByRole("button", { name: "Enable" }).click();
+    await expect(row.getByText("Active", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    await navigate(`/tasks?group=${FACET}`);
+    await expect(testPage.getByTestId("tasks-list-group")).toContainText("Fixture tag");
+    await expect(sections.first()).toContainText("Alpha");
+
+    // Only an enabled plugin accepts user-state writes; the re-enabled bundle must have
+    // re-subscribed, or this change never reaches the list.
+    await putValues(apiClient, seedData.workspaceId, {
+      [ids.multi]: [{ value: "gamma", label: "Gamma" }],
+    });
+    await expect(sections.first()).toContainText("Gamma");
+  });
 });

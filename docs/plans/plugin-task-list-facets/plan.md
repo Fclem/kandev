@@ -466,6 +466,8 @@ task 03. Task 05 depends on tasks 02, 03, and 04.
 ## Verification strategy
 
 ```bash
+# Every line is run on its own from the repository root: each `cd` is relative to it, so
+# run them one at a time (or wrap each in a subshell) rather than pasting the block as one script.
 cd apps && pnpm --filter @kandev/web exec vitest run lib/plugins/registry.test.ts lib/plugins/registry-task-list-facet-callback.test.ts lib/tasks/tasks-list-options.test.ts lib/tasks/task-list-sections.test.ts hooks/use-task-list-facets.test.tsx hooks/use-task-list-facet-selection.test.tsx app/tasks/tasks-list-view.test.tsx app/tasks/tasks-list-controls.test.tsx app/tasks/tasks-page-client.facet-selection.test.tsx components/kanban/mobile-menu-task-list-options.test.tsx
 cd apps/web && pnpm run typecheck
 cd apps && pnpm --filter @kandev/web lint

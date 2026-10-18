@@ -1928,7 +1928,7 @@ logged (mirroring `TaskMenuActionRegistration.visible`'s error handling).
 `{ value, label, color? }[]` for `{ taskId, workspaceId? }`; `subscribe` invalidates the loaded
 page. The facet label and value labels come from the plugin verbatim. Return each value at most
 once for a task, and keep one label and color for a value across all tasks. An entry with an
-empty label is ignored. Facet sorting orders the loaded page by each task's alphabetically first
+empty label or value is ignored. Facet sorting orders the loaded page by each task's alphabetically first
 value label, case-insensitively, with tasks without values last. A task with multiple values
 appears in each matching group; a task without a value appears in the trailing `Unassigned`
 section. Parent/child indentation is rebuilt within each section.

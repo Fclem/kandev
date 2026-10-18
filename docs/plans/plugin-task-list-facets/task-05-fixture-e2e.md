@@ -217,7 +217,10 @@ spec wrote a workspace user-state document while the fixture still read only
 - Build: `make -C apps/backend build`, `pnpm --dir apps/web run build:e2e`, and
   `make -C apps/backend e2e-plugin-package` all passed.
 - `pnpm e2e:run --no-build tests/plugins/task-list-facet.spec.ts` (apps/web):
-  2 passed in 30.7s, no flaky retries, host mode, one worker.
+  3 passed with retries disabled (host mode, one worker). The third test disables and
+  re-enables the plugin through Settings without a page reload, then changes the
+  workspace document; it fails against the previous fixture, whose module-level cache
+  skipped the re-read and the re-subscription after a re-enable.
 - `pnpm e2e:run --no-build --project mobile-chrome
   tests/plugins/mobile-task-list-facet.spec.ts` (apps/web): 1 passed in 13.8s.
 - Coverage: desktop covers built-in option precedence, facet sort/section

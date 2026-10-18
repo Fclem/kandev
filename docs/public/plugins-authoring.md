@@ -3602,7 +3602,7 @@ built-in default without replacing the stored choice; it returns when the plugin
 See the [facet selection persistence decision](../../docs/decisions/2026-09-22-plugin-facet-selection-persistence.md).
 
 Return each value at most once for a task and keep the same label and color for a value across
-all tasks. An entry with an empty label counts as no value for that entry. The plugin's facet
+all tasks. An entry with an empty label or value counts as no value for that entry. The plugin's facet
 and value labels are displayed verbatim. Facet sorting uses the alphabetically first value
 label, case-insensitively, with tasks without a value last. A task with multiple values appears
 in every matching group; a task without a value appears in the trailing `Unassigned` section.

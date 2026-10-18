@@ -145,6 +145,8 @@ export function sortTasksByFacet(
     .map(({ task }) => task);
 }
 
+// The alphabetically smallest non-empty label (case-insensitive), not the first in array order:
+// it gives a multi-value task one stable sort position.
 export function firstFacetLabel(values: readonly TaskListFacetValue[]): string | null {
   let first: string | null = null;
   for (const { label } of values) {

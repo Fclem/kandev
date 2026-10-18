@@ -40,7 +40,9 @@
   var listeners = new Set();
   // Synchronous facet reads use a per-workspace cache, hydrated and refreshed
   // through host.storage. The browser hook is only for getValues failure tests.
-  var facetByWorkspace = new Map();
+  // The cache itself lives inside initialize(): the host revokes this plugin's
+  // storage subscriptions on disable, so a cache that outlived a re-enable would
+  // never be re-read or re-subscribed.
   var facetListeners = new Set();
 
   function notifyFacetListeners() {
@@ -1716,6 +1718,7 @@
         Component: NotesPanel,
         mobileEnabled: true,
       });
+      var facetByWorkspace = new Map();
       function ensureFacetWorkspace(workspaceId) {
         var cached = facetByWorkspace.get(workspaceId);
         if (cached) return cached;

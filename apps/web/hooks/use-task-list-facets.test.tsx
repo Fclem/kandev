@@ -59,6 +59,23 @@ describe("resolveTaskFacetValues", () => {
     });
   });
 
+  // A blank value identifier would key one shared "facet:value:" section across tasks.
+  it("discards an entry with an empty value identifier", () => {
+    const resolved = resolveTaskFacetValues(
+      [
+        facet({
+          getValues: () => [
+            { value: "", label: "Blank" },
+            { value: "a", label: "Alpha" },
+          ],
+        }),
+      ],
+      TASKS,
+      WORKSPACE_ID,
+    );
+    expect(resolved[`facet:${PLUGIN_ID}:tags:task-1`]).toEqual([{ value: "a", label: "Alpha" }]);
+  });
+
   // AC-PLUGINS-TASKLIST-FACETS-002.8: discard only entries without labels.
   it("keeps a usable sibling but treats all empty labels as unassigned", () => {
     const resolved = resolveTaskFacetValues(

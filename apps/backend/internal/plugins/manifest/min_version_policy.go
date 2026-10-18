@@ -8,7 +8,7 @@ const MinimumMessagesCapabilityVersion = "0.91.1"
 
 // MinimumSessionActivityVersion is the first Host release that supports
 // session activity and turn reads.
-const MinimumSessionActivityVersion = "0.97.0"
+const MinimumSessionActivityVersion = "0.97.1"
 
 // RequiresMessagesCapabilityMinimum reports whether a manifest opts into the
 // messages read resource whose Host contract requires a minimum release.

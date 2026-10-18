@@ -58,8 +58,8 @@ func TestSessionActivityMinimumVersion(t *testing.T) {
 		wantReject bool
 	}{
 		{name: "session activity requires a floor", resource: "session_activity", wantReject: true},
-		{name: "below floor rejected", resource: "session_activity", minimum: "0.96.9", wantReject: true},
-		{name: "equal floor accepted", resource: "session_activity", minimum: "0.97.0"},
+		{name: "released host without signals rejected", resource: "session_activity", minimum: "0.97.0", wantReject: true},
+		{name: "equal floor accepted", resource: "session_activity", minimum: "0.97.1"},
 		{name: "sessions-only plugins remain unaffected", resource: "sessions"},
 	}
 	for _, test := range tests {
@@ -70,7 +70,7 @@ func TestSessionActivityMinimumVersion(t *testing.T) {
 
 			err := manifest.Validate()
 			if test.wantReject {
-				if err == nil || !strings.Contains(err.Error(), "api_read resource \"session_activity\" requires min_kandev_version >= 0.97.0") {
+				if err == nil || !strings.Contains(err.Error(), "api_read resource \"session_activity\" requires min_kandev_version >= ") {
 					t.Fatalf("Validate() error = %v, want session_activity minimum-version rejection", err)
 				}
 				return

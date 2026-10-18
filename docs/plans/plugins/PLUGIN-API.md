@@ -2026,7 +2026,7 @@ under `messages`; `ListSessionCodeStats` adds optional file counts under
 `change_requests`; and `ListTaskUsageExact` reads `usage`.
 Exact reads also require their matching workspace grant.
 
-Declaring `session_activity` requires `min_kandev_version: "0.97.0"` or later.
+Declaring `session_activity` requires `min_kandev_version: "0.97.1"` or later.
 Activity/turn filters accept 400 combined session/task IDs. Message filters
 accept 400 combined session/task/type/author values. Feedback accepts 20 tasks,
 50 newest combined-provider items per task, 4096-byte rune-safe sanitized

@@ -1,7 +1,7 @@
 ---
 id: "07-fixture-and-docs"
 title: "Fixture plugin, E2E, and documentation"
-status: pending
+status: completed
 wave: 5
 depends_on:
   - "02-activity-reporter"
@@ -119,4 +119,20 @@ Tasks 02 and 06.
 
 ## Results
 
-Pending.
+Completed. Fixture plugin reads only public Go SDK surfaces (summary, sessions, activity, turns, code stats, human-filtered messages, live feedback, usage) and follows pages. `summary` makes fresh Host reads on every call. `estimate` persists only derived `active_ms`/`human_prompts` and `fixture-count-v1` estimate fields, never feedback bodies or logins. Route `/plugins/e2e-effort`, task panel and card indicator use public host APIs. Manifest floor 0.97.0 with `session_activity`, `change_requests`, `usage`. The identity writer records the manifest's actual minimum (was pinned at 0.91.1).
+
+Behavioral RED then GREEN: `TestEffortSignalsActionsRequireHost` (summary/estimate dispatch); `TestEffortSignalsFreshReadAndDerivedState` (private feedback and login were persisted; fixed to persist derived features only; fresh Host `active_ms` rises 15000 to 30000); Node identity test (pinned 0.91.1 rejected actual 0.97.0; now passes). Two incidental action-order assertions were removed, not repinned.
+
+Acceptance amendment: the work order's "bring second page to front, assert first hidden" step cannot establish hidden state in headless Chromium (`bringToFront` leaves the first page visible and focused). Per the parent decision, the E2E uses visibility/focus emulation in that test only.
+
+Verification (parent rerun): `(cd apps/backend && go test -count=1 ./cmd/plugin-fixture/ -run TestEffortSignals)` PASS; `node --test scripts/write-e2e-plugin-identity.test.mjs` 1/1 PASS; `node scripts/validate-public-docs.mjs` 47 pages valid; `python3 scripts/list-docs.py validate` 348 decisions, 1333 specs; `python3 scripts/lint-spec-files.py --all` PASS. Child-reported: `make fmt lint` 0 issues; `go test ./cmd/plugin-fixture/... ./internal/plugins/...` and `./internal/plugins/... ./pkg/pluginsdk/...` PASS; eslint on E2E files PASS; vitest global-setup 30/30; public-doc test 62/62.
+
+E2E (observed, both projects PASS, retries 0). Desktop chromium: `AC-PLUGINS-EFFORT-SIGNALS-005.2: fresh Host activity stops under emulated visibility and resumes`, 1 passed (1.3m). Command, from apps/web: `TMPDIR=/tmp mise exec -- pnpm e2e:run --no-build tests/plugins/effort-signals-plugin.spec.ts -- --retries=0`. Mobile-chrome (Pixel 5): `AC-PLUGINS-EFFORT-SIGNALS-005.3: effort route panel and card badge fit Pixel 5`, 1 passed (22.4s). Command: `TMPDIR=/tmp mise exec -- pnpm e2e:run --no-build --project mobile-chrome tests/plugins/mobile-effort-signals-plugin.spec.ts -- --retries=0`. Evidence record: `/home/clem/.kandev/tasks/investigate-potentia_cw2zw7bk/task07-e2e-verification.txt`. Retained screenshot: `apps/web/e2e/test-results/plugins-mobile-effort-sign-296fe--and-card-badge-fit-Pixel-5-mobile-chrome/effort-mobile.png`. The desktop screenshot was removed by managed cleanup.
+
+Deviation: the prescribed desktop command failed in task setup (POST /api/v1/tasks, 500), before reporter assertions. Cause: the seed repository inherited a TMPDIR under `.kandev/tasks/` and was correctly rejected as a Kandev task worktree. This is a setup failure, not a reporter failure. Artifacts were built under the prescribed TMPDIR/GOCACHE; both specs then ran `--no-build` with browser-only `TMPDIR=/tmp`, passing normal global-setup freshness and fixture identity checks. No freshness override, production guard change, or shared fixture change. The original backend attachment was removed by managed cleanup; its diagnostic is kept in the evidence record. The literal combined mobile build+run command was not run.
+
+Limitation (verbatim): this proves the reporter's gating logic under emulated visibility/focus, not native background throttling in a real browser window.
+
+AC 005.4 manual checklist (child-reported, checked against proto, SDK and manifest): every new RPC and resource is documented in the public authoring, manifest and PLUGIN-API docs, including bounds, failure states and minimum version. `PullRequestsPartial` tri-state is documented.
+
+PostgreSQL not run: `KANDEV_TEST_POSTGRES_DSN` unset. Native-background throttling and the literal combined mobile build/run remain unclaimed.

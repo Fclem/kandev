@@ -1,7 +1,7 @@
 ---
 id: "03-message-origin"
 title: "Prompt origin and author filter"
-status: pending
+status: completed
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -112,4 +112,8 @@ None.
 
 ## Results
 
-Pending.
+Completed. `models.ClassifyMessageOrigin` derives `Origin` at read time (first-match order per design) and `Message.Origin` flows through proto, SDK, Host mapper and the exact sanitized-message DTO with no metadata keys exposed. `AuthorTypes` is added to `MessageFilter`/`PluginMessageFilter`, applied in SQLite `ListMessagesForPlugin`, and counted toward the 400-value bound (including exact queries). `TestHostSDKProtoParity` (bufconn, explicit mapping table, round-trip table) is in `pkg/pluginsdk/host_parity_test.go`. Queue-drain and workflow pre-recorded rows keep their origin and count once.
+
+Creator enumeration finding: managed-conversation dispatch (`DispatchManagedInput`) wrote source `plugin-installation:<id>`, which would have classified as `human`. It now writes `plugin:<installation id>`, with a regression test that failed against the old marker.
+
+Verification: `make proto` plus `go test ./internal/plugins/ ./internal/task/models/ ./pkg/pluginsdk/ -run 'TestClassifyMessageOrigin|TestMessageListAuthorTypesFilter|TestHostSDKProtoParity'`, `go test ./internal/orchestrator/ -run 'TestQueuedPromptKeepsOrigin|TestUserMessageCreatorsHaveClassifiedOrigin'` (both rerun by parent, passed), `make fmt lint` (0 issues), managed-dispatch regression, and public-doc validation passed.

@@ -6,7 +6,7 @@
 # cmd/plugin-pack into apps/backend/.build/kandev-plugin-e2e-1.0.0.tar.gz.
 id: "kandev-plugin-e2e"
 api_version: 2
-min_kandev_version: "0.91.1"
+min_kandev_version: "0.97.0"
 version: "1.0.0"
 display_name: "Kandev E2E Fixture Plugin"
 description: "SDK-based plugin backend used by backend integration tests and Playwright e2e tests"
@@ -24,7 +24,7 @@ runtime:
     windows-amd64: "server/plugin-windows-amd64.exe"
 
 capabilities:
-  api_read: ["messages", "managed_agent_conversations", "tasks", "sessions", "interactions", "automations"]
+  api_read: ["messages", "managed_agent_conversations", "tasks", "sessions", "session_activity", "change_requests", "usage", "interactions", "automations"]
   events: ["task.created"]
   api_write: ["tasks", "managed_agent_conversations", "execution", "interactions", "automations"]
   agent_invoke: true
@@ -92,6 +92,12 @@ executor_providers:
       maximum_lifetime_seconds: 28800
 
 actions:
+  - key: "summary"
+    scope: "workspace"
+    max_body_bytes: 4096
+  - key: "estimate"
+    scope: "task"
+    max_body_bytes: 4096
   - key: "connection-status"
     scope: "workspace"
     max_body_bytes: 4096

@@ -1,7 +1,7 @@
 ---
 id: "02-activity-reporter"
 title: "Browser activity reporter"
-status: pending
+status: completed
 wave: 2
 depends_on:
   - "01-activity-ledger"
@@ -92,4 +92,6 @@ Task 01.
 
 ## Results
 
-Pending.
+Completed. Mounted the activity reporter in the desktop active session panel and mobile chat surface. The reporter sends only the session identifier while the surface is visible, focused, and recently active; it stops on idle, blur, hidden page, session change, disabled acknowledgement, or reload-required state.
+
+Verification: Node 24 focused web tests passed (36 activity-reporter/WebSocket tests and 7 panel-activity tests); web typecheck and lint passed. Chromium E2E smoke `tests/session/session-focus-signal.spec.ts` passed (1 test), verifying desktop session mounting and the existing subscribe/focus flow; it does not assert activity beats.

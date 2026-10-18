@@ -16,13 +16,11 @@ async function sha256(file) {
 }
 
 const manifest = await readFile(manifestPath, "utf8");
-for (const required of [
-  'id: "kandev-plugin-e2e"',
-  'version: "1.0.0"',
-  'min_kandev_version: "0.91.1"',
-]) {
+for (const required of ['id: "kandev-plugin-e2e"', 'version: "1.0.0"']) {
   if (!manifest.includes(required)) throw new Error(`fixture manifest missing ${required}`);
 }
+const minKandevVersion = /^min_kandev_version:\s*"(\d+\.\d+\.\d+)"\s*$/m.exec(manifest)?.[1];
+if (!minKandevVersion) throw new Error("fixture manifest missing valid min_kandev_version");
 if (!/api_read:\s*\[[^\]]*"messages"/.test(manifest)) {
   throw new Error('fixture manifest missing api_read resource "messages"');
 }
@@ -41,7 +39,7 @@ const identity = {
   manifestHash: await sha256(manifestPath),
   archiveSha256: await sha256(archivePath),
   manifestCapability: "messages",
-  minKandevVersion: "0.91.1",
+  minKandevVersion,
   panelKey: "prompt-history-plugin",
 };
 await writeFile(identityPath, `${JSON.stringify(identity, null, 2)}\n`);

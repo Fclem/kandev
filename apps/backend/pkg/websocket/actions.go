@@ -135,6 +135,7 @@ const (
 	ActionSessionSetPlanMode              = "session.set_plan_mode"
 	ActionSessionRename                   = "session.rename"
 	ActionSessionRouteAction              = "session.route_action"
+	ActionSessionUserActivityBeat         = "session.user_activity.beat"
 
 	// Agent actions
 	ActionAgentList   = "agent.list"

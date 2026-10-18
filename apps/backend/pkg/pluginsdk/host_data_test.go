@@ -17,25 +17,30 @@ import (
 type dataRecordingHost struct {
 	UnimplementedHostData
 
-	tasks         map[string]Task
-	taskList      []Task
-	taskPageInfo  *PageInfo
-	sessions      []Session
-	sessionPage   *PageInfo
-	codeStats     []SessionCodeStats
-	codeStatsPage *PageInfo
-	workspaces    []Workspace
-	workflows     []Workflow
-	workflowSteps []WorkflowStep
-	agentProfiles []AgentProfile
-	repositories  []Repository
-	messages      []Message
-	messagePage   *PageInfo
-	utilityText   string
+	tasks           map[string]Task
+	taskList        []Task
+	taskPageInfo    *PageInfo
+	sessions        []Session
+	sessionPage     *PageInfo
+	codeStats       []SessionCodeStats
+	codeStatsPage   *PageInfo
+	sessionActivity []SessionUserActivity
+	activityPage    *PageInfo
+	sessionTurns    []SessionTurn
+	turnsPage       *PageInfo
+	workspaces      []Workspace
+	workflows       []Workflow
+	workflowSteps   []WorkflowStep
+	agentProfiles   []AgentProfile
+	repositories    []Repository
+	messages        []Message
+	messagePage     *PageInfo
+	utilityText     string
 
 	lastTaskFilter     TaskFilter
 	lastSessionFilter  SessionFilter
 	lastMessageFilter  MessageFilter
+	lastActivityFilter SessionActivityFilter
 	lastWorkspaceID    string
 	lastWorkflowID     string
 	lastUtilityPrompt  string
@@ -134,6 +139,16 @@ func (r dataRecordingSessionReader) List(_ context.Context, filter SessionFilter
 func (r dataRecordingSessionReader) CodeStats(_ context.Context, filter SessionFilter, _ Page) ([]SessionCodeStats, *PageInfo, error) {
 	r.h.lastSessionFilter = filter
 	return r.h.codeStats, r.h.codeStatsPage, nil
+}
+
+func (r dataRecordingSessionReader) UserActivity(_ context.Context, filter SessionActivityFilter, _ Page) ([]SessionUserActivity, *PageInfo, error) {
+	r.h.lastActivityFilter = filter
+	return r.h.sessionActivity, r.h.activityPage, nil
+}
+
+func (r dataRecordingSessionReader) Turns(_ context.Context, filter SessionActivityFilter, _ Page) ([]SessionTurn, *PageInfo, error) {
+	r.h.lastActivityFilter = filter
+	return r.h.sessionTurns, r.h.turnsPage, nil
 }
 
 type dataRecordingWorkspaceReader struct{ h *dataRecordingHost }

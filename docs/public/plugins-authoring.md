@@ -947,6 +947,7 @@ subscription vocabulary and wildcard rules are in the
 | Managed conversation input | `EnqueueInput`, `GetInput`, `ListInputs`, `CancelInput`, `Dispatch`                                                              | Reads use `api_read: managed_agent_conversations`; writes use `api_write: managed_agent_conversations`, plus the matching Host v2 workspace grant | Durable FIFO receipts, bounded sequence reads, exact active cancellation, and immediate dispatch whose `busy` result never queues                                                                                                                                                         |
 | Managed conversation schedules | `HostManagedConversationSchedules(host)`: `List`, `Create`, `Update`, `SetEnabled`, `Delete`                              | Reads require `api_read: automations` plus `host.v2.read:automations`; writes require `api_write: automations` plus `host.v2.write:automations` | Installation-owned schedules use revisioned commands and durable receipts; delivery reauthorizes the retained destination and retries by occurrence ID                                                                                                                                   |
 | Sessions                   | Sessions().List, Sessions().CodeStats                                                                                            | api_read: sessions                                                                                                                                | Typed session and computed code-stat records                                                                                                                                                                                                                                              |
+| Session activity and turns  | Sessions().UserActivity, Sessions().Turns                                                                                         | api_read: session_activity                                                                                                                        | Measured person-time summaries distinguish unmeasured capture from measured zero; turn DTOs expose IDs and lifecycle timestamps only. Requires min_kandev_version 0.97.0 or later.                                                                                                       |
 | Workspaces                 | Workspaces().List                                                                                                                | api_read: workspaces                                                                                                                              | Instance-visible workspaces                                                                                                                                                                                                                                                               |
 | Workflows                  | Workflows().List, Workflows().ListSteps                                                                                          | api_read: workflows                                                                                                                               | List steps by workflow id                                                                                                                                                                                                                                                                 |
 | Agent profiles             | AgentProfiles().List                                                                                                             | api_read: agent_profiles                                                                                                                          | Global agent profiles exposed by the Host data API                                                                                                                                                                                                                                        |
@@ -964,6 +965,128 @@ The Go signatures, filters, DTOs, and pagination types live in
 apps/backend/pkg/pluginsdk/host.go and data_types.go. api_write task/message
 methods are implemented in the current branch; do not repeat older docs that
 call them reserved.
+
+### Effort signal reads
+
+Declare `api_read: session_activity` with `min_kandev_version: "0.97.0"`
+or later to depend on the complete effort-signal contract. Existing plugins
+declaring only `sessions` do not acquire activity access or a new version floor.
+
+| RPC | Public Go read | Resource |
+| --- | --- | --- |
+| `ListSessionUserActivity` | `Sessions().UserActivity` | `session_activity` |
+| `ListSessionTurns` | `Sessions().Turns` | `session_activity` |
+| `ListMessages`, `ListSanitizedMessagesExact` | `Messages().List`, exact sanitized message read | `messages` |
+| `ListSessionCodeStats` | `Sessions().CodeStats` | `sessions` |
+| `GetTask`, `ListTasks`, `GetTaskExact`, `ListTasksExact` | task reads with `PullRequests` and optional `PullRequestsPartial` | `tasks` |
+| `ListChangeRequestFeedbackExact` | `HostExactQueries(host)` manager's `ListChangeRequestFeedback` | `change_requests` |
+| `ListTaskUsageExact` | exact manager's `ListTaskUsage` | `usage` |
+
+Exact reads additionally require the matching `host.v2.read:<resource>`
+workspace approval. Activity and turn reads do not require an exact-read
+workspace grant. Each activity/turn filter accepts at most 400 combined
+`SessionIDs` and `TaskIDs`; larger filters return `InvalidArgument`.
+Activity session selection is ordered by `(started_at, session_id)` and turns
+by `(started_at, id)`, using opaque stable keyset cursors.
+
+`SessionUserActivity` reports session/task IDs, `ActiveMS`, `IntervalCount`,
+first/last activity times, and `ActivityMeasured`. Unmeasured rows have zero
+totals and `ActivityMeasured=false`; measured zero has `ActivityMeasured=true`.
+Concurrent actors contribute summed person-time, so this is not wall time.
+`SessionTurn` exposes only IDs and start/completion timestamps, not metadata.
+Disabled capture or a runtime capture-start boundary can make historical rows
+unmeasured; do not interpret those rows as measured inactivity.
+
+New message origins are `human`, `peer_task`, `plugin`, `automation`,
+`workflow`, and `agent`. `AuthorTypes` and the combined 400-value filter cap
+apply to both message read variants. An older Host can omit `Origin` or ignore
+`AuthorTypes`, so reject an empty origin before interpreting a human-only count.
+New RPCs return `Unimplemented` on older Hosts; optional file/reviewer counts
+and `PullRequestsPartial` preserve absent values instead of inventing zero or
+complete results.
+
+The packaged in-tree effort fixture is test support, not a production estimator
+or plugin starter. Its `summary` action reads Host activity afresh each time;
+`estimate` stores a derived feature count in plugin state. Its route, mobile
+task panel, and card badge use existing contributions and `host.ui` primitives.
+The visibility test limitation is explicit: this proves the reporter's gating logic under emulated visibility/focus, not native background throttling in a real browser window.
+
+### Code and pull-request summaries
+
+`Sessions().CodeStats` requires `api_read: sessions` and reports committed
+and pending changes separately:
+
+- `FilesChangedCommitted` is the sum of each observed commit's `files_changed`.
+  A path edited in several commits counts several times. It is not a
+  distinct committed-path count. A nil value means committed capture was
+  unavailable, as indicated by `CommittedLinesAvailable=false`, or that an
+  older Host omitted the new field.
+- `FilesChangedPeakPending` is the maximum distinct file-path count in any
+  single stored git snapshot, not the latest snapshot and not necessarily the
+  snapshot with the most added or deleted lines. A measured zero is an explicit
+  value; nil means an older Host omitted the field.
+- Commits are deduplicated by session and SHA, not across sessions. Sessions
+  sharing a workspace can observe overlapping commit ranges and attribute the
+  same SHA independently. Summing session totals is not a repository-wide
+  unique-commit total.
+
+Task reads include GitHub pull requests and GitLab merge requests in
+`Task.PullRequests`, newest first by creation time. Each row carries `Provider`
+(`github` or `gitlab`), `CreatedAt`, optional `ChangedFiles`, optional
+`ApprovedReviewerCount`, and `SizeObserved`. Reviewer counts describe current
+approved reviewers, not review rounds or comments.
+
+Before the first sync, `ChangedFiles` and `ApprovedReviewerCount` are nil.
+Synced GitHub rows set `SizeObserved=true`; a zero additions/deletions count
+can then be treated as observed. GitLab rows have no stored changed-file or
+line-size measurements: `ChangedFiles` remains nil, additions/deletions remain
+zero with `SizeObserved=false`, and a synced row reports `ApprovalCount` as
+`ApprovedReviewerCount`. GitLab `locked` maps to `closed`.
+
+`Task.PullRequestsPartial` is presence-aware: false means every provider source
+was read, true means at least one source was missing or failed, and nil means
+an older Host did not report completeness. A failed source does not fail the
+task read or discard the successful provider's rows.
+
+
+### Change-request feedback
+
+`pluginsdk.HostExactQueries(host)` exposes `ListChangeRequestFeedback`. Declare
+`api_read: change_requests` and obtain the separate workspace approval for
+`host.v2.read:change_requests`. Capability discovery reports support and
+authorization for `ListChangeRequestFeedbackExact`.
+
+Query with `RequestID`, `WorkspaceID`, `TaskIDs`, and `Page`. At most 20 tasks
+are accepted. An empty task filter selects the approved workspace's tasks,
+subject to the same limit. Each task result contains its provider statuses and
+selected review/comment items together; opaque snapshot cursors preserve that
+result while paging.
+
+- Each provider reports `available`, `unavailable`, or `unsupported`, a coded
+  error when unavailable, and its own `ItemsOmitted`. A successful source with
+  no linked requests is available with no items. A linked request with no
+  feedback adapter is unsupported. One provider's failure discards only that
+  provider's items, not the other provider's results.
+- Bodies have Kandev system blocks removed, are capped at 4096 UTF-8 bytes on
+  a rune boundary, and carry `BodyTruncated`. The read keeps the 50 newest
+  items across providers per task and applies a 7 MiB JSON-encoded snapshot
+  budget, including JSON escaping. Older items are dropped first.
+- Returned items use ascending `(CreatedAt, Provider, RepositoryID, Number,
+  Kind, ItemID)` order. Omissions caused by either limit remain attributable
+  to the item's provider.
+- GitHub reviews identify bots only through the `[bot]` login suffix;
+  otherwise reviewer kind is unknown. Comments use the provider's bot flag.
+  GitHub resolution is absent. Missing update times use creation times.
+- GitLab approvals represent current active reviewer approvals, not event
+  history. Their ID is `approval:<numeric-user-id>`, stable across username
+  changes and reapproval by the same user. They have kind `review`, state
+  `APPROVED`, unknown author kind, and an empty body. Timestamps retain the
+  provider reader's supplied semantics. Discussion notes report resolution
+  only when the discussion is resolvable.
+
+Feedback is fetched live on each first page under the existing provider
+credentials. GitLab reads use the approved workspace's connection and verify
+the linked host; the ambient global connection is not used.
 
 ### Build an independent coordination policy
 
@@ -2033,12 +2156,17 @@ numeric release value; prerelease minimums are not accepted.
 
 `host.Messages().List(ctx, MessageFilter{...}, Page{...})` reads historical
 conversation content (capability `api_read:messages`). Filter by `SessionIDs`,
-`TaskIDs`, a `Since`/`Until` `created_at` window (RFC3339; `Since` inclusive,
-`Until` exclusive, the natural way to fetch "yesterday"), and message
-`Types`. Each `Message` carries `id`, `session_id`, `task_id`, `turn_id`,
-`author_type` (`user` or `agent`), `content`, `type`, and `created_at`.
-`content` has kandev's injected `<kandev-system>` blocks stripped; a plugin
-never sees raw system prompts.
+`TaskIDs`, `AuthorTypes` (`user` or `agent`), a `Since`/`Until` `created_at`
+window (RFC3339; `Since` inclusive, `Until` exclusive, the natural way to fetch
+"yesterday"), and message `Types`. Each `Message` carries `id`, `session_id`,
+`task_id`, `turn_id`, `author_type`, `origin`, `content`, `type`, and
+`created_at`. `Origin` is one of `human`, `peer_task`, `plugin`, `automation`,
+`workflow`, or `agent`. It is classified from stored provenance markers; raw
+metadata is never exposed. A workflow marker takes precedence over the generic
+auto-start marker. `content` has kandev's injected `<kandev-system>` blocks
+stripped; a plugin never sees raw system prompts.
+The combined `SessionIDs`, `TaskIDs`, `Types`, and `AuthorTypes` lists are capped
+at 400 values per request.
 
 ### Pending agent interactions
 

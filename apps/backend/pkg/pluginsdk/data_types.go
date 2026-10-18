@@ -119,6 +119,9 @@ type Task struct {
 	// is not derivable from any other field on Task: CheckoutBranch is the BASE
 	// branch, and a PR title is rewritten to conventional-commit form.
 	PullRequests []TaskPullRequest
+	// PullRequestsPartial is nil on older Hosts, false when every provider
+	// source was read, and true if any provider source is unavailable.
+	PullRequestsPartial *bool
 	// WorkflowStepID is where on the board the task stands. State says how it is
 	// going; this says where it is.
 	WorkflowStepID         string
@@ -189,6 +192,11 @@ type TaskPullRequest struct {
 	Additions               int32
 	Deletions               int32
 	AuthorLogin             string
+	CreatedAt               string
+	ChangedFiles            *int32
+	ApprovedReviewerCount   *int32
+	// SizeObserved is true only for a synced GitHub request.
+	SizeObserved bool
 }
 
 func (r TaskPullRequest) toProto() *pluginv1.TaskPullRequest {
@@ -200,6 +208,8 @@ func (r TaskPullRequest) toProto() *pluginv1.TaskPullRequest {
 		MergeableState: r.MergeableState, UnresolvedReviewThreads: r.UnresolvedReviewThreads,
 		ChecksTotal: r.ChecksTotal, ChecksPassing: r.ChecksPassing,
 		Additions: r.Additions, Deletions: r.Deletions, AuthorLogin: r.AuthorLogin,
+		CreatedAt: r.CreatedAt, ChangedFiles: r.ChangedFiles,
+		ApprovedReviewerCount: r.ApprovedReviewerCount, SizeObserved: r.SizeObserved,
 	}
 }
 
@@ -215,6 +225,8 @@ func taskPullRequestFromProto(p *pluginv1.TaskPullRequest) TaskPullRequest {
 		MergeableState: p.GetMergeableState(), UnresolvedReviewThreads: p.GetUnresolvedReviewThreads(),
 		ChecksTotal: p.GetChecksTotal(), ChecksPassing: p.GetChecksPassing(),
 		Additions: p.GetAdditions(), Deletions: p.GetDeletions(), AuthorLogin: p.GetAuthorLogin(),
+		CreatedAt: p.GetCreatedAt(), ChangedFiles: p.ChangedFiles,
+		ApprovedReviewerCount: p.ApprovedReviewerCount, SizeObserved: p.GetSizeObserved(),
 	}
 }
 
@@ -289,6 +301,7 @@ func (t Task) toProto() (*pluginv1.Task, error) {
 
 		ArchivedAt:             t.ArchivedAt,
 		PullRequests:           taskPullRequestsToProto(t.PullRequests),
+		PullRequestsPartial:    t.PullRequestsPartial,
 		WorkflowStepId:         t.WorkflowStepID,
 		Position:               t.Position,
 		AssigneeAgentProfileId: t.AssigneeAgentProfileID,
@@ -369,6 +382,7 @@ func taskFromProto(p *pluginv1.Task) (Task, error) {
 
 		ArchivedAt:             p.ArchivedAt,
 		PullRequests:           taskPullRequestsFromProto(p.GetPullRequests()),
+		PullRequestsPartial:    p.PullRequestsPartial,
 		WorkflowStepID:         p.GetWorkflowStepId(),
 		Position:               p.GetPosition(),
 		AssigneeAgentProfileID: p.GetAssigneeAgentProfileId(),
@@ -959,6 +973,11 @@ type SessionCodeStats struct {
 	LinesAddedPeakPending   int64
 	LinesDeletedPeakPending int64
 	CommittedLinesAvailable bool
+	// FilesChangedCommitted sums per-commit file counts. Nil means unavailable.
+	FilesChangedCommitted *int64
+	// FilesChangedPeakPending is the maximum distinct paths in a single snapshot.
+	// Nil means an older Host did not report this field.
+	FilesChangedPeakPending *int64
 }
 
 func (s SessionCodeStats) toProto() *pluginv1.SessionCodeStats {
@@ -969,6 +988,8 @@ func (s SessionCodeStats) toProto() *pluginv1.SessionCodeStats {
 		LinesAddedPeakPending:   s.LinesAddedPeakPending,
 		LinesDeletedPeakPending: s.LinesDeletedPeakPending,
 		CommittedLinesAvailable: s.CommittedLinesAvailable,
+		FilesChangedCommitted:   s.FilesChangedCommitted,
+		FilesChangedPeakPending: s.FilesChangedPeakPending,
 	}
 }
 
@@ -983,6 +1004,8 @@ func sessionCodeStatsFromProto(p *pluginv1.SessionCodeStats) SessionCodeStats {
 		LinesAddedPeakPending:   p.GetLinesAddedPeakPending(),
 		LinesDeletedPeakPending: p.GetLinesDeletedPeakPending(),
 		CommittedLinesAvailable: p.GetCommittedLinesAvailable(),
+		FilesChangedCommitted:   p.FilesChangedCommitted,
+		FilesChangedPeakPending: p.FilesChangedPeakPending,
 	}
 }
 
@@ -1008,6 +1031,125 @@ func sessionCodeStatsSliceToProto(items []SessionCodeStats) []*pluginv1.SessionC
 	return out
 }
 
+// SessionActivityFilter selects activity and turn rows by session and task.
+type SessionActivityFilter struct {
+	SessionIDs []string
+	TaskIDs    []string
+}
+
+func (f SessionActivityFilter) toProto() *pluginv1.SessionActivityFilter {
+	return &pluginv1.SessionActivityFilter{SessionIds: f.SessionIDs, TaskIds: f.TaskIDs}
+}
+
+func sessionActivityFilterFromProto(p *pluginv1.SessionActivityFilter) SessionActivityFilter {
+	if p == nil {
+		return SessionActivityFilter{}
+	}
+	return SessionActivityFilter{SessionIDs: p.GetSessionIds(), TaskIDs: p.GetTaskIds()}
+}
+
+// SessionUserActivity is a measured person-time summary for one session.
+// An unmeasured row has zero totals; ActivityMeasured distinguishes it from
+// a measured zero-activity session. Activity timestamps are empty without intervals.
+type SessionUserActivity struct {
+	SessionID        string
+	TaskID           string
+	ActiveMS         int64
+	IntervalCount    int64
+	FirstActivityAt  string
+	LastActivityAt   string
+	ActivityMeasured bool
+}
+
+func (a SessionUserActivity) toProto() *pluginv1.SessionUserActivity {
+	return &pluginv1.SessionUserActivity{
+		SessionId: a.SessionID, TaskId: a.TaskID, ActiveMs: a.ActiveMS,
+		IntervalCount: a.IntervalCount, FirstActivityAt: a.FirstActivityAt,
+		LastActivityAt: a.LastActivityAt, ActivityMeasured: a.ActivityMeasured,
+	}
+}
+
+func sessionUserActivityFromProto(p *pluginv1.SessionUserActivity) SessionUserActivity {
+	if p == nil {
+		return SessionUserActivity{}
+	}
+	return SessionUserActivity{
+		SessionID: p.GetSessionId(), TaskID: p.GetTaskId(), ActiveMS: p.GetActiveMs(),
+		IntervalCount: p.GetIntervalCount(), FirstActivityAt: p.GetFirstActivityAt(),
+		LastActivityAt: p.GetLastActivityAt(), ActivityMeasured: p.GetActivityMeasured(),
+	}
+}
+
+func sessionUserActivitySliceFromProto(items []*pluginv1.SessionUserActivity) []SessionUserActivity {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]SessionUserActivity, len(items))
+	for i, item := range items {
+		out[i] = sessionUserActivityFromProto(item)
+	}
+	return out
+}
+
+func sessionUserActivitySliceToProto(items []SessionUserActivity) []*pluginv1.SessionUserActivity {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]*pluginv1.SessionUserActivity, len(items))
+	for i := range items {
+		out[i] = items[i].toProto()
+	}
+	return out
+}
+
+// SessionTurn contains only stable turn identity and lifecycle timestamps.
+type SessionTurn struct {
+	ID          string
+	SessionID   string
+	TaskID      string
+	StartedAt   string
+	CompletedAt *string
+}
+
+func (turn SessionTurn) toProto() *pluginv1.SessionTurn {
+	return &pluginv1.SessionTurn{
+		Id: turn.ID, SessionId: turn.SessionID, TaskId: turn.TaskID,
+		StartedAt: turn.StartedAt, CompletedAt: turn.CompletedAt,
+	}
+}
+
+func sessionTurnFromProto(p *pluginv1.SessionTurn) SessionTurn {
+	if p == nil {
+		return SessionTurn{}
+	}
+	return SessionTurn{
+		ID: p.GetId(), SessionID: p.GetSessionId(), TaskID: p.GetTaskId(),
+		StartedAt: p.GetStartedAt(), CompletedAt: p.CompletedAt,
+	}
+}
+
+func sessionTurnSliceFromProto(items []*pluginv1.SessionTurn) []SessionTurn {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]SessionTurn, len(items))
+	for i, item := range items {
+		out[i] = sessionTurnFromProto(item)
+	}
+	return out
+}
+
+func sessionTurnSliceToProto(items []SessionTurn) []*pluginv1.SessionTurn {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]*pluginv1.SessionTurn, len(items))
+	for i := range items {
+		out[i] = items[i].toProto()
+	}
+	return out
+}
+
 // Message is the Go-native mirror of kandev.plugin.v1.Message — one
 // user/agent message in a session transcript. Content has kandev's injected
 // <kandev-system> blocks stripped; raw system content is never exposed.
@@ -1020,6 +1162,7 @@ type Message struct {
 	Content    string
 	Type       string // "message" default; see the MessageType vocabulary
 	CreatedAt  string // RFC3339
+	Origin     string // human | peer_task | plugin | automation | workflow | agent
 }
 
 func (m Message) toProto() *pluginv1.Message {
@@ -1032,6 +1175,7 @@ func (m Message) toProto() *pluginv1.Message {
 		Content:    m.Content,
 		Type:       m.Type,
 		CreatedAt:  m.CreatedAt,
+		Origin:     m.Origin,
 	}
 }
 
@@ -1048,6 +1192,7 @@ func messageFromProto(p *pluginv1.Message) Message {
 		Content:    p.GetContent(),
 		Type:       p.GetType(),
 		CreatedAt:  p.GetCreatedAt(),
+		Origin:     p.GetOrigin(),
 	}
 }
 
@@ -1074,23 +1219,26 @@ func messagesToProto(items []Message) []*pluginv1.Message {
 }
 
 // MessageFilter is the Go-native mirror of kandev.plugin.v1.MessageFilter.
-// Since/Until are RFC3339 strings bounding created_at (Since inclusive, Until
-// exclusive); nil means unbounded on that end.
+// Since/Until are RFC3339 strings bounding created_at (Since inclusive,
+// Until exclusive); nil means unbounded on that end. Empty AuthorTypes means
+// all authors.
 type MessageFilter struct {
-	SessionIDs []string
-	TaskIDs    []string
-	Since      *string
-	Until      *string
-	Types      []string
+	SessionIDs  []string
+	TaskIDs     []string
+	Since       *string
+	Until       *string
+	Types       []string
+	AuthorTypes []string
 }
 
 func (f MessageFilter) toProto() *pluginv1.MessageFilter {
 	return &pluginv1.MessageFilter{
-		SessionIds: f.SessionIDs,
-		TaskIds:    f.TaskIDs,
-		Since:      f.Since,
-		Until:      f.Until,
-		Types:      f.Types,
+		SessionIds:  f.SessionIDs,
+		TaskIds:     f.TaskIDs,
+		Since:       f.Since,
+		Until:       f.Until,
+		Types:       f.Types,
+		AuthorTypes: f.AuthorTypes,
 	}
 }
 
@@ -1099,11 +1247,12 @@ func messageFilterFromProto(p *pluginv1.MessageFilter) MessageFilter {
 		return MessageFilter{}
 	}
 	return MessageFilter{
-		SessionIDs: p.GetSessionIds(),
-		TaskIDs:    p.GetTaskIds(),
-		Since:      p.Since,
-		Until:      p.Until,
-		Types:      p.GetTypes(),
+		SessionIDs:  p.GetSessionIds(),
+		TaskIDs:     p.GetTaskIds(),
+		Since:       p.Since,
+		Until:       p.Until,
+		Types:       p.GetTypes(),
+		AuthorTypes: p.GetAuthorTypes(),
 	}
 }
 

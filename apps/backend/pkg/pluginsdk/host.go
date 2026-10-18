@@ -157,16 +157,20 @@ type TaskReader interface {
 	Move(ctx context.Context, in MoveTaskInput) (*MoveTaskOutcome, error)
 }
 
-// SessionReader is the read-only accessor behind Host.Sessions(), mirroring
-// the Host data API's ListSessions/ListSessionCodeStats RPCs.
+// SessionReader provides the sessions resource and separately gated activity
+// and turn reads.
 type SessionReader interface {
-	// List returns sessions matching filter.
+	// List returns sessions matching filter. Requires api_read:sessions.
 	List(ctx context.Context, filter SessionFilter, page Page) ([]Session, *PageInfo, error)
 
-	// CodeStats returns computed per-session code-change stats matching
-	// filter. SessionCodeStats is a stable, computed shape — never raw
-	// commit/snapshot rows.
+	// CodeStats returns computed per-session code-change stats. Requires api_read:sessions.
 	CodeStats(ctx context.Context, filter SessionFilter, page Page) ([]SessionCodeStats, *PageInfo, error)
+
+	// UserActivity returns measured person-time summaries. Requires api_read:session_activity.
+	UserActivity(ctx context.Context, filter SessionActivityFilter, page Page) ([]SessionUserActivity, *PageInfo, error)
+
+	// Turns returns turn identities and lifecycle times without turn metadata. Requires api_read:session_activity.
+	Turns(ctx context.Context, filter SessionActivityFilter, page Page) ([]SessionTurn, *PageInfo, error)
 }
 
 // WorkspaceReader is the read-only accessor behind Host.Workspaces(),
@@ -588,6 +592,22 @@ func (r grpcSessionReader) CodeStats(ctx context.Context, filter SessionFilter, 
 		return nil, nil, err
 	}
 	return sessionCodeStatsSliceFromProto(resp.GetStats()), pageInfoFromProto(resp.GetPageInfo()), nil
+}
+
+func (r grpcSessionReader) UserActivity(ctx context.Context, filter SessionActivityFilter, page Page) ([]SessionUserActivity, *PageInfo, error) {
+	resp, err := r.client.ListSessionUserActivity(ctx, &pluginv1.ListSessionUserActivityRequest{Filter: filter.toProto(), Page: page.toProto()})
+	if err != nil {
+		return nil, nil, err
+	}
+	return sessionUserActivitySliceFromProto(resp.GetActivity()), pageInfoFromProto(resp.GetPageInfo()), nil
+}
+
+func (r grpcSessionReader) Turns(ctx context.Context, filter SessionActivityFilter, page Page) ([]SessionTurn, *PageInfo, error) {
+	resp, err := r.client.ListSessionTurns(ctx, &pluginv1.ListSessionTurnsRequest{Filter: filter.toProto(), Page: page.toProto()})
+	if err != nil {
+		return nil, nil, err
+	}
+	return sessionTurnSliceFromProto(resp.GetTurns()), pageInfoFromProto(resp.GetPageInfo()), nil
 }
 
 // grpcWorkspaceReader implements WorkspaceReader on the plugin side.
@@ -1714,6 +1734,26 @@ func (s *grpcHostServer) ListSessionCodeStats(ctx context.Context, req *pluginv1
 	return &pluginv1.ListSessionCodeStatsResponse{Stats: sessionCodeStatsSliceToProto(stats), PageInfo: pageInfo.toProto()}, nil
 }
 
+func (s *grpcHostServer) ListSessionUserActivity(ctx context.Context, req *pluginv1.ListSessionUserActivityRequest) (*pluginv1.ListSessionUserActivityResponse, error) {
+	items, pageInfo, err := s.impl.Sessions().UserActivity(ctx, sessionActivityFilterFromProto(req.GetFilter()), pageFromProto(req.GetPage()))
+	if err != nil {
+		return nil, err
+	}
+	return &pluginv1.ListSessionUserActivityResponse{
+		Activity: sessionUserActivitySliceToProto(items), PageInfo: pageInfo.toProto(),
+	}, nil
+}
+
+func (s *grpcHostServer) ListSessionTurns(ctx context.Context, req *pluginv1.ListSessionTurnsRequest) (*pluginv1.ListSessionTurnsResponse, error) {
+	items, pageInfo, err := s.impl.Sessions().Turns(ctx, sessionActivityFilterFromProto(req.GetFilter()), pageFromProto(req.GetPage()))
+	if err != nil {
+		return nil, err
+	}
+	return &pluginv1.ListSessionTurnsResponse{
+		Turns: sessionTurnSliceToProto(items), PageInfo: pageInfo.toProto(),
+	}, nil
+}
+
 func (s *grpcHostServer) ListMessages(ctx context.Context, req *pluginv1.ListMessagesRequest) (*pluginv1.ListMessagesResponse, error) {
 	filter := messageFilterFromProto(req.GetFilter())
 	page := pageFromProto(req.GetPage())
@@ -1968,6 +2008,14 @@ func (unimplementedSessionReader) List(context.Context, SessionFilter, Page) ([]
 
 func (unimplementedSessionReader) CodeStats(context.Context, SessionFilter, Page) ([]SessionCodeStats, *PageInfo, error) {
 	return nil, nil, errUnimplementedHostData("sessions")
+}
+
+func (unimplementedSessionReader) UserActivity(context.Context, SessionActivityFilter, Page) ([]SessionUserActivity, *PageInfo, error) {
+	return nil, nil, errUnimplementedHostData("session_activity")
+}
+
+func (unimplementedSessionReader) Turns(context.Context, SessionActivityFilter, Page) ([]SessionTurn, *PageInfo, error) {
+	return nil, nil, errUnimplementedHostData("session_activity")
 }
 
 type unimplementedWorkspaceReader struct{}

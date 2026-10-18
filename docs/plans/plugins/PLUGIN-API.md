@@ -2008,6 +2008,46 @@ defaults, or the bare component when the route opted out (`topbar: false`).
   `UserEventBroadcaster` (user-scoped fan-out, same path as
   `user.settings.updated`).
 
+## Effort signals through the plugin backend
+
+There is no new browser data capability or core UI slot. Use authenticated
+plugin actions to project Go Host reads into `registerRoute`,
+`registerTaskPanel` (with `mobileEnabled`), and `task-card-indicators`.
+Compose existing `host.ui.Card`, `Badge`, `ChartContainer`, and `Empty`
+primitives; phone content stacks under one scroll owner.
+
+The public [effort signal RPC/resource table](../../public/plugins-authoring.md#effort-signal-reads)
+owns the complete mapping: `ListSessionUserActivity`/`Sessions().UserActivity`
+and `ListSessionTurns`/`Sessions().Turns` require `session_activity`;
+`ListMessages` and `ListSanitizedMessagesExact` add `Origin` and `AuthorTypes`
+under `messages`; `ListSessionCodeStats` adds optional file counts under
+`sessions`; task RPCs add provider-qualified PR/MR summaries under `tasks`;
+`ListChangeRequestFeedbackExact` reads bounded live reviews/comments under
+`change_requests`; and `ListTaskUsageExact` reads `usage`.
+Exact reads also require their matching workspace grant.
+
+Declaring `session_activity` requires `min_kandev_version: "0.97.0"` or later.
+Activity/turn filters accept 400 combined session/task IDs. Message filters
+accept 400 combined session/task/type/author values. Feedback accepts 20 tasks,
+50 newest combined-provider items per task, 4096-byte rune-safe sanitized
+bodies, and a 7 MiB JSON-encoded snapshot. Feedback provider states are
+`available`, `unavailable` (coded error), and `unsupported`; failures do not
+erase another provider's successful items. Opaque cursors preserve snapshot
+or keyset semantics; do not construct them in the bundle.
+
+`PullRequestsPartial=true` means partial; false means all sources were read;
+absence means an older Host did not report completeness. Never coerce absence
+to false. Optional file/reviewer counts similarly distinguish absent from zero.
+Activity distinguishes measured zero from `ActivityMeasured=false`; empty
+message origins signal an older Host, not a human prompt. Unsupported new
+RPCs return `Unimplemented`, while missing declarations/approvals return
+`PermissionDenied`.
+
+The single packaged fixture adds `summary` (fresh Host reads) and `estimate`
+(derived plugin state), a route, mobile task panel, and card badge. It is test
+support, not a starter or the real estimator. Its headless E2E uses explicit
+visibility/focus emulation; this proves the reporter's gating logic under emulated visibility/focus, not native background throttling in a real browser window.
+
 ## Security posture (documented, enforced where cheap)
 
 Backend exact commands use the optional Go `pluginsdk.ExactHost` extension. The

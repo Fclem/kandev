@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -29,17 +30,20 @@ import (
 	"github.com/kandev/kandev/internal/task/repository/repoerrors"
 
 	githubsvc "github.com/kandev/kandev/internal/github"
+	"github.com/kandev/kandev/internal/gitlab"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
 	taskservice "github.com/kandev/kandev/internal/task/service"
 	wfmodels "github.com/kandev/kandev/internal/workflow/models"
 	"github.com/kandev/kandev/pkg/pluginsdk"
 )
 
-// Resource names gating the Host data API's read RPCs, per ADR 0043: each
-// accessor requires "api_read:<resource>" in the plugin's manifest.
+// Resource names gating the Host data API's read methods, per ADR 0043. Each
+// method checks its api_read resource; session activity reads are independent
+// from the existing sessions resource.
 const (
 	resourceTasks            = "tasks"
 	resourceSessions         = "sessions"
+	resourceSessionActivity  = "session_activity"
 	resourceWorkspaces       = "workspaces"
 	resourceWorkflows        = "workflows"
 	resourceAgentProfiles    = "agent_profiles"
@@ -75,6 +79,8 @@ const (
 // parameters comfortably under SQLite's SQLITE_MAX_VARIABLE_NUMBER (999 on
 // older builds) with headroom for the since/until/limit/offset params.
 const maxMessageFilterValues = 400
+
+const maxSessionActivityFilterValues = 400
 
 // normalizePageLimit clamps limit to [1, maxPageLimit], defaulting to
 // defaultPageLimit when unset or invalid.
@@ -175,16 +181,25 @@ type agentProfileDataSource interface {
 // github_task_prs, owned by internal/github, not on the task row — so the link
 // is not derivable from anything taskDataSource returns. It is wired separately
 // (SetTaskPRSource) because GitHub is optional and may be available after a
-// host is created; a nil source simply yields tasks with no PullRequests rather
-// than failing the read.
+// host is created; an unavailable source makes PullRequestsPartial true.
 type taskPRSource interface {
 	ListTaskPRsByTaskIDs(ctx context.Context, taskIDs []string) (map[string][]*githubsvc.TaskPR, error)
+}
+
+type taskMRSource interface {
+	ListTaskMRsByTaskIDs(ctx context.Context, taskIDs []string) (map[string][]*gitlab.TaskMR, error)
 }
 
 // sessionCodeStatsSource is the narrow slice of
 // internal/analytics/service.Service the Sessions().CodeStats RPC needs.
 type sessionCodeStatsSource interface {
 	ListSessionCodeStats(ctx context.Context, filter analyticsmodels.SessionCodeStatsFilter) ([]*analyticsmodels.SessionCodeStats, error)
+}
+
+type sessionActivitySource interface {
+	ListUserActivitySessions(ctx context.Context, filter taskmodels.SessionActivityFilter, cursor string, limit int) (taskmodels.SessionActivitySessionsPage, error)
+	SumUserActivity(ctx context.Context, sessionIDs []string) ([]taskmodels.UserActivitySummary, error)
+	ListSessionTurns(ctx context.Context, filter taskmodels.SessionActivityFilter, cursor string, limit int) (taskmodels.SessionActivityTurnsPage, error)
 }
 
 // messageDataSource is the narrow slice of internal/task/service.Service the
@@ -209,14 +224,10 @@ type pendingTaskTransitionSource interface {
 
 // ── pluginHost accessors ────────────────────────────────────────────────
 //
-// These shadow the Unimplemented* defaults embedded via
-// pluginsdk.UnimplementedHostData: each checks the resource's api_read
-// capability once, then hands back either the real, service-backed reader or
-// a denied stub whose methods all return PermissionDenied. If the capability
-// is granted but the corresponding data source was never wired (e.g.
-// Service.SetDataSources not called — some tests build a bare pluginHost),
-// this falls back to the embedded Unimplemented reader rather than a nil
-// pointer dereference.
+// Most accessors check the resource's api_read capability once, then return
+// either the service-backed reader or a denied stub. Sessions() is method-
+// gated because session activity reads use a separate resource. Missing data
+// sources fall back to the embedded Unimplemented reader.
 
 // Tasks returns the task accessor. Unlike the read-only accessors below, it
 // mixes read (List/Get, api_read:tasks) and write (Create/Update,
@@ -228,12 +239,6 @@ func (h *pluginHost) Tasks() pluginsdk.TaskReader {
 }
 
 func (h *pluginHost) Sessions() pluginsdk.SessionReader {
-	if !h.capabilities.CanRead(resourceSessions) {
-		return deniedSessionReader{}
-	}
-	if h.taskData == nil || h.sessionCodeStats == nil {
-		return h.UnimplementedHostData.Sessions()
-	}
 	return sessionReader{host: h}
 }
 
@@ -296,16 +301,6 @@ func (h *pluginHost) Messages() pluginsdk.MessageReader {
 }
 
 // ── Denied readers ──────────────────────────────────────────────────────
-
-type deniedSessionReader struct{}
-
-func (deniedSessionReader) List(context.Context, pluginsdk.SessionFilter, pluginsdk.Page) ([]pluginsdk.Session, *pluginsdk.PageInfo, error) {
-	return nil, nil, permissionDenied(apiReadCapability(resourceSessions))
-}
-
-func (deniedSessionReader) CodeStats(context.Context, pluginsdk.SessionFilter, pluginsdk.Page) ([]pluginsdk.SessionCodeStats, *pluginsdk.PageInfo, error) {
-	return nil, nil, permissionDenied(apiReadCapability(resourceSessions))
-}
 
 type deniedWorkspaceReader struct{}
 
@@ -401,33 +396,73 @@ func (r taskReader) List(ctx context.Context, filter pluginsdk.TaskFilter, page 
 	return items, info, nil
 }
 
-// attachPullRequests fills Task.PullRequests in place. A missing source or a
-// failed lookup leaves them empty and logs nothing: pull requests are
-// supplementary to a task read, and refusing the whole list over them would
-// take away more than it protects.
+// attachPullRequests preserves successful provider data when another source
+// is unavailable. Every new Host reports explicit provider completeness.
 func (h *pluginHost) attachPullRequests(ctx context.Context, tasks []pluginsdk.Task) {
-	source := h.taskPRs
+	if len(tasks) == 0 {
+		return
+	}
+	ids := make([]string, len(tasks))
+	for i := range tasks {
+		ids[i] = tasks[i].ID
+	}
+	githubSource := h.taskPRs
 	if h.taskPRsDep != nil {
-		source = h.taskPRsDep()
+		githubSource = h.taskPRsDep()
 	}
-	if source == nil || len(tasks) == 0 {
-		return
+	gitlabSource := h.taskMRs
+	if h.taskMRsDep != nil {
+		gitlabSource = h.taskMRsDep()
 	}
-	ids := make([]string, 0, len(tasks))
-	for i := range tasks {
-		ids = append(ids, tasks[i].ID)
-	}
-	byTask, err := source.ListTaskPRsByTaskIDs(ctx, ids)
-	if err != nil {
-		return
-	}
-	for i := range tasks {
-		prs := byTask[tasks[i].ID]
-		if len(prs) == 0 {
-			continue
+	var prs map[string][]*githubsvc.TaskPR
+	var mrs map[string][]*gitlab.TaskMR
+	partial := githubSource == nil || gitlabSource == nil
+	if githubSource != nil {
+		var err error
+		prs, err = githubSource.ListTaskPRsByTaskIDs(ctx, ids)
+		if err != nil {
+			partial = true
+			prs = nil
 		}
-		tasks[i].PullRequests = taskPRsToDTOs(prs)
 	}
+	if gitlabSource != nil {
+		var err error
+		mrs, err = gitlabSource.ListTaskMRsByTaskIDs(ctx, ids)
+		if err != nil {
+			partial = true
+			mrs = nil
+		}
+	}
+	for i := range tasks {
+		tasks[i].PullRequests = mergeTaskPullRequests(prs[tasks[i].ID], mrs[tasks[i].ID])
+		tasks[i].PullRequestsPartial = &partial
+	}
+}
+
+func mergeTaskPullRequests(prs []*githubsvc.TaskPR, mrs []*gitlab.TaskMR) []pluginsdk.TaskPullRequest {
+	type summary struct {
+		createdAt time.Time
+		dto       pluginsdk.TaskPullRequest
+	}
+	rows := make([]summary, 0, len(prs)+len(mrs))
+	for _, pr := range prs {
+		if pr != nil {
+			rows = append(rows, summary{createdAt: pr.CreatedAt, dto: taskPRToDTO(pr)})
+		}
+	}
+	for _, mr := range mrs {
+		if mr != nil {
+			rows = append(rows, summary{createdAt: mr.CreatedAt, dto: taskMRToDTO(mr)})
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].createdAt.After(rows[j].createdAt)
+	})
+	out := make([]pluginsdk.TaskPullRequest, len(rows))
+	for i := range rows {
+		out[i] = rows[i].dto
+	}
+	return out
 }
 
 // fetchTask resolves id to both wire and raw model forms without attaching
@@ -493,6 +528,12 @@ type sessionReader struct{ host *pluginHost }
 // returned page) would turn that into an O(N) fan-out of DB queries per read
 // instead of O(limit).
 func (r sessionReader) List(ctx context.Context, filter pluginsdk.SessionFilter, page pluginsdk.Page) ([]pluginsdk.Session, *pluginsdk.PageInfo, error) {
+	if !r.host.capabilities.CanRead(resourceSessions) {
+		return nil, nil, permissionDenied(apiReadCapability(resourceSessions))
+	}
+	if r.host.taskData == nil {
+		return r.host.UnimplementedHostData.Sessions().List(ctx, filter, page)
+	}
 	sessions, err := r.host.fetchSessionsForFilter(ctx, filter)
 	if err != nil {
 		return nil, nil, err
@@ -508,40 +549,121 @@ func (r sessionReader) List(ctx context.Context, filter pluginsdk.SessionFilter,
 	return dtos, info, nil
 }
 
-// CodeStats delegates straight to the analytics service, which already
-// paginates via SQL Limit/Offset (per ADR 0043(b), computed on demand — no
-// in-memory fetch-everything like the other readers). It asks for one extra
-// row past the requested limit to derive HasMore without a second count
-// query; NextCursor is offset+limit exactly like the in-memory paginate
-// helper, keeping cursor semantics uniform across every Host data reader.
 func (r sessionReader) CodeStats(ctx context.Context, filter pluginsdk.SessionFilter, page pluginsdk.Page) ([]pluginsdk.SessionCodeStats, *pluginsdk.PageInfo, error) {
+	if !r.host.capabilities.CanRead(resourceSessions) {
+		return nil, nil, permissionDenied(apiReadCapability(resourceSessions))
+	}
+	if r.host.sessionCodeStats == nil {
+		return r.host.UnimplementedHostData.Sessions().CodeStats(ctx, filter, page)
+	}
 	limit := normalizePageLimit(page.Limit)
 	offset := pageOffset(page.Cursor)
-
 	stats, err := r.host.sessionCodeStats.ListSessionCodeStats(ctx, analyticsmodels.SessionCodeStatsFilter{
-		TaskIDs:      filter.TaskIDs,
-		WorkspaceIDs: filter.WorkspaceIDs,
-		States:       filter.States,
-		Limit:        limit + 1,
-		Offset:       offset,
+		TaskIDs: filter.TaskIDs, WorkspaceIDs: filter.WorkspaceIDs, States: filter.States,
+		Limit: limit + 1, Offset: offset,
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-
 	hasMore := len(stats) > limit
 	if hasMore {
 		stats = stats[:limit]
 	}
 	dtos := make([]pluginsdk.SessionCodeStats, len(stats))
-	for i, s := range stats {
-		dtos[i] = sessionCodeStatsModelToDTO(s)
+	for i, stat := range stats {
+		dtos[i] = sessionCodeStatsModelToDTO(stat)
 	}
 	info := &pluginsdk.PageInfo{HasMore: hasMore}
 	if hasMore {
 		info.NextCursor = strconv.Itoa(offset + limit)
 	}
 	return dtos, info, nil
+}
+
+func (r sessionReader) UserActivity(ctx context.Context, filter pluginsdk.SessionActivityFilter, page pluginsdk.Page) ([]pluginsdk.SessionUserActivity, *pluginsdk.PageInfo, error) {
+	if !r.host.capabilities.CanRead(resourceSessionActivity) {
+		return nil, nil, permissionDenied(apiReadCapability(resourceSessionActivity))
+	}
+	if err := validateSessionActivityFilter(filter); err != nil {
+		return nil, nil, err
+	}
+	source, ok := r.host.taskData.(sessionActivitySource)
+	if !ok {
+		return r.host.UnimplementedHostData.Sessions().UserActivity(ctx, filter, page)
+	}
+	sessionFilter := taskmodels.SessionActivityFilter{SessionIDs: filter.SessionIDs, TaskIDs: filter.TaskIDs}
+	sessionPage, err := source.ListUserActivitySessions(ctx, sessionFilter, page.Cursor, normalizePageLimit(page.Limit))
+	if err != nil {
+		return nil, nil, err
+	}
+	sessionIDs := make([]string, len(sessionPage.Sessions))
+	for i := range sessionPage.Sessions {
+		sessionIDs[i] = sessionPage.Sessions[i].SessionID
+	}
+	summaries, err := source.SumUserActivity(ctx, sessionIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	bySession := make(map[string]taskmodels.UserActivitySummary, len(summaries))
+	for _, summary := range summaries {
+		bySession[summary.SessionID] = summary
+	}
+	items := make([]pluginsdk.SessionUserActivity, len(sessionPage.Sessions))
+	for i, session := range sessionPage.Sessions {
+		item := pluginsdk.SessionUserActivity{SessionID: session.SessionID, TaskID: session.TaskID}
+		if summary, found := bySession[session.SessionID]; found && summary.ActivityMeasured {
+			item.ActiveMS = summary.ActiveMS
+			item.IntervalCount = summary.IntervalCount
+			if !summary.FirstAt.IsZero() {
+				item.FirstActivityAt = summary.FirstAt.UTC().Format(time.RFC3339Nano)
+			}
+			if !summary.LastAt.IsZero() {
+				item.LastActivityAt = summary.LastAt.UTC().Format(time.RFC3339Nano)
+			}
+			item.ActivityMeasured = true
+		}
+		items[i] = item
+	}
+	return items, &pluginsdk.PageInfo{NextCursor: sessionPage.NextCursor, HasMore: sessionPage.HasMore}, nil
+}
+
+func (r sessionReader) Turns(ctx context.Context, filter pluginsdk.SessionActivityFilter, page pluginsdk.Page) ([]pluginsdk.SessionTurn, *pluginsdk.PageInfo, error) {
+	if !r.host.capabilities.CanRead(resourceSessionActivity) {
+		return nil, nil, permissionDenied(apiReadCapability(resourceSessionActivity))
+	}
+	if err := validateSessionActivityFilter(filter); err != nil {
+		return nil, nil, err
+	}
+	source, ok := r.host.taskData.(sessionActivitySource)
+	if !ok {
+		return r.host.UnimplementedHostData.Sessions().Turns(ctx, filter, page)
+	}
+	turnPage, err := source.ListSessionTurns(ctx, taskmodels.SessionActivityFilter{
+		SessionIDs: filter.SessionIDs, TaskIDs: filter.TaskIDs,
+	}, page.Cursor, normalizePageLimit(page.Limit))
+	if err != nil {
+		return nil, nil, err
+	}
+	items := make([]pluginsdk.SessionTurn, len(turnPage.Turns))
+	for i, turn := range turnPage.Turns {
+		item := pluginsdk.SessionTurn{
+			ID: turn.ID, SessionID: turn.SessionID, TaskID: turn.TaskID,
+			StartedAt: turn.StartedAt.UTC().Format(time.RFC3339Nano),
+		}
+		if turn.CompletedAt != nil {
+			completed := turn.CompletedAt.UTC().Format(time.RFC3339Nano)
+			item.CompletedAt = &completed
+		}
+		items[i] = item
+	}
+	return items, &pluginsdk.PageInfo{NextCursor: turnPage.NextCursor, HasMore: turnPage.HasMore}, nil
+}
+
+func validateSessionActivityFilter(filter pluginsdk.SessionActivityFilter) error {
+	if len(filter.SessionIDs)+len(filter.TaskIDs) > maxSessionActivityFilterValues {
+		return invalidArgument("session activity filter exceeds 400 values")
+	}
+	return nil
 }
 
 type workspaceReader struct{ host *pluginHost }
@@ -668,12 +790,10 @@ func (r messageReader) List(ctx context.Context, filter pluginsdk.MessageFilter,
 	if r.host.messageData == nil {
 		return r.host.UnimplementedHostData.Messages().List(ctx, filter, page)
 	}
-	// Each session/task/type value becomes its own SQL bind parameter; cap
-	// their combined count well under SQLite's host-parameter limit
-	// (~500-999) so a large filter fails fast with a clear InvalidArgument
-	// instead of a cryptic "too many SQL variables" at query execution.
-	if n := len(filter.SessionIDs) + len(filter.TaskIDs) + len(filter.Types); n > maxMessageFilterValues {
-		return nil, nil, invalidArgument(fmt.Sprintf("message filter has %d session/task/type values, max %d", n, maxMessageFilterValues))
+	// Each filter value becomes a SQL bind parameter; cap their combined count
+	// well under SQLite's host-parameter limit (~500-999).
+	if n := len(filter.SessionIDs) + len(filter.TaskIDs) + len(filter.Types) + len(filter.AuthorTypes); n > maxMessageFilterValues {
+		return nil, nil, invalidArgument(fmt.Sprintf("message filter has %d values, max %d", n, maxMessageFilterValues))
 	}
 	since, err := parseFilterTime(filter.Since, "since")
 	if err != nil {
@@ -687,13 +807,14 @@ func (r messageReader) List(ctx context.Context, filter pluginsdk.MessageFilter,
 	offset := pageOffset(page.Cursor)
 
 	messages, err := r.host.messageData.ListMessagesForPlugin(ctx, taskmodels.PluginMessageFilter{
-		SessionIDs: filter.SessionIDs,
-		TaskIDs:    filter.TaskIDs,
-		Types:      filter.Types,
-		Since:      since,
-		Until:      until,
-		Limit:      limit + 1,
-		Offset:     offset,
+		SessionIDs:  filter.SessionIDs,
+		TaskIDs:     filter.TaskIDs,
+		Types:       filter.Types,
+		AuthorTypes: filter.AuthorTypes,
+		Since:       since,
+		Until:       until,
+		Limit:       limit + 1,
+		Offset:      offset,
 	})
 	if err != nil {
 		return nil, nil, err

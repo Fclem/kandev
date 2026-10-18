@@ -134,6 +134,7 @@ service Host {
   rpc ListPendingTaskTransitionsExact(ListPendingTaskTransitionsExactRequest) returns (ListPendingTaskTransitionsExactResponse);
   rpc ListChangeRequestEvidenceExact(ListChangeRequestEvidenceExactRequest) returns (ListChangeRequestEvidenceExactResponse);
   rpc ListTaskUsageExact(ListTaskUsageExactRequest) returns (ListTaskUsageExactResponse);
+  rpc ListChangeRequestFeedbackExact(ListChangeRequestFeedbackExactRequest) returns (ListChangeRequestFeedbackExactResponse);
 
   rpc GetState(GetStateRequest) returns (GetStateResponse);
   rpc SetState(SetStateRequest) returns (SetStateResponse);
@@ -183,6 +184,9 @@ service Host {
   // not the raw commit/snapshot rows, whose JSON schema churns.
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
   rpc ListSessionCodeStats(ListSessionCodeStatsRequest) returns (ListSessionCodeStatsResponse);
+  // Activity and turn reads have their own api_read:session_activity grant.
+  rpc ListSessionUserActivity(ListSessionUserActivityRequest) returns (ListSessionUserActivityResponse);
+  rpc ListSessionTurns(ListSessionTurnsRequest) returns (ListSessionTurnsResponse);
 
   // Conversation content — capability api_read:messages. Historical
   // user/agent message content for a session or task, filterable by a time
@@ -1612,6 +1616,8 @@ message Task {
   // regardless of the underlying stored configuration.
   bool start_when_unblocked = 36;
   string resource_version = 37; // RFC3339Nano task row version for exact writes
+  // Absent on older Hosts; false for complete provider reads, true if any source is unavailable.
+  optional bool pull_requests_partial = 38;
 }
 message TaskRepository {
   string id = 1;
@@ -1646,6 +1652,10 @@ message TaskPullRequest {
   int32 deletions = 17;
   string author_login = 18;
   optional string closed_at = 19; // RFC3339
+  string created_at = 20; // RFC3339
+  optional int32 changed_files = 21; // Unset until synced; not stored for GitLab.
+  optional int32 approved_reviewer_count = 22; // Unset until synced.
+  bool size_observed = 23; // True only for synced GitHub rows.
 }
 // TaskDependencyRef is one edge end in a task's dependency projection: a
 // predecessor entry in depends_on, or a dependent entry in blocks.
@@ -2090,6 +2100,10 @@ message SessionCodeStats {
   // *int64 is a source-level break for anyone rebuilding against a new SDK,
   // even though the wire-level `optional` change itself is protobuf-safe.
   bool committed_lines_available = 6;
+  // Sum of per-commit file counts, not distinct paths. Unset when committed lines are unavailable.
+  optional int64 files_changed_committed = 7;
+  // Maximum distinct file count in a single snapshot, independent of peak line counts.
+  optional int64 files_changed_peak_pending = 8;
 }
 message ListSessionCodeStatsRequest {
   SessionFilter filter = 1;
@@ -2097,6 +2111,48 @@ message ListSessionCodeStatsRequest {
 }
 message ListSessionCodeStatsResponse {
   repeated SessionCodeStats stats = 1;
+  PageInfo page_info = 2;
+}
+
+// SessionActivityFilter bounds activity and turn reads by session and task ids.
+// An empty list does not constrain that dimension.
+message SessionActivityFilter {
+  repeated string session_ids = 1;
+  repeated string task_ids = 2;
+}
+// Aggregate user person-time; an unmeasured row has zero totals and a false
+// activity_measured value, distinct from a measured zero-activity session.
+message SessionUserActivity {
+  string session_id = 1;
+  string task_id = 2;
+  int64 active_ms = 3;
+  int64 interval_count = 4;
+  string first_activity_at = 5; // Empty when no intervals were recorded.
+  string last_activity_at = 6;  // Empty when no intervals were recorded.
+  bool activity_measured = 7;
+}
+message ListSessionUserActivityRequest {
+  SessionActivityFilter filter = 1;
+  Page page = 2;
+}
+message ListSessionUserActivityResponse {
+  repeated SessionUserActivity activity = 1;
+  PageInfo page_info = 2;
+}
+// Stable turn identity and lifecycle timestamps; turn metadata is not exposed.
+message SessionTurn {
+  string id = 1;
+  string session_id = 2;
+  string task_id = 3;
+  string started_at = 4;
+  optional string completed_at = 5;
+}
+message ListSessionTurnsRequest {
+  SessionActivityFilter filter = 1;
+  Page page = 2;
+}
+message ListSessionTurnsResponse {
+  repeated SessionTurn turns = 1;
   PageInfo page_info = 2;
 }
 
@@ -2115,6 +2171,7 @@ message Message {
   string content = 6;     // <kandev-system> blocks stripped
   string type = 7;        // "message" default; see MessageType
   string created_at = 8;  // RFC3339
+  string origin = 9;      // human | peer_task | plugin | automation | workflow | agent
 }
 message MessageFilter {
   repeated string session_ids = 1; // empty → not constrained by session
@@ -2122,6 +2179,7 @@ message MessageFilter {
   optional string since = 3;       // RFC3339 inclusive lower bound on created_at
   optional string until = 4;       // RFC3339 exclusive upper bound on created_at
   repeated string types = 5;       // empty → all message types
+  repeated string author_types = 6; // empty → all author types
 }
 message ListMessagesRequest {
   MessageFilter filter = 1;
@@ -2654,3 +2712,42 @@ message ListChangeRequestEvidenceExactRequest { string request_id = 1; string wo
 message ListChangeRequestEvidenceExactResponse { repeated ChangeRequestEvidence items = 1; ExactReadPageInfo page_info = 2; }
 message ListTaskUsageExactRequest { string request_id = 1; string workspace_id = 2; repeated string task_ids = 3; ExactReadPage page = 4; }
 message ListTaskUsageExactResponse { repeated TaskUsageObservation items = 1; ExactReadPageInfo page_info = 2; }
+
+message ChangeRequestFeedbackProviderResult {
+  string provider = 1;
+  string provider_state = 2;
+  optional string provider_error = 3;
+  int64 items_omitted = 4;
+}
+message ChangeRequestFeedbackItem {
+  string provider = 1;
+  string repository_id = 2;
+  string repository_owner = 3;
+  string repository_name = 4;
+  int64 number = 5;
+  string item_id = 6;
+  string kind = 7;
+  string author_login = 8;
+  string author_kind = 9;
+  string review_state = 10;
+  optional bool resolved = 11;
+  string created_at = 12;
+  string updated_at = 13;
+  string body = 14;
+  bool body_truncated = 15;
+}
+message ChangeRequestFeedbackTask {
+  string task_id = 1;
+  repeated ChangeRequestFeedbackProviderResult providers = 2;
+  repeated ChangeRequestFeedbackItem items = 3;
+}
+message ListChangeRequestFeedbackExactRequest {
+  string request_id = 1;
+  string workspace_id = 2;
+  repeated string task_ids = 3;
+  ExactReadPage page = 4;
+}
+message ListChangeRequestFeedbackExactResponse {
+  repeated ChangeRequestFeedbackTask items = 1;
+  ExactReadPageInfo page_info = 2;
+}

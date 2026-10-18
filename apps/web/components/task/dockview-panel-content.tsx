@@ -12,6 +12,7 @@ import { useEnvironmentSessionId } from "@/hooks/use-environment-session-id";
 import { useSessionGitRefresh } from "@/hooks/domains/session/use-session-git-refresh";
 import { useFileEditors } from "@/hooks/use-file-editors";
 import { usePanelActive } from "@/hooks/use-panel-active";
+import { useSessionUserActivity } from "@/hooks/domains/session/use-session-user-activity";
 import { t } from "@/lib/i18n";
 import { setPanelTitle } from "@/lib/layout/panel-portal-manager";
 import { useDockviewStore } from "@/lib/state/dockview-store";
@@ -84,6 +85,8 @@ function ChatContent({ panelId, params }: { panelId: string; params: Record<stri
     sessionId ? state.taskSessions.items[sessionId]?.is_passthrough === true : false,
   );
   useChatSessionTitle(panelId, sessionId);
+  const isFocused = usePanelActive(panelId, true);
+  useSessionUserActivity(sessionId ?? null, isFocused);
 
   if (isPassthrough) {
     return (

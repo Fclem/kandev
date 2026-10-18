@@ -454,6 +454,7 @@ type Repos struct {
 	Reviews                       repository.ReviewRepository
 	ResourceCleanups              repository.TaskResourceCleanupRepository
 	StatusSummaries               repository.TaskStatusSummaryRepository
+	UserActivity                  repository.UserActivityRepository
 	TaskActivity                  repository.TaskActivityRepository
 	SubagentContexts              repository.SubagentContextRepository
 	Usage                         repository.UsageRepository
@@ -493,6 +494,7 @@ type Service struct {
 	reviews                         repository.ReviewRepository
 	resourceCleanups                repository.TaskResourceCleanupRepository
 	statusSummaries                 repository.TaskStatusSummaryRepository
+	userActivity                    repository.UserActivityRepository
 	taskActivity                    repository.TaskActivityRepository
 	subagentContexts                repository.SubagentContextRepository
 	usage                           repository.UsageRepository
@@ -825,6 +827,7 @@ func NewService(repos Repos, eventBus bus.EventBus, log *logger.Logger, discover
 		reviews:                       repos.Reviews,
 		resourceCleanups:              repos.ResourceCleanups,
 		statusSummaries:               repos.StatusSummaries,
+		userActivity:                  repos.UserActivity,
 		taskActivity:                  repos.TaskActivity,
 		subagentContexts:              repos.SubagentContexts,
 		usage:                         repos.Usage,

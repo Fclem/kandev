@@ -17,12 +17,11 @@ import { panelPortalManager } from "@/lib/layout/panel-portal-manager";
  * its `panelId`, not the dockview api directly; `usePortalSlot`'s mount
  * effect acquires the portal entry (with its api) before any child content
  * renders, so the entry is virtually always present by the time this runs.
- * Subscribes to both the manager's own add/remove notifications (a panel
- * acquired after this hook's first mount, or released while it stays
- * mounted) and the panel's own `onDidVisibilityChange` (tab switches within
- * an existing group). Dockview's `isActive` also requires the panel's group
- * to own global focus, so it is not a valid proxy for whether the panel is
- * rendered on screen beside another focused group.
+ * Subscribes to the manager's own add/remove notifications (a panel acquired
+ * after this hook's first mount, or released while it stays mounted) and the
+ * panel's `onDidVisibilityChange` (tab switches within an existing group).
+ * When `requireGlobalFocus` is true, it also tracks `onDidActiveChange` and
+ * requires `api.isActive`, excluding visible panels in unfocused groups.
  *
  * Only for dockview-hosted panels — pass the panel's real id. Defaults to
  * `false` until a portal entry/api is actually registered for it, rather
@@ -33,23 +32,22 @@ import { panelPortalManager } from "@/lib/layout/panel-portal-manager";
  * portal entry — they should pass a literal `true`/`false` instead of
  * calling this hook.
  */
-export function usePanelActive(panelId: string): boolean {
+export function usePanelActive(panelId: string, requireGlobalFocus = false): boolean {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
-      // Tracks which api our onDidVisibilityChange listener is currently bound
-      // to, so a manager notification (panel acquired/released/remounted
-      // anywhere) can detect when *this* panelId's api was replaced —
-      // Dockview does this during a layout restore/switch — and rebind
-      // rather than keep listening on the now-stale api.
+      // Rebind both Dockview event listeners if the portal entry replaces its panel API.
       let boundApi: DockviewPanelApi | null = null;
-      let disposable: { dispose: () => void } | null = null;
+      let disposables: Array<{ dispose: () => void }> = [];
 
       const rebindIfApiChanged = () => {
         const api = panelPortalManager.get(panelId)?.api ?? null;
         if (api === boundApi) return;
-        disposable?.dispose();
+        disposables.forEach((disposable) => disposable.dispose());
+        disposables = [];
         boundApi = api;
-        disposable = api?.onDidVisibilityChange(onStoreChange) ?? null;
+        if (!api) return;
+        disposables.push(api.onDidVisibilityChange(onStoreChange));
+        if (requireGlobalFocus) disposables.push(api.onDidActiveChange(onStoreChange));
       };
 
       rebindIfApiChanged();
@@ -59,14 +57,14 @@ export function usePanelActive(panelId: string): boolean {
       });
       return () => {
         unsubscribeManager();
-        disposable?.dispose();
+        disposables.forEach((disposable) => disposable.dispose());
       };
     },
-    [panelId],
+    [panelId, requireGlobalFocus],
   );
-  const getSnapshot = useCallback(
-    () => panelPortalManager.get(panelId)?.api?.isVisible ?? false,
-    [panelId],
-  );
+  const getSnapshot = useCallback(() => {
+    const api = panelPortalManager.get(panelId)?.api;
+    return Boolean(api?.isVisible && (!requireGlobalFocus || api.isActive));
+  }, [panelId, requireGlobalFocus]);
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

@@ -1,7 +1,7 @@
 ---
 id: "01-activity-ledger"
 title: "Session user-activity ledger"
-status: in_progress
+status: completed
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -153,4 +153,14 @@ None.
 
 ## Results
 
-Pending.
+- Focused Task 01 Go regressions passed in `internal/task/service`,
+  `internal/task/repository/sqlite`, `internal/task/handlers`,
+  `internal/gateway/websocket`, and `internal/backendapp`.
+- `internal/runtimeflags`, `internal/common/config`, and `internal/profiles`
+  tests passed; config tests ran without host-provided KANDEV port/home/proxy
+  aliases.
+- Web feature contract passed (8 tests); web typecheck and lint passed.
+- Public docs validator passed (47 pages); `make fmt lint` passed with 0
+  issues; `git diff --check -- docs` passed.
+- PostgreSQL integration was not run because `KANDEV_TEST_POSTGRES_DSN` was
+  unset.

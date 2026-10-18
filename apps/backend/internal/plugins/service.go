@@ -156,6 +156,8 @@ type Service struct {
 	// taskPRs is guarded by mu and read through taskPRSourceDep, because hosts can
 	// outlive the late SetTaskPRSource wiring.
 	taskPRs               taskPRSource
+	taskMRs               taskMRSource
+	changeFeedback        feedbackReaders
 	taskWriter            taskWriter
 	workspaceAdminWriter  WorkspaceAdminWriter
 	sourceIssueController SourceIssueController
@@ -583,14 +585,26 @@ func (s *Service) SetSourceIssueController(controller SourceIssueController) {
 // StartActivePlugins has spawned boot-active plugins — so hosts read it live
 // via interactionResponderDep rather than snapshotting it. A nil responder
 // leaves the write RPCs returning Unimplemented; the reads are unaffected.
-// SetTaskPRSource wires the optional pull-request lookup behind
-// Task.PullRequests. It is separate from SetDataSources because GitHub is an
-// optional service; nil leaves tasks with no PullRequests rather than failing
-// the read.
+// SetTaskPRSource wires GitHub associations independently of task data.
+// A nil source marks Task.PullRequestsPartial true without failing the read.
 func (s *Service) SetTaskPRSource(src taskPRSource) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.taskPRs = src
+}
+
+// SetTaskMRSource wires GitLab associations. Hosts resolve it at read time
+// so plugins started before provider wiring observe the current source.
+func (s *Service) SetTaskMRSource(src taskMRSource) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.taskMRs = src
+}
+
+func (s *Service) taskMRSourceDep() taskMRSource {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.taskMRs
 }
 
 // SetPendingTaskTransitionSource wires the durable orchestrator queue used by
@@ -904,6 +918,7 @@ func (s *Service) hostForPlugin(pluginID string) pluginsdk.Host {
 		messageData:                s.messageData,
 		interactionData:            s.interactionData,
 		taskPRsDep:                 s.taskPRSourceDep,
+		taskMRsDep:                 s.taskMRSourceDep,
 		pendingTaskTransitions:     s.pendingTaskTransitionSourceDep,
 		taskWriter:                 s.taskWriter,
 		workspaceAdminWriter:       s.workspaceAdminWriter,

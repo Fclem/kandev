@@ -107,6 +107,9 @@ func (r *Repository) runMigrations(ctx context.Context) error {
 	if err := r.migrateTaskPriorityToTextPostgres(); err != nil {
 		return err
 	}
+	if err := r.initUserActivitySchema(ctx); err != nil {
+		return err
+	}
 	if err := r.ensureTaskWorkspaceFoldersSchema(); err != nil {
 		return err
 	}

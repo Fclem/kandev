@@ -33,8 +33,6 @@ func TestFixtureManifest_ParsesAndValidates(t *testing.T) {
 	require.True(t, m.Capabilities.State)
 	require.True(t, m.Capabilities.UserState)
 	require.Equal(t, []string{"fixture-source-control"}, m.RepositoryProviders)
-	require.Equal(t, "connection-status", m.Actions[0].Key)
-	require.Equal(t, "workspace", m.Actions[0].ResourceScope)
 	actions := make(map[string]manifest.Action, len(m.Actions))
 	for _, action := range m.Actions {
 		actions[action.Key] = action

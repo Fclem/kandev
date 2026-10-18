@@ -1,7 +1,7 @@
 ---
 id: "06-change-request-feedback"
 title: "Change-request feedback read"
-status: pending
+status: completed
 wave: 4
 depends_on:
   - "05-code-pr-summary"
@@ -109,4 +109,6 @@ Task 05.
 
 ## Results
 
-Pending.
+Completed. `ListChangeRequestFeedbackExact` (SDK `ListChangeRequestFeedback`) returns provider-neutral reviews and comments for a task's linked GitHub pull requests and GitLab merge requests, gated by `change_requests` and workspace admission. Bounds: at most 20 tasks, newest 50 items per task across providers, and a 7 MiB `json.Marshal` budget with `items_omitted` attributed per provider. Bodies are sanitized and truncated to 4096 UTF-8 bytes at rune boundaries. Each provider fails independently with a coded error; successful providers with no links report `available` with an empty list, and linked requests without an adapter report `unsupported`. GitLab approvals use `approval:<numeric user ID>` (decision: option B, current active state, not event history), so username changes and reapproval keep identity. GitLab reads use workspace-scoped credentials and reject missing or mismatched linked hosts. `MinimumSessionActivityVersion` remains 0.97.0.
+
+Verification (parent rerun): `make proto`, then `go test -count=1 ./internal/plugins/ ./pkg/pluginsdk/ ./internal/plugins/manifest/ ./internal/gitlab/ -run 'TestListChangeRequestFeedbackExact|TestFeedbackProviderFailureIsPerProvider|TestFeedbackBoundsAndTruncation|TestFeedbackOrderingUsesProviderTieBreakers|TestHostSDKProtoParity|TestSessionActivityMinimumVersion|TestListChangeRequestFeedbackExactWorkspaceHost|TestFeedbackApprovalReaderRetainsUserID'` passed. Child reports: `make fmt lint` 0 issues; `go test ./internal/plugins/... ./pkg/pluginsdk/...` passed; a standalone HTTP smoke confirmed user ID 42 retained across a reapproval. PostgreSQL not run: `KANDEV_TEST_POSTGRES_DSN` unset. Provider matrix tests have no independent pre-implementation RED; the read-level RED/GREEN evidence is recorded in the child's report.

@@ -349,8 +349,8 @@ func (r *Repository) ListMessagesForPlugin(ctx context.Context, filter models.Pl
 // buildPluginMessageQuery assembles the WHERE/ORDER/LIMIT/OFFSET clauses for
 // ListMessagesForPlugin. session_ids and task_ids each become an IN (...)
 // clause (ANDed together when both are set); Since is an inclusive and Until
-// an exclusive created_at bound; types filters by message type. A zero/negative
-// Limit yields no LIMIT clause (returns all matching rows from the offset).
+// an exclusive created_at bound; types and author_types filter their
+// corresponding columns. A zero/negative Limit yields no LIMIT clause.
 func buildPluginMessageQuery(filter models.PluginMessageFilter) (string, []interface{}) {
 	query := `
 		SELECT id, task_session_id, task_id, turn_id, author_type, author_id, content, requests_input, type, metadata, created_at, updated_at
@@ -368,6 +368,10 @@ func buildPluginMessageQuery(filter models.PluginMessageFilter) (string, []inter
 	}
 	if ph, inArgs := buildInPlaceholders(filter.Types); ph != "" {
 		conditions = append(conditions, "type IN ("+ph+")")
+		args = append(args, inArgs...)
+	}
+	if ph, inArgs := buildInPlaceholders(filter.AuthorTypes); ph != "" {
+		conditions = append(conditions, "author_type IN ("+ph+")")
 		args = append(args, inArgs...)
 	}
 	if filter.Since != nil {

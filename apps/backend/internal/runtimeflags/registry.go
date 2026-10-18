@@ -358,6 +358,22 @@ var registrations = []runtimeFlagRegistration{
 	},
 	{
 		definition: RuntimeFlagDefinition{
+			Key:             "features.sessionUserActivity",
+			EnvVar:          "KANDEV_FEATURES_SESSION_USER_ACTIVITY",
+			Kind:            KindFeature,
+			Label:           "Session user activity",
+			Description:     "Records measured human engagement intervals for sessions.",
+			Stability:       StabilityExperimental,
+			RiskLevel:       RiskMedium,
+			RiskDescription: "Collects session-level engagement duration without interaction content. Disable if capture is not required.",
+			RestartRequired: true,
+			Mutable:         true,
+		},
+		read:  func(cfg *config.Config) bool { return cfg.Features.SessionUserActivity },
+		apply: func(cfg *config.Config, value bool) { cfg.Features.SessionUserActivity = value },
+	},
+	{
+		definition: RuntimeFlagDefinition{
 			Key:         "debug.devMode",
 			EnvVar:      "KANDEV_DEBUG_DEV_MODE",
 			Kind:        KindDebug,

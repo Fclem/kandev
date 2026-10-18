@@ -38,6 +38,7 @@ const (
 	exactReadListTaskDirectives      = "ListTaskDirectivesExact"
 	exactReadListTaskTransitions     = "ListPendingTaskTransitionsExact"
 	exactReadChangeEvidence          = "ListChangeRequestEvidenceExact"
+	exactReadChangeFeedback          = "ListChangeRequestFeedbackExact"
 	exactReadTaskUsage               = "ListTaskUsageExact"
 	exactReadSourceIssueCapabilities = "GetSourceIssueCapabilitiesExact"
 )
@@ -59,6 +60,7 @@ var exactReadMethods = []exactMethod{
 	{method: exactReadListTaskRelations, capability: "host.v2.read:task_relations", description: "Read workspace task relations"},
 	{method: exactReadListTaskTransitions, capability: "host.v2.read:task_transitions", description: "Read pending task transitions"},
 	{method: exactReadChangeEvidence, capability: "host.v2.read:change_requests", description: "Read linked change-request evidence"},
+	{method: exactReadChangeFeedback, capability: "host.v2.read:change_requests", description: "Read linked change-request reviews and comments"},
 	{method: exactReadTaskUsage, capability: "host.v2.read:usage", description: "Read task and session usage totals"},
 	{method: exactReadSourceIssueCapabilities, capability: "host.v2.read:source_issues", description: "Read operations for one task's linked Jira or Linear issue"},
 }
@@ -324,6 +326,7 @@ func (h *pluginHost) buildExactTaskObservations(ctx context.Context, models []*t
 		}
 	}
 	tasks := tasksToDTOs(models)
+	h.attachPullRequests(ctx, tasks)
 	if err := h.attachDependencies(ctx, tasks, models, true, operation); err != nil {
 		return nil, err
 	}
@@ -587,7 +590,7 @@ func (h *pluginHost) ListSanitizedMessages(ctx context.Context, q pluginsdk.Exac
 				return nil, status.Error(codes.InvalidArgument, "message filter contains a task outside the workspace")
 			}
 		}
-		if len(filter.SessionIDs)+len(filter.Types) > maxMessageFilterValues {
+		if len(taskIDs)+len(filter.SessionIDs)+len(filter.Types)+len(filter.AuthorTypes) > maxMessageFilterValues {
 			return nil, status.Error(codes.ResourceExhausted, "message filter exceeds the bounded size")
 		}
 		allowedSessions := make(map[string]bool)
@@ -618,7 +621,7 @@ func (h *pluginHost) ListSanitizedMessages(ctx context.Context, q pluginsdk.Exac
 		if err != nil {
 			return nil, err
 		}
-		rows, err := h.messageData.ListMessagesForPlugin(ctx, taskmodels.PluginMessageFilter{TaskIDs: taskIDs, SessionIDs: filter.SessionIDs, Types: filter.Types, Since: since, Until: until, Limit: exactSnapshotMaxRows + 1})
+		rows, err := h.messageData.ListMessagesForPlugin(ctx, taskmodels.PluginMessageFilter{TaskIDs: taskIDs, SessionIDs: filter.SessionIDs, Types: filter.Types, AuthorTypes: filter.AuthorTypes, Since: since, Until: until, Limit: exactSnapshotMaxRows + 1})
 		if err != nil {
 			return nil, err
 		}

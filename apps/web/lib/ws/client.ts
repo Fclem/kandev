@@ -82,7 +82,9 @@ const CORE_CONVERSATION_ACTIONS = new Set<BackendMessageType>([
   "session.turn.removed",
 ]);
 const SESSION_SUBSCRIBE_ACTION = "session.subscribe";
+export const SESSION_USER_ACTIVITY_BEAT_ACTION = "session.user_activity.beat";
 const SESSION_UNSUBSCRIBE_ACTION = "session.unsubscribe";
+
 const SESSION_CONVERSATION_CHANGED_ACTION = "session.conversation.changed" as const;
 
 function isConversationNotificationAction(action: BackendMessageType): boolean {
@@ -589,6 +591,12 @@ export class WebSocketClient {
       });
     }
     return () => this.unfocusSession(sessionId);
+  }
+
+  sendSessionUserActivityBeat(sessionId: string): Promise<{ enabled?: boolean }> {
+    return this.request<{ enabled?: boolean }>(SESSION_USER_ACTIVITY_BEAT_ACTION, {
+      session_id: sessionId,
+    });
   }
 
   /**

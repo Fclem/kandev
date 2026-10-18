@@ -392,3 +392,11 @@ func TestIsTopLevelTaskAction(t *testing.T) {
 		}
 	}
 }
+
+func TestUserActivityBeatDefersSessionAuthorizationToHandler(t *testing.T) {
+	f := newDispatchScopeFixture(t, realIdentity())
+	f.dispatchAs(t, ws.ActionSessionUserActivityBeat, `{"session_id":"sess-b"}`)
+	if !*f.handled {
+		t.Fatal("user-activity beat was denied by the gateway backstop instead of reaching the uniform handler rejection")
+	}
+}

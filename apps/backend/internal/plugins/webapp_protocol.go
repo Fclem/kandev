@@ -118,6 +118,7 @@ func (s *Service) webAppHost(binding webapp.CapabilityBinding) *pluginHost {
 			messageData:   s.messageData,
 			taskWriter:    s.taskWriter,
 			taskPRsDep:    s.taskPRSourceDep,
+			taskMRsDep:    s.taskMRSourceDep,
 			writeDeps:     s.writeDependencies,
 			log:           s.log,
 		}

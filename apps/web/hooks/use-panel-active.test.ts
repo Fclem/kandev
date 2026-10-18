@@ -23,6 +23,8 @@ type FakeApiHandle = {
   fireVisibilityChange: (isVisible: boolean) => void;
 };
 
+const VISIBLE_UNFOCUSED_PANEL_ID = "panel-visible-unfocused";
+
 function makeFakeApi(initialIsActive: boolean, initialIsVisible = initialIsActive): FakeApiHandle {
   let activeListener: ((event: { isActive: boolean }) => void) | null = null;
   let visibilityListener: ((event: { isVisible: boolean }) => void) | null = null;
@@ -87,8 +89,8 @@ describe("usePanelActive", () => {
   });
 
   it("treats a selected panel as visible when another Dockview group owns focus", () => {
-    const handle = acquirePanel("panel-visible-unfocused", false, true);
-    const { result } = renderHook(() => usePanelActive("panel-visible-unfocused"));
+    const handle = acquirePanel(VISIBLE_UNFOCUSED_PANEL_ID, false, true);
+    const { result } = renderHook(() => usePanelActive(VISIBLE_UNFOCUSED_PANEL_ID));
 
     expect(result.current).toBe(true);
 
@@ -98,6 +100,21 @@ describe("usePanelActive", () => {
     act(() => handle.fireActiveChange(false));
     expect(result.current).toBe(true);
 
+    act(() => handle.fireVisibilityChange(false));
+    expect(result.current).toBe(false);
+  });
+
+  it("requires global panel focus when requested for visible session surfaces", () => {
+    const handle = acquirePanel(VISIBLE_UNFOCUSED_PANEL_ID, false, true);
+    const { result } = renderHook(() => usePanelActive(VISIBLE_UNFOCUSED_PANEL_ID, true));
+
+    expect(result.current).toBe(false);
+    act(() => handle.fireActiveChange(true));
+    expect(result.current).toBe(true);
+    act(() => handle.fireActiveChange(false));
+    expect(result.current).toBe(false);
+    act(() => handle.fireActiveChange(true));
+    expect(result.current).toBe(true);
     act(() => handle.fireVisibilityChange(false));
     expect(result.current).toBe(false);
   });

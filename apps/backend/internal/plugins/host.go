@@ -78,6 +78,8 @@ type pluginHost struct {
 	// taskPRsDep resolves the source at read time so a host created before
 	// SetTaskPRSource still observes the late wiring.
 	taskPRsDep func() taskPRSource
+	taskMRs    taskMRSource
+	taskMRsDep func() taskMRSource
 	// pendingTaskTransitions resolves the orchestrator queue at read time for
 	// hosts created before its late backend wiring.
 	pendingTaskTransitions func() pendingTaskTransitionSource

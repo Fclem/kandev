@@ -35,6 +35,12 @@ type fakeTaskDataSource struct {
 	tasksByID        map[string]*taskmodels.Task
 	repositories     map[string][]*taskmodels.Repository
 	sessionsByTask   map[string][]*taskmodels.TaskSession
+	activitySessions taskmodels.SessionActivitySessionsPage
+	activitySummary  []taskmodels.UserActivitySummary
+	activityTurns    taskmodels.SessionActivityTurnsPage
+	activityFilter   taskmodels.SessionActivityFilter
+	activityCalls    int
+	activitySumCalls int
 	executorRunning  map[string]*taskmodels.ExecutorRunning
 	executorProfiles []*taskmodels.ExecutorProfile
 	executors        map[string]*taskmodels.Executor
@@ -120,6 +126,23 @@ func (f *fakeTaskDataSource) ListRepositories(_ context.Context, workspaceID str
 
 func (f *fakeTaskDataSource) ListTaskSessions(_ context.Context, taskID string) ([]*taskmodels.TaskSession, error) {
 	return f.sessionsByTask[taskID], nil
+}
+
+func (f *fakeTaskDataSource) ListUserActivitySessions(_ context.Context, filter taskmodels.SessionActivityFilter, _ string, _ int) (taskmodels.SessionActivitySessionsPage, error) {
+	f.activityCalls++
+	f.activityFilter = filter
+	return f.activitySessions, nil
+}
+
+func (f *fakeTaskDataSource) SumUserActivity(_ context.Context, _ []string) ([]taskmodels.UserActivitySummary, error) {
+	f.activitySumCalls++
+	return f.activitySummary, nil
+}
+
+func (f *fakeTaskDataSource) ListSessionTurns(_ context.Context, filter taskmodels.SessionActivityFilter, _ string, _ int) (taskmodels.SessionActivityTurnsPage, error) {
+	f.activityCalls++
+	f.activityFilter = filter
+	return f.activityTurns, nil
 }
 
 func (f *fakeTaskDataSource) GetExecutorRunningBySessionID(_ context.Context, sessionID string) (*taskmodels.ExecutorRunning, error) {
@@ -452,6 +475,92 @@ func TestPluginHost_Sessions_DeniedWithoutCapability(t *testing.T) {
 
 	_, _, err = d.host.Sessions().CodeStats(context.Background(), pluginsdk.SessionFilter{}, pluginsdk.Page{})
 	assertPermissionDenied(t, err, "api_read:sessions")
+}
+
+func TestSessionActivityRequiresResource(t *testing.T) {
+	d := newTestDataHost(manifest.Capabilities{APIRead: []string{"sessions"}})
+	_, _, err := d.host.Sessions().UserActivity(context.Background(), pluginsdk.SessionActivityFilter{}, pluginsdk.Page{})
+	assertPermissionDenied(t, err, "api_read:session_activity")
+	_, _, err = d.host.Sessions().Turns(context.Background(), pluginsdk.SessionActivityFilter{}, pluginsdk.Page{})
+	assertPermissionDenied(t, err, "api_read:session_activity")
+}
+
+func TestSessionActivityFilterBound(t *testing.T) {
+	d := newTestDataHost(manifest.Capabilities{APIRead: []string{"session_activity"}})
+	filter := pluginsdk.SessionActivityFilter{SessionIDs: make([]string, 201), TaskIDs: make([]string, 200)}
+	_, _, err := d.host.Sessions().UserActivity(context.Background(), filter, pluginsdk.Page{})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("UserActivity() with 401 combined filter values = %v, want InvalidArgument", err)
+	}
+	_, _, err = d.host.Sessions().Turns(context.Background(), filter, pluginsdk.Page{})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("Turns() with 401 combined filter values = %v, want InvalidArgument", err)
+	}
+	if d.tasks.activityCalls != 0 || d.tasks.activitySumCalls != 0 {
+		t.Fatalf("invalid filter reached activity data source: reads=%d sums=%d", d.tasks.activityCalls, d.tasks.activitySumCalls)
+	}
+}
+
+func TestSessionActivityOnlyCapabilityAllowsReads(t *testing.T) {
+	d := newTestDataHost(manifest.Capabilities{APIRead: []string{"session_activity"}})
+	started := time.Date(2026, 5, 2, 3, 4, 5, 0, time.UTC)
+	d.tasks.activitySessions = taskmodels.SessionActivitySessionsPage{Sessions: []taskmodels.SessionActivitySession{
+		{SessionID: "measured-zero", TaskID: "task-one", StartedAt: started},
+		{SessionID: "not-measured", TaskID: "task-one", StartedAt: started},
+	}}
+	d.tasks.activitySummary = []taskmodels.UserActivitySummary{
+		{SessionID: "measured-zero", ActivityMeasured: true},
+		{SessionID: "not-measured", ActiveMS: 99, IntervalCount: 7, ActivityMeasured: false},
+	}
+	completed := started.Add(time.Minute)
+	d.tasks.activityTurns = taskmodels.SessionActivityTurnsPage{Turns: []taskmodels.SessionActivityTurn{{
+		ID: "turn-one", SessionID: "measured-zero", TaskID: "task-one", StartedAt: started, CompletedAt: &completed,
+	}}}
+
+	activity, info, err := d.host.Sessions().UserActivity(context.Background(), pluginsdk.SessionActivityFilter{TaskIDs: []string{"task-one"}}, pluginsdk.Page{Limit: 2})
+	if err != nil {
+		t.Fatalf("UserActivity() with only session_activity capability: %v", err)
+	}
+	if len(activity) != 2 || activity[0].SessionID != "measured-zero" || !activity[0].ActivityMeasured ||
+		activity[0].FirstActivityAt != "" || activity[0].LastActivityAt != "" ||
+		activity[1].SessionID != "not-measured" || activity[1].ActivityMeasured || activity[1].ActiveMS != 0 || activity[1].IntervalCount != 0 ||
+		activity[1].FirstActivityAt != "" || activity[1].LastActivityAt != "" {
+		t.Fatalf("activity = %+v, want measured zero distinct from zeroed not-measured row", activity)
+	}
+	if info == nil || info.HasMore {
+		t.Fatalf("activity page info = %+v, want complete page", info)
+	}
+	turns, _, err := d.host.Sessions().Turns(context.Background(), pluginsdk.SessionActivityFilter{TaskIDs: []string{"task-one"}}, pluginsdk.Page{})
+	if err != nil || len(turns) != 1 || turns[0].ID != "turn-one" || turns[0].CompletedAt == nil ||
+		turns[0].StartedAt != started.Format(time.RFC3339Nano) {
+		t.Fatalf("Turns() with only session_activity capability = %+v, err=%v", turns, err)
+	}
+	if _, hasMetadata := reflect.TypeOf(turns[0]).FieldByName("Metadata"); hasMetadata {
+		t.Fatal("turn read DTO exposed turn metadata")
+	}
+	if _, _, err := d.host.Sessions().List(context.Background(), pluginsdk.SessionFilter{}, pluginsdk.Page{}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("List() with only session_activity capability = %v, want sessions permission denied", err)
+	}
+
+	if _, _, err := d.host.Sessions().CodeStats(context.Background(), pluginsdk.SessionFilter{}, pluginsdk.Page{}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("CodeStats() with only session_activity capability = %v, want sessions permission denied", err)
+	}
+}
+func TestSessionReaderNilDataSourcesUnimplementedIndependently(t *testing.T) {
+	host := &pluginHost{capabilities: manifest.Capabilities{APIRead: []string{"sessions", "session_activity"}}}
+	reader := host.Sessions()
+	if _, _, err := reader.List(context.Background(), pluginsdk.SessionFilter{}, pluginsdk.Page{}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("List() without task data source = %v, want Unimplemented", err)
+	}
+	if _, _, err := reader.CodeStats(context.Background(), pluginsdk.SessionFilter{}, pluginsdk.Page{}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("CodeStats() without analytics source = %v, want Unimplemented", err)
+	}
+	if _, _, err := reader.UserActivity(context.Background(), pluginsdk.SessionActivityFilter{}, pluginsdk.Page{}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("UserActivity() without activity source = %v, want Unimplemented", err)
+	}
+	if _, _, err := reader.Turns(context.Background(), pluginsdk.SessionActivityFilter{}, pluginsdk.Page{}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("Turns() without turn source = %v, want Unimplemented", err)
+	}
 }
 
 func TestPluginHost_Workspaces_DeniedWithoutCapability(t *testing.T) {

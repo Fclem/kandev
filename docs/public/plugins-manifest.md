@@ -201,9 +201,9 @@ for a complete authoring path.
 | `repo_url`                         | no                                   | string                                | Absolute `http(s)` URL to the plugin's source repository. Rendered as a "Repo" link in Settings > Plugins (both the installed list and the plugin detail). Any other scheme (e.g. `javascript:`) is rejected at registration. Distinct from the marketplace card's `repo_url`, which the registry derives from `plugins.yaml`; declare this in the manifest so sideloaded and directly-installed plugins also carry the link.                                                                                                                                                                                                                                                    |
 | `runtime.type`                     | conditionally                        | string                                | `"binary"` is the only supported value. Setting it (vs. leaving it empty) makes the manifest **runtime-managed**; see "Managed vs. legacy" below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `runtime.executables`              | required when `runtime.type: binary` | map\<string,string\>                  | Key is `<goos>-<goarch>` (e.g. `linux-amd64`, `darwin-arm64`, `windows-amd64`); value is a clean, package-relative path under `server/` (no leading `/`, no `..` segments). At least one entry required; the running host's key must be present at install time. Windows values end in `.exe`.                                                                                                                                                                                                                                                                                                                                                                                   |
-| `min_kandev_version`               | conditionally                        | string                                | Lowest released Kandev version this plugin supports. A manifest declaring `capabilities.api_read: messages` (for Go `Messages().List` or the browser conversation facade) must set at least `0.91.1`; `access: admin` actions have the same floor. One capability-aware validator enforces missing, malformed, and lower values at manifest/archive/install/boot boundaries in stamped, development, and E2E builds; equal or higher values pass. Release values use up to three dotted numeric segments (`0.78.0`) and may have a leading `v`. |
+| `min_kandev_version`               | conditionally                        | string                                | Lowest released Kandev version this plugin supports. A manifest declaring `capabilities.api_read: messages` (for Go `Messages().List` or the browser conversation facade) must set at least `0.91.1`; `capabilities.api_read: session_activity` requires at least `0.97.0`; `access: admin` actions have the same `0.91.1` floor. One capability-aware validator enforces missing, malformed, and lower values at manifest/archive/install/boot boundaries in stamped, development, and E2E builds; equal or higher values pass. Release values use up to three dotted numeric segments (`0.78.0`) and may have a leading `v`. |
 | `capabilities.events`              | no                                   | string[]                              | Bus subjects (or wildcard patterns) this plugin subscribes to. See "Event subscription vocabulary" below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `capabilities.api_read`            | no                                   | string[]                              | Gates the Host data API's read-only accessors and exact query resources. Entries include `tasks`, `sessions`, `messages`, `interactions`, `workspaces`, `workflows`, `agent_profiles`, `executor_profiles`, `repositories`, `managed_agent_conversations`, `automations`, `task_inbox`, `task_directives`, `task_relations`, `task_transitions`, `change_requests`, `source_issues`, and `usage`. Calling a matching accessor or exact manager without its resource declared returns gRPC `PermissionDenied`. See "Host data API resource vocabulary" below. |
+| `capabilities.api_read`            | no                                   | string[]                              | Gates the Host data API's read-only accessors and exact query resources. Entries include `tasks`, `sessions`, `session_activity`, `messages`, `interactions`, `workspaces`, `workflows`, `agent_profiles`, `executor_profiles`, `repositories`, `managed_agent_conversations`, `automations`, `task_inbox`, `task_directives`, `task_relations`, `task_transitions`, `change_requests`, `source_issues`, and `usage`. Calling a matching accessor or exact manager without its resource declared returns gRPC `PermissionDenied`. See "Host data API resource vocabulary" below. |
 | `capabilities.api_write`           | no                                   | string[]                              | Gates Host writes independently of `api_read`. `tasks` permits `Host.Tasks().Create` and `.Update`; `messages` permits `Host.Messages().Send`; `workspaces`, `workflows`, and `repositories` permit their typed exact administration calls when the matching Host v2 workspace grant is active. `execution` permits exact run, recovery, mode, and pending-transition commands when separately approved for a workspace; `interactions` permits exact permission and clarification responses only with a Host-issued human response receipt; `managed_agent_conversations` permits exact lifecycle and input writes when separately approved for a workspace; `automations` permits exact managed-conversation schedule operations when separately approved for a workspace; `source_issues` permits linked Jira/Linear comments and transitions through native workspace credentials when separately approved for a workspace; `managed_agent_tools` permits the managed agent-tool surface when separately approved for a workspace. Undeclared writes return gRPC `PermissionDenied`. |
 | `capabilities.state`               | no                                   | bool                                  | Gates `Host.GetState`/`SetState`/`DeleteState`/`ListState`. Calling any of them without this set to `true` returns gRPC `PermissionDenied`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `capabilities.secrets`             | no                                   | bool                                  | Gates `Host.RevealSecret`/`GetSecret`/`SetSecret`/`DeleteSecret`. Calling any of them without this set to `true` returns gRPC `PermissionDenied`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -422,12 +422,12 @@ for provider operations, callbacks, connection leases, and cleanup behavior.
 ## Host data API resource vocabulary
 
 `capabilities.api_read` gates the read-only Host data accessors (ADR 0043,
-ADR 0047). Recognized resource values include `tasks`, `sessions`, `messages`,
-`interactions`, `workspaces`, `workflows`, `agent_profiles`, `executor_profiles`,
-`repositories`, `managed_agent_conversations`, `automations`, `task_inbox`, `task_directives`,
+ADR 0047). Recognized resource values include `tasks`, `sessions`,
+`session_activity`, `messages`, `interactions`, `workspaces`, `workflows`,
+`agent_profiles`, `executor_profiles`, `repositories`,
+`managed_agent_conversations`, `automations`, `task_inbox`, `task_directives`,
 `task_relations`, `task_transitions`, `change_requests`, `source_issues`, or
-`usage`. Declaring a resource grants
-the matching `Host` accessor, the optional
+`usage`. Declaring a resource grants the matching `Host` accessor, the optional
 `pluginsdk.ExecutorProfiles(host)` extension, or the exact managed conversation
 reader. Exact workspace observations use `pluginsdk.HostExactQueries(host)` and
 also require a matching workspace grant such as `host.v2.read:tasks` or
@@ -435,6 +435,37 @@ also require a matching workspace grant such as `host.v2.read:tasks` or
 an RPC present in the protocol does not mean that every host has its data source.
 See [Authoring a plugin](plugins-authoring.md). Calling an accessor or exact
 manager without its resource declared returns gRPC `PermissionDenied`.
+
+`session_activity` is independent of `sessions`: it grants only
+`Sessions().UserActivity` and `Sessions().Turns`, with filtered keyset pages.
+It requires `min_kandev_version: "0.97.0"` or later.
+The `session_activity` floor covers `ListSessionUserActivity`,
+`ListSessionTurns`, message `Origin` and `AuthorTypes`, code-stat file counts,
+provider-neutral task PR summaries, and `ListChangeRequestFeedbackExact`.
+It does not grant `messages`, `sessions`, `tasks`, `change_requests`, or
+`usage`: declare each read resource separately. `ListTaskUsageExact` requires
+`usage`; exact feedback and usage also need matching workspace approvals.
+Activity/turn filters have a 400-value combined session/task limit; message
+filters have a separate combined 400-value cap including `Types` and
+`AuthorTypes`. Feedback accepts at most 20 tasks, 50 newest items per task,
+4096-byte UTF-8 bodies, and a 7 MiB JSON snapshot budget.
+See [effort signal reads](plugins-authoring.md#effort-signal-reads) for the
+RPC-to-resource table, unavailable/unsupported feedback states, optional
+field presence, and the packaged test fixture.
+
+`Task.PullRequestsPartial` preserves presence: true means partial, false means
+all provider sources were read, and absence means an older Host did not report
+completeness. Optional file/reviewer counts similarly distinguish absent data
+from observed zero. New activity/turn/feedback RPCs return `Unimplemented`
+on older Hosts; undeclared resources or missing workspace approvals return
+`PermissionDenied`.
+
+`change_requests` includes `ListChangeRequestFeedbackExact` through
+`pluginsdk.HostExactQueries(host).ListChangeRequestFeedback`. It also requires
+the workspace grant `host.v2.read:change_requests`. Feedback is a bounded
+snapshot of live provider reads, separate from cached task PR/MR summaries.
+See [Change-request feedback](plugins-authoring.md#change-request-feedback)
+for provider states, item limits, body sanitization, and cursor semantics.
 
 ```yaml
 capabilities:

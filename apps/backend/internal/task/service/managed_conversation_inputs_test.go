@@ -382,6 +382,7 @@ func TestManagedInputImmediateDispatchNeverQueuesAndReplaysStatus(t *testing.T) 
 	call := target.deps.dispatcher.lastCall()
 	require.Contains(t, call.text, "Run now")
 
+	require.Equal(t, "plugin:install-1", call.source, "managed plugin dispatches must persist plugin provenance")
 	gotStatus, _, err = target.service.DispatchManagedInput(context.Background(), "install-1", request, "dispatch-op", "dispatch-digest")
 	require.NoError(t, err)
 	require.Equal(t, pluginsdk.ManagedAgentDispatchStarted, gotStatus)

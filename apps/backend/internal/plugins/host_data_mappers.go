@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
 	agentsettingsdto "github.com/kandev/kandev/internal/agent/settings/dto"
 	analyticsmodels "github.com/kandev/kandev/internal/analytics/models"
 	githubsvc "github.com/kandev/kandev/internal/github"
+	"github.com/kandev/kandev/internal/gitlab"
 	"github.com/kandev/kandev/internal/sysprompt"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
 	wfmodels "github.com/kandev/kandev/internal/workflow/models"
@@ -160,50 +160,49 @@ func decodeTaskLabels(raw string) []string {
 	return labels
 }
 
-// taskPRsToDTOs maps kandev's own PR rows onto the plugin contract. Review and
-// check state come along because kandev's PR watcher already syncs them: a
-// plugin asking "what can merge" would otherwise re-query the forge per pull
-// request, which is slower and rate-limited.
-func taskPRsToDTOs(prs []*githubsvc.TaskPR) []pluginsdk.TaskPullRequest {
-	ordered := make([]*githubsvc.TaskPR, 0, len(prs))
-	for _, pr := range prs {
-		if pr != nil {
-			ordered = append(ordered, pr)
+func taskPRToDTO(pr *githubsvc.TaskPR) pluginsdk.TaskPullRequest {
+	item := pluginsdk.TaskPullRequest{
+		Number: int64(pr.PRNumber), URL: pr.PRURL, Title: pr.PRTitle,
+		State: pr.State, HeadBranch: pr.HeadBranch, BaseBranch: pr.BaseBranch,
+		IsDraft:  pr.IsDraft != nil && *pr.IsDraft,
+		Provider: taskmodels.RemoteContributionProviderGitHub, CreatedAt: pr.CreatedAt.UTC().Format(time.RFC3339),
+		MergedAt: timePtrToRFC3339(pr.MergedAt), ClosedAt: timePtrToRFC3339(pr.ClosedAt),
+		ReviewState: pr.ReviewState, ChecksState: pr.ChecksState, MergeableState: pr.MergeableState,
+		UnresolvedReviewThreads: int32(pr.UnresolvedReviewThreads),
+		ChecksTotal:             int32(pr.ChecksTotal), ChecksPassing: int32(pr.ChecksPassing),
+		Additions: int32(pr.Additions), Deletions: int32(pr.Deletions), AuthorLogin: pr.AuthorLogin,
+	}
+	if pr.LastSyncedAt != nil {
+		item.SizeObserved = true
+		reviews := int32(pr.ReviewCount)
+		item.ApprovedReviewerCount = &reviews
+		if pr.ChangedFiles != nil {
+			changed := int32(*pr.ChangedFiles)
+			item.ChangedFiles = &changed
 		}
 	}
-	sort.SliceStable(ordered, func(i, j int) bool {
-		return ordered[i].CreatedAt.After(ordered[j].CreatedAt)
-	})
+	return item
+}
 
-	out := make([]pluginsdk.TaskPullRequest, 0, len(ordered))
-	for _, pr := range ordered {
-		out = append(out, pluginsdk.TaskPullRequest{
-			Number:     int64(pr.PRNumber),
-			URL:        pr.PRURL,
-			Title:      pr.PRTitle,
-			State:      pr.State,
-			HeadBranch: pr.HeadBranch,
-			BaseBranch: pr.BaseBranch,
-			// IsDraft is nullable on the row (unknown before the first sync);
-			// nil reads as not-draft, matching how kandev's own UI treats it.
-			IsDraft: pr.IsDraft != nil && *pr.IsDraft,
-			// Only github writes these rows today; the field exists so a future
-			// gitlab-backed row is distinguishable rather than mislabelled.
-			Provider:                "github",
-			MergedAt:                timePtrToRFC3339(pr.MergedAt),
-			ClosedAt:                timePtrToRFC3339(pr.ClosedAt),
-			ReviewState:             pr.ReviewState,
-			ChecksState:             pr.ChecksState,
-			MergeableState:          pr.MergeableState,
-			UnresolvedReviewThreads: int32(pr.UnresolvedReviewThreads),
-			ChecksTotal:             int32(pr.ChecksTotal),
-			ChecksPassing:           int32(pr.ChecksPassing),
-			Additions:               int32(pr.Additions),
-			Deletions:               int32(pr.Deletions),
-			AuthorLogin:             pr.AuthorLogin,
-		})
+func taskMRToDTO(mr *gitlab.TaskMR) pluginsdk.TaskPullRequest {
+	state := mr.State
+	if state == "locked" {
+		state = "closed"
 	}
-	return out
+	item := pluginsdk.TaskPullRequest{
+		Number: int64(mr.MRIID), URL: mr.MRURL, Title: mr.MRTitle, State: state,
+		HeadBranch: mr.HeadBranch, BaseBranch: mr.BaseBranch, IsDraft: mr.Draft,
+		Provider: taskmodels.RemoteContributionProviderGitLab, CreatedAt: mr.CreatedAt.UTC().Format(time.RFC3339),
+		MergedAt: timePtrToRFC3339(mr.MergedAt), ClosedAt: timePtrToRFC3339(mr.ClosedAt),
+		ReviewState: mr.ApprovalState, ChecksState: mr.PipelineState, MergeableState: mr.MergeStatus,
+		ChecksTotal: int32(mr.PipelineJobsTotal), ChecksPassing: int32(mr.PipelineJobsPass),
+		UnresolvedReviewThreads: int32(mr.UnresolvedDiscussions), AuthorLogin: mr.AuthorUsername,
+	}
+	if mr.LastSyncedAt != nil {
+		count := int32(mr.ApprovalCount)
+		item.ApprovedReviewerCount = &count
+	}
+	return item
 }
 
 func workspaceModelToDTO(w *taskmodels.Workspace) pluginsdk.Workspace {
@@ -316,6 +315,7 @@ func messageModelToDTO(m *taskmodels.Message) pluginsdk.Message {
 		Content:    sysprompt.StripSystemContent(m.Content),
 		Type:       msgType,
 		CreatedAt:  m.CreatedAt.UTC().Format(time.RFC3339),
+		Origin:     string(taskmodels.ClassifyMessageOrigin(m)),
 	}
 }
 
@@ -330,11 +330,13 @@ func sessionCodeStatsModelToDTO(s *analyticsmodels.SessionCodeStats) pluginsdk.S
 		SessionID:               s.SessionID,
 		LinesAddedPeakPending:   s.LinesAddedPeakPending,
 		LinesDeletedPeakPending: s.LinesDeletedPeakPending,
+		FilesChangedPeakPending: &s.FilesChangedPeakPending,
 	}
 	if s.LinesAddedCommitted != nil && s.LinesDeletedCommitted != nil {
 		dto.LinesAddedCommitted = *s.LinesAddedCommitted
 		dto.LinesDeletedCommitted = *s.LinesDeletedCommitted
 		dto.CommittedLinesAvailable = true
+		dto.FilesChangedCommitted = s.FilesChangedCommitted
 	}
 	return dto
 }

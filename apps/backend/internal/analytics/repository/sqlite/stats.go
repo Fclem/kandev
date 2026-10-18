@@ -767,37 +767,18 @@ const defaultSessionCodeStatsLimit = 500
 // existing idiom in internal/persistence and internal/system/database).
 const commitCaptureActivatedAtMetaKey = "commit_capture_activated_at"
 
-// ListSessionCodeStats returns, per session, committed LOC (summed from
-// task_session_commits) and PEAK pending-diff LOC (the largest single
-// task_session_git_snapshots snapshot, not the latest — the latest snapshot
-// is usually a clean tree after a commit, merge, or archive). This is the
-// per-session line-of-code aggregation the kandev-plugin-agent-stats plugin
-// used to compute by reading the SQLite file directly (see ADR 0043); the
-// SQL here mirrors that plugin's sessionsQuery.
+// ListSessionCodeStats returns committed line and file churn plus independently
+// maximized pending line and file counts. Committed files sum per-commit counts;
+// pending files count distinct paths in each snapshot and take the maximum.
 //
-// lines_added_committed / lines_deleted_committed are NULL, not 0, for a
-// session with no observed commit rows that started before
-// commit_capture_activated_at (kandev_meta, published by
-// task/repository/sqlite.migrateSessionCommitsDedupeAndActivation): capture
-// wasn't running yet for that session, so zero cannot be told apart from
-// unknown. A session with any observed commit, or one that started after
-// activation, always gets a real sum (activation absent entirely — should
-// not happen once boot has completed successfully — falls through to the
-// pre-existing zero behavior via SQL's three-valued NULL comparison logic).
-// Peak-pending is unrelated to this marker and is always a real int64.
+// Committed counts are NULL for a session with no observed commits that started
+// before commit_capture_activated_at. A session with an observed commit or one
+// that started after activation receives a measured sum, including zero.
+// Pending counts are independent of commit-capture activation.
 //
-// Portability: the committed-sum half of this query is plain SQL and works
-// unchanged on both drivers. The peak-pending half must walk each snapshot's
-// `files` JSON object (keyed by file path, see task/models.GitSnapshot.Files)
-// to sum per-file additions/deletions — SQLite does this with json_each,
-// Postgres with jsonb_each on the same object; peakPendingSnapshotSubquery
-// branches on driver to build the equivalent fragment for each. Both paths
-// are covered by SQLite unit tests here; the Postgres path is exercised by
-// the ADR 0027-style env-gated Postgres suite (KANDEV_TEST_POSTGRES_DSN) at
-// the task/repository layer for the underlying schema, not re-verified here
-// against a live Postgres instance — if jsonb_each ever proves not to match
-// SQLite's json_each semantics for this shape, guard the Postgres branch
-// with a clear error instead of returning silently-wrong pending numbers.
+// Snapshot files are a path-keyed JSON object. SQLite uses json_each and
+// PostgreSQL uses jsonb_each; both branches aggregate each snapshot before
+// taking independent per-session maxima.
 func (r *Repository) ListSessionCodeStats(
 	ctx context.Context,
 	filter models.SessionCodeStatsFilter,
@@ -847,13 +828,20 @@ func (r *Repository) ListSessionCodeStats(
 				ELSE 0
 			END AS lines_deleted_committed,
 			COALESCE(peak_stats.peak_additions, 0) AS lines_added_peak_pending,
-			COALESCE(peak_stats.peak_deletions, 0) AS lines_deleted_peak_pending
+			COALESCE(peak_stats.peak_deletions, 0) AS lines_deleted_peak_pending,
+			CASE
+				WHEN commit_stats.session_id IS NOT NULL THEN commit_stats.files_changed
+				WHEN %[1]s < %[2]s THEN NULL
+				ELSE 0
+			END AS files_changed_committed,
+			COALESCE(peak_stats.peak_files_changed, 0) AS files_changed_peak_pending
 		FROM task_sessions ts
 		JOIN tasks t ON t.id = ts.task_id
 		LEFT JOIN (
 			SELECT c.session_id,
 				SUM(c.insertions) AS insertions,
-				SUM(c.deletions) AS deletions
+				SUM(c.deletions) AS deletions,
+				SUM(c.files_changed) AS files_changed
 			FROM task_session_commits c
 			GROUP BY c.session_id
 		) commit_stats ON commit_stats.session_id = ts.id
@@ -928,6 +916,7 @@ func scanSessionCodeStats(rows *sql.Rows) ([]*models.SessionCodeStats, error) {
 			&stat.SessionID,
 			&stat.LinesAddedCommitted, &stat.LinesDeletedCommitted,
 			&stat.LinesAddedPeakPending, &stat.LinesDeletedPeakPending,
+			&stat.FilesChangedCommitted, &stat.FilesChangedPeakPending,
 		); err != nil {
 			return nil, err
 		}
@@ -947,11 +936,13 @@ func peakPendingSnapshotSubquery(drv string) string {
 		return `
 			SELECT snap.session_id,
 				MAX(snap.additions) AS peak_additions,
-				MAX(snap.deletions) AS peak_deletions
+				MAX(snap.deletions) AS peak_deletions,
+				MAX(snap.files_changed) AS peak_files_changed
 			FROM (
 				SELECT g.id AS snapshot_id, g.session_id,
 				SUM(COALESCE((f.jvalue->>'additions')::numeric, 0)) AS additions,
-				SUM(COALESCE((f.jvalue->>'deletions')::numeric, 0)) AS deletions
+				SUM(COALESCE((f.jvalue->>'deletions')::numeric, 0)) AS deletions,
+				COUNT(DISTINCT f.jkey) AS files_changed
 				FROM task_session_git_snapshots g,
 					jsonb_each(g.files::jsonb) AS f(jkey, jvalue)
 				WHERE g.session_id IS NOT NULL
@@ -962,11 +953,13 @@ func peakPendingSnapshotSubquery(drv string) string {
 	return `
 		SELECT snap.session_id,
 			MAX(snap.additions) AS peak_additions,
-			MAX(snap.deletions) AS peak_deletions
+			MAX(snap.deletions) AS peak_deletions,
+			MAX(snap.files_changed) AS peak_files_changed
 		FROM (
 			SELECT g.id AS snapshot_id, g.session_id,
 				SUM(COALESCE(json_extract(f.value, '$.additions'), 0)) AS additions,
-				SUM(COALESCE(json_extract(f.value, '$.deletions'), 0)) AS deletions
+				SUM(COALESCE(json_extract(f.value, '$.deletions'), 0)) AS deletions,
+				COUNT(DISTINCT f.key) AS files_changed
 			FROM task_session_git_snapshots g, json_each(g.files) f
 			WHERE g.session_id IS NOT NULL
 			GROUP BY g.id, g.session_id

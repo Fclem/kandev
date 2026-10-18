@@ -260,6 +260,10 @@ The agent tool has additional rules:
 }
 ```
 
+### Report session activity
+
+`session.user_activity.beat` accepts only `{ "session_id": "..." }`; client timestamps are ignored. Its successful acknowledgement is `{ "enabled": true }` while capture is enabled and `{ "enabled": false }` after it is disabled. Missing, inaccessible, archived, and cleanup-in-progress sessions receive the same `NOT_FOUND` rejection.
+
 ### Launch a session
 
 `session.launch` always requires `task_id`. Explicit `intent` values are `prepare`, `start`, `start_created`, `resume`, `workflow_step`, and `restore_workspace`. Other fields are `session_id`, `agent_profile_id`, `executor_id`, `executor_profile_id`, `prompt`, `plan_mode`, `workflow_step_id`, `priority`, `launch_workspace`, `skip_message_record`, `auto_start`, and `attachments`.
@@ -530,6 +534,7 @@ session.file_review.reset
 session.file_review.update
 session.git.commits
 session.git.snapshots
+session.user_activity.beat
 session.launch
 session.recover
 session.rename

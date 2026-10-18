@@ -1,6 +1,6 @@
 ---
 created: 2026-10-03
-status: draft
+status: in_progress
 requirements:
   - REQ-TASKS-USER-ACTIVITY-001
   - REQ-TASKS-USER-ACTIVITY-002
@@ -77,9 +77,9 @@ and is non-normative.
 
 | Criteria | Evidence |
 | --- | --- |
-| AC-TASKS-USER-ACTIVITY-001.3, 001.6, 002.1-002.7 | `internal/task/service/user_activity_test.go`: `TestRecordUserActivityMergeMatrix`, `TestRecordUserActivityConcurrentBeats`, `TestRecordUserActivityDisabledStoresNothing`; `internal/task/repository/sqlite/user_activity_test.go`: `TestSumUserActivity`, `TestUserActivityCascadeDelete`; `user_activity_postgres_test.go`: `TestRecordUserActivityPostgresConcurrent` (needs `KANDEV_TEST_POSTGRES_DSN`); `internal/gateway/websocket/user_activity_test.go`: `TestBeatRejectsInaccessibleSession` (identical payload for inaccessible/missing, including auth off) |
-| AC-TASKS-USER-ACTIVITY-001.1, 001.2, 001.4, 001.5, 003.1 | `apps/web/hooks/domains/session/use-session-user-activity.test.ts`: `reports only while visible, focused, and recently active`, `stops on blur, hidden, idle, and session switch`, `sends only session_id`, `stops on enabled false acknowledgement and while reload is required`; `internal/task/service/user_activity_test.go`: `TestRecordUserActivityDisabledStoresNothing` |
-| AC-TASKS-USER-ACTIVITY-003.2-003.6 | `internal/task/repository/sqlite/user_activity_test.go`: `TestCreateTaskSessionStampsUserActivityCapture`, `TestCaptureTransitionTracksGaps`, `TestCaptureTransitionAtomicFailure`, `TestSessionMeasuredAcrossCaptureGap`, `TestSessionMeasuredUnaffectedBySiblingUpdate`; `internal/backendapp/`: `TestFlagOverrideStamps`; `internal/runtimeflags/registry_test.go`: `TestSessionUserActivityFlagRegistration`; `apps/web/lib/state/slices/features/features-contract.test.ts` |
+| AC-TASKS-USER-ACTIVITY-001.3, 001.6, 002.1-002.7 | `internal/task/repository/sqlite/user_activity_merge_test.go`: `TestRecordUserActivityMergeMatrix`, `TestRecordUserActivityConcurrentBeatsDoNotOverlap`; `internal/task/repository/sqlite/user_activity_test.go`: `TestRecordUserActivityDisabledStoresNothing`, `TestRecordUserActivityRejectsArchivedAndCleanupBlockedTasks`; `internal/task/service/user_activity_test.go`: `TestRecordUserActivityMissingAndInaccessibleSessionsAreUniform`; `internal/task/handlers/user_activity_ws_test.go`: `TestSessionUserActivityBeatAcknowledgements`; `internal/gateway/websocket/dispatch_scope_test.go`: `TestUserActivityBeatDefersSessionAuthorizationToHandler`; `internal/task/repository/sqlite/user_activity_postgres_test.go`: `TestPostgresUserActivityLedger` (needs `KANDEV_TEST_POSTGRES_DSN`) |
+| AC-TASKS-USER-ACTIVITY-001.1, 001.2, 001.4, 001.5, 003.1 | `apps/web/hooks/domains/session/use-session-user-activity.test.ts`: `reports only while visible, focused, and recently active`, `stops on blur, hidden, idle, and session switch`, `sends only session_id`, `stops on enabled false acknowledgement and while reload is required`; `internal/task/repository/sqlite/user_activity_test.go`: `TestRecordUserActivityDisabledStoresNothing` |
+| AC-TASKS-USER-ACTIVITY-003.2-003.6 | `internal/task/repository/sqlite/user_activity_test.go`: `TestCreateTaskSessionStampsCaptureState`, `TestEveryCreateTaskSessionVariantStampsCaptureState`, `TestActivityBeatsAndCaptureTransitionsDoNotChangeSessionUpdatedAt`; `internal/task/repository/sqlite/user_activity_transition_test.go`: `TestCaptureTransitionIsIdempotentAndFirstRunOffCreatesNoGap`, `TestCaptureGapMeasuredStateUsesSessionLifetimeNotUpdatedAt`, `TestCaptureTransitionWriteFailureLeavesPriorStateAtomic`; `internal/backendapp/user_activity_startup_test.go`: `TestFlagOverrideStampsNewActivitySession`; `internal/runtimeflags/registry_test.go`: `TestSessionUserActivityFlagIsRestartRequiredAndOffByDefault`; `apps/web/lib/state/slices/features/features-contract.test.ts` |
 | AC-PLUGINS-EFFORT-SIGNALS-001.* | `internal/plugins/host_data_message_origin_test.go`: `TestClassifyMessageOrigin`, `TestMessageListAuthorTypesFilter`; `internal/orchestrator/message_origin_test.go`: `TestQueuedPromptKeepsOrigin`, `TestUserMessageCreatorsHaveClassifiedOrigin` |
 | AC-PLUGINS-EFFORT-SIGNALS-002.* | `internal/plugins/host_data_session_activity_test.go`: `TestSessionUserActivityRead`, `TestSessionTurnsRead`, `TestSessionActivityFilterBound`, `TestSessionActivityRequiresResource` |
 | AC-PLUGINS-EFFORT-SIGNALS-003.* | `internal/plugins/host_data_mappers_test.go`: `TestTaskPullRequestSummaryFields`, `TestTaskPullRequestsIncludeGitLab`, `TestTaskPullRequestsPartialByProvider` (table-driven GitHub and GitLab source failures preserve the other provider's rows and set `PullRequestsPartial`); `pkg/pluginsdk/host_parity_test.go`: `TestTaskPullRequestsPartialPresence` (nil/false/true); `internal/analytics/repository/sqlite/session_code_stats_test.go`: `TestSessionCodeStatsFileCounts`; `session_code_stats_postgres_test.go`: `TestPostgresSessionCodeStatsFileCounts` (needs `KANDEV_TEST_POSTGRES_DSN`) |
@@ -96,13 +96,13 @@ and is non-normative.
 
 ## Work orders
 
-- [ ] [Task 01: Session user-activity ledger](task-01-activity-ledger.md)
-- [ ] [Task 02: Browser activity reporter](task-02-activity-reporter.md)
-- [ ] [Task 03: Prompt origin and author filter](task-03-message-origin.md)
-- [ ] [Task 04: Session activity and turn reads](task-04-activity-turn-reads.md)
-- [ ] [Task 05: Code and pull-request summary](task-05-code-pr-summary.md)
-- [ ] [Task 06: Change-request feedback read](task-06-change-request-feedback.md)
-- [ ] [Task 07: Fixture plugin, E2E, and documentation](task-07-fixture-and-docs.md)
+- [x] [Task 01: Session user-activity ledger](task-01-activity-ledger.md)
+- [x] [Task 02: Browser activity reporter](task-02-activity-reporter.md)
+- [x] [Task 03: Prompt origin and author filter](task-03-message-origin.md)
+- [x] [Task 04: Session activity and turn reads](task-04-activity-turn-reads.md)
+- [x] [Task 05: Code and pull-request summary](task-05-code-pr-summary.md)
+- [x] [Task 06: Change-request feedback read](task-06-change-request-feedback.md)
+- [x] [Task 07: Fixture plugin, E2E, and documentation](task-07-fixture-and-docs.md)
 
 Dependency order: 01 -> 02; 01 -> 04; 03 -> 04 -> 05 -> 06 -> 07; 02 -> 07.
 Waves: 1 (01, 03), 2 (02, 04), 3 (05), 4 (06), 5 (07). Every order is
@@ -111,7 +111,18 @@ the task repository package.
 
 ## Verification results
 
-Pending.
+Task 01 verification: focused Go regressions, runtime/config/profile tests, web
+feature contract, web typecheck/lint, public-doc validation, and backend
+format/lint passed. PostgreSQL integration was not run because
+`KANDEV_TEST_POSTGRES_DSN` was unset.
+
+Task 02 verification: Node 24 focused web tests passed (36 activity-reporter
+and WebSocket tests; 7 panel-activity tests); web typecheck and lint passed.
+The Chromium E2E smoke `tests/session/session-focus-signal.spec.ts` passed
+(1 test), exercising desktop session mounting and the existing subscribe/focus
+flow. It does not assert activity beats.
+
+Task 03 verification: proto regeneration, origin/author-filter/parity tests, orchestrator origin tests, `make fmt lint`, managed-dispatch regression, and public-doc validation passed. Work orders 04–07 remain pending.
 
 ## Risks
 

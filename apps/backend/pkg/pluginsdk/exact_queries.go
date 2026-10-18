@@ -323,6 +323,7 @@ type ExactQueryManager interface {
 	ListTaskRelations(context.Context, ExactTaskRelationsQuery) (ExactTaskRelationsPage, error)
 	ListPendingTaskTransitions(context.Context, ExactPendingTaskTransitionsQuery) (ExactPendingTransitionsPage, error)
 	ListChangeRequestEvidence(context.Context, ExactChangeRequestEvidenceQuery) (ExactChangeRequestEvidencePage, error)
+	ListChangeRequestFeedback(context.Context, ExactChangeRequestFeedbackQuery) (ExactChangeRequestFeedbackPage, error)
 	ListTaskUsage(context.Context, ExactTaskUsageQuery) (ExactTaskUsagePage, error)
 }
 

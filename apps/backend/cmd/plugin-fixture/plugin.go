@@ -214,6 +214,8 @@ func (p *fixturePlugin) HandleAction(ctx context.Context, req *pluginsdk.PluginA
 	}
 	response := map[string]any{"connected": true, "workspace_id": req.Context.WorkspaceID}
 	switch req.ActionKey {
+	case effortSummaryAction, effortEstimateAction:
+		return p.effortSignals(ctx, req)
 	case connectionStatusAction:
 		if requestedRevocation(req.Body) {
 			p.setCredentialRevoked(req.Context.WorkspaceID)

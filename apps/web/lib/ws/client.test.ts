@@ -135,6 +135,21 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("session user activity beat", () => {
+  it("sends the beat action with only the session ID", () => {
+    const { client, socket } = connectClient();
+
+    client.sendSessionUserActivityBeat("sess-activity");
+
+    expect(socket.sent.at(-1)).toMatchObject({
+      type: "request",
+      action: "session.user_activity.beat",
+      payload: { session_id: "sess-activity" },
+    });
+    expect(Object.keys(socket.sent.at(-1)?.payload as object)).toEqual(["session_id"]);
+  });
+});
+
 // eslint-disable-next-line max-lines-per-function -- readiness tests cover registration and retry lifecycle.
 describe("session subscription readiness", () => {
   it("accepts a registration acknowledgement that arrives after seven seconds", async () => {

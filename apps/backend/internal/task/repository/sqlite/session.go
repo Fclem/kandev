@@ -1258,7 +1258,15 @@ func (r *Repository) createTaskSession(ctx context.Context, exec taskSessionExec
 	if err := r.authorizeManualCreation(ctx, exec, "session", session.ID, session.TaskID); err != nil {
 		return err
 	}
-	metadataJSON, err := json.Marshal(session.Metadata)
+	metadata := session.Metadata
+	if r.userActivityCapture {
+		metadata = make(map[string]interface{}, len(session.Metadata)+1)
+		for key, value := range session.Metadata {
+			metadata[key] = value
+		}
+		metadata["user_activity_capture"] = true
+	}
+	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("failed to serialize agent session metadata: %w", err)
 	}

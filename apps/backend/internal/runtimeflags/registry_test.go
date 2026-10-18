@@ -627,3 +627,19 @@ func TestAgentSurvivalAvailabilityMatchesPlatformScope(t *testing.T) {
 		t.Fatalf("reasonCode = %q, want empty when available", reasonCode)
 	}
 }
+func TestSessionUserActivityFlagIsRestartRequiredAndOffByDefault(t *testing.T) {
+	def, ok := DefinitionByKey("features.sessionUserActivity")
+	if !ok {
+		t.Fatal("features.sessionUserActivity definition missing")
+	}
+	if def.EnvVar != "KANDEV_FEATURES_SESSION_USER_ACTIVITY" || !def.RestartRequired {
+		t.Fatalf("session user activity definition = %+v", def)
+	}
+	defaults, err := profiles.FeatureFlagDefaults()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaults["session_user_activity"] != "false" {
+		t.Fatalf("session user activity default = %q, want false in every profile", defaults["session_user_activity"])
+	}
+}

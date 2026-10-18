@@ -38,7 +38,8 @@ type Repository struct {
 	stepArrivalLocks sync.Map
 	// clockNow is a test-only clock seam. Set it before any concurrent
 	// repository call; it carries no synchronization.
-	clockNow func() time.Time
+	clockNow            func() time.Time
+	userActivityCapture bool
 	// sidebarQueryStage injects failures at resource boundaries in repository tests.
 	sidebarQueryStage func(string, *sqlx.Tx) error
 	// failCutoverAfter is a test-only failpoint for the worktree ownership

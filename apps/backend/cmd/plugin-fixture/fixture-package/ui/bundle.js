@@ -147,6 +147,146 @@
         return value;
       }
 
+      var effortValues = new Map();
+      var effortListeners = new Set();
+      function EffortView(props) {
+        var taskId =
+          props.taskId || new URLSearchParams(window.location.search).get("task_id") || "";
+        var state = React.useState(effortValues.get(taskId));
+        var value = state[0];
+        var errorState = React.useState("");
+        function load(action) {
+          return host.api
+            .invokeAction(action, {
+              workspaceId: host.context.getActiveWorkspaceId(),
+              taskId: action === "estimate" ? taskId : undefined,
+              body: { task_id: taskId },
+            })
+            .then(function (next) {
+              effortValues.set(taskId, next);
+              state[1](next);
+              effortListeners.forEach(function (fn) {
+                fn();
+              });
+              errorState[1]("");
+            })
+            .catch(function (err) {
+              errorState[1](String(err));
+            });
+        }
+        return jsx(
+          ui.Card,
+          { className: "min-w-0 p-3 space-y-3", "data-testid": "effort-view" },
+          jsx(
+            "div",
+            { className: "flex flex-wrap gap-2" },
+            jsx(
+              ui.Button,
+              {
+                "data-testid": "effort-summary",
+                onClick: function () {
+                  load("summary");
+                },
+                className: "max-md:min-h-11",
+              },
+              host.i18n.t("effortSummary"),
+            ),
+            jsx(
+              ui.Button,
+              {
+                "data-testid": "effort-estimate",
+                onClick: function () {
+                  load("estimate");
+                },
+                className: "max-md:min-h-11",
+              },
+              host.i18n.t("effortEstimate"),
+            ),
+          ),
+          errorState[0] ? jsx("p", { role: "alert", className: "break-all" }, errorState[0]) : null,
+          value
+            ? jsx(
+                "div",
+                { "data-testid": "effort-result", "data-active-ms": value.active_ms },
+                jsx(ui.Badge, null, String(value.active_ms)),
+                (value.feedback || []).map(function (task) {
+                  return jsx(
+                    "div",
+                    { key: task.TaskID },
+                    (task.Providers || []).map(function (provider) {
+                      return jsx(
+                        ui.Badge,
+                        {
+                          key: provider.Provider,
+                          "data-testid": "effort-provider",
+                          "data-provider": provider.Provider,
+                        },
+                        provider.Provider + ": " + provider.ProviderState,
+                      );
+                    }),
+                    (task.Items || []).map(function (item) {
+                      return jsx(
+                        "p",
+                        {
+                          key:
+                            item.Provider +
+                            item.RepositoryID +
+                            item.Number +
+                            item.Kind +
+                            item.ItemID,
+                          className: "break-words",
+                          "data-testid": "effort-feedback-item",
+                        },
+                        item.Body,
+                      );
+                    }),
+                  );
+                }),
+              )
+            : null,
+        );
+      }
+      function EffortBadge(props) {
+        var taskId = (props.slotProps || {}).taskId;
+        var state = React.useState(0);
+        React.useEffect(
+          function () {
+            var notify = function () {
+              state[1](function (n) {
+                return n + 1;
+              });
+            };
+            effortListeners.add(notify);
+            if (taskId && !effortValues.has(taskId)) {
+              host.api
+                .invokeAction("summary", {
+                  workspaceId: host.context.getActiveWorkspaceId(),
+                  body: { task_id: taskId },
+                })
+                .then(function (next) {
+                  effortValues.set(taskId, next);
+                  effortListeners.forEach(function (fn) {
+                    fn();
+                  });
+                })
+                .catch(function () {
+                  // Unknown remains explicit when this fixture lacks an approval.
+                });
+            }
+            return function () {
+              effortListeners.delete(notify);
+            };
+          },
+          [taskId],
+        );
+        var value = effortValues.get(taskId);
+        return jsx(
+          ui.Badge,
+          { "data-testid": "effort-badge", "data-task-id": taskId },
+          value ? String(value.human_prompts) : "?",
+        );
+      }
+
       function PluginPage() {
         var count = useCounter(React);
         var connectionState = React.useState("Not checked");
@@ -1547,6 +1687,63 @@
       });
       registry.registerRoute(FIXTURE_HELLO_PATH, PluginPage);
       registry.registerRoute(FIXTURE_MANAGED_CHAT_PATH, ManagedChatPage);
+      var effortTranslations = {
+        en: {
+          effortTitle: "Effort signals",
+          effortSummary: "Refresh signals",
+          effortEstimate: "Store estimate",
+        },
+        "pt-pt": {
+          effortTitle: "Sinais de esforço",
+          effortSummary: "Atualizar sinais",
+          effortEstimate: "Guardar estimativa",
+        },
+        "zh-cn": {
+          effortTitle: "工作量信号",
+          effortSummary: "刷新信号",
+          effortEstimate: "保存估算",
+        },
+        "zh-hk": {
+          effortTitle: "工作量訊號",
+          effortSummary: "重新整理訊號",
+          effortEstimate: "儲存估算",
+        },
+        "zh-tw": {
+          effortTitle: "工作量訊號",
+          effortSummary: "重新整理訊號",
+          effortEstimate: "儲存估算",
+        },
+        ja: {
+          effortTitle: "作業量シグナル",
+          effortSummary: "シグナルを更新",
+          effortEstimate: "見積もりを保存",
+        },
+        ko: {
+          effortTitle: "작업량 신호",
+          effortSummary: "신호 새로 고침",
+          effortEstimate: "추정 저장",
+        },
+        pseudo: {
+          effortTitle: "Éƒƒōŕŧ śĩģńàĺś",
+          effortSummary: "Ŕēƒŕēśħ śĩģńàĺś",
+          effortEstimate: "Śŧōŕē ēśŧĩḿàŧē",
+        },
+      };
+      registry.registerRoute("/plugins/e2e-effort", EffortView);
+      registry.registerNavItem({
+        id: "effort",
+        label: host.i18n.t("effortTitle", { defaultValue: effortTranslations.en.effortTitle }),
+        path: "/plugins/e2e-effort",
+      });
+      registry.registerTaskPanel({
+        id: "effort",
+        title: "Effort signals",
+        titleKey: "effortTitle",
+        icon: "chart-bar",
+        Component: EffortView,
+        mobileEnabled: true,
+      });
+      registry.registerComponent("task-card-indicators", EffortBadge);
       registry.registerComponent("task-sidebar", SidebarSlot);
       registry.registerComponent("main-top-bar", MainTopBarSlot);
       registry.registerComponent("main-top-bar", LegacyCompatibilitySlot);
@@ -1645,7 +1842,13 @@
         Selector: FixtureReviewSelector,
       });
 
-      registry.registerTranslations({
+      function registerFixtureTranslations(catalogs) {
+        Object.keys(effortTranslations).forEach(function (locale) {
+          catalogs[locale] = Object.assign({}, catalogs[locale], effortTranslations[locale]);
+        });
+        registry.registerTranslations(catalogs);
+      }
+      registerFixtureTranslations({
         en: {
           promptHistoryTitle: "Prompt history fixture",
           loading: "Loading prompt history",

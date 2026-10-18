@@ -475,6 +475,7 @@ var exactReadTaskDataMethods = map[string]struct{}{
 	exactReadListTaskRelations: {}, exactReadGetTaskRelations: {}, exactReadListTaskInbox: {},
 	exactReadGetTaskDirective: {}, exactReadListTaskDirectives: {}, exactReadListTaskTransitions: {},
 	exactReadChangeEvidence: {}, exactReadTaskUsage: {},
+	exactReadChangeFeedback: {},
 }
 
 //nolint:nestif // The operation capability check preserves the full authorization decision order.

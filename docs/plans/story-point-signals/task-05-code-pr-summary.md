@@ -1,7 +1,7 @@
 ---
 id: "05-code-pr-summary"
 title: "Code and pull-request summary"
-status: pending
+status: completed
 wave: 3
 depends_on:
   - "04-activity-turn-reads"
@@ -107,4 +107,8 @@ Task 04 (shared proto and generated files).
 
 ## Results
 
-Pending.
+Completed. `FilesChangedCommitted` sums `task_session_commits.files_changed` per commit and is nil when committed capture is unavailable (pre-activation), with measured zero explicit. `FilesChangedPeakPending` is the max distinct files across the session's git snapshots, branched by driver in `stats.go` with a Postgres branch. Both are optional scalars in the SDK. `TaskPullRequest` adds `CreatedAt`, synced-only `ChangedFiles`/`ApprovedReviewerCount`, and `SizeObserved`. GitLab merge requests merge into `Task.PullRequests` newest first, provider-labelled; each source fails independently, omitting only its own rows and setting `PullRequestsPartial` true, while complete reads set false. The SDK field is `*bool`, so absent, false and true stay distinct. GitLab maps the design table field by field.
+
+Finding: `CreateSessionCommit` deduplicates only on `(session_id, commit_sha)` (`git_snapshots.go:649-667`). The orchestrator attributes commits to the supplied session, and each session's sweep resolves its own base range, so overlapping observations in reused or shared workspaces count the same SHA once per session. Session totals are therefore not repository-wide unique commit totals. The public doc states this; no code change was made.
+
+Verification (parent rerun): `make proto`; `go test -count=1 ./internal/analytics/... ./internal/plugins/ ./pkg/pluginsdk/ -run 'TestSessionCodeStatsFileCounts|TestTaskPullRequestSummaryFields|TestTaskPullRequestsIncludeGitLab|TestTaskPullRequestsPartialByProvider|TestTaskPullRequestsPartialPresence|TestHostSDKProtoParity'` passed. Child reports: `make fmt lint` 0 issues; `go test ./internal/plugins/... ./pkg/pluginsdk/...` passed; public-doc validation 62/62 and 47 pages valid. PostgreSQL `TestPostgresSessionCodeStatsFileCounts` NOT RUN: `KANDEV_TEST_POSTGRES_DSN` unset.

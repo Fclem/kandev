@@ -430,6 +430,12 @@ func startServices( //nolint:cyclop
 	if !applyStartupRuntimeFlags(ctx, cfg, repos, log) {
 		return false
 	}
+	repos.Task.SetUserActivityCapture(cfg.Features.SessionUserActivity)
+	if err := repos.Task.RecordCaptureTransition(ctx, cfg.Features.SessionUserActivity, time.Now().UTC()); err != nil {
+		repos.Task.SetUserActivityCapture(false)
+		log.Error("Failed to persist session user activity capture state", zap.Error(err))
+		return false
+	}
 
 	agentRegistry, _, err := registry.Provide(log, cfg.Features.CodexAppServer)
 	if err != nil {

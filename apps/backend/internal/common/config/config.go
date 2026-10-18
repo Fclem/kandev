@@ -592,6 +592,10 @@ type FeaturesConfig struct {
 	// effect together with Coordinator, CoordinatorPhase2 and CoordinatorPhase3.
 	CoordinatorPhase31 bool `mapstructure:"coordinator_phase31" json:"coordinatorPhase31"`
 
+	// SessionUserActivity enables measured human engagement interval capture.
+	// It is restart-required and ships disabled in every profile.
+	SessionUserActivity bool `mapstructure:"session_user_activity" json:"sessionUserActivity"`
+
 	// CodexAppServer enables the separate native Codex app-server agent. It is
 	// off in every shipped profile and requires a restart because its protocol
 	// adapter and profile catalogue are composed at startup.

@@ -115,6 +115,12 @@ type SessionCodeStats struct {
 	LinesDeletedCommitted   *int64 `json:"lines_deleted_committed"`
 	LinesAddedPeakPending   int64  `json:"lines_added_peak_pending"`
 	LinesDeletedPeakPending int64  `json:"lines_deleted_peak_pending"`
+	// FilesChangedCommitted sums per-commit file counts, not distinct paths.
+	// It follows the same capture-availability semantics as committed lines.
+	FilesChangedCommitted *int64 `json:"files_changed_committed"`
+	// FilesChangedPeakPending is the maximum number of distinct file paths
+	// in any single snapshot, independent of the peak line-count snapshot.
+	FilesChangedPeakPending int64 `json:"files_changed_peak_pending"`
 }
 
 // SessionCodeStatsFilter narrows ListSessionCodeStats to a subset of

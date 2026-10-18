@@ -100,7 +100,7 @@ func TestTaskPRsToDTOsCarriesReadinessNotJustIdentity(t *testing.T) {
 		Additions: 400, Deletions: 25, MergedAt: &merged,
 	}}
 
-	out := taskPRsToDTOs(prs)
+	out := mergeTaskPullRequests(prs, nil)
 
 	require.Len(t, out, 1)
 	require.Equal(t, int64(3019), out[0].Number)
@@ -120,7 +120,7 @@ func TestTaskPRsToDTOsReturnsNewestFirst(t *testing.T) {
 		{PRNumber: 200, PRTitle: "newer", CreatedAt: time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)},
 	}
 
-	out := taskPRsToDTOs(prs)
+	out := mergeTaskPullRequests(prs, nil)
 
 	require.Len(t, out, 2)
 	require.Equal(t, int64(200), out[0].Number)
@@ -131,7 +131,7 @@ func TestTaskPRsToDTOsReturnsNewestFirst(t *testing.T) {
 // IsDraft is nullable on the row: unknown before the first sync. Nil must read
 // as not-draft rather than panicking the whole task list.
 func TestTaskPRsToDTOsTreatsAnUnknownDraftFlagAsNotDraft(t *testing.T) {
-	out := taskPRsToDTOs([]*githubsvc.TaskPR{{PRNumber: 1}, nil})
+	out := mergeTaskPullRequests([]*githubsvc.TaskPR{{PRNumber: 1}, nil}, nil)
 	require.Len(t, out, 1, "a nil row is skipped, not mapped")
 	require.False(t, out[0].IsDraft)
 }

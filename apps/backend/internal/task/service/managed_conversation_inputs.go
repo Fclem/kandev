@@ -374,7 +374,7 @@ func (s *AgentConversationService) DispatchManagedInput(
 	}
 	messageID := conversationIdentity("managed-dispatch", installationID, input.WorkspaceID, input.InstanceKey, input.OccurrenceKey)
 	dispatchStatus, err := immediate.DispatchImmediate(ctx, target.task.ID, target.session,
-		composeConversationPrompt(target.task, input.Payload), "plugin-installation:"+installationID, messageID)
+		composeConversationPrompt(target.task, input.Payload), "plugin:"+installationID, messageID)
 	if err != nil {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()

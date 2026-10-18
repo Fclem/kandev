@@ -39,6 +39,7 @@ import { PluginTaskPanel } from "../plugin-task-panel";
 import { parsePluginPanelId } from "@/lib/state/layout-manager/plugin-panels";
 import { useEffectiveMobilePanel, type MobileReviewSource } from "./mobile-plugin-panel-lifecycle";
 import { useTranslation } from "react-i18next";
+import { useSessionUserActivity } from "@/hooks/domains/session/use-session-user-activity";
 import { useTaskStatusSummary } from "@/hooks/domains/task/use-task-status-summary";
 import { LaunchQueueStatus } from "../launch-queue-status";
 import { WipQueueStatus } from "../wip-queue-status";
@@ -745,6 +746,10 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
       currentMobilePanel,
       handlePanelChangeAndClearSheet: handlePanelChangeAndClearTarget,
     });
+  useSessionUserActivity(
+    effectiveSessionId ?? null,
+    Boolean(effectiveSessionId) && effectiveMobilePanel === "chat",
+  );
   useLayoutEffect(() => {
     if (currentMobilePanel !== "chat" || effectiveMobilePanel !== "chat") {
       mobileScrollTokenRef.current += 1;

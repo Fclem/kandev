@@ -351,6 +351,7 @@ func (c *PATClient) fetchApprovals(ctx context.Context, projectPath string, iid 
 	var raw struct {
 		ApprovedBy []struct {
 			User struct {
+				ID        int64  `json:"id"`
 				Username  string `json:"username"`
 				AvatarURL string `json:"avatar_url"`
 			} `json:"user"`
@@ -365,6 +366,7 @@ func (c *PATClient) fetchApprovals(ctx context.Context, projectPath string, iid 
 	approvals := make([]MRApproval, 0, len(raw.ApprovedBy))
 	for _, a := range raw.ApprovedBy {
 		approvals = append(approvals, MRApproval{
+			UserID:    a.User.ID,
 			Username:  a.User.Username,
 			Avatar:    a.User.AvatarURL,
 			CreatedAt: raw.UpdatedAt,

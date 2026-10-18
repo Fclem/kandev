@@ -116,6 +116,7 @@ type SubscriptionState struct {
 // GitLab approvals are simpler than GitHub reviews — there is no
 // COMMENTED / DISMISSED state, only approved/not-approved.
 type MRApproval struct {
+	UserID    int64     `json:"user_id"`
 	Username  string    `json:"username"`
 	Avatar    string    `json:"avatar"`
 	CreatedAt time.Time `json:"created_at"`

@@ -124,6 +124,16 @@ func provideServices(ctx context.Context, cfg *config.Config, log *logger.Logger
 		return nil, nil, err
 	}
 	pluginsSvc := integrations.pluginsSvc
+	if pluginsSvc != nil && providers.gitlab != nil {
+		pluginsSvc.SetTaskMRSource(providers.gitlab)
+	}
+	if pluginsSvc != nil {
+		if providers.github != nil {
+			pluginsSvc.SetChangeRequestFeedbackReaders(providers.github.Client(), providers.gitlab)
+		} else {
+			pluginsSvc.SetChangeRequestFeedbackReaders(nil, providers.gitlab)
+		}
+	}
 
 	services := assembleServices(managedRuntimeSelections, core, providers, integrations)
 	if services.Plugins != nil {
@@ -269,6 +279,7 @@ func initCoreTaskServices(
 			BackgroundWork:     repos.Task,
 			RecoveryOperations: repos.Task,
 			AgentProfiles:      repos.AgentSettings,
+			UserActivity:       repos.Task,
 			AgentProfileExecutorValidator: taskAgentExecutorCompatibilityValidator{
 				profiles:        repos.AgentSettings,
 				agentRegistry:   agentRegistry,

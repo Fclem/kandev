@@ -1,7 +1,7 @@
 ---
 id: "04-activity-turn-reads"
 title: "Session activity and turn reads"
-status: pending
+status: completed
 wave: 2
 depends_on:
   - "01-activity-ledger"
@@ -113,4 +113,6 @@ Tasks 01 and 03.
 
 ## Results
 
-Pending.
+Completed. Added independent `session_activity` read resource (minimum version 0.97.0, keyed only on that resource) and per-method `Sessions()` gates: `List`/`CodeStats` need `sessions`; `UserActivity`/`Turns` need `session_activity` only, with PermissionDenied naming `api_read:session_activity`. Shared `validateSessionActivityFilter` bounds the combined 400-value filter. Repository does filtered, stable keyset pagination for session selection and turns (`(started_at,session_id)` and `(started_at,id)`); capture state is read once, aggregated in <=400-ID chunks, and measured state is evaluated in Go. Host zeroes totals when unmeasured and preserves measured zero. Turn DTO carries no metadata. Proto fields/RPCs appended only; SDK, gRPC server/client, mappers and bufconn parity updated.
+
+Verification (parent rerun): `make proto`, then `go test -count=1 ./internal/plugins/ ./internal/plugins/manifest/ ./pkg/pluginsdk/ ./internal/task/repository/sqlite/ -run 'TestSessionUserActivityRead|TestSessionTurnsRead|TestSessionActivityFilterBound|TestSessionActivityRequiresResource|TestSessionActivityMinimumVersion|TestHostSDKProtoParity'` passed. Child reports: `make fmt lint` 0 issues; `go test ./internal/plugins/... ./pkg/pluginsdk/...` passed; public-doc validation 62/62 and 47 pages valid; standalone smoke program (removed) passed. PostgreSQL tests NOT RUN: `KANDEV_TEST_POSTGRES_DSN` unset.

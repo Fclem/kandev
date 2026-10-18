@@ -1311,6 +1311,9 @@ func (r *Repository) initStepTransitionsSchema() error {
 }
 
 func (r *Repository) initMessageTurnSchema() error {
+	if err := r.initUserActivitySchema(r.migrationContext()); err != nil {
+		return err
+	}
 	_, err := r.db.ExecContext(r.migrationContext(), `
 	CREATE TABLE IF NOT EXISTS task_session_turns (
 		id TEXT PRIMARY KEY,

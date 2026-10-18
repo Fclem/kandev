@@ -344,7 +344,6 @@ function assertPluginFixtureIdentity(identityPath: string): void {
     identity.pluginVersion !== "1.0.0" ||
     identity.bundlePath !== "ui/bundle.js" ||
     identity.manifestCapability !== "messages" ||
-    identity.minKandevVersion !== "0.91.1" ||
     identity.panelKey !== "prompt-history-plugin"
   ) {
     throw new Error(`Unsupported E2E plugin identity schema in ${identityPath}`);
@@ -372,6 +371,12 @@ function assertPluginFixtureIdentity(identityPath: string): void {
     "fixture-package",
     "manifest.yaml",
   );
+  const manifestMinimum = /^min_kandev_version:\s*"(\d+\.\d+\.\d+)"\s*$/m.exec(
+    fs.readFileSync(manifest, "utf8"),
+  )?.[1];
+  if (!manifestMinimum || identity.minKandevVersion !== manifestMinimum) {
+    throw new Error(`E2E plugin minimum version does not match manifest in ${identityPath}`);
+  }
   const archive = path.join(BACKEND_DIR, ".build", "kandev-plugin-e2e-1.0.0.tar.gz");
   for (const [file, expected] of [
     [source, identity.sourceHash],

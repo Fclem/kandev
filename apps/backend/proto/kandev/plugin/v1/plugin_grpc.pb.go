@@ -822,6 +822,7 @@ const (
 	Host_ListPendingTaskTransitionsExact_FullMethodName            = "/kandev.plugin.v1.Host/ListPendingTaskTransitionsExact"
 	Host_ListChangeRequestEvidenceExact_FullMethodName             = "/kandev.plugin.v1.Host/ListChangeRequestEvidenceExact"
 	Host_ListTaskUsageExact_FullMethodName                         = "/kandev.plugin.v1.Host/ListTaskUsageExact"
+	Host_ListChangeRequestFeedbackExact_FullMethodName             = "/kandev.plugin.v1.Host/ListChangeRequestFeedbackExact"
 	Host_GetState_FullMethodName                                   = "/kandev.plugin.v1.Host/GetState"
 	Host_SetState_FullMethodName                                   = "/kandev.plugin.v1.Host/SetState"
 	Host_DeleteState_FullMethodName                                = "/kandev.plugin.v1.Host/DeleteState"
@@ -847,6 +848,8 @@ const (
 	Host_ListRepositories_FullMethodName                           = "/kandev.plugin.v1.Host/ListRepositories"
 	Host_ListSessions_FullMethodName                               = "/kandev.plugin.v1.Host/ListSessions"
 	Host_ListSessionCodeStats_FullMethodName                       = "/kandev.plugin.v1.Host/ListSessionCodeStats"
+	Host_ListSessionUserActivity_FullMethodName                    = "/kandev.plugin.v1.Host/ListSessionUserActivity"
+	Host_ListSessionTurns_FullMethodName                           = "/kandev.plugin.v1.Host/ListSessionTurns"
 	Host_ListMessages_FullMethodName                               = "/kandev.plugin.v1.Host/ListMessages"
 	Host_ListPendingInteractions_FullMethodName                    = "/kandev.plugin.v1.Host/ListPendingInteractions"
 	Host_GetInteraction_FullMethodName                             = "/kandev.plugin.v1.Host/GetInteraction"
@@ -962,6 +965,7 @@ type HostClient interface {
 	ListPendingTaskTransitionsExact(ctx context.Context, in *ListPendingTaskTransitionsExactRequest, opts ...grpc.CallOption) (*ListPendingTaskTransitionsExactResponse, error)
 	ListChangeRequestEvidenceExact(ctx context.Context, in *ListChangeRequestEvidenceExactRequest, opts ...grpc.CallOption) (*ListChangeRequestEvidenceExactResponse, error)
 	ListTaskUsageExact(ctx context.Context, in *ListTaskUsageExactRequest, opts ...grpc.CallOption) (*ListTaskUsageExactResponse, error)
+	ListChangeRequestFeedbackExact(ctx context.Context, in *ListChangeRequestFeedbackExactRequest, opts ...grpc.CallOption) (*ListChangeRequestFeedbackExactResponse, error)
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 	SetState(ctx context.Context, in *SetStateRequest, opts ...grpc.CallOption) (*SetStateResponse, error)
 	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*DeleteStateResponse, error)
@@ -1006,6 +1010,9 @@ type HostClient interface {
 	// not the raw commit/snapshot rows, whose JSON schema churns.
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
 	ListSessionCodeStats(ctx context.Context, in *ListSessionCodeStatsRequest, opts ...grpc.CallOption) (*ListSessionCodeStatsResponse, error)
+	// Activity and turn reads have their own api_read:session_activity grant.
+	ListSessionUserActivity(ctx context.Context, in *ListSessionUserActivityRequest, opts ...grpc.CallOption) (*ListSessionUserActivityResponse, error)
+	ListSessionTurns(ctx context.Context, in *ListSessionTurnsRequest, opts ...grpc.CallOption) (*ListSessionTurnsResponse, error)
 	// Conversation content — capability api_read:messages. Historical
 	// user/agent message content for a session or task, filterable by a time
 	// range (e.g. "yesterday"). Content is sanitized: kandev-injected
@@ -1688,6 +1695,16 @@ func (c *hostClient) ListTaskUsageExact(ctx context.Context, in *ListTaskUsageEx
 	return out, nil
 }
 
+func (c *hostClient) ListChangeRequestFeedbackExact(ctx context.Context, in *ListChangeRequestFeedbackExactRequest, opts ...grpc.CallOption) (*ListChangeRequestFeedbackExactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListChangeRequestFeedbackExactResponse)
+	err := c.cc.Invoke(ctx, Host_ListChangeRequestFeedbackExact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *hostClient) GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetStateResponse)
@@ -1941,6 +1958,26 @@ func (c *hostClient) ListSessionCodeStats(ctx context.Context, in *ListSessionCo
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListSessionCodeStatsResponse)
 	err := c.cc.Invoke(ctx, Host_ListSessionCodeStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostClient) ListSessionUserActivity(ctx context.Context, in *ListSessionUserActivityRequest, opts ...grpc.CallOption) (*ListSessionUserActivityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSessionUserActivityResponse)
+	err := c.cc.Invoke(ctx, Host_ListSessionUserActivity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostClient) ListSessionTurns(ctx context.Context, in *ListSessionTurnsRequest, opts ...grpc.CallOption) (*ListSessionTurnsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSessionTurnsResponse)
+	err := c.cc.Invoke(ctx, Host_ListSessionTurns_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -2213,6 +2250,7 @@ type HostServer interface {
 	ListPendingTaskTransitionsExact(context.Context, *ListPendingTaskTransitionsExactRequest) (*ListPendingTaskTransitionsExactResponse, error)
 	ListChangeRequestEvidenceExact(context.Context, *ListChangeRequestEvidenceExactRequest) (*ListChangeRequestEvidenceExactResponse, error)
 	ListTaskUsageExact(context.Context, *ListTaskUsageExactRequest) (*ListTaskUsageExactResponse, error)
+	ListChangeRequestFeedbackExact(context.Context, *ListChangeRequestFeedbackExactRequest) (*ListChangeRequestFeedbackExactResponse, error)
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	SetState(context.Context, *SetStateRequest) (*SetStateResponse, error)
 	DeleteState(context.Context, *DeleteStateRequest) (*DeleteStateResponse, error)
@@ -2257,6 +2295,9 @@ type HostServer interface {
 	// not the raw commit/snapshot rows, whose JSON schema churns.
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	ListSessionCodeStats(context.Context, *ListSessionCodeStatsRequest) (*ListSessionCodeStatsResponse, error)
+	// Activity and turn reads have their own api_read:session_activity grant.
+	ListSessionUserActivity(context.Context, *ListSessionUserActivityRequest) (*ListSessionUserActivityResponse, error)
+	ListSessionTurns(context.Context, *ListSessionTurnsRequest) (*ListSessionTurnsResponse, error)
 	// Conversation content — capability api_read:messages. Historical
 	// user/agent message content for a session or task, filterable by a time
 	// range (e.g. "yesterday"). Content is sanitized: kandev-injected
@@ -2512,6 +2553,9 @@ func (UnimplementedHostServer) ListChangeRequestEvidenceExact(context.Context, *
 func (UnimplementedHostServer) ListTaskUsageExact(context.Context, *ListTaskUsageExactRequest) (*ListTaskUsageExactResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTaskUsageExact not implemented")
 }
+func (UnimplementedHostServer) ListChangeRequestFeedbackExact(context.Context, *ListChangeRequestFeedbackExactRequest) (*ListChangeRequestFeedbackExactResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListChangeRequestFeedbackExact not implemented")
+}
 func (UnimplementedHostServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
 }
@@ -2586,6 +2630,12 @@ func (UnimplementedHostServer) ListSessions(context.Context, *ListSessionsReques
 }
 func (UnimplementedHostServer) ListSessionCodeStats(context.Context, *ListSessionCodeStatsRequest) (*ListSessionCodeStatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSessionCodeStats not implemented")
+}
+func (UnimplementedHostServer) ListSessionUserActivity(context.Context, *ListSessionUserActivityRequest) (*ListSessionUserActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSessionUserActivity not implemented")
+}
+func (UnimplementedHostServer) ListSessionTurns(context.Context, *ListSessionTurnsRequest) (*ListSessionTurnsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSessionTurns not implemented")
 }
 func (UnimplementedHostServer) ListMessages(context.Context, *ListMessagesRequest) (*ListMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMessages not implemented")
@@ -3757,6 +3807,24 @@ func _Host_ListTaskUsageExact_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Host_ListChangeRequestFeedbackExact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListChangeRequestFeedbackExactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostServer).ListChangeRequestFeedbackExact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Host_ListChangeRequestFeedbackExact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostServer).ListChangeRequestFeedbackExact(ctx, req.(*ListChangeRequestFeedbackExactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Host_GetState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetStateRequest)
 	if err := dec(in); err != nil {
@@ -4196,6 +4264,42 @@ func _Host_ListSessionCodeStats_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HostServer).ListSessionCodeStats(ctx, req.(*ListSessionCodeStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Host_ListSessionUserActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSessionUserActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostServer).ListSessionUserActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Host_ListSessionUserActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostServer).ListSessionUserActivity(ctx, req.(*ListSessionUserActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Host_ListSessionTurns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSessionTurnsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostServer).ListSessionTurns(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Host_ListSessionTurns_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostServer).ListSessionTurns(ctx, req.(*ListSessionTurnsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -4758,6 +4862,10 @@ var Host_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Host_ListTaskUsageExact_Handler,
 		},
 		{
+			MethodName: "ListChangeRequestFeedbackExact",
+			Handler:    _Host_ListChangeRequestFeedbackExact_Handler,
+		},
+		{
 			MethodName: "GetState",
 			Handler:    _Host_GetState_Handler,
 		},
@@ -4852,6 +4960,14 @@ var Host_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListSessionCodeStats",
 			Handler:    _Host_ListSessionCodeStats_Handler,
+		},
+		{
+			MethodName: "ListSessionUserActivity",
+			Handler:    _Host_ListSessionUserActivity_Handler,
+		},
+		{
+			MethodName: "ListSessionTurns",
+			Handler:    _Host_ListSessionTurns_Handler,
 		},
 		{
 			MethodName: "ListMessages",

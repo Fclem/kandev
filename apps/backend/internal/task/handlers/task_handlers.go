@@ -297,6 +297,7 @@ func (h *TaskHandlers) registerHTTP(router *gin.Engine) {
 }
 
 func (h *TaskHandlers) registerWS(dispatcher *ws.Dispatcher) {
+	dispatcher.RegisterFunc(ws.ActionSessionUserActivityBeat, h.wsSessionUserActivityBeat)
 	dispatcher.RegisterFunc(ws.ActionTaskList, h.wsListTasks)
 	dispatcher.RegisterFunc(ws.ActionTaskCreate, h.wsCreateTask)
 	dispatcher.RegisterFunc(ws.ActionTaskGet, h.wsGetTask)

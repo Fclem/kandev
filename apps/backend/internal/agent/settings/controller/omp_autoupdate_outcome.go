@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/kandev/kandev/internal/agent/agents"
 	"github.com/kandev/kandev/internal/agent/managedruntime"
 	"github.com/kandev/kandev/internal/agent/settings/dto"
 )
@@ -97,5 +99,10 @@ func (c *Controller) retainAutomaticHarnessOutcome(job dto.AgentUpdateJobDTO, re
 	if !found {
 		return
 	}
-	c.publishRuntimeStatus(ctx, dto.AgentUpdateStatusDTO{AgentName: job.AgentName, DisplayName: ag.DisplayName(), RuntimeID: job.RuntimeID, UpdateMode: dto.AgentUpdateModeSelfUpdate, LastOutcome: outcome, AutoUpdate: policy.Enabled, AutoUpdatePaused: policy.Enabled && policy.Paused, LastChange: policy.LastChange})
+	if c.runtimeUpdateNotifier == nil {
+		return
+	}
+	// Publish notices only: a partial status must not feed the availability observer, which would drop a pending stable-availability notice.
+	notice := agents.RuntimeUpdateNotice{AgentID: job.AgentName, RuntimeID: job.RuntimeID, DisplayName: ag.DisplayName(), UpdateMode: string(dto.AgentUpdateModeSelfUpdate), URL: "/settings/agents#runtime-update-" + url.PathEscape(job.AgentName)}
+	c.publishAutomaticHarnessNotices(ctx, dto.AgentUpdateStatusDTO{AgentName: job.AgentName, RuntimeID: job.RuntimeID, UpdateMode: dto.AgentUpdateModeSelfUpdate, LastOutcome: outcome, AutoUpdate: policy.Enabled, AutoUpdatePaused: policy.Enabled && policy.Paused, LastChange: policy.LastChange}, notice)
 }

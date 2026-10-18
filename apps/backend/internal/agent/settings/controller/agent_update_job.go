@@ -1005,7 +1005,8 @@ func (s *AgentUpdateJobStore) finishRefresh(
 	case caps.Status == hostutility.StatusOK:
 		job.Status = dto.AgentUpdateJobStatusSucceeded
 		job.CurrentVersion = caps.AgentVersion
-		refreshed = true
+		// An automatic no-change check leaves capabilities untouched, so it must not invalidate status caches or broadcast a refresh.
+		refreshed = job.automaticResult.Cause != automaticNoChange
 	case caps.Status == hostutility.StatusAuthRequired:
 		job.Status = dto.AgentUpdateJobStatusSucceeded
 		job.RefreshError = caps.Error

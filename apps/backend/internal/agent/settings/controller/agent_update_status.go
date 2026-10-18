@@ -208,16 +208,23 @@ func (c *Controller) runtimeUpdateStatusTargets(ctx context.Context) ([]runtimeU
 		return nil, nil
 	}
 
+	available := map[string]bool{}
+	if c.discovery != nil {
+		results, err := c.detectAgents(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("detect available agents: %w", err)
+		}
+		for _, result := range results {
+			available[result.Name] = result.Available
+		}
+	}
+
 	targets := make([]runtimeUpdateStatusTarget, 0)
 	for _, ag := range c.agentRegistry.List() {
-		available, err := c.agentAvailable(ctx, ag)
-		if err != nil {
-			return nil, fmt.Errorf("detect available agent: %w", err)
-		}
 		capability := c.runtimeUpdateCapabilities(ag)
 		target := runtimeUpdateStatusTarget{
 			agentName: ag.ID(), displayName: ag.DisplayName(), capability: capability,
-			available: available, enabled: ag.Enabled(),
+			available: c.discovery == nil || available[ag.ID()], enabled: ag.Enabled(),
 		}
 		target.packageName = capability.Source.NPM
 		if capability.Source.GitHubRepository != "" {

@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { t } from "i18next";
 import type { UsageTurn } from "@/lib/types/conversation-usage";
 import type { Turn } from "@/lib/types/http";
 import { MessageTurnMetrics } from "./message-turn-metrics";
+
+const pointer = vi.hoisted(() => ({ touch: false }));
+vi.mock("@/hooks/use-compact-task-chrome", () => ({
+  useTouchDrawer: () => pointer.touch,
+}));
 
 const USAGE_READ = vi.hoisted(() => ({
   usageTurn: null as UsageTurn | null,
@@ -63,6 +68,7 @@ function rowValue(label: string): string | undefined {
 
 afterEach(() => {
   cleanup();
+  pointer.touch = false;
   USAGE_READ.usageTurn = null;
   USAGE_READ.isLoading = false;
   USAGE_READ.isUnavailable = false;
@@ -85,16 +91,22 @@ describe("MessageTurnMetrics", () => {
     expect(screen.getByText("Provider-reported cost")).toBeTruthy();
   });
 
-  it("renders TTFT and TPS definitions as visible text instead of hover-only titles", () => {
-    USAGE_READ.usageTurn = usageTurn();
-    const { container } = render(
-      <MessageTurnMetrics turn={turn()} taskId="task-1" sessionId="session-1" />,
-    );
-
-    expect(screen.getByText(/Backend-measured time from receipt of turn_started/)).toBeTruthy();
-    expect(screen.getByText(/Average direct output and reasoning token rate/)).toBeTruthy();
-    expect(container.querySelector("[title]")).toBeNull();
-  });
+  it.each([false, true])(
+    "discloses TTFT help only through the info control (touch=%s)",
+    async (touch) => {
+      pointer.touch = touch;
+      render(<MessageTurnMetrics turn={turn()} taskId="task-1" sessionId="session-1" />);
+      expect(screen.queryByText(/Backend-measured time from receipt of turn_started/)).toBeNull();
+      const info = screen.getByTestId("message-ttft-info");
+      if (touch) fireEvent.click(info);
+      else fireEvent.focus(info);
+      const disclosure = await screen.findByRole(touch ? "dialog" : "tooltip");
+      expect(disclosure.textContent).toContain(
+        "Backend-measured time from receipt of turn_started",
+      );
+      expect(screen.getByText("350 ms")).toBeTruthy();
+    },
+  );
 
   it("shows pending or unavailable usage as status instead of fabricated token zeros", () => {
     USAGE_READ.isLoading = true;

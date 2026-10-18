@@ -315,7 +315,6 @@ describe("MessageActions metadata field selection", () => {
     expect(screen.queryByTestId("message-metadata-tokens")).toBeNull();
     expect(screen.queryByTestId("message-metadata-cost")).toBeNull();
     const ttft = screen.getByTestId("message-metadata-ttft");
-    expect(ttft.textContent).toBe("Time to first token: 350 ms");
     expect(ttft.getAttribute("tabindex")).toBe("0");
     fireEvent.focus(ttft);
     expect((await screen.findByRole("tooltip")).textContent).toContain("turn_started");

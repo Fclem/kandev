@@ -148,10 +148,10 @@ unavailable-plugin fallback.
 ```bash
 make build-backend
 make -C apps/backend build-e2e-delivery-fixture
-cd apps/web && pnpm run build:e2e
+(cd apps/web && pnpm run build:e2e)
 make -C apps/backend e2e-plugin-package
-cd apps/web && pnpm e2e:run --no-build tests/plugins/task-list-facet.spec.ts
-cd apps/web && pnpm e2e:run --no-build --project mobile-chrome tests/plugins/mobile-task-list-facet.spec.ts
+(cd apps/web && pnpm e2e:run --no-build tests/plugins/task-list-facet.spec.ts)
+(cd apps/web && pnpm e2e:run --no-build --project mobile-chrome tests/plugins/mobile-task-list-facet.spec.ts)
 ```
 
 ## Files likely touched
@@ -225,5 +225,6 @@ spec wrote a workspace user-state document while the fixture still read only
   the stored preference/query surviving disable, reload, and re-enable. Phone
   covers the Display Options sort and group pickers, the multi-value rows, the
   trailing bucket, and zero document horizontal overflow.
-- The released Tags package still needs the manual released-package procedure in
-  the plan; the automated fixture is shape-equivalent, not that bundle.
+- The plan's optional released-package procedure supplies separate package
+  compatibility evidence. The automated fixture and registry tests cover the
+  structural registration acceptance criterion; they do not install that bundle.

@@ -149,7 +149,7 @@ All applicable pre-commit and commit-message hooks passed without bypass.
 The standalone plugin pins that remotely verified SDK commit.
 Hook receipt: `host-effort-completion-receipt.json` in the parent task workspace.
 
-Standalone source delivery:
+Initial standalone source delivery:
 [`Fclem/kandev-plugin-story-points`](https://github.com/Fclem/kandev-plugin-story-points/tree/feature/design-story-point-e-n4h),
 branch `feature/design-story-point-e-n4h`, commit
 `e6f54e430db4f80d8f351a50a4103fecf71fdf10`. The clean committed tree
@@ -166,13 +166,47 @@ Changed-package Go lint passed against canonical `origin/main`'s merge base
 existing `goconst` finding. The override was command-scoped, with no persistent
 configuration or linter suppression.
 
-Final-package verification: the unchanged Go race suite passed in 12.154 seconds.
+Initial-package verification: the unchanged Go race suite passed in 12.154 seconds.
 All 40 UI tests passed, along with format, vet, package-verifier,
 release-version, host-package, and all-five-platform checks. The archive was
 rebuilt after the final structured-error classifier correction and installed
 successfully on the disposable backend, returning a fresh two-session estimate.
 Archive SHA-256:
 `d9465d28ffe09a7b2aecd0636e22e11aa6be8dcca57c86b5c6727eecbbe0bbb7`.
+
+#### Late completion-review reconciliation
+
+A delayed round-2 report exposed two defects still present after the initial
+delivery: unclassified feedback authors counted as human effort, and failed
+task-panel refreshes retained a fresh-looking cached record. Both reproduced
+with behavioral regressions before correction. Findings about mixed-session
+time, nullable file evidence, capped summary rows hiding card badges, and
+unavailable summary time were already fixed in the delivered source.
+
+Follow-up plugin commit `f9fa1e82d3dac8eab32c272d534a9089112b4ba5` was normally
+pushed on the same feature branch and independently verified remotely; its
+clean tree is `179b344d2283b79bad4a1652f41779e0fb85a849`.
+Formula version 3 excludes unclassified authors and records a confidence gap;
+startup/periodic reconciliation recomputes older formula records. The task panel
+retains saved points on a failed refresh but labels them stale.
+
+Final follow-up verification: Go race suite 12.174 seconds; 40 UI tests; format,
+vet, verifier/release negative cases, host and all-five-platform packages passed.
+Archive SHA-256:
+`5507cf27d69c1e75ad590700e8cef201e9f59b133dac136fc7aab0b5af18779a`.
+An executable feature smoke counted one human comment, one review, and one bot
+while excluding unknown-author comments/discussions and emitting the confidence
+gap (`late-feedback-evidence.json`). Native installation returned 201; a fresh
+estimate returned formula 3 and two sessions. The actual dockview task panel
+retained points with a stale badge and saved-estimate notice after a
+transport-injected 502, then cleared the stale notice after a successful retry
+(`late-panel-evidence.json`). Screenshot inspected; no page errors. Owned
+services stopped and throwaway scripts removed.
+
+No additional numbered review round was started beyond the requested 50-round
+cap. Earlier clean-review statements describe their checkpoint, not this later
+patch. No known findings from the delayed six-item report remain unaddressed.
+
 
 Review corrections cover mixed and unavailable human time, nullable
 file/line statistics, first-prompt proxy boundaries, session grouping,

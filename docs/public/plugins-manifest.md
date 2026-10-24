@@ -439,6 +439,10 @@ manager without its resource declared returns gRPC `PermissionDenied`.
 `session_activity` is independent of `sessions`: it grants only
 `Sessions().UserActivity` and `Sessions().Turns`, with filtered keyset pages.
 It requires `min_kandev_version: "0.98.0"` or later.
+Because their numeric core (`0.97.n`) is below `0.98.0`,
+published Nightlies built after 0.97.0 (`0.97.1-nightly.sha…`) reject these
+plugins at install time until 0.98.0 Stable ships. Development and
+git-describe builds skip that install comparison.
 The `session_activity` floor covers `ListSessionUserActivity`,
 `ListSessionTurns`, message `Origin` and `AuthorTypes`, code-stat file counts,
 provider-neutral task PR summaries, and `ListChangeRequestFeedbackExact`.

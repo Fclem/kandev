@@ -10,6 +10,7 @@ import { PreviewController } from "@/components/task/preview-controller";
 import { useDefaultLayout } from "@/lib/layout/use-default-layout";
 import { useLayoutStore } from "@/lib/state/layout-store";
 import { useSessionLayoutState } from "@/hooks/use-session-layout-state";
+import { useSessionUserActivity } from "@/hooks/domains/session/use-session-user-activity";
 import type { Repository } from "@/lib/types/http";
 import type { Layout } from "react-resizable-panels";
 import type { OpenFileTab } from "@/lib/types/backend";
@@ -111,6 +112,7 @@ export const SessionTabletLayout = memo(function SessionTabletLayout({
     handleOpenFile,
     handleFileOpenHandled,
   } = useSessionLayoutState({ sessionId });
+  useSessionUserActivity(effectiveSessionId ?? null, Boolean(effectiveSessionId));
 
   const layoutBySession = useLayoutStore((state) => state.columnsBySessionId);
   const layoutState = useMemo(

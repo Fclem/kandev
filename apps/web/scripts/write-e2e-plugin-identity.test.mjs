@@ -18,7 +18,7 @@ test("fixture identity records the actual manifest minimum rather than a pinned 
     await writeFile(archive, "archive");
     await writeFile(
       manifest,
-      'id: "kandev-plugin-e2e"\nversion: "1.0.0"\nmin_kandev_version: "0.97.0"\ncapabilities:\n  api_read: ["messages", "session_activity"]\n',
+      'id: "kandev-plugin-e2e"\nversion: "1.0.0"\nmin_kandev_version: "0.98.0"\ncapabilities:\n  api_read: ["messages", "session_activity"]\n',
     );
     const result = spawnSync(
       process.execPath,
@@ -26,7 +26,7 @@ test("fixture identity records the actual manifest minimum rather than a pinned 
       { encoding: "utf8" },
     );
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(await readFile(identity, "utf8")).minKandevVersion, "0.97.0");
+    assert.equal(JSON.parse(await readFile(identity, "utf8")).minKandevVersion, "0.98.0");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

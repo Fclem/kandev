@@ -23,9 +23,24 @@ const (
 	userActivityOutcomeDisabled  = "disabled"
 )
 
+// userActivityCaptureState is the durable capture history. UnconfirmedSince is
+// the start of the earliest boot whose capture transition has not committed;
+// that boot runs with capture disabled.
 type userActivityCaptureState struct {
-	Enabled bool                     `json:"enabled"`
-	Gaps    []userActivityCaptureGap `json:"gaps"`
+	Enabled          bool                     `json:"enabled"`
+	Gaps             []userActivityCaptureGap `json:"gaps"`
+	UnconfirmedSince *time.Time               `json:"unconfirmed_since,omitempty"`
+}
+
+// measurementGaps returns the recorded gaps plus, while a boot is unconfirmed
+// after capture was last confirmed on, an open gap from that boot's start.
+func (s userActivityCaptureState) measurementGaps() []userActivityCaptureGap {
+	if s.UnconfirmedSince == nil || !s.Enabled {
+		return s.Gaps
+	}
+	gaps := make([]userActivityCaptureGap, 0, len(s.Gaps)+1)
+	gaps = append(gaps, s.Gaps...)
+	return append(gaps, userActivityCaptureGap{Off: *s.UnconfirmedSince})
 }
 
 type userActivityCaptureGap struct {
@@ -41,6 +56,7 @@ func (r *Repository) SetUserActivityCapture(enabled bool) {
 // RecordUserActivity stores a server-timestamped beat when capture is enabled.
 // Outcome is one of recorded, coalesced, rejected, or disabled.
 func (r *Repository) RecordUserActivity(ctx context.Context, actorID, sessionID string, now time.Time) (string, error) {
+	now = now.UTC().Truncate(time.Millisecond)
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -167,11 +183,14 @@ func (r *Repository) SumUserActivity(ctx context.Context, sessionIDs []string) (
 	return summaries, nil
 }
 
+// userActivityDurationExpression sums intervals whose stored endpoints are whole
+// milliseconds. Rounding each SQLite julianday() difference removes floating-point
+// error without changing the interval's exact millisecond duration.
 func userActivityDurationExpression(driverName string) string {
 	if dialect.IsPostgres(driverName) {
 		return `CAST(SUM(EXTRACT(EPOCH FROM (a.ended_at - a.started_at)) * 1000) AS BIGINT)`
 	}
-	return `CAST(ROUND(SUM((julianday(a.ended_at) - julianday(a.started_at)) * 86400000)) AS BIGINT)`
+	return `SUM(CAST(ROUND((julianday(a.ended_at) - julianday(a.started_at)) * 86400000) AS INTEGER))`
 }
 
 func (r *Repository) sumUserActivityBatch(
@@ -237,7 +256,7 @@ func scanUserActivitySummary(rows *sqlx.Rows, state userActivityCaptureState) (m
 }
 
 func userActivityGapOverlaps(state userActivityCaptureState, started time.Time, completed sql.NullTime) bool {
-	for _, gap := range state.Gaps {
+	for _, gap := range state.measurementGaps() {
 		if gap.On != nil && !gap.On.After(started) {
 			continue
 		}
@@ -249,8 +268,56 @@ func userActivityGapOverlaps(state userActivityCaptureState, started time.Time, 
 	return false
 }
 
-// RecordCaptureTransition atomically persists startup capture state and gaps.
+// RecordCaptureTransition persists startup capture state and gaps. It first
+// commits an unconfirmed-boot marker and clears it only in the transaction that
+// commits the transition, so a boot whose transition never commits counts as
+// capture-off from its start, both for reads during that boot and for the next
+// successful transition.
 func (r *Repository) RecordCaptureTransition(ctx context.Context, effective bool, now time.Time) error {
+	now = now.UTC()
+	var prior *time.Time
+	err := r.updateCaptureState(ctx, func(state *userActivityCaptureState, first bool) bool {
+		if first {
+			return false
+		}
+		if state.UnconfirmedSince != nil {
+			prior = state.UnconfirmedSince
+			return false
+		}
+		state.UnconfirmedSince = &now
+		return true
+	})
+	if err != nil {
+		return err
+	}
+	return r.updateCaptureState(ctx, func(state *userActivityCaptureState, first bool) bool {
+		if prior != nil && state.Enabled {
+			state.Gaps = append(state.Gaps, userActivityCaptureGap{Off: *prior})
+			state.Enabled = false
+		}
+		applyCaptureTransition(state, first, effective, now)
+		state.UnconfirmedSince = nil
+		return true
+	})
+}
+
+func applyCaptureTransition(state *userActivityCaptureState, first, effective bool, now time.Time) {
+	if first || state.Enabled == effective {
+		state.Enabled = effective
+		return
+	}
+	if state.Enabled {
+		state.Gaps = append(state.Gaps, userActivityCaptureGap{Off: now})
+	} else if len(state.Gaps) > 0 && state.Gaps[len(state.Gaps)-1].On == nil {
+		closed := now
+		state.Gaps[len(state.Gaps)-1].On = &closed
+	}
+	state.Enabled = effective
+}
+
+// updateCaptureState runs one atomic read-modify-write of the capture state.
+// mutate receives whether no state exists yet and reports whether to persist.
+func (r *Repository) updateCaptureState(ctx context.Context, mutate func(*userActivityCaptureState, bool) bool) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -268,16 +335,8 @@ func (r *Repository) RecordCaptureTransition(ctx context.Context, effective bool
 			return fmt.Errorf("decode user activity capture state: %w", err)
 		}
 	}
-	if first {
-		state.Enabled = effective
-	} else if state.Enabled != effective {
-		if state.Enabled {
-			state.Gaps = append(state.Gaps, userActivityCaptureGap{Off: now.UTC()})
-		} else if len(state.Gaps) > 0 && state.Gaps[len(state.Gaps)-1].On == nil {
-			closed := now.UTC()
-			state.Gaps[len(state.Gaps)-1].On = &closed
-		}
-		state.Enabled = effective
+	if !mutate(&state, first) {
+		return tx.Commit()
 	}
 	encoded, err := json.Marshal(state)
 	if err != nil {

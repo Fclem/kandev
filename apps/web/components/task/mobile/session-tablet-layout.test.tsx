@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLayoutStore } from "@/lib/state/layout-store";
 import { SessionTabletLayout } from "./session-tablet-layout";
@@ -61,6 +61,29 @@ vi.mock("../dockview-review-dialog", () => ({
   TaskReviewDialogMount: () => null,
 }));
 
+const activity = vi.hoisted(() => ({
+  sendSessionUserActivityBeat: vi.fn(),
+}));
+
+vi.mock("@/components/state-provider", () => ({
+  useAppStore: (selector: (state: { features: { sessionUserActivity: boolean } }) => unknown) =>
+    selector({ features: { sessionUserActivity: true } }),
+  useAppStoreApi: () => ({
+    getState: () => ({ features: { sessionUserActivity: true }, setFeatures: vi.fn() }),
+  }),
+}));
+
+vi.mock("@/lib/ws/connection", () => ({
+  getWebSocketClient: () => ({
+    sendSessionUserActivityBeat: activity.sendSessionUserActivityBeat,
+  }),
+}));
+
+vi.mock("@/lib/platform/backend-reload-coordinator", () => ({
+  getBackendReloadSnapshot: () => ({ reloadRequired: false }),
+  subscribeToBackendReload: () => () => undefined,
+}));
+
 afterEach(cleanup);
 
 describe("SessionTabletLayout right-panel visibility", () => {
@@ -83,5 +106,30 @@ describe("SessionTabletLayout right-panel visibility", () => {
 
     expect(screen.queryByTestId("tablet-right-panel")).toBeNull();
     expect(screen.getByTestId("tablet-center-panel")).toBeTruthy();
+  });
+});
+
+describe("SessionTabletLayout user activity", () => {
+  beforeEach(() => {
+    activity.sendSessionUserActivityBeat.mockReset().mockResolvedValue({ enabled: true });
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // @covers AC-TASKS-USER-ACTIVITY-001.1
+  it("reports the shown session when the user interacts with the tablet layout", () => {
+    render(
+      <SessionTabletLayout
+        workspaceId="workspace-1"
+        workflowId="workflow-1"
+        sessionId="session-1"
+      />,
+    );
+    act(() => document.dispatchEvent(new Event("pointerdown")));
+    expect(activity.sendSessionUserActivityBeat).toHaveBeenCalledWith("session-1");
   });
 });

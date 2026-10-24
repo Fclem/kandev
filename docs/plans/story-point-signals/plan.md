@@ -27,8 +27,9 @@ pull-request summaries, and change-request feedback. Order: the ledger first
 because the activity read projects it; message origin early because it is
 independent and unblocks the plugin's prompt counts; the three remaining Host
 reads share `plugin.proto` and generated code, so they go in sequence; the
-fixture and documentation close the package. The estimator plugin itself is an
-external repository and is not in this plan.
+fixture and documentation close the Host package. The estimator plugin lives
+in the external repository `Fclem/kandev-plugin-story-points`. The user's later
+completion request includes that plugin and the remaining Host review fixes.
 
 ## Scope
 
@@ -41,10 +42,11 @@ external repository and is not in this plan.
   PR summary fields, GitLab MRs in `Task.PullRequests`, and
   `ListChangeRequestFeedbackExact`.
 - A fixture plugin, Playwright proof, and public plugin documentation.
+- The standalone estimator plugin, formula, native UI, packaged artifact, and
+  disposable-host verification in `Fclem/kandev-plugin-story-points`.
 
 ### Out of scope
 
-- The estimator plugin, formula, and its pages (external repository).
 - A core story-point field and a `/stats` slot.
 - Backfilling activity from history.
 - Enabling the flag in the `prod` profile; that is a separate release decision
@@ -122,7 +124,53 @@ The Chromium E2E smoke `tests/session/session-focus-signal.spec.ts` passed
 (1 test), exercising desktop session mounting and the existing subscribe/focus
 flow. It does not assert activity beats.
 
-Task 03 verification: proto regeneration, origin/author-filter/parity tests, orchestrator origin tests, `make fmt lint`, managed-dispatch regression, and public-doc validation passed. Work orders 04–07 remain pending.
+Task 03 verification: proto regeneration, origin/author-filter/parity tests, orchestrator origin tests, `make fmt lint`, managed-dispatch regression, and public-doc validation passed. Tasks 04–07 are complete; their individual Results record verification and limitations.
+
+### Completion review
+
+The original Host work orders are complete, but the combined API/plugin
+deliverable is not yet accepted. Remaining work from adversarial review:
+
+- [x] Finish Host round 3 findings, including tablet activity and timestamp precision.
+- [x] Reconcile existing tasks on plugin install/restart and formula upgrades.
+- [x] Debounce event-driven recomputes and serialize per-task writes.
+- [x] Render derived per-session detail in the task panel.
+- [x] Distinguish incomplete source totals from the summary display-row cap.
+- [x] Prove cold phone navigation to the canonical plugin route.
+- [ ] Complete the requested review loop and package/install verification.
+
+Host review rounds 4, 5, and 6 returned no findings against the completion fixes.
+The standalone plugin still needs its final review and delivery. PostgreSQL
+coverage requires `KANDEV_TEST_POSTGRES_DSN`; emulated visibility is not native
+browser-background proof.
+
+Parent verification of completion fixes: focused Go regressions in GitHub,
+task service, handlers, and SQLite passed; mounted mobile and tablet tests
+passed (two tests each). Changed-package Go lint passed against canonical
+`origin/main`'s merge base `70c884c84b`; the default stale `upstream/main` base
+reported an unrelated existing `goconst` finding. The override was
+command-scoped, with no persistent configuration or linter suppression.
+
+Standalone plugin: Go race tests and 21 UI tests passed, as did format, vet,
+package-verifier, release-version, and host-package checks. A package installed
+on a disposable backend automatically estimated a task created before install,
+without an estimate action or task event. A subsequent completion event updated
+the stored estimate. Desktop and fresh Pixel 5 contexts directly opened and
+reloaded `/story-points`, exercised Why, and showed no document overflow or page
+errors. The phone task panel rendered both session rows. Evidence:
+`/home/clem/.kandev/tasks/investigate-potentia_cw2zw7bk/story-final-jls69X/browser-evidence.json`
+and screenshots in the same directory. This smoke used a Vite frontend against
+the isolated backend, not a shipped embedded-web artifact. Both seeded sessions
+were capture-enabled measured zero; unmeasured/proxy distinctions are covered
+by regression tests, not claimed from these browser fixtures.
+
+A later capture-off smoke confirmed the unavailable-time headline and separate
+unavailable count. Phone controls measured 44px; desktop fine-pointer controls
+remained 24px, and narrow fine-pointer controls measured 44px. Evidence:
+`story-final-jls69X/availability-evidence.json` in the same task workspace.
+Subsequent plugin review identified mixed measured/proxy aggregation, pending-file
+fallback, cancellation freshness, and partial state-write consistency issues;
+their remediation and final review remain pending.
 
 ## Risks
 

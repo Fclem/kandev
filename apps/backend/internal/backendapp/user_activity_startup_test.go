@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/kandev/kandev/internal/common/config"
 	"github.com/kandev/kandev/internal/task/models"
@@ -39,9 +38,9 @@ func TestFlagOverrideStampsNewActivitySession(t *testing.T) {
 	if !cfg.Features.SessionUserActivity {
 		t.Fatal("SQLite override did not enable session user-activity capture")
 	}
-	repos.Task.SetUserActivityCapture(cfg.Features.SessionUserActivity)
-	if err := repos.Task.RecordCaptureTransition(ctx, cfg.Features.SessionUserActivity, time.Now().UTC()); err != nil {
-		t.Fatalf("record capture transition: %v", err)
+	initializeUserActivityCapture(ctx, cfg, repos.Task, log)
+	if !cfg.Features.SessionUserActivity {
+		t.Fatal("startup capture initialization disabled the SQLite-overridden flag")
 	}
 	if err := repos.Task.CreateTask(ctx, &models.Task{ID: "activity-override-task", Title: "activity"}); err != nil {
 		t.Fatalf("create task: %v", err)

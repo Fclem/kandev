@@ -54,7 +54,10 @@ with `{ session_id }` every 15 seconds and immediately on gaining engagement.
 It stops on blur, hidden, idle, session switch, unmount, or when the runtime
 flag reads off. The session is the one whose chat or panel surface owns focus,
 which the existing dockview active-panel state exposes; a task page with
-several sessions therefore reports one session at a time (AC 001.4).
+several sessions therefore reports one session at a time (AC 001.4). On phones
+every session panel (chat, plan, changes, files, terminal, review, and plugin task
+panels) is that surface, and reporting pauses while the task switcher is open. Coarse-pointer
+tablet layouts report the session they display through the same hook.
 
 Payload and logs contain no text, key identity, coordinates, or paths (AC 001.5).
 Two tabs on one session each beat, and the server merges them (AC 001.3).
@@ -104,7 +107,7 @@ base schema and migration files that own `task_session_turns`):
 | `session_id` | text | FK to `task_sessions`, `ON DELETE CASCADE` |
 | `task_id` | text | denormalized for task-scoped reads, FK cascade |
 | `actor_id` | text | authenticated user ID; with auth off, the synthetic `userstore.DefaultUserID` |
-| `started_at`, `ended_at` | timestamp | server clock, UTC |
+| `started_at`, `ended_at` | timestamp | server clock, UTC, truncated to whole milliseconds at the repository write boundary |
 
 Index `(session_id, actor_id, ended_at DESC)`. Turning auth on later changes the
 actor ID, so one person's earlier intervals and later ones are separate rows and
@@ -150,12 +153,24 @@ Measured state needs no write to any session row. Two facts decide it:
    with no backfill (AC 003.2, 003.3, 003.4).
 2. Capture gaps. At startup, after the setter, `RecordCaptureTransition` reads
    and updates one `kandev_meta` JSON value `user_activity_capture` containing
-   the current state and capture-off gaps. The read-modify-write is one atomic
-   transaction and one upsert. An on-to-off transition appends `{off: now}`;
-   off-to-on closes the latest open gap with `{on: now}`. If startup is off and
-   no open gap exists, off-to-on records no gap. The first startup records state
-   without inventing a prior gap. A metadata read or write error fails startup
-   closed: session capture remains disabled and session creation adds no stamp.
+   the current state, capture-off gaps, and an optional `unconfirmed_since`
+   boot marker. It runs two atomic read-modify-write transactions. The first
+   stamps `unconfirmed_since` with the boot time unless an earlier boot's marker
+   is still present or no capture state exists yet. The second applies the
+   transition and clears the marker.
+   An on-to-off transition appends `{off: now}`; off-to-on closes the latest
+   open gap with `{on: now}`. If startup is off and no open gap exists,
+   off-to-on records no gap. The first startup records state without inventing
+   a prior gap. A metadata read or write error fails startup closed: session
+   capture remains disabled and session creation adds no stamp.
+
+   A boot whose second transaction never commits ran with capture disabled.
+   While its marker remains and capture was last confirmed on, reads treat it
+   as an open gap from the marker. The next startup whose second transaction
+   commits first appends `{off: marker}` when the state was on, then applies
+   its own transition, so an off-to-on startup closes that gap at its own time.
+   A boot whose first transaction also fails leaves no durable record, and the
+   next startup cannot detect it.
 
 A session is `activity_measured` when it is stamped and no capture gap overlaps
 its life. A gap `[off, on)` (an open gap has `on = infinity`) overlaps when

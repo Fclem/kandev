@@ -35,8 +35,8 @@ func feedbackBody(body string) (string, bool) {
 	}
 	return body[:end], true
 }
-func githubFeedbackItems(ctx context.Context, reader githubFeedbackReader, workspaceID, userID string, pr *githubsvc.TaskPR) ([]pluginsdk.ChangeRequestFeedbackItem, error) {
-	feedback, err := reader.GetPRFeedbackItemsForWorkspace(ctx, workspaceID, userID, pr.Owner, pr.Repo, pr.PRNumber)
+func githubFeedbackItems(ctx context.Context, reader githubFeedbackReader, workspaceID string, pr *githubsvc.TaskPR) ([]pluginsdk.ChangeRequestFeedbackItem, error) {
+	feedback, err := reader.GetPRFeedbackItemsForWorkspace(ctx, workspaceID, pr.Owner, pr.Repo, pr.PRNumber)
 	if err != nil {
 		return nil, err
 	}

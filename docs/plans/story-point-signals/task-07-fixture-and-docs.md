@@ -136,3 +136,5 @@ Limitation (verbatim): this proves the reporter's gating logic under emulated vi
 AC 005.4 manual checklist (child-reported, checked against proto, SDK and manifest): every new RPC and resource is documented in the public authoring, manifest and PLUGIN-API docs, including bounds, failure states and minimum version. `PullRequestsPartial` tri-state is documented.
 
 PostgreSQL not run: `KANDEV_TEST_POSTGRES_DSN` unset. Native-background throttling and the literal combined mobile build/run remain unclaimed.
+
+Amendment: the fixture manifest floor is now 0.98.0 (see Task 04 amendment). The production estimator plugin lives in the external repository `Fclem/kandev-plugin-story-points`.

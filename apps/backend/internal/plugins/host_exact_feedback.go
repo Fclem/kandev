@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/kandev/kandev/internal/auth/authn"
 	githubsvc "github.com/kandev/kandev/internal/github"
 	"github.com/kandev/kandev/internal/gitlab"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
@@ -35,62 +34,81 @@ func (h *pluginHost) ListChangeRequestFeedback(ctx context.Context, q pluginsdk.
 		return pluginsdk.ExactChangeRequestFeedbackPage{}, status.Error(codes.ResourceExhausted, "feedback query exceeds 20 tasks")
 	}
 	rows, info, err := exactPage(h, identity, q.RequestID, q.Page, func() ([]pluginsdk.ChangeRequestFeedbackTask, error) {
-		ids := append([]string(nil), q.TaskIDs...)
-		tasks, err := h.fetchTasksForWorkspaces(ctx, []string{q.WorkspaceID}, true, true)
-		if err != nil {
-			return nil, err
-		}
-		allowed := make(map[string]bool, len(tasks))
-		for _, task := range tasks {
-			if task != nil {
-				allowed[task.ID] = true
-			}
-		}
-		if len(ids) == 0 {
-			for id := range allowed {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) > feedbackMaxTasks {
-			return nil, status.Error(codes.ResourceExhausted, "feedback query exceeds 20 tasks")
-		}
-		sort.Strings(ids)
-		unique := ids[:0]
-		for _, id := range ids {
-			if !allowed[id] {
-				return nil, status.Error(codes.InvalidArgument, "feedback task is outside the workspace")
-			}
-			if len(unique) == 0 || unique[len(unique)-1] != id {
-				unique = append(unique, id)
-			}
-		}
-		result := make([]pluginsdk.ChangeRequestFeedbackTask, 0, len(unique))
-		for _, id := range unique {
-			row := pluginsdk.ChangeRequestFeedbackTask{TaskID: id, Items: []pluginsdk.ChangeRequestFeedbackItem{}}
-			gh, items := h.githubFeedback(ctx, q.WorkspaceID, id)
-			row.Providers = append(row.Providers, gh)
-			row.Items = append(row.Items, items...)
-			gl, items := h.gitlabFeedback(ctx, q.WorkspaceID, id)
-			row.Providers = append(row.Providers, gl)
-			row.Items = append(row.Items, items...)
-			sort.Slice(row.Items, func(i, j int) bool { return feedbackItemLess(row.Items[i], row.Items[j]) })
-			if len(row.Items) > feedbackMaxItems {
-				omitFeedbackItems(&row, len(row.Items)-feedbackMaxItems)
-			}
-			result = append(result, row)
-		}
-		boundFeedbackBytes(result)
-		return result, nil
+		loaded, err := h.loadFeedbackTasks(ctx, q)
+		h.logFeedbackRead(loaded, err)
+		return loaded, err
 	})
-	h.logFeedbackRead(rows, err)
 	return pluginsdk.ExactChangeRequestFeedbackPage{Items: rows, PageInfo: info}, err
+}
+
+// loadFeedbackTasks builds the feedback snapshot for a query. exactPage calls
+// it only when no snapshot exists for the request, so the read record is
+// emitted once per snapshot rather than once per page.
+func (h *pluginHost) loadFeedbackTasks(ctx context.Context, q pluginsdk.ExactChangeRequestFeedbackQuery) ([]pluginsdk.ChangeRequestFeedbackTask, error) {
+	tasks, err := h.fetchTasksForWorkspaces(ctx, []string{q.WorkspaceID}, true, true)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		if task != nil {
+			allowed[task.ID] = true
+		}
+	}
+	unique, err := feedbackTaskIDs(q.TaskIDs, allowed)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]pluginsdk.ChangeRequestFeedbackTask, 0, len(unique))
+	for _, id := range unique {
+		row := pluginsdk.ChangeRequestFeedbackTask{TaskID: id, Items: []pluginsdk.ChangeRequestFeedbackItem{}}
+		gh, items := h.githubFeedback(ctx, q.WorkspaceID, id)
+		row.Providers = append(row.Providers, gh)
+		row.Items = append(row.Items, items...)
+		gl, items := h.gitlabFeedback(ctx, q.WorkspaceID, id)
+		row.Providers = append(row.Providers, gl)
+		row.Items = append(row.Items, items...)
+		sort.Slice(row.Items, func(i, j int) bool { return feedbackItemLess(row.Items[i], row.Items[j]) })
+		if len(row.Items) > feedbackMaxItems {
+			omitFeedbackItems(&row, len(row.Items)-feedbackMaxItems)
+		}
+		result = append(result, row)
+	}
+	boundFeedbackBytes(result)
+	return result, nil
+}
+
+// feedbackTaskIDs resolves the requested task IDs (every allowed task when none
+// are requested) into a sorted, de-duplicated list. Any ID outside allowed is
+// rejected.
+func feedbackTaskIDs(requested []string, allowed map[string]bool) ([]string, error) {
+	ids := append([]string(nil), requested...)
+	if len(ids) == 0 {
+		for id := range allowed {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) > feedbackMaxTasks {
+		return nil, status.Error(codes.ResourceExhausted, "feedback query exceeds 20 tasks")
+	}
+	sort.Strings(ids)
+	unique := ids[:0]
+	for _, id := range ids {
+		if !allowed[id] {
+			return nil, status.Error(codes.InvalidArgument, "feedback task is outside the workspace")
+		}
+		if len(unique) == 0 || unique[len(unique)-1] != id {
+			unique = append(unique, id)
+		}
+	}
+	return unique, nil
 }
 
 func (h *pluginHost) logFeedbackRead(rows []pluginsdk.ChangeRequestFeedbackTask, err error) {
 	if h.log == nil {
 		return
 	}
-	outcome := "available"
+	outcome := feedbackStateAvailable
 	if err != nil {
 		outcome = "failed"
 	} else {
@@ -119,7 +137,6 @@ func (h *pluginHost) githubFeedback(ctx context.Context, workspaceID, taskID str
 		return feedbackUnavailable(result), nil
 	}
 	reader := h.feedbackReaders().github
-	identity, _ := authn.IdentityFromContext(ctx)
 	var items []pluginsdk.ChangeRequestFeedbackItem
 	for _, pr := range rows[taskID] {
 		if pr == nil {
@@ -129,7 +146,7 @@ func (h *pluginHost) githubFeedback(ctx context.Context, workspaceID, taskID str
 			result.ProviderState = feedbackStateUnsupported
 			return result, nil
 		}
-		next, err := githubFeedbackItems(ctx, reader, workspaceID, identity.UserID, pr)
+		next, err := githubFeedbackItems(ctx, reader, workspaceID, pr)
 		if err != nil {
 			return feedbackUnavailable(result), nil
 		}
@@ -260,7 +277,7 @@ func boundFeedbackBytes(rows []pluginsdk.ChangeRequestFeedbackTask) {
 
 // Narrow provider contracts retain native credential and host resolution.
 type githubFeedbackReader interface {
-	GetPRFeedbackItemsForWorkspace(context.Context, string, string, string, string, int) (*githubsvc.PRFeedback, error)
+	GetPRFeedbackItemsForWorkspace(context.Context, string, string, string, int) (*githubsvc.PRFeedback, error)
 }
 type gitlabFeedbackReader interface {
 	GetMRFeedbackForWorkspace(context.Context, string, string, string, int) (*gitlab.MRFeedback, error)

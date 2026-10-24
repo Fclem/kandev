@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/common/logger"
 	githubsvc "github.com/kandev/kandev/internal/github"
 	"github.com/kandev/kandev/internal/gitlab"
+	taskmodels "github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/pkg/pluginsdk"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -18,35 +18,59 @@ import (
 )
 
 type feedbackGitHubStub struct {
-	reviews     []githubsvc.PRReview
-	comments    []githubsvc.PRComment
-	err         error
-	scopedUsers []string
+	reviews  []githubsvc.PRReview
+	comments []githubsvc.PRComment
+	err      error
 }
 
-func (s *feedbackGitHubStub) GetPRFeedbackItemsForWorkspace(_ context.Context, workspace, user, owner, repo string, _ int) (*githubsvc.PRFeedback, error) {
+func (s *feedbackGitHubStub) GetPRFeedbackItemsForWorkspace(_ context.Context, workspace, owner, repo string, _ int) (*githubsvc.PRFeedback, error) {
 	if workspace != "workspace-one" || owner != "acme" || repo != "repo" {
 		return nil, errors.New("incorrect GitHub workspace association")
 	}
-	s.scopedUsers = append(s.scopedUsers, user)
 	return &githubsvc.PRFeedback{Reviews: s.reviews, Comments: s.comments}, s.err
 }
 
-func TestFeedbackUsesCurrentWorkspaceGitHubCredentials(t *testing.T) {
+// GitHub feedback resolves through the workspace automation credential, so a
+// read with no caller identity must succeed and a revoked connection must
+// surface as that provider's unavailable state only.
+func TestFeedbackGitHubReadNeedsNoCallerIdentity(t *testing.T) {
 	host, gh, _ := linkedFeedbackHost(t)
-	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "reviewer"})
-	first, err := host.ListChangeRequestFeedback(ctx, feedbackQuery())
+	first, err := host.ListChangeRequestFeedback(context.Background(), feedbackQuery())
 	require.NoError(t, err)
 	require.Len(t, first.Items[0].Items, 2)
-	require.Equal(t, []string{"reviewer"}, gh.scopedUsers)
 	gh.err = errors.New("credentials revoked")
 	q := feedbackQuery()
 	q.RequestID = "after-revocation"
-	next, err := host.ListChangeRequestFeedback(ctx, q)
+	next, err := host.ListChangeRequestFeedback(context.Background(), q)
 	require.NoError(t, err)
-	require.Equal(t, []string{"reviewer", "reviewer"}, gh.scopedUsers)
 	require.Len(t, next.Items[0].Items, 1)
 	require.Equal(t, "gitlab", next.Items[0].Items[0].Provider)
+}
+
+// A continuation page is served from the snapshot the first page loaded, so it
+// must not emit a second read record.
+func TestFeedbackContinuationPageEmitsNoReadRecord(t *testing.T) {
+	host, _, _ := linkedFeedbackHost(t)
+	data := host.taskData.(*fakeTaskDataSource)
+	data.tasksByWorkspace["workspace-one"] = append(data.tasksByWorkspace["workspace-one"], &taskmodels.Task{ID: "task-two", WorkspaceID: "workspace-one"})
+	core, logs := observer.New(zap.DebugLevel)
+	log, err := logger.NewFromZap(zap.New(core))
+	require.NoError(t, err)
+	host.log = log
+	q := feedbackQuery()
+	q.TaskIDs = nil
+	q.Page.Limit = 1
+	first, err := host.ListChangeRequestFeedback(context.Background(), q)
+	require.NoError(t, err)
+	require.True(t, first.PageInfo.HasMore)
+	require.Len(t, logs.FilterMessage("plugin feedback read").All(), 1)
+	q.Page.Cursor = first.PageInfo.NextCursor
+	q.Page.SnapshotVersion = first.PageInfo.SnapshotVersion
+	second, err := host.ListChangeRequestFeedback(context.Background(), q)
+	require.NoError(t, err)
+	require.Len(t, second.Items, 1)
+	require.Equal(t, "task-two", second.Items[0].TaskID)
+	require.Len(t, logs.FilterMessage("plugin feedback read").All(), 1)
 }
 
 type feedbackGitLabStub struct {
@@ -100,7 +124,9 @@ func TestFeedbackProviderFailureIsPerProvider(t *testing.T) {
 						require.Equal(t, provider.Provider, page.Items[0].Items[0].Provider)
 					}
 				}
-				require.NotEmpty(t, logs.All(), "feedback reads must emit bounded outcome diagnostics")
+				feedbackLogs := logs.FilterMessage("plugin feedback read").All()
+				require.Len(t, feedbackLogs, 1, "one provider-backed read emits exactly one outcome record")
+				require.Equal(t, map[string]any{"task_count": int64(1), "outcome": "partial"}, feedbackLogs[0].ContextMap())
 				for _, entry := range logs.All() {
 					encoded, err := json.Marshal(entry.ContextMap())
 					require.NoError(t, err)

@@ -241,9 +241,11 @@ Resolution per task: query GitHub and GitLab association sources independently,
 then call each provider reader for the linked requests it returns. A failed
 association source produces an `unavailable` provider result with no items;
 successful data from the other provider is still returned. GitHub uses
-`ListPRReviews` and `ListPRComments` (`internal/github/client.go`); GitLab uses
-`Service.GetMRFeedback` (`internal/gitlab/service.go`) over its approvals and
-discussions. Current reader shapes limit the fields: `github.PRReview` has no
+`Service.GetPRFeedbackItemsForWorkspace` (`internal/github/service_feedback_items.go`) over
+`ListPRReviews` and `ListPRComments` (`internal/github/client.go`), resolved through the
+workspace automation credential; GitLab uses `Service.GetMRFeedbackForWorkspace`
+(`internal/gitlab/service_feedback.go`) over its approvals and discussions. Reads carry no
+caller identity. Current reader shapes limit the fields: `github.PRReview` has no
 bot flag and no `UpdatedAt`, and no GitHub reader supplies resolution. So review
 items use `author_kind` `bot` only when the login ends in `[bot]` and `unknown`
 otherwise, `updated_at` equals `created_at`, and `resolved` is absent; comment
@@ -259,7 +261,7 @@ kinds. The task-page cursor is opaque. Log fields are task count and outcome
 only (AC 004.6). `exactPage` loads a snapshot keyed by a generated version, with
 the request ID only in the receipt; it does not join or deduplicate concurrent
 calls. Each first page therefore performs a full live provider fan-out under the
-user's credential, so the plugin reads incrementally and per task.
+workspace automation credential, so the plugin reads incrementally and per task.
 
 ## Compatibility and authorization
 

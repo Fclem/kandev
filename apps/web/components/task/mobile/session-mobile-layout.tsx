@@ -748,7 +748,7 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
     });
   useSessionUserActivity(
     effectiveSessionId ?? null,
-    Boolean(effectiveSessionId) && effectiveMobilePanel === "chat",
+    Boolean(effectiveSessionId) && !isTaskSwitcherOpen,
   );
   useLayoutEffect(() => {
     if (currentMobilePanel !== "chat" || effectiveMobilePanel !== "chat") {

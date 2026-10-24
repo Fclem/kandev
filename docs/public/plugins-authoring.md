@@ -1000,7 +1000,10 @@ synthetic lifecycle-only turns and pending reservations are excluded.
 Disabled capture or a runtime capture-start boundary can make historical rows
 unmeasured; do not interpret those rows as measured inactivity.
 On desktop, capture follows the globally focused session-owned task panel, including
-Changes, diff, file, and terminal panels, not just chat. Capture-state persistence
+Changes, diff, file, and terminal panels, not just chat. On phones, every session panel
+(Chat, Plan, Changes, Files, Terminal, Review, and plugin task panels) reports the same way,
+and reporting pauses while the task switcher is open. On tablets (coarse pointer, half-screen
+width), the displayed session reports the same way. Capture-state persistence
 failures disable telemetry without preventing backend startup.
 
 New message origins are `human`, `peer_task`, `plugin`, `automation`,
@@ -1091,9 +1094,10 @@ result while paging.
   excluded; other notes report resolution only when the discussion is resolvable.
 
 Feedback reads resolve credentials for the approved workspace on each first
-page. GitHub uses the calling user's personal-read client and the workspace's
-repository boundary; reviews and comments bypass the UI feedback cache and do
-not synchronize PR aggregates. Token rotation or removal takes effect on the next read.
+page. GitHub uses the workspace automation credential after the workspace's
+repository boundary check; the read needs the `pull_request_read` grant on GitHub App
+installations and carries no caller identity. Reviews and comments bypass the UI feedback
+cache and do not synchronize PR aggregates. Token rotation or removal takes effect on the next read.
 GitLab uses the workspace's connection and verifies the linked host.
 Neither provider uses a boot-captured ambient client.
 

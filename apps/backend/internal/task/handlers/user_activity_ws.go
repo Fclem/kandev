@@ -37,6 +37,7 @@ func (h *TaskHandlers) wsSessionUserActivityBeat(ctx context.Context, msg *ws.Me
 	}
 	outcome, err := h.service.RecordUserActivity(ctx, actorID, req.SessionID)
 	if err != nil {
+		h.logger.Warn("Failed to record session user activity", zap.String("session_id", req.SessionID), zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Unable to record session activity", nil)
 	}
 	sessionUserActivityBeatsTotal.Add(outcome, 1)

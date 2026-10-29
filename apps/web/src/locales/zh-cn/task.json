@@ -2902,6 +2902,7 @@
   "mcpReasonInvalidTransport": "无法解析此服务器的传输配置。",
   "mcpReasonDefinitionDisabled": "此 MCP 服务器已在工作区中禁用。",
   "mcpReasonDefinitionMissing": "此 MCP 服务器定义已不可用。",
+  "mcpReasonSessionExcluded": "已从此会话排除",
   "mcpReasonSecretResolution": "无法解析所需的凭据。",
   "mcpTaskSelectionInfo": "为此任务选择额外的 MCP 服务器。代理配置或仓库中已选择的服务器会自动包含在内。",
   "deleteKeepFilesOption": "保留工作区文件",

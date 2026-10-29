@@ -2902,6 +2902,7 @@
   "mcpReasonInvalidTransport": "Não foi possível resolver a configuração de transporte deste servidor.",
   "mcpReasonDefinitionDisabled": "Este servidor MCP está desativado no espaço de trabalho.",
   "mcpReasonDefinitionMissing": "Esta definição de servidor MCP já não está disponível.",
+  "mcpReasonSessionExcluded": "Excluído desta sessão",
   "mcpReasonSecretResolution": "Não foi possível resolver as credenciais necessárias.",
   "mcpTaskSelectionInfo": "Escolha servidores MCP adicionais para esta tarefa. Os servidores selecionados no perfil do agente ou nos repositórios são incluídos automaticamente.",
   "deleteKeepFilesOption": "Manter os ficheiros do espaço de trabalho",

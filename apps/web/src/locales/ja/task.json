@@ -2902,6 +2902,7 @@
   "mcpReasonInvalidTransport": "このサーバーの転送設定を解決できませんでした。",
   "mcpReasonDefinitionDisabled": "この MCP サーバーはワークスペースで無効になっています。",
   "mcpReasonDefinitionMissing": "この MCP サーバーの定義は利用できなくなりました。",
+  "mcpReasonSessionExcluded": "このセッションから除外されています",
   "mcpReasonSecretResolution": "必要な認証情報を解決できませんでした。",
   "mcpTaskSelectionInfo": "このタスクに追加する MCP サーバーを選択します。エージェントプロファイルやリポジトリで選択済みのサーバーは自動的に含まれます。",
   "deleteKeepFilesOption": "ワークスペースのファイルを保持",

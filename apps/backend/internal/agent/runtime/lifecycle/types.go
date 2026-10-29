@@ -78,6 +78,13 @@ type AgentExecution struct {
 	// historical name is retained inside lifecycle because profile resolution,
 	// MCP, env, and command construction all consume this value.
 	AgentProfileID string
+	// CopilotSelectedPlugins carries the stable plugin identities from the
+	// authorized profile snapshot. Roots are resolved at each new process
+	// boundary and never persisted here.
+	CopilotSelectedPlugins []string
+	// ExecutionProfileID names the concrete CLI profile that owns this
+	// execution. Empty falls back to AgentProfileID for legacy sessions.
+	ExecutionProfileID string
 	// OfficeAgentProfileID is the stable Office identity. Empty for non-Office
 	// launches, where AgentProfileID owns both identity and execution config.
 	OfficeAgentProfileID      string
@@ -296,6 +303,12 @@ type AgentExecution struct {
 	// (e.g., after backend restart). Used by StartAgentProcess to route passthrough sessions
 	// to ResumePassthroughSession instead of startPassthroughSession.
 	isResumedSession bool
+	// attachedExistingCompute records that this attempt attached to runtime
+	// storage that already existed instead of allocating it. Recovery retention
+	// reads it so a reused workspace is not destroyed with the failed attempt.
+	// Conversation-resume intent is a separate fact and never authorizes or
+	// prevents destructive cleanup.
+	attachedExistingCompute bool
 	// suppressBootStatusMessage is set only for silent restart restore, where a
 	// boot status would otherwise create a synthetic completed transcript turn.
 	suppressBootStatusMessage bool
@@ -1911,6 +1924,7 @@ type AgentProfileInfo struct {
 	CursorPluginsMCPEnabled bool
 	MCPSelectionMode        string
 	MCPSelectedServers      []string
+	CopilotSelectedPlugins  []string
 	NativeSessionResume     bool // Agent supports ACP session/load for resume
 	SupportsMCP             bool
 	// CLIFlags is the resolved user-configurable list of CLI flags for this

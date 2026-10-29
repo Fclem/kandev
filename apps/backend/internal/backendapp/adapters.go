@@ -323,6 +323,9 @@ var _ interface {
 	InspectDeliveryRecordEvidence(context.Context, runtimeapi.DeliveryRecordEvidenceRequest) (*runtimeapi.DeliveryRecordEvidence, error)
 	ReadDeliveryRecordSubmission(context.Context, runtimeapi.DeliveryRecordSubmissionRequest) (*runtimeapi.DeliveryRecordSubmission, error)
 } = (*lifecycleAdapter)(nil)
+var _ interface {
+	RuntimeStorageObservation(string) (runtimeapi.RuntimeStorageObservation, bool)
+} = (*lifecycleAdapter)(nil)
 
 // newLifecycleAdapter creates a new lifecycle adapter
 func newLifecycleAdapter(mgr *lifecycle.Manager, reg *registry.Registry, log *logger.Logger) *lifecycleAdapter {
@@ -1905,8 +1908,25 @@ func clarificationQuestionData(question clarification.Question, options []interf
 		"prompt":  question.Prompt,
 		"options": options,
 	}
+	if len(question.Images) > 0 {
+		data["images"] = question.Images
+	}
 	if question.AllowCustomText != nil {
 		data["allow_custom_text"] = *question.AllowCustomText
+	}
+	return data
+}
+
+func clarificationOptionsData(options []clarification.Option) []interface{} {
+	data := make([]interface{}, len(options))
+	for j, opt := range options {
+		item := map[string]interface{}{
+			"option_id": opt.ID, "label": opt.Label, "description": opt.Description,
+		}
+		if len(opt.Images) > 0 {
+			item["images"] = opt.Images
+		}
+		data[j] = item
 	}
 	return data
 }
@@ -1915,14 +1935,7 @@ func (a *messageCreatorAdapter) CreateClarificationRequestMessages(ctx context.C
 	ids := make([]string, 0, len(questions))
 	total := len(questions)
 	for i, question := range questions {
-		options := make([]interface{}, len(question.Options))
-		for j, opt := range question.Options {
-			options[j] = map[string]interface{}{
-				"option_id":   opt.ID,
-				"label":       opt.Label,
-				"description": opt.Description,
-			}
-		}
+		options := clarificationOptionsData(question.Options)
 
 		questionData := clarificationQuestionData(question, options)
 

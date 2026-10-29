@@ -51,8 +51,6 @@ export type TaskRowProps = {
   isPinned?: boolean;
   pinnedTaskIds?: string[];
   deletingTaskId?: string | null;
-  archivingTaskId?: string | null;
-  isArchiving?: boolean;
   selectedTaskIds?: Set<string>;
   onToggleSelectTask?: (taskId: string, occurrenceId?: string) => void;
   onSelectTaskRange?: (taskId: string, occurrenceId?: string) => void;
@@ -96,7 +94,6 @@ function getContextMenuProps(props: SelectedTaskRowProps, isArchived: boolean) {
     isPinned: isArchived ? false : props.isPinned,
     pinnedTaskIds: props.pinnedTaskIds,
     isDeleting: props.deletingTaskId === props.task.id,
-    isArchiving: props.isArchiving && props.archivingTaskId === props.task.id,
     selectedTaskIds: archiveAware(props.selectedTaskIds, isArchived),
     onBulkArchive: archiveAware(props.onBulkArchive, isArchived),
     onBulkDelete: props.onBulkDelete,

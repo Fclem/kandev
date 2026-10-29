@@ -631,7 +631,13 @@ Each card uses retained data for that turn. Later edits, commits, or branch chan
 
 The diff shows the selected file’s full path and its previous path after a rename. If a file list fails to load, select **Retry**.
 
-Some captures are partial or unavailable. Cards with captured files label that state and give the reason when available. A completed turn with no recorded file entries has no card; this does not prove that a failed capture had no changes. Retained content can expire. Kandev then shows an expiry message and does not replace the historical diff with current workspace content. The **Changes** panel continues to show the current workspace and Git history.
+For a new capture, Kandev compares the turn with its captured history. If the branch integrates upstream commits during the turn, for example with a rebase or merge onto the configured comparison target, the card excludes those upstream changes. Starting local edits stay in the baseline, so a later revert still appears as a turn change. If Kandev cannot separate the history safely, the affected repository reports an unavailable comparison and does not show whole-repository totals as turn edits. Other repositories in the same turn remain usable.
+
+Older captures keep their original files and counts with repository-change wording. Kandev does not reconstruct missing history from the current checkout.
+
+Some captures are partial or unavailable. Cards with captured files label that state and give the reason when available. A completed turn with no recorded file entries has no card; this does not prove that a failed capture had no changes. An unavailable history comparison is the exception and uses the normal unavailable status. Retained content can expire. Kandev then shows an expiry message and does not replace the historical diff with current workspace content. The **Changes** panel continues to show the current workspace and Git history.
+
+Saved files stay available while the remaining content is preserved. A selected file whose content is still pending shows the usual loading state. If preservation stops, the missing files report an explicit unavailable reason.
 
 By default, a running session keeps the coarse **Generating** state and queues
 another message even if Kandev detects background work. Operators can opt into

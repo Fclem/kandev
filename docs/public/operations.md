@@ -279,7 +279,7 @@ manual database compaction are separate maintenance operations.
 <summary>Storage maintenance details</summary>
 
 Open **Settings > System > Storage > Host** to inspect Kandev-managed disk usage and
-configure cleanup. Open **Storage > Office retention** for Office history policy and status.
+configure cleanup. When Office is enabled, open **Storage > Office retention** for Office history policy and status.
 **Analyze** is read-only. **Run now** applies only the enabled cleanup rules and refuses to start
 while another maintenance run owns the cleanup gate. Cleanup normally waits for active task
 resources to become idle. If they are active, the page names the work and offers **Run anyway**
@@ -494,7 +494,8 @@ the Kandev service first provides the clearest maintenance boundary.
 ## Office run history retention
 
 Open **Settings > System > Storage > Office retention** to manage automatic deletion of old
-Office run history. Deletion is enabled by default. The first sweep starts five
+Office run history. This tab is available only when the Office feature is enabled.
+Deletion is enabled by default. The first sweep starts five
 minutes after the backend starts or after you enable deletion.
 
 The first sweep for each history table is a preview. It reports the rows that

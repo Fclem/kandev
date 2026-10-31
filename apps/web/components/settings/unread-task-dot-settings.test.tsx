@@ -46,4 +46,15 @@ describe("UnreadTaskDotSettings", () => {
 
     expect(screen.queryByLabelText(DELAY_LABEL)).toBeNull();
   });
+
+  it("keeps an unsaved delay edit when the dot switch is turned off and on", () => {
+    renderSettings(true);
+    fireEvent.change(screen.getByLabelText(DELAY_LABEL), { target: { value: "7" } });
+    const toggle = screen.getByRole("switch", { name: DOT_LABEL });
+
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+
+    expect((screen.getByLabelText(DELAY_LABEL) as HTMLInputElement).value).toBe("7");
+  });
 });

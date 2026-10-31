@@ -22,9 +22,11 @@ export function parseUnreadTaskDotHideDelay(value: string): number | null {
 /**
  * Edits how long an opened task keeps its unread dot before it clears. It
  * participates in the shared Settings save/discard lifecycle and commits the
- * persisted preference to the app store on save.
+ * persisted preference to the app store on save. It stays mounted while
+ * hidden so an unsaved edit and its save registration survive the dot switch
+ * being toggled.
  */
-export function UnreadTaskDotHideDelaySettings() {
+export function UnreadTaskDotHideDelaySettings({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
   const stored = useAppStore((state) => state.userSettings.unreadTaskDotHideDelaySeconds);
   const setUserSettings = useAppStore((state) => state.setUserSettings);
@@ -62,6 +64,7 @@ export function UnreadTaskDotHideDelaySettings() {
     discard: () => setDraft(saved),
   });
 
+  if (!visible) return null;
   return (
     <SettingsRow
       label={t("settings:unreadTaskDotHideDelay")}

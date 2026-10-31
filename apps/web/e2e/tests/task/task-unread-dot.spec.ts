@@ -1,7 +1,13 @@
 import { expect, type Locator } from "@playwright/test";
 import { test } from "../../fixtures/test-base";
 import { SessionPage } from "../../pages/session-page";
-import { TASK_UNREAD_DOT_LABEL, rowHeight, seedUnreadDotTasks } from "../../helpers/unread-divider";
+import { watchWs } from "../../helpers/causal-waits";
+import {
+  TASK_UNREAD_DOT_LABEL,
+  rowHeight,
+  seedUnreadDotTasks,
+  waitForTaskUnreadSummary,
+} from "../../helpers/unread-divider";
 
 function unreadDot(row: Locator): Locator {
   return row.getByRole("img", { name: TASK_UNREAD_DOT_LABEL });
@@ -36,6 +42,7 @@ test.describe("Task unread dot", () => {
     test.setTimeout(120_000);
     const seeded = await seedUnreadDotTasks(apiClient, seedData, "Unread dot");
 
+    const ws = watchWs(testPage);
     await testPage.goto(`/t/${seeded.navTaskId}`);
     const session = new SessionPage(testPage);
     await session.waitForLoad();
@@ -60,12 +67,14 @@ test.describe("Task unread dot", () => {
       content: "arrives while open",
     });
     await expect(unreadDot(targetRow)).toHaveCount(0);
+    const targetUnread = waitForTaskUnreadSummary(ws, seeded.targetTaskId);
     const unreadReply = await apiClient.seedSessionMessage(seeded.targetSessionId, {
       type: "message",
       content: "background reply",
     });
 
-    await expect(unreadDot(targetRow)).toBeVisible({ timeout: 15_000 });
+    await targetUnread;
+    await expect(unreadDot(targetRow)).toBeVisible();
     expect(await rowHeight(targetRow)).toBe(heightWithoutDot);
     await expect(unreadDot(navRow)).toHaveCount(0);
 

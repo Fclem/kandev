@@ -1,7 +1,13 @@
 import { expect } from "@playwright/test";
 import { test } from "../../fixtures/test-base";
 import { SessionPage } from "../../pages/session-page";
-import { TASK_UNREAD_DOT_LABEL, rowHeight, seedUnreadDotTasks } from "../../helpers/unread-divider";
+import { watchWs } from "../../helpers/causal-waits";
+import {
+  TASK_UNREAD_DOT_LABEL,
+  rowHeight,
+  seedUnreadDotTasks,
+  waitForTaskUnreadSummary,
+} from "../../helpers/unread-divider";
 
 test.describe("Mobile task unread dot", () => {
   test.beforeEach(async ({ apiClient }) => {
@@ -23,6 +29,7 @@ test.describe("Mobile task unread dot", () => {
     test.setTimeout(90_000);
     const seeded = await seedUnreadDotTasks(apiClient, seedData, "Mobile unread dot");
 
+    const ws = watchWs(testPage);
     await testPage.goto(`/t/${seeded.navTaskId}`);
     const session = new SessionPage(testPage);
     await session.waitForLoad();
@@ -36,12 +43,14 @@ test.describe("Mobile task unread dot", () => {
     await expect(dot).toHaveCount(0);
     const heightWithoutDot = await rowHeight(targetRow);
 
+    const targetUnread = waitForTaskUnreadSummary(ws, seeded.targetTaskId);
     await apiClient.seedSessionMessage(seeded.targetSessionId, {
       type: "message",
       content: "background reply",
     });
 
-    await expect(dot).toBeVisible({ timeout: 15_000 });
+    await targetUnread;
+    await expect(dot).toBeVisible();
     expect(await rowHeight(targetRow)).toBe(heightWithoutDot);
     expect(
       await testPage.evaluate(

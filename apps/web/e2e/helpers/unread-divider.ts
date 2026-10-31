@@ -3,6 +3,7 @@ import type { ApiClient } from "./api-client";
 import type { SeedData } from "../fixtures/test-base";
 import { multiMessageScript } from "./seed-session-messages";
 import { waitForSessionDone } from "./session";
+import type { WsFrame, WsWatcher } from "./causal-waits";
 
 /** True only when element is actually scrolled into container's visible
  *  viewport. Unlike Playwright's toBeVisible(), which only checks CSS
@@ -71,6 +72,17 @@ export async function seedScrollTestConversation(
 }
 
 export const TASK_UNREAD_DOT_LABEL = "Task has unread messages";
+
+/** Arms a wait for the task status summary that lists `taskId` as unread.
+ *  Arm it before the action that makes the backend publish the summary. */
+export function waitForTaskUnreadSummary(ws: WsWatcher, taskId: string): Promise<WsFrame> {
+  return ws.waitForEvent("task.status_summary.updated", {
+    where: (payload) => {
+      const summary = payload.status_summary as { unread_session_ids?: string[] } | undefined;
+      return payload.task_id === taskId && (summary?.unread_session_ids?.length ?? 0) > 0;
+    },
+  });
+}
 
 export type UnreadDotTasks = {
   navTitle: string;

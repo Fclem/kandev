@@ -109,3 +109,9 @@ e2e specs passed in the single-worker host runner (desktop 39.6s, mobile
 harness that was deleted afterwards; the SQL candidate prefilter reduced the
 no-qualifying-row list load from 4.1s to about 150ms for 40 sessions of 5000
 rows.
+
+PR review follow-up: the hide delay control stays mounted while hidden so an
+unsaved delay edit survives toggling the dot switch; both unread setting
+targets and save contributors map to the Conversation tab; and both e2e specs
+arm `watchWs().waitForEvent("task.status_summary.updated")` before seeding
+instead of waiting on the UI with a long timeout.

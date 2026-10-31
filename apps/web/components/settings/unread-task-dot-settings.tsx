@@ -71,7 +71,7 @@ export function UnreadTaskDotSettings() {
           />
         }
       />
-      {draft && <UnreadTaskDotHideDelaySettings />}
+      <UnreadTaskDotHideDelaySettings visible={draft} />
     </>
   );
 }

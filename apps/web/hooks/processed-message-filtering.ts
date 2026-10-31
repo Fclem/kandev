@@ -14,23 +14,11 @@ import {
   isAutomaticPermissionPresentation,
   permissionPresentationFromMetadata,
 } from "@/lib/permissions/presentation";
+import visibleMessageTypes from "@kandev/types/unread-message-visible-types.json";
 
-const VISIBLE_MESSAGE_TYPES: Set<string> = new Set([
-  "message",
-  "content",
-  "tool_call",
-  "tool_read",
-  "tool_edit",
-  "tool_execute",
-  "tool_search",
-  "progress",
-  "status",
-  "error",
-  "thinking",
-  "todo",
-  "script_execution",
-  "agent_plan",
-]);
+/** Transcript-visible message types. The backend unread predicate requires the
+ *  same set, so both sides read the shared manifest. */
+const VISIBLE_MESSAGE_TYPES: ReadonlySet<string> = new Set<string>(visibleMessageTypes);
 
 function isVisibleMessageType(type: MessageType | undefined): boolean {
   return !type || VISIBLE_MESSAGE_TYPES.has(type);

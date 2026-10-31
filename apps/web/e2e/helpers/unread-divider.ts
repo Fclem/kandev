@@ -69,3 +69,73 @@ export async function seedScrollTestConversation(
 
   return { taskId: task.id, sessionId, cursorMessageId, newestMessageId };
 }
+
+export const TASK_UNREAD_DOT_LABEL = "Task has unread messages";
+
+export type UnreadDotTasks = {
+  navTitle: string;
+  targetTitle: string;
+  cursorlessTitle: string;
+  navTaskId: string;
+  navSessionId: string;
+  targetTaskId: string;
+  targetSessionId: string;
+  cursorlessSessionId: string;
+};
+
+/**
+ * Seeds three agent-less tasks for the task-row unread dot: a navigation task
+ * the spec opens, a target whose session has a read cursor at its tail, and a
+ * task whose session was never read (no cursor, so its agent output is
+ * unread). The cursor is force-set through the e2e route, which also moves the
+ * live task-status projection.
+ */
+export async function seedUnreadDotTasks(
+  apiClient: ApiClient,
+  seedData: SeedData,
+  prefix: string,
+): Promise<UnreadDotTasks> {
+  const stepOptions = { workflow_id: seedData.workflowId, workflow_step_id: seedData.startStepId };
+  const titles = {
+    navTitle: `${prefix} navigation`,
+    targetTitle: `${prefix} target`,
+    cursorlessTitle: `${prefix} never opened`,
+  };
+  const sessionFor = async (title: string) => {
+    const task = await apiClient.seedTask(seedData.workspaceId, title, stepOptions);
+    const session = await apiClient.seedTaskSession(task.task_id, {
+      state: "WAITING_FOR_INPUT",
+      agentProfileId: seedData.agentProfileId,
+    });
+    return { taskId: task.task_id, sessionId: session.session_id };
+  };
+  const nav = await sessionFor(titles.navTitle);
+  const target = await sessionFor(titles.targetTitle);
+  const cursorless = await sessionFor(titles.cursorlessTitle);
+
+  const read = await apiClient.seedSessionMessage(target.sessionId, {
+    type: "message",
+    content: "already read",
+  });
+  await apiClient.forceSetSessionReadCursor(target.sessionId, read.messageId);
+  await apiClient.seedSessionMessage(cursorless.sessionId, {
+    type: "message",
+    content: "never read",
+  });
+
+  return {
+    ...titles,
+    navTaskId: nav.taskId,
+    navSessionId: nav.sessionId,
+    targetTaskId: target.taskId,
+    targetSessionId: target.sessionId,
+    cursorlessSessionId: cursorless.sessionId,
+  };
+}
+
+/** Row height in CSS pixels; the dot must never change it. */
+export async function rowHeight(row: Locator): Promise<number> {
+  const box = await row.boundingBox();
+  if (!box) throw new Error("expected a measurable task row");
+  return box.height;
+}

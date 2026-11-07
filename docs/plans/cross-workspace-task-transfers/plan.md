@@ -66,3 +66,12 @@ build and public-docs validation cover integration.
 Delivery is complete when the transfer behaves per
 [the requirements](../../specs/tasks/requirements/cross-workspace-task-transfer.md)
 and the verification commands in the work order pass.
+
+## Web UI companion
+
+[Web task workspace moves](../task-workspace-moves/plan.md) is the draft
+follow-on package for issue #5075. It reuses this completed domain command and
+adds a human HTTP adapter, transfer-aware client reconciliation, and responsive
+movement actions. This package's frontend exclusion and historical verification
+remain scoped to its original delivery; they do not establish evidence for the
+new Web surface or write-scope checks.

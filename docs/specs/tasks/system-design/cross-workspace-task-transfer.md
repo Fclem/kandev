@@ -356,9 +356,23 @@ independent of render timing. No optimistic workspace removal occurs.
   all disclosed outcomes, including after access restoration.
 - Retain the unresolved submission in the owning domain state across
   dialog close/reopen within the page lifetime, scoped by task and authenticated
-  caller; clear it on identity change. Dismissal is not rollback. On full page
-  reload, canonical reads determine current placement and no POST replays
-  automatically. Do not persist transcript data or authority in browser storage.
+  caller; clear it on identity change. Dismissal is not rollback.
+- Persist the unresolved operation record to `sessionStorage` (tab-scoped, not
+  `localStorage`) so a full page reload keeps its identity. The record holds only
+  the idempotency key, task ID, expected source placement and generation,
+  destination workspace/workflow/step IDs, transfer policy, a digest of the
+  immutable request, and the authenticated caller ID. It holds no transcript,
+  prompt, credential, token, or authority. Reads of it on load are scoped to the
+  current caller; a mismatch or identity change clears it without contacting the
+  server.
+- On reload, canonical reads determine current placement and the restored
+  record shows `Check result`. That action re-sends the identical body and key
+  under current authorization, exactly as in an in-page check. No POST replays
+  automatically, and a restored record never enables a fresh-key move until a
+  terminal result is established by the rules above.
+- If storage is unavailable or the record fails validation, the Web keeps
+  placement reads only and shows that the prior operation cannot be checked from
+  this browser. It does not claim the original move failed.
 - If the user navigates to another task while the request settles, reconcile
   memberships but do not navigate, reopen the form, or steal focus.
 

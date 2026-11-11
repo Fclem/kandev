@@ -1,5 +1,5 @@
 ---
-status: draft
+status: current
 system: tasks
 requirements:
   - REQ-TASKS-CROSS-WORKSPACE-TRANSFER-001
@@ -356,15 +356,20 @@ independent of render timing. No optimistic workspace removal occurs.
   all disclosed outcomes, including after access restoration.
 - Retain the unresolved submission in the owning domain state across
   dialog close/reopen within the page lifetime, scoped by task and authenticated
-  caller; clear it on identity change. Dismissal is not rollback.
+  caller. Dismissal is not rollback. Identity change, logout, or navigation
+  never clears an unresolved record; it is only cleared when an exact receipt or
+  authoritative terminal rejection resolves it.
 - Persist the unresolved operation record to `sessionStorage` (tab-scoped, not
   `localStorage`) so a full page reload keeps its identity. The record holds only
   the idempotency key, task ID, expected source placement and generation,
   destination workspace/workflow/step IDs, transfer policy, a digest of the
   immutable request, and the authenticated caller ID. It holds no transcript,
   prompt, credential, token, or authority. Reads of it on load are scoped to the
-  current caller; a mismatch or identity change clears it without contacting the
-  server.
+  current caller. Records of other callers stay stored but are hidden and never
+  sent to the server; a different caller cannot check or act on them. Switching
+  back to the original caller restores the record with the same key and body.
+  Clearing happens only on the terminal resolution above, never on identity
+  change or logout.
 - On reload, canonical reads determine current placement and the restored
   record shows `Check result`. That action re-sends the identical body and key
   under current authorization, exactly as in an in-page check. No POST replays
@@ -372,7 +377,8 @@ independent of render timing. No optimistic workspace removal occurs.
   terminal result is established by the rules above.
 - If storage is unavailable or the record fails validation, the Web keeps
   placement reads only and shows that the prior operation cannot be checked from
-  this browser. It does not claim the original move failed.
+  this browser. It does not claim the original move failed, and it enables no
+  fresh-key move.
 - If the user navigates to another task while the request settles, reconcile
   memberships but do not navigate, reopen the form, or steal focus.
 

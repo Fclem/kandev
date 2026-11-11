@@ -1,6 +1,6 @@
 ---
 created: 2026-11-05
-status: draft
+status: done
 requirements:
   - REQ-TASKS-CROSS-WORKSPACE-TRANSFER-001
   - REQ-TASKS-CROSS-WORKSPACE-TRANSFER-002
@@ -70,7 +70,7 @@ Add proposed `TaskWorkspaceMoveDialog` and `useTaskWorkspaceMove`. Reuse existin
 
 Share movement entries across `kanban-card-menu-items.tsx`, `TaskMoveContextMenuItems`, `useTaskActionsMenu`, sidebar, Threads, and palette adapters. Keep existing step and workflow operations separate beneath the common parent. All single-task surfaces expose workspace transfer even if the current workflow has only one step; bulk transfer is not offered. Preserve existing archived/ephemeral eligibility.
 
-A submission captures immutable predicates/key and prevents double clicks. Network/5xx uncertainty freezes that request and offers explicit Check result with the same body/key. Rejection of the original request can permit a fresh reviewed attempt; a check's 403/404 or arbitrary conflict cannot: retain the body/key in an unavailable-to-verify state, without rollback claims, until permissions recover and the same operation can be checked. Only its exact committed receipt or an authoritative `operation_rejected` result resolves it. The latter uses existing failed-key storage under transfer serialization, with committed receipt precedence and a durable barrier against any later same-key commit. Canonical reads reconcile current placement, not historical operation outcome. Preserve unresolved state through drawer reopen; logout clears it. Full reload restores the unresolved request from per-tab `sessionStorage` (opaque key, task, expected placement and generation, destination IDs, policy, request digest, and caller ID; no transcript, credential, or authority), keeps `Check result` available, and never auto-POSTs. Identity change clears the record.
+A submission captures immutable predicates/key and prevents double clicks. Network/5xx uncertainty freezes that request and offers explicit Check result with the same body/key. Rejection of the original request can permit a fresh reviewed attempt; a check's 403/404 or arbitrary conflict cannot: retain the body/key in an unavailable-to-verify state, without rollback claims, until permissions recover and the same operation can be checked. Only its exact committed receipt or an authoritative `operation_rejected` result resolves it. The latter uses existing failed-key storage under transfer serialization, with committed receipt precedence and a durable barrier against any later same-key commit. Canonical reads reconcile current placement, not historical operation outcome. Preserve unresolved state through drawer reopen, logout, and identity switches; only terminal resolution clears it. Full reload restores the unresolved request from per-tab `sessionStorage`, partitioned by caller and task (opaque key, task, expected placement and generation, destination IDs, policy, request digest, and caller ID; no transcript, credential, or authority). It keeps `Check result` available to the original caller only, hides other callers' records without sending them, and never auto-POSTs.
 
 ### Compatibility boundaries
 
@@ -210,11 +210,25 @@ Run headed-free managed builds through `pnpm e2e:run`, sequential projects, defa
 
 ## Work orders
 
-- [ ] [Task 01: Expose safe human workspace transfer](task-01-human-transfer-api.md)
-- [ ] [Task 02: Preserve client task context across transfers](task-02-transfer-reconciliation.md), depends on 01
-- [ ] [Task 03: Deliver unified responsive movement actions](task-03-responsive-move-flow.md), depends on 01 and 02
+- [x] [Task 01: Expose safe human workspace transfer](task-01-human-transfer-api.md)
+- [x] [Task 02: Preserve client task context across transfers](task-02-transfer-reconciliation.md), depends on 01
+- [x] [Task 03: Deliver unified responsive movement actions](task-03-responsive-move-flow.md), depends on 01 and 02
 
 ## Verification results
+
+### Implementation (2026-11-11)
+
+All three work orders are done; each work order's Results section records its RED/GREEN, exact commands and rendered evidence. Root gates on this branch:
+
+- `make fmt`: clean. It also reformatted the unrelated generated file `apps/packages/plugin-sdk/sdk-release.json`, which was reverted.
+- `make typecheck`: passed with `NODE_OPTIONS=--max-old-space-size=8192`. With the default 4 GB heap, classic `tsc` aborted with an out-of-memory error before it reported anything.
+- `make lint`: backend `golangci-lint` 0 issues after fixing two `goconst` findings in the transfer handler; web Oxlint, harness, specification and architecture lint passed.
+- `make test`:
+  - Every `internal/task/...`, `internal/mcp/...` and `internal/gateway/websocket` package passes. `internal/task/repository/sqlite` hit the 10-minute package timeout under full-suite load (in `TestSidebarQueryPreparationMemory`) and passes alone (`ok`, 873s).
+  - These tests fail identically on the unchanged base commit `1e45e36263`, in a detached worktree: `internal/common/config`, `internal/launcher` and `internal/system/updates` (the host exports `KANDEV_SERVER_PORT`/`KANDEV_TRUSTED_PROXIES`), `internal/agent/mcpconfig`, `internal/agentctl/server/api`, and `internal/agentctl/server/process` (runner fixtures).
+  - `internal/agent/settings/handlers` and `internal/agent/runtime/lifecycle` failed only on full-suite timing and pass alone.
+  - Web: one real regression, a stale `change-workflow` card-order expectation in `task-actions-menu-entries.test.ts`, is fixed (13/13). The other failing files pass alone (73 tests across 8 files); they timed out only under full-suite load.
+  - `test-scripts` stops at `spawnSync cargo ENOENT` because this host has no Rust toolchain.
 
 Design validation completed on 2026-11-05; all three implementation work orders remain pending.
 

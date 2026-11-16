@@ -134,6 +134,7 @@ function useSingleMenuState(props: SingleSelectionMenuProps): SingleMenuState {
     currentMoveSteps,
     actingOnSelection,
     isMixedWorkflowSelection: props.isMixedWorkflowSelection,
+    onChangeWorkspace: props.onChangeWorkspace,
   });
   const hasLinkGroup = Object.values(linkActions).some(Boolean) || pluginLinkActions.length > 0;
   const hasRelationshipsGroup = Boolean(
@@ -207,9 +208,10 @@ function hasSingleMoveGroup({
   currentMoveSteps,
   actingOnSelection,
   isMixedWorkflowSelection,
+  onChangeWorkspace,
 }: Pick<
   SingleSelectionMenuProps,
-  "task" | "workflows" | "actingOnSelection" | "isMixedWorkflowSelection"
+  "task" | "workflows" | "actingOnSelection" | "isMixedWorkflowSelection" | "onChangeWorkspace"
 > & {
   workflowId: string | undefined;
   currentMoveSteps: StepDef[];
@@ -220,7 +222,10 @@ function hasSingleMoveGroup({
   const hasCrossWorkflowMove = (workflows ?? []).some(
     (workflow) => !workflow.hidden && workflow.id !== workflowId,
   );
-  return hasSameWorkflowMove || hasCrossWorkflowMove;
+  // A single task can always be moved to another workspace, even from a
+  // one-step workflow with no other workflow.
+  const hasWorkspaceMove = Boolean(onChangeWorkspace);
+  return hasSameWorkflowMove || hasCrossWorkflowMove || hasWorkspaceMove;
 }
 
 function hasSingleRemoveGroup({

@@ -4,6 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocketClient, WebSocketRequestError, WebSocketRequestTimeoutError } from "./client";
 import { sendQueuedNow } from "../api/domains/queue-api";
 import { setWebSocketClient } from "./connection";
+import { createAppStore } from "@/lib/state/store";
+import type { TaskOverview } from "@/lib/state/slices/task-overview-types";
+import { registerTasksHandlers } from "./handlers/tasks";
+import { taskMembershipSettled } from "./handlers/task-transfer";
+
+const transferFetchTask = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/api/domains/kanban-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/domains/kanban-api")>()),
+  fetchTask: transferFetchTask,
+}));
 
 type SentRequest = {
   id: string;
@@ -1458,5 +1468,144 @@ describe("Send Now cancellation acknowledgement", () => {
       client.disconnect();
       setWebSocketClient(null);
     }
+  });
+});
+
+// Covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-005.4: an event held upstream can be
+// fanned out through the CURRENT socket after a reconnect, so replacing the
+// transport must not retire workspace-membership admission.
+describe("transfer membership across socket replacement", () => {
+  const SOURCE = "ws-a";
+  const TASK = "task-transfer";
+  const heldSourceEvent = {
+    id: "held-source-event",
+    type: "notification",
+    action: "task.state_changed",
+    payload: {
+      task_id: TASK,
+      workspace_id: SOURCE,
+      workflow_id: "wf-a",
+      workflow_step_id: "step-a",
+      title: "Held",
+      state: "COMPLETED",
+      updated_at: "2026-11-01T10:00:00.123456789Z",
+    },
+  };
+
+  function storeWithResidentTask() {
+    const row = {
+      id: TASK,
+      workspaceId: SOURCE,
+      workflowId: "wf-a",
+      workflowStepId: "step-a",
+      title: "Held",
+      state: "COMPLETED",
+      position: 0,
+      updatedAt: "2026-11-01T10:00:00.123456789Z",
+    } as TaskOverview;
+    const store = createAppStore({
+      workspaces: { items: [], activeId: SOURCE },
+      kanban: { workflowId: "wf-a", steps: [], tasks: [row] },
+    });
+    const setConnection = (status: "connected" | "disconnected") =>
+      store.setState((state) => ({ ...state, connection: { ...state.connection, status } }));
+    setConnection("connected");
+    return { store, setConnection };
+  }
+
+  function wire(client: WebSocketClient, store: ReturnType<typeof createAppStore>) {
+    const handlers = registerTasksHandlers(store);
+    for (const action of [
+      "task.created",
+      "task.updated",
+      "task.state_changed",
+      "task.deleted",
+    ] as const) {
+      client.on(action, handlers[action] as never);
+    }
+  }
+
+  function replaceSocket(
+    socket: FakeWebSocket,
+    setConnection: (status: "connected" | "disconnected") => void,
+  ) {
+    socket.close();
+    setConnection("disconnected");
+    vi.advanceTimersByTime(0);
+    const current = FakeWebSocket.latest();
+    current.open();
+    setConnection("connected");
+    return current;
+  }
+
+  function acceptSourceListingWithout(store: ReturnType<typeof createAppStore>) {
+    const readId = store.getState().beginTaskOverviewRead();
+    store.setState((state) => ({ ...state, kanban: { ...state.kanban, tasks: [] } }));
+    store.getState().finishTaskOverviewRead(readId, []);
+  }
+
+  const resident = (store: ReturnType<typeof createAppStore>) =>
+    store.getState().kanban.tasks.some((task) => task.id === TASK) ||
+    Boolean(store.getState().taskOverview.byId[TASK]);
+
+  beforeEach(() => transferFetchTask.mockReset());
+
+  it("keeps a delivered departure guard when the held event arrives on the current socket", async () => {
+    vi.useFakeTimers();
+    const { client, socket } = connectClient({ enabled: true, initialDelay: 0, maxAttempts: 1 });
+    const { store, setConnection } = storeWithResidentTask();
+    wire(client, store);
+    transferFetchTask.mockResolvedValue({ id: TASK, workspace_id: "ws-b", workflow_id: "wf-b" });
+
+    socket.receive({
+      id: "marker",
+      type: "notification",
+      action: "task.deleted",
+      payload: {
+        task_id: TASK,
+        workspace_id: SOURCE,
+        workflow_id: "wf-a",
+        transfer_operation_id: "op",
+      },
+    });
+    await vi.waitFor(() => expect(resident(store)).toBe(false));
+
+    const current = replaceSocket(socket, setConnection);
+    acceptSourceListingWithout(store);
+    current.receive(heldSourceEvent);
+    expect(resident(store)).toBe(false);
+    await vi.advanceTimersByTimeAsync(300);
+    await taskMembershipSettled(store, TASK);
+    expect(resident(store)).toBe(false);
+  });
+
+  it("bootstraps admission when no transfer notification reached the recovering store", async () => {
+    vi.useFakeTimers();
+    const { client, socket } = connectClient({ enabled: true, initialDelay: 0, maxAttempts: 1 });
+    const { store, setConnection } = storeWithResidentTask();
+    wire(client, store);
+
+    // Disconnected while another browser transfers the task: no marker arrives.
+    const current = replaceSocket(socket, setConnection);
+    transferFetchTask.mockResolvedValue({ id: TASK, workspace_id: "ws-b", workflow_id: "wf-b" });
+    acceptSourceListingWithout(store);
+    current.receive(heldSourceEvent);
+    expect(resident(store)).toBe(false);
+    await vi.advanceTimersByTimeAsync(300);
+    await taskMembershipSettled(store, TASK);
+    expect(resident(store)).toBe(false);
+
+    // A genuine canonical return stays discoverable through the same path.
+    transferFetchTask.mockResolvedValue({
+      id: TASK,
+      workspace_id: SOURCE,
+      workflow_id: "wf-a",
+      workflow_step_id: "step-a-returned",
+      title: "Returned",
+    });
+    current.receive({ ...heldSourceEvent, id: "return-hint" });
+    await vi.advanceTimersByTimeAsync(300);
+    await taskMembershipSettled(store, TASK);
+    expect(store.getState().taskOverview.byId[TASK]?.workflowStepId).toBe("step-a-returned");
   });
 });

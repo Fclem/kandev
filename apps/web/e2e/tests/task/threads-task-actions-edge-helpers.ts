@@ -52,6 +52,7 @@ export async function failedActionOutcomes(
       error: "Failed to move task",
       choose: async () => {
         await ui.nested("Move to");
+        await ui.nested("Workflow step");
         await ui.pick("Task actions triage");
       },
     },
@@ -62,7 +63,8 @@ export async function failedActionOutcomes(
       error:
         "The result is not confirmed. The task was refreshed. Review the current assignment before trying again.",
       choose: async () => {
-        await ui.pick("Change workflow...");
+        await ui.nested("Move to");
+        await ui.pick("Different workflow...");
         const changeWorkflow = new ChangeWorkflowPage(page, mobile);
         await expect(changeWorkflow.form).toBeVisible();
         await changeWorkflow.chooseWorkflow(destination.id);

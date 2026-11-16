@@ -85,6 +85,7 @@ test("keeps auto-hide scoped and moves through the mobile card menu", async ({
   await expect(testPage.getByTestId(`kanban-column-${hiddenDestination.id}`)).toHaveCount(0);
   await mobile.taskCard(task.id).getByRole("button", { name: "More options" }).tap();
   await testPage.getByTestId("task-context-move-to").tap();
+  await testPage.getByTestId("task-context-move-step").tap();
   await testPage.getByTestId(`task-context-step-${hiddenDestination.id}`).tap();
   const overflow = await testPage.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

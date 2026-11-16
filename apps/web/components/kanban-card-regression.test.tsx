@@ -103,6 +103,8 @@ function expectedMenuEntries() {
     { text: t("common:edit"), disabled: true, destructive: false },
     { text: t("task:taskGraphShowInGraph"), disabled: false, destructive: false },
     { text: t("kanban:link"), disabled: false, destructive: false },
+    // Every single task in a workspace can move to another workspace.
+    { text: t("kanban:moveTo"), disabled: false, destructive: false },
     { text: t("kanban:archive"), disabled: true, destructive: false },
     { text: t("kanban:delete"), disabled: false, destructive: true },
   ];

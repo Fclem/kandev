@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@kandev/ui/context-menu";
-import { TaskMoveContextMenuItems } from "./task-move-context-menu";
+import { TaskMoveContextMenuItems } from "./task-move-context-menu-items";
 
 afterEach(() => {
   cleanup();
@@ -19,6 +19,7 @@ const steps = [
 ];
 
 const MOVE_TO_TEST_ID = "task-context-move-to";
+const MOVE_STEP_TEST_ID = "task-context-move-step";
 const STEP_2_TEST_ID = "task-context-step-step-2";
 const STEP_2_OPTIONS_TEST_ID = "task-context-step-options-step-2";
 
@@ -56,6 +57,12 @@ async function openSubmenu(testId: string, childTestId: string) {
   return screen.findByTestId(childTestId);
 }
 
+/** Single-task step moves live under Move to > Workflow step. */
+async function openStepSubmenu(childTestId: string) {
+  await openSubmenu(MOVE_TO_TEST_ID, MOVE_STEP_TEST_ID);
+  return openSubmenu(MOVE_STEP_TEST_ID, childTestId);
+}
+
 describe("TaskMoveContextMenuItems", () => {
   it("keeps direct moves on the step row while nesting options under that row", async () => {
     const direct = vi.fn();
@@ -65,7 +72,7 @@ describe("TaskMoveContextMenuItems", () => {
     expect(screen.getByTestId(MOVE_TO_TEST_ID)).toBeTruthy();
     expect(screen.queryByTestId("task-context-move-with-options")).toBeNull();
 
-    const directStep = await openSubmenu(MOVE_TO_TEST_ID, STEP_2_TEST_ID);
+    const directStep = await openStepSubmenu(STEP_2_TEST_ID);
     expect(directStep.className).toContain("[@media(pointer:coarse)]:min-h-11");
     fireEvent.pointerDown(directStep, { pointerType: "mouse" });
     fireEvent.click(directStep);
@@ -80,7 +87,7 @@ describe("TaskMoveContextMenuItems", () => {
     const options = vi.fn();
     renderMoveMenu({ onMoveToStep: direct, onMoveToStepWithOptions: options });
 
-    const step = await openSubmenu(MOVE_TO_TEST_ID, STEP_2_TEST_ID);
+    const step = await openStepSubmenu(STEP_2_TEST_ID);
     fireEvent.pointerMove(step, { pointerType: "mouse" });
 
     const optionsStep = await screen.findByTestId(STEP_2_OPTIONS_TEST_ID);
@@ -96,7 +103,7 @@ describe("TaskMoveContextMenuItems", () => {
     const options = vi.fn();
     renderMoveMenu({ onMoveToStep: direct, onMoveToStepWithOptions: options });
 
-    const step = await openSubmenu(MOVE_TO_TEST_ID, STEP_2_TEST_ID);
+    const step = await openStepSubmenu(STEP_2_TEST_ID);
     fireEvent.pointerMove(step, { pointerType: "mouse" });
     const optionsStep = await screen.findByTestId(STEP_2_OPTIONS_TEST_ID);
     fireEvent.click(optionsStep);
@@ -110,7 +117,7 @@ describe("TaskMoveContextMenuItems", () => {
     const direct = vi.fn();
     renderMoveMenu({ onMoveToStep: direct, onMoveToStepWithOptions: vi.fn() });
 
-    const step = await openSubmenu(MOVE_TO_TEST_ID, STEP_2_TEST_ID);
+    const step = await openStepSubmenu(STEP_2_TEST_ID);
     fireEvent.pointerDown(step, { pointerType: "touch", clientX: 0 });
     fireEvent.click(step, { clientX: 0 });
 
@@ -122,7 +129,7 @@ describe("TaskMoveContextMenuItems", () => {
   it("opens the nested options submenu from the step chevron on touch", async () => {
     renderMoveMenu({ onMoveToStepWithOptions: vi.fn() });
 
-    const step = await openSubmenu(MOVE_TO_TEST_ID, STEP_2_TEST_ID);
+    const step = await openStepSubmenu(STEP_2_TEST_ID);
     vi.spyOn(step, "getBoundingClientRect").mockReturnValue({
       x: 0,
       y: 0,
@@ -143,7 +150,7 @@ describe("TaskMoveContextMenuItems", () => {
   it("keeps Radix keyboard navigation for the nested options submenu", async () => {
     renderMoveMenu({ onMoveToStepWithOptions: vi.fn() });
 
-    const trigger = await openSubmenu(MOVE_TO_TEST_ID, STEP_2_TEST_ID);
+    const trigger = await openStepSubmenu(STEP_2_TEST_ID);
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowRight" });
 
@@ -153,7 +160,7 @@ describe("TaskMoveContextMenuItems", () => {
   it("keeps the current step disabled when options are available", async () => {
     renderMoveMenu({ onMoveToStepWithOptions: vi.fn() });
 
-    const currentStep = await openSubmenu(MOVE_TO_TEST_ID, "task-context-step-step-1");
+    const currentStep = await openStepSubmenu("task-context-step-step-1");
 
     expect(currentStep.getAttribute("aria-disabled")).toBe("true");
   });
@@ -162,7 +169,7 @@ describe("TaskMoveContextMenuItems", () => {
     const direct = vi.fn();
     renderMoveMenu({ onMoveToStep: direct });
 
-    const directStep = await openSubmenu(MOVE_TO_TEST_ID, STEP_2_TEST_ID);
+    const directStep = await openStepSubmenu(STEP_2_TEST_ID);
     fireEvent.pointerMove(directStep, { pointerType: "mouse" });
     expect(
       directStep.querySelector('[data-testid="task-context-step-autostart-step-2"]'),

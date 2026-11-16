@@ -57,7 +57,8 @@ test("searches long desktop workflow steps in the change form", async ({
   await testPage.goto(`/threads?workspace=${seedData.workspaceId}`);
   const ui = new ThreadActionsPage(testPage);
   await ui.open(a.id);
-  await ui.pick("Change workflow...");
+  await ui.nested("Move to");
+  await ui.pick("Different workflow...");
   const form = new ChangeWorkflowPage(testPage);
   await expect(form.desktopDialog).toBeVisible();
   await form.chooseWorkflow(destination.id);

@@ -1148,6 +1148,8 @@ After that operation finishes, manually retry the same unchanged request and
 idempotency key. Kandev does not automatically retry this conflict. Denied or
 failed attempts still require a fresh key as described above.
 
+Every caller also needs permission to edit tasks in the task's current workspace and in the destination workspace, including for a replay. People can make the same audited move from the Web UI with **Move to** > **Different workspace...**; see [Move a task to another workspace](tasks-and-workflows.md#move-a-task-to-another-workspace). MCP errors stay generic and do not reveal whether a task exists.
+
 The database migration is additive. Rolling back the application binary leaves transfer receipts and audit rows intact for a later upgrade; do not drop the transfer ledger tables during an application rollback.
 
 <details>

@@ -3241,6 +3241,7 @@ export class ApiClient {
     parent_id?: string;
     position?: number;
     metadata?: Record<string, unknown> | null;
+    updated_at?: string;
     repositories?: Array<{
       id: string;
       task_id: string;
@@ -3259,6 +3260,23 @@ export class ApiClient {
     }>;
   }> {
     return this.request("GET", `/api/v1/tasks/${taskId}`);
+  }
+
+  /** Moves a task to another workspace through the human transfer route. */
+  async transferTask(
+    taskId: string,
+    body: {
+      expected_source_workspace_id: string;
+      expected_source_workflow_id: string;
+      expected_source_workflow_step_id: string;
+      expected_task_updated_at: string;
+      destination_workspace_id: string;
+      destination_workflow_id: string;
+      destination_workflow_step_id: string;
+      idempotency_key: string;
+    },
+  ): Promise<{ receipt: { operation_id: string; task_id: string } }> {
+    return this.request("POST", `/api/v1/tasks/${taskId}/transfer`, body);
   }
 
   async getTaskPlan(taskId: string): Promise<{

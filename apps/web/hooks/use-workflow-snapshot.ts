@@ -7,6 +7,8 @@ import type { KanbanState } from "@/lib/state/slices/kanban/types";
 import { reconcileTaskOverviewRead } from "@/lib/state/slices/task-overview-merge";
 import { getWorkflowSnapshotReads } from "@/lib/state/workflow-snapshot-reads";
 import { raceSharedRead } from "@/lib/state/shared-resource-reads";
+import type { AppState } from "@/lib/state/store";
+import { reconcileTaskMembership } from "@/lib/ws/handlers/tasks";
 
 type KanbanTask = KanbanState["tasks"][number];
 
@@ -86,6 +88,23 @@ function preserveLiveParkedFields(snapshotTasks: KanbanTask[], currentTasks: Kan
       parkedEpoch: currentEpoch,
     };
   });
+}
+
+/**
+ * A complete workflow listing proves only that a row left this workflow, not
+ * the workspace, so each omitted resident is confirmed by a canonical read.
+ */
+function omittedBoardResidents(
+  state: AppState,
+  workflowId: string,
+  listed: KanbanTask[],
+): string[] {
+  const listedIds = new Set(listed.map((task) => task.id));
+  const before = [
+    ...(state.kanbanMulti?.snapshots[workflowId]?.tasks ?? []),
+    ...(state.kanban.workflowId === workflowId ? state.kanban.tasks : []),
+  ];
+  return [...new Set(before.map((task) => task.id))].filter((id) => !listedIds.has(id));
 }
 
 function reconcileFetchedOverview(
@@ -192,7 +211,11 @@ export function useWorkflowSnapshot(
           );
           if (!reconcileFetchedOverview(store, nextState, overviewRead, snapshot)) return;
         }
+        const omitted = nextState.kanban
+          ? omittedBoardResidents(store.getState(), workflowId, nextState.kanban.tasks)
+          : [];
         store.getState().hydrate(nextState);
+        for (const taskId of omitted) void reconcileTaskMembership(store, taskId);
       })
       .catch((error) => {
         // Suppress superseded-fetch noise; retry happens on WS reconnect.

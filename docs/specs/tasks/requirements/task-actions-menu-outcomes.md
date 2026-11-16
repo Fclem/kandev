@@ -77,7 +77,7 @@ coherent rather than on a surface whose subject no longer exists.
 - **AC-TASKS-TASK-ACTIONS-MENU-003.6:** Selecting a **Move to** target or a
   legacy bulk **Send to workflow** target shall move the subject task alone to
   that step, keep the surface open on that task, and not navigate. Selecting
-  **Change workflow...** shall open the form defined by
+  **Different workflow...** shall open the form defined by
   [REQ-TASKS-CHANGE-WORKFLOW-001](change-workflow.md); submitting it shall
   perform the version-checked transition defined by
   [REQ-TASKS-CHANGE-WORKFLOW-002](change-workflow.md), keep the surface open,
@@ -99,7 +99,7 @@ coherent rather than on a surface whose subject no longer exists.
 - **AC-TASKS-TASK-ACTIONS-MENU-003.11:** Actions governed by this menu
   requirement shall use their existing contracts and shall add no endpoint,
   request payload, persisted field, permission, or feature flag. The explicit
-  **Change workflow...** form is the exception: it uses the existing move route
+  **Different workflow...** form is the exception: it uses the existing move route
   with the source-versioned `workflow_change` object specified in
   [REQ-TASKS-CHANGE-WORKFLOW-002](change-workflow.md), and stores choices in the
   existing task workflow-agent override field.

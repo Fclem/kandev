@@ -215,7 +215,6 @@ export async function allTaskActionOutcomes(
   await expect(root.getByRole(mobile ? "button" : "menuitem")).toHaveText([
     "Priority",
     "Move to",
-    "Change workflow...",
     "Link",
     "Archive",
     "Delete",
@@ -223,7 +222,8 @@ export async function allTaskActionOutcomes(
   await page.keyboard.press("Escape");
 
   await ui.open(a.id);
-  await ui.pick("Change workflow...");
+  await ui.nested("Move to");
+  await ui.pick("Different workflow...");
   const emptyForm = new ChangeWorkflowPage(page, mobile);
   await expect(emptyForm.form).toBeVisible();
   await emptyForm.chooseWorkflow(emptyWorkflow.id);
@@ -252,13 +252,15 @@ export async function allTaskActionOutcomes(
 
   await ui.open(a.id);
   await ui.nested("Move to");
+  await ui.nested("Workflow step");
   const current = await api.getTask(a.id);
   await expect(page.getByTestId(`task-context-step-${current.workflow_step_id}`)).toBeDisabled();
   await ui.pick("Task actions triage");
   await expect.poll(async () => (await api.getTask(a.id)).workflow_step_id).toBe(localStep.id);
 
   await ui.open(a.id);
-  await ui.pick("Change workflow...");
+  await ui.nested("Move to");
+  await ui.pick("Different workflow...");
   const changeWorkflow = new ChangeWorkflowPage(page, mobile);
   await expect(changeWorkflow.form).toBeVisible();
   await changeWorkflow.chooseWorkflow(destination.id);

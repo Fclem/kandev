@@ -1,7 +1,7 @@
 ---
 id: "02-transfer-reconciliation"
 title: "Preserve client task context across transfers"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "01-human-transfer-api"
@@ -104,4 +104,24 @@ Task 01 provides the supported human command for disposable runtime smoke and de
 
 ## Results
 
-Pending. Record behavioral RED/GREEN, runtime observations, and exact commands/results. No layout change is claimed by this work order.
+Completed 2026-11-07.
+
+Implementation:
+
+- `lib/ws/handlers/task-transfer.ts` is the membership reconciler shared by WS handlers and HTTP settlement (`reconcileTaskMembership` in `tasks.ts`). It coalesces one canonical `GET /tasks/:id` per task, supersedes in-flight results on a newer invalidation, reconnect/overview generation change, or newer accepted admission, and applies only the accepted canonical row. A read that places the task in another workspace, or a 403/404, removes only listing membership (boards, overview with a journaled deletion, archive list, sidebar pages, Office projection refresh) and installs a retained guard; an open task keeps its route and session and adopts the canonical workspace, or returns to the listing only on definitive unavailability. Transient failures keep the row and retry with bounded backoff.
+- `tasks.ts` branches transfer-tagged `task.deleted` before every destructive cleanup. `task.created`/`task.updated`/`task.state_changed` pass `admitTaskEvent`: an event that would insert a task, change its workspace/workflow, carry a transfer source, or touch a guarded task becomes a canonical read; archived-only rows and admitted residents keep their normal freshness path.
+- `lib/state/task-membership-control.ts` holds store-lifetime control metadata: per-task admission tagged with the task-overview generation (advanced by reconnects and workspace switches) and retained per-workspace departure guards, reset only on authenticated identity change. Accepted read journals (`finishTaskOverviewRead`, `retainTaskOverviews` with a read ID) admit their rows; cached pages do not.
+- `use-workflow-snapshot.ts` confirms each resident omitted from a complete workflow listing through the same canonical read instead of treating absence as departure.
+- Gateway routing is unchanged; `task_notifications_transfer_reconnect_test.go` pins the held-upstream-event-on-current-socket schedule, with and without a delivered marker, and source-only redaction.
+
+RED: `vitest run lib/ws/handlers/task-transfer.test.ts` failed 12 of 15 behavioral cases before the change (sessions deleted by the marker, departed rows resurrected by delayed `task.updated`/`task.state_changed`, stale `step-a-stale` applied after a canonical return and after reconnect, unknown candidates inserted without a read). The client reconnect and omitted-resident tests were written alongside the implementation; a deliberate mutation (gate always admits, omission confirmation removed) made all four fail (`client.test.ts` 2, `use-workflow-snapshot-membership.test.ts` 2), and restoring the code returned 50/50 passing.
+
+GREEN, sequential:
+
+- `(cd apps/web && pnpm exec vitest run lib/ws/handlers/task-transfer.test.ts lib/ws/client.test.ts lib/ws/handlers/tasks-archive.test.ts lib/ws/handlers/task-lifecycle-diagnostics.test.ts lib/ws/handlers/task-dependencies.test.ts lib/state/task-navigation-reads.test.ts)`: 6 files, 80 tests passed.
+- `(cd apps/web && pnpm run typecheck)`: passed.
+- `(cd apps/backend && go test ./internal/gateway/websocket -run 'Transfer|TaskNotification' -count=1)`: ok.
+- Broader affected web suites (`lib/ws lib/state hooks/domains/kanban lib/sidebar`): 325 files, 3280 tests passed after updating tests that inserted tasks directly from unadmitted events to answer the canonical read.
+- `python3 scripts/list-docs.py validate` and `python3 scripts/lint-spec-files.py --all`: passed.
+
+Runtime evidence: the Task 03 production-build Playwright scenario `keeps an open task and its session while it leaves and returns` (chromium, disposable backend) triggers the human HTTP transfer A -> B -> A from the API while `/t/<id>` is open; the route and transcript stay, and the source board shows the returned card after both moves. The phone/desktop form scenarios also observe the source card disappearing after a committed move without session loss. No layout change is claimed by this work order.

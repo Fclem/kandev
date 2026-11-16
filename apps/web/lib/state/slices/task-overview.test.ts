@@ -1,11 +1,25 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createAppStore } from "../store";
 import type { TaskOverview } from "./task-overview-types";
 import { recordTaskOverviewChange } from "./task-overview-merge";
 import { registerTasksHandlers } from "@/lib/ws/handlers/tasks";
+import { taskMembershipSettled } from "@/lib/ws/handlers/task-transfer";
 import { defaultKanbanState } from "./kanban/kanban-slice";
 
 const DISPLAY_OWNER = "sidebar:display";
+
+// Unadmitted rows are refreshed from a canonical task read before an event applies.
+vi.mock("@/lib/api/domains/kanban-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/domains/kanban-api")>()),
+  fetchTask: vi.fn(async (id: string) => ({
+    id,
+    workspace_id: "workspace",
+    workflow_id: "workflow",
+    workflow_step_id: "step",
+    title: "Live",
+    updated_at: "2026-09-29T15:00:00Z",
+  })),
+}));
 
 const task = (id: string, fields: Partial<TaskOverview> = {}): TaskOverview => ({
   id,
@@ -172,7 +186,7 @@ it("releases replaced pages while preserving board and active-detail ownership",
   expect(Object.keys(store.getState().taskOverview.byId)).toEqual(["one"]);
 });
 
-it("reconciles real task updates across an older read without restoring deleted records", () => {
+it("reconciles real task updates across an older read without restoring deleted records", async () => {
   const store = sharedStore();
   const handlers = registerTasksHandlers(store);
   const read = store.getState().beginTaskOverviewRead();
@@ -188,6 +202,7 @@ it("reconciles real task updates across an older read without restoring deleted 
       updated_at: "2026-09-29T15:00:00Z",
     },
   } as Parameters<NonNullable<(typeof handlers)["task.updated"]>>[0]);
+  await taskMembershipSettled(store, "one");
   store.setState((state) => ({
     taskOverview: recordTaskOverviewChange(state.taskOverview, "deleted", null),
   }));

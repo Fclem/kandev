@@ -7,6 +7,7 @@ const PLUGIN_ID = "kandev-plugin-tags";
 const ACTION_ID = "quick-tag";
 const ACTION_LABEL = "Quick tag";
 const CHANGE_WORKFLOW_ENTRY_KEY = "change-workflow";
+const MOVE_GROUP_KEY = "move-to";
 const WORKFLOW_ONE = "wf-1";
 const WORKFLOW_TWO = "wf-2";
 
@@ -18,6 +19,11 @@ afterEach(() => {
 
 function entryKeys(entries: KanbanCardMenuEntry[]) {
   return entries.map((entry) => entry.key);
+}
+
+function moveGroupChildren(entries: KanbanCardMenuEntry[]) {
+  const group = entries.find((entry) => entry.key === MOVE_GROUP_KEY);
+  return group?.kind === "submenu" ? group.children : [];
 }
 
 function registerPrimaryAction(visible?: () => boolean) {
@@ -59,15 +65,15 @@ describe("buildKanbanCardMenuEntries — 'primary' group plugin actions", () => 
     });
 
     const keys = entryKeys(entries);
-    const changeWorkflowIndex = keys.indexOf(CHANGE_WORKFLOW_ENTRY_KEY);
+    const moveIndex = keys.indexOf(MOVE_GROUP_KEY);
     const primaryIndex = keys.indexOf(`plugin-primary-${PLUGIN_ID}:${ACTION_ID}`);
     const linkIndex = keys.indexOf("link");
 
-    expect(changeWorkflowIndex).toBeGreaterThanOrEqual(0);
+    expect(moveIndex).toBeGreaterThanOrEqual(0);
     expect(primaryIndex).toBeGreaterThanOrEqual(0);
     expect(linkIndex).toBeGreaterThanOrEqual(0);
-    expect(linkIndex).toBeLessThan(changeWorkflowIndex);
-    expect(changeWorkflowIndex).toBeLessThan(primaryIndex);
+    expect(linkIndex).toBeLessThan(moveIndex);
+    expect(moveIndex).toBeLessThan(primaryIndex);
 
     const archiveIndex = keys.indexOf("archive");
     expect(primaryIndex).toBeLessThan(archiveIndex);
@@ -106,31 +112,13 @@ describe("buildKanbanCardMenuEntries — 'primary' group plugin actions", () => 
       "link",
       "detach",
       "move-separator",
-      "move-to",
-      CHANGE_WORKFLOW_ENTRY_KEY,
+      MOVE_GROUP_KEY,
       "plugins-separator",
       `plugin-primary-${PLUGIN_ID}:${ACTION_ID}`,
       "remove-separator",
       "archive",
       "delete",
     ]);
-  });
-
-  it("offers one single-task Change workflow action instead of a workflow submenu", () => {
-    const onChangeWorkflow = vi.fn();
-    const entries = buildKanbanCardMenuEntries({
-      ...movementArgs(),
-      currentStepId: "s1",
-      onMoveToStep: vi.fn(),
-      onChangeWorkflow,
-    });
-
-    expect(entryKeys(entries)).toContain(CHANGE_WORKFLOW_ENTRY_KEY);
-    expect(entryKeys(entries)).not.toContain("send-to-workflow");
-    const entry = entries.find((candidate) => candidate.key === CHANGE_WORKFLOW_ENTRY_KEY);
-    expect(entry?.kind).toBe("item");
-    if (entry?.kind === "item") entry.onSelect?.();
-    expect(onChangeWorkflow).toHaveBeenCalledOnce();
   });
 
   it("does not add a 'primary' entry when visible(context) returns false", () => {
@@ -148,5 +136,62 @@ describe("buildKanbanCardMenuEntries — 'primary' group plugin actions", () => 
     const editMenu = entries.find((entry) => entry.key === "edit");
 
     expect(editMenu?.kind).toBe("item");
+  });
+});
+
+describe("buildKanbanCardMenuEntries — single-task Move to group", () => {
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.1
+  it("groups step, workflow, and workspace moves for one task under Move to", () => {
+    const onChangeWorkflow = vi.fn();
+    const onChangeWorkspace = vi.fn();
+    const entries = buildKanbanCardMenuEntries({
+      ...movementArgs(),
+      currentStepId: "s1",
+      onMoveToStep: vi.fn(),
+      onChangeWorkflow,
+      onChangeWorkspace,
+    });
+
+    expect(entryKeys(entries)).not.toContain(CHANGE_WORKFLOW_ENTRY_KEY);
+    const children = moveGroupChildren(entries);
+    expect(entryKeys(children)).toEqual([
+      "move-step",
+      CHANGE_WORKFLOW_ENTRY_KEY,
+      "change-workspace",
+    ]);
+    for (const child of children) if (child.kind === "item") child.onSelect?.();
+    expect(onChangeWorkflow).toHaveBeenCalledOnce();
+    expect(onChangeWorkspace).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the workspace move for a one-step workflow with no other workflow", () => {
+    const entries = buildKanbanCardMenuEntries({
+      currentWorkflowId: WORKFLOW_ONE,
+      workflows: [{ id: WORKFLOW_ONE, name: "Workflow 1" }],
+      stepsByWorkflowId: { [WORKFLOW_ONE]: [{ id: "s1", title: "Step 1" }] },
+      currentStepId: "s1",
+      onMoveToStep: vi.fn(),
+      onChangeWorkflow: vi.fn(),
+      onChangeWorkspace: vi.fn(),
+    });
+
+    expect(entryKeys(moveGroupChildren(entries))).toEqual(["change-workspace"]);
+  });
+
+  it("keeps plural step and workflow moves and offers no workspace move for a selection", () => {
+    const entries = buildKanbanCardMenuEntries({
+      ...movementArgs(),
+      isBulkSelection: true,
+      onMoveToStep: vi.fn(),
+      onSendToWorkflow: vi.fn(),
+      onChangeWorkspace: vi.fn(),
+    });
+
+    expect(entryKeys(entries)).toEqual(
+      expect.arrayContaining([MOVE_GROUP_KEY, "change-workflow-selection"]),
+    );
+    const steps = moveGroupChildren(entries);
+    expect(entryKeys(steps)).toEqual(["step-s1", "step-s2"]);
+    expect(JSON.stringify(entryKeys(entries))).not.toContain("change-workspace");
   });
 });

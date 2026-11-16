@@ -32,6 +32,7 @@ test("shows the current agent status in the existing phone Move to drawer", asyn
     .filter({ hasText: "Mobile workflow step progress" });
   await taskRow.getByRole("button", { name: "Task actions" }).tap();
   await testPage.getByTestId("task-context-move-to").tap();
+  await testPage.getByTestId("task-context-move-step").tap();
 
   const currentStep = testPage.getByTestId(`task-context-step-${settledTask.workflow_step_id}`);
   await expect(currentStep).toBeVisible();

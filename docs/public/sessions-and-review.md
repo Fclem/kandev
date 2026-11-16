@@ -513,10 +513,12 @@ Select **Open task** in a tile when you need the complete task workbench. To lin
 To manage the task without leaving Threads, select **Task actions** (the three
 dots beside **Open task**). On desktop, you can also right-click the task
 header; conversation text and editors keep their normal context menus.
-The menu offers **Priority**, **Move to**, **Change workflow...**, supported
-**Link** choices, **Archive**, and **Delete**, according to availability.
+The menu offers **Priority**, **Move to**, supported **Link** choices,
+**Archive**, and **Delete**, according to availability. **Move to** contains
+**Workflow step**, **Different workflow...**, and
+[**Different workspace...**](tasks-and-workflows.md#move-a-task-to-another-workspace).
 
-Choose **Change workflow...** to select a workflow and destination step, review
+Choose **Move to** > **Different workflow...** to select a workflow and destination step, review
 the entry preview, and optionally map fixed workflow profiles for this task.
 On a phone, the form uses a full-height sheet with a scrollable body. Actions
 apply to the task whose menu you opened, even if its selected session changes.

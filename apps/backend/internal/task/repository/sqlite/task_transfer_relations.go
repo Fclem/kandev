@@ -222,7 +222,8 @@ func (r *Repository) validateUnmappedTransferRelations(ctx context.Context, tx *
 			return err
 		}
 		if count != 0 {
-			return fmt.Errorf("%w: task transfer relation %q has unapproved workspace ownership", repoerrors.ErrTaskTransferConflict, relation.table)
+			return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferWorkspaceRelationUnmapped,
+				fmt.Sprintf("task transfer relation %q has unapproved workspace ownership", relation.table))
 		}
 	}
 	return nil

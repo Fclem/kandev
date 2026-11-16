@@ -48,14 +48,16 @@ test.describe("Desktop task-row menu grouping", () => {
       "Nest under",
       "Link",
       "Move to",
-      "Change workflow...",
       "Archive",
       "Delete",
     ]);
 
     const separators = menu.locator(":scope > [data-slot='context-menu-separator']");
     await expect(separators).toHaveCount(4);
-    await expect(menu.getByTestId("task-context-change-workflow")).toBeVisible();
+    await menu.getByTestId("task-context-move-to").hover();
+    await expect(testPage.getByTestId("task-context-move-step")).toBeVisible();
+    await expect(testPage.getByTestId("task-context-change-workflow")).toBeVisible();
+    await expect(testPage.getByTestId("task-context-change-workspace")).toBeVisible();
     await prCapture.screenshot("desktop-task-row-menu-grouping", {
       caption: "Desktop task-row actions grouped by purpose",
     });

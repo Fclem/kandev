@@ -143,6 +143,7 @@ async function startMove(page: Page, owned: Owned, mobile: boolean, targetIndex 
   if (mobile) {
     await card.getByRole("button", { name: "More options" }).tap();
     await page.getByTestId("task-context-move-to").tap();
+    await page.getByTestId("task-context-move-step").tap();
     await page.getByTestId(`task-context-step-${owned.steps[targetIndex]}`).tap();
     return;
   }

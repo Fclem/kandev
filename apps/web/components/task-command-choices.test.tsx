@@ -26,7 +26,7 @@ it("offers one task-scoped workflow-change command for every other workflow", ()
   expect(result.current.workflows).toHaveLength(1);
   expect(result.current.workflows[0]).toMatchObject({
     id: "task-change-workflow",
-    label: "Change workflow...",
+    label: "Different workflow...",
   });
   result.current.workflows[0].action?.();
   expect(onChangeWorkflow).toHaveBeenCalledOnce();

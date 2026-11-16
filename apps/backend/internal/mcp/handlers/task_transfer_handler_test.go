@@ -13,6 +13,7 @@ import (
 	mcpscope "github.com/kandev/kandev/internal/mcp/scope"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository/repoerrors"
+	"github.com/kandev/kandev/internal/task/service"
 	ws "github.com/kandev/kandev/pkg/websocket"
 	"github.com/stretchr/testify/require"
 )
@@ -390,6 +391,37 @@ func TestHandleTransferTaskDeniesUnattestedSessionAndRedactsFailures(t *testing.
 	response, err := h.handleTransferTask(context.Background(), transferTaskMessage(t))
 	require.NoError(t, err)
 	assertWSError(t, response, ws.ErrorCodeInternalError)
+}
+
+// The Web adapter's typed reasons and new write-scope denials must not change
+// the MCP vocabulary: conflicts stay generic and a known-but-forbidden caller
+// is indistinguishable from an unreachable one.
+func TestHandleTransferTaskKeepsMCPErrorsNonDisclosing(t *testing.T) {
+	tests := []struct {
+		name        string
+		service     error
+		wantCode    string
+		wantMessage string
+	}{
+		{name: "typed conflict", service: repoerrors.NewTaskTransferConflict(
+			repoerrors.TaskTransferStepIncompatible, "destination lane changes task semantics"),
+			wantCode: ws.ErrorCodeConflict, wantMessage: "task transfer conflict"},
+		{name: "write scope denied", service: service.ErrForbidden,
+			wantCode: ws.ErrorCodeNotFound, wantMessage: "task transfer unavailable"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transfer := &recordingTaskTransferService{err: tt.service}
+			h := &Handlers{taskTransferSvc: transfer, logger: testLogger(t)}
+			response, err := h.handleTransferTask(context.Background(), transferTaskMessage(t))
+			require.NoError(t, err)
+			var payload ws.ErrorPayload
+			require.NoError(t, json.Unmarshal(response.Payload, &payload))
+			require.Equal(t, tt.wantCode, payload.Code)
+			require.Equal(t, tt.wantMessage, payload.Message)
+			require.Empty(t, payload.Details)
+		})
+	}
 }
 
 func transferTaskMessage(t *testing.T) *ws.Message {

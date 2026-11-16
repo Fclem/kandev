@@ -195,8 +195,9 @@ it("allows moves within the current hidden workflow without offering other hidde
   }));
   render(<Harness />);
   fireEvent.click(screen.getByText("Open A"));
-  expect(screen.queryByRole("button", { name: "Change workflow..." })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Move to" }));
+  expect(screen.queryByRole("button", { name: "Different workflow..." })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Workflow step" }));
   fireEvent.click(screen.getByRole("button", { name: "next" }));
   await waitFor(() =>
     expect(api.bulkMoveSelectedTasks).toHaveBeenCalledWith({

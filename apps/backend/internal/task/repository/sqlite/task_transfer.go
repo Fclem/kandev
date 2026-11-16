@@ -98,6 +98,9 @@ func (r *Repository) TransferTask(
 	if err != nil {
 		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
 	}
+	if command.DurableRejection {
+		return r.transferTaskWithDurableRejection(ctx, command, requestDigest)
+	}
 	if receipt, found, replayErr := r.replayTaskTransferCommitted(ctx, command, requestDigest); replayErr != nil {
 		return nil, errors.Join(replayErr, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultForError(replayErr)))
 	} else if found {
@@ -147,7 +150,7 @@ func (r *Repository) handleTaskTransferApplyError(
 		case found:
 			return replay, nil
 		case isTaskTransferOperationViolation(applyErr):
-			applyErr = fmt.Errorf("%w: idempotency key request differs", repoerrors.ErrTaskTransferConflict)
+			applyErr = repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferIdempotencyConflict, "idempotency key request differs")
 		}
 	}
 	result := taskTransferResultFailed
@@ -177,16 +180,16 @@ func taskTransferResultForError(err error) string {
 
 func validateTaskTransferCommand(command models.TaskTransferCommand) error {
 	if taskTransferCommandMissingPredicate(command) {
-		return fmt.Errorf("%w: required transfer predicate is missing", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferUnsupported, "required transfer predicate is missing")
 	}
 	if taskTransferCommandUnsupported(command) {
-		return fmt.Errorf("%w: unsupported transfer request", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferUnsupported, "unsupported transfer request")
 	}
 	if command.Actor.Kind != models.TaskTransferActorHuman && command.Actor.Kind != models.TaskTransferActorCoordinator {
-		return fmt.Errorf("%w: actor is not attested", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferUnsupported, "actor is not attested")
 	}
 	if command.Actor.Kind == models.TaskTransferActorCoordinator && command.Actor.CallerTaskID == "" {
-		return fmt.Errorf("%w: coordinator caller task is missing", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferUnsupported, "coordinator caller task is missing")
 	}
 	return nil
 }
@@ -239,7 +242,7 @@ func (r *Repository) ResolveTaskTransferReplayActor(
 		return models.TaskTransferActor{}, false, err
 	}
 	if persisted.RequestDigest != digest {
-		return models.TaskTransferActor{}, false, repoerrors.ErrTaskTransferConflict
+		return models.TaskTransferActor{}, false, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferIdempotencyConflict, "")
 	}
 	return models.TaskTransferActor{
 		Kind: models.TaskTransferActorKind(persisted.ActorKind), ID: persisted.ActorID,
@@ -282,11 +285,11 @@ func (r *Repository) replayTaskTransfer(
 		return nil, false, err
 	}
 	if persisted.RequestDigest != requestDigest {
-		return nil, true, fmt.Errorf("%w: idempotency key request differs", repoerrors.ErrTaskTransferConflict)
+		return nil, true, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferIdempotencyConflict, "idempotency key request differs")
 	}
 	if persisted.ActorKind != string(command.Actor.Kind) || persisted.ActorID != command.Actor.ID ||
 		persisted.ActorSessionID != command.Actor.SessionID {
-		return nil, true, fmt.Errorf("%w: idempotency actor differs", repoerrors.ErrTaskTransferConflict)
+		return nil, true, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferIdempotencyConflict, "idempotency actor differs")
 	}
 	var receipt models.TaskTransferReceipt
 	if err := json.Unmarshal([]byte(persisted.ReceiptJSON), &receipt); err != nil {
@@ -377,7 +380,7 @@ func (r *Repository) applyTaskTransfer(
 		return nil, err
 	}
 	if beforeDigest != afterDigest {
-		return nil, fmt.Errorf("%w: preservation census changed", repoerrors.ErrTaskTransferConflict)
+		return nil, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferUnsupported, "preservation census changed")
 	}
 	var transitionCount int
 	if err := tx.GetContext(ctx, &transitionCount,
@@ -410,7 +413,7 @@ func (r *Repository) lockAndValidateTaskTransferSource(
 ) (*transferTaskPlacement, error) {
 	placement, err := r.lockTransferTask(ctx, tx, command.TaskID)
 	if err != nil || !taskTransferSourceMatches(placement, command) {
-		return nil, taskTransferConflict(err, "source predicate changed")
+		return nil, taskTransferConflict(err, repoerrors.TaskTransferSourceChanged, "source predicate changed")
 	}
 	if err := r.validateTransferCoordinatorActor(ctx, tx, command); err != nil {
 		return nil, err
@@ -443,11 +446,11 @@ func taskTransferSourceMatches(placement *transferTaskPlacement, command models.
 		placement.UpdatedAt.Equal(command.ExpectedTaskUpdatedAt)
 }
 
-func taskTransferConflict(err error, reason string) error {
+func taskTransferConflict(err error, reason repoerrors.TaskTransferConflictReason, detail string) error {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	return fmt.Errorf("%w: %s", repoerrors.ErrTaskTransferConflict, reason)
+	return repoerrors.NewTaskTransferConflict(reason, detail)
 }
 
 func (r *Repository) resolveTransferDestination(
@@ -459,7 +462,7 @@ func (r *Repository) resolveTransferDestination(
 	err := tx.GetContext(ctx, &workflowWorkspaceID,
 		r.db.Rebind(`SELECT workspace_id FROM workflows WHERE id = ?`), command.DestinationWorkflowID)
 	if err != nil || workflowWorkspaceID != command.DestinationWorkspaceID {
-		return "", "", taskTransferConflict(err, "destination unavailable")
+		return "", "", taskTransferConflict(err, repoerrors.TaskTransferDestinationUnavailable, "destination unavailable")
 	}
 	if command.DestinationStepID != "" {
 		var step struct {
@@ -470,7 +473,7 @@ func (r *Repository) resolveTransferDestination(
 			`SELECT id, name FROM workflow_steps WHERE id = ? AND workflow_id = ?`),
 			command.DestinationStepID, command.DestinationWorkflowID)
 		if err != nil || (command.DestinationStepName != "" && step.Name != command.DestinationStepName) {
-			return "", "", taskTransferConflict(err, "destination lane unavailable")
+			return "", "", taskTransferConflict(err, repoerrors.TaskTransferDestinationUnavailable, "destination lane unavailable")
 		}
 		return step.ID, step.Name, nil
 	}
@@ -484,7 +487,7 @@ func (r *Repository) resolveTransferDestination(
 		return "", "", err
 	}
 	if len(steps) != 1 {
-		return "", "", fmt.Errorf("%w: destination lane mapping is not unique", repoerrors.ErrTaskTransferConflict)
+		return "", "", repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferDestinationUnavailable, "destination lane mapping is not unique")
 	}
 	return steps[0].ID, steps[0].Name, nil
 }
@@ -504,10 +507,8 @@ func (r *Repository) validateTransferInvariants(
 		return err
 	}
 	if placement.ProjectID != "" {
-		return fmt.Errorf(
-			"%w: source task is project-bound; cross-workspace transfer requires resolving project membership first",
-			repoerrors.ErrTaskTransferConflict,
-		)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferWorkspaceRelationUnmapped,
+			"source task is project-bound; cross-workspace transfer requires resolving project membership first")
 	}
 	if err := r.validateTransferCleanup(ctx, tx, taskID, inventory.automationCleanupJobs); err != nil {
 		return err
@@ -535,7 +536,7 @@ func (r *Repository) validateTransferWorkspaceBoundary(
 		return err
 	}
 	if compatible != 1 {
-		return fmt.Errorf("%w: workspace boundary changed", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferDestinationUnavailable, "workspace boundary changed")
 	}
 	return nil
 }
@@ -550,7 +551,7 @@ func (r *Repository) validateTransferLane(
 		var lockedStepID string
 		query := `SELECT id FROM workflow_steps WHERE id = ?` + postgresForUpdateClause
 		if err := tx.GetContext(ctx, &lockedStepID, r.db.Rebind(query), destinationStepID); err != nil {
-			return taskTransferConflict(err, "destination lane unavailable")
+			return taskTransferConflict(err, repoerrors.TaskTransferDestinationUnavailable, "destination lane unavailable")
 		}
 	}
 	equivalent, destination, err := r.transferStepsEquivalent(ctx, tx, sourceStepID, destinationStepID)
@@ -558,7 +559,7 @@ func (r *Repository) validateTransferLane(
 		return err
 	}
 	if !equivalent {
-		return fmt.Errorf("%w: destination lane changes task semantics", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferStepIncompatible, "destination lane changes task semantics")
 	}
 	if placement.WIPAdmitted != 0 && destination.WIPLimit > 0 {
 		var occupants int
@@ -570,7 +571,7 @@ func (r *Repository) validateTransferLane(
 			return err
 		}
 		if occupants >= destination.WIPLimit {
-			return fmt.Errorf("%w: destination lane is at capacity", repoerrors.ErrTaskTransferConflict)
+			return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferDestinationFull, "destination lane is at capacity")
 		}
 	}
 	return nil
@@ -591,7 +592,7 @@ func (r *Repository) validateTransferWorkspaceRelations(
 			return err
 		}
 		if incompatibleLabelCount != 0 {
-			return fmt.Errorf("%w: destination label mapping is required", repoerrors.ErrTaskTransferConflict)
+			return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferWorkspaceRelationUnmapped, "destination label mapping is required")
 		}
 	}
 	if inventory.groups {
@@ -602,7 +603,7 @@ func (r *Repository) validateTransferWorkspaceRelations(
 			return err
 		}
 		if groupCount != 0 {
-			return fmt.Errorf("%w: workspace group mapping is incompatible", repoerrors.ErrTaskTransferConflict)
+			return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferWorkspaceRelationUnmapped, "workspace group mapping is incompatible")
 		}
 	}
 	if inventory.treeHolds {
@@ -613,7 +614,7 @@ func (r *Repository) validateTransferWorkspaceRelations(
 			return err
 		}
 		if holdCount != 0 {
-			return fmt.Errorf("%w: destination tree-hold mapping is required", repoerrors.ErrTaskTransferConflict)
+			return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferWorkspaceRelationUnmapped, "destination tree-hold mapping is required")
 		}
 	}
 	return nil
@@ -642,7 +643,7 @@ func (r *Repository) transferStepsEquivalent(
 				COALESCE(s.session_target, '') AS session_target
 			FROM workflow_steps s JOIN workflows w ON w.id = s.workflow_id WHERE s.id = ?`), stepID)
 		if err != nil {
-			return step, taskTransferConflict(err, "lane unavailable")
+			return step, taskTransferConflict(err, repoerrors.TaskTransferDestinationUnavailable, "lane unavailable")
 		}
 		return step, nil
 	}
@@ -794,7 +795,7 @@ func (r *Repository) updateTaskTransferPlacement(
 		return 0, err
 	}
 	if rows, _ := result.RowsAffected(); rows != 1 {
-		return 0, fmt.Errorf("%w: source predicate changed", repoerrors.ErrTaskTransferConflict)
+		return 0, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferSourceChanged, "source predicate changed")
 	}
 	attribution := steptelemetry.Attribution{
 		Trigger: steptelemetry.TriggerTaskTransfer, ActorID: command.Actor.ID, SessionID: command.Actor.SessionID,

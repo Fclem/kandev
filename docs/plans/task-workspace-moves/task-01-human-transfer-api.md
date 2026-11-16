@@ -1,7 +1,7 @@
 ---
 id: "01-human-transfer-api"
 title: "Expose safe human workspace transfer"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -107,4 +107,22 @@ None. Existing transfer storage/service implementation is present. Read its orig
 
 ## Results
 
-Pending. Record RED/GREEN assertions, exact commands/results, and disposable API smoke evidence. Do not update historical companion test counts as if rerun.
+Completed 2026-11-07.
+
+Implementation:
+
+- `task_transfer_http_handlers.go` adds the strict `POST /api/v1/tasks/:id/transfer` adapter (route registered in `task_handlers.go`). Unknown/trailing fields, an unparsable generation, or a missing field return 400; a missing middleware identity returns non-disclosing 404. The adapter attests `TaskTransferActorHuman` from `authn.IdentityFromContext` (`local-human` only for a synthetic identity without user ID), fixes the policy, sets the server-only `DurableRejection` mode, returns `{receipt}` with `Cache-Control: no-store`, and audits adapter rejections as non-barrier `conflict` rows.
+- `repoerrors/task_transfer.go` adds `TaskTransferConflictError` reasons that keep `errors.Is(ErrTaskTransferConflict)` and the existing error text. Every repository guard (lane, capacity, relations, project, profiles, pending moves, cleanup, idempotency, source predicate) is typed without predicate changes. The Web adapter maps an allowlist; MCP keeps `task transfer conflict` and now maps the new write-scope `ErrForbidden` to its existing non-disclosing `task transfer unavailable`.
+- `Service.TransferTask` requires `authz.ScopeTaskWrite` for the task's current workspace and the destination before replay or mutation (reach-first 404, readable-but-forbidden 403).
+- `task_transfer_durable_rejection.go` runs Web commands under the existing transfer serialization: committed receipt first, then caller-bound barrier lookup (exact request match returns `operation_rejected`, another request under the key returns `idempotency_conflict`), then `SAVEPOINT`; a domain guard rolls back to the savepoint, rechecks receipt precedence, and commits exactly one `failed` audit row (the barrier). Lookup/storage/commit failures stay uncertain 500s.
+
+RED (behavioral, after the route existed): `go test ./internal/task/handlers -run TestHTTPTransferTask` failed `RequiresWriteInBothWorkspaces` (read-only source/destination expected 403, got 200), `CheckAfterPermissionRevocation` (expected 403, got 200), `TerminalRejectedKey` (failed barrier rows 0, want 1; lookup failure expected 500, got 409), `LostDomainConflictResponse` (expected `operation_rejected`, got `source_changed`/`step_incompatible`; the admitted same-key writer committed with 200 after the rejection). The first run before the route existed failed only on the missing route (404 and a gate that never admitted) and is not counted as behavioral evidence. MCP: `TestHandleTransferTaskKeepsMCPErrorsNonDisclosing/write_scope_denied` expected `NOT_FOUND`, got `INTERNAL_ERROR`.
+
+GREEN, run sequentially with module cache only (`GOPROXY=off`; the pinned ACP SDK was already cached):
+
+- `(cd apps/backend && go test ./internal/task/handlers ./internal/task/service ./internal/task/repository/sqlite ./internal/mcp/handlers -run 'TransferTask|TaskTransfer' -count=1)`: all four packages ok.
+- `(cd apps/backend && go test -race ./internal/task/handlers ./internal/task/service ./internal/task/repository/sqlite -run 'TransferTask|TaskTransfer' -count=1)`: ok (handlers 4.8s, service 2.7s, sqlite 38.5s).
+- `(cd apps/backend && go build ./...)`: exit 0.
+- New permanent tests: `task_transfer_http_handlers_test.go` (`PreservesIdentityAndRunningSession`, `RejectsActorFields`, `RequiresWriteInBothWorkspaces`, `ReportsSafeConflictReasons`, `ReplaysExactRequest`, `CheckAfterPermissionRevocation`, `TerminalRejectedKey`, `LostDomainConflictResponse` with deterministic writer-first and rejection-first gates, `CancelledBeforeCommitLeavesTaskUnchanged`) and `TestHandleTransferTaskKeepsMCPErrorsNonDisclosing`.
+
+Disposable API smoke (`/tmp` backend `bin/kandev __backend`, port 38711, throwaway DB; script removed afterwards): seeded two same-owner workspaces with equivalent `Work` steps plus an incompatible `Review` step through the HTTP API. A fresh-key request to `Review` returned `409 {"code":"step_incompatible"}` with unchanged placement; the same key then returned `409 {"code":"operation_rejected"}`. The compatible request returned 200 (`Cache-Control: no-store`), operation `ee6b3c09-…`; `GET /tasks/:id` showed the destination workspace/workflow/step. The identical replay returned the same operation ID, and a body with `actor` returned 400. The seeded task had no session through the plain API (the session-preservation evidence is the running session/turn in the handler test and the Task 03 browser scenario).

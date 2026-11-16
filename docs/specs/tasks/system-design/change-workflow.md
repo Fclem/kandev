@@ -189,7 +189,8 @@ Mount the surface outside the menu that triggers it, so closing the menu cannot
 destroy its draft. Freeze the subject task ID when opening; changing active tabs
 must not retarget a pending submission.
 
-Replace single-task workflow submenus with one `Change workflow...` item in:
+Replace single-task workflow submenus with one `Different workflow...` child of the
+single-task `Move to` group ([workspace transfer](cross-workspace-task-transfer.md#web-movement-navigation)) in:
 
 - `kanban-card-menu-items.tsx` and `kanban-card-menu.tsx`.
 - `task-move-context-menu.tsx` and `task-switcher-context-menu-move-items.tsx`.

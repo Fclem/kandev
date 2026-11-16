@@ -18,6 +18,8 @@ import { usePluginRegistry } from "@/lib/plugins/registry";
 import type { PluginTaskMenuContext } from "@/lib/plugins/types";
 import type { TaskPriority, TaskState } from "@/lib/types/http";
 import { buildTaskActionsMenuEntries } from "@/lib/kanban/task-actions-menu-entries";
+import { requestTaskWorkspaceMove } from "@/lib/kanban/task-workspace-move-request";
+import { useAppStoreApi } from "@/components/state-provider";
 import type { DeleteTaskParams } from "@/lib/api/domains/kanban-api";
 
 export type TaskActionsMenuBoardRow = {
@@ -88,6 +90,7 @@ type ComputeEntriesArgs = {
   pluginLinkActions: ReturnType<typeof useTaskPluginLinkActions>;
   onMoveToStep: (stepId: string) => void;
   onChangeWorkflow: () => void;
+  onChangeWorkspace?: () => void;
   pluginMenuContext: PluginTaskMenuContext;
   onSelectPriority: (priority: TaskPriority) => void;
 };
@@ -126,6 +129,7 @@ function computeTaskActionsMenuEntries(args: ComputeEntriesArgs) {
     pluginLinkActions: args.pluginLinkActions,
     onMoveToStep: args.onMoveToStep,
     onChangeWorkflow: args.onChangeWorkflow,
+    onChangeWorkspace: args.onChangeWorkspace,
     pluginMenuContext: args.pluginMenuContext,
   });
 }
@@ -193,6 +197,12 @@ function useSubjectScopedDialogs(
   };
 }
 
+/** The form captures this subject; a later subject change cannot retarget it. */
+function workspaceMoveRequest(store: object, taskId: string | null, workspaceId: string | null) {
+  if (!taskId || !workspaceId) return undefined;
+  return () => requestTaskWorkspaceMove(store, taskId, workspaceId);
+}
+
 type UseTaskActionsMenuArgs = {
   taskId: string | null;
   taskTitle: string;
@@ -240,6 +250,7 @@ export function useTaskActionsMenu({
   usePluginRegistry();
   const moveTargets = useTaskActionsMenuMoveTargets(taskId ?? "", steps);
   const moveTasks = useTaskWorkflowMove();
+  const store = useAppStoreApi();
 
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -300,6 +311,7 @@ export function useTaskActionsMenu({
     pluginLinkActions,
     onMoveToStep,
     onChangeWorkflow: requestChangeWorkflow,
+    onChangeWorkspace: workspaceMoveRequest(store, taskId, workspaceId),
     pluginMenuContext,
     onSelectPriority,
   });

@@ -155,7 +155,7 @@ in the same order, with the same labels, wherever the menu is opened.
   AC-TASKS-TASK-ACTIONS-MENU-002.4 through
   AC-TASKS-TASK-ACTIONS-MENU-002.9 state otherwise, except for plugin
   `edit`-group actions (AC-TASKS-TASK-ACTIONS-MENU-002.2a), and except that
-  single-task **Change workflow...** opens the shared change form directly while
+  single-task **Move to** > **Different workflow...** opens the shared change form directly while
   a selected multi-task set retains the separate bulk workflow submenu, and
   except for the
   in-flight disabled state, which is per surface under
@@ -244,7 +244,7 @@ in the same order, with the same labels, wherever the menu is opened.
 - **AC-TASKS-TASK-ACTIONS-MENU-002.9:** The system shall present no entry on
   these two surfaces that the card actions menu does not present for a single,
   unselected task, and shall present no bulk-selection variant of the menu.
-- **AC-TASKS-TASK-ACTIONS-MENU-002.10:** The single-task **Change workflow...**
+- **AC-TASKS-TASK-ACTIONS-MENU-002.10:** The single-task **Different workflow...**
   entry shall open the shared form defined by
   [Change workflow](change-workflow.md), including from the card, sidebar,
   preview, detail, Threads, and command palette surfaces. A selected multi-task

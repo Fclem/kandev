@@ -33,6 +33,9 @@ vi.mock("@/components/quick-chat/quick-chat-provider", () => ({
   QuickChatProvider: mocks.passthrough,
 }));
 vi.mock("@/components/task/recent-task-switcher", () => ({ RecentTaskSwitcher: () => null }));
+vi.mock("@/components/task/task-workspace-move-host", () => ({
+  TaskWorkspaceMoveHost: () => null,
+}));
 vi.mock("@/components/session-failure-toast-bridge", () => ({
   SessionFailureToastBridge: () => null,
 }));

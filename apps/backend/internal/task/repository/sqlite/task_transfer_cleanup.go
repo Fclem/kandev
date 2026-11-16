@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -17,7 +16,7 @@ func (r *Repository) validateTransferCleanup(ctx context.Context, tx *sqlx.Tx, t
 		return err
 	}
 	if cleanupCount != 0 {
-		return fmt.Errorf("%w: incompatible lifecycle mutation is active", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferCleanupActive, "incompatible lifecycle mutation is active")
 	}
 	if automationCleanupJobs {
 		if err := tx.GetContext(ctx, &cleanupCount, r.db.Rebind(`
@@ -26,7 +25,7 @@ func (r *Repository) validateTransferCleanup(ctx context.Context, tx *sqlx.Tx, t
 			return err
 		}
 		if cleanupCount != 0 {
-			return fmt.Errorf("%w: incompatible automation cleanup mutation is active", repoerrors.ErrTaskTransferConflict)
+			return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferCleanupActive, "incompatible automation cleanup mutation is active")
 		}
 	}
 	return nil

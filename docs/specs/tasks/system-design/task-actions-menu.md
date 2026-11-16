@@ -69,7 +69,7 @@ its board row from the store (see below) and degrades per
 **Dialog host (new, one per surface).** Mounts the confirmation and link
 dialogs the entries open. Each surface hosts its own so a dialog outlives the
 menu that opened it and is not nested inside a portal that unmounts on select.
-The single-task **Change workflow...** entry opens the shared form from
+The single-task **Move to** > **Different workflow...** entry opens the shared form from
 [Change workflow](change-workflow.md); that design owns its task snapshot, draft,
 preview, version check, in-flight guard, and result recovery.
 

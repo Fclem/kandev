@@ -1,13 +1,8 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { IconAdjustments, IconArrowRight, IconLogicBuffer } from "@tabler/icons-react";
-import {
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubTrigger,
-} from "@kandev/ui/context-menu";
+import { IconAdjustments, IconArrowRight } from "@tabler/icons-react";
+import { ContextMenuItem, ContextMenuSub, ContextMenuSubTrigger } from "@kandev/ui/context-menu";
 import { TaskContextMenuSubContent as ContextMenuSubContent } from "./task-context-menu-sub-content";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -24,6 +19,9 @@ import type { WorkflowMoveEntryOptions, WorkflowMoveResponse } from "@/lib/api/d
 import type { WorkflowStepProgress } from "@/hooks/domains/kanban/use-workflow-step-progress";
 import { StepProgressDetails } from "./workflow-step-progress-details";
 import { keepMoveOpenForPromptSuggestions } from "./workflow-move-surface";
+
+/** Move destination lists prefer 20rem and stay inside the viewport. */
+export const TASK_MOVE_MENU_WIDTH = "w-[min(20rem,calc(100vw-1rem))]";
 
 export type TaskMoveStep = {
   id: string;
@@ -157,27 +155,6 @@ export function TaskMoveOptionsSurface({
   return <Options {...optionsProps} />;
 }
 
-type TaskMoveContextMenuItemsProps = {
-  currentWorkflowId?: string | null;
-  currentStepId?: string | null;
-  workflows: TaskMoveWorkflow[];
-  stepsByWorkflowId: Record<string, TaskMoveStep[]>;
-  disabled?: boolean;
-  showSeparator?: boolean;
-  onMoveToStep?: (stepId: string) => void;
-  onMoveToStepWithOptions?: (stepId: string) => void;
-  onSubmitWithOptions?: (
-    stepId: string,
-    entryOptions: WorkflowMoveEntryOptions | undefined,
-  ) => Promise<boolean>;
-  isMoving?: boolean;
-  isBulkSelection?: boolean;
-  progressByStepId?: Readonly<Record<string, WorkflowStepProgress>>;
-  agentLabelsByProfileId?: Readonly<Record<string, string>>;
-  onChangeWorkflow?: () => void;
-  onSendToWorkflow?: (workflowId: string, stepId: string) => void;
-};
-
 export function stepHasAutoStart(step: TaskMoveStep) {
   return step.events?.on_enter?.some((action) => action.type === "auto_start_agent") ?? false;
 }
@@ -208,7 +185,7 @@ function StepMenuLabel({
   return (
     <>
       <span className={cn("block h-2 w-2 rounded-full shrink-0", step.color ?? "")} />
-      <span className="flex-1 truncate">{step.title}</span>
+      <span className="min-w-0 flex-1 whitespace-normal break-words">{step.title}</span>
       {(isCurrent || hasAutoStart) && (
         <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
           {isCurrent && (
@@ -223,7 +200,7 @@ function StepMenuLabel({
   );
 }
 
-function StepMenuItem({
+export function StepMenuItem({
   step,
   currentStepId,
   onSelect,
@@ -347,7 +324,7 @@ function StepMenuSubItem({
         {content}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent
-        className={onSubmitWithOptions ? "w-72" : "w-48"}
+        className={onSubmitWithOptions ? "w-72" : TASK_MOVE_MENU_WIDTH}
         onEscapeKeyDown={keepMoveOpenForPromptSuggestions}
       >
         {onSubmitWithOptions ? (
@@ -411,7 +388,7 @@ function StepMenuContent({
   );
 }
 
-function MoveToCurrentWorkflowSubmenu({
+export function MoveToCurrentWorkflowSubmenu({
   steps,
   currentStepId,
   disabled,
@@ -421,6 +398,7 @@ function MoveToCurrentWorkflowSubmenu({
   isMoving,
   progressByStepId,
   agentLabelsByProfileId,
+  nested = false,
 }: {
   steps: TaskMoveStep[];
   currentStepId?: string | null;
@@ -434,6 +412,8 @@ function MoveToCurrentWorkflowSubmenu({
   isMoving?: boolean;
   progressByStepId?: Readonly<Record<string, WorkflowStepProgress>>;
   agentLabelsByProfileId?: Readonly<Record<string, string>>;
+  /** Rendered as the `Workflow step` child of the single-task `Move to` group. */
+  nested?: boolean;
 }) {
   const { t } = useTranslation();
   if (!onMoveToStep || steps.length <= 1) return null;
@@ -441,13 +421,13 @@ function MoveToCurrentWorkflowSubmenu({
     <ContextMenuSub>
       <ContextMenuSubTrigger
         className="[@media(pointer:coarse)]:min-h-11"
-        data-testid="task-context-move-to"
+        data-testid={nested ? "task-context-move-step" : "task-context-move-to"}
         disabled={disabled}
       >
         <IconArrowRight className="mr-2 h-4 w-4" />
-        {t("task:moveTo")}
+        {nested ? t("task:moveToWorkflowStep") : t("task:moveTo")}
       </ContextMenuSubTrigger>
-      <ContextMenuSubContent className="w-48">
+      <ContextMenuSubContent className={TASK_MOVE_MENU_WIDTH}>
         {steps.map((step) => (
           <StepMenuItem
             key={step.id}
@@ -463,161 +443,5 @@ function MoveToCurrentWorkflowSubmenu({
         ))}
       </ContextMenuSubContent>
     </ContextMenuSub>
-  );
-}
-
-function WorkflowTargetItem({
-  workflow,
-  steps,
-  disabled,
-  onSendToWorkflow,
-}: {
-  workflow: TaskMoveWorkflow;
-  steps: TaskMoveStep[];
-  disabled?: boolean;
-  onSendToWorkflow?: (workflowId: string, stepId: string) => void;
-}) {
-  const { t } = useTranslation();
-  if (steps.length === 0 || !onSendToWorkflow) {
-    return (
-      <ContextMenuItem
-        data-testid={`task-context-workflow-${workflow.id}`}
-        disabled
-        aria-disabled="true"
-      >
-        <span className="flex-1 truncate">{workflow.name}</span>
-        <span data-testid="task-context-disabled-reason" className="ml-2 text-[10px]">
-          {t("task:noSteps")}
-        </span>
-      </ContextMenuItem>
-    );
-  }
-
-  return (
-    <ContextMenuSub>
-      <ContextMenuSubTrigger
-        className="[@media(pointer:coarse)]:min-h-11"
-        data-testid={`task-context-workflow-${workflow.id}`}
-        disabled={disabled}
-      >
-        <span className="truncate">{workflow.name}</span>
-      </ContextMenuSubTrigger>
-      <ContextMenuSubContent className="w-48">
-        {steps.map((step) => (
-          <StepMenuItem
-            key={step.id}
-            step={step}
-            onSelect={(stepId) => onSendToWorkflow(workflow.id, stepId)}
-          />
-        ))}
-      </ContextMenuSubContent>
-    </ContextMenuSub>
-  );
-}
-
-function SendToWorkflowSubmenu({
-  workflows,
-  stepsByWorkflowId,
-  disabled,
-  onSendToWorkflow,
-}: {
-  workflows: TaskMoveWorkflow[];
-  stepsByWorkflowId: Record<string, TaskMoveStep[]>;
-  disabled?: boolean;
-  onSendToWorkflow?: (workflowId: string, stepId: string) => void;
-}) {
-  const { t } = useTranslation();
-  if (!onSendToWorkflow || workflows.length === 0) return null;
-  return (
-    <ContextMenuSub>
-      <ContextMenuSubTrigger
-        className="[@media(pointer:coarse)]:min-h-11"
-        data-testid="task-context-change-workflow-selection"
-        disabled={disabled}
-      >
-        <IconLogicBuffer className="mr-2 h-4 w-4" />
-        {t("task:changeWorkflowForSelectedTasks")}
-      </ContextMenuSubTrigger>
-      <ContextMenuSubContent className="w-56">
-        {workflows.map((workflow) => (
-          <WorkflowTargetItem
-            key={workflow.id}
-            workflow={workflow}
-            steps={stepsByWorkflowId[workflow.id] ?? []}
-            disabled={disabled}
-            onSendToWorkflow={onSendToWorkflow}
-          />
-        ))}
-      </ContextMenuSubContent>
-    </ContextMenuSub>
-  );
-}
-
-export function TaskMoveContextMenuItems({
-  currentWorkflowId,
-  currentStepId,
-  workflows,
-  stepsByWorkflowId,
-  disabled,
-  showSeparator = true,
-  onMoveToStep,
-  onMoveToStepWithOptions,
-  onSubmitWithOptions,
-  isMoving,
-  isBulkSelection = false,
-  progressByStepId,
-  agentLabelsByProfileId,
-  onChangeWorkflow,
-  onSendToWorkflow,
-}: TaskMoveContextMenuItemsProps) {
-  const { t } = useTranslation();
-  const { currentSteps, targets, canMove, canSend } = taskMoveOptions(
-    currentWorkflowId,
-    workflows,
-    stepsByWorkflowId,
-  );
-  const hasSameWorkflowMove = Boolean(
-    (onMoveToStep || onMoveToStepWithOptions || onSubmitWithOptions) && canMove,
-  );
-  const hasCrossWorkflowMove = Boolean(
-    canSend && (isBulkSelection ? onSendToWorkflow : onChangeWorkflow),
-  );
-
-  if (!hasSameWorkflowMove && !hasCrossWorkflowMove) return null;
-
-  return (
-    <>
-      {showSeparator && <ContextMenuSeparator />}
-      <MoveToCurrentWorkflowSubmenu
-        steps={currentSteps}
-        currentStepId={currentStepId}
-        disabled={disabled}
-        onMoveToStep={onMoveToStep}
-        onMoveToStepWithOptions={onMoveToStepWithOptions}
-        onSubmitWithOptions={onSubmitWithOptions}
-        isMoving={isMoving}
-        progressByStepId={progressByStepId}
-        agentLabelsByProfileId={agentLabelsByProfileId}
-      />
-      {hasCrossWorkflowMove &&
-        (isBulkSelection ? (
-          <SendToWorkflowSubmenu
-            workflows={targets}
-            stepsByWorkflowId={stepsByWorkflowId}
-            disabled={disabled}
-            onSendToWorkflow={onSendToWorkflow}
-          />
-        ) : (
-          <ContextMenuItem
-            data-testid="task-context-change-workflow"
-            className="[@media(pointer:coarse)]:min-h-11"
-            disabled={disabled}
-            onSelect={onChangeWorkflow}
-          >
-            <IconLogicBuffer className="mr-2 h-4 w-4" />
-            {t("task:changeWorkflow")}
-          </ContextMenuItem>
-        ))}
-    </>
   );
 }

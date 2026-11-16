@@ -91,18 +91,24 @@ test.describe("Cross-workflow task move from home", () => {
     const kanban = new KanbanPage(testPage);
     await kanban.goto();
 
-    const expectedLabels = ["Edit", "Move to", "Change workflow...", "Archive", "Delete"];
-    await kanban.openTaskContextMenu(task.id);
-    for (const label of expectedLabels) {
-      await expect(testPage.getByRole("menuitem", { name: label })).toBeVisible();
+    const expectedLabels = ["Edit", "Move to", "Archive", "Delete"];
+    const moveLabels = ["Workflow step", "Different workflow...", "Different workspace..."];
+    for (const openMenu of [
+      () => kanban.openTaskContextMenu(task.id),
+      () => kanban.openTaskActionsMenu(task.id),
+    ]) {
+      await openMenu();
+      for (const label of expectedLabels) {
+        await expect(testPage.getByRole("menuitem", { name: label })).toBeVisible();
+      }
+      await kanban.contextMoveTo().focus();
+      await testPage.keyboard.press("ArrowRight");
+      for (const label of moveLabels) {
+        await expect(testPage.getByRole("menuitem", { name: label })).toBeVisible();
+      }
+      await testPage.keyboard.press("Escape");
+      await testPage.keyboard.press("Escape");
     }
-    await testPage.keyboard.press("Escape");
-
-    await kanban.openTaskActionsMenu(task.id);
-    for (const label of expectedLabels) {
-      await expect(testPage.getByRole("menuitem", { name: label })).toBeVisible();
-    }
-    await testPage.keyboard.press("Escape");
     await kanban.sendTaskToWorkflowFromActions(task.id, targetWorkflow.id, targetStep.id);
 
     await expect(kanban.taskCard(task.id)).not.toBeVisible({ timeout: 10_000 });

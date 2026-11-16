@@ -1,11 +1,14 @@
 import type { StateCreator } from "zustand";
 import type { AppState } from "../app-state-types";
 import { generateUUID } from "@/lib/utils";
+import { admitTaskMembership } from "../task-membership-control";
 import { reconcileTaskOverviewRead, recordAcceptedTaskStages } from "./task-overview-merge";
 import { emptyTaskOverviewState, type TaskOverviewSlice } from "./task-overview-types";
 
 export const createTaskOverviewSlice: StateCreator<AppState, [], [], TaskOverviewSlice> = (
   set,
+  _get,
+  api,
 ) => ({
   taskOverview: emptyTaskOverviewState(),
   denyTaskOverviewAccess: () =>
@@ -39,12 +42,20 @@ export const createTaskOverviewSlice: StateCreator<AppState, [], [], TaskOvervie
     }));
     return id;
   },
-  finishTaskOverviewRead: (id, acceptedTasks = []) =>
+  finishTaskOverviewRead: (id, acceptedTasks = []) => {
+    let admitted: string[] = [];
     set((state) => {
       const read = state.taskOverview.reads[id];
       if (!read) return state;
       const reads = { ...state.taskOverview.reads };
       delete reads[id];
+      admitted = acceptedTasks
+        .filter(
+          (task) =>
+            read.changes[task.id] !== null &&
+            (!task.workspaceId || task.workspaceId === state.workspaces.activeId),
+        )
+        .map((task) => task.id);
       return {
         taskOverview: recordAcceptedTaskStages(
           { ...state.taskOverview, reads },
@@ -52,15 +63,19 @@ export const createTaskOverviewSlice: StateCreator<AppState, [], [], TaskOvervie
           acceptedTasks,
         ),
       };
-    }),
+    });
+    admitTaskMembership(api, admitted);
+  },
   retainTaskOverviews: (owner, tasks, readId) => {
     let accepted = false;
+    let admittedIds: string[] = [];
     set((state) => {
       if (tasks.some((task) => task.workspaceId && task.workspaceId !== state.workspaces.activeId))
         return state;
       const reconciled = reconcileTaskOverviewRead(state.taskOverview, tasks, readId);
       if (!reconciled) return state;
       accepted = true;
+      admittedIds = reconciled.map((task) => task.id);
       const byId = { ...state.taskOverview.byId };
       for (const task of reconciled) byId[task.id] = task;
       return {
@@ -71,6 +86,8 @@ export const createTaskOverviewSlice: StateCreator<AppState, [], [], TaskOvervie
         },
       };
     });
+    // Cached pages (no read journal) are not canonical admission evidence.
+    if (accepted && readId) admitTaskMembership(api, admittedIds);
     return accepted;
   },
   releaseTaskOverviews: (owner) =>

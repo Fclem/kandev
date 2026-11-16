@@ -10,7 +10,7 @@ import {
   IconLink,
   IconUnlink,
   IconArrowRight,
-  IconLogicBuffer,
+  IconBuildingWarehouse,
   IconTrash,
 } from "@tabler/icons-react";
 import { taskRowActionAvailability } from "./task/task-row-action-availability";
@@ -29,6 +29,8 @@ export type TaskCommandContext = {
   steps: CommandItem[];
   workflows: CommandItem[];
   plugins: CommandItem[];
+  /** Opens the single-task workspace transfer form. */
+  onChangeWorkspace?: () => void;
   onPin: () => void;
   onEdit: () => void;
   onRename: () => void;
@@ -76,17 +78,25 @@ export function buildSidebarTaskCommands(ctx: TaskCommandContext): CommandItem[]
   if (available.detach)
     items.push(command("task-detach", t("task:detachFromParent"), IconUnlink, ctx.onDetach));
   if (available.move) {
-    choices("task-move", t("task:moveTo"), IconArrowRight, ctx.steps);
-    if (ctx.workflows.length) {
-      items.push(
+    // One `Move to` group: a workflow step, a different workflow, and a
+    // different workspace, each keeping its own operation.
+    const moveChildren: CommandItem[] = [];
+    if (ctx.steps.length)
+      moveChildren.push({
+        ...command("task-move-step", t("task:moveToWorkflowStep"), IconArrowRight),
+        children: ctx.steps,
+      });
+    moveChildren.push(...ctx.workflows);
+    if (ctx.onChangeWorkspace)
+      moveChildren.push(
         command(
-          "task-change-workflow",
-          t("task:changeWorkflow"),
-          IconLogicBuffer,
-          ctx.workflows[0]?.action,
+          "task-change-workspace",
+          t("task:moveToDifferentWorkspace"),
+          IconBuildingWarehouse,
+          ctx.onChangeWorkspace,
         ),
       );
-    }
+    choices("task-move", t("task:moveTo"), IconArrowRight, moveChildren);
   }
   items.push(...ctx.plugins);
   items.push({

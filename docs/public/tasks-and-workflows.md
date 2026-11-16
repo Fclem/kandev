@@ -136,14 +136,27 @@ Normal **Move here** and next-step actions use the destination step's saved defa
 | **Instructions**     | Adds one instruction block after the destination prompt.                                                                       |
 | **Skip step prompt** | Suppresses the destination prompt and task-description fallback. Without instructions, the task moves without starting a turn. |
 
-For a keyboard move, press `Cmd/Ctrl+K`, search for **Move to**, and select a destination. Press `Cmd/Ctrl+Enter` to move with defaults, or `Enter` to open options. A failed move keeps your instructions so you can retry. On touch devices, move options open in a bottom drawer.
+For a keyboard move, press `Cmd/Ctrl+K`, search for **Move to**, choose **Workflow step**, and select a destination. Press `Cmd/Ctrl+Enter` to move with defaults, or `Enter` to open options. A failed move keeps your instructions so you can retry. On touch devices, move options open in a bottom drawer.
 
 Moves keep the normal reachability, authorization, WIP, archive, workspace, and active-session rules. A move waits for a running agent to finish, and its options survive queueing and backend restarts. Instructions require an active target session or a destination that auto-starts an agent. Pull-request draft and review status use the PR step's automation. For the agent tool contract, see [Automation and MCP](automation-and-mcp.md#task-mcp).
 
+## Move a task to a step, workflow, or workspace
+
+A single task's card, sidebar, task actions, preview, Threads, and command-palette
+menus group movement under **Move to**:
+
+- **Workflow step** moves the task within its current workflow, with the step's
+  normal entry options.
+- **Different workflow...** opens the workflow change form described below.
+- **Different workspace...** moves the task to another workspace you own.
+
+A multi-task selection keeps its plural step and workflow actions; it cannot move
+tasks to another workspace.
+
 ## Change a task's workflow
 
-Choose **Change workflow...** from a single task's card, sidebar, task actions,
-or command-palette menu. Select a destination workflow and the step where this
+Choose **Move to** > **Different workflow...** from a single task's card, sidebar,
+task actions, or command-palette menu. Select a destination workflow and the step where this
 task will enter. The form previews the destination's session and settings before
 you submit. The task keeps its identity, description, repositories, and existing
 conversations.
@@ -179,6 +192,44 @@ The response lists the task's recorded moves oldest first. Each item has `id`, t
 
 The read needs the same workspace access as opening the task; an unknown or inaccessible task returns `404`. History starts when Kandev began recording step transitions and is never reconstructed for older moves.
 
+## Move a task to another workspace
+
+Choose **Move to** > **Different workspace...** for one task. The form shows the
+task's current workspace, workflow, and step. Choose a destination workspace,
+then a workflow, then a step; changing a workspace clears the workflow and step,
+and changing a workflow clears the step. Browsing destinations does not switch
+your active workspace. On a phone, the form opens in a bottom drawer.
+
+The same task moves with its history, plan, sessions, repositories, and pull
+requests, including an agent turn that is still running. A workspace move does
+not enter the step as a new move, so the step's entry actions do not run.
+
+Kandev accepts a workspace move only when it is safe to keep everything intact:
+
+- You need permission to edit tasks in both workspaces, and both workspaces must
+  have the same owner.
+- The destination step must have the same name and saved settings as the
+  current step, including its prompt, events, agent profile, and limits.
+  Workflows with matching names are not always equivalent.
+- Workspace-owned associations such as labels, a project, or a workspace group,
+  workspace-specific agent profiles, and a queued move without a matching
+  destination step block the move until you resolve them.
+
+If the move is rejected, the form explains why and keeps your choices. After a
+successful move from a board or list, the listing stays where it is and offers
+**Open task**. A task that is already open stays open with its selected session
+and follows its new workspace.
+
+If the result of a move is not confirmed, for example after a network error,
+the form keeps the submitted choices and offers **Check result**. Checking
+repeats the same request and never creates a second move. If your current access
+cannot check the result, the same request is kept until you can check again.
+When the check reports that the move did not happen, refresh the task and review
+its placement before moving it again.
+
+Agents and integrations use the same audited transfer through the
+[MCP transfer tool](automation-and-mcp.md#task-mcp).
+
 ## Find a task from its conversation
 
 Open `Cmd/Ctrl+K` and enter a phrase from a user message or an assistant reply.
@@ -203,7 +254,8 @@ description search remain available if conversation search is unavailable.
 
 While a task is open, `Cmd/Ctrl+K` offers the task actions available from its sidebar
 menu, including Pin/Unpin, Color, Priority, Edit, Rename, Create subtask, Nest under,
-Link, Move to, Change workflow..., Archive, and Delete. Detach and plugin actions
+Link, Move to (a workflow step, a different workflow, or a different workspace),
+Archive, and Delete. Detach and plugin actions
 appear when applicable. These commands target the open task, even when the search
 also shows other tasks. Duplicate remains disabled.
 
@@ -1206,7 +1258,7 @@ limits apply to each selected value, not to the combined selection.
 
 On desktop and tablet, drag a card up or down within its column to reorder it relative to the other cards in that step. You can also focus a card and press **Space** or **Enter** to pick it up, **Arrow Up**/**Arrow Down** to move it, **Space**/**Enter** again to drop it, or **Escape** to cancel. The new order is saved immediately and shown to other viewers of the same board.
 
-On phones, Kanban focuses one workflow and one step at a time. The board navigator always names both; open it to choose either level, or use the previous/next controls and horizontal swipe to move between steps. Choosing a workflow makes it the active workflow for board actions and task creation. Tap a card to open that task directly. Its **More options** menu opens as a touch-sized bottom surface; **Move to** changes the task's workflow or step. **Edit** can still rename a task after work starts, while its original prompt remains locked.
+On phones, Kanban focuses one workflow and one step at a time. The board navigator always names both; open it to choose either level, or use the previous/next controls and horizontal swipe to move between steps. Choosing a workflow makes it the active workflow for board actions and task creation. Tap a card to open that task directly. Its **More options** menu opens as a touch-sized bottom surface; **Move to** changes the task's step, workflow, or workspace. **Edit** can still rename a task after work starts, while its original prompt remains locked.
 
 ### Color several tasks
 

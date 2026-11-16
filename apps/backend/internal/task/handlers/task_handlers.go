@@ -298,6 +298,7 @@ func (h *TaskHandlers) registerHTTP(router *gin.Engine) {
 	api.DELETE("/tasks/:id/repositories/:repo_id", h.httpDetachTaskRepository)
 	api.POST("/tasks/:id/move", h.httpMoveTask)
 	api.POST("/tasks/:id/move-preview", h.httpMoveTaskPreview)
+	api.POST("/tasks/:id/transfer", h.httpTransferTask)
 	api.DELETE("/tasks/:id", h.httpDeleteTask)
 	api.POST("/tasks/:id/archive", h.httpArchiveTask)
 	api.POST("/tasks/:id/unarchive", h.httpUnarchiveTask)

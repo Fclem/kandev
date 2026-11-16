@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kandev/kandev/internal/authz"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository/repoerrors"
@@ -26,8 +27,14 @@ type taskTransferReplayRepository interface {
 	ResolveTaskTransferReplayActor(context.Context, models.TaskTransferCommand) (models.TaskTransferActor, bool, error)
 }
 
+type taskTransferRejectionRepository interface {
+	TaskTransferRejection(context.Context, models.TaskTransferCommand) error
+}
+
 // TransferTask preserves one task identity while atomically rebinding its
-// workspace, workflow, and semantically equivalent lane.
+// workspace, workflow, and semantically equivalent lane. The caller needs
+// task.write in the task's current workspace and in the destination, checked
+// before replay so a committed receipt is never disclosed without it.
 func (s *Service) TransferTask(
 	ctx context.Context,
 	command models.TaskTransferCommand,
@@ -37,10 +44,10 @@ func (s *Service) TransferTask(
 		err := fmt.Errorf("task transfer repository is unavailable")
 		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "failed"))
 	}
-	if err := s.authorizeTaskID(ctx, command.TaskID); err != nil {
+	if err := s.authorizeTaskScope(ctx, command.TaskID, authz.ScopeTaskWrite); err != nil {
 		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "denied"))
 	}
-	if err := s.authorizeWorkspaceID(ctx, command.DestinationWorkspaceID); err != nil {
+	if err := s.AuthorizeWorkspaceScope(ctx, command.DestinationWorkspaceID, authz.ScopeTaskWrite); err != nil {
 		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "denied"))
 	}
 	if replayRepository, ok := s.tasks.(taskTransferReplayRepository); ok {
@@ -50,6 +57,11 @@ func (s *Service) TransferTask(
 		}
 		if found {
 			return receipt, nil
+		}
+	}
+	if rejectionRepository, ok := s.tasks.(taskTransferRejectionRepository); ok {
+		if err := rejectionRepository.TaskTransferRejection(ctx, command); err != nil {
+			return nil, err
 		}
 	}
 	if err := s.authorizeWorkflowID(ctx, command.DestinationWorkflowID); err != nil {

@@ -35,7 +35,8 @@ describe("task drawer navigation", () => {
         />
       </StateProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Change workflow..." }));
+    fireEvent.click(screen.getByTestId("task-management-page-move"));
+    fireEvent.click(screen.getByRole("button", { name: "Different workflow..." }));
     expect(onChangeWorkflow).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByTestId("task-management-page-steps"));
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
@@ -73,6 +74,7 @@ describe("task drawer navigation", () => {
       </StateProvider>,
     );
 
+    fireEvent.click(screen.getByTestId("task-management-page-move"));
     fireEvent.click(screen.getByTestId("task-management-page-steps"));
     const currentChoice = screen.getByTestId("task-context-step-s1");
     const status = screen.getByTestId("task-context-step-progress-s1");
@@ -80,5 +82,35 @@ describe("task drawer navigation", () => {
     expect(currentChoice.hasAttribute("disabled")).toBe(true);
     expect(status.getAttribute("role")).toBe("status");
     expect(currentChoice.contains(status)).toBe(false);
+  });
+});
+
+describe("task drawer movement group", () => {
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.1
+  it("offers the workspace move under Move to even for a one-step workflow", () => {
+    const onChangeWorkspace = vi.fn();
+    render(
+      <StateProvider>
+        <TaskManagementDrawer
+          task={{ id: "A", title: "Task A", workflowId: "one", workflowStepId: "s1" }}
+          workflows={[{ id: "one", name: "One" }]}
+          stepsByWorkflowId={{ one: [{ id: "s1", title: "Initial" }] }}
+          onMove={vi.fn()}
+          onChangeWorkflow={vi.fn()}
+          onChangeWorkspace={onChangeWorkspace}
+          onPriority={vi.fn()}
+          onArchive={vi.fn()}
+          onDelete={vi.fn()}
+          closeMenu={vi.fn()}
+          linkActions={{}}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        />
+      </StateProvider>,
+    );
+    fireEvent.click(screen.getByTestId("task-management-page-move"));
+    expect(screen.queryByTestId("task-management-page-steps")).toBeNull();
+    expect(screen.queryByTestId("task-management-page-workflows")).toBeNull();
+    fireEvent.click(screen.getByTestId("task-management-page-workspace"));
+    expect(onChangeWorkspace).toHaveBeenCalledOnce();
   });
 });

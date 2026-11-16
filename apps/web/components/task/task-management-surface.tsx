@@ -26,6 +26,7 @@ import { useSidebarTaskLinking } from "./task-session-sidebar-task-linking";
 import { SidebarLinkDialogs } from "./task-session-sidebar-dialogs";
 import { selectTaskLinkActions, type TaskLinkHandlers } from "./task-switcher-link-menu";
 import { ChangeWorkflowDialog } from "./change-workflow-dialog";
+import { requestTaskWorkspaceMove } from "@/lib/kanban/task-workspace-move-request";
 
 type Flow = ReturnType<typeof useTaskManagementFlow>;
 export type TaskMenuPoint = { x: number; y: number };
@@ -270,6 +271,20 @@ export function TaskManagementSurface({
   ) : null;
 }
 
+/** Closes the management menu, then opens the app-level workspace move form. */
+function workspaceMoveHandler(
+  store: object,
+  task: { id: string; workspaceId?: string } | null | undefined,
+  closeMenu: () => void,
+) {
+  const workspaceId = task?.workspaceId;
+  if (!task || !workspaceId) return undefined;
+  return () => {
+    closeMenu();
+    requestTaskWorkspaceMove(store, task.id, workspaceId);
+  };
+}
+
 function TaskManagementChoices({
   flow,
   point,
@@ -284,12 +299,14 @@ function TaskManagementChoices({
   onCloseAutoFocus: (event: Event) => void;
 }) {
   const links = useManagementLinks(flow);
+  const store = useAppStoreApi();
   const repositoriesByWorkspace = useAppStore((state) => state.repositories.itemsByWorkspaceId);
   const closeMenu = useCallback(
     () => flow.setStage((stage) => (stage === "menu" ? "closed" : stage)),
     [flow.setStage],
   );
   const task = flow.task;
+  const onChangeWorkspace = workspaceMoveHandler(store, task, closeMenu);
   const props = task
     ? {
         task,
@@ -299,6 +316,7 @@ function TaskManagementChoices({
         onPriority: mutations.onPriority,
         onMove: mutations.onMove,
         onChangeWorkflow: () => flow.setStage("change-workflow"),
+        onChangeWorkspace,
         onArchive: () => flow.setStage("archive"),
         onDelete: () => flow.setStage("delete"),
         closeMenu,

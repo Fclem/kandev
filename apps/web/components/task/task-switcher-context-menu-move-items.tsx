@@ -1,6 +1,6 @@
 "use client";
 
-import { TaskMoveContextMenuItems } from "@/components/task/task-move-context-menu";
+import { TaskMoveContextMenuItems } from "@/components/task/task-move-context-menu-items";
 import type { TaskContextMenuItemsProps } from "./task-switcher-context-menu";
 import { useWorkflowStepProgress } from "@/hooks/domains/kanban/use-workflow-step-progress";
 
@@ -21,6 +21,7 @@ export function TaskMoveItems({
   closeMenu,
   moveTasks,
   onChangeWorkflow,
+  onChangeWorkspace,
 }: Omit<
   TaskContextMenuItemsProps,
   "onRenameTask" | "onArchiveTask" | "onDeleteTask" | "isArchiving"
@@ -83,7 +84,7 @@ export function TaskMoveItems({
       progressByStepId={progressByStepId}
       agentLabelsByProfileId={agentLabelsByProfileId}
       isBulkSelection={actingIds.length > 1}
-      onChangeWorkflow={actingIds.length === 1 ? onChangeWorkflow : undefined}
+      {...singleTaskChanges(actingIds, onChangeWorkflow, onChangeWorkspace)}
       onSendToWorkflow={
         actingIds.length > 1
           ? (targetWorkflowId, stepId) => {
@@ -100,6 +101,15 @@ export function TaskMoveItems({
       }
     />
   );
+}
+
+/** Workflow and workspace changes apply to one task, never to a selection. */
+function singleTaskChanges(
+  actingIds: string[],
+  onChangeWorkflow: (() => void) | undefined,
+  onChangeWorkspace: (() => void) | undefined,
+) {
+  return actingIds.length === 1 ? { onChangeWorkflow, onChangeWorkspace } : {};
 }
 
 function useTaskMoveProgress(task: TaskContextMenuItemsProps["task"], actingOnSelection: boolean) {

@@ -205,7 +205,7 @@ export function useTaskMoveChoices({
     ? [
         {
           id: "task-change-workflow",
-          label: t("task:changeWorkflow"),
+          label: t("task:moveToDifferentWorkflow"),
           group,
           icon: <IconLogicBuffer className="size-3.5" />,
           action: onChangeWorkflow,

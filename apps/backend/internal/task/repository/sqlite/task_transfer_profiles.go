@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -45,7 +44,7 @@ func (r *Repository) validateTransferCoordinatorActor(
 		return err
 	}
 	if bindings != 1 {
-		return fmt.Errorf("%w: coordinator session binding changed", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferUnsupported, "coordinator session binding changed")
 	}
 	return nil
 }
@@ -83,7 +82,7 @@ func (r *Repository) rejectUnverifiableTransferProfiles(
 		return nil, err
 	}
 	if profileCount != 0 {
-		return nil, fmt.Errorf("%w: destination agent profile mapping is required", repoerrors.ErrTaskTransferConflict)
+		return nil, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferProfileMappingRequired, "destination agent profile mapping is required")
 	}
 	return map[string]string{}, nil
 }
@@ -105,10 +104,10 @@ func (r *Repository) validateTransferEffectiveProfile(
 	var workspaceID string
 	if err := tx.GetContext(ctx, &workspaceID, r.db.Rebind(
 		`SELECT COALESCE(workspace_id, '') FROM agent_profiles WHERE id = ?`), profileID); err != nil {
-		return taskTransferConflict(err, "effective agent profile unavailable")
+		return taskTransferConflict(err, repoerrors.TaskTransferProfileMappingRequired, "effective agent profile unavailable")
 	}
 	if workspaceID != "" {
-		return fmt.Errorf("%w: destination agent profile mapping is required", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferProfileMappingRequired, "destination agent profile mapping is required")
 	}
 	return nil
 }
@@ -138,13 +137,13 @@ func (r *Repository) mapTaskTransferParticipantProfiles(
 	mappings := make(map[string]string)
 	for _, participant := range participants {
 		if participant.ProfileExists == 0 {
-			return nil, fmt.Errorf("%w: task participant agent profile is unavailable", repoerrors.ErrTaskTransferConflict)
+			return nil, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferProfileMappingRequired, "task participant agent profile is unavailable")
 		}
 		if participant.WorkspaceID == "" {
 			continue
 		}
 		if !canMapTransferCEOProfile(command, participant) {
-			return nil, fmt.Errorf("%w: destination agent profile mapping is required", repoerrors.ErrTaskTransferConflict)
+			return nil, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferProfileMappingRequired, "destination agent profile mapping is required")
 		}
 		destinationProfileID, err := r.destinationTransferCEOProfile(ctx, tx, command.DestinationWorkspaceID)
 		if err != nil {
@@ -177,7 +176,7 @@ func (r *Repository) destinationTransferCEOProfile(
 		return "", err
 	}
 	if len(candidates) != 1 {
-		return "", fmt.Errorf("%w: destination CEO profile mapping is not unique", repoerrors.ErrTaskTransferConflict)
+		return "", repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferProfileMappingRequired, "destination CEO profile mapping is not unique")
 	}
 	return candidates[0], nil
 }

@@ -102,7 +102,6 @@ describe("buildTaskActionsMenuEntries — normal tier", () => {
       "detach",
       "move-separator",
       "move-to",
-      "change-workflow",
       REMOVE_SEPARATOR,
       "archive",
       "delete",

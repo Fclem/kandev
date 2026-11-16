@@ -91,6 +91,7 @@ test("moves through the mobile task switcher and shows touch queue status", asyn
   await expect(sourceRow).toBeVisible({ timeout: 15_000 });
   await sourceRow.getByRole("button", { name: "Task actions" }).tap();
   await testPage.getByTestId("task-context-move-to").tap();
+  await testPage.getByTestId("task-context-move-step").tap();
   await testPage.getByTestId(`task-context-step-${reviewStep.id}`).tap();
 
   await expect
@@ -129,6 +130,7 @@ test("moves through the mobile task switcher and shows touch queue status", asyn
     .filter({ hasText: "Mobile Admitted Review" });
   await admittedRow.getByRole("button", { name: "Task actions" }).tap();
   await testPage.getByTestId("task-context-move-to").tap();
+  await testPage.getByTestId("task-context-move-step").tap();
   await testPage.getByTestId(`task-context-step-${doneStep.id}`).tap();
 
   await expect

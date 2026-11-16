@@ -7,6 +7,7 @@ import {
   buildDeleteEntry,
   buildGroupedMenuEntries,
   buildPriorityMenuEntry,
+  buildSingleTaskMoveGroup,
   buildWorkflowMenuEntry,
   resolveCardPluginEntries,
   type BuildKanbanCardMenuEntriesArgs,
@@ -24,32 +25,46 @@ function buildMoveMenuEntries(
     | "moveDisabled"
     | "onMoveToStep"
     | "onChangeWorkflow"
+    | "onChangeWorkspace"
     | "onSendToWorkflow"
     | "isBulkSelection"
   >,
   isProcessing: boolean,
-) {
+): KanbanCardMenuEntry[] {
   const currentSteps = args.currentWorkflowId
     ? (args.stepsByWorkflowId[args.currentWorkflowId] ?? [])
     : [];
   const moveDisabled = Boolean(args.moveDisabled || isProcessing);
-  return {
-    moveToEntry: buildCurrentWorkflowMoveEntry(
-      currentSteps,
-      args.currentStepId,
-      moveDisabled,
-      args.onMoveToStep,
-    ),
-    sendToEntry: buildWorkflowMenuEntry({
-      currentWorkflowId: args.currentWorkflowId,
-      workflows: args.workflows,
-      stepsByWorkflowId: args.stepsByWorkflowId,
-      disabled: moveDisabled,
-      onChangeWorkflow: args.onChangeWorkflow,
-      onSendToWorkflow: args.onSendToWorkflow,
-      isBulkSelection: args.isBulkSelection,
-    }),
-  };
+  const single = !args.isBulkSelection;
+  const stepEntry = buildCurrentWorkflowMoveEntry(
+    currentSteps,
+    args.currentStepId,
+    moveDisabled,
+    args.onMoveToStep,
+    single,
+  );
+  const workflowEntry = buildWorkflowMenuEntry({
+    currentWorkflowId: args.currentWorkflowId,
+    workflows: args.workflows,
+    stepsByWorkflowId: args.stepsByWorkflowId,
+    disabled: moveDisabled,
+    onChangeWorkflow: args.onChangeWorkflow,
+    onSendToWorkflow: args.onSendToWorkflow,
+    isBulkSelection: args.isBulkSelection,
+  });
+  // Bulk selections keep their plural step and workflow actions and never
+  // offer a workspace transfer.
+  const entries = single
+    ? [
+        buildSingleTaskMoveGroup({
+          stepEntry,
+          workflowEntry,
+          disabled: moveDisabled,
+          onChangeWorkspace: args.onChangeWorkspace,
+        }),
+      ]
+    : [stepEntry, workflowEntry];
+  return entries.filter((entry): entry is KanbanCardMenuEntry => entry !== null);
 }
 
 function buildDetachEntry({
@@ -177,6 +192,7 @@ export function buildKanbanCardMenuEntries({
   pluginLinkActions,
   onMoveToStep,
   onChangeWorkflow,
+  onChangeWorkspace,
   onSendToWorkflow,
   isBulkSelection,
   pluginMenuContext,
@@ -200,6 +216,7 @@ export function buildKanbanCardMenuEntries({
       moveDisabled,
       onMoveToStep,
       onChangeWorkflow,
+      onChangeWorkspace,
       onSendToWorkflow,
       isBulkSelection,
     },
@@ -230,16 +247,12 @@ export function buildKanbanCardMenuEntries({
     },
     isProcessing,
   );
-  const moveMenuEntries = [moveEntries.moveToEntry, moveEntries.sendToEntry].filter(
-    (entry): entry is KanbanCardMenuEntry => entry !== null,
-  );
-
   return buildGroupedMenuEntries(
     buildCardMenuGroups({
       priorityEntry,
       editEntry: pluginContributions.edit,
       relationshipEntries,
-      moveEntries: moveMenuEntries,
+      moveEntries,
       pluginEntries: pluginContributions.primary,
       archiveEntry: buildArchiveEntry({ isArchiving, isProcessing, onArchive }),
       deleteEntry: buildDeleteEntry({ isDeleting, isProcessing, onDelete }),

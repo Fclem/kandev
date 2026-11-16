@@ -28,6 +28,7 @@ test.describe("Mobile workflow session focus", () => {
     await expect(taskRow).toBeVisible();
     await taskRow.getByRole("button", { name: "Task actions" }).tap();
     await testPage.getByTestId("task-context-move-to").tap();
+    await testPage.getByTestId("task-context-move-step").tap();
     await testPage.getByTestId(`task-context-step-${scenario.destination.id}`).tap();
     const response = await moveResponse;
     expect(response.ok()).toBe(true);

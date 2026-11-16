@@ -1,9 +1,6 @@
 import { TaskPriorityContextMenu } from "./task-priority-context-menu";
-import {
-  TaskMoveContextMenuItems,
-  type TaskMoveStep,
-  type TaskMoveWorkflow,
-} from "./task-move-context-menu";
+import type { TaskMoveStep, TaskMoveWorkflow } from "./task-move-context-menu";
+import { TaskMoveContextMenuItems } from "./task-move-context-menu-items";
 import { TaskArchiveItem, TaskDeleteItem } from "./task-switcher-action-items";
 import { TaskPluginLinkMenu, type selectTaskLinkActions } from "./task-switcher-link-menu";
 import type { TaskSwitcherItem } from "./task-switcher-types";
@@ -17,6 +14,7 @@ export type TaskManagementMenuProps = {
   onPriority: (priority: TaskPriority) => void;
   onMove: (workflowId: string, stepId: string) => void;
   onChangeWorkflow?: () => void;
+  onChangeWorkspace?: () => void;
   onArchive: () => void;
   onDelete: () => void;
   closeMenu: () => void;
@@ -32,6 +30,7 @@ export function TaskManagementMenu({
   onPriority,
   onMove,
   onChangeWorkflow,
+  onChangeWorkspace,
   onArchive,
   onDelete,
   closeMenu,
@@ -55,6 +54,7 @@ export function TaskManagementMenu({
           if (task.workflowId) onMove(task.workflowId, stepId);
         }}
         onChangeWorkflow={onChangeWorkflow}
+        onChangeWorkspace={onChangeWorkspace}
       />
       <TaskPluginLinkMenu
         task={task}

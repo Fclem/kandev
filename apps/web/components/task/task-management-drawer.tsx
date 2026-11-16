@@ -4,6 +4,7 @@ import {
   IconArchive,
   IconArrowLeft,
   IconArrowRight,
+  IconBuildingWarehouse,
   IconChevronRight,
   IconFlag,
   IconLink,
@@ -34,7 +35,7 @@ import {
 export type TaskManagementDrawerProps = TaskManagementMenuProps & {
   onCloseAutoFocus: (event: Event) => void;
 };
-type Page = "root" | "priority" | "steps" | "links";
+type Page = "root" | "priority" | "move" | "steps" | "links";
 
 export function TaskManagementSheet({
   title,
@@ -260,6 +261,7 @@ function DrawerChoices({
   const links = taskLinkMenuOptions(linkActions);
   const plugins = useTaskPluginLinkActions(task.id, task.repositoryLinks ?? []);
   if (page === "priority") return <PriorityChoices {...props} />;
+  if (page === "move") return <MoveChoices props={props} setPage={setPage} />;
   if (page === "steps")
     return (
       <StepChoices
@@ -310,6 +312,55 @@ function DrawerChoices({
   );
 }
 
+/** Single-task movement: step, different workflow, and different workspace. */
+function MoveChoices({
+  props,
+  setPage,
+}: {
+  props: TaskManagementDrawerProps;
+  setPage: (page: Page) => void;
+}) {
+  const { t } = useTranslation();
+  const { task, workflows, stepsByWorkflowId, disabled, onChangeWorkflow, onChangeWorkspace } =
+    props;
+  const { canMove, canSend } = taskMoveOptions(task.workflowId, workflows, stepsByWorkflowId);
+  return (
+    <>
+      {canMove && (
+        <Choice
+          testId="task-management-page-steps"
+          nested
+          disabled={disabled}
+          icon={<IconArrowRight className="size-4" />}
+          onClick={() => setPage("steps")}
+        >
+          {t("task:moveToWorkflowStep")}
+        </Choice>
+      )}
+      {canSend && (
+        <Choice
+          testId="task-management-page-workflows"
+          disabled={disabled}
+          icon={<IconLogicBuffer className="size-4" />}
+          onClick={onChangeWorkflow}
+        >
+          {t("task:moveToDifferentWorkflow")}
+        </Choice>
+      )}
+      {onChangeWorkspace && (
+        <Choice
+          testId="task-management-page-workspace"
+          disabled={disabled}
+          icon={<IconBuildingWarehouse className="size-4" />}
+          onClick={onChangeWorkspace}
+        >
+          {t("task:moveToDifferentWorkspace")}
+        </Choice>
+      )}
+    </>
+  );
+}
+
 function RootChoices({
   props,
   setPage,
@@ -320,9 +371,9 @@ function RootChoices({
   hasLinks: boolean;
 }) {
   const { t } = useTranslation();
-  const { task, workflows, stepsByWorkflowId, disabled, onArchive, onDelete, onChangeWorkflow } =
-    props;
+  const { task, workflows, stepsByWorkflowId, disabled, onArchive, onDelete } = props;
   const { canMove, canSend } = taskMoveOptions(task.workflowId, workflows, stepsByWorkflowId);
+  const hasMove = canMove || canSend || Boolean(props.onChangeWorkspace);
   return (
     <>
       <Choice
@@ -334,25 +385,15 @@ function RootChoices({
       >
         {t("kanban:priority")}
       </Choice>
-      {canMove && (
+      {hasMove && (
         <Choice
-          testId="task-management-page-steps"
+          testId="task-management-page-move"
           nested
           disabled={disabled}
           icon={<IconArrowRight className="size-4" />}
-          onClick={() => setPage("steps")}
+          onClick={() => setPage("move")}
         >
           {t("task:moveTo")}
-        </Choice>
-      )}
-      {canSend && (
-        <Choice
-          testId="task-management-page-workflows"
-          disabled={disabled}
-          icon={<IconLogicBuffer className="size-4" />}
-          onClick={onChangeWorkflow}
-        >
-          {t("task:changeWorkflow")}
         </Choice>
       )}
       {hasLinks && (
@@ -406,13 +447,15 @@ export function TaskManagementDrawer(props: TaskManagementDrawerProps) {
   };
   const back = () => {
     setFocusChoiceId(`task-management-page-${page}`);
-    setPage("root");
+    // The step list is a child of the `Move to` page.
+    setPage(page === "steps" ? "move" : "root");
   };
   const title = t(
     {
       root: "task:taskActions",
       priority: "kanban:priority",
-      steps: "task:moveTo",
+      move: "task:moveTo",
+      steps: "task:moveToWorkflowStep",
       links: "task:link",
     }[page],
   );

@@ -45,8 +45,11 @@ describe("focused shared task actions", () => {
       </StateProvider>,
     );
     fireEvent.contextMenu(screen.getByText("Open"));
-    expect(screen.queryByText("Change workflow...")).toBeNull();
     fireEvent.pointerMove(screen.getByTestId("task-context-move-to"), { pointerType: "mouse" });
+    const stepGroup = await screen.findByTestId("task-context-move-step");
+    // Hidden workflows are never offered as a different-workflow destination.
+    expect(screen.queryByTestId("task-context-change-workflow")).toBeNull();
+    fireEvent.pointerMove(stepGroup, { pointerType: "mouse" });
     const current = await screen.findByTestId("task-context-step-s1");
     expect(current.getAttribute("aria-disabled")).toBe("true");
     fireEvent.pointerMove(screen.getByTestId("task-context-priority"), { pointerType: "mouse" });

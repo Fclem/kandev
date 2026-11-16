@@ -311,6 +311,9 @@ describe("MobileTaskList move options", () => {
     fireEvent.click(within(row!).getByRole("button", { name: "Task actions" }));
     const moveTo = await screen.findByTestId("task-context-move-to");
     fireEvent.pointerMove(moveTo, { pointerType: "mouse" });
+    fireEvent.pointerMove(await screen.findByTestId("task-context-move-step"), {
+      pointerType: "mouse",
+    });
     const step = await screen.findByTestId("task-context-step-step-2");
     fireEvent.pointerMove(step, {
       pointerType: "mouse",

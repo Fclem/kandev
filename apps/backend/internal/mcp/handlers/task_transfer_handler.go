@@ -14,6 +14,7 @@ import (
 	mcpscope "github.com/kandev/kandev/internal/mcp/scope"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository/repoerrors"
+	"github.com/kandev/kandev/internal/task/service"
 	ws "github.com/kandev/kandev/pkg/websocket"
 	"go.uber.org/zap"
 )
@@ -87,7 +88,7 @@ func (h *Handlers) handleTransferTask(ctx context.Context, msg *ws.Message) (*ws
 	switch {
 	case errors.Is(err, repoerrors.ErrTaskTransferConflict):
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, "task transfer conflict", nil)
-	case errors.Is(err, repoerrors.ErrTaskNotFound), errors.Is(err, repoerrors.ErrWorkspaceNotFound):
+	case errors.Is(err, repoerrors.ErrTaskNotFound), errors.Is(err, repoerrors.ErrWorkspaceNotFound), service.IsForbidden(err):
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "task transfer unavailable", nil)
 	case err != nil:
 		h.logger.Error("task transfer failed", zap.Error(err))

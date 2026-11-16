@@ -109,6 +109,9 @@ export type TaskEventPayload = {
   workspace_id?: string;
   workflow_id: string;
   old_workflow_id?: string | null;
+  /** Present on events of an audited cross-workspace transfer. */
+  transfer_operation_id?: string;
+  source_workspace_id?: string;
   workflow_step_id: string;
   title: string;
   description?: string;

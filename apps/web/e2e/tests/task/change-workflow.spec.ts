@@ -176,6 +176,7 @@ test.describe("Change workflow", () => {
     await testPage.getByTestId("task-topbar-actions-menu").click();
     // The menu label follows the current product wording, while this stable
     // test id identifies the single-task workflow action across both labels.
+    await testPage.getByTestId("task-context-move-to").click();
     await expect(testPage.getByTestId("task-context-change-workflow")).toBeVisible();
     await testPage.getByTestId("task-context-change-workflow").click();
 
@@ -341,7 +342,7 @@ test.describe("Change workflow", () => {
     const kanban = new KanbanPage(testPage);
     await kanban.goto();
     await kanban.openTaskContextMenu(task.id);
-    await expect(kanban.contextChangeWorkflow()).toBeVisible();
+    await expect(kanban.contextMoveTo()).toBeVisible();
     await kanban.openChangeWorkflowForm();
     await expect(testPage.getByRole("dialog", { name: "Change workflow..." })).toBeVisible();
     await testPage.getByTestId("change-workflow-cancel").click();
@@ -365,7 +366,7 @@ test.describe("coarse-pointer tablet Change workflow", () => {
     const kanban = new KanbanPage(testPage);
     await kanban.goto();
     await kanban.openTaskActionsMenu(task.id);
-    await expect(kanban.contextChangeWorkflow()).toBeVisible();
+    await expect(kanban.contextMoveTo()).toBeVisible();
     await kanban.openChangeWorkflowForm();
 
     const form = new ChangeWorkflowPage(testPage);

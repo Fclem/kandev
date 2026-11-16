@@ -18,6 +18,8 @@ import type {
   MoveTaskResponse,
   ReorderBand,
   ReorderStepTasksResponse,
+  TaskTransferReceipt,
+  TaskTransferRequest,
 } from "@/lib/types/http";
 
 // Workflow operations
@@ -471,6 +473,23 @@ export async function moveTask(
   return fetchJson<WorkflowMoveResponse>(`/api/v1/tasks/${taskId}/move`, {
     ...options,
     init: { method: "POST", body: JSON.stringify(requestPayload), ...(options?.init ?? {}) },
+  });
+}
+
+/**
+ * Moves one task to another workspace through the audited transfer command.
+ * Resending the identical body (same idempotency key) checks the result of
+ * that one operation; it never creates a second transfer.
+ */
+export async function transferTask(
+  taskId: string,
+  body: TaskTransferRequest,
+  options?: ApiRequestOptions,
+): Promise<{ receipt: TaskTransferReceipt }> {
+  return fetchJson<{ receipt: TaskTransferReceipt }>(`/api/v1/tasks/${taskId}/transfer`, {
+    ...options,
+    cache: "no-store",
+    init: { method: "POST", body: JSON.stringify(body), ...(options?.init ?? {}) },
   });
 }
 

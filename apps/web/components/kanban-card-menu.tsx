@@ -24,6 +24,8 @@ import { useTaskMultiSelectStore } from "@/hooks/use-task-multi-select";
 import { useDetachTask } from "@/hooks/use-detach-task";
 import { useUpdateTaskPriority } from "@/hooks/use-update-task-priority";
 import { useTaskMenuDialogState } from "@/hooks/use-task-menu-dialog-state";
+import { useAppStoreApi } from "@/components/state-provider";
+import { requestTaskWorkspaceMove } from "@/lib/kanban/task-workspace-move-request";
 import type { Repository, TaskPriority } from "@/lib/types/http";
 import type { PluginTaskMenuContext } from "@/lib/plugins/types";
 import { usePluginRegistry } from "@/lib/plugins/registry";
@@ -203,6 +205,13 @@ function useTaskMenuConfirmations(
   return { handleDetachConfirm, requestDetachConfirmation, requestArchiveConfirmation };
 }
 
+/** Opens the app-level workspace move form for one captured task. */
+function useWorkspaceMoveRequest(taskId: string, workspaceId: string | null) {
+  const store = useAppStoreApi();
+  if (!workspaceId) return undefined;
+  return () => requestTaskWorkspaceMove(store, taskId, workspaceId);
+}
+
 export function useKanbanCardMenus({
   task,
   workspaceId,
@@ -227,6 +236,7 @@ export function useKanbanCardMenus({
   usePluginRegistry();
   const moveMenu = useKanbanCardMoveMenuActions({ task, steps, isSelected, selectedIds, onMove });
   const dialogs = useTaskMenuDialogState();
+  const onChangeWorkspace = useWorkspaceMoveRequest(task.id, workspaceId);
   const { detachTask, detachingTaskId } = useDetachTask();
   const updateTaskPriority = useUpdateTaskPriority();
   const prUnlinkMenu = useCardPRUnlinkEntries(task);
@@ -260,6 +270,7 @@ export function useKanbanCardMenus({
     onChangeWorkflow: () => {
       window.setTimeout(() => dialogs.setShowChangeWorkflow(true), 300);
     },
+    onChangeWorkspace,
     pluginLinkActions,
   };
 

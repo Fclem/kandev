@@ -255,6 +255,8 @@ test("opens move options from the mobile task-switcher context menu", async ({
 
   await testPage.getByTestId("task-context-move-to").tap();
 
+  await testPage.getByTestId("task-context-move-step").tap();
+
   const targetStep = testPage.getByTestId(`task-context-step-${fixture.targetStepId}`);
   await expect(targetStep).toBeVisible();
   const targetStepBox = await targetStep.boundingBox();

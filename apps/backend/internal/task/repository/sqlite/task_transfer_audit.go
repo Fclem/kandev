@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,7 +25,7 @@ func (r *Repository) validateTaskTransferRejectedKey(ctx context.Context, tx *sq
 		return err
 	}
 	if count != 0 {
-		return fmt.Errorf("%w: caller must use a fresh key after a denied or failed attempt", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferIdempotencyConflict, "caller must use a fresh key after a denied or failed attempt")
 	}
 	return nil
 }
@@ -92,15 +91,25 @@ func (r *Repository) RecordTaskTransferAttempt(
 ) error {
 	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), taskTransferAuditTimeout)
 	defer cancel()
+	return r.insertTaskTransferAttempt(auditCtx, r.db, command, result)
+}
+
+// insertTaskTransferAttempt writes one redacted attempt row through the given
+// executor, so a serialized transfer transaction can commit it atomically.
+func (r *Repository) insertTaskTransferAttempt(
+	ctx context.Context,
+	execer sqlx.ExecerContext,
+	command models.TaskTransferCommand,
+	result string,
+) error {
 	if result != taskTransferResultDenied && result != taskTransferResultConflict && result != taskTransferResultFailed {
 		result = taskTransferResultFailed
 	}
-	stepID := command.DestinationStepID
 	auditID := command.AuditAttemptID
 	if auditID == "" {
 		auditID = uuid.NewString()
 	}
-	_, err := r.db.ExecContext(auditCtx, r.db.Rebind(`
+	_, err := execer.ExecContext(ctx, r.db.Rebind(`
 		INSERT INTO task_transfer_audit
 			(id, operation_id, actor_kind, actor_id, actor_session_id, task_id,
 			 source_workspace_id, source_workflow_id, source_step_id,
@@ -112,7 +121,7 @@ func (r *Repository) RecordTaskTransferAttempt(
 		auditID, uuid.NewString(), command.Actor.Kind, command.Actor.ID, command.Actor.SessionID,
 		command.TaskID, command.ExpectedSourceWorkspaceID, command.ExpectedSourceWorkflowID,
 		command.ExpectedSourceStepID, command.DestinationWorkspaceID, command.DestinationWorkflowID,
-		stepID, command.ExpectedTaskUpdatedAt, command.IdempotencyKey, command.PreservationPolicy,
+		command.DestinationStepID, command.ExpectedTaskUpdatedAt, command.IdempotencyKey, command.PreservationPolicy,
 		result, r.nowUTC())
 	return err
 }

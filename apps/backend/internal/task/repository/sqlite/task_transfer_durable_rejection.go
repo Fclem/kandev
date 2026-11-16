@@ -1,0 +1,204 @@
+package sqlite
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+
+	"github.com/kandev/kandev/internal/task/models"
+	"github.com/kandev/kandev/internal/task/repository/repoerrors"
+)
+
+const taskTransferApplySavepoint = "task_transfer_apply"
+
+// taskTransferAttemptIdentity is the request identity a failed-key barrier
+// row was recorded for.
+type taskTransferAttemptIdentity struct {
+	TaskID                 string    `db:"task_id"`
+	SourceWorkflowID       string    `db:"source_workflow_id"`
+	SourceStepID           string    `db:"source_step_id"`
+	DestinationWorkspaceID string    `db:"destination_workspace_id"`
+	DestinationWorkflowID  string    `db:"destination_workflow_id"`
+	DestinationStepID      string    `db:"destination_step_id"`
+	TaskGeneration         time.Time `db:"task_generation"`
+	PreservationPolicy     string    `db:"preservation_policy"`
+}
+
+func (identity taskTransferAttemptIdentity) matches(command models.TaskTransferCommand) bool {
+	return identity.TaskID == command.TaskID && identity.SourceWorkflowID == command.ExpectedSourceWorkflowID &&
+		identity.SourceStepID == command.ExpectedSourceStepID &&
+		identity.DestinationWorkspaceID == command.DestinationWorkspaceID &&
+		identity.DestinationWorkflowID == command.DestinationWorkflowID &&
+		identity.DestinationStepID == command.DestinationStepID &&
+		identity.TaskGeneration.Equal(command.ExpectedTaskUpdatedAt) &&
+		identity.PreservationPolicy == command.PreservationPolicy
+}
+
+// transferTaskWithDurableRejection runs one reviewed Web transfer under the
+// shared transfer serialization. Outcome precedence is: committed receipt,
+// then this caller's terminal rejection, then the guarded mutation. A domain
+// guard rejection rolls back to the mutation savepoint and commits exactly one
+// failed attempt row bound to this caller and request; that row is the barrier
+// that keeps every later same-key attempt from committing.
+func (r *Repository) transferTaskWithDurableRejection(
+	ctx context.Context,
+	command models.TaskTransferCommand,
+	requestDigest string,
+) (*models.TaskTransferReceipt, error) {
+	projections, counts, inventory, err := r.inspectTaskTransferRelations(ctx)
+	if err != nil {
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+	}
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.lockTaskTransferRelations(ctx, tx, projections, counts, inventory); err != nil {
+		_ = tx.Rollback()
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+	}
+	if receipt, found, err := r.serializedTaskTransferOutcome(ctx, tx, command, requestDigest); err != nil || found {
+		return receipt, err
+	}
+	if _, err := tx.ExecContext(ctx, "SAVEPOINT "+taskTransferApplySavepoint); err != nil {
+		return nil, err
+	}
+	receipt, applyErr := r.applyTaskTransfer(ctx, tx, command, requestDigest, projections, counts, inventory)
+	if applyErr == nil {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return receipt, nil
+	}
+	if !errors.Is(applyErr, repoerrors.ErrTaskTransferConflict) {
+		_ = tx.Rollback()
+		return nil, errors.Join(applyErr, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+	}
+	return r.commitTaskTransferRejection(ctx, tx, command, requestDigest, applyErr)
+}
+
+// serializedTaskTransferOutcome resolves an exact receipt or this caller's
+// recorded rejection. found reports that the attempt is already settled; it
+// never runs the mutation path.
+func (r *Repository) serializedTaskTransferOutcome(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	command models.TaskTransferCommand,
+	requestDigest string,
+) (*models.TaskTransferReceipt, bool, error) {
+	receipt, found, err := r.replayTaskTransfer(ctx, tx, command, requestDigest)
+	switch {
+	case err != nil && errors.Is(err, repoerrors.ErrTaskTransferConflict):
+		return nil, true, r.commitTaskTransferAttemptConflict(ctx, tx, command, err)
+	case err != nil:
+		return nil, true, err
+	case found:
+		if err := r.insertTaskTransferAudit(ctx, tx, command, receipt, "idempotent_replay"); err != nil {
+			return nil, true, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, true, err
+		}
+		return receipt, true, nil
+	}
+	if err := r.taskTransferTerminalRejection(ctx, tx, command); err != nil {
+		if errors.Is(err, repoerrors.ErrTaskTransferConflict) {
+			return nil, true, r.commitTaskTransferAttemptConflict(ctx, tx, command, err)
+		}
+		return nil, true, err
+	}
+	return nil, false, nil
+}
+
+// taskTransferTerminalRejection inspects this caller's failed-key barrier.
+// A barrier recorded for exactly this request is an authoritative terminal
+// rejection; a barrier for any other request under the key is an idempotency
+// conflict that neither settles nor replaces that other operation.
+func (r *Repository) taskTransferTerminalRejection(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	command models.TaskTransferCommand,
+) error {
+	var barriers []taskTransferAttemptIdentity
+	if err := tx.SelectContext(ctx, &barriers, r.db.Rebind(`
+		SELECT task_id, source_workflow_id, source_step_id, destination_workspace_id, destination_workflow_id,
+			destination_step_id, task_generation, preservation_policy
+		FROM task_transfer_audit
+		WHERE source_workspace_id = ? AND idempotency_key = ? AND result IN ('denied', 'failed')
+			AND actor_session_id = ? AND (actor_id = ? OR (actor_kind = 'rejected' AND actor_session_id <> ''))`),
+		command.ExpectedSourceWorkspaceID, command.IdempotencyKey, command.Actor.SessionID, command.Actor.ID); err != nil {
+		return err
+	}
+	if len(barriers) == 0 {
+		return nil
+	}
+	for _, barrier := range barriers {
+		if barrier.matches(command) {
+			return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferOperationRejected,
+				"operation was durably rejected")
+		}
+	}
+	return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferIdempotencyConflict,
+		"idempotency key belongs to another rejected request")
+}
+
+// TaskTransferRejection reports this caller's durable terminal rejection for the
+// exact request without consulting mutable workflow or workspace state. It only
+// reads the failed-key barrier, so the service can settle a lost 409 even after
+// the destination workflow has been deleted or moved.
+func (r *Repository) TaskTransferRejection(ctx context.Context, command models.TaskTransferCommand) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	return r.taskTransferTerminalRejection(ctx, tx, command)
+}
+
+// commitTaskTransferRejection rolls back mutation effects to the savepoint,
+// rechecks receipt precedence, and commits one failed barrier row for a domain
+// guard rejection. A storage or commit failure stays an uncertain error.
+func (r *Repository) commitTaskTransferRejection(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	command models.TaskTransferCommand,
+	requestDigest string,
+	rejection error,
+) (*models.TaskTransferReceipt, error) {
+	if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+taskTransferApplySavepoint); err != nil {
+		return nil, err
+	}
+	if receipt, found, err := r.serializedTaskTransferOutcome(ctx, tx, command, requestDigest); err != nil || found {
+		return receipt, err
+	}
+	if reason, _ := repoerrors.TaskTransferConflictReasonOf(rejection); reason == repoerrors.TaskTransferIdempotencyConflict {
+		return nil, r.commitTaskTransferAttemptConflict(ctx, tx, command, rejection)
+	}
+	if err := r.insertTaskTransferAttempt(ctx, tx, command, taskTransferResultFailed); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return nil, rejection
+}
+
+// commitTaskTransferAttemptConflict audits a non-terminal conflict inside the
+// serialized transaction. A conflict row is never barrier evidence.
+func (r *Repository) commitTaskTransferAttemptConflict(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	command models.TaskTransferCommand,
+	conflict error,
+) error {
+	if err := r.insertTaskTransferAttempt(ctx, tx, command, taskTransferResultConflict); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return conflict
+}

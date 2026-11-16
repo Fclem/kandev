@@ -16,6 +16,7 @@ import type { CommandItem } from "@/lib/commands/types";
 import { ChangeWorkflowDialog } from "@/components/task/change-workflow-dialog";
 import type { Task } from "@/lib/types/http";
 import { taskCommandItemFromDetail } from "./task-command-task";
+import { requestTaskWorkspaceMove } from "@/lib/kanban/task-workspace-move-request";
 
 /** One task action host, shared by desktop and phone and independent of sessions. */
 export function TaskCommands({ task: detailTask }: { task: Task | null }) {
@@ -78,6 +79,7 @@ function TaskCommandsForTask({ task, workspaceId, data }: TaskCommandsForTaskPro
       onRename: () => actions.handleRenameTask(task.id, task.title),
       onDetach: () => actions.handleDetachTask(task.id),
       onDelete: () => actions.handleDeleteTask(task.id),
+      onChangeWorkspace: () => requestTaskWorkspaceMove(store, task.id, workspaceId),
     });
     return guardTaskCommands(items, () => {
       const state = store.getState();

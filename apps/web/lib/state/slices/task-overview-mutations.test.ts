@@ -1,8 +1,17 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createAppStore } from "../store";
 import { toKanbanTask } from "@/lib/kanban/map-task";
 import { registerTasksHandlers } from "@/lib/ws/handlers/tasks";
+import { taskMembershipSettled } from "@/lib/ws/handlers/task-transfer";
 import { reconcileTaskOverviewRead } from "./task-overview-merge";
+
+// Live events that create or re-admit membership are confirmed by a canonical
+// task read; this fake server answers with the row the event describes.
+const canonicalRows = vi.hoisted(() => new Map<string, Record<string, unknown>>());
+vi.mock("@/lib/api/domains/kanban-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/domains/kanban-api")>()),
+  fetchTask: vi.fn(async (id: string) => ({ id, ...canonicalRows.get(id) })),
+}));
 
 const TASK_CREATED = "task.created";
 const TASK_UPDATED = "task.updated";
@@ -43,10 +52,12 @@ function fixture() {
     };
   });
   const handlers = registerTasksHandlers(store);
-  const event = (
+  const event = async (
     action: typeof TASK_CREATED | typeof TASK_UPDATED,
     payload: Record<string, unknown>,
   ) => {
+    const id = String(payload.task_id);
+    canonicalRows.set(id, { ...canonicalRows.get(id), ...payload });
     if (action === TASK_CREATED) {
       handlers[action]?.({ type: "notification", action, payload } as Parameters<
         NonNullable<(typeof handlers)[typeof TASK_CREATED]>
@@ -56,7 +67,9 @@ function fixture() {
         NonNullable<(typeof handlers)[typeof TASK_UPDATED]>
       >[0]);
     }
+    await taskMembershipSettled(store, id);
   };
+  canonicalRows.clear();
   return { store, task, event };
 }
 
@@ -88,10 +101,10 @@ it("keeps atomic placement and step metadata through moves and optimistic rollba
   unsub();
 });
 
-it("keeps live create, archive and unarchive membership across older workflow reads", () => {
+it("keeps live create, archive and unarchive membership across older workflow reads", async () => {
   const { store, task, event } = fixture();
   const read = store.getState().beginTaskOverviewRead();
-  event(TASK_CREATED, {
+  await event(TASK_CREATED, {
     task_id: "created",
     workspace_id: "ws",
     workflow_id: "a",
@@ -99,7 +112,7 @@ it("keeps live create, archive and unarchive membership across older workflow re
     title: "Created",
     state: "TODO",
   });
-  event(TASK_UPDATED, {
+  await event(TASK_UPDATED, {
     task_id: "task",
     workspace_id: "ws",
     workflow_id: "a",
@@ -108,7 +121,7 @@ it("keeps live create, archive and unarchive membership across older workflow re
   });
   const tasks = reconcileTaskOverviewRead(store.getState().taskOverview, [task], read, true)!;
   expect(tasks.filter((item) => !item.isArchived).map((item) => item.id)).toEqual(["created"]);
-  event(TASK_UPDATED, {
+  await event(TASK_UPDATED, {
     task_id: "task",
     workspace_id: "ws",
     workflow_id: "a",
@@ -135,10 +148,10 @@ it("preserves nanosecond task freshness independently of newer summaries", () =>
   expect(store.getState().taskOverview.byId.task.title).toBe("Latest");
 });
 
-it("invalidates workspace-wide coverage for unknown or unassigned live workflow membership", () => {
+it("invalidates workspace-wide coverage for unknown or unassigned live workflow membership", async () => {
   for (const workflow of ["hidden", ""]) {
     const { store, event } = fixture();
-    event(TASK_CREATED, {
+    await event(TASK_CREATED, {
       task_id: "new",
       workspace_id: "ws",
       workflow_id: workflow,
@@ -148,9 +161,9 @@ it("invalidates workspace-wide coverage for unknown or unassigned live workflow 
   }
 });
 
-it("extends active scope coverage when live work enters a completely loaded empty workflow", () => {
+it("extends active scope coverage when live work enters a completely loaded empty workflow", async () => {
   const { store, event } = fixture();
-  event(TASK_CREATED, {
+  await event(TASK_CREATED, {
     task_id: "new",
     workspace_id: "ws",
     workflow_id: "b",

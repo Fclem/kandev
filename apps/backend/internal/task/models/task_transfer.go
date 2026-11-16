@@ -39,6 +39,11 @@ type TaskTransferCommand struct {
 	Actor                     TaskTransferActor `json:"-"`
 	AuthorizedOwnerID         string            `json:"-"`
 	OwnerPredicateSet         bool              `json:"-"`
+	// DurableRejection is set only by the human Web adapter. A domain-guard
+	// rejection then commits one caller/request-bound failed audit row under
+	// transfer serialization, and an exact retry settles as operation_rejected.
+	// It is never decoded from a request and is excluded from request identity.
+	DurableRejection bool `json:"-"`
 }
 
 type TaskTransferSessionReceipt struct {

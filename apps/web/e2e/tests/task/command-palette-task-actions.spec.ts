@@ -10,6 +10,11 @@ import {
 
 async function chooseCommand(page: Page, label: string) {
   await page.keyboard.press("Control+k");
+  await chooseChild(page, label);
+}
+
+/** Selects one entry of the palette's current (possibly nested) command list. */
+async function chooseChild(page: Page, label: string) {
   const palette = page.getByRole("dialog").filter({ has: page.getByRole("combobox") });
   await palette.getByRole("combobox").fill(label);
   const command = palette
@@ -32,6 +37,7 @@ test("moves the current task from the keyboard and retains failed instructions",
     "Keyboard palette move",
   );
   await chooseCommand(testPage, "Move to");
+  await chooseChild(testPage, "Workflow step");
   const palette = testPage.getByRole("dialog").filter({ has: testPage.getByRole("combobox") });
   await palette.getByRole("combobox").fill("Verify");
   await expect(
@@ -130,6 +136,7 @@ test("shows destination colors and moves immediately with the modified Enter sho
   await testPage.keyboard.press("Escape");
   await testPage.keyboard.press("Escape");
   await chooseCommand(testPage, "Move to");
+  await chooseChild(testPage, "Workflow step");
   const target = testPage
     .getByRole("option")
     .filter({ has: testPage.getByText("Verify", { exact: true }) });
@@ -162,7 +169,8 @@ test("opens the shared change workflow form from the command palette", async ({
   await fixture.session.waitForLoad();
   await fixture.session.waitForChatIdle({ timeout: 30_000 });
 
-  await chooseCommand(testPage, "Change workflow...");
+  await chooseCommand(testPage, "Move to");
+  await chooseChild(testPage, "Different workflow...");
   const form = new ChangeWorkflowPage(testPage);
   await expect(form.desktopDialog).toBeVisible();
   await form.chooseWorkflow(destination.id);

@@ -43,10 +43,22 @@ describe("sidebar task command parity", () => {
       "task-link",
       "task-detach",
       "task-move",
-      "task-change-workflow",
       PLUGIN_ACTION,
       "task-delete",
     ]);
+  });
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.1
+  it("groups step, workflow, and workspace moves under one Move to command", () => {
+    const ctx = { ...context(), onChangeWorkspace: vi.fn() };
+    const move = buildSidebarTaskCommands(ctx).find((c) => c.id === "task-move");
+    // `workflows` holds the existing Different workflow choice.
+    expect(move?.children?.map((c) => c.id)).toEqual([
+      "task-move-step",
+      "child",
+      "task-change-workspace",
+    ]);
+    move?.children?.find((c) => c.id === "task-change-workspace")?.action?.();
+    expect(ctx.onChangeWorkspace).toHaveBeenCalledOnce();
   });
   it("keeps Duplicate disabled and identifies the task", () => {
     const commands = buildSidebarTaskCommands(context());

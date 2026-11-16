@@ -33,6 +33,10 @@ test("uses nested task commands and the move drawer on a phone", async ({
   await back.tap();
   await expect(search).toHaveValue("Move to");
   await move.tap();
+  await palette
+    .getByRole("option")
+    .filter({ has: testPage.getByText("Workflow step", { exact: true }) })
+    .tap();
   const target = palette
     .getByRole("option")
     .filter({ has: testPage.getByText("Verify", { exact: true }) });
@@ -107,10 +111,14 @@ test("opens the shared change workflow form from the phone command palette", asy
   await testPage.keyboard.press("Control+k");
   const palette = testPage.getByRole("dialog").filter({ has: testPage.getByRole("combobox") });
   const search = palette.getByRole("combobox");
-  await search.fill("Change workflow...");
+  await search.fill("Move to");
+  await palette
+    .getByRole("option")
+    .filter({ has: testPage.getByText("Move to", { exact: true }) })
+    .tap();
   const command = palette
     .getByRole("option")
-    .filter({ has: testPage.getByText("Change workflow...", { exact: true }) });
+    .filter({ has: testPage.getByText("Different workflow...", { exact: true }) });
   await expect(command).toBeVisible();
   expect((await command.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await command.tap();

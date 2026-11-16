@@ -70,8 +70,17 @@ export class KanbanPage {
     return this.page.getByTestId("task-context-move-to");
   }
 
+  /** `Workflow step` child of the single-task `Move to` group. */
+  contextMoveStep(): Locator {
+    return this.page.getByTestId("task-context-move-step");
+  }
+
   contextChangeWorkflow(): Locator {
     return this.page.getByTestId("task-context-change-workflow");
+  }
+
+  contextChangeWorkspace(): Locator {
+    return this.page.getByTestId("task-context-change-workspace");
   }
 
   contextChangeWorkflowSelection(): Locator {
@@ -138,22 +147,45 @@ export class KanbanPage {
   async moveTaskWithinWorkflow(taskId: string, stepId: string) {
     await this.selectFromTaskContextMenu(taskId, async () => {
       const step = this.contextStep(stepId);
-      await this.openSubmenu(this.contextMoveTo(), step);
+      await this.openSubmenu(this.contextMoveTo(), this.contextMoveStep());
+      await this.openSubmenu(this.contextMoveStep(), step);
       await this.selectMenuItem(step);
     });
   }
 
+  /** Opens `Move to > Workflow step` on the menu that is already open. */
+  async openMoveStepSubmenu(firstStepId: string) {
+    await this.openSubmenu(this.contextMoveTo(), this.contextMoveStep());
+    await this.openSubmenu(this.contextMoveStep(), this.contextStep(firstStepId));
+  }
+
   async sendTaskToWorkflow(taskId: string, workflowId: string, stepId: string) {
     await this.selectFromTaskContextMenu(taskId, async () => {
-      await expect(
-        this.contextChangeWorkflow().or(this.contextChangeWorkflowSelection()),
-      ).toBeVisible();
+      await expect(this.contextMoveTo().or(this.contextChangeWorkflowSelection())).toBeVisible();
       if (await this.contextChangeWorkflowSelection().isVisible()) {
         await this.selectBulkWorkflowStep(workflowId, stepId);
         return;
       }
       await this.selectChangeWorkflowForm(workflowId, stepId);
     });
+  }
+
+  /** Opens the workspace transfer form from the card's context menu. */
+  async openWorkspaceMoveForm(taskId: string) {
+    await this.selectFromTaskContextMenu(taskId, async () => {
+      await this.openSubmenu(this.contextMoveTo(), this.contextChangeWorkspace());
+      await this.selectMenuItem(this.contextChangeWorkspace());
+    });
+    await expect(this.page.getByTestId("workspace-move-form")).toBeVisible();
+  }
+
+  /** Opens the workspace transfer form from the card's three-dot menu. */
+  async openWorkspaceMoveFormFromActions(taskId: string) {
+    await this.selectFromTaskActionsMenu(taskId, async () => {
+      await this.openSubmenu(this.contextMoveTo(), this.contextChangeWorkspace());
+      await this.selectMenuItem(this.contextChangeWorkspace());
+    });
+    await expect(this.page.getByTestId("workspace-move-form")).toBeVisible();
   }
 
   async sendTaskToWorkflowFromActions(taskId: string, workflowId: string, stepId: string) {
@@ -174,6 +206,9 @@ export class KanbanPage {
   }
 
   async openChangeWorkflowForm() {
+    if (!(await this.contextChangeWorkflow().isVisible())) {
+      await this.openSubmenu(this.contextMoveTo(), this.contextChangeWorkflow());
+    }
     await this.contextChangeWorkflow().click();
     await expect(this.page.getByTestId("change-workflow-form")).toBeVisible();
   }

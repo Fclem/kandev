@@ -902,6 +902,37 @@ export type UserResponse = {
   settings: UserSettings;
 };
 
+/**
+ * Body of `POST /api/v1/tasks/:id/transfer`. `expected_task_updated_at` is the
+ * exact server string (nanosecond precision); never round-trip it through Date.
+ */
+export type TaskTransferRequest = {
+  expected_source_workspace_id: string;
+  expected_source_workflow_id: string;
+  expected_source_workflow_step_id: string;
+  expected_task_updated_at: string;
+  destination_workspace_id: string;
+  destination_workflow_id: string;
+  destination_workflow_step_id: string;
+  idempotency_key: string;
+};
+
+/** The committed operation result; not necessarily the task's latest placement. */
+export type TaskTransferReceipt = {
+  operation_id: string;
+  task_id: string;
+  source_workspace_id: string;
+  source_workflow_id: string;
+  source_workflow_step_id: string;
+  destination_workspace_id: string;
+  destination_workflow_id: string;
+  destination_workflow_step_id: string;
+  destination_workflow_step_name: string;
+  idempotency_key: string;
+  preservation_policy: string;
+  transferred_at: string;
+};
+
 export type WorkflowSnapshot = {
   workflow: Workflow;
   steps: WorkflowStepDTO[];

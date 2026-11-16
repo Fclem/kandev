@@ -20,7 +20,7 @@ Mobile users need the same task controls as desktop without relying on long pres
 #### Acceptance criteria
 
 - **AC-UI-MOBILE-TASK-NAVIGATION-001.1:** Task action controls are visible and touch-reachable on mobile.
-- **AC-UI-MOBILE-TASK-NAVIGATION-001.2:** Mobile task actions preserve desktop capabilities, including same-workflow **Move to**, cross-workflow **Change workflow...**, linking, pinning, renaming, coloring, archiving, and deleting when those actions are available on desktop.
+- **AC-UI-MOBILE-TASK-NAVIGATION-001.2:** Mobile task actions preserve desktop capabilities, including **Move to** with same-workflow **Workflow step**, cross-workflow **Different workflow...**, and cross-workspace **Different workspace...**, linking, pinning, renaming, coloring, archiving, and deleting when those actions are available on desktop.
 - **AC-UI-MOBILE-TASK-NAVIGATION-001.3:** Context and dropdown action menus below 640px stay within the viewport, use bottom-sheet presentation, contain their own vertical overflow, respect the bottom safe area, and provide touch targets at least 44px high.
 - **AC-UI-MOBILE-TASK-NAVIGATION-001.4:** Mobile Kanban renders one focused workflow and one focused step at a time when the user has several workflows.
 - **AC-UI-MOBILE-TASK-NAVIGATION-001.5:** Workflow is a primary mobile Kanban navigation dimension, not a setting hidden in the secondary display menu. The current workflow and step are always visible together in the board navigation control, including when only one workflow exists.
@@ -53,7 +53,7 @@ Mobile users need the same task controls as desktop without relying on long pres
 ## What
 
 - Task action controls are visible and touch-reachable on mobile.
-- Mobile task actions preserve desktop capabilities, including same-workflow **Move to**, cross-workflow **Change workflow...**, linking, pinning, renaming, coloring, archiving, and deleting when those actions are available on desktop.
+- Mobile task actions preserve desktop capabilities, including **Move to** with same-workflow **Workflow step**, cross-workflow **Different workflow...**, and cross-workspace **Different workspace...**, linking, pinning, renaming, coloring, archiving, and deleting when those actions are available on desktop.
 - Context and dropdown action menus below 640px stay within the viewport, use bottom-sheet presentation, contain their own vertical overflow, respect the bottom safe area, and provide touch targets at least 44px high.
 - Mobile Kanban renders one focused workflow and one focused step at a time when the user has several workflows.
 - Workflow is a primary mobile Kanban navigation dimension, not a setting hidden in the secondary display menu. The current workflow and step are always visible together in the board navigation control, including when only one workflow exists.

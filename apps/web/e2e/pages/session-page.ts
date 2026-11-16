@@ -411,6 +411,7 @@ export class SessionPage {
     stepId: string,
   ): Promise<void> {
     await this.openSidebarTaskContextMenu(title);
+    await this.page.getByTestId("task-context-move-to").hover();
     await this.page.getByTestId("task-context-change-workflow").click();
     const changeWorkflow = new ChangeWorkflowPage(this.page);
     await changeWorkflow.form.waitFor({ state: "visible" });

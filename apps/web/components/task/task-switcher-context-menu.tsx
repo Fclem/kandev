@@ -23,6 +23,8 @@ import {
 } from "./task-switcher-context-menu-items";
 import { useMenuTouchDragCancel } from "./task-switcher-touch-drag-cancel";
 import { ChangeWorkflowDialog } from "./change-workflow-dialog";
+import { useAppStoreApi } from "@/components/state-provider";
+import { requestTaskWorkspaceMove } from "@/lib/kanban/task-workspace-move-request";
 import { useTaskPRUnlinkMenu } from "@/hooks/domains/github/use-task-pr-unlink-menu";
 import type { KanbanCardMenuEntry } from "@/components/kanban-card-menu-items";
 
@@ -205,6 +207,8 @@ export function TaskItemWithContextMenu(props: ContextMenuProps) {
   const { task } = props;
   const { t } = useTranslation();
   const prUnlinkMenu = useTaskPRUnlinkMenu(task.id, task.prInfo?.number);
+  const store = useAppStoreApi();
+  const sourceWorkspaceId = task.workspaceId;
   const { contextOpen, setContextOpen, openedNestSources, handleContextOpenChange } =
     useContextMenuOpenState(props);
   const [menuKey, setMenuKey] = useState(0);
@@ -270,6 +274,14 @@ export function TaskItemWithContextMenu(props: ContextMenuProps) {
               closeMenu,
               setChangeWorkflowOpen,
             )}
+            onChangeWorkspace={
+              sourceWorkspaceId
+                ? () => {
+                    closeMenu();
+                    requestTaskWorkspaceMove(store, task.id, sourceWorkspaceId);
+                  }
+                : undefined
+            }
           />
         </ContextMenuContent>
       </ContextMenu>
@@ -302,6 +314,8 @@ export type TaskContextMenuItemsProps = Omit<
   isArchiving: boolean;
   nativeUnlinkEntries?: KanbanCardMenuEntry[];
   onChangeWorkflow?: () => void;
+  /** Opens the workspace transfer form for this single task. */
+  onChangeWorkspace?: () => void;
   closeMenu: () => void;
   moveTasks: ReturnType<typeof useTaskWorkflowMove>;
   onMoveToStepWithOptions?: (targetStepId: string) => void;

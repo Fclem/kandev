@@ -19,7 +19,7 @@ export function buildSingleTaskWorkflowEntry({
     key: "change-workflow",
     testId: "task-context-change-workflow",
     icon: <IconLogicBuffer className="mr-2 h-4 w-4" />,
-    label: t("task:changeWorkflow"),
+    label: t("task:moveToDifferentWorkflow"),
     disabled,
     onSelect: onChangeWorkflow,
   };

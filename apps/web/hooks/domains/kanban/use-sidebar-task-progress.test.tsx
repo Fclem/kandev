@@ -2,18 +2,20 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useStore } from "zustand";
 import { createAppStore, type AppState } from "@/lib/state/store";
-import { querySidebarTasks } from "@/lib/api/domains/kanban-api";
+import { fetchTask, querySidebarTasks } from "@/lib/api/domains/kanban-api";
 import { registerTasksHandlers } from "@/lib/ws/handlers/tasks";
+import { taskMembershipSettled } from "@/lib/ws/handlers/task-transfer";
 import type { SidebarTaskPageResponse } from "@/lib/types/http";
 import { sidebarTaskPageCache } from "@/lib/sidebar/sidebar-task-page-cache";
 import { useSidebarTaskPage } from "./use-sidebar-task-page";
 
 let store: ReturnType<typeof createAppStore>;
+const LIVE_TITLE = "Live title";
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (state: AppState) => unknown) => useStore(store, selector),
   useAppStoreApi: () => store,
 }));
-vi.mock("@/lib/api/domains/kanban-api", () => ({ querySidebarTasks: vi.fn() }));
+vi.mock("@/lib/api/domains/kanban-api", () => ({ querySidebarTasks: vi.fn(), fetchTask: vi.fn() }));
 vi.mock("@/hooks/use-foreground-refresh", () => ({ useForegroundRefresh: vi.fn() }));
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -73,9 +75,14 @@ it("publishes safe first rows after three invalidations with at most one trailin
   const hook = renderHook(() => useSidebarTaskPage("ws"));
   await waitFor(() => expect(querySidebarTasks).toHaveBeenCalledTimes(1));
   const handlers = registerTasksHandlers(store);
+  // A live event for a row not yet admitted is confirmed by its canonical read.
+  vi.mocked(fetchTask).mockResolvedValue({
+    ...response().entries[0].task!,
+    title: LIVE_TITLE,
+  });
   act(() => {
     for (const [id, patch] of [
-      ["kept", { title: "Live title" }],
+      ["kept", { title: LIVE_TITLE }],
       ["deleted", null],
       ["archived", { archived_at: "2026-09-29T01:00:00Z" }],
     ] as const) {
@@ -101,12 +108,13 @@ it("publishes safe first rows after three invalidations with at most one trailin
       }
     }
   });
+  await act(async () => taskMembershipSettled(store, "kept"));
   expect(querySidebarTasks).toHaveBeenCalledTimes(1);
   await act(async () => initial.resolve(response()));
   expect(
     hook.result.current.response?.entries.flatMap((row) => (row.task_id ? [row.task_id] : [])),
   ).toEqual(["kept"]);
-  expect(store.getState().taskOverview.byId.kept.title).toBe("Live title");
+  expect(store.getState().taskOverview.byId.kept.title).toBe(LIVE_TITLE);
   expect(hook.result.current.isLoading).toBe(false);
   expect(sidebarTaskPageCache(store).get(hook.result.current.scopeKey)).toBeNull();
   await waitFor(() => expect(querySidebarTasks).toHaveBeenCalledTimes(2));
@@ -114,7 +122,7 @@ it("publishes safe first rows after three invalidations with at most one trailin
     trailing.resolve({
       ...response(),
       entries: [
-        { ...response().entries[0], task: { ...response().entries[0].task!, title: "Live title" } },
+        { ...response().entries[0], task: { ...response().entries[0].task!, title: LIVE_TITLE } },
       ],
     }),
   );

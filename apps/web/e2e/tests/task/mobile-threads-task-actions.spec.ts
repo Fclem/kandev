@@ -97,7 +97,8 @@ test("contains the mobile change form and preserves native swiping after dismiss
   await ui.contained(drawer);
   await expect(ui.choice("Close")).toHaveCSS("cursor", "pointer");
   await testPage.screenshot({ path: testInfo.outputPath("phone-root-360.png") });
-  await ui.pick("Change workflow...");
+  await ui.nested("Move to");
+  await ui.pick("Different workflow...");
   const form = new ChangeWorkflowPage(testPage, true);
   await expect(form.phoneDrawer).toBeVisible();
   await ui.contained(form.phoneDrawer);

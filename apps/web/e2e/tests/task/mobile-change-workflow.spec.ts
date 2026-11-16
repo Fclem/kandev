@@ -43,6 +43,7 @@ test("shows step colors when selecting a destination on phone", async ({
   const kanban = new KanbanPage(testPage);
   await kanban.goto(seedData.workflowId);
   await kanban.taskCard(task.id).getByLabel("More options").tap();
+  await testPage.getByTestId("task-context-move-to").tap();
   await testPage.getByTestId("task-context-change-workflow").tap();
   const form = new ChangeWorkflowPage(testPage, true);
   await expect(form.phoneDrawer).toBeVisible();
@@ -128,8 +129,9 @@ test("changes workflow from phone task actions with task-local agent routing", a
 
   const openChangeForm = async () => {
     await actions.open(task.id);
-    await expect(actions.choice("Change workflow...")).toBeVisible();
-    await actions.pick("Change workflow...");
+    await actions.nested("Move to");
+    await expect(actions.choice("Different workflow...")).toBeVisible();
+    await actions.pick("Different workflow...");
   };
   const chooseDraft = async () => {
     const form = new ChangeWorkflowPage(testPage, true);
@@ -209,6 +211,7 @@ test("changes workflow from phone task actions with task-local agent routing", a
   await expect(actions.column(task.id)).toBeVisible();
   await actions.open(task.id);
   await actions.nested("Move to");
+  await actions.nested("Workflow step");
   const currentDestinationStep = testPage.getByTestId(`task-context-step-${fixture.prStep.id}`);
   await expect(currentDestinationStep).toBeVisible();
   await expect(currentDestinationStep).toBeDisabled();

@@ -34,7 +34,7 @@ conversation. Actual workflow configuration determines each step's recipient.
 #### Acceptance criteria
 
 - **AC-TASKS-CHANGE-WORKFLOW-001.1:** Single-task entry points shall display
-  `Change workflow...` instead of `Send to workflow`. Card, sidebar, detail,
+  `Move to` > `Different workflow...` instead of `Send to workflow`. Card, sidebar, detail,
   preview, command-palette, and phone task actions shall open the same logical form.
 - **AC-TASKS-CHANGE-WORKFLOW-001.2:** The form shall offer accessible, visible
   destination workflows in the task's workspace, excluding its current workflow.

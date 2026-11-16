@@ -1060,6 +1060,8 @@ Every attempt writes a redacted audit row. A successful receipt includes the ope
 
 Configuration access is derived from the calling session's stored purpose. Office CEO authority requires an enabled, active profile. Lane equivalence also checks session start/end policy, session target, completion on entry, and the unclassified fallback veto. An unmapped workspace-owned record blocks its task's transfer; empty tables and records for other tasks do not. After a denied or failed attempt, that caller must supply a fresh idempotency key.
 
+Every caller also needs permission to edit tasks in the task's current workspace and in the destination workspace, including for a replay. People can make the same audited move from the Web UI with **Move to** > **Different workspace...**; see [Move a task to another workspace](tasks-and-workflows.md#move-a-task-to-another-workspace). MCP errors stay generic and do not reveal whether a task exists.
+
 The database migration is additive. Rolling back the application binary leaves transfer receipts and audit rows intact for a later upgrade; do not drop the transfer ledger tables during an application rollback.
 
 <details>

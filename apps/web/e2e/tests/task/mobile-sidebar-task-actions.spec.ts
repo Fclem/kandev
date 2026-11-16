@@ -894,6 +894,8 @@ test.describe("Mobile sidebar task actions", () => {
     await actions.click();
 
     await testPage.getByTestId("task-context-move-to").click();
+
+    await testPage.getByTestId("task-context-move-step").click();
     await testPage.getByTestId(`task-context-step-${targetStep.id}`).click();
 
     await expect

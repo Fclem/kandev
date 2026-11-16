@@ -329,7 +329,7 @@ describe("buildKanbanCardMenuEntries — 'primary' group plugin actions", () => 
     });
 
     const keys = entryKeys(entries);
-    const changeWorkflowIndex = keys.indexOf("change-workflow");
+    const changeWorkflowIndex = keys.indexOf("move-to");
     const primaryIndex = keys.indexOf(`plugin-primary-${PLUGIN_ID}:quick-tag`);
     const archiveIndex = keys.indexOf("archive");
 
@@ -682,7 +682,12 @@ describe("buildKanbanCardMenuEntries — move-only disabled state", () => {
     expect(disabled("edit")).toBe(false);
     expect(disabled("priority")).toBe(false);
     expect(disabled("move-to")).toBe(true);
-    expect(disabled("change-workflow")).toBe(true);
+    const moveGroup = entry("move-to");
+    const workflowChange =
+      moveGroup?.kind === "submenu"
+        ? moveGroup.children.find((child) => child.key === "change-workflow")
+        : undefined;
+    expect(workflowChange?.kind === "item" && workflowChange.disabled).toBe(true);
     expect(disabled("link")).toBe(false);
     expect(disabled("archive")).toBe(false);
     expect(disabled("delete")).toBe(false);

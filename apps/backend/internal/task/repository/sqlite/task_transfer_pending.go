@@ -29,7 +29,7 @@ func (r *Repository) resolveTransferPendingState(
 		if err := tx.GetContext(ctx, &sourceName, r.db.Rebind(
 			`SELECT name FROM workflow_steps WHERE id = ? AND workflow_id = ?`),
 			sourceStepID, command.ExpectedSourceWorkflowID); err != nil {
-			return "", taskTransferConflict(err, "pending lane unavailable")
+			return "", taskTransferConflict(err, repoerrors.TaskTransferPendingStepUnmapped, "pending lane unavailable")
 		}
 		var destinations []string
 		if err := tx.SelectContext(ctx, &destinations, r.db.Rebind(
@@ -38,14 +38,14 @@ func (r *Repository) resolveTransferPendingState(
 			return "", err
 		}
 		if len(destinations) != 1 {
-			return "", fmt.Errorf("%w: pending lane mapping is not unique", repoerrors.ErrTaskTransferConflict)
+			return "", repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferPendingStepUnmapped, "pending lane mapping is not unique")
 		}
 		equivalent, _, err := r.transferStepsEquivalent(ctx, tx, sourceStepID, destinations[0])
 		if err != nil {
-			return "", err
+			return "", repoerrors.RetagTaskTransferConflict(err, repoerrors.TaskTransferPendingStepUnmapped)
 		}
 		if !equivalent {
-			return "", fmt.Errorf("%w: pending lane changes task semantics", repoerrors.ErrTaskTransferConflict)
+			return "", repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferPendingStepUnmapped, "pending lane changes task semantics")
 		}
 		mapped[sourceStepID] = destinations[0]
 		return destinations[0], nil
@@ -65,7 +65,7 @@ func (r *Repository) resolveTransferPendingState(
 		}
 		for _, row := range rows {
 			if row.WorkflowID != command.ExpectedSourceWorkflowID {
-				return "", nil, fmt.Errorf("%w: pending move source changed", repoerrors.ErrTaskTransferConflict)
+				return "", nil, repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferPendingStepUnmapped, "pending move source changed")
 			}
 			if _, err := mapStep(row.StepID); err != nil {
 				return "", nil, err

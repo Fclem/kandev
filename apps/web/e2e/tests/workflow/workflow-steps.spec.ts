@@ -153,6 +153,7 @@ test.describe("Workflow steps", () => {
 
     await session.openSidebarTaskContextMenu("Workflow Sidebar Move Feedback Task");
     await testPage.getByTestId("task-context-move-to").hover();
+    await testPage.getByTestId("task-context-move-step").hover();
     await testPage.getByTestId(`task-context-step-${targetStep.id}`).click();
 
     const moveError = testPage.getByTestId("task-move-error-banner");

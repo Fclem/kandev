@@ -4,6 +4,7 @@ import { type ReactNode } from "react";
 import {
   IconArchive,
   IconArrowRight,
+  IconBuildingWarehouse,
   IconFlag,
   IconLoader,
   IconLogicBuffer,
@@ -11,6 +12,7 @@ import {
 } from "@tabler/icons-react";
 import {
   stepHasAutoStart,
+  TASK_MOVE_MENU_WIDTH,
   type TaskMoveStep,
   type TaskMoveWorkflow,
 } from "@/components/task/task-move-context-menu";
@@ -125,6 +127,8 @@ export type BuildKanbanCardMenuEntriesArgs = {
   pluginLinkActions?: KanbanPluginLinkAction[];
   onMoveToStep?: (stepId: string) => void;
   onChangeWorkflow?: () => void;
+  /** Opens the single-task workspace transfer form; never offered for bulk selection. */
+  onChangeWorkspace?: () => void;
   onSendToWorkflow?: (workflowId: string, stepId: string) => void;
   isBulkSelection?: boolean;
   /** Defaults to an empty-id context (no visible plugin actions match it in practice). */
@@ -229,7 +233,7 @@ function buildStepEntry(
     testId: `task-context-step-${step.id}`,
     disabled: isCurrent,
     leading: <span className={cn("block h-2 w-2 rounded-full shrink-0", step.color ?? "")} />,
-    label: <span className="flex-1 truncate">{step.title}</span>,
+    label: <span className="min-w-0 flex-1 whitespace-normal break-words">{step.title}</span>,
     trailing: <StepBadges step={step} isCurrent={isCurrent} />,
     onSelect: () => {
       if (!isCurrent) onSelect(step.id);
@@ -242,21 +246,24 @@ function buildMoveToCurrentWorkflowSubmenu({
   currentStepId,
   disabled,
   onMoveToStep,
+  nested = false,
 }: {
   steps: TaskMoveStep[];
   currentStepId?: string | null;
   disabled?: boolean;
   onMoveToStep?: (stepId: string) => void;
+  /** Nested under the single-task `Move to` group as its `Workflow step` child. */
+  nested?: boolean;
 }): KanbanCardMenuEntry | null {
   if (!onMoveToStep || steps.length <= 1) return null;
   return {
     kind: "submenu",
-    key: "move-to",
-    testId: "task-context-move-to",
+    key: nested ? "move-step" : "move-to",
+    testId: nested ? "task-context-move-step" : "task-context-move-to",
     icon: <IconArrowRight className="mr-2 h-4 w-4" />,
-    label: t("kanban:moveTo"),
+    label: nested ? t("task:moveToWorkflowStep") : t("kanban:moveTo"),
     disabled,
-    className: "w-48",
+    className: TASK_MOVE_MENU_WIDTH,
     children: steps.map((step) => buildStepEntry(step, currentStepId, onMoveToStep)),
   };
 }
@@ -330,7 +337,7 @@ function buildWorkflowTargetEntry({
       key: `workflow-${workflow.id}`,
       testId: `task-context-workflow-${workflow.id}`,
       disabled: true,
-      label: <span className="flex-1 truncate">{workflow.name}</span>,
+      label: <span className="min-w-0 flex-1 whitespace-normal break-words">{workflow.name}</span>,
       trailing: (
         <span data-testid="task-context-disabled-reason" className="ml-2 text-[10px]">
           {t("kanban:noSteps")}
@@ -343,9 +350,9 @@ function buildWorkflowTargetEntry({
     kind: "submenu",
     key: `workflow-${workflow.id}`,
     testId: `task-context-workflow-${workflow.id}`,
-    label: <span className="truncate">{workflow.name}</span>,
+    label: <span className="min-w-0 whitespace-normal break-words">{workflow.name}</span>,
     disabled,
-    className: "w-48",
+    className: TASK_MOVE_MENU_WIDTH,
     stepTarget:
       steps === undefined
         ? { workflowId: workflow.id, onSelect: (stepId) => onSendToWorkflow(workflow.id, stepId) }
@@ -430,13 +437,59 @@ export function buildCurrentWorkflowMoveEntry(
   currentStepId: string | null | undefined,
   disabled: boolean,
   onMoveToStep: ((stepId: string) => void) | undefined,
+  nested = false,
 ) {
   return buildMoveToCurrentWorkflowSubmenu({
     steps: currentSteps,
     currentStepId,
     disabled,
     onMoveToStep,
+    nested,
   });
+}
+
+/**
+ * Single-task movement: one `Move to` parent whose children are a workflow
+ * step, a different workflow, and a different workspace. Each child keeps its
+ * own operation; the workspace choice stays available even when the current
+ * workflow has a single step or no other workflow exists.
+ */
+export function buildSingleTaskMoveGroup({
+  stepEntry,
+  workflowEntry,
+  disabled,
+  onChangeWorkspace,
+}: {
+  stepEntry: KanbanCardMenuEntry | null;
+  workflowEntry: KanbanCardMenuEntry | null;
+  disabled: boolean;
+  onChangeWorkspace?: () => void;
+}): KanbanCardMenuEntry | null {
+  const workspaceEntry: KanbanCardMenuEntry | null = onChangeWorkspace
+    ? {
+        kind: "item",
+        key: "change-workspace",
+        testId: "task-context-change-workspace",
+        icon: <IconBuildingWarehouse className="mr-2 h-4 w-4" />,
+        label: t("task:moveToDifferentWorkspace"),
+        disabled,
+        onSelect: onChangeWorkspace,
+      }
+    : null;
+  const children = [stepEntry, workflowEntry, workspaceEntry].filter(
+    (entry): entry is KanbanCardMenuEntry => entry !== null,
+  );
+  if (children.length === 0) return null;
+  return {
+    kind: "submenu",
+    key: "move-to",
+    testId: "task-context-move-to",
+    icon: <IconArrowRight className="mr-2 h-4 w-4" />,
+    label: t("kanban:moveTo"),
+    disabled,
+    className: "w-56",
+    children,
+  };
 }
 
 // A flat Edit surface cannot reuse plugin entries that include the card-only Edit group.

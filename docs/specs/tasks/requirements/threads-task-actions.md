@@ -42,7 +42,9 @@ and consequences on desktop and phone.
 #### Acceptance criteria
 
 - **AC-TASKS-THREADS-ACTIONS-001.1:** For an eligible task, the menu shall present
-  Priority, Move to, Change workflow..., Link, Archive, and Delete in that order.
+  Priority, Move to, Link, Archive, and Delete in that order. Move to groups
+  Workflow step, Different workflow..., and Different workspace...
+  ([workspace transfer](cross-workspace-task-transfer.md)).
   Delete shall follow a separator and use destructive styling. Actions that are
   unavailable under existing rules shall retain their existing hidden or
   disabled treatment.
@@ -50,7 +52,7 @@ and consequences on desktop and phone.
   localized choices and current-value marker, following the
   [task priority contract](task-priority-visibility.md).
 - **AC-TASKS-THREADS-ACTIONS-001.3:** Move to shall offer the target task's
-  workflow steps. Change workflow... shall open the shared form for the target
+  workflow steps under Workflow step. Different workflow... shall open the shared form for the target
   task, with eligible workflows, an explicit destination step, task-only fixed
   profile mappings, read-only conversation relationships, and an entry preview
   as defined by [Change workflow](change-workflow.md). The bulk workflow action
@@ -163,7 +165,7 @@ without losing the deck's position and session behavior.
   not depend on right-click, hover, or long press.
 - **AC-TASKS-THREADS-ACTIONS-004.3:** Phone choices shall use one inset bottom
   drawer with nested pages and a visible Back control. Entering a nested choice
-  shall replace its parent content. Change workflow... shall open the shared
+  shall replace its parent content. Different workflow... shall open the shared
   full-height form with a fixed action footer and one scrollable body. A link or
   full confirmation surface shall replace the menu surface without concurrent
   interactive overlay stacks.

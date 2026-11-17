@@ -6,6 +6,15 @@ import { fileURLToPath } from "node:url";
 
 export type CatalogCase = { project: string; file: string; testId: string };
 type CatalogIdentity = { sha: string; runId: string; runAttempt: string };
+export const NORMAL_PROJECT_NAMES = [
+  "chromium",
+  "mobile-chrome",
+  "desktop-coarse-pointer",
+  "mobile-fine-pointer",
+] as const;
+export const CONTAINER_PROJECT_NAMES = ["containers"] as const;
+const AUTH_STAR_SPEC = "tests/auth/plugin-repository-stars.spec.ts";
+const NATIVE_PROJECT_NAMES = [...NORMAL_PROJECT_NAMES, ...CONTAINER_PROJECT_NAMES, "auth"];
 const nativeCache = new Map<string, CatalogCase[]>();
 
 function identityKey(item: { project: string; file: string; testId?: string }): string {
@@ -19,13 +28,14 @@ function validateCases(value: unknown): CatalogCase[] {
   for (const item of value as CatalogCase[]) {
     if (
       !item ||
-      !["chromium", "mobile-chrome", "containers"].includes(item.project) ||
+      !NATIVE_PROJECT_NAMES.includes(item.project) ||
       typeof item.file !== "string" ||
       !item.file.startsWith("tests/") ||
       item.file.includes("\\") ||
       item.file.split("/").some((part) => !part || part === ".." || part === ".") ||
       typeof item.testId !== "string" ||
-      !item.testId
+      !item.testId ||
+      (item.project === "auth" && item.file !== AUTH_STAR_SPEC)
     )
       throw new Error("Invalid native catalog case");
     const key = identityKey(item);
@@ -39,6 +49,19 @@ export function discoverNativeCases(webRoot: string): CatalogCase[] {
   const root = path.resolve(webRoot);
   const cached = nativeCache.get(root);
   if (cached) return cached;
+  const cases = collectNativeCases(root, [...NORMAL_PROJECT_NAMES, ...CONTAINER_PROJECT_NAMES]);
+  if (fs.existsSync(path.join(root, "e2e", AUTH_STAR_SPEC))) {
+    cases.push(...collectNativeCases(root, ["auth"], AUTH_STAR_SPEC));
+  }
+  nativeCache.set(root, cases);
+  return cases;
+}
+
+function collectNativeCases(
+  root: string,
+  projects: readonly string[],
+  spec?: string,
+): CatalogCase[] {
   const cli = createRequire(import.meta.url).resolve("@playwright/test/cli");
   const reporter = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -51,9 +74,8 @@ export function discoverNativeCases(webRoot: string): CatalogCase[] {
       "test",
       "--config",
       path.join(root, "e2e/playwright.config.ts"),
-      "--project=chromium",
-      "--project=mobile-chrome",
-      "--project=containers",
+      ...projects.map((project) => `--project=${project}`),
+      ...(spec ? [spec] : []),
       "--list",
       `--reporter=${reporter}`,
     ],
@@ -66,9 +88,7 @@ export function discoverNativeCases(webRoot: string): CatalogCase[] {
   const report = JSON.parse(output) as { cases?: unknown; errors?: unknown };
   if (!Array.isArray(report.errors) || report.errors.length)
     throw new Error("Native catalog collection failed");
-  const cases = validateCases(report.cases);
-  nativeCache.set(root, cases);
-  return cases;
+  return validateCases(report.cases);
 }
 
 export function githubCatalogIdentity(env = process.env): CatalogIdentity {

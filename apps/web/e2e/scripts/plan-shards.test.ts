@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,8 @@ import {
   validateShardManifest,
   type CatalogUnit,
 } from "./plan-shards";
-import type { TimingProfile } from "./e2e-timings";
+import { parseBlobReports, type TimingProfile } from "./e2e-timings";
+import { assertCatalogCoverage, discoverNativeCases } from "./native-catalog";
 
 const profile: TimingProfile = {
   version: 1,
@@ -87,18 +89,6 @@ function createWebRootWithRealConfig(specs: ReadonlyArray<readonly [string, stri
   return webRoot;
 }
 
-const FOUR_TEST_SPEC = [
-  'import { test } from "@playwright/test";',
-  'test.describe("suite", () => {',
-  "  test.beforeEach(async () => {});",
-  '  test("works", async () => {});',
-  '  test.skip("skipped", async () => {});',
-  '  for (const name of ["generated one", "generated two"]) {',
-  "    test(name, async () => {});",
-  "  }",
-  "});",
-].join("\n");
-
 const TWO_TEST_SPEC = [
   'import { test } from "@playwright/test";',
   'test("first", async () => {});',
@@ -121,6 +111,8 @@ describe("duration-aware shard planning", () => {
         '    { name: "chromium", testIgnore: [/mobile-.*\\.spec\\.ts$/, /tests\\/(docker|ssh)\\//] },',
         '    { name: "mobile-chrome", testMatch: /mobile-.*\\.spec\\.ts$/ },',
         '    { name: "containers", testMatch: /tests\\/(docker|ssh)\\/.*\\.spec\\.ts$/ },',
+        '    { name: "desktop-coarse-pointer", testMatch: /$^/ },',
+        '    { name: "mobile-fine-pointer", testMatch: /$^/ },',
         "  ],",
         "});",
       ].join("\n"),
@@ -472,6 +464,7 @@ describe("normal cohort project retention", () => {
       ["tests/settings/mobile-plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
       ["tests/settings/mobile-fine-pointer-plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
       ["tests/auth/plugin-repository-stars.spec.ts", TWO_TEST_SPEC],
+      ["tests/auth/other-auth.spec.ts", TWO_TEST_SPEC],
       ["tests/chat/example.spec.ts", TWO_TEST_SPEC],
       ["tests/chat/mobile-example.spec.ts", TWO_TEST_SPEC],
     ]);
@@ -498,6 +491,28 @@ describe("normal cohort project retention", () => {
       expect(unit.testCount).toBe(2);
     }
   });
+
+  it("reconciles the selected authenticated star report against the native catalog", () => {
+    const authCases = discoverNativeCases(webRoot).filter((item) => item.project === "auth");
+    expect([...new Set(authCases.map((item) => item.file))]).toEqual([
+      "tests/auth/plugin-repository-stars.spec.ts",
+    ]);
+    const blobs = path.join(webRoot, "auth-blobs");
+    execFileSync(
+      process.execPath,
+      [
+        path.resolve("node_modules/@playwright/test/cli.js"),
+        "test",
+        "--config=e2e/playwright.config.ts",
+        "--project=auth",
+        "--workers=1",
+        "--reporter=blob",
+        "tests/auth/plugin-repository-stars.spec.ts",
+      ],
+      { cwd: webRoot, env: { ...process.env, PLAYWRIGHT_BLOB_OUTPUT_DIR: blobs }, stdio: "pipe" },
+    );
+    assertCatalogCoverage(authCases, parseBlobReports(blobs));
+  }, 30_000);
 
   it("retains both added projects when the catalog is sharded", () => {
     const catalog = discoverTestCatalog(webRoot, "normal");

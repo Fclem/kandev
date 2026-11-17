@@ -63,7 +63,7 @@ func startSupervisor(t *testing.T, dataDir string, provisioner Provisioner) supe
 	if err != nil {
 		t.Fatal(err)
 	}
-	socketPath := filepath.Join(dataDir, "run", "deployment-secret.sock")
+	socketPath := filepath.Join(dataDir, "run", "s.sock")
 	server, err := NewServer(Config{
 		SocketPath:  socketPath,
 		Target:      Target{GOOS: "linux", BackendUID: 1000},
@@ -325,7 +325,7 @@ func TestSupervisorFailsClosedForUnavailableTargetsAndPeers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	socketPath := filepath.Join(dataDir, "run", "deployment-secret.sock")
+	socketPath := filepath.Join(dataDir, "run", "s.sock")
 	targets := map[string]Target{
 		"darwin":       {GOOS: "darwin", BackendUID: 1000},
 		"root-backend": {GOOS: "linux", BackendUID: 0},

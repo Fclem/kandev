@@ -5,7 +5,7 @@ import {
   MOBILE_FINE_POINTER_VIEWPORT,
   projectContextOptions,
 } from "../fixtures/project-contexts";
-import { NORMAL_PROJECT_NAMES } from "./plan-shards";
+import { NORMAL_PROJECT_NAMES } from "./native-catalog";
 
 /**
  * Project-cohort regressions for the normal (non-container) Playwright

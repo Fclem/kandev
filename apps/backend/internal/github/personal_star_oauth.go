@@ -28,13 +28,15 @@ const (
 	// PKCEChallengeMethodS256 is the only accepted S256 challenge method.
 	PKCEChallengeMethodS256 = "S256"
 
-	personalStarParamState    = "state"
-	personalStarParamCode     = "code"
-	personalStarParamClientID = "client_id"
-	personalStarParamError    = "error"
-	personalStarStateBytes    = 32
-	personalStarVerifierBytes = 32
-	personalStarReturnPrefix  = "/settings/plugins"
+	personalStarParamState       = "state"
+	personalStarParamCode        = "code"
+	personalStarParamClientID    = "client_id"
+	personalStarParamError       = "error"
+	personalStarParamRedirectURI = "redirect_uri"
+	personalStarParamScope       = "scope"
+	personalStarStateBytes       = 32
+	personalStarVerifierBytes    = 32
+	personalStarReturnPrefix     = "/settings/plugins"
 
 	personalStarOutcomeConnected         = "connected"
 	personalStarOutcomeDeclined          = "declined"
@@ -214,12 +216,12 @@ func (s *PersonalStarOAuthService) Start(
 
 func (s *PersonalStarOAuthService) authorizationURL(state, challenge string) string {
 	query := url.Values{
-		personalStarParamClientID: {s.settings.ClientID},
-		"redirect_uri":            {s.settings.CallbackURL},
-		"scope":                   {PersonalStarScope},
-		personalStarParamState:    {state},
-		"code_challenge":          {challenge},
-		"code_challenge_method":   {PKCEChallengeMethodS256},
+		personalStarParamClientID:    {s.settings.ClientID},
+		personalStarParamRedirectURI: {s.settings.CallbackURL},
+		personalStarParamScope:       {PersonalStarScope},
+		personalStarParamState:       {state},
+		"code_challenge":             {challenge},
+		"code_challenge_method":      {PKCEChallengeMethodS256},
 	}
 	return githubWebBase + "/login/oauth/authorize?" + query.Encode()
 }

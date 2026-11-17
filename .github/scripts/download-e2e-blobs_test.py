@@ -49,6 +49,23 @@ class BlobDownloadTests(unittest.TestCase):
         self.assertEqual((self.output / "shard-normal-1-metadata.json").read_bytes(), b'{"shard":1}\n')
         sleep.assert_not_called()
 
+    def test_authenticated_report_is_published_without_accepting_similar_names(self):
+        for name in ("blob-report-auth", "blob-report-auth-extra", "blob-report-auth0"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                stage = Path(temporary) / "stage"
+                artifact = stage / name
+                artifact.mkdir(parents=True)
+                payload = b"\x00\xffauthenticated report\x00"
+                (artifact / "report-auth.zip").write_bytes(payload)
+                output = Path(temporary) / "reports"
+                if name == "blob-report-auth":
+                    self.assertEqual(self.module.publish_blobs(stage, output), 1)
+                    self.assertEqual((output / "report-auth.zip").read_bytes(), payload)
+                else:
+                    with self.assertRaisesRegex(ValueError, "unexpected blob artifact"):
+                        self.module.publish_blobs(stage, output)
+                    self.assertFalse(output.exists())
+
     def test_retry_uses_fresh_staging_without_publishing_partial_files(self):
         stages = []
 

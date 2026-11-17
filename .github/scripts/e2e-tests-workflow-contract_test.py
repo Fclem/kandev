@@ -97,7 +97,7 @@ class E2EWorkflowContractTest(unittest.TestCase):
 
     def test_required_report_reconciles_the_build_catalog(self) -> None:
         workflow = E2E_WORKFLOW.read_text()
-        report = workflow.partition("  e2e-report:\n")[2]
+        report = job_block(workflow, "e2e-report", "e2e-auth")
         collection = report.partition("      - name: Collect timing and retry diagnostics\n")[2].partition("      - name:")[0]
         self.assertIn('--catalog "$GITHUB_WORKSPACE/e2e-manifests/native-catalog.json"', collection)
         manifest_download = report.partition("      - name: Download E2E shard manifests\n")[2].partition("      - name:")[0]
@@ -111,7 +111,7 @@ class E2EWorkflowContractTest(unittest.TestCase):
     def test_browser_free_jobs_bootstrap_host_tools_and_share_one_store_writer(self) -> None:
         workflow = E2E_WORKFLOW.read_text()
         build = job_block(workflow, "build", "e2e")
-        report = workflow.partition("  e2e-report:\n")[2]
+        report = job_block(workflow, "e2e-report", "e2e-auth")
         for job in (build, report):
             self.assertNotIn("COREPACK_HOME: ${{ runner.", job.partition("    steps:\n")[0])
             self.assertNotRegex(job, r"(?m)^    container:")
@@ -688,11 +688,11 @@ cat "${FAKE_DOCKER_MANIFEST}"
 
         report_job = job_block(workflow, "e2e-report", "e2e-auth")
         self.assertIn(
-            "needs: [changes, build, playwright_image, e2e, e2e-containers,"
+            "needs: [changes, helper_compile, build, playwright_image, e2e, e2e-containers,"
             " e2e-kubernetes-compatibility, desktop-e2e, e2e-auth]",
             report_job,
         )
-        self.assertIn("pattern: blob-report-*", report_job)
+        self.assertIn("python3 .github/scripts/download-e2e-blobs.py", report_job)
         self.assertIn("E2E_AUTH_RESULT: ${{ needs['e2e-auth'].result }}", report_job)
         self.assertIn('"e2e-auth:${E2E_AUTH_RESULT}"', report_job)
 

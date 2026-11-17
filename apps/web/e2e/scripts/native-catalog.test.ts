@@ -72,7 +72,7 @@ describe("single-producer native catalog", () => {
     fs.symlinkSync(path.resolve("node_modules"), path.join(webRoot, "node_modules"), "dir");
     fs.writeFileSync(
       path.join(webRoot, "e2e/playwright.config.ts"),
-      `export default { testDir: './tests', projects: [{ name: 'chromium' }, { name: 'mobile-chrome' }, { name: 'containers' }] };`,
+      `export default { testDir: './tests', projects: [{ name: 'chromium' }, { name: 'mobile-chrome' }, { name: 'containers' }, { name: 'desktop-coarse-pointer', testMatch: /$^/ }, { name: 'mobile-fine-pointer', testMatch: /$^/ }] };`,
     );
     fs.writeFileSync(
       path.join(webRoot, "e2e/tests/helper.ts"),

@@ -97,3 +97,11 @@ Verification:
 - Interactive browser smoke on the updated LAN demo: observed 12 -> 13 -> 12 using browser-only catalog/provider fixtures, with no real GitHub writes. Phone rendering retained a 44px toggle and no horizontal overflow. Browser tab closed; the user-requested demo remains at `http://192.168.10.103:53823/settings/plugins`.
 
 Public docs updated: `docs/public/plugins-marketplace.md` describes session-local adjustment against the catalog baseline. Limitation: the demo host currently cannot reach the official GitHub Pages catalog; interactive screenshots used a temporary browser fixture, not persisted catalog data. Browser suites use isolated mock-provider backends.
+
+Delivery rebase onto `ea6af0d500e92a20420729a505c2b95c65707b36`:
+
+- Migrated star-count actions to upstream's slice-only setter contract and star HTTP errors to its classified API-error path.
+- Preserved both pointer-specific projects in upstream's native catalog. Included only the authenticated star spec in report coverage, without assigning it to normal shards. The blob downloader accepts its exact artifact name and rejects lookalikes.
+- Final plugin and catalog Vitest run: 29 files, 261 tests passed, including authenticated-report reconciliation coverage. Typecheck, production web build, both native binary builds, targeted GitHub/backend cleanup tests, deployment-secret tests, 29 workflow contracts, nine blob-downloader tests, and public-doc validation passed.
+- Fresh isolated backend and rebuilt web assets rendered Plugins. Browser-only provider fixtures confirmed count transitions `12 -> 13 -> 12`; visual proof captured and the temporary browser/runtime closed. No live GitHub writes. The existing LAN demo was left running.
+- The broader launcher package run was not clean: `TestRunDevShutsDownTreeOnBackendReadinessFailure`, `TestDevLaunchConfigIgnoresAmbientHomeForSupervisorState`, and `TestRunStartBuildVersion` failed. Targeted deployment-secret/cleanup launcher checks passed. No full-suite pass is claimed.

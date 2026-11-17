@@ -19,7 +19,7 @@ def publish_blobs(stage: Path, output: Path) -> int:
         if (
             artifact.is_symlink()
             or not artifact.is_dir()
-            or not re.fullmatch(r"blob-report-(?:containers-)?[1-9][0-9]*", artifact.name)
+            or not re.fullmatch(r"blob-report-(?:(?:containers-)?[1-9][0-9]*|auth)", artifact.name)
         ):
             raise ValueError(f"unexpected blob artifact: {artifact.name}")
         entries = sorted(artifact.iterdir())

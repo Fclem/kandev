@@ -1,11 +1,11 @@
-import type { StateCreator } from "zustand";
+import type { SliceCreator } from "@/lib/state/slice-creator";
 import type { PluginsSlice } from "./types";
 
-type SliceCreator = StateCreator<PluginsSlice, [["zustand/immer", never]], [], PluginsSlice>;
+type PluginsSliceCreator = SliceCreator<PluginsSlice>;
 
 export function createPluginStarCountActions(
-  set: Parameters<SliceCreator>[0],
-  get: Parameters<SliceCreator>[1],
+  set: Parameters<PluginsSliceCreator>[0],
+  get: Parameters<PluginsSliceCreator>[1],
 ): Pick<PluginsSlice, "seedPluginStarCount" | "applyPluginStarMutationResult"> {
   return {
     seedPluginStarCount: (repository, count) => {

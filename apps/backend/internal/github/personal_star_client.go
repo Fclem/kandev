@@ -78,8 +78,7 @@ func (c *PersonalStarHTTPClient) request(ctx context.Context, method string, rep
 	c.client.recordRateHeaders(response, endpoint)
 	if response.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		c.client.maybeMarkRateExhaustedFromBody(endpoint, response.StatusCode, body)
-		return 0, &GitHubAPIError{StatusCode: response.StatusCode, Endpoint: endpoint, Body: string(body)}
+		return 0, c.client.apiError(response, endpoint, body)
 	}
 	return response.StatusCode, nil
 }

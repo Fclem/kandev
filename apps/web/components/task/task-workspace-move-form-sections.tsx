@@ -361,13 +361,15 @@ function CheckOutcome({
   state,
   isTouchSurface,
   unavailable,
-}: SectionProps & { unavailable: boolean }) {
+  refused,
+}: SectionProps & { unavailable: boolean; refused: boolean }) {
   const { t } = useTranslation();
+  let message = t("task:workspaceMoveUncertain");
+  if (unavailable) message = t("task:workspaceMoveCheckUnavailable");
+  if (refused) message = t("task:workspaceMoveCheckRejected");
   return (
     <>
-      <span>
-        {unavailable ? t("task:workspaceMoveCheckUnavailable") : t("task:workspaceMoveUncertain")}
-      </span>
+      <span>{message}</span>
       <OutcomeAction
         label={unavailable ? t("task:workspaceMoveCheckAgain") : t("task:workspaceMoveCheckResult")}
         onClick={() => void state.check()}
@@ -399,7 +401,13 @@ function OperationOutcome(props: OutcomeProps) {
       );
     case "uncertain":
     case "check-unavailable":
-      return <CheckOutcome {...props} unavailable={operation.status === "check-unavailable"} />;
+      return (
+        <CheckOutcome
+          {...props}
+          unavailable={operation.status === "check-unavailable"}
+          refused={operation.status === "check-unavailable" && operation.code !== undefined}
+        />
+      );
     case "operation-rejected":
       return <span>{t("task:workspaceMoveOperationRejected")}</span>;
     default:

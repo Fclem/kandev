@@ -152,4 +152,105 @@ test.describe("Phone task workspace move", () => {
     await expect(form.submitButton).toBeEnabled();
     await assertNoDocumentHorizontalOverflow(testPage, "768px workspace move dialog");
   });
+
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.5, 004.6
+  test("shows the empty destination catalog and blocks submit", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const fixture = await seedWorkspaceMove(apiClient, seedData, "Phone empty catalog");
+    const emptyWorkspace = await apiClient.createWorkspace("Phone empty catalog destination");
+    const task = await apiClient.createTask(seedData.workspaceId, "Phone empty catalog task", {
+      workflow_id: fixture.sourceWorkflow.id,
+      workflow_step_id: fixture.sourceStep.id,
+    });
+    // Workspaces created through the API bootstrap a kanban workflow, so the
+    // empty catalog is answered by the workflow list endpoint instead.
+    await testPage.route(
+      (url) =>
+        url.pathname === "/api/v1/workflows" &&
+        url.searchParams.get("workspace_id") === emptyWorkspace.id,
+      (route) => route.fulfill({ json: { workflows: [] } }),
+    );
+    await openSourceBoard(testPage, fixture.sourceWorkflow.id);
+    const form = await openMoveDrawer(testPage, task.id);
+    await form.chooseWorkspace(emptyWorkspace.id);
+    await expect(form.form.getByTestId("workspace-move-no-workflows")).toHaveText(
+      "No workflows in this workspace.",
+    );
+    await expect(form.submitButton).toBeDisabled();
+    await expectPhoneGeometry(testPage, form);
+  });
+
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.5, 004.6
+  test("recovers a failed destination catalog through its retry action", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }, testInfo) => {
+    const fixture = await seedWorkspaceMove(apiClient, seedData, "Phone catalog error");
+    const task = await apiClient.createTask(seedData.workspaceId, "Phone catalog error task", {
+      workflow_id: fixture.sourceWorkflow.id,
+      workflow_step_id: fixture.sourceStep.id,
+    });
+    let failing = true;
+    await testPage.route(
+      (url) =>
+        url.pathname === "/api/v1/workflows" &&
+        url.searchParams.get("workspace_id") === fixture.destination.id,
+      async (route) => {
+        if (!failing) return route.continue();
+        await route.fulfill({ status: 500, json: { error: "workflow catalog unavailable" } });
+      },
+    );
+    await openSourceBoard(testPage, fixture.sourceWorkflow.id);
+    const form = await openMoveDrawer(testPage, task.id);
+    await form.chooseWorkspace(fixture.destination.id);
+    const failure = form.form.getByTestId("workspace-move-workflows-error");
+    await expect(failure).toContainText("Could not load workflows.");
+    await expectPhoneGeometry(testPage, form);
+    await testPage.screenshot({ path: testInfo.outputPath("ui-03-phone-catalog-error.png") });
+
+    failing = false;
+    await form.press(failure.getByRole("button", { name: "Retry" }));
+    await form.choose(
+      fixture.destination.id,
+      fixture.destinationWorkflow.id,
+      fixture.destinationStep.id,
+    );
+    await form.submit();
+    await expect(form.outcome).toHaveAttribute("data-status", "committed");
+    expect((await apiClient.getTask(task.id)).workspace_id).toBe(fixture.destination.id);
+  });
+
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.5
+  test("keeps the phone drawer at 767px with a fine pointer", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const fixture = await seedWorkspaceMove(apiClient, seedData, "Fine pointer boundary");
+    const task = await apiClient.createTask(seedData.workspaceId, "Fine pointer boundary task", {
+      workflow_id: fixture.sourceWorkflow.id,
+      workflow_step_id: fixture.sourceStep.id,
+    });
+    const cdp = await testPage.context().newCDPSession(testPage);
+    await cdp.send("Emulation.setEmulatedMedia", {
+      features: [
+        { name: "pointer", value: "fine" },
+        { name: "any-pointer", value: "fine" },
+      ],
+    });
+    await testPage.setViewportSize({ width: 767, height: 720 });
+    await openSourceBoard(testPage, fixture.sourceWorkflow.id);
+    const form = await openMoveDrawer(testPage, task.id);
+    await expect(form.desktopDialog).toHaveCount(0);
+    await expectPhoneGeometry(testPage, form);
+
+    await testPage.setViewportSize({ width: 768, height: 720 });
+    await expect(form.desktopDialog).toBeVisible();
+    await expect(form.phoneDrawer).toHaveCount(0);
+    await assertNoDocumentHorizontalOverflow(testPage, "768px fine-pointer workspace move dialog");
+  });
 });

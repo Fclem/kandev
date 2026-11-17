@@ -26,6 +26,10 @@ export class WorkspaceMovePage {
     await this.select("workspace-move-step", stepId);
   }
 
+  async chooseWorkspace(workspaceId: string) {
+    await this.select("workspace-move-workspace", workspaceId);
+  }
+
   async chooseStep(stepId: string) {
     await this.select("workspace-move-step", stepId);
   }
@@ -47,7 +51,14 @@ export class WorkspaceMovePage {
     if ((await trigger.getAttribute("aria-expanded")) !== "true") await this.press(trigger);
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     const option = this.page.locator(`[role="option"][data-value="${value}"]`);
-    await expect(option).toBeVisible();
+    // The shared Combobox clears a value when its selected option is chosen again,
+    // so an already-selected choice is confirmed in place rather than re-picked.
+    const optionText = (await option.innerText()).trim();
+    if (optionText === (await trigger.innerText()).trim()) {
+      await this.page.keyboard.press("Escape");
+      await expect(trigger).toHaveAttribute("aria-expanded", "false");
+      return;
+    }
     await this.press(option);
     await expect(option).toBeHidden();
   }

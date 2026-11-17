@@ -3412,6 +3412,7 @@
   "workspaceMoveUncertain": "移動結果尚未確認。在檢查結果之前，你的選擇會被保留。",
   "workspaceMoveCheckResult": "檢查結果",
   "workspaceMoveCheckUnavailable": "以你目前的存取權限無法檢查移動結果。同一請求會被保留，不會傳送新的移動。",
+  "workspaceMoveCheckRejected": "移動已被拒絕。目標位置或任務的目前狀態不允許此次移動。你的選擇會被保留，請再次檢查以確認結果。",
   "workspaceMoveCheckAgain": "再次檢查",
   "workspaceMoveOperationRejected": "此次移動未發生。請刷新任務並檢查其位置後再重新移動。",
   "workspaceMoveRefreshTask": "刷新任務",

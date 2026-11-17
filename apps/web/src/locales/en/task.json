@@ -3412,6 +3412,7 @@
   "workspaceMoveUncertain": "The move result was not confirmed. Your choices are kept until the result is checked.",
   "workspaceMoveCheckResult": "Check result",
   "workspaceMoveCheckUnavailable": "The move result cannot be checked with your current access. The same request is kept and no new move is sent.",
+  "workspaceMoveCheckRejected": "The move was refused. The destination or the task's current state does not allow it. Your choices are kept; check again to confirm the result.",
   "workspaceMoveCheckAgain": "Check again",
   "workspaceMoveOperationRejected": "This move did not happen. Refresh the task and review its placement before moving it again.",
   "workspaceMoveRefreshTask": "Refresh task",

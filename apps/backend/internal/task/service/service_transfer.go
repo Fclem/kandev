@@ -59,8 +59,11 @@ func (s *Service) TransferTask(
 			return receipt, nil
 		}
 	}
-	if rejectionRepository, ok := s.tasks.(taskTransferRejectionRepository); ok {
+	if rejectionRepository, ok := s.tasks.(taskTransferRejectionRepository); ok && command.DurableRejection {
 		if err := rejectionRepository.TaskTransferRejection(ctx, command); err != nil {
+			if errors.Is(err, repoerrors.ErrTaskTransferConflict) {
+				return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "conflict"))
+			}
 			return nil, err
 		}
 	}

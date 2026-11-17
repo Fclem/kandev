@@ -3117,6 +3117,7 @@
   "workspaceMoveUncertain": "O resultado da movimentação não foi confirmado. As suas escolhas são mantidas até o resultado ser verificado.",
   "workspaceMoveCheckResult": "Verificar resultado",
   "workspaceMoveCheckUnavailable": "Não é possível verificar o resultado da movimentação com o seu acesso atual. O mesmo pedido é mantido e não é enviada nenhuma nova movimentação.",
+  "workspaceMoveCheckRejected": "A movimentação foi recusada. O destino ou o estado atual da tarefa não a permitem. As suas escolhas são mantidas; verifique novamente para confirmar o resultado.",
   "workspaceMoveCheckAgain": "Verificar novamente",
   "workspaceMoveOperationRejected": "Esta movimentação não aconteceu. Atualize a tarefa e reveja a sua posição antes de a mover novamente.",
   "workspaceMoveRefreshTask": "Atualizar tarefa",

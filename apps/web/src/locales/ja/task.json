@@ -3117,6 +3117,7 @@
   "workspaceMoveUncertain": "移動の結果を確認できませんでした。結果を確認するまで選択内容は保持されます。",
   "workspaceMoveCheckResult": "結果を確認",
   "workspaceMoveCheckUnavailable": "現在のアクセス権では移動の結果を確認できません。同じリクエストが保持され、新しい移動は送信されません。",
+  "workspaceMoveCheckRejected": "移動は拒否されました。移動先またはタスクの現在の状態により、この移動は許可されません。選択内容は保持されます。もう一度確認して結果を確かめてください。",
   "workspaceMoveCheckAgain": "もう一度確認",
   "workspaceMoveOperationRejected": "この移動は行われませんでした。タスクを更新し、配置を確認してから再度移動してください。",
   "workspaceMoveRefreshTask": "タスクを更新",

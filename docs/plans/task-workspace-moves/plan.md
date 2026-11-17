@@ -74,15 +74,15 @@ A submission captures immutable predicates/key and prevents double clicks. Netwo
 
 ### Compatibility boundaries
 
-| Caller or shape | Intended behavior | Evidence |
-| --- | --- | --- |
-| Local synthetic human; same-owner equivalent steps | Transfer existing task, including running session | Handler/service tests; desktop and phone E2E |
-| Authenticated human with task.write in both workspaces | Same transfer policy | Scoped handler/service tests |
-| Read-only or foreign/unreachable workspace | 403 for known insufficient scope; otherwise non-disclosing 404 | Auth tests; no mutation assertions |
-| Non-equivalent step or unmapped relations/profiles | Typed safe conflict; no task changes | Repository/handler tests and UI failure E2E |
-| Existing MCP human/coordinator | Same tool exposure, policy, audit, generic error text; write scopes enforced | Existing transfer MCP/service regression suites |
-| Source-only WS reader | Redacted membership removal, not deletion | Gateway and client state tests |
-| Existing step/workflow and bulk moves | Existing payload/lifecycle; grouped navigation only | Existing move and workflow-form E2E |
+| Caller or shape                                        | Intended behavior                                                            | Evidence                                        |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------- |
+| Local synthetic human; same-owner equivalent steps     | Transfer existing task, including running session                            | Handler/service tests; desktop and phone E2E    |
+| Authenticated human with task.write in both workspaces | Same transfer policy                                                         | Scoped handler/service tests                    |
+| Read-only or foreign/unreachable workspace             | 403 for known insufficient scope; otherwise non-disclosing 404               | Auth tests; no mutation assertions              |
+| Non-equivalent step or unmapped relations/profiles     | Typed safe conflict; no task changes                                         | Repository/handler tests and UI failure E2E     |
+| Existing MCP human/coordinator                         | Same tool exposure, policy, audit, generic error text; write scopes enforced | Existing transfer MCP/service regression suites |
+| Source-only WS reader                                  | Redacted membership removal, not deletion                                    | Gateway and client state tests                  |
+| Existing step/workflow and bulk moves                  | Existing payload/lifecycle; grouped navigation only                          | Existing move and workflow-form E2E             |
 
 Remote executors are not newly implemented or re-certified here. The existing transfer command preserves runtime artifacts without executor-specific migration; the Web adapter must not introduce executor gates or claim live SSH/Kubernetes coverage from mock-agent E2E.
 
@@ -185,15 +185,15 @@ Original rejection and unavailable-to-verify are different states: a check denie
 
 Proposed test names below describe behavioral evidence, not source-text/wiring assertions. Add tests before implementation and record expected assertion failure, then passing result.
 
-| Criteria | Test file and evidence |
-| --- | --- |
-| 001.1-001.4, 005.1 | New `task/handlers/task_transfer_http_handlers_test.go`: `TestHTTPTransferTaskPreservesIdentityAndRunningSession`, `TestHTTPTransferTaskRequiresWriteInBothWorkspaces`, `TestHTTPTransferTaskRejectsActorFields` |
-| 001.2, 005.2 | Same handler file: `TestHTTPTransferTaskReportsSafeConflictReasons`, including incompatible lane, full lane, project/label/group/profile/pending mapping, cleanup, and stale source; assert no partial task changes |
-| 003.1-003.5, 005.3 | New handler tests `TestHTTPTransferTaskReplaysExactRequest`, `TestHTTPTransferTaskCheckAfterPermissionRevocation`, `TestHTTPTransferTaskTerminalRejectedKey`, `TestHTTPTransferTaskLostDomainConflictResponse`: identity/non-disclosure, access revocation, receipt precedence, lost source_changed/step_incompatible 409 recovery, rejection-savepoint rollback, deterministic writer-first/rejection-first races, no later same-key commit, and no changed-body/actor poisoning |
+| Criteria            | Test file and evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 001.1-001.4, 005.1  | New `task/handlers/task_transfer_http_handlers_test.go`: `TestHTTPTransferTaskPreservesIdentityAndRunningSession`, `TestHTTPTransferTaskRequiresWriteInBothWorkspaces`, `TestHTTPTransferTaskRejectsActorFields`                                                                                                                                                                                                                                                                                                                               |
+| 001.2, 005.2        | Same handler file: `TestHTTPTransferTaskReportsSafeConflictReasons`, including incompatible lane, full lane, project/label/group/profile/pending mapping, cleanup, and stale source; assert no partial task changes                                                                                                                                                                                                                                                                                                                            |
+| 003.1-003.5, 005.3  | New handler tests `TestHTTPTransferTaskReplaysExactRequest`, `TestHTTPTransferTaskCheckAfterPermissionRevocation`, `TestHTTPTransferTaskTerminalRejectedKey`, `TestHTTPTransferTaskLostDomainConflictResponse`: identity/non-disclosure, access revocation, receipt precedence, lost source_changed/step_incompatible 409 recovery, rejection-savepoint rollback, deterministic writer-first/rejection-first races, no later same-key commit, and no changed-body/actor poisoning                                                              |
 | 001.5, 004.4, 005.4 | New `lib/ws/handlers/task-transfer.test.ts`, `lib/ws/client.test.ts`, and gateway `TestTaskNotificationTransferDepartureAcrossReconnect`: both marker-delivered retention and NO-marker recovery bootstrap; upstream-held ordinary event released on CURRENT socket after offline transfer and fresh source read; ordinary/completed unchanged-timestamp tasks; all source projections; real canonical return and ordinary new-task admission; partial/filtered/paged omission is not false departure; A -> B -> A and real deletion unchanged |
-| 004.2, 005.3 | New `hooks/domains/kanban/use-task-workspace-move.test.ts`: dependent selection reset, late reads, exact generation/double-click admission, original rejection versus denied check, lost domain-409 -> authoritative terminal rejection -> new reviewed key, 403/404 across reopen/access restoration, canonical placement versus operation outcome, and new-key eligibility only after authoritative resolution |
-| 004.1, 004.3, 004.5 | New `components/task/task-workspace-move-dialog.test.tsx` plus existing menu/form tests: visible state transitions, cancellation, keyboard/focus behavior, and retained workflow/step actions |
-| Existing safety | Existing `task_transfer*_test.go`, `service_transfer_test.go`, MCP transfer handler tests, and gateway `task_notifications_test.go` |
+| 004.2, 005.3        | New `hooks/domains/kanban/use-task-workspace-move.test.ts`: dependent selection reset, late reads, exact generation/double-click admission, original rejection versus denied check, lost domain-409 -> authoritative terminal rejection -> new reviewed key, 403/404 across reopen/access restoration, canonical placement versus operation outcome, and new-key eligibility only after authoritative resolution                                                                                                                               |
+| 004.1, 004.3, 004.5 | New `components/task/task-workspace-move-dialog.test.tsx` plus existing menu/form tests: visible state transitions, cancellation, keyboard/focus behavior, and retained workflow/step actions                                                                                                                                                                                                                                                                                                                                                  |
+| Existing safety     | Existing `task_transfer*_test.go`, `service_transfer_test.go`, MCP transfer handler tests, and gateway `task_notifications_test.go`                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## E2E tests
 
@@ -230,7 +230,7 @@ All three work orders are done; each work order's Results section records its RE
   - Web: one real regression, a stale `change-workflow` card-order expectation in `task-actions-menu-entries.test.ts`, is fixed (13/13). The other failing files pass alone (73 tests across 8 files); they timed out only under full-suite load.
   - `test-scripts` stops at `spawnSync cargo ENOENT` because this host has no Rust toolchain.
 
-Design validation completed on 2026-11-05; all three implementation work orders remain pending.
+Design validation completed on 2026-11-05. The three implementation work orders were completed on 2026-11-11; see Implementation above.
 
 - `python3 scripts/list-docs.py validate`: passed (431 decisions and 1920 specifications).
 - `python3 scripts/lint-spec-files.test.py`: passed (36 tests).
@@ -250,7 +250,7 @@ Blocked before compilation: download of `github.com/kdlbs/acp-go-sdk` version `v
 ### Adversarial design review
 
 - Round 1, OMP Sol profile, child `f9a38bdc-9815-4bc4-8edf-97253eec80d1`: two actionable P2 findings accepted. The design/work orders now require guarded canonical reconciliation for A -> B -> A and distinguish denied result checks from original-operation rejection. Added completed-task unchanged-timestamp, transient-read, revoked-access, and durable terminal failed-key test obligations. These are specification corrections, not implemented or runtime-verified fixes.
-- Review loop complete: 8 rounds, with 3 consecutive clean rounds (6, 7, 8). Six actionable P2 findings from rounds 1, 3, 4, and 5 were accepted and addressed in the design package. Stop condition met; no round 9. All implementation work orders remain pending.
+- Review loop complete: 8 rounds, with 3 consecutive clean rounds (6, 7, 8). Six actionable P2 findings from rounds 1, 3, 4, and 5 were accepted and addressed in the design package. Stop condition met; no round 9. All three implementation work orders were completed on 2026-11-11; see Implementation above.
 - Round 1 remediation validation: catalog validation, 36 specification-validator tests, full specification lint, scoped whitespace check, revised three-work-order coverage preflight, and local-link validation passed. Production/runtime verification remains deferred.
 - Round 3, OMP Sol profile, child `7fc037e0-2cfc-44b8-8aa4-ba3b89f7133e`: accepted missing terminal recovery after a lost domain-conflict response, and missing admission fencing for delayed untagged source events. Added Web-only serialized savepoint/rejection-audit ownership, exact-request/no-poison rules, and retained transfer-source admission guards across ordinary events and canonical returns. Work orders and regression/E2E obligations are synchronized; these remain unimplemented design changes.
 - Round 3 remediation validation: catalog validation, 36 validator tests, full spec lint, scoped whitespace, revised three-work-order coverage preflight, and local-link checks passed. Requirement/design remain within standard size limits. No production code, permanent tests, runtime or rendered verification were added or claimed.

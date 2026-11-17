@@ -17,7 +17,12 @@ import {
 export type WorkspaceMoveOperation =
   | { status: "submitting"; taskId: string; body: TaskTransferRequest; attempt: "submit" | "check" }
   | { status: "uncertain"; taskId: string; body: TaskTransferRequest }
-  | { status: "check-unavailable"; taskId: string; body: TaskTransferRequest }
+  | {
+      status: "check-unavailable";
+      taskId: string;
+      body: TaskTransferRequest;
+      code?: TransferRejectionCode;
+    }
   | { status: "committed"; taskId: string; body: TaskTransferRequest; receipt: TaskTransferReceipt }
   | { status: "rejected"; taskId: string; body: TaskTransferRequest; code: TransferRejectionCode }
   | { status: "operation-rejected"; taskId: string; body: TaskTransferRequest };
@@ -69,21 +74,30 @@ export function settleWorkspaceMove(
   if ("receipt" in outcome) return { status: "committed", taskId, body, receipt: outcome.receipt };
   const error = outcome.error;
   const status = error instanceof ApiError ? error.status : 0;
-  if (operation.attempt === "check") {
-    if (
-      status === 409 &&
-      error instanceof ApiError &&
-      conflictCode(error) === "operation_rejected"
-    ) {
-      return { status: "operation-rejected", taskId, body };
-    }
-    if (status === 0 || status >= 500) return { status: "uncertain", taskId, body };
-    return { status: "check-unavailable", taskId, body };
-  }
+  if (operation.attempt === "check") return settleCheckAttempt(taskId, body, error, status);
   if (!(error instanceof ApiError) || status >= 500 || status === 0 || status === 499) {
     return { status: "uncertain", taskId, body };
   }
   return { status: "rejected", taskId, body, code: originalRejectionCode(error) };
+}
+
+function settleCheckAttempt(
+  taskId: string,
+  body: TaskTransferRequest,
+  error: unknown,
+  status: number,
+): WorkspaceMoveOperation {
+  if (status === 409 && error instanceof ApiError && conflictCode(error) === "operation_rejected") {
+    return { status: "operation-rejected", taskId, body };
+  }
+  if (status === 0 || status >= 500) return { status: "uncertain", taskId, body };
+  if (status === 409 && error instanceof ApiError) {
+    const code = conflictCode(error);
+    if (code && KNOWN_CONFLICT_CODES.has(code)) {
+      return { status: "check-unavailable", taskId, body, code: code as TransferRejectionCode };
+    }
+  }
+  return { status: "check-unavailable", taskId, body };
 }
 
 function originalRejectionCode(error: ApiError): TransferRejectionCode {

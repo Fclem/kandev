@@ -3,6 +3,7 @@ import { test, expect } from "../../fixtures/test-base";
 import { KanbanPage } from "../../pages/kanban-page";
 import { WorkspaceMovePage } from "../../pages/workspace-move-page";
 import { runningTurnScript, seedWorkspaceMove, transferBody } from "../../helpers/workspace-move";
+import { OfficeApiClient } from "../../helpers/office-api-client";
 
 const TRANSFER_ROUTE = "**/api/v1/tasks/*/transfer";
 
@@ -39,7 +40,20 @@ test.describe("Task workspace move", () => {
         description: runningTurnScript("desktop"),
       },
     );
+    await apiClient.wsRequest("task.plan.create", {
+      task_id: task.id,
+      title: "Move plan",
+      content: "Plan survives the workspace move",
+    });
+    await apiClient.seedTaskSession(task.id, {
+      state: "IDLE",
+      agentProfileId: seedData.agentProfileId,
+      repositoryId: seedData.repositoryId,
+    });
     const sessionsBefore = (await apiClient.listTaskSessions(task.id)).sessions.map((s) => s.id);
+    // The move form must read the task after the running turn writes its first marker.
+    await testPage.goto(`/t/${task.id}`);
+    await expect(testPage.getByText(/desktop before move/).last()).toBeVisible({ timeout: 30_000 });
     const kanban = new KanbanPage(testPage);
     await kanban.goto(fixture.sourceWorkflow.id);
     await expect(kanban.taskCard(task.id)).toBeVisible();
@@ -65,17 +79,6 @@ test.describe("Task workspace move", () => {
     );
     await testPage.screenshot({ path: testInfo.outputPath("ui-02-desktop-ready.png") });
     await form.submit();
-    // A running turn can update the task while the form is open; the server then
-    // rejects the stale placement and the user refreshes and submits again.
-    await expect(form.outcome).toHaveAttribute("data-status", /committed|rejected/);
-    if ((await form.outcome.getAttribute("data-status")) === "rejected") {
-      await expect(testPage.getByTestId("workspace-move-rejection")).toHaveAttribute(
-        "data-code",
-        "source_changed",
-      );
-      await form.press(testPage.getByTestId("workspace-move-refresh-task"));
-      await form.submit();
-    }
     await expect(form.outcome).toHaveAttribute("data-status", "committed");
     await expect(kanban.taskCard(task.id)).toHaveCount(0);
     expect(testPage.url()).toBe(listingUrl);
@@ -91,12 +94,14 @@ test.describe("Task workspace move", () => {
     expect((await apiClient.listTaskSessions(task.id)).sessions.map((s) => s.id).sort()).toEqual(
       [...sessionsBefore].sort(),
     );
+    expect((await apiClient.getTaskPlan(task.id)).content).toContain(
+      "Plan survives the workspace move",
+    );
 
     await testPage.reload();
     // The persisted transcript keeps the turn's output from before and after the move.
-    await expect(
-      testPage.getByText(/desktop before move.*desktop after move/).last(),
-    ).toBeVisible();
+    await expect(testPage.getByText(/desktop before move/).last()).toBeVisible();
+    await expect(testPage.getByText(/desktop after move/).last()).toBeVisible();
     await testPage.goto(
       `/?workspaceId=${fixture.destination.id}&workflowId=${fixture.destinationWorkflow.id}`,
     );
@@ -299,5 +304,115 @@ test.describe("Task workspace move", () => {
     const kanban = new KanbanPage(testPage);
     await kanban.goto(fixture.sourceWorkflow.id);
     await expect(kanban.taskCard(task.id)).toBeVisible();
+  });
+
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-001.2, 001.4, 004.3, 005.2
+  test("names a workspace-owned label that blocks the move and clears after repair", async ({
+    testPage,
+    apiClient,
+    backend,
+    seedData,
+  }, testInfo) => {
+    const fixture = await seedWorkspaceMove(apiClient, seedData, "Label blocked move");
+    const task = await apiClient.createTask(seedData.workspaceId, "Label blocked task", {
+      workflow_id: fixture.sourceWorkflow.id,
+      workflow_step_id: fixture.sourceStep.id,
+    });
+    const officeApi = new OfficeApiClient(backend.baseUrl, backend.ensureReady);
+    await officeApi.addLabel(seedData.workspaceId, task.id, "Source label");
+    const requests = recordTransfers(testPage);
+    const kanban = new KanbanPage(testPage);
+    await kanban.goto(fixture.sourceWorkflow.id);
+    await kanban.openWorkspaceMoveForm(task.id);
+    const form = new WorkspaceMovePage(testPage);
+    await form.choose(
+      fixture.destination.id,
+      fixture.destinationWorkflow.id,
+      fixture.destinationStep.id,
+    );
+    await form.submit();
+
+    await expect(testPage.getByTestId("workspace-move-rejection")).toHaveAttribute(
+      "data-code",
+      "workspace_relation_unmapped",
+    );
+    await expect(form.outcome).toContainText("blocks this move");
+    await testPage.screenshot({ path: testInfo.outputPath("ui-04-desktop-label-blocked.png") });
+    expect((await apiClient.getTask(task.id)).workspace_id).toBe(seedData.workspaceId);
+    await expect(kanban.taskCard(task.id)).toBeVisible();
+
+    await officeApi.removeLabel(seedData.workspaceId, task.id, "Source label");
+    await form.press(testPage.getByTestId("workspace-move-cancel"));
+    await expect(form.desktopDialog).toHaveCount(0);
+    await kanban.openWorkspaceMoveForm(task.id);
+    const reopened = new WorkspaceMovePage(testPage);
+    await reopened.choose(
+      fixture.destination.id,
+      fixture.destinationWorkflow.id,
+      fixture.destinationStep.id,
+    );
+    await reopened.submit();
+    await expect(reopened.outcome).toHaveAttribute("data-status", "committed");
+    const keys = transferKeys(requests);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).not.toBe(keys[0]);
+    expect((await apiClient.getTask(task.id)).workspace_id).toBe(fixture.destination.id);
+  });
+
+  // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-003.1, 005.3
+  test("settles a lost source_changed response before allowing a reviewed move", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const fixture = await seedWorkspaceMove(apiClient, seedData, "Lost source change");
+    const task = await apiClient.createTask(seedData.workspaceId, "Lost source change task", {
+      workflow_id: fixture.sourceWorkflow.id,
+      workflow_step_id: fixture.sourceStep.id,
+    });
+    const requests = recordTransfers(testPage);
+    let dropped = false;
+    await testPage.route(TRANSFER_ROUTE, async (route) => {
+      if (dropped) return route.continue();
+      dropped = true;
+      const response = await route.fetch(); // real 409 source_changed
+      expect(response.status()).toBe(409);
+      await route.abort("connectionreset");
+    });
+    const kanban = new KanbanPage(testPage);
+    await kanban.goto(fixture.sourceWorkflow.id);
+    await kanban.openWorkspaceMoveForm(task.id);
+    const form = new WorkspaceMovePage(testPage);
+    await expect(form.form.getByTestId("workspace-move-current")).toContainText("Work");
+    // The form captured the task version at open; a title edit makes that version stale.
+    await apiClient.updateTaskTitle(task.id, "Lost source change task, edited");
+    await form.choose(
+      fixture.destination.id,
+      fixture.destinationWorkflow.id,
+      fixture.destinationStep.id,
+    );
+    await form.submit();
+    await expect(form.outcome).toHaveAttribute("data-status", "uncertain");
+
+    await form.press(testPage.getByTestId("workspace-move-check-result"));
+    await expect(form.outcome).toHaveAttribute("data-status", "operation-rejected");
+    await expect(form.submitButton).toBeDisabled();
+    const unchanged = await apiClient.getTask(task.id);
+    expect(unchanged.workspace_id).toBe(seedData.workspaceId);
+    expect(unchanged.title).toBe("Lost source change task, edited");
+
+    await form.press(testPage.getByTestId("workspace-move-refresh-task"));
+    await expect(testPage.getByTestId("workspace-move-refresh-task")).toHaveCount(0);
+    await expect(form.outcome).toHaveCount(0);
+    await form.chooseStep(fixture.destinationStep.id);
+    await expect(form.form.getByTestId("workspace-move-step")).toContainText(
+      fixture.destinationStep.name,
+    );
+    await form.submit();
+    await expect(form.outcome).toHaveAttribute("data-status", "committed");
+    const keys = transferKeys(requests);
+    expect(keys).toHaveLength(3);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 });

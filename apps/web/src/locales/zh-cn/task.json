@@ -3117,6 +3117,7 @@
   "workspaceMoveUncertain": "移动结果尚未确认。在检查结果之前，你的选择会被保留。",
   "workspaceMoveCheckResult": "检查结果",
   "workspaceMoveCheckUnavailable": "以你当前的访问权限无法检查移动结果。同一请求会被保留，不会发送新的移动。",
+  "workspaceMoveCheckRejected": "移动已被拒绝。目标位置或任务的当前状态不允许此次移动。你的选择会被保留，请再次检查以确认结果。",
   "workspaceMoveCheckAgain": "再次检查",
   "workspaceMoveOperationRejected": "此次移动未发生。请刷新任务并检查其位置后再重新移动。",
   "workspaceMoveRefreshTask": "刷新任务",

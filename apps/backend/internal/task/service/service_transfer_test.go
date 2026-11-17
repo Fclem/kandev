@@ -243,6 +243,43 @@ func TestServiceTransferTaskReplayRequiresCurrentDestinationAccess(t *testing.T)
 	}
 }
 
+func TestServiceTransferTaskDurableRejectionWritesOneAuditRowPerAttempt(t *testing.T) {
+	svc, _, repo := createTestService(t)
+	task := seedServiceTaskTransfer(t, repo, "owner-1")
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner-1", Role: authn.RoleMember})
+	if _, err := repo.DB().Exec(`UPDATE workflow_steps SET prompt = ? WHERE id = ?`,
+		"different instructions", "transfer-step-destination"); err != nil {
+		t.Fatalf("make destination incompatible: %v", err)
+	}
+	command := serviceTaskTransferCommand(task)
+	command.DurableRejection = true
+
+	if _, err := svc.TransferTask(ctx, command); err == nil {
+		t.Fatal("first durable attempt committed an incompatible transfer")
+	}
+	if got := serviceTransferAuditRows(t, repo, command.IdempotencyKey); got != 1 {
+		t.Fatalf("audit rows after rejection = %d, want 1", got)
+	}
+
+	if _, err := svc.TransferTask(ctx, command); !errors.Is(err, repoerrors.ErrTaskTransferConflict) {
+		t.Fatalf("barrier retry error = %v, want task transfer conflict", err)
+	}
+	if got := serviceTransferAuditRows(t, repo, command.IdempotencyKey); got != 2 {
+		t.Fatalf("audit rows after barrier retry = %d, want 2", got)
+	}
+}
+
+func serviceTransferAuditRows(t *testing.T, repo *sqliterepo.Repository, key string) int {
+	t.Helper()
+	var count int
+	if err := repo.DB().QueryRow(
+		`SELECT COUNT(*) FROM task_transfer_audit WHERE idempotency_key = ?`, key,
+	).Scan(&count); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	}
+	return count
+}
+
 func seedServiceTaskTransfer(t *testing.T, repo *sqliterepo.Repository, destinationOwner string) *models.Task {
 	t.Helper()
 	ctx := context.Background()

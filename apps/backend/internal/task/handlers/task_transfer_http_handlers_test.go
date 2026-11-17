@@ -256,6 +256,15 @@ func (f *httpTransferFixture) failedAuditRows(t *testing.T, key string) int {
 	return count
 }
 
+func (f *httpTransferFixture) auditRowCount(t *testing.T, key string) int {
+	t.Helper()
+	var count int
+	require.NoError(t, f.repo.DB().QueryRow(
+		`SELECT COUNT(*) FROM task_transfer_audit WHERE idempotency_key = ?`, key,
+	).Scan(&count))
+	return count
+}
+
 func identityFor(userID string) authn.Identity {
 	return authn.Identity{UserID: userID, Role: authn.RoleMember}
 }
@@ -656,12 +665,14 @@ func TestHTTPTransferTaskLostDomainConflictResponse(t *testing.T) {
 			body := f.body("step-b-work", transferHTTPKey)
 			tt.setup(t, f, body)
 			lost := f.post(t, owner, body)
+			require.Equal(t, 1, f.auditRowCount(t, transferHTTPKey), "lost rejection writes one audit row")
 			require.Equal(t, tt.code, lost.code(t), "body: %v", lost.body)
 
 			check := f.post(t, owner, body)
 			require.Equal(t, http.StatusConflict, check.status, "body: %v", check.body)
 			require.Equal(t, "operation_rejected", check.code(t))
 			f.requireSourcePlacement(t, f.task)
+			require.Equal(t, 2, f.auditRowCount(t, transferHTTPKey), "each attempt writes one audit row")
 
 			tt.repair(t, f, body)
 			body["idempotency_key"] = "transfer-http-key-reviewed"
@@ -673,6 +684,28 @@ func TestHTTPTransferTaskLostDomainConflictResponse(t *testing.T) {
 			require.Equal(t, models.TaskSessionStateRunning, sessions[0].State)
 		})
 	}
+
+	t.Run("deleted destination workflow still settles a lost step rejection", func(t *testing.T) {
+		f := newHTTPTransferFixture(t)
+		owner := identityFor(transferHTTPOwner)
+		f.exec(t, `UPDATE workflow_steps SET prompt = ? WHERE id = ?`, "different instructions", "step-b-work")
+		body := f.body("step-b-work", transferHTTPKey)
+		lost := f.post(t, owner, body)
+		require.Equal(t, "step_incompatible", lost.code(t), "body: %v", lost.body)
+		require.Equal(t, 1, f.auditRowCount(t, transferHTTPKey))
+
+		f.exec(t, `DELETE FROM workflows WHERE id = ?`, "wf-b")
+		check := f.post(t, owner, body)
+		require.Equal(t, http.StatusConflict, check.status, "body: %v", check.body)
+		require.Equal(t, "operation_rejected", check.code(t), "body: %v", check.body)
+		f.requireSourcePlacement(t, f.task)
+		require.Equal(t, 2, f.auditRowCount(t, transferHTTPKey), "each attempt writes one audit row")
+
+		again := f.post(t, owner, body)
+		require.Equal(t, http.StatusConflict, again.status, "body: %v", again.body)
+		require.Equal(t, "operation_rejected", again.code(t), "body: %v", again.body)
+		require.Equal(t, 3, f.auditRowCount(t, transferHTTPKey), "each attempt writes one audit row")
+	})
 
 	t.Run("writer committed first wins over a later rejection", func(t *testing.T) {
 		f := newHTTPTransferFixture(t)

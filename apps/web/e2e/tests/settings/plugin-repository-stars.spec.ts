@@ -110,16 +110,18 @@ test.describe("Plugin repository stars", () => {
   }) => {
     await useCapableDeployment(backend);
     await seedConnectedRepository(apiClient, seedData.workspaceId, false);
-    await mockMarketplaceCatalog(testPage, { plugins: [pluginCatalogEntry()] });
+    await mockMarketplaceCatalog(testPage, { plugins: [{ ...pluginCatalogEntry(), stars: 12 }] });
 
     const row = await openMarketplaceEntry(testPage);
     const toggle = row.getByTestId(STAR_TOGGLE);
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(row.getByTestId("plugin-star-count")).toHaveText("12");
 
     const starred = waitForHttp(testPage, "PUT", STAR_MUTATION_PATH);
     await toggle.click();
     expect((await starred).ok()).toBe(true);
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(row.getByTestId("plugin-star-count")).toHaveText("13");
     expect(
       (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
         REPOSITORY_KEY
@@ -130,11 +132,14 @@ test.describe("Plugin repository stars", () => {
     await testPage.reload();
     await testPage.getByTestId("plugins-tab-browse").click();
     await expect(row.getByTestId(STAR_TOGGLE)).toHaveAttribute("aria-pressed", "true");
+    // A full reload starts a fresh session-local projection from the catalog.
+    await expect(row.getByTestId("plugin-star-count")).toHaveText("12");
 
     const unstarred = waitForHttp(testPage, "DELETE", STAR_MUTATION_PATH);
     await row.getByTestId(STAR_TOGGLE).click();
     expect((await unstarred).ok()).toBe(true);
     await expect(row.getByTestId(STAR_TOGGLE)).toHaveAttribute("aria-pressed", "false");
+    await expect(row.getByTestId("plugin-star-count")).toHaveText("11");
     expect(
       (await apiClient.getPersonalStarStates(seedData.workspaceId, [REPOSITORY_URL])).states[
         REPOSITORY_KEY
@@ -273,6 +278,7 @@ test.describe("Plugin repository stars", () => {
     const row = await openMarketplaceEntry(testPage);
     const toggle = row.getByTestId(STAR_TOGGLE);
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(row.getByTestId("plugin-star-count")).toHaveText("0");
 
     const failed = waitForHttp(testPage, "PUT", STAR_MUTATION_PATH, {
       predicate: (response) => !response.ok(),
@@ -283,6 +289,7 @@ test.describe("Plugin repository stars", () => {
     // No optimistic flip, no error state replacing the list, no toast.
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await expect(toggle).toBeEnabled();
+    await expect(row.getByTestId("plugin-star-count")).toHaveText("0");
     await expect(row).toBeVisible();
     await expect(row.getByTestId(REPO_LINK)).toBeVisible();
     await expect(testPage.locator("[data-sonner-toast]")).toHaveCount(0);

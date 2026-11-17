@@ -9,6 +9,7 @@ import {
   starGitHubRepository,
   unstarGitHubRepository,
 } from "@/lib/api/domains/github-api";
+import { startGitHubPersonalConnect } from "@/lib/api/domains/github-auth-api";
 import { parseGitHubRepositoryUrl } from "@/lib/plugins/github-repository-url";
 import {
   STAR_CONNECTION_OUTCOME_PARAM,
@@ -28,6 +29,7 @@ const EMPTY_PLUGIN_STARS: PluginStarsState = {
   epochs: {},
   pending: {},
   busy: {},
+  repositoryCounts: {},
 };
 
 const selectPluginStars = (state: AppState): PluginStarsState =>
@@ -108,38 +110,32 @@ function resolvePluginStarView({
     busy: Boolean(stars.busy[scopeKey]),
   };
 }
+async function pluginStarAuthorizationUrl(
+  workspaceId: string,
+  connectPath: GitHubStarConnectionStatus["connect"],
+) {
+  if (connectPath === "github_app_user") {
+    // The App personal-connection flow returns to the GitHub settings page.
+    const response = await startGitHubPersonalConnect(workspaceId);
+    return response.url ?? response.URL;
+  }
+  const returnPath = buildPluginStarReturnPath(
+    typeof window === "undefined" ? "" : window.location.pathname,
+    typeof window === "undefined" ? "" : window.location.search,
+  );
+  const response = await startGitHubStarConnection({
+    workspace_id: workspaceId,
+    return_path: returnPath,
+  });
+  return response.authorization_url;
+}
 
-/**
- * Star state for one plugin repository on one surface.
- *
- * The connection-status read always happens first; repository states are only
- * requested once the tuple is capable, and only for the exact scope key it
- * produced. Status and mutation responses are fenced by that key's request
- * epoch, so a late response from a previous workspace, user, credential
- * generation, or capability scope can never populate the current one.
- */
-export function usePluginRepositoryStar({
-  workspaceId,
-  repositoryUrl,
-}: {
-  workspaceId?: string | null;
-  repositoryUrl?: string | null;
-}): PluginRepositoryStar {
+function usePluginStarConnection(workspaceId: string | null | undefined) {
   const store = useOptionalAppStoreApi();
   const stars = useOptionalAppStore(selectPluginStars, EMPTY_PLUGIN_STARS);
-  // The connection tuple belongs to one authenticated user: reading the
-  // identity here is what invalidates the cache on an account switch.
   const authUserId = useOptionalAppStore(selectAuthenticatedUserId, null);
-  const [starting, setStarting] = useState(false);
-  const canonicalRepository = useMemo(
-    () => parseGitHubRepositoryUrl(repositoryUrl),
-    [repositoryUrl],
-  );
-
   const entry = workspaceId ? stars.connections[workspaceId] : undefined;
   const status = entry?.userId === authUserId ? (entry.status ?? null) : null;
-  const view = resolvePluginStarView({ stars, workspaceId, canonicalRepository, status });
-  const { mode, scopeKey, starred, busy } = view;
 
   const loadConnection = useCallback(() => {
     if (!store || !workspaceId) return;
@@ -168,6 +164,35 @@ export function usePluginRepositoryStar({
     entry?.userId,
   ]);
 
+  return { store, stars, status, loadConnection };
+}
+
+/**
+ * Star state for one plugin repository on one surface.
+ *
+ * The connection-status read always happens first; repository states are only
+ * requested once the tuple is capable, and only for the exact scope key it
+ * produced. Status and mutation responses are fenced by that key's request
+ * epoch, so a late response from a previous workspace, user, credential
+ * generation, or capability scope can never populate the current one.
+ */
+export function usePluginRepositoryStar({
+  workspaceId,
+  repositoryUrl,
+}: {
+  workspaceId?: string | null;
+  repositoryUrl?: string | null;
+}): PluginRepositoryStar {
+  const { store, stars, status, loadConnection } = usePluginStarConnection(workspaceId);
+  const [starting, setStarting] = useState(false);
+  const canonicalRepository = useMemo(
+    () => parseGitHubRepositoryUrl(repositoryUrl),
+    [repositoryUrl],
+  );
+
+  const view = resolvePluginStarView({ stars, workspaceId, canonicalRepository, status });
+  const { mode, scopeKey, starred, busy } = view;
+
   const hydrate = useCallback(() => {
     if (!store || !scopeKey || !workspaceId || !repositoryUrl) return;
     const epoch = store.getState().beginPluginStarRequest(scopeKey, "status");
@@ -187,35 +212,48 @@ export function usePluginRepositoryStar({
   }, [hydrate]);
 
   const toggle = useCallback(() => {
-    if (!store || !scopeKey || !workspaceId || !repositoryUrl || starred === null) return;
+    if (
+      !store ||
+      !scopeKey ||
+      !workspaceId ||
+      !repositoryUrl ||
+      !canonicalRepository ||
+      starred === null
+    )
+      return;
     const epoch = store.getState().beginPluginStarRequest(scopeKey, "mutation");
     if (epoch === null) return;
     const request = starred
       ? unstarGitHubRepository({ workspace_id: workspaceId, repository_url: repositoryUrl })
       : starGitHubRepository({ workspace_id: workspaceId, repository_url: repositoryUrl });
     request
-      .then((response) => store.getState().applyPluginStarResult(scopeKey, epoch, response.starred))
+      .then((response) =>
+        store
+          .getState()
+          .applyPluginStarMutationResult(scopeKey, epoch, canonicalRepository, response.starred),
+      )
       // A failed mutation restores the actionable state: nothing is optimistic.
-      .catch(() => store.getState().failPluginStarRequest(scopeKey, epoch));
-  }, [repositoryUrl, scopeKey, starred, store, workspaceId]);
+      // The status refetch lets a recorded denial remove the control silently.
+      .catch(() => {
+        store.getState().failPluginStarRequest(scopeKey, epoch);
+        loadConnection();
+      });
+  }, [canonicalRepository, loadConnection, repositoryUrl, scopeKey, starred, store, workspaceId]);
 
   const connect = useCallback(() => {
     if (!store || !workspaceId || starting || mode === "omit") return;
-    const returnPath = buildPluginStarReturnPath(
-      typeof window === "undefined" ? "" : window.location.pathname,
-      typeof window === "undefined" ? "" : window.location.search,
-    );
     setStarting(true);
-    startGitHubStarConnection({ workspace_id: workspaceId, return_path: returnPath })
-      .then((response) => {
-        if (typeof window === "undefined" || !response.authorization_url) {
-          setStarting(false);
-          return;
-        }
-        window.location.assign(response.authorization_url);
-      })
+    const navigate = (url: string | undefined) => {
+      if (typeof window === "undefined" || !url) {
+        setStarting(false);
+        return;
+      }
+      window.location.assign(url);
+    };
+    pluginStarAuthorizationUrl(workspaceId, status?.connect)
+      .then(navigate)
       .catch(() => setStarting(false));
-  }, [mode, starting, store, workspaceId]);
+  }, [mode, starting, status?.connect, store, workspaceId]);
 
   return {
     mode,

@@ -1,8 +1,13 @@
 # ADR-2026-09-18-github-personal-star-oauth: Use a dedicated OAuth App for personal stars
 
-**Status:** accepted
+**Status:** superseded by ADR-2026-10-18-github-star-actor-resolution
 **Date:** 2026-09-18
 **Area:** backend
+
+Superseded by
+[ADR-2026-10-18-github-star-actor-resolution](2026-10-18-github-star-actor-resolution.md),
+which keeps this dedicated OAuth App as one optional star source among every builtin GitHub
+authentication scheme.
 
 ## Context
 

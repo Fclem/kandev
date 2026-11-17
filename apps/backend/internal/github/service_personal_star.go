@@ -23,6 +23,12 @@ type PersonalStarConnectionStatus struct {
 	Capable              bool   `json:"capable"`
 	ReconnectRequired    bool   `json:"reconnect_required"`
 	Available            bool   `json:"available"`
+	// Actor names the GitHub identity star calls act as; nil when none resolved.
+	Actor *PersonalStarActor `json:"actor"`
+	// Connect names the consent flow that can produce an actor, or empty.
+	Connect string `json:"connect,omitempty"`
+	// Remediation is an operator hint when the actor cannot star.
+	Remediation string `json:"remediation,omitempty"`
 }
 
 // PersonalStarResolver isolates the dedicated OAuth App connection from every
@@ -58,12 +64,50 @@ func (s *Service) PersonalStarConnectionStatus(
 	if err := s.authorizeWorkspaceAccess(ctx, workspaceID); err != nil {
 		return PersonalStarConnectionStatus{}, err
 	}
-	if s == nil || s.personalStarResolver == nil {
-		return PersonalStarConnectionStatus{UserID: userID}, nil
-	}
-	return s.personalStarResolver.ConnectionStatus(ctx, workspaceID, userID)
+	status, _, err := s.resolveStarActor(ctx, workspaceID, userID)
+	return status, err
 }
 
+// resolveStarActor resolves the connection status and, when one exists, the
+// single actor a star request runs as: the dedicated connection first, then
+// the App personal connection or the workspace's human credential.
+func (s *Service) resolveStarActor(
+	ctx context.Context,
+	workspaceID, userID string,
+) (PersonalStarConnectionStatus, *starActor, error) {
+	status := PersonalStarConnectionStatus{UserID: userID}
+	if s != nil && s.personalStarResolver != nil {
+		dedicated, err := s.personalStarResolver.ConnectionStatus(ctx, workspaceID, userID)
+		if err != nil {
+			return PersonalStarConnectionStatus{}, nil, err
+		}
+		status = dedicated
+		if dedicated.Available && dedicated.Active && dedicated.Capable {
+			status.Actor = &PersonalStarActor{Source: StarActorSourceDedicated}
+			return status, nil, nil
+		}
+	}
+	dedicatedAvailable := status.Available
+	actor := s.resolveCredentialStarActor(ctx, workspaceID, userID)
+	if actor == nil {
+		if connect := s.starConnectPath(ctx, workspaceID, userID, dedicatedAvailable); connect != "" {
+			status.Available = true
+			status.Connect = connect
+		}
+		return status, nil, nil
+	}
+	actorView := actor.PersonalStarActor
+	return PersonalStarConnectionStatus{
+		UserID:               userID,
+		CredentialGeneration: actor.generation,
+		Active:               true,
+		Capable:              actor.capable,
+		ReconnectRequired:    status.ReconnectRequired,
+		Available:            true,
+		Actor:                &actorView,
+		Remediation:          actor.remedy,
+	}, actor, nil
+}
 func (s *Service) RepositoryStarStatus(
 	ctx context.Context,
 	workspaceID, userID string,
@@ -131,15 +175,29 @@ func (s *Service) mutateRepositoryStar(
 	})
 }
 
-// withPersonalStarRefresh runs one dedicated star operation and, when the
-// provider rejects the access token, rotates it once through the stored refresh
-// token before retrying. Any other failure returns unchanged: a refresh is
-// never attempted through another credential source.
+// withPersonalStarRefresh runs one star operation as the resolved actor. For
+// the dedicated connection, a rejected access token is rotated once through the
+// stored refresh token before retrying. Every other failure returns unchanged:
+// no request is ever retried under another credential source.
 func (s *Service) withPersonalStarRefresh(
 	ctx context.Context,
 	workspaceID, userID string,
 	operation func(PersonalStarClient) (bool, error),
 ) (bool, error) {
+	_, actor, err := s.resolveStarActor(ctx, workspaceID, userID)
+	if err != nil {
+		return false, err
+	}
+	if actor != nil {
+		if !actor.capable {
+			return false, ErrGitHubCapabilityDenied
+		}
+		value, opErr := operation(s.starClientForActor(actor, workspaceID, userID))
+		s.recordStarDenial(actor, opErr)
+		return value, opErr
+	}
+	// No credential actor: the dedicated connection is the only candidate,
+	// and its resolver reports why it cannot serve the call.
 	client, err := s.resolvePersonalStarClient(ctx, workspaceID, userID)
 	if err != nil {
 		return false, err

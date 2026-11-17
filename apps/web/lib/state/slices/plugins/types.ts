@@ -46,6 +46,8 @@ export type PluginStarsState = {
   pending: Record<string, true>;
   /** Keys with an in-flight mutation; every mounted row for the key disables. */
   busy: Record<string, true>;
+  /** Session-local aggregate counts shared by every actor of a canonical repository. */
+  repositoryCounts: Record<string, number>;
 };
 
 export type PluginsSliceState = {
@@ -89,6 +91,15 @@ export type PluginsSliceActions = {
   beginPluginStarRequest: (key: string, kind: "status" | "mutation") => number | null;
   /** Commits a response only while `epoch` is still the key's epoch. */
   applyPluginStarResult: (key: string, epoch: number, value: PluginStarValue) => boolean;
+  /** Seeds the first known catalog count without overwriting confirmed adjustments. */
+  seedPluginStarCount: (repository: string, count: number | null) => void;
+  /** Atomically commits one confirmed mutation and its aggregate count adjustment. */
+  applyPluginStarMutationResult: (
+    key: string,
+    epoch: number,
+    repository: string,
+    value: boolean,
+  ) => boolean;
   /** Releases an in-flight marker without touching the visible state. */
   failPluginStarRequest: (key: string, epoch: number) => void;
 };

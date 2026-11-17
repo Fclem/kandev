@@ -6,6 +6,7 @@ import { IconArrowUpCircle, IconCheck, IconStar } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { formatNumber } from "@/lib/i18n/formats";
+import { usePluginRepositoryStarCount } from "@/hooks/domains/plugins/use-plugin-repository-star-count";
 import type { MarketplaceEntry } from "@/lib/types/plugins";
 import { SETTINGS_TYPOGRAPHY } from "@/components/settings/settings-typography";
 import { PluginRepoLink } from "./plugin-repo-link";
@@ -33,6 +34,7 @@ export function MarketplaceEntryRow({
   canManage = true,
   workspaceId,
 }: MarketplaceEntryRowProps) {
+  const stars = usePluginRepositoryStarCount(entry.repo_url, entry.stars);
   return (
     <div
       data-testid={`marketplace-entry-${entry.id}`}
@@ -69,9 +71,9 @@ export function MarketplaceEntryRow({
       {entry.previews?.length ? <MarketplacePreviewGallery previews={entry.previews} /> : null}
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
+        <span className="inline-flex items-center gap-1" data-testid="plugin-star-count">
           <IconStar className="h-3.5 w-3.5" />
-          {entry.stars === null ? "-" : formatNumber(entry.stars)}
+          {stars === null ? "-" : formatNumber(stars)}
         </span>
         {/* The name, description, author and categories all come from the
             catalog's index.json — third-party data, not our copy. */}

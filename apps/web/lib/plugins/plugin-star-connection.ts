@@ -33,6 +33,9 @@ export function resolvePluginStarControlMode(
 ): PluginStarControlMode {
   if (!status || !status.available) return "omit";
   if (status.active && status.capable) return "stars";
+  // A resolved workspace or App-personal actor that cannot star has no
+  // member-actionable remedy: the operator fixes scopes or App permissions.
+  if (status.actor && status.actor.source !== "personal_star_oauth") return "omit";
   if (!status.capable && status.reconnect_required) return "reconnect";
   return "connect";
 }
@@ -55,6 +58,8 @@ export function pluginStarKey(
     status.active ? "1" : "0",
     status.capable ? "1" : "0",
     status.reconnect_required ? "1" : "0",
+    status.actor?.source ?? "",
+    status.actor?.login.toLowerCase() ?? "",
     canonicalRepository,
   ].join(KEY_SEPARATOR);
 }

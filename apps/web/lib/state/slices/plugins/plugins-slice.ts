@@ -1,7 +1,8 @@
 import type { SliceCreator } from "@/lib/state/slice-creator";
 import type { Draft } from "immer";
 import type { PluginsSlice, PluginsSliceState, PluginStarsState } from "./types";
-import { pluginStarWorkspacePrefix } from "@/lib/plugins/plugin-star-connection";
+import { pluginStarKey, pluginStarWorkspacePrefix } from "@/lib/plugins/plugin-star-connection";
+import { createPluginStarCountActions } from "./star-count-actions";
 
 export const defaultPluginStarsState: PluginStarsState = {
   connections: {},
@@ -9,6 +10,7 @@ export const defaultPluginStarsState: PluginStarsState = {
   epochs: {},
   pending: {},
   busy: {},
+  repositoryCounts: {},
 };
 
 export const defaultPluginsState: PluginsSliceState = {
@@ -103,11 +105,7 @@ function createPluginStarActions(
         }
         const scopeChanged =
           previous !== null &&
-          (previous.user_id !== status.user_id ||
-            previous.credential_generation !== status.credential_generation ||
-            previous.active !== status.active ||
-            previous.capable !== status.capable ||
-            previous.reconnect_required !== status.reconnect_required);
+          pluginStarKey(workspaceId, previous, "") !== pluginStarKey(workspaceId, status, "");
         if (scopeChanged) clearWorkspacePluginStars(stars, workspaceId);
         stars.connections[workspaceId] = { status, userId, loaded: true, loading: false, epoch };
       });
@@ -122,6 +120,7 @@ function createPluginStarActions(
 
     beginPluginStarRequest: (key, kind) => {
       const stars = get().pluginStars;
+      if (stars.busy[key]) return null;
       if (kind === "status") {
         const value = stars.values[key];
         if (stars.pending[key] || (value !== undefined && value !== null)) return null;
@@ -143,6 +142,7 @@ function createPluginStarActions(
       if (get().pluginStars.epochs[key] !== epoch) return false;
       set((draft) => {
         draft.pluginStars.values[key] = value;
+        delete draft.pluginStars.epochs[key];
         delete draft.pluginStars.pending[key];
         delete draft.pluginStars.busy[key];
       });
@@ -152,6 +152,7 @@ function createPluginStarActions(
     failPluginStarRequest: (key, epoch) => {
       if (get().pluginStars.epochs[key] !== epoch) return;
       set((draft) => {
+        delete draft.pluginStars.epochs[key];
         delete draft.pluginStars.pending[key];
         delete draft.pluginStars.busy[key];
       });
@@ -162,6 +163,7 @@ function createPluginStarActions(
 export const createPluginsSlice: SliceCreator<PluginsSlice> = (set: ImmerSet, get: SliceGet) => ({
   ...defaultPluginsState,
   ...createPluginStarActions(set, get),
+  ...createPluginStarCountActions(set, get),
   setPlugins: (plugins) =>
     set((draft) => {
       draft.plugins.items = plugins;

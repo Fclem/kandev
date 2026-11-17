@@ -65,6 +65,7 @@ test.describe("Plugin repository stars on a phone", () => {
       const cardToggle = card.getByTestId(STAR_TOGGLE);
       await expect(cardToggle).toHaveText(STAR_LABEL);
       await expect(cardToggle).toHaveAttribute("aria-pressed", "false");
+      await expect(card.getByTestId("plugin-star-count")).toHaveText("0");
       await expectTouchControl(cardToggle);
       await assertNoDocumentHorizontalOverflow(testPage);
 
@@ -73,6 +74,16 @@ test.describe("Plugin repository stars on a phone", () => {
       expect((await starred).ok()).toBe(true);
       await expect(cardToggle).toHaveAttribute("aria-pressed", "true");
       await expect(cardToggle).toHaveText(UNSTAR_LABEL);
+      await expect(card.getByTestId("plugin-star-count")).toHaveText("1");
+      const removed = waitForHttp(testPage, "DELETE", STAR_MUTATION_PATH);
+      await cardToggle.tap();
+      expect((await removed).ok()).toBe(true);
+      await expect(card.getByTestId("plugin-star-count")).toHaveText("0");
+      await expect(cardToggle).toHaveAttribute("aria-pressed", "false");
+      const restored = waitForHttp(testPage, "PUT", STAR_MUTATION_PATH);
+      await cardToggle.tap();
+      expect((await restored).ok()).toBe(true);
+      await expect(card.getByTestId("plugin-star-count")).toHaveText("1");
       await expectTouchControl(cardToggle);
 
       // Installed row: same repository, same touch target, and the confirmed

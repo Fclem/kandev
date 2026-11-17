@@ -13,7 +13,7 @@ owners:
 
 The integration system owns the authenticated GitHub client and provider calls. The plugin marketplace and installed-plugin settings surfaces consume this capability through the existing GitHub API client and plugin repository metadata. GitHub's REST starring contract provides `GET /user/starred/{owner}/{repo}` for status, `PUT /user/starred/{owner}/{repo}` for starring, and `DELETE /user/starred/{owner}/{repo}` for unstarring. Mutation endpoints require an empty request body and return success without a response payload.
 
-Personal starring uses the separate OAuth App connection defined by [ADR-2026-09-18-github-personal-star-oauth](../../../decisions/2026-09-18-github-personal-star-oauth.md). The existing GitHub App user-to-server personal flow and App installation credentials remain separate and are not star fallbacks.
+The star actor is resolved across every builtin GitHub authentication scheme by the [star actor resolution design](github-repository-star-actors.md) ([ADR-2026-10-18-github-star-actor-resolution](../../../decisions/2026-10-18-github-star-actor-resolution.md)). The dedicated OAuth App below is one optional source; App installation credentials are never an actor.
 
 ## Dedicated OAuth App configuration
 
@@ -29,13 +29,14 @@ Runtime archives stay daemon-free for desktop/Docker. Linux publishes `kandev-de
 
 Composition root injects `OpenExisting(cfg.ResolvedDataDir())` into `github.Provide`, registers `githubCleanup`, once-guards a local owner for failures, then transfers to `Services.GitHubCleanup`. Shutdown drains `StarSecretCleanupRunner` before resolver close.
 
-Missing or invalid settings fail closed during GitHub provider startup: the backend remains available, connection status reports incapable, and start/reconnect returns the existing configuration-unavailable error without attempting OAuth. The `github` provider owns validation and resolution during `Provide`; the secret is never returned to the browser. A backend running as UID 0 is unsupported: it would satisfy the same socket peer check as the operator CLI, so such installs report `available=false` with no socket or provisioning side effect.
+Missing or invalid settings fail closed during GitHub provider startup: the backend remains available, the dedicated source reports unavailable to actor resolution, and start/reconnect returns the existing configuration-unavailable error without attempting OAuth. The `github` provider owns validation and resolution during `Provide`; the secret is never returned to the browser. A backend running as UID 0 is unsupported: it would satisfy the same socket peer check as the operator CLI, so the dedicated source is unavailable with no socket or provisioning side effect.
 
 ## Requirement mapping
 
 | Requirement | Design section |
 | --- | --- |
-| `REQ-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001` | Provider API, OAuth App capability, strict personal routing, authorization, URL validation, HTTP contract, cache, control, and failure behavior |
+| `REQ-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001` | Provider API, OAuth App capability, authorization, URL validation, HTTP contract, cache, control, and failure behavior |
+| `REQ-INTEGRATIONS-GITHUB-REPOSITORY-STARS-002` | [Star actor resolution design](github-repository-star-actors.md) |
 
 ## Dedicated personal star connection
 
@@ -52,13 +53,13 @@ The callback controller exposes a dedicated `ParseGitHubStarCallbackRawQuery(raw
 
 Workspace deletion records every generation-specific access and refresh secret in the same durable cleanup queue before deleting the connection row. The queue stores owner workspace/user, secret ID, kind, generation, attempt count, next-attempt time, claim lease, and terminal status. `StarSecretCleanupRunner` is a mandatory GitHub-runtime component created by `Provide`, started before backend readiness, and stopped by the GitHub runtime `Stop` path with a cancellable timer and waited goroutine. It claims due records transactionally with a lease, retries with bounded exponential backoff, survives process restart through durable records, and retains terminal failures under the documented retention policy for operator diagnostics. Concurrent workers cannot claim the same record; shutdown waits for the current deletion attempt and releases unfinished leases.
 
-The authenticated connection-status contract is `GET /api/v1/github/user/starred/connection?workspace_id=...`. It returns `{user_id, credential_generation, active, capable, reconnect_required, available}` for the current Kandev user and workspace, without token material. `available` is false when the deployment lacks the supported root daemon/configuration; in that case backend readiness is preserved, no OAuth/start/provisioning request is accepted, and the frontend renders no star control or actionable CTA. `credential_generation` changes after replacement or disconnect; `active` and `capable` describe the committed row. The frontend fetches this status before repository hydration and scopes by all returned fields.
+The authenticated connection-status contract is `GET /api/v1/github/user/starred/connection?workspace_id=...`. It returns `{user_id, credential_generation, active, capable, reconnect_required, available}` plus the `actor`, `connect`, and `remediation` fields of the [actor design](github-repository-star-actors.md#connection-status-contract), without token material. Backend readiness never depends on it. The rows below cover the dedicated source; the actor design extends them. The frontend fetches this status before repository hydration and scopes by all returned fields.
 
 Connection status and CTA truth table:
 
 | `available` | `active` | `capable` | `reconnect_required` | Meaning | UI |
 | --- | --- | --- | --- | --- | --- |
-| false | any | any | any | Unsupported deployment or unavailable configuration | Omit star/CTA; no start request |
+| false | any | any | any | No actor, connect path, or dedicated connection | Omit star/CTA; no start request |
 | true | false | false | false | No usable grant and no prior valid generation (first consent, disconnect, or declined consent) | Show `Connect GitHub`; never assert unstarred |
 | true | true | true | false | Valid dedicated connection | Hydrate status and show star/unstar controls |
 | true | true | false | true | Unknown/reduced scope | Show `Reconnect GitHub`; never assert unstarred |
@@ -71,7 +72,7 @@ The callback outcome query is navigation-only and untrusted. The UI immediately 
 
 - The controller exposes the connection-status endpoint plus three JSON repository endpoints with explicit workspace identity: `GET /api/v1/github/user/starred/connection?workspace_id=...` returns the current user's non-secret generation/capability state; `POST /api/v1/github/user/starred/status` accepts `{workspace_id:string, repository_urls:string[]}`; `PUT /api/v1/github/user/starred` and `DELETE /api/v1/github/user/starred` accept `{workspace_id:string, repository_url:string}`. The consent-start, status, and star mutation JSON bodies are capped at 4 KiB; status accepts at most 100 raw URLs. All provider lookups share a 30-second deadline, and unresolved results remain `null` on provider failure or timeout. Responses are `{states:{canonicalOwnerRepo:true|false|null}}`. Mutation responses are `{starred:true|false}`.
 
-- The dedicated connection service resolves only `github_personal_star_connection` rows with active status and `public_repo`; it rejects GitHub App installations, GitHub App user-to-server connections, missing star connections, and insufficient scopes. It stays separate from `CredentialPurposePersonalWrite`.
+- The dedicated connection service resolves only `github_personal_star_connection` rows with active status and `public_repo`. `StarActorResolver` consults it first, then the other sources, and stays separate from `CredentialPurposePersonalWrite`.
 - Every endpoint requires a non-empty `workspace_id`. The controller validates the request and the service entry points independently call `Service.authorizeWorkspaceAccess(ctx, workspaceID)` before credential resolution, repository parsing side effects, or provider calls. Missing or foreign workspace IDs return the existing authorization error shape.
 - One strict parser consumes raw repository URLs at the backend boundary and is reused by frontend conformance vectors. It requires HTTPS, exact case-insensitive `github.com` hostname with no credentials or port, no percent-encoding, exactly two non-empty path segments, and no query or fragment. Owner must match ASCII `[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?`; repository must match ASCII `[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9_-])?` (a trailing hyphen is valid; a trailing dot is not). A final `.git` is removed once before repository validation; `repo.git.git` is invalid. Canonicalization lowercases both segments with ASCII case folding. Unicode, dot-only, empty, traversal-like, encoded, confusable, and out-of-grammar names are rejected identically by Go and TypeScript using shared vectors.
 - `apps/web/lib/api/domains/github-api.ts` owns typed calls with `workspace_id` and raw repository URLs. A plugin-star hook first loads connection status, then stores state by `(workspaceId, userId, personalCredentialGeneration, canonicalOwnerRepo, active, capable, reconnectRequired)` and maintains a per-key request epoch. Status and mutation responses apply only when their connection-status snapshot and epoch still match; a mutation increments the key epoch before sending and commits only its confirmed response. The user ID and connection generation are part of the request scope and response fence.
@@ -82,9 +83,9 @@ Test-only provider contract: `MockClient` implements every star client method an
 1. The plugin settings page derives eligible raw GitHub repository URLs from visible marketplace entries, installed plugin rows, installed-plugin detail, and the Settings > Plugins Canvases detail.
 2. The hook fetches the authenticated connection status, captures workspace, authenticated user ID, generation, active, capable, and reconnect-required state, then hydrates only when active and capable; it reuses matching cached states immediately and requests missing or stale URLs through the bounded status endpoint.
 3. A status response merges only returned keys in the same connection-status snapshot and epoch. Unknown (`null`) keys remain non-assertive rather than being rendered as unstarred.
-4. Clicking the control increments the repository epoch, disables that key, and sends `PUT` or `DELETE` through the dedicated strict personal GitHub client. A confirmed response updates all mounted rows sharing the scoped key.
+4. Clicking the control increments the repository epoch, disables that key, and sends `PUT` or `DELETE` through the resolved actor's star client. A confirmed response updates all mounted rows sharing the scoped key.
 5. Workspace or GitHub-account changes invalidate the prior scope and clear visible state before fetching connection status. Reconnect completion refetches connection status before hydration. A late response from the old workspace/user/generation/capability scope is discarded.
-6. If the dedicated star connection lacks `public_repo`, the backend returns the existing insufficient-scope provider error. The frontend keeps the optional control non-assertive and leaves the dedicated personal reconnect path available; no star action is retried through an App identity.
+6. If the actor lacks capability, the backend returns the existing insufficient-scope provider error. The frontend keeps the optional control non-assertive; no star action is retried through another identity.
 
 ## Failure and recovery
 
@@ -96,7 +97,7 @@ On transaction commit errors, reconcile the lifecycle and connection row before 
 
 ## Permissions and security
 
-The backend uses the current request identity to select the user's dedicated personal OAuth App connection and verifies active workspace membership in both the controller and service entry points. It does not require a registered workspace repository for public catalog entries. GitHub App installation identities and existing GitHub App user-to-server connections cannot perform this user-attributed operation, and no fallback changes the actor. Foreign-workspace requests and requests without a dedicated personal connection or `public_repo` capability fail closed.
+The backend uses the current request identity to resolve the star actor and verifies active workspace membership in both the controller and service entry points. It does not require a registered workspace repository for public catalog entries. GitHub App installation identities cannot perform this user-attributed operation, and no fallback changes the actor. Foreign-workspace requests and requests without a capable actor fail closed.
 
 Raw repository URLs are validated at both UI and HTTP boundaries. Arbitrary GitHub API paths are never accepted. The browser never receives or stores a PAT, OAuth token, App token, or `gh` credential.
 
@@ -109,4 +110,4 @@ GitHub owns star persistence. Kandev stores dedicated OAuth App token material o
 - [Workspace GitHub authentication requirements](../requirements/github-authentication.md) defines existing credential source and actor resolution.
 - [Plugin marketplace requirements](../../plugins/requirements/marketplace.md) defines repository metadata and marketplace presentation.
 - [GitHub REST starring endpoints](https://docs.github.com/en/rest/activity/starring) and the [OAuth scope reference](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps) define external API semantics and `public_repo`.
-- [ADR: dedicated OAuth App for personal stars](../../../decisions/2026-09-18-github-personal-star-oauth.md) records the authorization boundary; the [configuration reference](../../../public/configuration.md) documents deployment keys and rotation.
+- [ADR: star actor resolution](../../../decisions/2026-10-18-github-star-actor-resolution.md) records the authorization boundary and supersedes the dedicated-OAuth-only ADR; the [configuration reference](../../../public/configuration.md) documents deployment keys and rotation.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StateProvider } from "@/components/state-provider";
 import { MarketplaceEntryRow } from "./marketplace-entry-row";
 import type { MarketplaceEntry } from "@/lib/types/plugins";
@@ -8,6 +8,8 @@ const STAR_ROW_CANONICAL = "kdlbs/kandev-plugin-acme";
 
 const fetchStarConnection = vi.fn();
 const fetchStarStates = vi.fn();
+const starRepository = vi.fn();
+const unstarRepository = vi.fn();
 
 vi.mock("@/lib/api/domains/github-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/domains/github-api")>();
@@ -15,6 +17,8 @@ vi.mock("@/lib/api/domains/github-api", async (importOriginal) => {
     ...actual,
     fetchGitHubStarConnection: (...args: unknown[]) => fetchStarConnection(...args),
     fetchGitHubStarStates: (...args: unknown[]) => fetchStarStates(...args),
+    starGitHubRepository: (...args: unknown[]) => starRepository(...args),
+    unstarGitHubRepository: (...args: unknown[]) => unstarRepository(...args),
   };
 });
 
@@ -22,6 +26,8 @@ afterEach(() => {
   cleanup();
   fetchStarConnection.mockReset();
   fetchStarStates.mockReset();
+  starRepository.mockReset();
+  unstarRepository.mockReset();
 });
 
 function entry(overrides: Partial<MarketplaceEntry> = {}): MarketplaceEntry {
@@ -93,6 +99,44 @@ describe("MarketplaceEntryRow attribution", () => {
 });
 
 describe("MarketplaceEntryRow repository star", () => {
+  // @covers AC-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001.13
+  it("updates every repository count only after confirmed star and unstar", async () => {
+    fetchStarConnection.mockResolvedValue({
+      user_id: "default-user",
+      credential_generation: 1,
+      active: true,
+      capable: true,
+      reconnect_required: false,
+      available: true,
+    });
+    fetchStarStates.mockResolvedValue({ states: { [STAR_ROW_CANONICAL]: false } });
+    const pendingStar = Promise.withResolvers<{ starred: boolean }>();
+    starRepository.mockReturnValue(pendingStar.promise);
+    unstarRepository.mockResolvedValue({ starred: false });
+
+    render(
+      <StateProvider>
+        <MarketplaceEntryRow entry={entry()} busy={false} onInstall={noop} workspaceId="ws-1" />
+        <MarketplaceEntryRow
+          entry={entry({ id: "duplicate", repo_url: `${entry().repo_url}.git` })}
+          busy={false}
+          onInstall={noop}
+          workspaceId="ws-1"
+        />
+      </StateProvider>,
+    );
+    const toggles = await screen.findAllByTestId("plugin-star-toggle");
+    expect(screen.getAllByText("3")).toHaveLength(2);
+    fireEvent.click(toggles[0]);
+    expect(screen.getAllByText("3")).toHaveLength(2);
+
+    await act(async () => pendingStar.resolve({ starred: true }));
+    await waitFor(() => expect(screen.getAllByText("4")).toHaveLength(2));
+    fireEvent.click(toggles[1]);
+    await waitFor(() => expect(toggles[1].getAttribute("aria-pressed")).toBe("false"));
+    expect(screen.getAllByText("3")).toHaveLength(2);
+  });
+
   it("keeps the star toggle beside the repo link instead of inside it", async () => {
     fetchStarConnection.mockResolvedValue({
       user_id: "default-user",

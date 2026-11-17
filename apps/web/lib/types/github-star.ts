@@ -1,9 +1,21 @@
-// Wire shapes for the dedicated personal GitHub star connection. Split out
-// of `github.ts` to keep that barrel under the file-length cap.
-// Dedicated personal GitHub star connection (Settings > Plugins). This is a
-// separate OAuth App authorization from the GitHub App user-to-server
-// connection; `available` is false when the deployment cannot support it, in
-// which case the UI renders no star control and issues no start request.
+// Wire shapes for the personal GitHub star connection. Split out of
+// `github.ts` to keep that barrel under the file-length cap.
+
+/** The GitHub identity star calls act as; never carries credential material. */
+export type GitHubStarActor = {
+  /** `personal_star_oauth`, `github_app_user`, `pat`, `gh_cli`, or `legacy_shared`. */
+  source: string;
+  login: string;
+  /** True when every workspace member stars as this account. */
+  shared: boolean;
+};
+
+/** Consent flow that can produce an actor when none resolved. */
+export type GitHubStarConnectPath = "personal_star_oauth" | "github_app_user";
+
+// Star connection status (Settings > Plugins). `available` is false when no
+// actor, connect path, or dedicated connection exists, in which case the UI
+// renders no star control and issues no start request.
 export type GitHubStarConnectionStatus = {
   user_id: string;
   credential_generation: number;
@@ -11,6 +23,9 @@ export type GitHubStarConnectionStatus = {
   capable: boolean;
   reconnect_required: boolean;
   available: boolean;
+  actor?: GitHubStarActor | null;
+  connect?: GitHubStarConnectPath | null;
+  remediation?: "token_scope" | "app_permission" | null;
 };
 
 export type GitHubStarConnectionStartRequest = {

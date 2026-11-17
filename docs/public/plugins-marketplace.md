@@ -83,6 +83,12 @@ its OAuth App settings are missing or invalid, Kandev omits the control and its 
 sends no start request. A connection that no longer has the `public_repo` grant shows
 **Reconnect GitHub** instead of a star state.
 
+After GitHub confirms a star or unstar, the displayed count increases or
+decreases by one across cards for that repository. Failed requests leave the
+count unchanged. These adjustments last for the current app session: a full
+reload returns to the catalog's count, which may lag GitHub. Counts are not a
+live total of other users' activity; an unknown count stays as a dash.
+
 Click **Install** on a card to install it. This resolves the entry to its
 latest release tarball and runs the same verified install pipeline as
 install-by-URL (`POST /api/plugins/install`), see [Plugins → Installing a

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { create } from "zustand";
+import { create, type StoreApi } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { createPluginsSlice } from "./plugins-slice";
 import type { PluginsSlice } from "./types";
@@ -203,5 +203,91 @@ describe("plugin star connection identity", () => {
     store.getState().failPluginStarRequest(key, staleEpoch as number);
     expect(store.getState().pluginStars.values[key]).toBe(false);
     expect(store.getState().pluginStars.busy[key]).toBeUndefined();
+  });
+});
+
+// @covers AC-INTEGRATIONS-GITHUB-REPOSITORY-STARS-001.13
+describe("confirmed repository star counts", () => {
+  const repository = "owner/repo";
+  const key = pluginStarKey("ws-1", connection("user-a"), repository);
+
+  function hydrate(store: StoreApi<PluginsSlice>, value: boolean) {
+    const epoch = store.getState().beginPluginStarRequest(key, "status")!;
+    store.getState().applyPluginStarResult(key, epoch, value);
+  }
+
+  it("adjusts a known count once per confirmed transition, never during hydration or failure", () => {
+    const store = makeStore();
+    const actions = store.getState();
+    actions.seedPluginStarCount(repository, 12);
+    hydrate(store, false);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(12);
+
+    const failed = actions.beginPluginStarRequest(key, "mutation")!;
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(12);
+    expect(actions.beginPluginStarRequest(key, "mutation")).toBeNull();
+    actions.failPluginStarRequest(key, failed);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(12);
+
+    const starred = actions.beginPluginStarRequest(key, "mutation")!;
+    expect(actions.applyPluginStarMutationResult(key, starred, repository, true)).toBe(true);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(13);
+    expect(actions.applyPluginStarMutationResult(key, starred, repository, false)).toBe(false);
+    expect(store.getState().pluginStars.values[key]).toBe(true);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(13);
+
+    // A confirmed no-op is idempotent, even with a new request epoch.
+    const unchanged = actions.beginPluginStarRequest(key, "mutation")!;
+    actions.applyPluginStarMutationResult(key, unchanged, repository, true);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(13);
+
+    const unstarred = actions.beginPluginStarRequest(key, "mutation")!;
+    actions.applyPluginStarMutationResult(key, unstarred, repository, false);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(12);
+  });
+
+  it("preserves aggregate counts across actor changes and rejects the previous actor's result", () => {
+    const store = makeStore();
+    const actions = store.getState();
+    const first = {
+      ...connection("user-a"),
+      actor: { source: "gh_cli", login: "alice", shared: true },
+    };
+    const firstEpoch = actions.beginPluginStarConnectionRequest("ws-1", "user-a");
+    actions.applyPluginStarConnection("ws-1", firstEpoch, first, "user-a");
+    const actorKey = pluginStarKey("ws-1", first, repository);
+    actions.seedPluginStarCount(repository, 12);
+    const statusEpoch = actions.beginPluginStarRequest(actorKey, "status")!;
+    actions.applyPluginStarResult(actorKey, statusEpoch, false);
+    const success = actions.beginPluginStarRequest(actorKey, "mutation")!;
+    actions.applyPluginStarMutationResult(actorKey, success, repository, true);
+    const stale = actions.beginPluginStarRequest(actorKey, "mutation")!;
+
+    const second = { ...first, actor: { ...first.actor, login: "bob" } };
+    const secondEpoch = actions.beginPluginStarConnectionRequest("ws-1", "user-a");
+    actions.applyPluginStarConnection("ws-1", secondEpoch, second, "user-a");
+    expect(actions.applyPluginStarMutationResult(actorKey, stale, repository, false)).toBe(false);
+    expect(store.getState().pluginStars.values[actorKey]).toBeUndefined();
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(13);
+    actions.seedPluginStarCount(repository, 12);
+    actions.resetPluginStarConnection("ws-1");
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(13);
+  });
+
+  it("keeps unknown counts unknown and never lets an unstar decrement below zero", () => {
+    const store = makeStore();
+    const actions = store.getState();
+    actions.seedPluginStarCount(repository, null);
+    hydrate(store, false);
+    const starred = actions.beginPluginStarRequest(key, "mutation")!;
+    actions.applyPluginStarMutationResult(key, starred, repository, true);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBeUndefined();
+    expect(store.getState().pluginStars.values[key]).toBe(true);
+
+    // A later known catalog count may seed an unknown projection, including zero.
+    actions.seedPluginStarCount(repository, 0);
+    const unstarred = actions.beginPluginStarRequest(key, "mutation")!;
+    actions.applyPluginStarMutationResult(key, unstarred, repository, false);
+    expect(store.getState().pluginStars.repositoryCounts[repository]).toBe(0);
   });
 });

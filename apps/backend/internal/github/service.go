@@ -184,6 +184,7 @@ type Service struct {
 	freshDefaultsDone      bool
 	rateCoordinator        *RateCoordinator
 	personalStarResolver  PersonalStarResolver
+	starCapabilities      *StarCapabilityCache
 	personalStarOAuth     PersonalStarOAuthCoordinator
 
 	// cleanupFailureMu guards cleanupFailureCounts; the cleanup loop is the
@@ -285,6 +286,7 @@ func NewService(client Client, authMethod string, secrets SecretProvider, store 
 		appRegistrationRuntimes:      make(map[string]*githubAppRuntime),
 		stopCtx:                      stopCtx,
 		stopCancel:                   stopCancel,
+		starCapabilities:             NewStarCapabilityCache(),
 		clock:                        time.Now,
 	}
 	if store != nil {

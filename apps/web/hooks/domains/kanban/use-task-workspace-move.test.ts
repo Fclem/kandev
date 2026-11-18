@@ -417,7 +417,8 @@ describe("caller-partitioned restore", () => {
     expect(hook.result.current.operation?.status).toBe("committed");
     expect(Object.keys(window.sessionStorage)).toHaveLength(0);
   });
-
+});
+describe("superseded responses across caller switches", () => {
   it("ignores a late original failure after a successful check that followed a caller switch", async () => {
     signIn("user-a");
     const original = Promise.withResolvers<{ receipt: TaskTransferReceipt }>();
@@ -460,6 +461,28 @@ describe("caller-partitioned restore", () => {
     expect(hook.result.current.operation?.status).toBe("committed");
   });
 
+  it("keeps an accepted receipt committed when a caller switch lands during reconciliation", async () => {
+    signIn("user-a");
+    const gate = Promise.withResolvers<void>();
+    reconcile.mockReturnValueOnce(gate.promise);
+    api.transferTask.mockResolvedValueOnce({ receipt });
+    const hook = render();
+    await choose(hook);
+    act(() => {
+      void hook.result.current.submit();
+    });
+    await waitFor(() => expect(reconcile).toHaveBeenCalled());
+    signIn("user-b");
+    signIn("user-a");
+    await waitFor(() => expect(Object.keys(window.sessionStorage)).toHaveLength(0));
+    expect(hook.result.current.operation?.status).not.toBe("uncertain");
+    await act(async () => gate.resolve());
+    expect(Object.keys(window.sessionStorage)).toHaveLength(0);
+    expect(hook.result.current.operation?.status).not.toBe("uncertain");
+  });
+});
+
+describe("caller-partitioned restore", () => {
   it("keeps an unresolved request through logout and login", async () => {
     signIn("user-a");
     api.transferTask.mockRejectedValueOnce(networkLost());

@@ -418,6 +418,48 @@ describe("caller-partitioned restore", () => {
     expect(Object.keys(window.sessionStorage)).toHaveLength(0);
   });
 
+  it("ignores a late original failure after a successful check that followed a caller switch", async () => {
+    signIn("user-a");
+    const original = Promise.withResolvers<{ receipt: TaskTransferReceipt }>();
+    api.transferTask.mockReturnValueOnce(original.promise);
+    const hook = render();
+    await choose(hook);
+    act(() => {
+      void hook.result.current.submit();
+    });
+    signIn("user-b");
+    signIn("user-a");
+    await waitFor(() => expect(hook.result.current.operation?.status).toBe("uncertain"));
+    api.transferTask.mockResolvedValueOnce({ receipt });
+    await act(() => hook.result.current.check());
+    expect(hook.result.current.operation?.status).toBe("committed");
+    await act(async () => original.reject(networkLost()));
+    expect(hook.result.current.operation?.status).toBe("committed");
+    expect(Object.keys(window.sessionStorage)).toHaveLength(0);
+  });
+
+  it("keeps a check in flight when the superseded original fails before it resolves", async () => {
+    signIn("user-a");
+    const original = Promise.withResolvers<{ receipt: TaskTransferReceipt }>();
+    const check = Promise.withResolvers<{ receipt: TaskTransferReceipt }>();
+    api.transferTask.mockReturnValueOnce(original.promise).mockReturnValueOnce(check.promise);
+    const hook = render();
+    await choose(hook);
+    act(() => {
+      void hook.result.current.submit();
+    });
+    signIn("user-b");
+    signIn("user-a");
+    await waitFor(() => expect(hook.result.current.operation?.status).toBe("uncertain"));
+    act(() => {
+      void hook.result.current.check();
+    });
+    await act(async () => original.reject(networkLost()));
+    expect(hook.result.current.operation?.status).toBe("submitting");
+    await act(async () => check.resolve({ receipt }));
+    expect(hook.result.current.operation?.status).toBe("committed");
+  });
+
   it("keeps an unresolved request through logout and login", async () => {
     signIn("user-a");
     api.transferTask.mockRejectedValueOnce(networkLost());

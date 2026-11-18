@@ -55,7 +55,7 @@ export function useTaskWorkspaceMoveOperation(taskId: string | null) {
         // failed reconciliation read leaves the operation committed.
         await reconcileTaskMembership(store, taskId).catch(() => undefined);
       }
-      registry.settle(identity, settled);
+      registry.settle(identity, pending, settled);
     },
     [identity, registry, store, taskId],
   );

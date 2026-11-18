@@ -134,6 +134,8 @@ type Listener = () => void;
 export class WorkspaceMoveOperations {
   private identity: string | null = null;
   private readonly byTask = new Map<string, WorkspaceMoveOperation>();
+  /** The in-flight request admitted for each task; only it may settle that task. */
+  private readonly live = new Map<string, object>();
   private readonly unverifiable = new Set<string>();
   private storageUnavailable = false;
   private readonly listeners = new Set<Listener>();
@@ -167,14 +169,18 @@ export class WorkspaceMoveOperations {
     const next = { status: "submitting" as const, taskId, body, attempt };
     // The record must be durable before any request can leave this tab.
     if (!persistWorkspaceMove(identity, taskId, body)) return null;
+    this.live.set(taskId, next);
     this.set(taskId, next);
     return next;
   }
 
-  settle(identity: string, operation: WorkspaceMoveOperation): void {
+  settle(identity: string, pending: object, operation: WorkspaceMoveOperation): void {
     if (identity !== this.identity) return;
+    // A superseded or pre-switch request must not overwrite a newer outcome.
+    if (this.live.get(operation.taskId) !== pending) return;
     const current = this.byTask.get(operation.taskId);
     if (!current || current.body.idempotency_key !== operation.body.idempotency_key) return;
+    this.live.delete(operation.taskId);
     this.set(operation.taskId, operation);
   }
 
@@ -195,6 +201,7 @@ export class WorkspaceMoveOperations {
     const hadState = this.byTask.size > 0 || this.unverifiable.size > 0 || this.storageUnavailable;
     this.identity = identity;
     this.byTask.clear();
+    this.live.clear();
     this.unverifiable.clear();
     // Another caller's stored records are hidden, never cleared.
     const restored = restoreWorkspaceMoves(identity);

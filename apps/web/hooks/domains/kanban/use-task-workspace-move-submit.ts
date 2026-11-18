@@ -50,12 +50,14 @@ export function useTaskWorkspaceMoveOperation(taskId: string | null) {
       } catch (error) {
         settled = settleWorkspaceMove(pending, { error });
       }
+      // Durable settlement comes first: a caller switch during the reconciliation
+      // read must not discard an accepted receipt.
+      registry.settle(identity, pending, settled);
       if (settled.status === "committed") {
         // Canonical placement is reconciled before success is announced. A
         // failed reconciliation read leaves the operation committed.
         await reconcileTaskMembership(store, taskId).catch(() => undefined);
       }
-      registry.settle(identity, pending, settled);
     },
     [identity, registry, store, taskId],
   );

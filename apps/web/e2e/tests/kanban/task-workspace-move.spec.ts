@@ -1,4 +1,7 @@
 import type { Page, Request } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { test, expect } from "../../fixtures/test-base";
 import { KanbanPage } from "../../pages/kanban-page";
 import { WorkspaceMovePage } from "../../pages/workspace-move-page";
@@ -25,87 +28,100 @@ test.describe("Task workspace move", () => {
   // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-001.1, 001.3, 004.1, 004.2, 004.4
   test("moves a running task to another workspace and keeps its sessions", async ({
     testPage,
+    backend,
     apiClient,
     seedData,
   }, testInfo) => {
     const fixture = await seedWorkspaceMove(apiClient, seedData, "Desktop move");
-    const task = await apiClient.createTaskWithAgent(
-      seedData.workspaceId,
-      "Desktop workspace move keeps a long readable task title",
-      seedData.agentProfileId,
-      {
-        workflow_id: fixture.sourceWorkflow.id,
-        workflow_step_id: fixture.sourceStep.id,
-        repository_ids: [seedData.repositoryId],
-        description: runningTurnScript("desktop"),
-      },
-    );
-    await apiClient.wsRequest("task.plan.create", {
-      task_id: task.id,
-      title: "Move plan",
-      content: "Plan survives the workspace move",
-    });
-    await apiClient.seedTaskSession(task.id, {
-      state: "IDLE",
-      agentProfileId: seedData.agentProfileId,
-      repositoryId: seedData.repositoryId,
-    });
-    const sessionsBefore = (await apiClient.listTaskSessions(task.id)).sessions.map((s) => s.id);
-    // The move form must read the task after the running turn writes its first marker.
-    await testPage.goto(`/t/${task.id}`);
-    await expect(testPage.getByText(/desktop before move/).last()).toBeVisible({ timeout: 30_000 });
-    const kanban = new KanbanPage(testPage);
-    await kanban.goto(fixture.sourceWorkflow.id);
-    await expect(kanban.taskCard(task.id)).toBeVisible();
-    const listingUrl = testPage.url();
+    const gate = join(backend.tmpDir, `workspace-move-${randomUUID()}.release`);
+    try {
+      const task = await apiClient.createTaskWithAgent(
+        seedData.workspaceId,
+        "Desktop workspace move keeps a long readable task title",
+        seedData.agentProfileId,
+        {
+          workflow_id: fixture.sourceWorkflow.id,
+          workflow_step_id: fixture.sourceStep.id,
+          repository_ids: [seedData.repositoryId],
+          description: runningTurnScript("desktop", gate),
+        },
+      );
+      await apiClient.wsRequest("task.plan.create", {
+        task_id: task.id,
+        title: "Move plan",
+        content: "Plan survives the workspace move",
+      });
+      const sessionsBefore = (await apiClient.listTaskSessions(task.id)).sessions.map((s) => s.id);
+      // The move form must read the task after the running turn writes its first marker.
+      await testPage.goto(`/t/${task.id}`);
+      await expect(testPage.getByText(/desktop before move/).last()).toBeVisible({
+        timeout: 30_000,
+      });
+      const kanban = new KanbanPage(testPage);
+      await kanban.goto(fixture.sourceWorkflow.id);
+      await expect(kanban.taskCard(task.id)).toBeVisible();
+      const listingUrl = testPage.url();
 
-    await kanban.openTaskContextMenu(task.id);
-    await kanban.contextMoveTo().focus();
-    await testPage.keyboard.press("ArrowRight");
-    await expect(kanban.contextChangeWorkspace()).toBeVisible();
-    await testPage.screenshot({ path: testInfo.outputPath("ui-01-desktop-move-menu.png") });
-    await testPage.keyboard.press("Escape");
-    await testPage.keyboard.press("Escape");
+      await kanban.openTaskContextMenu(task.id);
+      await kanban.contextMoveTo().focus();
+      await testPage.keyboard.press("ArrowRight");
+      await expect(kanban.contextChangeWorkspace()).toBeVisible();
+      await testPage.screenshot({ path: testInfo.outputPath("ui-01-desktop-move-menu.png") });
+      await testPage.keyboard.press("Escape");
+      await testPage.keyboard.press("Escape");
 
-    await kanban.openWorkspaceMoveForm(task.id);
-    const form = new WorkspaceMovePage(testPage);
-    await expect(form.desktopDialog).toBeVisible();
-    await expect(form.form.getByTestId("workspace-move-current")).toContainText("Work");
-    await expect(form.submitButton).toBeDisabled();
-    await form.choose(
-      fixture.destination.id,
-      fixture.destinationWorkflow.id,
-      fixture.destinationStep.id,
-    );
-    await testPage.screenshot({ path: testInfo.outputPath("ui-02-desktop-ready.png") });
-    await form.submit();
-    await expect(form.outcome).toHaveAttribute("data-status", "committed");
-    await expect(kanban.taskCard(task.id)).toHaveCount(0);
-    expect(testPage.url()).toBe(listingUrl);
-    await testPage.screenshot({ path: testInfo.outputPath("ui-04-desktop-success.png") });
+      await kanban.openWorkspaceMoveForm(task.id);
+      const form = new WorkspaceMovePage(testPage);
+      await expect(form.desktopDialog).toBeVisible();
+      await expect(form.form.getByTestId("workspace-move-current")).toContainText("Work");
+      await expect(form.submitButton).toBeDisabled();
+      await form.choose(
+        fixture.destination.id,
+        fixture.destinationWorkflow.id,
+        fixture.destinationStep.id,
+      );
+      await testPage.screenshot({ path: testInfo.outputPath("ui-02-desktop-ready.png") });
+      await expect
+        .poll(async () =>
+          (await apiClient.listTaskSessions(task.id)).sessions.map((session) => session.state),
+        )
+        .toContain("RUNNING");
+      await form.submit();
+      await expect(form.outcome).toHaveAttribute("data-status", "committed");
+      await writeFile(gate, "release");
+      await expect(kanban.taskCard(task.id)).toHaveCount(0);
+      expect(testPage.url()).toBe(listingUrl);
+      await testPage.screenshot({ path: testInfo.outputPath("ui-04-desktop-success.png") });
 
-    await form.press(testPage.getByTestId("workspace-move-open-task"));
-    await expect(testPage).toHaveURL(new RegExp(`/t/${task.id}`));
-    // The running turn finishes after the move, in the same session transcript.
-    await expect(testPage.getByText(/desktop after move/).last()).toBeVisible({ timeout: 30_000 });
-    const moved = await apiClient.getTask(task.id);
-    expect(moved.workspace_id).toBe(fixture.destination.id);
-    expect(moved.workflow_step_id).toBe(fixture.destinationStep.id);
-    expect((await apiClient.listTaskSessions(task.id)).sessions.map((s) => s.id).sort()).toEqual(
-      [...sessionsBefore].sort(),
-    );
-    expect((await apiClient.getTaskPlan(task.id)).content).toContain(
-      "Plan survives the workspace move",
-    );
+      await form.press(testPage.getByTestId("workspace-move-open-task"));
+      await expect(testPage).toHaveURL(new RegExp(`/t/${task.id}`));
+      // The running turn finishes after the move, in the same session transcript.
+      await expect(testPage.getByText(/desktop after move/).last()).toBeVisible({
+        timeout: 30_000,
+      });
+      const moved = await apiClient.getTask(task.id);
+      expect(moved.workspace_id).toBe(fixture.destination.id);
+      expect(moved.workflow_step_id).toBe(fixture.destinationStep.id);
+      expect((await apiClient.listTaskSessions(task.id)).sessions.map((s) => s.id).sort()).toEqual(
+        [...sessionsBefore].sort(),
+      );
+      expect((await apiClient.getTaskPlan(task.id)).content).toContain(
+        "Plan survives the workspace move",
+      );
 
-    await testPage.reload();
-    // The persisted transcript keeps the turn's output from before and after the move.
-    await expect(testPage.getByText(/desktop before move/).last()).toBeVisible();
-    await expect(testPage.getByText(/desktop after move/).last()).toBeVisible();
-    await testPage.goto(
-      `/?workspaceId=${fixture.destination.id}&workflowId=${fixture.destinationWorkflow.id}`,
-    );
-    await expect(kanban.taskCardInColumn(moved.title, fixture.destinationStep.id)).toBeVisible();
+      // The persisted transcript keeps the turn's output from before and after the move.
+      const transcript = (await apiClient.listSessionMessages(sessionsBefore[0])).messages
+        .map((message) => message.content)
+        .join("\n");
+      expect(transcript).toContain("desktop before move");
+      expect(transcript).toContain("desktop after move");
+      await testPage.goto(
+        `/?workspaceId=${fixture.destination.id}&workflowId=${fixture.destinationWorkflow.id}`,
+      );
+      await expect(kanban.taskCardInColumn(moved.title, fixture.destinationStep.id)).toBeVisible();
+    } finally {
+      await writeFile(gate, "release");
+    }
   });
 
   // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-001.2, 004.3, 005.2

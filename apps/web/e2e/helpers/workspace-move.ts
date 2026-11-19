@@ -25,11 +25,11 @@ export async function seedWorkspaceMove(api: ApiClient, seed: SeedData, label: s
   };
 }
 
-/** A running mock turn that writes a marker before and after the move. */
-export function runningTurnScript(label: string) {
+/** A running mock turn that writes a marker before and waits on the gate file before finishing. */
+export function runningTurnScript(label: string, gatePath: string) {
   return [
     `e2e:message("${label} before move")`,
-    "e2e:delay(8000)",
+    `e2e:await_file(${JSON.stringify(gatePath)})`,
     `e2e:message("${label} after move")`,
   ].join("\n");
 }

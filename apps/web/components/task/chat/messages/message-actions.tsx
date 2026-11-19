@@ -266,7 +266,6 @@ function MessageDebugDialog({
   );
 }
 
-
 /** Selects the message turn and its model-specific usage multiplier. */
 function findMessageTurn(state: AppState, message: Message): Turn | null {
   const sessionId = message.session_id;

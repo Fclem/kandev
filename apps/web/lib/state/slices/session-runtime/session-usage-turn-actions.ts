@@ -1,9 +1,7 @@
-import type { StateCreator } from "zustand";
+import type { SliceSet } from "@/lib/state/slice-creator";
 import type { SessionRuntimeSlice } from "./types";
 
-export type ImmerSet = Parameters<
-  StateCreator<SessionRuntimeSlice, [["zustand/immer", never]], [], SessionRuntimeSlice>
->[0];
+export type ImmerSet = SliceSet<SessionRuntimeSlice>;
 
 export function buildSessionUsageTurnActions(set: ImmerSet) {
   return {

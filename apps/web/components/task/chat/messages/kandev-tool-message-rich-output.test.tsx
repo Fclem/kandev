@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { hasKandevRenderer, KandevToolMessage } from "./kandev-tool-message";
+import { KandevToolMessage } from "./kandev-tool-message";
+import { hasKandevRenderer } from "./kandev/has-renderer";
 import type { ToolCallMetadata } from "../types";
 import { richOutputExamples } from "@/lib/rich-output/examples";
 import { kandevToolCall } from "./kandev-tool-message.test-helpers";

@@ -1,5 +1,5 @@
 import type { SessionRuntimeSlice } from "./types";
-import type { ImmerSet } from "./session-runtime-slice";
+import type { ImmerSet } from "./session-usage-turn-actions";
 import { buildBackgroundOutputActions, reconcileOutputWindows } from "./background-output-window";
 import {
   applyWorkloadActionAvailability,

@@ -1,6 +1,6 @@
 import type { WorkloadRunObservation } from "@/lib/types/background-work";
 import type { BackgroundOutputWindow, BackgroundWorkState, SessionRuntimeSlice } from "./types";
-import type { ImmerSet } from "./session-runtime-slice";
+import type { ImmerSet } from "./session-usage-turn-actions";
 
 function newWindow(state: BackgroundWorkState, runId: string | undefined): BackgroundOutputWindow {
   return { runId, generation: state.nextOutputWindowGeneration++, evicted: 0 };

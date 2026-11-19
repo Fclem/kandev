@@ -430,10 +430,11 @@ export function buildCoreFields(
     hiddenWorkflowStepIds: s.kanban_hidden_step_ids ?? current.hiddenWorkflowStepIds,
     workflowIdsWithAutoHideEmptySteps:
       s.workflow_ids_with_auto_hide_empty_steps ?? current.workflowIdsWithAutoHideEmptySteps,
-    messageMetadataFields:
-      s.message_metadata_fields === undefined
-        ? current.messageMetadataFields
-        : parseMessageMetadataFields(s.message_metadata_fields),
+    messageMetadataFields: mapDefined(
+      s.message_metadata_fields,
+      current.messageMetadataFields,
+      parseMessageMetadataFields,
+    ),
     kanbanSort: mapDefined(s.kanban_sort, current.kanbanSort, parseKanbanSort),
     kanbanPriorityFilterTokens: mapDefined(
       s.kanban_priority_filter_tokens,

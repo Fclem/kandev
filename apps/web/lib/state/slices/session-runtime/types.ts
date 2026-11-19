@@ -12,6 +12,7 @@ import type { NativeMCPDiagnostic } from "@/lib/prepare/native-mcp-diagnostic";
 import type { ModelCatalog } from "@kandev/types/model-catalog";
 import type { UserShellScope } from "@/lib/state/user-shell-scope";
 import type { UsageTurn, UsageTurnsPage } from "@/lib/types/conversation-usage";
+import type { UsageTurnIndexState } from "./usage-turn-index-types";
 
 export type TerminalState = {
   terminals: Array<{ id: string; output: string[] }>;
@@ -618,20 +619,6 @@ export type BackgroundOutputWindow = {
   runId: string | undefined;
   generation: number;
   evicted: number;
-};
-
-export type UsageTurnIndexEntry = {
-  byTurnId: Record<string, UsageTurn>;
-  /** `usageInvalidation` counter the newest page was last refreshed at; unset = never refreshed. */
-  refreshedInvalidation?: number;
-  /** Each cached turn's accepted usage invalidation generation. */
-  refreshedInvalidationByTurnId?: Record<string, number>;
-  nextCursor?: string;
-  exhausted: boolean;
-};
-
-export type UsageTurnIndexState = {
-  bySessionId: Record<string, UsageTurnIndexEntry>;
 };
 
 export type SessionRuntimeSliceState = {

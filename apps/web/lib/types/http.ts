@@ -970,6 +970,7 @@ export type SidebarTaskQuery = {
   };
   group: string;
   collapsed_group_keys: string[];
+  disclosure_view_id?: string;
   collapsed_task_ids: string[];
   page: number;
   page_size: number;
@@ -1013,6 +1014,7 @@ export type SidebarTaskPageResponse = {
   has_next: boolean;
   grouping_revision?: string;
   grouping_generation?: string;
+  grouping_keys?: string[];
   entries: SidebarTaskPageEntry[];
 };
 

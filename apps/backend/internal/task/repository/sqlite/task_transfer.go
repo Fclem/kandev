@@ -835,7 +835,7 @@ func (r *Repository) lockTaskTransferWorkspaces(ctx context.Context, tx *sqlx.Tx
 		return taskTransferConflict(err, repoerrors.TaskTransferSourceChanged, "source predicate changed")
 	}
 	if workspace != command.ExpectedSourceWorkspaceID || workflow != command.ExpectedSourceWorkflowID || step != command.ExpectedSourceStepID || !version.Equal(command.ExpectedTaskUpdatedAt) {
-		return repoerrors.ErrTaskTransferConflict
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferSourceChanged, "source predicate changed")
 	}
 	return nil
 }

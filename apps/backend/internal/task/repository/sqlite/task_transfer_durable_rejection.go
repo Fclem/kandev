@@ -90,9 +90,6 @@ func (r *Repository) runDurableTaskTransfer(
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, "SAVEPOINT "+taskTransferApplySavepoint); err != nil {
-		return nil, err
-	}
 	// Same acquisition order as TransferTask: workspace rows, then the relation census.
 	if err := r.lockTaskTransferWorkspaces(ctx, tx, command); err != nil {
 		if !errors.Is(err, repoerrors.ErrTaskTransferConflict) {
@@ -106,6 +103,9 @@ func (r *Repository) runDurableTaskTransfer(
 	if receipt, found, err := r.serializedTaskTransferOutcome(ctx, tx, command, requestDigest); err != nil || found {
 		return receipt, err
 	}
+	if _, err := tx.ExecContext(ctx, "SAVEPOINT "+taskTransferApplySavepoint); err != nil {
+		return nil, err
+	}
 	receipt, applyErr := r.applyTaskTransfer(ctx, tx, command, requestDigest, projections, counts, inventory)
 	if applyErr == nil {
 		if err := tx.Commit(); err != nil {
@@ -115,6 +115,9 @@ func (r *Repository) runDurableTaskTransfer(
 	}
 	if !errors.Is(applyErr, repoerrors.ErrTaskTransferConflict) {
 		return nil, applyErr
+	}
+	if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+taskTransferApplySavepoint); err != nil {
+		return nil, err
 	}
 	return r.commitTaskTransferRejection(ctx, tx, command, requestDigest, applyErr)
 }
@@ -236,9 +239,9 @@ func (r *Repository) commitTaskTransferReplay(
 	return receipt, nil
 }
 
-// commitTaskTransferRejection rolls back mutation effects to the savepoint,
-// rechecks receipt precedence, and commits one failed barrier row for a domain
-// guard rejection. A storage or commit failure stays an uncertain error.
+// commitTaskTransferRejection rechecks receipt precedence and commits one failed
+// barrier row for a domain guard rejection. The caller has rolled back any
+// mutation effects. A storage or commit failure stays an uncertain error.
 func (r *Repository) commitTaskTransferRejection(
 	ctx context.Context,
 	tx *sqlx.Tx,
@@ -246,9 +249,6 @@ func (r *Repository) commitTaskTransferRejection(
 	requestDigest string,
 	rejection error,
 ) (*models.TaskTransferReceipt, error) {
-	if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+taskTransferApplySavepoint); err != nil {
-		return nil, err
-	}
 	if receipt, found, err := r.serializedTaskTransferOutcome(ctx, tx, command, requestDigest); err != nil || found {
 		return receipt, err
 	}

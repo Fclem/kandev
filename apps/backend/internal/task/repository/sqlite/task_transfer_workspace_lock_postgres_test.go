@@ -21,19 +21,29 @@ func TestDurableTransferWaitsForSourceWorkspaceRowHolder(t *testing.T) {
 	holder, err := repo.db.BeginTxx(context.Background(), nil)
 	require.NoError(t, err)
 	defer func() { _ = holder.Rollback() }()
-	_, err = holder.Exec(`SELECT id FROM workspaces WHERE id = ? FOR UPDATE`, command.ExpectedSourceWorkspaceID)
+	_, err = holder.Exec(repo.db.Rebind(`SELECT id FROM workspaces WHERE id = ? FOR UPDATE`), command.ExpectedSourceWorkspaceID)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_, err = repo.TransferTask(ctx, command)
-	require.Error(t, err, "durable transfer must wait on the source workspace row, not commit past it")
+	require.ErrorIs(t, err, context.DeadlineExceeded, "durable transfer must wait on the source workspace row, not commit past it")
 
-	var barriers int
+	var conflicts, barriers int
+	require.NoError(t, repo.db.QueryRow(
+		`SELECT count(*) FROM task_transfer_audit WHERE idempotency_key = 'workspace-holder-durable' AND result = 'conflict'`,
+	).Scan(&conflicts))
+	require.Equal(t, 1, conflicts, "the interrupted attempt must be audited once as a non-barrier conflict")
 	require.NoError(t, repo.db.QueryRow(
 		`SELECT count(*) FROM task_transfer_audit WHERE idempotency_key = 'workspace-holder-durable' AND result IN ('failed', 'denied')`,
 	).Scan(&barriers))
 	require.Zero(t, barriers, "an interrupted workspace-lock wait must not write a terminal barrier row")
+
+	var workspaceID string
+	require.NoError(t, repo.db.QueryRow(
+		repo.db.Rebind(`SELECT workspace_id FROM tasks WHERE id = ?`), command.TaskID,
+	).Scan(&workspaceID))
+	require.Equal(t, command.ExpectedSourceWorkspaceID, workspaceID, "the task must remain in the source workspace")
 
 	require.NoError(t, holder.Rollback())
 	receipt, err := repo.TransferTask(context.Background(), command)

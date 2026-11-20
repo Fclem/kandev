@@ -447,8 +447,9 @@ rather than choosing a new transfer or ownership policy.
 
 This design amendment was independently reviewed and accepted in V6; a later
 explicit instruction authorized the local implementation. The candidate takes
-workspace-first EXCLUSIVE NOWAIT reservations; the delivered version still uses
-blocking SHARE ROW EXCLUSIVE. Delivery requires independent actual-diff review.
+workspace-first EXCLUSIVE NOWAIT reservations; the delivered version takes SHARE ROW
+EXCLUSIVE workspace locks and NOWAIT EXCLUSIVE relation locks
+(`task_transfer_relations.go`). Delivery requires independent actual-diff review.
 
 For AC-TASKS-CROSS-WORKSPACE-TRANSFER-001.6, acquire source and destination
 workspace rows in sorted order before any table or task-row lock. Resolve

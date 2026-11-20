@@ -66,6 +66,11 @@ independent of render timing. No optimistic workspace removal occurs.
   domain-guard rejection. After rollback it records one non-barrier `conflict` audit
   row outside the transaction and leaves the same key retryable. It writes no
   `failed` barrier and no `operation_rejected` terminal result.
+- Every Web attempt that ends without a committed receipt or a domain-guard barrier
+  (cancellation, workspace or relation lock wait or failure, lookup, apply, or commit
+  infrastructure error) records one detached non-barrier `conflict` row, leaves the
+  same key retryable, and is uncertain to the client. The MCP path audits the same
+  infrastructure failures as `failed`; the Web path audits them as `conflict`.
 - Bind Web terminal-result lookup to the exact task, expected source placement
   and generation, destination IDs, policy, key, and server-attested actor/session
   stored in the audit columns. A changed request or other actor's key collision

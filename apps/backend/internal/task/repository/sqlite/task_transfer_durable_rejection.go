@@ -85,19 +85,26 @@ func (r *Repository) runDurableTaskTransfer(
 	if err != nil {
 		return nil, err
 	}
-	tx, err := r.db.BeginTxx(ctx, nil)
+	tx, err := r.db.BeginTxx(ctx, r.hierarchyTxOptions())
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, "SAVEPOINT "+taskTransferApplySavepoint); err != nil {
+		return nil, err
+	}
+	// Same acquisition order as TransferTask: workspace rows, then the relation census.
+	if err := r.lockTaskTransferWorkspaces(ctx, tx, command); err != nil {
+		if !errors.Is(err, repoerrors.ErrTaskTransferConflict) {
+			return nil, err
+		}
+		return r.commitTaskTransferRejection(ctx, tx, command, requestDigest, err)
+	}
 	if err := r.lockTaskTransferRelations(ctx, tx, projections, counts, inventory); err != nil {
 		return nil, err
 	}
 	if receipt, found, err := r.serializedTaskTransferOutcome(ctx, tx, command, requestDigest); err != nil || found {
 		return receipt, err
-	}
-	if _, err := tx.ExecContext(ctx, "SAVEPOINT "+taskTransferApplySavepoint); err != nil {
-		return nil, err
 	}
 	receipt, applyErr := r.applyTaskTransfer(ctx, tx, command, requestDigest, projections, counts, inventory)
 	if applyErr == nil {

@@ -208,6 +208,28 @@ func TestTransferTaskAuditsValidationAndTransactionFailuresAfterCancellation(t *
 	}
 }
 
+func TestDurableTransferInterruptionLeavesKeyRetryable(t *testing.T) {
+	repo, task := seedTaskTransferFixture(t)
+	command := taskTransferCommand(task)
+	command.DurableRejection = true
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := repo.TransferTask(ctx, command); err == nil {
+		t.Fatal("TransferTask unexpectedly succeeded")
+	}
+	var barriers int
+	if err := repo.db.Get(&barriers, `SELECT COUNT(*) FROM task_transfer_audit
+		WHERE task_id = ? AND result = ?`, task.ID, taskTransferResultFailed); err != nil {
+		t.Fatalf("read barrier rows: %v", err)
+	}
+	if barriers != 0 {
+		t.Fatalf("failed barrier rows = %d, want 0", barriers)
+	}
+	if _, err := repo.TransferTask(context.Background(), command); err != nil {
+		t.Fatalf("exact retry after interruption: %v", err)
+	}
+}
+
 func TestHandleTaskTransferOperationViolationDeterministicallyRecoversChangedKeyConflict(t *testing.T) {
 	repo, task := seedTaskTransferFixture(t)
 	command := taskTransferCommand(task)

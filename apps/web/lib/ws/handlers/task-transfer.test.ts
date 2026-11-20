@@ -606,3 +606,17 @@ describe("transfer departure read across a delete", () => {
     expect(fetchTask).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("delayed events after a genuine delete", () => {
+  it("does not re-admit a deleted task from a stale canonical read", async () => {
+    const { store, handlers } = sourceStore();
+    fetchTask.mockResolvedValue(canonical({ workspace_id: SOURCE, workflow_id: "wf-a" }));
+
+    deliver(handlers, "task.deleted", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
+    expect(resident(store)).toBe(false);
+
+    deliver(handlers, "task.updated", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
+    await taskMembershipSettled(store, TASK);
+    expect(resident(store)).toBe(false);
+  });
+});

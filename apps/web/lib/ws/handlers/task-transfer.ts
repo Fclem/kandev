@@ -171,12 +171,21 @@ export function taskMembershipSettled(store: StoreApi<AppState>, taskId: string)
   return records.get(store)?.get(taskId)?.running ?? Promise.resolve();
 }
 
+/** Task ids this store has seen really deleted. Task ids are never reused. */
+const deletedTaskIds = new WeakMap<StoreApi<AppState>, Set<string>>();
+
 /**
- * Retires a deleted task's membership record. A canonical read already in flight
- * observes the retirement and applies nothing, so a delete cannot be undone by a
- * read that resolves after it.
+ * Retires a deleted task. A canonical read already in flight observes the
+ * retirement and applies nothing, and a read that starts later is fenced, so a
+ * stale pre-delete row cannot re-admit the task after a genuine delete.
  */
 export function retireTaskMembership(store: StoreApi<AppState>, taskId: string): void {
+  let deleted = deletedTaskIds.get(store);
+  if (!deleted) {
+    deleted = new Set();
+    deletedTaskIds.set(store, deleted);
+  }
+  deleted.add(taskId);
   const byTask = records.get(store);
   const record = byTask?.get(taskId);
   if (!byTask || !record) return;
@@ -252,6 +261,7 @@ function applyCanonicalMembership(
   record: ReconcileRecord,
 ): void {
   if (!workspaceId) return;
+  if (deletedTaskIds.get(store)?.has(taskId)) return;
   if (result.kind === "transient") {
     scheduleRetry(store, taskId, record);
     return;

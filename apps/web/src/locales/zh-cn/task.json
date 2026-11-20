@@ -3429,6 +3429,7 @@
   "workspaceMoveErrorCleanupActive": "任务清理或恢复正在进行。请等待其完成。",
   "workspaceMoveErrorIdempotency": "此请求与之前的移动请求冲突。请先检查任务再重试。",
   "workspaceMoveErrorUnsupported": "无法将此任务安全地移动到该目标。",
+  "workspaceMoveErrorRelationsBusy": "未移动任何内容。另一项更改暂时占用了此任务。请再次尝试移动。",
   "workspaceMoveErrorForbidden": "你需要在两个工作区中都有编辑任务的权限。",
   "workspaceMoveErrorUnavailable": "任务或目标不可用。",
   "workspaceMoveErrorInvalid": "移动请求未被接受。",

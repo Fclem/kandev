@@ -166,6 +166,8 @@ describe("submission", () => {
     });
     await waitFor(() => expect(reconcile).toHaveBeenCalledWith(store, "task-1"));
     expect(hook.result.current.operation?.status).toBe("submitting");
+    await act(() => hook.result.current.submit());
+    expect(api.transferTask).toHaveBeenCalledTimes(1);
     await act(async () => gate.resolve(undefined));
     expect(hook.result.current.operation?.status).toBe("committed");
   });

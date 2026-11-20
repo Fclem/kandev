@@ -3429,6 +3429,7 @@
   "workspaceMoveErrorCleanupActive": "任務清理或恢復正在進行。請等待其完成。",
   "workspaceMoveErrorIdempotency": "此請求與之前的移動請求衝突。請先檢查任務再重試。",
   "workspaceMoveErrorUnsupported": "無法將此任務安全地移動到該目標。",
+  "workspaceMoveErrorRelationsBusy": "未移動任何內容。另一項變更暫時佔用了此任務。請再次嘗試移動。",
   "workspaceMoveErrorForbidden": "你需要在兩個工作區中都有編輯任務的權限。",
   "workspaceMoveErrorUnavailable": "任務或目標不可用。",
   "workspaceMoveErrorInvalid": "移動請求未被接受。",

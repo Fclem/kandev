@@ -65,8 +65,9 @@ func (r *Repository) transferTaskWithDurableRejection(
 	case errors.As(err, &settled):
 		return nil, settled.err
 	case isTaskTransferRelationsBusy(err):
-		// NOWAIT lock conflict: nothing was mutated and the key stays retryable (AC-...-001.6).
-		return nil, err
+		// NOWAIT lock conflict: nothing was mutated, so the key stays retryable (AC-...-001.6).
+		// The attempt is audited as a conflict, which is not barrier evidence.
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(context.WithoutCancel(ctx), command, taskTransferResultConflict))
 	default:
 		// The transaction rolled back before this point, so no outcome row is committed.
 		// Record exactly one failed row on a detached context so cancellation cannot drop it.

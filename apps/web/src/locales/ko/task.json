@@ -3429,6 +3429,7 @@
   "workspaceMoveErrorCleanupActive": "작업 정리 또는 복구가 진행 중입니다. 완료될 때까지 기다리세요.",
   "workspaceMoveErrorIdempotency": "이 요청이 이전 이동 요청과 충돌합니다. 다시 시도하기 전에 작업을 확인하세요.",
   "workspaceMoveErrorUnsupported": "이 작업을 해당 대상으로 안전하게 이동할 수 없습니다.",
+  "workspaceMoveErrorRelationsBusy": "아무것도 이동되지 않았습니다. 다른 변경으로 작업이 잠시 잠겨 있습니다. 이동을 다시 시도하세요.",
   "workspaceMoveErrorForbidden": "두 워크스페이스 모두에서 작업을 편집할 권한이 필요합니다.",
   "workspaceMoveErrorUnavailable": "작업 또는 대상을 사용할 수 없습니다.",
   "workspaceMoveErrorInvalid": "이동 요청이 수락되지 않았습니다.",

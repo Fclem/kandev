@@ -3429,6 +3429,7 @@
   "workspaceMoveErrorCleanupActive": "Ţàśķ ćĺēàńũƥ ōŕ ŕēćōvēŕŷ ĩś ŕũńńĩńĝ. Ŵàĩţ ƒōŕ ĩţ ţō ƒĩńĩśĥ.",
   "workspaceMoveErrorIdempotency": "Ţĥĩś ŕēqũēśţ ćōńƒĺĩćţś ŵĩţĥ àń ēàŕĺĩēŕ ḿōvē ŕēqũēśţ. Ŕēvĩēŵ ţĥē ţàśķ ƀēƒōŕē ţŕŷĩńĝ àĝàĩń.",
   "workspaceMoveErrorUnsupported": "Ţĥĩś ţàśķ ćàńńōţ ƀē ḿōvēď śàƒēĺŷ ţō ţĥàţ ďēśţĩńàţĩōń.",
+  "workspaceMoveErrorRelationsBusy": "Ńōţĥĩńĝ ŵàś ḿōvēď. Àńōţĥēŕ ćĥàńĝē ƀŕĩēƒĺŷ ĥōĺďŝ ţĥĩś ţàśķ. Ţŕŷ ţĥē ḿōvē àĝàĩń.",
   "workspaceMoveErrorForbidden": "Ŷōũ ńēēď ƥēŕḿĩśśĩōń ţō ēďĩţ ţàśķś ĩń ƀōţĥ ŵōŕķśƥàćēś.",
   "workspaceMoveErrorUnavailable": "Ţĥē ţàśķ ōŕ ďēśţĩńàţĩōń ĩś ńōţ àvàĩĺàƀĺē.",
   "workspaceMoveErrorInvalid": "Ţĥē ḿōvē ŕēqũēśţ ŵàś ńōţ àććēƥţēď.",

@@ -3429,6 +3429,7 @@
   "workspaceMoveErrorCleanupActive": "Task cleanup or recovery is running. Wait for it to finish.",
   "workspaceMoveErrorIdempotency": "This request conflicts with an earlier move request. Review the task before trying again.",
   "workspaceMoveErrorUnsupported": "This task cannot be moved safely to that destination.",
+  "workspaceMoveErrorRelationsBusy": "Nothing moved. Another change briefly holds this task. Try the move again.",
   "workspaceMoveErrorForbidden": "You need permission to edit tasks in both workspaces.",
   "workspaceMoveErrorUnavailable": "The task or destination is not available.",
   "workspaceMoveErrorInvalid": "The move request was not accepted.",

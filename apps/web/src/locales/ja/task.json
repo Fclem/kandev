@@ -3429,6 +3429,7 @@
   "workspaceMoveErrorCleanupActive": "タスクのクリーンアップまたは復旧が実行中です。完了するまでお待ちください。",
   "workspaceMoveErrorIdempotency": "このリクエストは以前の移動リクエストと競合しています。もう一度試す前にタスクを確認してください。",
   "workspaceMoveErrorUnsupported": "このタスクをその移動先に安全に移動することはできません。",
+  "workspaceMoveErrorRelationsBusy": "何も移動されていません。別の変更によりタスクが一時的にロックされています。もう一度移動してください。",
   "workspaceMoveErrorForbidden": "両方のワークスペースでタスクを編集する権限が必要です。",
   "workspaceMoveErrorUnavailable": "タスクまたは移動先を利用できません。",
   "workspaceMoveErrorInvalid": "移動リクエストは受け付けられませんでした。",

@@ -231,6 +231,7 @@ Allowlist these proposed codes and translate their recovery copy in the client:
 | `idempotency_conflict` | Review the operation identity; this alone cannot settle a previously uncertain move or enable a fresh key. |
 | `operation_rejected` | The caller-bound key is durably barred and has no committed receipt; review current placement before a fresh submission. |
 | `transfer_unsupported` | This attempt cannot safely transfer the task; a result check does not establish that the original attempt failed. |
+| `relations_busy` | Nothing moved; a concurrent change briefly holds the task. Retry the same move shortly. |
 
 Missing reach never returns a diagnostic reason, destination metadata, table
 name, or raw internal error. Same-owner mismatch remains a non-disclosing

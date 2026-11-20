@@ -39,6 +39,7 @@ export type TransferRejectionCode =
   | "cleanup_active"
   | "idempotency_conflict"
   | "transfer_unsupported"
+  | "relations_busy"
   | "forbidden"
   | "unavailable"
   | "invalid";
@@ -54,6 +55,7 @@ const KNOWN_CONFLICT_CODES = new Set<string>([
   "cleanup_active",
   "idempotency_conflict",
   "transfer_unsupported",
+  "relations_busy",
 ]);
 
 function conflictCode(error: ApiError): string | null {
@@ -148,22 +150,27 @@ export class WorkspaceMoveOperations {
   }
 
   /** Hides an accepted receipt from the visible surface until membership is reconciled. */
-  beginReconcile(identity: string, taskId: string): void {
-    if (identity !== this.identity) return;
+  beginReconcile(identity: string, taskId: string): object | null {
+    if (identity !== this.identity) return null;
     const committed = this.byTask.get(taskId);
-    if (committed?.status !== "committed") return;
-    this.reconciling.set(taskId, {
-      status: "submitting",
+    if (committed?.status !== "committed") return null;
+    const overlay = {
+      status: "submitting" as const,
       taskId,
       body: committed.body,
-      attempt: "submit",
-    });
+      attempt: "submit" as const,
+    };
+    this.reconciling.set(taskId, overlay);
     this.emit();
+    return overlay;
   }
 
-  endReconcile(identity: string, taskId: string): void {
+  /** Clears only the overlay this reconcile created; a superseded token is ignored. */
+  endReconcile(identity: string, taskId: string, overlay: object): void {
     if (identity !== this.identity) return;
-    if (this.reconciling.delete(taskId)) this.emit();
+    if (this.reconciling.get(taskId) !== overlay) return;
+    this.reconciling.delete(taskId);
+    this.emit();
   }
 
   /** A restored record for this task failed validation and cannot be checked here. */
@@ -181,6 +188,7 @@ export class WorkspaceMoveOperations {
   ): Extract<WorkspaceMoveOperation, { status: "submitting" }> | null {
     this.adopt(identity);
     const current = this.byTask.get(taskId);
+    if (this.reconciling.has(taskId)) return null;
     if (current?.status === "submitting") return null;
     if (attempt === "submit" && isUnresolvedWorkspaceMove(current ?? null)) return null;
     if (attempt === "submit" && (this.storageUnavailable || this.unverifiable.has(taskId))) {

@@ -56,9 +56,9 @@ export function useTaskWorkspaceMoveOperation(taskId: string | null) {
       if (settled.status === "committed") {
         // Success stays hidden until canonical placement is reconciled. A failed
         // reconciliation read leaves the receipt committed.
-        registry.beginReconcile(identity, taskId);
+        const overlay = registry.beginReconcile(identity, taskId);
         await reconcileTaskMembership(store, taskId).catch(() => undefined);
-        registry.endReconcile(identity, taskId);
+        if (overlay) registry.endReconcile(identity, taskId, overlay);
       }
     },
     [identity, registry, store, taskId],

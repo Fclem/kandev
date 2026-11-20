@@ -26,6 +26,7 @@ const REJECTION_KEYS: Record<TransferRejectionCode, string> = {
   cleanup_active: "task:workspaceMoveErrorCleanupActive",
   idempotency_conflict: "task:workspaceMoveErrorIdempotency",
   transfer_unsupported: "task:workspaceMoveErrorUnsupported",
+  relations_busy: "task:workspaceMoveErrorRelationsBusy",
   forbidden: "task:workspaceMoveErrorForbidden",
   unavailable: "task:workspaceMoveErrorUnavailable",
   invalid: "task:workspaceMoveErrorInvalid",

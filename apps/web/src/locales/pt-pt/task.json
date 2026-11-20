@@ -3429,6 +3429,7 @@
   "workspaceMoveErrorCleanupActive": "A limpeza ou recuperação da tarefa está em curso. Aguarde que termine.",
   "workspaceMoveErrorIdempotency": "Este pedido entra em conflito com um pedido de movimentação anterior. Reveja a tarefa antes de tentar novamente.",
   "workspaceMoveErrorUnsupported": "Não é possível mover esta tarefa com segurança para esse destino.",
+  "workspaceMoveErrorRelationsBusy": "Nada foi movido. Outra alteração bloqueia brevemente esta tarefa. Tente mover novamente.",
   "workspaceMoveErrorForbidden": "Precisa de permissão para editar tarefas em ambos os espaços de trabalho.",
   "workspaceMoveErrorUnavailable": "A tarefa ou o destino não está disponível.",
   "workspaceMoveErrorInvalid": "O pedido de movimentação não foi aceite.",

@@ -27,6 +27,7 @@ acceptance_criteria:
   - AC-TASKS-CROSS-WORKSPACE-TRANSFER-005.3
 system_design:
   - ../../specs/tasks/system-design/cross-workspace-task-transfer.md
+  - ../../specs/tasks/system-design/cross-workspace-task-transfer-web-recovery.md
 ---
 
 # Task 01: Expose safe human workspace transfer
@@ -102,7 +103,7 @@ None. Existing transfer storage/service implementation is present. Read its orig
 ## Inputs
 
 - [Requirements](../../specs/tasks/requirements/cross-workspace-task-transfer.md), 001-003 and 005.
-- [System design](../../specs/tasks/system-design/cross-workspace-task-transfer.md): Human HTTP boundary, Safe conflict diagnostics, Submission recovery.
+- [System design](../../specs/tasks/system-design/cross-workspace-task-transfer.md): Human HTTP boundary, Safe conflict diagnostics. [Companion](../../specs/tasks/system-design/cross-workspace-task-transfer-web-recovery.md): durable-rejection, serialization, and cancellation rules for this endpoint.
 - `apps/backend/AGENTS.md`, `/tdd`, existing `service_transfer_test.go`, repository `task_transfer*_test.go`, and `task_transfer_handler.go` strict decoding/actor pattern.
 
 ## Results

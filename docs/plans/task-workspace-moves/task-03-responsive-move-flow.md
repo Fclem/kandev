@@ -29,6 +29,7 @@ acceptance_criteria:
   - AC-TASKS-CROSS-WORKSPACE-TRANSFER-005.4
 system_design:
   - ../../specs/tasks/system-design/cross-workspace-task-transfer.md
+  - ../../specs/tasks/system-design/cross-workspace-task-transfer-web-recovery.md
 ---
 
 # Task 03: Deliver unified responsive movement actions
@@ -178,7 +179,7 @@ Tasks 01 and 02. Do not expose workspace transfer while source-removal notificat
 ## Inputs
 
 - [Requirements](../../specs/tasks/requirements/cross-workspace-task-transfer.md), especially 004 and 005.
-- [System design](../../specs/tasks/system-design/cross-workspace-task-transfer.md): all Web sections.
+- [System design](../../specs/tasks/system-design/cross-workspace-task-transfer.md) and [web submission recovery companion](../../specs/tasks/system-design/cross-workspace-task-transfer-web-recovery.md): all Web sections.
 - [Plan test matrix and previews](plan.md).
 - `apps/web/AGENTS.md`, `/tdd`, `/mobile-parity`, `/e2e`, `/docs-maintainer`.
 - Existing `ChangeWorkflowDialog`, `use-change-workflow-data.ts`, `TaskMoveContextMenuItems`, `MobilePickerSheet`, cross-workflow E2E, and Task 01/02 contracts.

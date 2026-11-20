@@ -12,8 +12,9 @@ requirements:
 # Cross-workspace task transfer web submission recovery System Design
 
 Companion to [Audited cross-workspace task transfers System Design](cross-workspace-task-transfer.md).
-Owns the Web submission and recovery rules. The backend contract, conflict codes,
-and audit semantics remain in the parent document.
+Owns the Web submission and recovery rules, plus the backend durable-rejection,
+serialization, and cancellation rules that those Web operations depend on. The
+parent keeps the HTTP boundary, conflict-code table, persistence, and observability.
 
 ## Submission recovery
 

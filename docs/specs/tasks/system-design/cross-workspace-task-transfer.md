@@ -298,9 +298,9 @@ the Traditional Chinese pair through the existing locale script.
 
 ## Submission recovery
 
-Web submission, uncertainty, check, and session-storage recovery rules are in
+Web submission, uncertainty, check, session-storage recovery, and the backend
+durable-rejection, serialization, and cancellation rules those operations use are in
 [Cross-workspace task transfer web submission recovery System Design](cross-workspace-task-transfer-web-recovery.md).
-The backend conflict and audit contract stays in this document.
 
 ## Client reconciliation
 

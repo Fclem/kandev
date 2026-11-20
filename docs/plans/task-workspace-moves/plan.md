@@ -9,6 +9,7 @@ requirements:
   - REQ-TASKS-CROSS-WORKSPACE-TRANSFER-005
 system_design:
   - ../../specs/tasks/system-design/cross-workspace-task-transfer.md
+  - ../../specs/tasks/system-design/cross-workspace-task-transfer-web-recovery.md
 legacy_specs: []
 ---
 
@@ -43,7 +44,7 @@ These are the existing transfer restrictions, not a new narrower preservation po
 
 ### Existing contracts and companion packages
 
-- Authoritative [requirements](../../specs/tasks/requirements/cross-workspace-task-transfer.md) and [design](../../specs/tasks/system-design/cross-workspace-task-transfer.md), extended in place, own this whole vertical feature.
+- Authoritative [requirements](../../specs/tasks/requirements/cross-workspace-task-transfer.md), [design](../../specs/tasks/system-design/cross-workspace-task-transfer.md), and its [web submission recovery companion](../../specs/tasks/system-design/cross-workspace-task-transfer-web-recovery.md), extended in place, own this whole vertical feature.
 - [Original transfer package](../cross-workspace-task-transfers/plan.md): completed domain/MCP implementation. Its frontend exclusion does not apply to this new package. Its historical results are not evidence for new HTTP, scope, client, or UI behavior.
 - [Change workflow](../change-workflow/plan.md) and [step colors](../change-workflow-step-colors/plan.md): preserve their form, replacement controls, entry preview, source-version guard, and color semantics. Only movement-menu placement changes. On delivery reconcile affected menu E2E scenarios and active presentation wording; do not mark those completed packages pending or claim their historical commands were rerun.
 - [Task-owned worktree lifetime](../../decisions/2026-08-08-task-owned-worktree-lifetime.md) prohibits deleting task resources merely because a session or listing membership changes. No new ADR, schema, or runtime flag is needed.

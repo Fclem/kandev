@@ -16,6 +16,7 @@ acceptance_criteria:
   - AC-TASKS-CROSS-WORKSPACE-TRANSFER-005.4
 system_design:
   - ../../specs/tasks/system-design/cross-workspace-task-transfer.md
+  - ../../specs/tasks/system-design/cross-workspace-task-transfer-web-recovery.md
 ---
 
 # Task 02: Preserve client task context across transfers

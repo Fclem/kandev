@@ -33,9 +33,9 @@ describe("settleWorkspaceMove check outcomes", () => {
     expect(settled).toEqual({ status: "check-unavailable", taskId: "task-1", body });
   });
 
-  it("does not attach a refusal code to a busy relation lock on check", () => {
+  it("keeps a busy relation lock on check uncertain, not a permissions failure", () => {
     const settled = settleWorkspaceMove(checking(), { error: conflict("relations_busy") });
-    expect(settled).toEqual({ status: "check-unavailable", taskId: "task-1", body });
+    expect(settled).toEqual({ status: "uncertain", taskId: "task-1", body });
   });
 
   it("does not attach a code to a non-conflict check failure", () => {

@@ -832,7 +832,7 @@ func (r *Repository) lockTaskTransferWorkspaces(ctx context.Context, tx *sqlx.Tx
 	var version time.Time
 	err := tx.QueryRowContext(ctx, r.db.Rebind(`SELECT workspace_id,workflow_id,workflow_step_id,updated_at FROM tasks WHERE id=?`), command.TaskID).Scan(&workspace, &workflow, &step, &version)
 	if err != nil {
-		return taskTransferConflict(err, "source predicate changed")
+		return taskTransferConflict(err, repoerrors.TaskTransferSourceChanged, "source predicate changed")
 	}
 	if workspace != command.ExpectedSourceWorkspaceID || workflow != command.ExpectedSourceWorkflowID || step != command.ExpectedSourceStepID || !version.Equal(command.ExpectedTaskUpdatedAt) {
 		return repoerrors.ErrTaskTransferConflict

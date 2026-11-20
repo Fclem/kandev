@@ -81,11 +81,12 @@ export function useProfileModelCapabilities(
     configIsLoading: modelOptions.configIsLoading,
   });
 
-  useRuntimeActivationRefresh(agentName, runtimeUpdateJob, discovery.refresh);
+  useRuntimeActivationRefresh(agentName, runtimeUpdateJob, discovery.refreshProbe);
 
   return {
     capabilities,
     discoveryState: discovery.discoveryState,
+    publicationFailed: discovery.publicationFailed,
     configOptions: modelOptions.configOptions,
     configStatus: modelOptions.configStatus,
     configReasonCode: modelOptions.configReasonCode,

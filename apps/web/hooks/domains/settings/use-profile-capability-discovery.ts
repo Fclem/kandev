@@ -7,7 +7,10 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { probeAgentProfile } from "@/lib/api/domains/profile-capability-api";
+import {
+  probeAgentProfile,
+  refreshAgentProfileCatalog,
+} from "@/lib/api/domains/profile-capability-api";
 import type {
   CapabilityStatus,
   CLIFlag,
@@ -216,6 +219,7 @@ function useSavedProfileCapabilityProbe({
 type ProfileCapabilityRefreshInput = {
   agentName: string;
   profileId?: string;
+  publicationProfileId?: string;
   launchSettings: ProfileLaunchSettingsRequest;
   launchKey: string;
   isStaticContext: boolean;
@@ -228,6 +232,7 @@ type ProfileCapabilityRefreshInput = {
 function useProfileCapabilityRefresh({
   agentName,
   profileId,
+  publicationProfileId,
   launchSettings,
   launchKey,
   isStaticContext,
@@ -236,69 +241,76 @@ function useProfileCapabilityRefresh({
   setCapabilityState,
   commitCapabilityResponse,
 }: ProfileCapabilityRefreshInput) {
-  return useCallback(async () => {
-    if (isStaticContext || !agentName) return;
-    const sequence = ++capabilitySequence.current;
-    const resolveContext: ProfileCapabilityState["resolveContext"] = {
-      ...(profileId ? { profile_id: profileId } : {}),
-      launch_settings: launchSettings,
-    };
-    setCapabilityState((current) => ({
-      launchKey,
-      status: "loading",
-      response:
-        current?.launchKey === launchKey && current.response.status === "ok"
-          ? current.response
-          : emptyResponse(agentName, "probing"),
-      resolveContext,
-    }));
-    try {
-      const response = await probeAgentProfile(agentName, { ...resolveContext, refresh: true });
-      if (
-        capabilityRequestIsStale(
-          sequence,
-          capabilitySequence.current,
-          currentLaunchKeyRef.current,
-          launchKey,
-        )
-      )
-        return;
-      commitCapabilityResponse(response, launchKey, resolveContext);
-    } catch (err) {
-      if (
-        capabilityRequestIsStale(
-          sequence,
-          capabilitySequence.current,
-          currentLaunchKeyRef.current,
-          launchKey,
-        )
-      )
-        return;
-      const error = err instanceof Error ? err.message : t("agents:failedToFetchCapabilities");
-      setCapabilityState((current) => {
-        const priorResponse =
+  return useCallback(
+    async (publishSaved: boolean) => {
+      if (isStaticContext || !agentName) return;
+      const sequence = ++capabilitySequence.current;
+      const resolveContext: ProfileCapabilityState["resolveContext"] = {
+        ...(profileId ? { profile_id: profileId } : {}),
+        launch_settings: launchSettings,
+      };
+      setCapabilityState((current) => ({
+        launchKey,
+        status: "loading",
+        response:
           current?.launchKey === launchKey && current.response.status === "ok"
             ? current.response
-            : emptyResponse(agentName, "failed");
-        return {
-          launchKey,
-          status: "failed",
-          response: { ...priorResponse, error },
-          resolveContext,
-        };
-      });
-    }
-  }, [
-    agentName,
-    capabilitySequence,
-    commitCapabilityResponse,
-    currentLaunchKeyRef,
-    isStaticContext,
-    launchKey,
-    launchSettings,
-    profileId,
-    setCapabilityState,
-  ]);
+            : emptyResponse(agentName, "probing"),
+        resolveContext,
+      }));
+      try {
+        const response =
+          publishSaved && publicationProfileId
+            ? await refreshAgentProfileCatalog(publicationProfileId)
+            : await probeAgentProfile(agentName, { ...resolveContext, refresh: true });
+        if (
+          capabilityRequestIsStale(
+            sequence,
+            capabilitySequence.current,
+            currentLaunchKeyRef.current,
+            launchKey,
+          )
+        )
+          return;
+        commitCapabilityResponse(response, launchKey, resolveContext);
+      } catch (err) {
+        if (
+          capabilityRequestIsStale(
+            sequence,
+            capabilitySequence.current,
+            currentLaunchKeyRef.current,
+            launchKey,
+          )
+        )
+          return;
+        const error = err instanceof Error ? err.message : t("agents:failedToFetchCapabilities");
+        setCapabilityState((current) => {
+          const priorResponse =
+            current?.launchKey === launchKey && current.response.status === "ok"
+              ? current.response
+              : emptyResponse(agentName, "failed");
+          return {
+            launchKey,
+            status: "failed",
+            response: { ...priorResponse, error },
+            resolveContext,
+          };
+        });
+      }
+    },
+    [
+      agentName,
+      capabilitySequence,
+      commitCapabilityResponse,
+      currentLaunchKeyRef,
+      isStaticContext,
+      launchKey,
+      launchSettings,
+      profileId,
+      publicationProfileId,
+      setCapabilityState,
+    ],
+  );
 }
 
 export function useProfileCapabilityDiscovery(
@@ -360,9 +372,10 @@ export function useProfileCapabilityDiscovery(
     commitCapabilityResponse,
   });
 
-  const refresh = useProfileCapabilityRefresh({
+  const requestRefresh = useProfileCapabilityRefresh({
     agentName,
     profileId: options.profileId,
+    publicationProfileId: savedPublicationProfileId(options, launchSettings),
     launchSettings,
     launchKey,
     isStaticContext,
@@ -371,6 +384,8 @@ export function useProfileCapabilityDiscovery(
     setCapabilityState,
     commitCapabilityResponse,
   });
+  const refresh = useCallback(() => requestRefresh(true), [requestRefresh]);
+  const refreshProbe = useCallback(() => requestRefresh(false), [requestRefresh]);
 
   const activeCapability = capabilityState?.launchKey === launchKey ? capabilityState : null;
   const discoveryState: ProfileDiscoveryStatus = getDiscoveryState(
@@ -387,21 +402,46 @@ export function useProfileCapabilityDiscovery(
   return {
     activeCapability,
     discoveryState,
-    error: discoveryState === "failed" ? (activeCapability?.response.error ?? null) : null,
+    ...capabilityDiscoveryView(
+      activeCapability,
+      capabilityState,
+      profileIdentityRef.current === profileIdentity,
+      discoveryState,
+    ),
     refresh,
+    refreshProbe,
     markCapabilityFailed,
+    launchKey,
+  };
+}
+
+function savedPublicationProfileId(
+  options: ProfileCapabilityDiscoveryOptions,
+  launchSettings: ProfileLaunchSettingsRequest,
+): string | undefined {
+  if (!options.profileId || !options.savedLaunchSettings) return undefined;
+  return JSON.stringify(canonicalLaunchSettings(options.savedLaunchSettings)) ===
+    JSON.stringify(launchSettings)
+    ? options.profileId
+    : undefined;
+}
+
+function capabilityDiscoveryView(
+  activeCapability: ProfileCapabilityState | null,
+  capabilityState: ProfileCapabilityState | null,
+  isSameProfile: boolean,
+  discoveryState: ProfileDiscoveryStatus,
+) {
+  return {
+    error: discoveryState === "failed" ? (activeCapability?.response.error ?? null) : null,
+    publicationFailed: activeCapability?.response.publication?.status === "failed",
     models: responseModels(activeCapability?.response),
     modes: responseModes(activeCapability?.response),
     commands: responseCommands(activeCapability?.response),
     currentModelId: activeCapability?.response.current_model_id,
     currentModeId: activeCapability?.response.current_mode_id,
     status: activeCapability?.response.status,
-    launchKey,
-    runtimeInfo: retainedRuntimeInfo(
-      activeCapability,
-      capabilityState,
-      profileIdentityRef.current === profileIdentity,
-    ),
+    runtimeInfo: retainedRuntimeInfo(activeCapability, capabilityState, isSameProfile),
   };
 }
 

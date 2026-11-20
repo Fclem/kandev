@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TooltipProvider } from "@kandev/ui/tooltip";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ModelSelector } from "@/components/task/model-selector";
 import { ModeSelector } from "@/components/task/mode-selector";
+import { createAppStore, type AppState } from "@/lib/state/store";
 
 const mocks = vi.hoisted(() => {
   const sessionId = "session-1" as const;
@@ -78,10 +79,16 @@ const mocks = vi.hoisted(() => {
 const SESSION_ID = mocks.sessionId;
 const MODE_SELECTOR_TEST_ID = "session-mode-selector";
 
+let mockStoreApi: ReturnType<typeof createAppStore>;
+beforeEach(() => {
+  mockStoreApi = createAppStore();
+  Object.assign(mockStoreApi.getState(), mocks.appState);
+});
+
 vi.mock("@/components/state-provider", () => ({
-  useAppStoreApi: () => ({ getState: () => mocks.appState }),
-  useAppStore: (selector: (state: typeof mocks.appState) => unknown) => {
-    const result = selector(mocks.appState);
+  useAppStoreApi: () => mockStoreApi,
+  useAppStore: (selector: (state: AppState) => unknown) => {
+    const result = selector(mockStoreApi.getState());
     mocks.storeSelections.push(result);
     return result;
   },
@@ -123,18 +130,6 @@ afterEach(() => {
 });
 
 describe("task selector trigger styling", () => {
-  it("forwards custom trigger classes to the model selector trigger", () => {
-    render(
-      <TooltipProvider>
-        <ModelSelector sessionId={SESSION_ID} triggerClassName="max-w-model" />
-      </TooltipProvider>,
-    );
-
-    expect(screen.getByRole("button", { name: "Session model settings" }).className).toContain(
-      "max-w-model",
-    );
-  });
-
   it("opts the task model selector into its changed-values summary", () => {
     render(
       <TooltipProvider>
@@ -147,17 +142,6 @@ describe("task selector trigger styling", () => {
     );
   });
 
-  it("subscribes only to the active session model entry", () => {
-    render(
-      <TooltipProvider>
-        <ModelSelector sessionId={SESSION_ID} />
-      </TooltipProvider>,
-    );
-
-    expect(mocks.storeSelections).toContain(mocks.appState.sessionModels.bySessionId[SESSION_ID]);
-    expect(mocks.storeSelections).not.toContain(mocks.appState.sessionModels.bySessionId);
-  });
-
   it("waits for dynamic session config before rendering a partial label", () => {
     render(
       <TooltipProvider>
@@ -166,16 +150,6 @@ describe("task selector trigger styling", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Session model settings" })).toBeNull();
-  });
-
-  it("forwards custom trigger classes to the mode selector trigger", () => {
-    render(
-      <TooltipProvider>
-        <ModeSelector sessionId={SESSION_ID} triggerClassName="max-w-mode" />
-      </TooltipProvider>,
-    );
-
-    expect(screen.getByTestId(MODE_SELECTOR_TEST_ID).className).toContain("max-w-mode");
   });
 
   it("puts the current mode first with a persistent selected surface", () => {

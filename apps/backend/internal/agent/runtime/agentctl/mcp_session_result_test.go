@@ -29,19 +29,20 @@ func TestMCPSessionResultCarriesExactRequestMetadataAndIdentity(t *testing.T) {
 			ctx := streams.WithMCPResolution(context.Background(), []streams.MCPResolutionEntry{{RuntimeName: "protected", DefinitionID: "definition", ReasonCode: "secret_resolution_failed"}})
 			var id string
 			var err error
+			var result NewSessionResponse
 			switch action {
 			case "new":
-				var result NewSessionResponse
 				result, err = client.NewSessionWithResult(ctx, "/workspace", nil)
 				id = result.AttachmentAttemptID
 			case "reset":
-				var result NewSessionResponse
 				result, err = client.ResetSessionWithResult(ctx, "/workspace", nil)
 				id = result.AttachmentAttemptID
 			case "load":
-				id, err = client.LoadSessionWithResult(ctx, "native", nil, streams.SessionSettingsPolicyStrict)
+				result, err = client.LoadSessionWithResult(ctx, "native", nil, streams.SessionSettingsPolicyStrict)
+				id = result.AttachmentAttemptID
 			case "resume":
-				id, err = client.ResumeSessionWithResult(ctx, "native", "/workspace", nil)
+				result, err = client.ResumeSessionWithResult(ctx, "native", "/workspace", nil)
+				id = result.AttachmentAttemptID
 			}
 			client.setLastAttachmentAttemptID("unrelated-later-request")
 			if err != nil || id != "actual-"+action || len(received) != 1 || received[0].DefinitionID != "definition" {

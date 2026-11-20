@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { createAppStore } from "@/lib/state/store";
-import type { TaskSession } from "@/lib/types/http";
+import { agentProfileId, type TaskSession } from "@/lib/types/http";
 import { acquireSessionStateReconciliation } from "./session-state-reconciler";
 
 afterEach(() => {
@@ -63,6 +63,59 @@ it("backfills persisted model configuration while reconciling a session summary"
     expect(store.getState().taskSessions.items[session.id].agent_profile_snapshot?.model).toBe(
       SAVED_MODEL,
     );
+  } finally {
+    release();
+  }
+});
+
+it("hydrates independently revisioned availability from an older session snapshot without replacing live state", async () => {
+  const owner = { execution_id: "current-execution", attempt_id: "", source_generation: 1 };
+  const provider = {
+    revision: 1,
+    owner,
+    profile_id: "profile",
+    result: {
+      outcome: "complete",
+      generation: 6,
+      models: {
+        present: true,
+        supported: true,
+        choices: [{ id: "provider-current", name: "Provider current" }],
+      },
+      modes: { present: true, supported: true, choices: [] },
+    },
+  };
+  const snapshot = sessionWithSavedModel();
+  snapshot.agent_execution_id = owner.execution_id;
+  snapshot.agent_profile_id = agentProfileId("profile");
+  snapshot.metadata!.acp_model_state = { catalog_discovery: provider };
+  const current = {
+    ...snapshot,
+    updated_at: "2026-09-29T00:00:01Z",
+    metadata: {
+      runtime_config: { model: "live-selected" },
+      composer_draft: "Keep unsent work",
+    },
+  };
+  const store = createAppStore();
+  store.getState().setTaskSession(current);
+  vi.spyOn(api, "fetchTaskSessionConditional").mockResolvedValue({
+    status: "ok",
+    data: { session: snapshot },
+    etag: SESSION_ETAG_V1,
+  });
+  const release = acquireSessionStateReconciliation(store, snapshot.id);
+  try {
+    await vi.waitFor(() => {
+      const availability =
+        store.getState().sessionCatalogRefresh.bySessionId[snapshot.id]?.provider;
+      expect(availability?.result.models.choices).toEqual([
+        { id: "provider-current", name: "Provider current" },
+      ]);
+      expect(availability?.owner).toEqual(owner);
+    });
+    expect(store.getState().taskSessions.items[snapshot.id]).toEqual(current);
+    expect(store.getState().sessionModels.bySessionId[snapshot.id]).toBeUndefined();
   } finally {
     release();
   }

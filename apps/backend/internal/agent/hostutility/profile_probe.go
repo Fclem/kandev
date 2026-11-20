@@ -134,7 +134,7 @@ func (m *Manager) ProbeProfileCapabilities(
 		if cached, ok, current := m.getProfileCapabilityIfCurrent(agentType, baseRevision, runtimeGeneration, contextGeneration, key); !current {
 			return ProfileCapabilityResult{}, errProfileContextChanged
 		} else if ok {
-			return cached, nil
+			return m.withProfilePublicationCurrency(cached, agentType, baseRevision, runtimeGeneration, contextGeneration), nil
 		}
 	}
 	flightKey := key
@@ -161,7 +161,7 @@ func (m *Manager) ProbeProfileCapabilities(
 	if !m.profileContextIsCurrent(agentType, baseRevision, runtimeGeneration, contextGeneration) {
 		return ProfileCapabilityResult{}, errProfileContextChanged
 	}
-	return value.(ProfileCapabilityResult), nil
+	return m.withProfilePublicationCurrency(value.(ProfileCapabilityResult), agentType, baseRevision, runtimeGeneration, contextGeneration), nil
 }
 
 func (m *Manager) probeProfileCapabilitiesFlight(

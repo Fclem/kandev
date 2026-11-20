@@ -286,6 +286,12 @@ For `intent: "start_created"`, Kandev trims leading and trailing whitespace from
 
 A successful response contains `success`, `task_id`, `state`, and usually `session_id`; it can also contain `agent_execution_id`, `worktree_path`, and `worktree_branch`. Session states use uppercase values such as `CREATED`, `STARTING`, `RUNNING`, `WAITING_FOR_INPUT`, `COMPLETED`, `FAILED`, and `CANCELLED`.
 
+A launch response can also include `accepted_launch_owner` with `execution_id`,
+`attempt_id`, and `source_generation`. This identifies the launch accepted by
+that request, not an execution inferred from a later session snapshot. It is not
+proof of readiness or completed catalog discovery. An omitted owner or zero source
+generation cannot establish a fresh provider result.
+
 ### Repair preserved workspace inventory
 
 `session.recover` accepts the task-scoped `repair_workspace_inventory` action when a Worktree resume fails because the canonical environment inventory is missing or has a stale branch-slot identity. This is a preservation-only recovery action, not a general database editor. The server derives the workspace, repository, environment, row, path, and branch from the authorized task and session; clients provide only `task_id`, `session_id`, `action`, and a non-empty retry-stable `idempotency_key`. The key remains bound to the original session and derived checkout identity after repair; reusing it for another session conflicts. Active borrowers of the same environment block repair, and inherited resumes must pass the environment owner’s preservation attestation. Repositories with external Git clean/process filters require manual recovery.
@@ -761,6 +767,32 @@ tasks require a workflow and remain visible in Kanban and the sidebar. A
 repository-required provider trigger rejects `repository_mode=none` before it
 creates an `AutomationRun`.
 
+### Refresh saved profile catalogs over HTTP
+
+`POST /api/v1/agent-profiles/:id/model-catalog/refresh` forces discovery from the
+saved concrete profile and publishes the raw probe observation to eligible,
+authorized initialized sessions. Send no request body. The endpoint does not
+accept launch overrides, client catalogs, or target-session lists, and it uses
+the existing profile discovery/configuration authorization boundary.
+
+The normal model-discovery response includes a separate `publication` object:
+
+- `status: "published"` means publication completed.
+- `status: "not_published"` means discovery did not produce a publishable result.
+- `status: "failed"` includes a sanitized `error`; successful discovery choices
+  remain usable in the settings response even when publication is incomplete.
+
+Publication does not restart sessions or change their effective configuration.
+Compatible local/worktree executions may receive host candidates; isolated,
+remote, or unverified contexts receive only a rediscovery notice. Inaccessible
+sessions and their counts are not disclosed. A later explicit refresh can finish
+a partial batch.
+
+Draft and automatic discovery continue to use the pure
+`POST /api/v1/agent-models/:agentName/probe` operation. See
+[refreshing an existing session](agents-and-profiles.md#refresh-choices-in-an-existing-session)
+for the explicit consent and ordinary Stop/Resume flow.
+
 ### GitHub and GitLab
 
 ```text
@@ -1042,10 +1074,35 @@ session.available_commands
 session.mode_changed
 session.agent_capabilities
 session.models_updated
+session.catalog_refresh_updated
+session.catalog_discovery_updated
 session.info_updated
 session.todos_updated
 session.prompt_usage
 ```
+
+Catalog notifications carry `task_id` and `session_id`. The
+`session.catalog_refresh_updated` payload contains `record`, a version-1 host
+observation with its own positive monotonic `revision`, concrete `profile_id`,
+execution/attempt/source `owner`, and `disposition` (`host_candidates`,
+`rediscovery_required`, or `cleared`). Only compatible host observations include
+candidate model/mode choices or a structured catalog. A newer `cleared` record
+is an explicit tombstone, not an absent field.
+
+The independent `session.catalog_discovery_updated` payload contains `provider`
+with its own positive monotonic `revision`, `profile_id`, `owner`, and explicit
+`result`. Provider revisions do not reset when the execution or settings source
+changes. `result.outcome` is `complete`, `unsupported`, or `failed`. Its independent
+`models` and `modes` surfaces each carry `present`, `supported`, and `choices`,
+plus optional structured `catalog` data. A supported empty list is terminal
+evidence; an omitted ordinary model update is not.
+
+Both notifications are emitted only after their guarded database writes commit.
+Full session metadata carries the same projections at `profile_catalog_refresh`
+and `acp_model_state.catalog_discovery`. Clients must retain independent revision
+guards across live events and HTTP hydration, correlate provider evidence with
+the current execution/attempt/source, and never treat host candidates as
+provider-approved live configuration.
 
 Semantic `session.message.added`, `session.message.updated`, and
 `session.message.deleted` notifications can include `pending_action` with

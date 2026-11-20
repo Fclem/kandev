@@ -83,6 +83,10 @@ export function createAppStore(initialState?: HydrationState) {
       })),
     ),
   );
+  const initialized = store.getState();
+  for (const session of Object.values(initialized.taskSessions.items)) {
+    initialized.hydrateSessionCatalogRefresh(session);
+  }
   observeSettingsAgentRemovals(store);
   observeAnswerDraftAuthority(store);
   let previousAuth = store.getState().auth;

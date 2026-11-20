@@ -20,6 +20,7 @@ import (
 	"github.com/kandev/kandev/internal/agentctl/types"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
@@ -361,7 +362,10 @@ type Adapter struct {
 	// Used by emitSetModelEvent to include cached options in the convergence
 	// event emitted after SetModel succeeds so the frontend doesn't lose
 	// the options list when the model is changed.
-	availableConfigOptions []streams.ConfigOption
+	availableConfigOptions     []streams.ConfigOption
+	catalogDiscovery           *sessioncatalog.Discovery
+	catalogHandshakeReady      bool
+	catalogHandshakeGeneration uint64
 
 	// sessionSettingsPolicy is host-selected provenance for unsolicited
 	// settings reports from the currently loaded session. Explicit setter
@@ -919,6 +923,7 @@ func (a *Adapter) sendUpdateNow(event AgentEvent) {
 		a.mu.RUnlock()
 		return
 	}
+	a.enrichProviderCatalogLocked(&event)
 	updatesCh := a.updatesCh
 	lifetimeCtx := a.lifetimeCtx
 	if lifetimeCtx == nil {
@@ -949,6 +954,7 @@ func (a *Adapter) sendUpdateLocked(event AgentEvent) bool {
 	if a.closed {
 		return false
 	}
+	a.enrichProviderCatalogLocked(&event)
 	event = streams.PrepareToolEvent(event)
 	event.NormalizedPayload = event.NormalizedPayload.Snapshot()
 	select {

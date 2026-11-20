@@ -1,6 +1,7 @@
 import type { UISliceActions as UIA } from "./slices/ui/types";
 import type {
   SystemSliceActions,
+  SessionRuntimeSliceActions,
   AutomationsSliceActions,
   CoordinatorsSliceActions,
   FeaturesSliceActions,
@@ -21,6 +22,13 @@ import type {
 // Split out of app-state-types.ts to stay under the file line limit. These
 // slices contribute actions only (no AppState fields declared here).
 export type AppStateExtraActions = Pick<UIA, "setThreadActiveView" | "createThreadView"> &
+  Pick<
+    SessionRuntimeSliceActions,
+    | "applySessionCatalogRefresh"
+    | "applySessionProviderCatalog"
+    | "observeSessionCatalogRefresh"
+    | "hydrateSessionCatalogRefresh"
+  > &
   GitHubSliceActions &
   GitLabSliceActions &
   JiraSliceActions &

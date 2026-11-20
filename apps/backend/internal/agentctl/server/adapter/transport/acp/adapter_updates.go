@@ -587,6 +587,7 @@ func (a *Adapter) convertACPSessionNotification(n acp.SessionNotification) (*Age
 			}
 			cachedModels := a.availableModels
 			a.availableConfigOptions = configOptions
+			a.noteCatalogOptionsLocked(configOptions)
 			if modes, found := sessionModesFromConfig(configOptions); found {
 				a.availableModes = modes
 			}

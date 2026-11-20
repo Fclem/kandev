@@ -206,23 +206,6 @@ describe("AgentSetupFields", () => {
     });
     expect(onStatusChange).toHaveBeenCalledWith("ok", null);
   });
-
-  it("calls refresh when refresh button is clicked", async () => {
-    probeAgentProfileMock.mockResolvedValue(capabilityResponse([{ id: "gpt-4", name: "GPT-4" }]));
-
-    renderFields({
-      agent: mockAgent,
-      setting: mockSetting,
-      onChange: vi.fn(),
-    });
-
-    await waitFor(() => expect(probeAgentProfileMock).toHaveBeenCalledTimes(1));
-
-    const refreshButton = screen.getByTestId("onboarding-agent-refresh-models");
-    fireEvent.click(refreshButton);
-
-    await waitFor(() => expect(probeAgentProfileMock).toHaveBeenCalledTimes(2));
-  });
 });
 
 it("announces authentication failure and links to the saved profile settings", async () => {

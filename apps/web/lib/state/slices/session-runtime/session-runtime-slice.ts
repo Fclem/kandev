@@ -14,6 +14,7 @@ import {
   failWorkspaceRestoration,
 } from "./workspace-restoration";
 import { buildSessionViewActions } from "./session-runtime-view-actions";
+import { buildSessionCatalogRefreshActions } from "./session-catalog-refresh";
 import { buildSessionGitCheckoutActions } from "./session-runtime-git-checkout-actions";
 import { buildBackgroundWorkActions } from "./session-runtime-background-work";
 import {
@@ -55,6 +56,7 @@ function purgePerSessionRuntime(state: SessionRuntimeSliceState, sessionId: stri
   delete state.sessionMode.bySessionId[sessionId];
   delete state.agentCapabilities.bySessionId[sessionId];
   delete state.sessionModels.bySessionId[sessionId];
+  delete state.sessionCatalogRefresh.bySessionId[sessionId];
   delete state.sessionMcpStatus.bySessionId[sessionId];
   delete state.promptUsage.bySessionId[sessionId];
   delete state.usageInvalidation.bySessionId[sessionId];
@@ -141,6 +143,7 @@ export const defaultSessionRuntimeState: SessionRuntimeSliceState = {
   sessionMode: { bySessionId: {} },
   agentCapabilities: { bySessionId: {} },
   sessionModels: { bySessionId: {} },
+  sessionCatalogRefresh: { bySessionId: {} },
   sessionMcpStatus: { bySessionId: {} },
   promptUsage: { bySessionId: {} },
   usageInvalidation: { bySessionId: {} },
@@ -471,9 +474,10 @@ function buildGitStatusCleanupActions(set: SliceSet<SessionRuntimeSlice>) {
   };
 }
 
-export const createSessionRuntimeSlice: SliceCreator<SessionRuntimeSlice> = (set) => ({
+export const createSessionRuntimeSlice: SliceCreator<SessionRuntimeSlice> = (set, get) => ({
   ...defaultSessionRuntimeState,
   ...buildTerminalShellProcessActions(set),
+  ...buildSessionCatalogRefreshActions(set, get),
   // Returns whether the git state meaningfully changed so callers (the WS
   // handler) can decide to invalidate derived caches without re-running the
   // expensive deep comparison themselves. The comparison walks every file's

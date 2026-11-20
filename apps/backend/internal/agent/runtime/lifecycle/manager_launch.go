@@ -663,11 +663,12 @@ func baseBranchMetadataKey(spec RepoLaunchSpec) string {
 
 // agentCommands holds both the display strings and structured argv for an agent execution.
 type agentCommands struct {
-	wrapper      launchwrapper.Spec
-	initial      string
-	continue_    string // continue command for one-shot agents (empty if not applicable)
-	args         []string
-	continueArgs []string
+	wrapper        launchwrapper.Spec
+	initial        string
+	continue_      string // continue command for one-shot agents (empty if not applicable)
+	args           []string
+	continueArgs   []string
+	catalogCommand *catalogLaunchCommand
 }
 
 func newAgentCommands(args, continueArgs []string) agentCommands {
@@ -785,6 +786,15 @@ func (m *Manager) buildAgentCommandWithContext(
 	}
 	commands := newAgentCommands(args, continueArgs)
 	commands.wrapper = launchwrapper.Profile(commandPrefixTokens)
+	commands.catalogCommand = &catalogLaunchCommand{
+		flags:          cliFlagTokens,
+		prefix:         commandPrefixTokens,
+		runtimeOptions: managedRuntimeOptions,
+		provider:       agentConfig.ID(),
+	}
+	if profileInfo != nil {
+		commands.catalogCommand.plugins = append([]string(nil), profileInfo.CopilotSelectedPlugins...)
+	}
 	return commands, nil
 }
 
@@ -2119,6 +2129,7 @@ func (m *Manager) promoteWorkspaceExecution(ctx context.Context, execution *Agen
 		execution.AgentArgs = cmds.args
 		execution.ContinueArgs = cmds.continueArgs
 		execution.LaunchWrapper = cmds.wrapper
+		execution.catalogCommand.Store(cmds.catalogCommand)
 		execution.ExecutionProfileID = executionProfileID(req)
 		if profileInfo != nil {
 			execution.CopilotSelectedPlugins = append([]string{}, profileInfo.CopilotSelectedPlugins...)
@@ -2658,6 +2669,7 @@ func (m *Manager) buildExecutionFromInstance(
 	execution.AgentArgs = cmds.args
 	execution.ContinueArgs = cmds.continueArgs
 	execution.LaunchWrapper = cmds.wrapper
+	execution.catalogCommand.Store(cmds.catalogCommand)
 	return execution, nil
 }
 

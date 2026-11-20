@@ -55,7 +55,7 @@ lib/state/
 ├── slices/                         # Domain slices
 │   ├── kanban/                    # boards, tasks, columns
 │   ├── session/                   # sessions, messages, turns, worktrees
-│   ├── session-runtime/           # shell, processes, git, context
+│   ├── session-runtime/           # shell, processes, git, context, session-scoped catalog observations
 │   ├── workspace/                 # workspaces, repos, branches
 │   ├── settings/                  # executors, agents, editors, prompts (incl. userSettings)
 │   ├── comments/                  # code review diff comments

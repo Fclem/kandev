@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => {
     { value: "claude-fable-5[1m]", name: "Fable 1M" },
   ];
   const appState = {
+    sessionCatalogRefresh: { bySessionId: {} },
+    hydrateSessionCatalogRefresh: vi.fn(),
     activeModel: { bySessionId: {} as Record<string, string> },
     sessionModels: {
       bySessionId: {

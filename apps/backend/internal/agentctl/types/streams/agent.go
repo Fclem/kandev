@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/kandev/kandev/internal/common/modelcatalog"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 )
 
 // AgentEvent type constants define the types of events streamed from the agent.
@@ -74,6 +75,9 @@ const (
 
 	// EventTypeSessionModels indicates available models from ACP session/new.
 	EventTypeSessionModels = "session_models"
+
+	// EventTypeSessionCatalogDiscovery is an explicit terminal handshake result.
+	EventTypeSessionCatalogDiscovery = "session_catalog_discovery"
 
 	// EventTypeSessionModelFallback indicates the session started on the
 	// profile's fallback model because the configured start model was
@@ -546,7 +550,8 @@ type AgentEvent struct {
 
 	// ConfigBaselineCandidate carries an authoritative response snapshot for
 	// lifecycle settlement without replacing the event's newer live options.
-	ConfigBaselineCandidate []ConfigOption `json:"config_baseline_candidate,omitempty"`
+	ConfigBaselineCandidate []ConfigOption            `json:"config_baseline_candidate,omitempty"`
+	CatalogDiscovery        *sessioncatalog.Discovery `json:"catalog_discovery,omitempty"`
 
 	// OriginalConfigCandidate is the profile-settled model-adjacent state used
 	// once to capture a task session's immutable original configuration. It is

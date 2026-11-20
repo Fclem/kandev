@@ -25,6 +25,9 @@ import {
 } from "@/components/task/model-selector-change-handlers";
 import type { Agent, AgentProfile, AvailableAgent, TaskSession } from "@/lib/types/http";
 import type { SessionModelEntry } from "@/lib/state/slices/session-runtime/types";
+import { useSessionCatalogRefresh } from "@/hooks/domains/session/use-session-catalog-refresh";
+import { projectSessionModelChoices } from "./model-selector-catalog-refresh";
+import { SessionCatalogRefreshConfirmation } from "./session-catalog-refresh-confirmation";
 
 type ModelSelectorProps = {
   sessionId: string | null;
@@ -372,14 +375,18 @@ function useModelSelectorState(sessionId: string | null) {
     [session?.agent_profile_id, settingsAgents],
   );
 
-  const { configOptions, currentModel, availableModels } = resolveModelSelectorInputs({
-    session,
-    sessionModelsData,
-    activeModel,
-    settingsAgents: settingsAgents as Agent[],
-    availableAgents,
-    profileModel,
-  });
+  const { configOptions, currentModel, availableModels } = useMemo(
+    () =>
+      resolveModelSelectorInputs({
+        session,
+        sessionModelsData,
+        activeModel,
+        settingsAgents: settingsAgents as Agent[],
+        availableAgents,
+        profileModel,
+      }),
+    [session, sessionModelsData, activeModel, settingsAgents, availableAgents, profileModel],
+  );
   const modelOptions = useMemo(
     () =>
       annotateFallbackOptions(
@@ -393,10 +400,20 @@ function useModelSelectorState(sessionId: string | null) {
 
   const { handleModelChange, handleConfigChange, handleConfigurationApply } =
     useModelChangeHandlers(configOptions, sessionModelsData);
+  const providerModelIds = useMemo(
+    () =>
+      new Set(
+        configOptions.find(isModelConfigOption)?.options.map((option) => option.value) ??
+          sessionModelsData?.models.map((model) => model.modelId) ??
+          [],
+      ),
+    [configOptions, sessionModelsData],
+  );
 
   return {
     currentModel,
     modelOptions,
+    providerModelIds,
     configOptions,
     configBaseline: sessionModelsData?.configBaseline,
     fallbackModel: sessionModelsData?.fallbackModel ?? null,
@@ -428,6 +445,81 @@ function useSessionModelResolver(sessionId: string | null, showAgentIcon: boolea
   return { agentName: showAgentIcon ? resolverAgentName : null, resolveConfigurationOptions };
 }
 
+function useRefreshableModelSelection(sessionId: string | null) {
+  const state = useModelSelectorState(sessionId);
+  const {
+    currentModel,
+    modelOptions: baseModelOptions,
+    configOptions: baseConfigOptions,
+    providerModelIds,
+    handleModelChange,
+    handleConfigChange,
+    handleConfigurationApply,
+  } = state;
+  const refresh = useSessionCatalogRefresh(sessionId);
+  const { modelOptions, configOptions, refreshModelIds } = useMemo(
+    () =>
+      projectSessionModelChoices({
+        session: refresh.session,
+        record: refresh.entry?.record,
+        sourceOwner: refresh.sourceOwner,
+        modelOptions: baseModelOptions,
+        configOptions: baseConfigOptions,
+        currentModel,
+        providerModelIds,
+        provider: refresh.entry?.provider,
+      }),
+    [
+      refresh.session,
+      refresh.entry?.record,
+      refresh.sourceOwner,
+      baseModelOptions,
+      baseConfigOptions,
+      currentModel,
+      providerModelIds,
+      refresh.entry?.provider,
+    ],
+  );
+  const onModelChange = useCallback(
+    (value: string) => {
+      if (!sessionId) return;
+      if (refreshModelIds.has(value)) {
+        refresh.requestRefresh();
+        return;
+      }
+      handleModelChange(sessionId, value);
+    },
+    [sessionId, handleModelChange, refreshModelIds, refresh.requestRefresh],
+  );
+  const onConfigChange = useCallback(
+    (configId: string, value: string) => {
+      if (!sessionId) return;
+      handleConfigChange(sessionId, configId, value);
+    },
+    [sessionId, handleConfigChange],
+  );
+  const onConfigurationApply = useCallback(
+    (selection: { model: string; configOptions: Record<string, string> }) => {
+      if (!sessionId) return;
+      if (refreshModelIds.has(selection.model)) {
+        refresh.requestRefresh();
+        return;
+      }
+      void handleConfigurationApply(sessionId, selection);
+    },
+    [sessionId, handleConfigurationApply, refreshModelIds, refresh.requestRefresh],
+  );
+  return {
+    state,
+    refresh,
+    modelOptions,
+    configOptions,
+    onModelChange,
+    onConfigChange,
+    onConfigurationApply,
+  };
+}
+
 export const ModelSelector = memo(function ModelSelector({
   sessionId,
   triggerClassName,
@@ -435,19 +527,22 @@ export const ModelSelector = memo(function ModelSelector({
 }: ModelSelectorProps) {
   const { t } = useTranslation();
   const {
-    currentModel,
+    state: {
+      currentModel,
+      configBaseline,
+      fallbackModel,
+      configHydrated,
+      requiredKeys,
+      rawConfigOptionIds,
+      restoredModelUnknown,
+    },
+    refresh,
     modelOptions,
     configOptions,
-    configBaseline,
-    fallbackModel,
-    configHydrated,
-    requiredKeys,
-    rawConfigOptionIds,
-    restoredModelUnknown,
-    handleModelChange,
-    handleConfigChange,
-    handleConfigurationApply,
-  } = useModelSelectorState(sessionId);
+    onModelChange,
+    onConfigChange,
+    onConfigurationApply,
+  } = useRefreshableModelSelection(sessionId);
   const { agentName, resolveConfigurationOptions } = useSessionModelResolver(
     sessionId,
     showAgentIcon,
@@ -474,30 +569,6 @@ export const ModelSelector = memo(function ModelSelector({
   // the session is not on the configured start model.
   const currentModelSuffix = fallbackModel ? ` ${t("settings:modelFallbackSuffix")}` : undefined;
 
-  const onModelChange = useCallback(
-    (value: string) => {
-      if (!sessionId) return;
-      handleModelChange(sessionId, value);
-    },
-    [sessionId, handleModelChange],
-  );
-
-  const onConfigChange = useCallback(
-    (configId: string, value: string) => {
-      if (!sessionId) return;
-      handleConfigChange(sessionId, configId, value);
-    },
-    [sessionId, handleConfigChange],
-  );
-
-  const onConfigurationApply = useCallback(
-    (selection: { model: string; configOptions: Record<string, string> }) => {
-      if (!sessionId) return;
-      void handleConfigurationApply(sessionId, selection);
-    },
-    [sessionId, handleConfigurationApply],
-  );
-
   if (isDebug()) {
     debug("render", {
       sessionId: sessionId ?? "",
@@ -515,11 +586,13 @@ export const ModelSelector = memo(function ModelSelector({
 
   return (
     <ModelConfigSelector
+      triggerRef={refresh.anchorRef}
       providerIcon={providerIcon}
       modelOptions={modelOptions}
       currentModel={currentModel}
       configOptions={configOptions}
       onModelChange={onModelChange}
+      onRefreshRequired={refresh.requestRefresh}
       onConfigChange={onConfigChange}
       onConfigurationApply={onConfigurationApply}
       resolveConfigurationOptions={resolveConfigurationOptions}
@@ -531,6 +604,14 @@ export const ModelSelector = memo(function ModelSelector({
       triggerSummary="changed"
       configBaseline={configBaseline}
       currentModelSuffix={currentModelSuffix}
+      confirmation={
+        <SessionCatalogRefreshConfirmation
+          target={refresh.target}
+          anchorRef={refresh.anchorRef}
+          onDismiss={refresh.dismiss}
+          onConfirm={refresh.confirm}
+        />
+      }
     />
   );
 });

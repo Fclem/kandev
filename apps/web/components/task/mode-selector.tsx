@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { RefObject } from "react";
 import { IconAlertTriangle, IconCheck, IconChevronDown, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import {
@@ -30,14 +31,22 @@ import { cn } from "@/lib/utils";
 import { prioritizeSelectedOption } from "@/lib/utils/selector-options";
 import type { Agent, AgentProfile, AvailableAgent } from "@/lib/types/http";
 import { useTranslation } from "react-i18next";
+import { useSessionCatalogRefresh } from "@/hooks/domains/session/use-session-catalog-refresh";
+import { SessionCatalogRefreshConfirmation } from "./session-catalog-refresh-confirmation";
+import { projectSessionModeChoices } from "./mode-selector-catalog-refresh";
+import type { SessionCatalogOwner, SessionCatalogRefreshEntry } from "@/lib/types/session-catalog";
+import { MobileConfirmationHost } from "@/components/confirmation/mobile-confirmation-host";
+import type { MobileConfirmationHostState } from "@/components/confirmation/mobile-confirmation-host";
 
-type ModeOption = {
+export type ModeOption = {
   id: string;
   name: string;
   description?: string;
+  requiresRefresh?: boolean;
+  disabled?: boolean;
 };
 
-type ModeSelectorState = {
+export type ModeSelectorState = {
   currentModeId: string;
   availableModes: ModeOption[];
   requestedModeId?: string;
@@ -125,7 +134,11 @@ function buildModeState(
   };
 }
 
-function useModeSelectorState(sessionId: string | null) {
+function useModeSelectorState(
+  sessionId: string | null,
+  entry: SessionCatalogRefreshEntry | undefined,
+  sourceOwner: SessionCatalogOwner | undefined,
+) {
   useSettingsData(true);
 
   const liveModeState = useAppStore((state) =>
@@ -146,18 +159,24 @@ function useModeSelectorState(sessionId: string | null) {
     [availableAgents, session?.agent_profile_id, settingsAgents],
   );
 
-  return useMemo(
-    () =>
-      withRequestedMode(
-        buildModeState(
-          liveModeState ? liveModeState.currentModeId : snapshotMode || profileMode,
-          liveModeState?.availableModes,
-          staticModes,
-        ),
-        liveModeState?.requestedModeId,
-      ),
-    [liveModeState, profileMode, snapshotMode, staticModes],
-  );
+  return useMemo(() => {
+    const currentModeId = liveModeState ? liveModeState.currentModeId : snapshotMode || profileMode;
+    const state = buildModeState(currentModeId, liveModeState?.availableModes, staticModes);
+    return withRequestedMode(
+      projectSessionModeChoices({
+        state,
+        currentModeId,
+        currentModeName:
+          liveModeState?.availableModes.find((mode) => mode.id === currentModeId)?.name ??
+          (currentModeId ? formatModeName(currentModeId) : ""),
+        liveModes: liveModeState?.availableModes,
+        session,
+        entry,
+        sourceOwner,
+      }),
+      liveModeState?.requestedModeId,
+    );
+  }, [liveModeState, profileMode, snapshotMode, staticModes, session, entry, sourceOwner]);
 }
 
 function ModeMismatchWarning({
@@ -201,6 +220,7 @@ function MobileModeOption({
       data-testid={`session-mode-option-${mode.id}`}
       aria-label={mode.name}
       aria-pressed={selected}
+      disabled={mode.disabled}
       className={cn(
         "relative flex min-h-11 w-full cursor-pointer items-center rounded-md border px-3 py-2 pr-10 text-left",
         selected ? "border-primary/50 bg-card font-medium" : "border-transparent hover:bg-muted/60",
@@ -222,10 +242,12 @@ function MobileModeOptions({
   modeState,
   onModeChange,
   onClose,
+  onRefreshRequired,
 }: {
   modeState: ModeSelectorState;
   onModeChange: (modeId: string) => Promise<void>;
   onClose: () => void;
+  onRefreshRequired: () => void;
 }) {
   return (
     <div className="space-y-1">
@@ -235,6 +257,11 @@ function MobileModeOptions({
           mode={mode}
           selected={mode.id === modeState.currentModeId}
           onSelect={() => {
+            if (mode.disabled) return;
+            if (mode.requiresRefresh) {
+              onRefreshRequired();
+              return;
+            }
             void onModeChange(mode.id);
             onClose();
           }}
@@ -244,27 +271,38 @@ function MobileModeOptions({
   );
 }
 
+type ModePresentationProps = {
+  modeState: ModeSelectorState;
+  displayName: string;
+  requestedName?: string;
+  triggerClassName?: string;
+  onModeChange: (modeId: string) => Promise<void>;
+  onRefreshRequired: () => void;
+  anchorRef: RefObject<HTMLButtonElement | null>;
+};
+
 function MobileModeSelector({
   modeState,
   displayName,
   requestedName,
   triggerClassName,
   onModeChange,
-}: {
-  modeState: ModeSelectorState;
-  displayName: string;
-  requestedName?: string;
-  triggerClassName?: string;
-  onModeChange: (modeId: string) => Promise<void>;
+  onRefreshRequired,
+  anchorRef,
+  open,
+  onOpenChange,
+  confirmationState,
+}: ModePresentationProps & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  confirmationState: MobileConfirmationHostState;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <>
       <MobilePillButton
-        ref={triggerRef}
+        ref={anchorRef}
         icon={
           requestedName ? (
             <IconAlertTriangle className="h-3 w-3 shrink-0 text-amber-500" aria-hidden />
@@ -273,19 +311,20 @@ function MobileModeSelector({
         label={displayName}
         ariaLabel={displayName}
         isOpen={open}
-        onClick={() => setOpen(true)}
+        onClick={() => onOpenChange(true)}
         data-testid="session-mode-selector"
         className={cn("h-11 min-h-11 min-w-11", triggerClassName)}
       />
       <MobilePickerSheet
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={onOpenChange}
         title={t("task:agentPermissionMode")}
         description={t("task:availableModes")}
         contentTestId="session-mode-picker-scroll"
+        confirmationState={confirmationState}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          triggerRef.current?.focus({ preventScroll: true });
+          anchorRef.current?.focus({ preventScroll: true });
         }}
         fixedContent={
           requestedName ? (
@@ -303,7 +342,7 @@ function MobileModeSelector({
             className="h-12 w-12 shrink-0"
             aria-label={t("common:close")}
             data-testid="session-mode-mobile-picker-close"
-            onClick={() => setOpen(false)}
+            onClick={() => onOpenChange(false)}
           >
             <IconX className="h-4 w-4" aria-hidden />
           </Button>
@@ -312,7 +351,8 @@ function MobileModeSelector({
         <MobileModeOptions
           modeState={modeState}
           onModeChange={onModeChange}
-          onClose={() => setOpen(false)}
+          onClose={() => onOpenChange(false)}
+          onRefreshRequired={onRefreshRequired}
         />
       </MobilePickerSheet>
     </>
@@ -387,66 +427,30 @@ function useModeSelectorDropdownState() {
   };
 }
 
-export const ModeSelector = memo(function ModeSelector({
-  sessionId,
+function DesktopModeSelector({
+  modeState,
+  displayName,
+  requestedName,
   triggerClassName,
-}: ModeSelectorProps) {
+  onModeChange,
+  anchorRef,
+}: ModePresentationProps) {
   const { t } = useTranslation();
-  const { isMobile, isFinePointer } = useResponsiveBreakpoint();
-  const modeState = useModeSelectorState(sessionId);
   const { dropdownOpen, tooltipOpen, handleDropdownOpenChange, handleTooltipOpenChange } =
     useModeSelectorDropdownState();
-
-  const handleModeChange = useCallback(
-    async (modeId: string) => {
-      if (!sessionId) return;
-      try {
-        await setSessionMode(sessionId, modeId);
-      } catch (err) {
-        console.error("[ModeSelector] set-mode API failed:", err);
-      }
-    },
-    [sessionId],
-  );
-
-  if (!sessionId || !modeState) {
-    return null;
-  }
-
-  const currentMode = modeState.availableModes.find((m) => m.id === modeState.currentModeId);
-  const displayName = currentMode?.name || modeState.currentModeId || t("common:unknown");
-  // Set only when the agent did not end up in the requested mode. Showing the
-  // effective mode alone would be truthful but silent about the mismatch.
-  const requestedName = modeState.requestedModeId
-    ? (modeState.availableModes.find((m) => m.id === modeState.requestedModeId)?.name ??
-      formatModeName(modeState.requestedModeId))
-    : undefined;
-
-  if (isMobile || !isFinePointer) {
-    return (
-      <MobileModeSelector
-        modeState={modeState}
-        displayName={displayName}
-        requestedName={requestedName}
-        triggerClassName={triggerClassName}
-        onModeChange={handleModeChange}
-      />
-    );
-  }
-
   let tooltipLabel = t("task:agentPermissionMode");
   if (requestedName) {
     tooltipLabel = modeState.currentModeId
       ? t("task:sessionModeNotApplied", { requested: requestedName, effective: displayName })
       : t("task:sessionModeUnconfirmed", { requested: requestedName });
   }
-
   return (
     <DropdownMenu open={dropdownOpen} onOpenChange={handleDropdownOpenChange}>
       <Tooltip open={tooltipOpen} onOpenChange={handleTooltipOpenChange}>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <ModeSelectorTrigger
+              ref={anchorRef}
               displayName={displayName}
               notApplied={Boolean(requestedName)}
               triggerClassName={triggerClassName}
@@ -460,7 +464,8 @@ export const ModeSelector = memo(function ModeSelector({
         {modeState.availableModes.map((mode) => (
           <DropdownMenuItem
             key={mode.id}
-            onClick={() => handleModeChange(mode.id)}
+            disabled={mode.disabled}
+            onClick={() => onModeChange(mode.id)}
             className={cn(
               "relative min-h-11 cursor-pointer border border-transparent pr-7 sm:min-h-8",
               mode.id === modeState.currentModeId &&
@@ -480,5 +485,73 @@ export const ModeSelector = memo(function ModeSelector({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export const ModeSelector = memo(function ModeSelector({
+  sessionId,
+  triggerClassName,
+}: ModeSelectorProps) {
+  const { t } = useTranslation();
+  const { isMobile, isFinePointer } = useResponsiveBreakpoint();
+  const refresh = useSessionCatalogRefresh(sessionId);
+  const modeState = useModeSelectorState(sessionId, refresh.entry, refresh.sourceOwner);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const handleModeChange = useCallback(
+    async (modeId: string) => {
+      const mode = modeState?.availableModes.find((item) => item.id === modeId);
+      if (!sessionId || !mode || mode.disabled) return;
+      if (mode.requiresRefresh) {
+        refresh.requestRefresh();
+        return;
+      }
+      try {
+        await setSessionMode(sessionId, modeId);
+      } catch (err) {
+        console.error("[ModeSelector] set-mode API failed:", err);
+      }
+    },
+    [sessionId, modeState, refresh.requestRefresh],
+  );
+  if (!sessionId || !modeState) return null;
+  const currentMode = modeState.availableModes.find((mode) => mode.id === modeState.currentModeId);
+  const displayName = currentMode?.name || modeState.currentModeId || t("common:unknown");
+  const requestedName = modeState.requestedModeId
+    ? (modeState.availableModes.find((mode) => mode.id === modeState.requestedModeId)?.name ??
+      formatModeName(modeState.requestedModeId))
+    : undefined;
+  const presentation = {
+    modeState,
+    displayName,
+    requestedName,
+    triggerClassName,
+    onModeChange: handleModeChange,
+    onRefreshRequired: refresh.requestRefresh,
+    anchorRef: refresh.anchorRef,
+  };
+  const mobile = isMobile || !isFinePointer;
+  return (
+    <MobileConfirmationHost open={mobile && mobileOpen} surface="drawer">
+      {(confirmationState) => (
+        <>
+          {mobile ? (
+            <MobileModeSelector
+              {...presentation}
+              open={mobileOpen}
+              onOpenChange={setMobileOpen}
+              confirmationState={confirmationState}
+            />
+          ) : (
+            <DesktopModeSelector {...presentation} />
+          )}
+          <SessionCatalogRefreshConfirmation
+            target={refresh.target}
+            anchorRef={refresh.anchorRef}
+            onDismiss={refresh.dismiss}
+            onConfirm={refresh.confirm}
+          />
+        </>
+      )}
+    </MobileConfirmationHost>
   );
 });

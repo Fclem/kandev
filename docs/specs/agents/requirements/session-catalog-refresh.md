@@ -28,13 +28,13 @@ to own effective model-dependent options and confirmed live application.
 ## Terms
 
 - **Provider catalog:** Choices advertised by the running session's agent.
-- **Refreshed profile catalog:** A successful probe of a saved concrete profile
-  in the Kandev host context, not an unsaved draft or a separate vendor CLI list.
-- **Compatible host session:** A session actually running on the host with
-  matching provider and launch settings. Local containers are isolated executors,
-  not host sessions. Unknown compatibility is not a match.
-- **Candidate:** A host-discovered choice not yet advertised by the live agent.
-  It is not proof that the live agent can select that choice.
+- **Refreshed profile catalog:** The successful saved-profile discovery shown in
+  settings. It gates publication but is not a task's candidate source.
+- **Compatible host session:** A session actually running on the host whose
+  provider supports qualified fresh discovery in that session's execution
+  context. Local containers are isolated executors. Unknown support is not a match.
+- **Candidate:** A choice freshly discovered in that host task's own context,
+  not yet advertised by its running agent. It is not live selection authority.
 
 ## Requirements
 
@@ -53,9 +53,9 @@ to own effective model-dependent options and confirmed live application.
   prompt queue, unsent composer draft, and active turn. A removed selected choice
   shall remain identifiable without selecting a replacement.
 - **AC-AGENTS-SESSION-CATALOG-001.3:** Unsaved drafts, new profiles, automatic
-  editor reads, agent-wide probes, failed probes, and separate host-CLI model
-  suggestions shall not publish session updates. A profile edit during refresh
-  shall prevent that older refresh from publishing.
+  editor reads, agent-wide probes, failed saved-profile probes, and separate
+  host-CLI suggestions shall not publish session updates. A profile edit during
+  refresh shall prevent that older refresh from publishing.
 - **AC-AGENTS-SESSION-CATALOG-001.4:** Refresh shall affect only the same concrete
   execution profile's unarchived live task sessions accessible to the caller.
   Another profile, a dynamically routed session using another concrete profile,
@@ -69,6 +69,16 @@ to own effective model-dependent options and confirmed live application.
   reload and reconnect. Repeating an identical refresh shall not accumulate
   notices. A late older refresh or older session report shall not restore a
   superseded catalog or clear a newer refresh notice.
+- **AC-AGENTS-SESSION-CATALOG-001.7:** Refreshed session candidates shall come from
+  that authorized task's own provider context, not another task or the generic
+  settings probe. Unsupported or failed task discovery shall retain an honest
+  rediscovery notice without importing generic choices or changing live provider
+  availability. One successful target shall not conceal another target's failure.
+- **AC-AGENTS-SESSION-CATALOG-001.8:** Background candidate discovery shall not
+  start, resume or replace a native conversation, submit/replay a prompt, mutate
+  the live provider configuration, or interrupt an active task turn. Cached reads
+  shall not be presented as forced-fresh discovery. Existing unqualified
+  candidates shall not become qualified merely through reload or upgrade.
 
 ### REQ-AGENTS-SESSION-CATALOG-002: Explicit executor rediscovery
 

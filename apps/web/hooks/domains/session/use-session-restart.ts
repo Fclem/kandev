@@ -18,6 +18,10 @@ import {
 } from "@/lib/session/session-recovery-guidance";
 import { lastAgentErrorStamp, readLastAgentError } from "@/lib/session-last-agent-error";
 import type { TaskSession } from "@/lib/types/http";
+import {
+  sessionCatalogResumeAckSchema,
+  type SessionCatalogRecord,
+} from "@/lib/types/session-catalog";
 import { isSessionStoppable } from "./session-action-state";
 
 /** Subscribes to the target's pending entry in the current application store. */
@@ -66,10 +70,8 @@ export function useSessionRestart(sessionId: string | null | undefined, taskId: 
 
   const restart = useCallback(async () => {
     if (isRestartPending()) return false;
-    const session = taskId
-      ? owner.getState().taskSessionsByTask.itemsByTaskId[taskId]?.find((s) => s.id === sessionId)
-      : undefined;
-    if (!sessionId || !taskId || !session || !isSessionStoppable(session.state)) {
+    const session = findRestartableSession(owner, taskId, sessionId);
+    if (!sessionId || !taskId || !session) {
       toast({
         title: t("task:sessionRestartFailed"),
         description: t("task:sessionRestartUnavailable"),
@@ -79,6 +81,7 @@ export function useSessionRestart(sessionId: string | null | undefined, taskId: 
     }
 
     const initial = owner.getState();
+    const catalogNotice = initial.sessionCatalogRefresh.bySessionId[sessionId]?.record;
     const guidanceSession = initial.taskSessions.items[sessionId] ?? session;
     const initialError = readLastAgentError(guidanceSession.metadata);
     const guidanceOperation = beginSessionRecoveryGuidanceOperation(
@@ -99,11 +102,12 @@ export function useSessionRestart(sessionId: string | null | undefined, taskId: 
       const client = getWebSocketClient();
       if (!client) throw new Error(t("task:sessionRestartConnectionUnavailable"));
       await client.request("session.stop", { session_id: sessionId }, 15000);
-      await client.request(
+      const response = await client.request(
         "session.launch",
         { task_id: taskId, intent: "resume", session_id: sessionId },
         30000,
       );
+      observeRestartedCatalog(owner, taskId, sessionId, catalogNotice, response);
       clearSessionRecoveryGuidance(
         owner,
         guidanceOperation,
@@ -134,6 +138,36 @@ export function useSessionRestart(sessionId: string | null | undefined, taskId: 
   }, [isRestartPending, owner, pending, sessionId, taskId, t, toast, updateToast]);
 
   return { restart, isRestarting, isRestartPending };
+}
+
+function observeRestartedCatalog(
+  owner: ReturnType<typeof useAppStoreApi>,
+  taskId: string,
+  sessionId: string,
+  notice: SessionCatalogRecord | undefined,
+  response: unknown,
+) {
+  if (!notice || notice.disposition === "cleared") return;
+  const ack = sessionCatalogResumeAckSchema.safeParse(response);
+  owner.getState().observeSessionCatalogRefresh({
+    taskId,
+    sessionId,
+    noticeRevision: notice.revision,
+    owner: ack.success ? ack.data.accepted_launch_owner : undefined,
+  });
+}
+
+function findRestartableSession(
+  owner: ReturnType<typeof useAppStoreApi>,
+  taskId: string | null,
+  sessionId: string | null | undefined,
+): TaskSession | undefined {
+  const session = taskId
+    ? owner
+        .getState()
+        .taskSessionsByTask.itemsByTaskId[taskId]?.find((item) => item.id === sessionId)
+    : undefined;
+  return session && isSessionStoppable(session.state) ? session : undefined;
 }
 
 function currentGuidanceIdentity(

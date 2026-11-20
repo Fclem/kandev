@@ -5,6 +5,7 @@ import {
   MobileConfirmationHost,
   MobileConfirmationHostBody,
 } from "@/components/confirmation/mobile-confirmation-host";
+import type { MobileConfirmationHostState } from "@/components/confirmation/mobile-confirmation-host";
 import {
   Drawer,
   DrawerContent,
@@ -24,6 +25,7 @@ type MobilePickerSheetProps = {
   headerAction?: ReactNode;
   /** Replace the picker content with a confirmation step in this same drawer. */
   confirmationHost?: boolean;
+  confirmationState?: MobileConfirmationHostState;
   onCloseAutoFocus?: (event: Event) => void;
   /** Fixed content above the single scrolling picker region. */
   fixedContent?: ReactNode;
@@ -43,6 +45,7 @@ export function MobilePickerSheet({
   contentTestId,
   headerAction,
   confirmationHost = false,
+  confirmationState,
   onCloseAutoFocus,
   fixedContent,
   children,
@@ -65,6 +68,15 @@ export function MobilePickerSheet({
       </div>
     </>
   );
+
+  if (confirmationState)
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent onCloseAutoFocus={onCloseAutoFocus} {...confirmationState.contentProps}>
+          <MobileConfirmationHostBody>{content}</MobileConfirmationHostBody>
+        </DrawerContent>
+      </Drawer>
+    );
 
   if (confirmationHost)
     return (

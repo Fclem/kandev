@@ -22,6 +22,7 @@ import (
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/common/constants"
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 	protocol "github.com/kandev/kandev/pkg/codexappserver"
 	ws "github.com/kandev/kandev/pkg/websocket"
@@ -83,6 +84,7 @@ type NewSessionResponse struct {
 	Success             bool                       `json:"success"`
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
+	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -100,6 +102,7 @@ type LoadSessionResponse struct {
 	Success             bool                       `json:"success"`
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
+	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -118,6 +121,7 @@ type ResumeSessionResponse struct {
 	Success             bool                       `json:"success"`
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
+	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -721,6 +725,8 @@ func (s *Server) handleAgentStreamRequest(ctx context.Context, msg *ws.Message) 
 		return s.handleWSNewSession(ctx, msg)
 	case "agent.session.load":
 		return s.handleWSLoadSession(ctx, msg)
+	case "agent.session.catalog_discovery":
+		return s.handleWSSessionCatalogDiscovery(ctx, msg)
 	case "agent.session.fork":
 		return s.handleWSForkSession(ctx, msg)
 	case "agent.session.resume":
@@ -1183,6 +1189,7 @@ func (s *Server) handleWSNewSession(ctx context.Context, msg *ws.Message) *ws.Me
 		Success:             true,
 		SessionID:           sessionID,
 		ModelState:          sessionModelState(adapter),
+		CatalogDiscovery:    sessionCatalogDiscovery(adapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp
@@ -1268,6 +1275,7 @@ func (s *Server) handleWSLoadSession(ctx context.Context, msg *ws.Message) *ws.M
 		Success:             true,
 		SessionID:           req.SessionID,
 		ModelState:          sessionModelState(adapter),
+		CatalogDiscovery:    sessionCatalogDiscovery(adapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp
@@ -1332,6 +1340,7 @@ func (s *Server) handleWSResumeSession(ctx context.Context, msg *ws.Message) *ws
 	}
 	resp, _ := ws.NewResponse(msg.ID, msg.Action, ResumeSessionResponse{
 		Success: true, SessionID: req.SessionID, ModelState: sessionModelState(adapter),
+		CatalogDiscovery:    sessionCatalogDiscovery(adapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp
@@ -1833,6 +1842,7 @@ func (s *Server) handleWSResetSession(ctx context.Context, msg *ws.Message) *ws.
 		Success:             true,
 		SessionID:           sessionID,
 		ModelState:          sessionModelState(agentAdapter),
+		CatalogDiscovery:    sessionCatalogDiscovery(agentAdapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp

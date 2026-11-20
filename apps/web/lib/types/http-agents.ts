@@ -264,6 +264,7 @@ export type DynamicModelsResponse = {
   context_revision?: string;
   /** Ephemeral host-scoped runtime evidence for this exact profile probe. */
   runtime_info?: ProfileRuntimeInfo;
+  publication?: { status: "published" | "not_published" | "failed"; error?: string };
 };
 
 export type ResolveAgentModelConfigRequest = {

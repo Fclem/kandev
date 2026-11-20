@@ -16,6 +16,7 @@ import (
 	agenttypes "github.com/kandev/kandev/internal/agentctl/types"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 	protocol "github.com/kandev/kandev/pkg/codexappserver"
 	"go.uber.org/zap"
@@ -30,6 +31,7 @@ const (
 )
 
 var errNoActiveThread = errors.New("codex app-server thread is not active")
+var errMissingModelListData = errors.New("codex model/list response is missing the required data array")
 
 type serverRequestDisposition uint8
 
@@ -75,39 +77,41 @@ type Adapter struct {
 	cfg *shared.Config
 	log *logger.Logger
 
-	mu                       sync.RWMutex
-	client                   *protocol.Client
-	info                     *AgentInfo
-	threadID                 string
-	turnID                   string
-	promptPending            bool
-	modelID                  string
-	activeGeneration         uint64
-	turnSequence             uint64
-	models                   []streams.SessionModelInfo
-	permission               agenttypes.PermissionHandler
-	userInputRequest         agenttypes.UserInputRequestHandler
-	closed                   bool
-	completed                map[string]struct{}
-	children                 map[string]childBinding
-	childStatuses            map[string]string
-	earlyChildActivities     map[string]string
-	backgrounds              map[string]protocol.BackgroundTerminal
-	backgroundSnapshotLoaded bool
-	backgroundCancel         context.CancelFunc
-	latestTokenTotals        map[string]protocol.TokenUsageBreakdown
-	latestContextWindows     map[string]int64
-	turnTokenBaselines       map[string]protocol.TokenUsageBreakdown
-	turnHasTokenBaseline     map[string]bool
-	turnModels               map[string]string
-	turnGenerations          map[string]uint64
-	turnResponseObserved     map[string]bool
-	turnFallbackSelected     map[string]bool
-	completedProviderTurns   map[string]bool
-	updates                  chan streams.AgentEvent
-	updatesDone              chan struct{}
-	updatesMu                sync.RWMutex
-	updatesOnce              sync.Once
+	mu                         sync.RWMutex
+	client                     *protocol.Client
+	info                       *AgentInfo
+	threadID                   string
+	turnID                     string
+	promptPending              bool
+	modelID                    string
+	activeGeneration           uint64
+	turnSequence               uint64
+	models                     []streams.SessionModelInfo
+	catalogHandshakeGeneration uint64
+	catalogDiscovery           *sessioncatalog.Discovery
+	permission                 agenttypes.PermissionHandler
+	userInputRequest           agenttypes.UserInputRequestHandler
+	closed                     bool
+	completed                  map[string]struct{}
+	children                   map[string]childBinding
+	childStatuses              map[string]string
+	earlyChildActivities       map[string]string
+	backgrounds                map[string]protocol.BackgroundTerminal
+	backgroundSnapshotLoaded   bool
+	backgroundCancel           context.CancelFunc
+	latestTokenTotals          map[string]protocol.TokenUsageBreakdown
+	latestContextWindows       map[string]int64
+	turnTokenBaselines         map[string]protocol.TokenUsageBreakdown
+	turnHasTokenBaseline       map[string]bool
+	turnModels                 map[string]string
+	turnGenerations            map[string]uint64
+	turnResponseObserved       map[string]bool
+	turnFallbackSelected       map[string]bool
+	completedProviderTurns     map[string]bool
+	updates                    chan streams.AgentEvent
+	updatesDone                chan struct{}
+	updatesMu                  sync.RWMutex
+	updatesOnce                sync.Once
 }
 
 func NewAdapter(cfg *shared.Config, log *logger.Logger) *Adapter {
@@ -196,6 +200,9 @@ func (a *Adapter) GetAgentInfo() *AgentInfo {
 }
 
 func (a *Adapter) NewSession(ctx context.Context, servers []agenttypes.McpServer) (string, error) {
+	catalogGeneration := a.beginCatalogHandshake()
+	catalogSuccess := false
+	defer func() { a.finishCatalogHandshake(catalogGeneration, catalogSuccess) }()
 	client := a.getClient()
 	if client == nil {
 		return "", errors.New("codex app-server adapter is not connected")
@@ -232,10 +239,14 @@ func (a *Adapter) NewSession(ctx context.Context, servers []agenttypes.McpServer
 	a.mu.Unlock()
 	a.emit(streams.AgentEvent{Type: streams.EventTypeSessionStatus, SessionID: response.Thread.ID, SessionStatus: streams.SessionStatusNew})
 	a.emitModelState()
+	catalogSuccess = true
 	return response.Thread.ID, nil
 }
 
 func (a *Adapter) LoadSession(ctx context.Context, threadID string, servers []agenttypes.McpServer) error {
+	catalogGeneration := a.beginCatalogHandshake()
+	catalogSuccess := false
+	defer func() { a.finishCatalogHandshake(catalogGeneration, catalogSuccess) }()
 	client := a.getClient()
 	if client == nil {
 		return errors.New("codex app-server adapter is not connected")
@@ -274,6 +285,7 @@ func (a *Adapter) LoadSession(ctx context.Context, threadID string, servers []ag
 	a.refreshBackgroundTerminals(ctx, threadID)
 	a.emit(streams.AgentEvent{Type: streams.EventTypeSessionStatus, SessionID: threadID, SessionStatus: streams.SessionStatusResumed})
 	a.emitModelState()
+	catalogSuccess = true
 	return nil
 }
 
@@ -455,6 +467,9 @@ func (a *Adapter) fetchModels(ctx context.Context) ([]streams.SessionModelInfo, 
 	var response protocol.ModelListResponse
 	if err := client.Call(ctx, protocol.MethodModelList, protocol.ModelListParams{}, &response); err != nil {
 		return nil, err
+	}
+	if response.Data == nil {
+		return nil, errMissingModelListData
 	}
 	models := make([]streams.SessionModelInfo, 0, len(response.Data))
 	for _, model := range response.Data {

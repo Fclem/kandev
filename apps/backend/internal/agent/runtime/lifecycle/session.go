@@ -23,6 +23,7 @@ import (
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/common/appctx"
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/task/models"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 	"go.opentelemetry.io/otel/trace"
@@ -73,6 +74,7 @@ type SessionManager struct {
 	persistPromptTurnBinding func(context.Context, *AgentExecution) error
 	initialPromptFailure     func(failure InitialPromptFailure)
 	historyManager           *SessionHistoryManager
+	catalogDiscoveryStore    catalogDiscoveryStartupStore
 	attachmentReader         AttachmentReader
 	stopCh                   <-chan struct{} // For graceful shutdown coordination
 	turnChangeAdmitted       func(context.Context, *AgentExecution, uint64) error
@@ -152,6 +154,7 @@ type InitializeResult struct {
 	AgentName           string
 	AgentVersion        string
 	SessionID           string
+	CatalogDiscovery    *sessioncatalog.Discovery
 }
 
 // InitializeSession initializes an ACP session with the agent.
@@ -290,6 +293,7 @@ func (sm *SessionManager) initializeSessionWithSettingsPolicy(
 
 	result.SessionID = sessionID.SessionID
 	result.AttachmentAttemptID = sessionID.AttachmentAttemptID
+	result.CatalogDiscovery = sessionID.CatalogDiscovery
 	return result, nil
 }
 
@@ -340,6 +344,7 @@ func (sm *SessionManager) publishNegotiatedDeliveryMode(
 type sessionMCPResult struct {
 	SessionID           string
 	AttachmentAttemptID string
+	CatalogDiscovery    *sessioncatalog.Discovery
 }
 
 // createOrLoadSession creates a new session or loads an existing one based on agent config.
@@ -493,7 +498,7 @@ func (sm *SessionManager) loadSession(
 	if settingsPolicy == SessionSettingsPolicyProviderRestored {
 		loadSettingsPolicy = streams.SessionSettingsPolicyProviderRestored
 	}
-	attemptID, err := client.LoadSessionWithResult(ctx, sessionID, mcpServers, loadSettingsPolicy)
+	response, err := client.LoadSessionWithResult(ctx, sessionID, mcpServers, loadSettingsPolicy)
 	if err != nil {
 		// context.Canceled is caller teardown (WS disconnect, session already
 		// gone) rather than an agent or transport fault, so it does not warrant
@@ -519,7 +524,7 @@ func (sm *SessionManager) loadSession(
 		zap.String("agent_type", agentConfig.ID()),
 		zap.String("session_id", sessionID))
 
-	return sessionMCPResult{SessionID: sessionID, AttachmentAttemptID: attemptID}, nil
+	return sessionMCPResult{SessionID: sessionID, AttachmentAttemptID: response.AttachmentAttemptID, CatalogDiscovery: response.CatalogDiscovery}, nil
 }
 
 // createNewSession creates a new session via ACP session/new
@@ -547,7 +552,7 @@ func (sm *SessionManager) createNewSession(
 		zap.String("agent_type", agentConfig.ID()),
 		zap.String("session_id", response.SessionID))
 
-	return sessionMCPResult{SessionID: response.SessionID, AttachmentAttemptID: response.AttachmentAttemptID}, nil
+	return sessionMCPResult{SessionID: response.SessionID, AttachmentAttemptID: response.AttachmentAttemptID, CatalogDiscovery: response.CatalogDiscovery}, nil
 }
 
 // InitializeAndPrompt performs full ACP session initialization and sends the initial prompt.
@@ -604,6 +609,22 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 	startModelPolicy StartModelPolicy,
 	setupAccepted ...func(string),
 ) error {
+	catalogSource := execution.startupAttemptSnapshot()
+	catalogAttemptID := execution.currentStartupAttemptID()
+	catalogNativeID := execution.ACPSessionID
+	var catalogInitial *sessioncatalog.Discovery
+	catalogSettled := false
+	defer func() {
+		if !catalogSettled {
+			var terminal *sessioncatalog.Discovery
+			if catalogInitial != nil {
+				terminal = sm.finalSessionCatalogDiscovery(ctx, execution, catalogNativeID, catalogInitial)
+			} else {
+				terminal = &sessioncatalog.Discovery{Outcome: sessioncatalog.OutcomeFailed}
+			}
+			sm.publishSessionCatalogDiscovery(execution, catalogNativeID, catalogSource, catalogAttemptID, terminal)
+		}
+	}()
 	attempt := execution.beginDeliveryStartupAttempt(ctx)
 	defer execution.releaseDeliveryStartupAttempt(attempt)
 	// Every exit before native success releases pending setup-event work with
@@ -617,6 +638,10 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 			execution.clearDeliveryBootstrapForAttempt(attempt)
 		}
 	}()
+	if err := sm.reserveSessionCatalogDiscovery(ctx, execution, catalogSource, catalogAttemptID); err != nil {
+		attempt.fail(err)
+		return err
+	}
 	ctx, result, err := sm.initializeACPConnection(ctx, execution, agentConfig, mcpServers, attempt)
 	if err != nil {
 		attempt.fail(err)
@@ -625,6 +650,8 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 	startModelPolicy = strictAuggieTaskStartModelPolicy(startModelPolicy, execution, agentConfig)
 
 	execution.ACPSessionID = result.SessionID
+	catalogNativeID = result.SessionID
+	catalogInitial = result.CatalogDiscovery
 	for _, accepted := range setupAccepted {
 		accepted(result.AttachmentAttemptID)
 	}
@@ -699,6 +726,9 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 	execution.setSessionInitialized(true)
 	sm.publishSettledConfigOptions(execution, result.SessionID, finalConfigID, providerDefaultConfig)
 	sm.publishWorkflowSessionConfigFailures(execution, result.SessionID, runtimeFailures)
+	finalCatalog := sm.finalSessionCatalogDiscovery(ctx, execution, result.SessionID, result.CatalogDiscovery)
+	sm.publishSessionCatalogDiscovery(execution, result.SessionID, catalogSource, catalogAttemptID, finalCatalog)
+	catalogSettled = true
 
 	// Send the task prompt if provided, or mark the execution as ready.
 	sm.dispatchInitialPrompt(ctx, execution, agentConfig, taskDescription, attachments, markReady)

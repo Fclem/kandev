@@ -385,6 +385,7 @@
   "profileCapabilitiesReady": "模型與目前啟動設定一致。",
   "profileCapabilitiesStale": "啟動設定已更改。請重新整理模型。",
   "refreshCapabilities": "重新整理模型",
+  "profileCatalogPublicationFailed": "已擷取設定檔選項，但無法完成現有工作階段的更新。請再次重新整理模型。已儲存的選擇保持不變。",
   "remove": "移除",
   "removeCliFlag": "移除 {{name}}",
   "removeDynamicCandidate": "移除候選設定",

@@ -17,6 +17,7 @@ import {
 } from "@/components/task/chat/chat-input-container";
 import { QueueAffordance } from "@/components/task/chat/queued-ghost-list";
 import { ComposerStatusNotices } from "./composer-status-notices";
+import { SessionCatalogRefreshNotice } from "@/components/task/session-catalog-refresh-notice";
 import {
   formatReviewCommentsAsMarkdown,
   formatPRFeedbackAsMarkdown,
@@ -584,6 +585,7 @@ export function ChatInputArea(props: ChatInputAreaProps) {
         surfaceClassName,
       )}
     >
+      <SessionCatalogRefreshNotice sessionId={resolvedSessionId} />
       {disclosure?.enabled && (
         <ComposerCIStatus
           taskId={resolveStatusRowTaskId(taskId, statusTaskId)}

@@ -12,6 +12,8 @@ import type { NativeMCPDiagnostic } from "@/lib/prepare/native-mcp-diagnostic";
 import type { ModelCatalog } from "@kandev/types/model-catalog";
 import type { UserShellScope } from "@/lib/state/user-shell-scope";
 import type { WorkspaceRootFilesResponse } from "@/lib/types/workspace-files";
+import type { SessionCatalogRefreshState } from "@/lib/types/session-catalog";
+import type { SessionCatalogRefreshActions } from "./session-catalog-refresh";
 
 export type TerminalState = {
   terminals: Array<{ id: string; output: string[] }>;
@@ -641,6 +643,7 @@ export type SessionRuntimeSliceState = {
   sessionMode: SessionModeState;
   agentCapabilities: AgentCapabilitiesState;
   sessionModels: SessionModelsState;
+  sessionCatalogRefresh: SessionCatalogRefreshState;
   sessionMcpStatus: SessionMCPStatusState;
   promptUsage: PromptUsageState;
   usageInvalidation: { bySessionId: Record<string, number> };
@@ -656,7 +659,7 @@ export type SessionRuntimeSliceState = {
   backgroundWork: BackgroundWorkState;
 };
 
-export type SessionRuntimeSliceActions = {
+export type SessionRuntimeSliceActions = SessionCatalogRefreshActions & {
   setTerminalOutput: (terminalId: string, data: string) => void;
   appendShellOutput: (sessionId: string, data: string) => void;
   setShellStatus: (

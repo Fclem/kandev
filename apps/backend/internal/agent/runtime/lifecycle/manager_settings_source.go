@@ -19,6 +19,9 @@ type SessionSettingsSnapshotWriter interface {
 // writer used while adopting surviving executions.
 func (m *Manager) SetSessionSettingsSnapshotWriter(writer SessionSettingsSnapshotWriter) {
 	m.sessionSettingsSnapshotWriter = writer
+	if m.sessionManager != nil {
+		m.sessionManager.catalogDiscoveryStore, _ = writer.(catalogDiscoveryStartupStore)
+	}
 }
 
 func (m *Manager) restoreRecoveredSessionSettingsSource(ctx context.Context, execution *AgentExecution) error {

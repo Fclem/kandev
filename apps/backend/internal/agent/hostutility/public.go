@@ -404,6 +404,7 @@ func (m *Manager) PublishCapabilities(agentType string, caps AgentCapabilities) 
 func (m *Manager) InvalidateCapabilities(agentType string) {
 	m.cache.delete(agentType)
 	m.invalidateModelConfigCache(agentType)
+	m.invalidateProfileCapabilities(agentType)
 }
 
 // ExecutePrompt runs a sessionless utility prompt against the warm instance

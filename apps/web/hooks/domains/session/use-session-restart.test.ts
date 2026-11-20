@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { StoreApi } from "zustand";
 import { createAppStore } from "@/lib/state/store";
 import type { AppState } from "@/lib/state/store";
 import { sessionId, taskId } from "@/lib/types/http";
@@ -10,7 +11,7 @@ import { useSessionRestart } from "./use-session-restart";
 const mockRequest = vi.fn();
 const mockToast = vi.fn().mockReturnValue("restart-toast");
 const mockUpdateToast = vi.fn();
-let mockStore: ReturnType<typeof createAppStore>;
+let mockStore: StoreApi<AppState>;
 
 vi.mock("@/components/state-provider", () => ({
   useAppStoreApi: () => mockStore,

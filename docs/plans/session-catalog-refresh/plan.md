@@ -7,6 +7,7 @@ requirements:
   - REQ-AGENTS-SESSION-CATALOG-003
 system_design:
   - ../../specs/agents/system-design/session-catalog-refresh.md
+  - ../../specs/agents/system-design/session-catalog-task-discovery.md
 legacy_specs: []
 ---
 
@@ -90,12 +91,12 @@ the conversation and use existing recovery without a new-session fallback.
 
 ### Saved-profile operation and durable session observation
 
-Add the saved-profile POST described in the design. Share the existing internal
-profile probe without reusing host-CLI-enriched response entries for publication.
-Wire a narrow consumer in `internal/backendapp`; keep settings independent of
-orchestrator/lifecycle imports. Response preserves the discovery payload with a
-separate sanitized publication outcome so a partial fan-out cannot appear fully
-successful. Do not expose foreign session counts or IDs.
+Keep the saved-profile POST/editor response and pure settings probe. Its success
+gates a bounded authorized fan-out; each eligible host obtains its own fresh
+task-context result under the [acquisition contract](../../specs/agents/system-design/session-catalog-task-discovery.md).
+Wire the narrow consumer in backendapp; settings stays independent of runtime.
+Never transfer generic utility choices. Return sanitized partial/unavailable
+publication separately, without exposing foreign session counts or IDs.
 
 Add a bounded query by actual concrete profile and live execution, including IDLE
 rather than relying on `ListActiveTaskSessions`, which omits it. Authorize each
@@ -138,13 +139,12 @@ Chat reuse through session-scoped hooks rather than adding page-specific effects
 
 | Provider/transport and actual executor | Identity/capability shape | Behavior and verification | Unsupported or unknown fallback |
 | --- | --- | --- | --- |
-| Registered/custom ACP on canonical `local` or `worktree`; legacy `local_pc` alias only | Same concrete profile, proven matching launch context; flat model list or normalized model select | Host candidates; separate canonical local/worktree eligibility fixtures; existing advertised values use existing RPC | Host-only values require explicit restart; unknown/empty locality is notice-only; no speculative SetModel |
-| ACP with structured groups/compositions | Bounded normalized catalog from the matching probe | Preserve order, exact values, groups, candidate marking, modes; component and converter regressions | Invalid richer metadata retains ordinary bounded exact choices |
-| Native Codex app-server on canonical `local` or `worktree`; legacy `local_pc` alias only | Existing supported dynamic profile discovery | Same candidate/provider distinction; native provider catalog stays authoritative | Unsupported probe is visible and publishes nothing; no ACP-only wire assumptions |
-| ACP/native on Docker, SSH, Remote Docker, Sprites, Kubernetes, plugin remote | Actual executor identity, not desired settings or host reachability | Notice only; explicit restart rediscovery uses that executor; service matrix plus real Docker flow | Never copy host choices/credentials; preserve normal recovery failures |
-| Host with changed launch snapshot, executor/workspace env overlay, or missing compatibility evidence | Actual inputs do not attest the probe context | Notice only; mismatch/legacy/race tests | No presumed match from profile ID or machine name alone |
-| Dynamic routing profile | Session's concrete execution profile | Refresh only actual matching concrete users; routing regression | No propagation based on dynamic parent identity |
-| Static/passthrough/virtual or non-discoverable provider | No structured dynamic catalog operation | Retain current choices and unsupported/no-change result | No process restart or fabricated dynamic-model support |
+| Qualified native Codex built-in unwrapped host app-server, actual 0.169.0 | Sealed current task command/context plus source/profile fences | Fresh helper initialize/model-list only; complete pagination, model surface supported; actual native Local and Worktree proof required | Unknown runtime/version/wrapper or unavailable context gets notice-only; native modes remain explicitly unsupported |
+| ACP including grouped/mode-capable providers | No qualified generic fresh read-only task acquisition established by research | Preserve live provider choices and offer notice/explicit rediscovery; deterministic task-probe fixture covers model/mode UI independently | No invented RPC or new native conversation to manufacture eligibility; concrete future capabilities need same-contract proof |
+| Custom/passthrough/wrapped or legacy host runtime | No qualified acquisition capability/launch evidence | Notice-only with exact current selections retained | No generic environment exclusions or installer equality |
+| Any Docker/SSH/Remote Docker/Sprites/Kubernetes/plugin remote, or unknown locality | Actual executor identity | Notice-only; explicit restart stays on that executor; real Docker proof remains required | Never run automatic task probes or import host choices |
+| Dynamic routing profile | Actual concrete execution profile and authorized owning task | Only actual matching concrete users enter acquisition/publication | No dynamic-parent propagation |
+| Static/virtual/non-discoverable provider | Unsupported task acquisition | Retain provider choices and truthful unsupported/rediscovery notice | No fabricated dynamic support or automatic restart |
 
 All registered profiles and executors take one of these explicit paths. That is
 coverage of the scope, not a claim that every upstream provider supports dynamic
@@ -260,6 +260,7 @@ Names below are proposed implementation targets, not tests run during design.
 | 001.1-001.6 | `hooks/domains/settings/use-profile-capability-discovery.test.tsx`; `lib/ws/handlers/session-catalog-refresh.test.ts`; `lib/state/slices/session-runtime/session-model-hydration.test.ts`: saved-only routing, candidate hydration, newer event versus stale HTTP, tombstone, provider event retention |
 | 002.1, 001.2 | `components/task/model-selector-catalog-refresh.test.tsx`: candidate versus advertised selection, no unadvertised RPC, unchanged effective model/options, candidate modes, structured groups and removed current selection |
 | 002.2-002.5, 003.1-003.3 | `hooks/domains/session/use-session-restart.test.ts`; new `components/task/session-catalog-refresh-notice.test.tsx`: captured target/revision, cancel, duplicate hooks, pending, terminal empty/unsupported, no-report 60s controlled-clock boundary, late result, failure and focus; runtime `TestSessionCatalogRefreshUsesCurrentLaunchSettings` covers changed env/flags/wrapper and retained native identity on restore failure |
+| 001.7-001.8 | `process`/`api`/native adapter `TestSessionCatalogTaskDiscovery` suites: authenticated owner/source capture, fresh helper protocol, task-specific results, paging/cleanup/cancellation; legacy provenance rejection and real native warm-A/fresh-B/resume-B experiment |
 
 The complete identifiers use the prefix `AC-AGENTS-SESSION-CATALOG-`.
 Tests assert choices, preserved state, authority, and transitions, not source text,
@@ -305,6 +306,32 @@ Task 02 depends on Task 01. The split follows the independently verifiable
 publication/settlement API boundary, not a shared schema migration wave. Both
 orders are sequential; they share contracts and are not parallel-safe.
 
+### Revised acquisition checkpoint
+
+The user selected fresh task-context design after provider research completed
+without a qualified generic-transfer path. This is a new review checkpoint:
+existing implementation and results remain partial; neither work order is done.
+Task 01 owns the replacement acquisition and provenance cutover; Task 02 consumes
+only qualified task-owned candidates and repeats endpoint/browser proof. Preserve
+historical results below, but do not treat them as proof of this new boundary.
+Do not implement the revised boundary until the user later explicitly requests it.
+
+Review tradeoff: initial production-native model acquisition is explicit, while
+ACP mode/model acquisition remains unsupported until qualified. This is not a
+promise that arbitrary providers support a safe new catalog API. The mock
+model/mode fixture is not production-provider qualification.
+
+Add targeted commands after Task 01 RED/GREEN:
+
+```bash
+(cd apps/backend && go test -tags fts5 ./internal/agentctl/server/process ./internal/agentctl/server/api ./internal/agentctl/server/adapter/transport/codexappserver ./internal/orchestrator -run 'TestSessionCatalogTaskDiscovery|TestSessionCatalogRefresh' -count=1)
+(cd apps/backend && go test -race -tags fts5 ./internal/agentctl/server/process ./internal/orchestrator -run 'TestSessionCatalogTaskDiscovery|TestSessionCatalogRefreshOrderingAndSettlement' -count=1)
+```
+
+Run complete changed packages as well as the existing native PostgreSQL,
+desktop/phone/Docker and final root gates. Record versioned actual-provider
+fresh-helper/no-conversation proof separately from mocked/UI evidence.
+
 ## Verification
 
 Each work order contains exact commands. From repo root, validate artifacts with:
@@ -348,16 +375,140 @@ Design validation on 2026-11-10:
 - Status shows only this new requirement, design, and three-file plan directory,
   all unstaged and uncommitted.
 
-Implementation remains pending. No live provider, product test, formatting/build,
-runtime mutation, or browser verification ran during this planning turn.
+At the planning handoff, implementation was pending. No live provider, product
+test, formatting/build, runtime mutation, or browser verification ran during that
+planning turn.
 
 Round 1 Sol adversarial review (2026-11-11) found three material design defects:
 an unsupported frozen-launch promise, a legacy-only host predicate, and no
 terminal empty/unsupported discovery path. The package now describes ordinary
 resume's actual current-input behavior, canonical host identities, and explicit
-terminal discovery plus bounded missing-report handling. Implementation remains
-pending. Subsequent review and revised-package checks are recorded in the task
-plan; these corrections are not product verification.
+terminal discovery plus bounded missing-report handling. Implementation was still
+pending at that checkpoint. Subsequent review and revised-package checks are
+recorded in the task plan; those design corrections are not product verification.
+
+Implementation is in progress under explicit user authorization. Task 01's
+backend and focused SQLite/runtime/race evidence exist, but its compatibility
+predicate still needs correction: installer identity does not prove equality of
+the actual final probe and agent contexts. No additional generated-key exclusion
+is approved. The source-grounded normal-host feasibility assessment leaves
+AC-AGENTS-SESSION-CATALOG-001.1 unresolved; the
+[separate attestation proposal](../../specs/agents/system-design/session-catalog-launch-context-evidence.md)
+is a security-review draft, not implementation authorization or a solution to
+that feasibility blocker.
+Review acknowledged the blocker, not the transport. Further transport/crypto
+implementation is not the next step. The user-owned decision is a supported
+provider-specific catalog-dependency contract or a separately reviewed actual-
+task-context discovery architecture; universal notice-only needs explicit scope
+reduction. Eligibility correction awaits that direction; unchanged-contract
+implementation and verification resumed after cache headroom recovered.
+
+Task 02's composer flow, focused tests, desktop/phone smoke, locales and guidance
+are implemented within the unchanged contract; candidate-publication observations
+do not qualify the defective eligibility predicate. Complete desktop and phone
+collections, including adjacent restart/settings suites, passed. Their actual
+runtime paths include current-input/restore/terminal/preview/Quick Chat/deadline,
+duplicate refresh, unchanged native catalogs and running/sibling/other-profile
+isolation, with inspected captures.
+
+Native disposable PostgreSQL 18.6 is provisioned on cache-backed storage.
+Its scoped conditional-write and concurrent-CAS contracts passed without skips;
+the required ordering/settlement race check passed. All specified backend
+packages and fourteen affected frontend suites (130 tests) passed. The complete
+PostgreSQL-enabled repository package passed untrimmed (2646.706s) with an
+extended global deadline; its feature-specific PostgreSQL cases ran rather than
+skipping. Combined desktop and phone collections passed (22 and 19 tests).
+Required locales and current specification/public-document validators passed.
+Formatting and full root classic typecheck passed. The first complete backend
+test run exposed inherited service settings, a mixed legacy-slug fixture and
+unrelated opt-in PostgreSQL failures. Five packages passed after service-env
+isolation and the fixture correction; unmodified worktree strict-lock cases
+still fail with Git 2.53.0. Owned lint refactors passed focused catalog cases,
+and a false cross-surface completion regression now passes with executable
+wire-validation smoke. The full scripts gate passes after native Rust and
+cache-backed desktop-build prerequisites were restored.
+
+Current-source results now pass all seven required backend packages. Six passed
+in the complete matrix, including the PostgreSQL-enabled repository (2397.394s);
+three handler fixtures initially timed out when discovery reached personal
+CLIs. Fixture HOME/PATH isolation made the complete handler package pass
+(0.710s), without weakening production behavior or timeouts. The required race
+check passed (2.025s). Full Go lint reported zero issues; scoped lint passed
+after the fixture-only correction.
+
+Fresh required formatting passed (231.26s). The twelve required frontend suites
+pass 106 tests after helper extraction, module splits and accessible consent
+assertions under Node 24.19.0. Full-app typecheck and full web lint passed after
+the final extraction. The earlier full web suite was cancelled at 91% cache usage
+after reporting a separate Linear lifetime test failure and local connection
+refusals; it is not a passing gate. Revalidated older-cache recovery restored
+90% use while protecting current/recent data, source and databases.
+
+Four remaining backend packages pass with service-environment isolation.
+The separate unmodified worktree strict-lock failure remains; an isolated
+Linear lifetime case also still reaches its existing 5000 ms deadline. No
+assertion or timeout was weakened. Final harness, architecture, specification,
+public-document, locale and changed-path coverage checks pass.
+
+Fresh desktop/phone qualification remains pending after browser-helper
+refactoring. At 90% cache use, less than 0.5 GB of policy-safe headroom cannot
+cover the 1 GB fresh-build budget. The required Hermes capacity alert was sent
+successfully. Real Docker execution and corrected launch eligibility also remain
+mandatory. Both work orders stay open; no final verified implementation, commit
+or Sol review-ready handoff exists.
+
+Execution resumed after capacity recovered to 30% use. Following an interrupted
+desktop job with no inferred pass, fresh full-build collections passed 22
+desktop and 19 phone cases, with current visual captures inspected. These
+passes do not qualify launch eligibility. The original exact aggregate passed
+typecheck and other backend packages but failed SQLite's cumulative 10-minute
+timeout; the complete isolated SQLite suite later passed in 1008.424s with a
+2-hour budget. The retained follow-on chain is running full web checks with
+observed restart/selector/onboarding failures; no later targets are inferred
+passed.
+
+The later parent user choice (2026-11-19 around 10:53) is provider-specific
+contract research, superseding the earlier child task-context answer. No
+task-context rewrite, context exclusion or attestation transport is approved.
+Task 01 records exact-version model-and-mode dependencies and measured native
+catalog/mode-factory behavior. No ordinary positive generic-utility-to-task
+path is qualified; AC001.1 and real Docker proof remain mandatory and open.
+The five package documents are not frozen awaiting parent edits. Both work
+orders remain in progress; no complete verified commit or review-ready signal.
+
+Before terminal-owner TDD, cache use reached 91% again. The owned follow-on
+aggregate was cancelled and its output retained: SQLite's complete 1008.424s
+pass is preserved; full web has partial observed failures and no complete
+terminal verdict. No later targets passed by inference. Older secondary caches
+were empty and conservative compiled-cache scans found no safe old candidates;
+no protected data was deleted. Hermes reported the capacity gate successfully.
+Read-only source diagnosis identified incomplete restart/selector fixtures and
+an obsolete onboarding forwarding-count assertion. No fixes/reruns are claimed.
+Terminal process/source fences and explicit-null native protocol coverage remain
+open alongside ordinary eligibility, Docker and final verification.
+
+Cache expansion to 189 GB/58% cleared that storage gate. Independent
+same-native-ID process replacement and same-process reload regressions now ran
+RED/GREEN with manager/process and adapter-handshake source fences. Actual
+authenticated HTTP/WebSocket/process smoke confirmed owned complete-empty,
+same-ID reload and stale/unknown owner handling; disposable children stopped
+and smoke sources were removed. Native explicit-null coverage passed without
+claiming a new pre-fix RED. Corrected web fixtures and removal of obsolete
+wiring assertions yielded 49 passing tests across the three failed suites.
+These are independent fixes, not AC001.1 or Docker qualification. Subsequent
+qualification passed 13 full Go packages (one additional package had no tests),
+four terminal-discovery race packages and root typecheck. Full web completed
+7635.32s with 30811 passing/eight failing/four skipped tests in 3373 files;
+CLI/scripts/lint were not reached. Four-file test-only remediation then passed
+63 tests. Current `bg_31` subsequently passed root typecheck, full web
+(3373 files, 30818 tests passed/four skipped, 7189.17s) and CLI five tests.
+Scripts stopped at an offline exact-Cargo-cache miss; locked fetch then restored
+the prerequisites and exact `make test-scripts` passed (363.76s). A case-only
+ST1005 correction was followed by native-package pass and exact `make lint` pass
+(812.31s), with its external-checkout warning retained. No original SQLite timeout
+waiver or complete aggregate pass is inferred. The revised task-discovery draft
+still requires its review/later-implementation checkpoint and actual native
+helper/provenance plus real Docker qualification.
 
 ## Risks
 

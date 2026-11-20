@@ -15,6 +15,7 @@ import (
 	"github.com/kandev/kandev/internal/agentctl/types"
 	"github.com/kandev/kandev/internal/agentctl/types/deliverylimits"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/common/startupdiag"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 	protocol "github.com/kandev/kandev/pkg/codexappserver"
@@ -167,6 +168,7 @@ type NewSessionResponse struct {
 	Success             bool                       `json:"success"`
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
+	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -251,9 +253,9 @@ func (c *Client) LoadSessionWithPolicy(
 	return err
 }
 
-func (c *Client) LoadSessionWithResult(ctx context.Context, sessionID string, mcpServers []types.McpServer, policy streams.SessionSettingsPolicy) (string, error) {
+func (c *Client) LoadSessionWithResult(ctx context.Context, sessionID string, mcpServers []types.McpServer, policy streams.SessionSettingsPolicy) (NewSessionResponse, error) {
 	if policy != streams.SessionSettingsPolicyStrict && policy != streams.SessionSettingsPolicyProviderRestored {
-		return "", fmt.Errorf("unsupported session settings policy %q", policy)
+		return NewSessionResponse{}, fmt.Errorf("unsupported session settings policy %q", policy)
 	}
 	payload := struct {
 		SessionID             string                        `json:"session_id"`
@@ -268,42 +270,37 @@ func (c *Client) LoadSessionWithResult(ctx context.Context, sessionID string, mc
 	c.setLastSessionModelState(nil)
 	resp, err := c.sendStreamRequest(ctx, agentSessionLoadAction, payload)
 	if err != nil {
-		return "", fmt.Errorf("load session request failed: %w", err)
+		return NewSessionResponse{}, fmt.Errorf("load session request failed: %w", err)
 	}
 
 	if resp.Type == ws.MessageTypeError {
 		var errPayload ws.ErrorPayload
 		if err := resp.ParsePayload(&errPayload); err != nil {
-			return "", fmt.Errorf("load session failed: unable to parse error")
+			return NewSessionResponse{}, fmt.Errorf("load session failed: unable to parse error")
 		}
 		if errPayload.Code == "SESSION_RESTORE_REQUIRED" || errPayload.Code == "SESSION_RESTORE_BLOCKED" {
-			return "", &SessionRestoreOperationError{
+			return NewSessionResponse{}, &SessionRestoreOperationError{
 				Code:    errPayload.Code,
 				Message: errPayload.Message,
 				Details: errPayload.Details,
 			}
 		}
 		if authenticationError := sessionOperationAuthenticationError(agentSessionLoadAction, resp, errPayload); authenticationError != nil {
-			return "", authenticationError
+			return NewSessionResponse{}, authenticationError
 		}
-		return "", fmt.Errorf("load session failed: %s", errPayload.Message)
+		return NewSessionResponse{}, fmt.Errorf("load session failed: %s", errPayload.Message)
 	}
 
-	var result struct {
-		Success             bool                       `json:"success"`
-		ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
-		AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
-		Error               string                     `json:"error,omitempty"`
-	}
+	var result NewSessionResponse
 	if err := resp.ParsePayload(&result); err != nil {
-		return "", fmt.Errorf("failed to parse load session response: %w", err)
+		return NewSessionResponse{}, fmt.Errorf("failed to parse load session response: %w", err)
 	}
 	if !result.Success {
-		return "", fmt.Errorf("load session failed: %s", result.Error)
+		return NewSessionResponse{}, fmt.Errorf("load session failed: %s", result.Error)
 	}
 	c.setLastSessionModelState(result.ModelState)
 	c.setLastAttachmentAttemptID(result.AttachmentAttemptID)
-	return result.AttachmentAttemptID, nil
+	return result, nil
 }
 
 // ResumeSession reconnects an existing ACP session without replaying its
@@ -314,7 +311,7 @@ func (c *Client) ResumeSession(ctx context.Context, sessionID, cwd string, mcpSe
 	return err
 }
 
-func (c *Client) ResumeSessionWithResult(ctx context.Context, sessionID, cwd string, mcpServers []types.McpServer) (string, error) {
+func (c *Client) ResumeSessionWithResult(ctx context.Context, sessionID, cwd string, mcpServers []types.McpServer) (NewSessionResponse, error) {
 	payload := struct {
 		SessionID     string                       `json:"session_id"`
 		Cwd           string                       `json:"cwd"`
@@ -325,33 +322,28 @@ func (c *Client) ResumeSessionWithResult(ctx context.Context, sessionID, cwd str
 	c.setLastSessionModelState(nil)
 	resp, err := c.sendStreamRequest(ctx, agentSessionResumeAction, payload)
 	if err != nil {
-		return "", fmt.Errorf("resume session request failed: %w", err)
+		return NewSessionResponse{}, fmt.Errorf("resume session request failed: %w", err)
 	}
 	if resp.Type == ws.MessageTypeError {
 		var errPayload ws.ErrorPayload
 		if err := resp.ParsePayload(&errPayload); err != nil {
-			return "", fmt.Errorf("resume session failed: unable to parse error")
+			return NewSessionResponse{}, fmt.Errorf("resume session failed: unable to parse error")
 		}
 		if authenticationError := sessionOperationAuthenticationError(agentSessionResumeAction, resp, errPayload); authenticationError != nil {
-			return "", authenticationError
+			return NewSessionResponse{}, authenticationError
 		}
-		return "", fmt.Errorf("resume session failed: %s", errPayload.Message)
+		return NewSessionResponse{}, fmt.Errorf("resume session failed: %s", errPayload.Message)
 	}
-	var result struct {
-		Success             bool                       `json:"success"`
-		ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
-		AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
-		Error               string                     `json:"error,omitempty"`
-	}
+	var result NewSessionResponse
 	if err := resp.ParsePayload(&result); err != nil {
-		return "", fmt.Errorf("failed to parse resume session response: %w", err)
+		return NewSessionResponse{}, fmt.Errorf("failed to parse resume session response: %w", err)
 	}
 	if !result.Success {
-		return "", fmt.Errorf("resume session failed: %s", result.Error)
+		return NewSessionResponse{}, fmt.Errorf("resume session failed: %s", result.Error)
 	}
 	c.setLastSessionModelState(result.ModelState)
 	c.setLastAttachmentAttemptID(result.AttachmentAttemptID)
-	return result.AttachmentAttemptID, nil
+	return result, nil
 }
 
 // ForkSession asks the current provider session to fork through a completed

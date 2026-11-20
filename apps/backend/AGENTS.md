@@ -66,7 +66,7 @@ apps/backend/
 │   ├── gateway/          # WebSocket gateway, including task-owned LSP lease lifecycle
 │   ├── github/           # GitHub API integration (PRs, reviews, webhooks)
 │   ├── githubauth/       # Shared GitHub credential-broker environment and request wire contract
-│   ├── common/           # Shared utilities, config, logger
+│   ├── common/           # Shared utilities, config, logger, sessioncatalog discovery/ownership types
 │   ├── integration/      # External integrations
 │   ├── integrations/     # Shared shapes for third-party integrations
 │   │   ├── healthpoll/   # Reusable 90s auth-health Poller (used by jira, linear)

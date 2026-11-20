@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
     sessionAgentctl: { itemsBySessionId: {} as Record<string, { status: string }> },
     connection: { status: "connected" },
     setTaskSession: vi.fn(),
+    hydrateSessionCatalogRefresh: vi.fn(),
   };
   return {
     state,

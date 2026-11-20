@@ -82,60 +82,101 @@ test("blocks sending throughout restart while keeping the draft editable", async
 });
 
 // @covers AC-TASKS-SESSION-TAB-RESTART-001.1, AC-TASKS-SESSION-TAB-RESTART-001.2, AC-TASKS-SESSION-TAB-RESTART-001.3, AC-TASKS-SESSION-TAB-RESTART-001.5
-test("keeps history and recovery available after restarting an interrupted turn", async ({
+test("keeps history and recovery when native restore rejects an interrupted turn", async ({
   testPage,
   apiClient,
   seedData,
+  backend,
 }) => {
   test.setTimeout(120_000);
-  const fixture = await createRestartScenario(testPage, apiClient, seedData);
-  await fixture.session.sendMessage('e2e:message("Restart running witness")\ne2e:delay(60000)');
-  await expect(
-    fixture.session.chat.getByText("Restart running witness", { exact: true }),
-  ).toBeVisible();
-  const before = await captureRestartBaseline(apiClient, fixture.task.id, fixture.sessionId);
-  expect(before.target.state).toBe("RUNNING");
-  const stop = fixture.wire.waitForResponse("session.stop");
-  const launch = fixture.wire
-    .waitForResponse("session.launch", { timeout: 30_000, timeoutAfter: stop })
-    .catch((error: unknown) => error);
-  const wireStart = fixture.traffic.frames.length;
-  await fixture.session.sessionTabBySessionId(fixture.sessionId).click({ button: "right" });
-  await testPage.getByRole("menuitem", { name: "Restart session", exact: true }).click();
-  await stop;
-  const launchOutcome = await launch;
-  if (launchOutcome instanceof Error) {
-    expect(launchOutcome.message).toContain("unknown_prompt_outcome");
+  const releaseCancellation = await backend.useEnv({
+    KANDEV_E2E_CANCEL_HOLD_DURATION: "120s",
+    KANDEV_E2E_PROMPT_CANCEL_JOIN_TIMEOUT: "1s",
+  });
+  let taskId: string | undefined;
+  let profileId: string | undefined;
+  try {
+    const { agents } = await apiClient.listAgents();
+    const agent = agents.find((candidate) => candidate.name === "mock-agent");
+    if (!agent) throw new Error("Mock agent is required for interrupted restart");
+    const profile = await apiClient.createAgentProfile(agent.id, "Interrupted restart", {
+      model: "mock-fast",
+      mode: "default",
+      auto_fallback: false,
+      cli_flags: [
+        { description: "Reject native restore", flag: "--fail-on-resume", enabled: true },
+      ],
+    });
+    profileId = profile.id;
+    const fixture = await createRestartScenario(testPage, apiClient, {
+      ...seedData,
+      agentProfileId: profile.id,
+    });
+    taskId = fixture.task.id;
+    await fixture.session.sendMessageViaButton("/e2e:cancel-hold Restart running witness");
+    await expect(
+      fixture.session.chat.getByText("Restart running witness", { exact: true }),
+    ).toBeVisible();
+    const before = await captureRestartBaseline(apiClient, fixture.task.id, fixture.sessionId);
+    expect(before.target.state).toBe("RUNNING");
+    const stop = fixture.wire.waitForResponse("session.stop", {
+      requestWhere: (payload) => payload.session_id === fixture.sessionId,
+    });
+    const launch = fixture.wire
+      .waitForResponse("session.launch", {
+        timeout: 30_000,
+        timeoutAfter: stop,
+        requestWhere: (payload) =>
+          payload.session_id === fixture.sessionId &&
+          payload.intent === "resume" &&
+          !payload.activation_source,
+      })
+      .catch((error: unknown) => {
+        if (
+          !(error instanceof Error) ||
+          !error.message.startsWith('watchWs.waitForResponse: "session.launch" was rejected: ')
+        )
+          throw error;
+        return error;
+      });
+    const wireStart = fixture.traffic.frames.length;
+    await fixture.session.sessionTabBySessionId(fixture.sessionId).click({ button: "right" });
+    await testPage.getByRole("menuitem", { name: "Restart session", exact: true }).click();
+    await Promise.all([stop, launch]);
+    await expect
+      .poll(async () =>
+        (await apiClient.getTaskSession(fixture.sessionId)).session.session_recovery_blocks?.some(
+          (block) => block.reason === "unknown_prompt_outcome",
+        ),
+      )
+      .toBe(true);
+    await expect(testPage.getByTestId("user-message-delivery-blocked")).toBeVisible();
+    await expect(fixture.session.recoveryResumeButton()).toBeEnabled();
+    await assertRestartDataRetained(apiClient, fixture.task.id, fixture.sessionId, before);
+    await expect(
+      fixture.session.chat.getByText("simple mock response", { exact: false }),
+    ).toBeVisible();
+    // Focus signals are independent from the explicit Stop/Resume sequence.
+    const requests = fixture.traffic.frames
+      .slice(wireStart)
+      .filter(
+        (frame) =>
+          frame.direction === "sent" &&
+          frame.activationSource !== "session_focus" &&
+          ["session.stop", "session.launch"].includes(frame.action ?? ""),
+      );
+    expect(requests.map((frame) => [frame.action, frame.sessionId])).toEqual([
+      ["session.stop", fixture.sessionId],
+      ["session.launch", fixture.sessionId],
+    ]);
+  } finally {
+    try {
+      if (taskId) await apiClient.deleteTask(taskId);
+      if (profileId) await apiClient.deleteAgentProfile(profileId, true);
+    } finally {
+      await releaseCancellation();
+    }
   }
-  await expect
-    .poll(async () =>
-      (await apiClient.getTaskSession(fixture.sessionId)).session.session_recovery_blocks?.some(
-        (block) => block.reason === "unknown_prompt_outcome",
-      ),
-    )
-    .toBe(true);
-  const recovery = testPage.getByTestId("failed-session-banner");
-  await expect(recovery).toContainText(
-    "Kandev cannot confirm whether the agent processed your message.",
-  );
-  await expect(recovery.getByTestId("recovery-resume-button")).toBeEnabled();
-  await assertRestartDataRetained(apiClient, fixture.task.id, fixture.sessionId, before);
-  await expect(
-    fixture.session.chat.getByText("simple mock response", { exact: false }),
-  ).toBeVisible();
-  // Focus signals are independent from the explicit Stop/Resume sequence.
-  const requests = fixture.traffic.frames
-    .slice(wireStart)
-    .filter(
-      (f) =>
-        f.direction === "sent" &&
-        f.activationSource !== "session_focus" &&
-        ["session.stop", "session.launch"].includes(f.action ?? ""),
-    );
-  expect(requests.map((f) => [f.action, f.sessionId])).toEqual([
-    ["session.stop", fixture.sessionId],
-    ["session.launch", fixture.sessionId],
-  ]);
 });
 
 test("shows typed continuation guidance after Restart closes its menu", async ({

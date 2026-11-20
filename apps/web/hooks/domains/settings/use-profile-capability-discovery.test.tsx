@@ -10,6 +10,7 @@ const SAVED_MODEL_ID = "saved-model";
 const SAVED_MODEL_NAME = "Saved model";
 
 const probeAgentProfileMock = vi.fn();
+const refreshAgentProfileCatalogMock = vi.fn();
 const resolveAgentModelConfigMock = vi.fn();
 
 vi.mock("@/lib/api/domains/settings-api", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/lib/api/domains/settings-api", () => ({
 
 vi.mock("@/lib/api/domains/profile-capability-api", () => ({
   probeAgentProfile: (...args: unknown[]) => probeAgentProfileMock(...args),
+  refreshAgentProfileCatalog: (...args: unknown[]) => refreshAgentProfileCatalogMock(...args),
 }));
 
 import { useProfileCapabilityDiscovery } from "./use-profile-capability-discovery";
@@ -57,6 +59,7 @@ const savedProfile = {
 afterEach(() => {
   cleanup();
   probeAgentProfileMock.mockReset();
+  refreshAgentProfileCatalogMock.mockReset();
   resolveAgentModelConfigMock.mockReset();
 });
 
@@ -318,4 +321,91 @@ it("carries a changed draft Copilot selection into the capability probe", async 
     },
     refresh: true,
   } satisfies ProfileCapabilityRequest);
+});
+
+it("keeps automatic discovery pure and publishes only an explicit saved-baseline refresh", async () => {
+  const current = capabilityResponse([{ id: SAVED_MODEL_ID, name: SAVED_MODEL_NAME }], REVISION_A);
+  const refreshed = capabilityResponse(
+    [
+      { id: SAVED_MODEL_ID, name: SAVED_MODEL_NAME },
+      { id: "new-candidate", name: "New candidate" },
+    ],
+    "refreshed-revision",
+  );
+  probeAgentProfileMock.mockResolvedValue(current);
+  refreshAgentProfileCatalogMock.mockResolvedValue(refreshed);
+  const { result } = renderHook(() =>
+    useProfileCapabilityDiscovery(MOCK_AGENT_NAME, savedProfile, {
+      profileId: PROFILE_ID_A,
+      savedLaunchSettings,
+      supportsDynamicModels: true,
+    }),
+  );
+  await waitFor(() => expect(result.current.discoveryState).toBe("ready"));
+  expect(refreshAgentProfileCatalogMock).not.toHaveBeenCalled();
+  await act(async () => {
+    await result.current.refresh();
+  });
+  expect(result.current.models).toEqual(refreshed.models);
+  expect(refreshAgentProfileCatalogMock).toHaveBeenCalledOnce();
+  expect(refreshAgentProfileCatalogMock).toHaveBeenCalledWith(PROFILE_ID_A);
+  expect(probeAgentProfileMock).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a mode-only unsaved launch draft on the pure probe boundary", async () => {
+  const current = capabilityResponse([{ id: SAVED_MODEL_ID, name: SAVED_MODEL_NAME }], REVISION_A);
+  probeAgentProfileMock.mockResolvedValue(current);
+  refreshAgentProfileCatalogMock.mockResolvedValue(current);
+  const { result } = renderHook(() =>
+    useProfileCapabilityDiscovery(
+      MOCK_AGENT_NAME,
+      { ...savedProfile, mode: "plan-mock" },
+      {
+        profileId: PROFILE_ID_A,
+        savedLaunchSettings,
+        supportsDynamicModels: true,
+      },
+    ),
+  );
+  await waitFor(() => expect(result.current.discoveryState).toBe("ready"));
+  await act(async () => {
+    await result.current.refresh();
+  });
+  expect(refreshAgentProfileCatalogMock).not.toHaveBeenCalled();
+  expect(probeAgentProfileMock).toHaveBeenLastCalledWith(MOCK_AGENT_NAME, {
+    profile_id: PROFILE_ID_A,
+    launch_settings: { ...savedLaunchSettings, mode: "plan-mock" },
+    refresh: true,
+  });
+  expect(result.current.discoveryState).toBe("ready");
+});
+
+it("owns publication failure to the saved refresh context without discarding probe choices or leaking it into another profile", async () => {
+  const current = capabilityResponse([{ id: SAVED_MODEL_ID, name: SAVED_MODEL_NAME }], REVISION_A);
+  probeAgentProfileMock.mockResolvedValue(current);
+  refreshAgentProfileCatalogMock.mockResolvedValue({
+    ...capabilityResponse([{ id: "new-candidate", name: "New candidate" }], "new-revision"),
+    publication: { status: "failed", error: "internal-error-not-user-copy" },
+  });
+  const { result, rerender } = renderHook(
+    ({ profileId }) =>
+      useProfileCapabilityDiscovery(MOCK_AGENT_NAME, savedProfile, {
+        profileId,
+        savedLaunchSettings,
+        supportsDynamicModels: true,
+      }),
+    { initialProps: { profileId: PROFILE_ID_A } },
+  );
+  await waitFor(() => expect(result.current.discoveryState).toBe("ready"));
+  await act(async () => {
+    await result.current.refresh();
+  });
+  expect(result.current.publicationFailed).toBe(true);
+  expect(result.current.models.map((model) => model.id)).toEqual(["new-candidate"]);
+  expect(savedProfile.model).toBe(SAVED_MODEL_ID);
+  rerender({ profileId: PROFILE_ID_B });
+  expect(result.current.publicationFailed).toBe(false);
+  await waitFor(() => expect(result.current.discoveryState).toBe("ready"));
+  expect(result.current.models.map((model) => model.id)).toEqual([SAVED_MODEL_ID]);
+  expect(result.current.publicationFailed).toBe(false);
 });

@@ -312,6 +312,7 @@
   "profileCapabilitiesReady": "モデルは現在の起動設定に一致しています。",
   "profileCapabilitiesStale": "起動設定が変更されました。モデルを更新してください。",
   "refreshCapabilities": "モデルを更新",
+  "profileCatalogPublicationFailed": "プロファイルの選択肢は検出されましたが、既存セッションへの更新を完了できませんでした。モデルを再度更新してください。保存済みの選択は変更されていません。",
   "remove": "削除",
   "removeCliFlag": "{{name}} を削除",
   "removeThisProfile": "このプロファイルを削除",

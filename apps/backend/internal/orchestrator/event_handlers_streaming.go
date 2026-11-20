@@ -12,6 +12,7 @@ import (
 
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/orchestrator/executor"
@@ -257,6 +258,9 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 
 	case "agent_capabilities":
 		s.handleAgentCapabilitiesEvent(ctx, payload)
+
+	case streams.EventTypeSessionCatalogDiscovery:
+		s.handleSessionCatalogDiscovery(ctx, payload)
 
 	case "session_models":
 		s.handleSessionModelsEvent(ctx, payload)
@@ -4564,6 +4568,9 @@ func (s *Service) handleSessionModelsEvent(ctx context.Context, payload *lifecyc
 	if data, ok := payload.Data.Data.(map[string]interface{}); ok {
 		configOptionsSource = stringFromMap(data, "config_options_source")
 	}
+	if err := s.persistProviderCatalogFromEvent(ctx, payload); err != nil {
+		s.logCatalogSettlementFailure(payload, err)
+	}
 	if providerRestored {
 		s.persistProviderRestoredSessionModelsSnapshot(
 			ctx, sessionID, identity,
@@ -4729,10 +4736,12 @@ func sessionSettingsSnapshotMatchesSource(
 func newSessionSettingsSnapshot(
 	identity sessionSettingsEventIdentity,
 	policy streams.SessionSettingsPolicy,
+	catalogDiscovery *sessioncatalog.ProviderCatalog,
 ) lifecycle.SessionModelsSnapshot {
 	snapshot := lifecycle.SessionModelsSnapshot{
 		SettingsAttemptID: identity.AttemptID,
 		SettingsPolicy:    policy,
+		CatalogDiscovery:  catalogDiscovery,
 	}
 	setSessionSettingsSnapshotSource(&snapshot, identity)
 	return snapshot
@@ -5316,7 +5325,7 @@ func (s *Service) persistProviderRestoredSessionModeSnapshot(
 	snapshot, _ := lifecycle.LoadSessionModelsSnapshot(session.Metadata[models.SessionMetaKeyACPModelState])
 	if snapshot.SettingsAttemptID != identity.AttemptID ||
 		!sessionSettingsSnapshotMatchesSource(snapshot, identity.ExecutionID, identity.SourceGeneration) {
-		snapshot = newSessionSettingsSnapshot(identity, streams.SessionSettingsPolicyProviderRestored)
+		snapshot = newSessionSettingsSnapshot(identity, streams.SessionSettingsPolicyProviderRestored, snapshot.CatalogDiscovery)
 	}
 	snapshot.SettingsPolicy = streams.SessionSettingsPolicyProviderRestored
 	if identity.SettingsGeneration > 0 && identity.SettingsGeneration <= snapshot.CurrentModeGeneration {
@@ -5344,7 +5353,7 @@ func (s *Service) persistSessionModeSnapshot(ctx context.Context, sessionID stri
 	snapshot, _ := lifecycle.LoadSessionModelsSnapshot(session.Metadata[models.SessionMetaKeyACPModelState])
 	if snapshot.SettingsAttemptID != identity.AttemptID ||
 		!sessionSettingsSnapshotMatchesSource(snapshot, identity.ExecutionID, identity.SourceGeneration) {
-		snapshot = newSessionSettingsSnapshot(identity, "")
+		snapshot = newSessionSettingsSnapshot(identity, "", snapshot.CatalogDiscovery)
 	}
 	if identity.SettingsGeneration > 0 && identity.SettingsGeneration <= snapshot.CurrentModeGeneration {
 		return
@@ -5393,6 +5402,7 @@ func (s *Service) persistSessionModelsSnapshot(
 		sameOwner := previous.SettingsAttemptID == identity.AttemptID &&
 			sessionSettingsSnapshotMatchesSource(previous, identity.ExecutionID, identity.SourceGeneration)
 		if sameOwner {
+			snapshot.CatalogDiscovery = previous.CatalogDiscovery
 			snapshot.ConfigOptionsSettled = snapshot.ConfigOptionsSettled || previous.ConfigOptionsSettled
 			snapshot.CurrentModeID = previous.CurrentModeID
 			snapshot.CurrentModeGeneration = previous.CurrentModeGeneration
@@ -5405,7 +5415,7 @@ func (s *Service) persistSessionModelsSnapshot(
 			}
 		}
 		if !sameOwner {
-			snapshot = newSessionSettingsSnapshot(identity, settingsPolicy)
+			snapshot = newSessionSettingsSnapshot(identity, settingsPolicy, previous.CatalogDiscovery)
 			snapshot.CurrentModelID = currentModelID
 			snapshot.Models = modelsForBoot
 			snapshot.ConfigOptions = options

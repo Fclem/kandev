@@ -93,6 +93,11 @@ type Controller struct {
 	copilotPluginKey            []byte
 	copilotPluginRandom         io.Reader
 	hostUtility                 hostUtilityProvider
+	catalogRefreshPublisher     func(context.Context, string, string, hostutility.ProfileProbeContext, hostutility.AgentCapabilities, func(context.Context, func() error) error) error
+	catalogRefreshMu            sync.Mutex
+	catalogRefreshGeneration    uint64
+	catalogRefreshFlights       map[string]uint64
+	catalogProfileMutations     map[string]uint32
 	jobStore                    *JobStore
 	updateJobStore              *AgentUpdateJobStore
 	runtimeUpdater              RuntimeUpdater
@@ -432,6 +437,8 @@ func (c *Controller) adoptProbedModel(
 			zap.String("profile_id", profileID))
 		return
 	}
+	finishMutation := c.beginCatalogProfileMutation(profileID)
+	defer finishMutation()
 	updated, err := adopter.UpdateAgentProfileModelIfEmpty(ctx, profileID, caps.CurrentModelID)
 	if err != nil {
 		c.logger.Debug("adopting the probed model failed",

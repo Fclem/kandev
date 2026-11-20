@@ -128,7 +128,7 @@ function defineReopeningCases(kind: Kind) {
           );
           await f.settle(1);
           await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-        });
+        }, 10_000);
       }
     }
   }

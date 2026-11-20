@@ -238,12 +238,12 @@ func (m *Manager) restoreReboundACPSession(ctx context.Context, execution *Agent
 	if _, err := client.Initialize(ctx, "kandev", "1.0.0"); err != nil {
 		return fmt.Errorf("initialize restarted ACP adapter: %w", err)
 	}
-	attemptID, err := client.LoadSessionWithResult(operation.context(ctx), acpID, operation.servers, streams.SessionSettingsPolicyStrict)
+	result, err := client.LoadSessionWithResult(operation.context(ctx), acpID, operation.servers, streams.SessionSettingsPolicyStrict)
 	if err != nil {
 		return err
 	}
 	if operation.captured {
-		m.recordAcceptedMCPSetupOperation(ctx, execution, operation.setup, operation.revision, attemptID)
+		m.recordAcceptedMCPSetupOperation(ctx, execution, operation.setup, operation.revision, result.AttachmentAttemptID)
 	}
 	return nil
 }

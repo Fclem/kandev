@@ -138,22 +138,22 @@ func (m *Manager) reconfigureIdleSessionMCP(ctx context.Context, execution *Agen
 
 func (m *Manager) applySessionMCPWithAgent(ctx context.Context, client *agentctl.Client, execution *AgentExecution, servers []agentctltypes.McpServer) (string, error) {
 	var err error
-	var attemptID string
+	var result agentctl.NewSessionResponse
 	if client.SupportsSessionResume() {
-		attemptID, err = client.ResumeSessionWithResult(ctx, execution.ACPSessionID, execution.WorkspacePath, servers)
+		result, err = client.ResumeSessionWithResult(ctx, execution.ACPSessionID, execution.WorkspacePath, servers)
 		if err == nil {
-			return attemptID, nil
+			return result.AttachmentAttemptID, nil
 		}
 		if !client.SupportsSessionLoad() {
 			return "", fmt.Errorf("%s: %w", sessionMCPFailureResume, err)
 		}
 	}
 	if client.SupportsSessionLoad() {
-		attemptID, err = client.LoadSessionWithResult(ctx, execution.ACPSessionID, servers, streams.SessionSettingsPolicyStrict)
+		result, err = client.LoadSessionWithResult(ctx, execution.ACPSessionID, servers, streams.SessionSettingsPolicyStrict)
 		if err != nil {
 			return "", fmt.Errorf("%s: %w", sessionMCPFailureLoad, err)
 		}
-		return attemptID, nil
+		return result.AttachmentAttemptID, nil
 	}
 	return "", errors.New("agent does not support session resume or load")
 }

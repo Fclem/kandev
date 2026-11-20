@@ -27,6 +27,15 @@ func (c *Controller) FetchProfileDynamicModels(
 	agentName string,
 	req dto.ProfileCapabilityRequest,
 ) (*dto.DynamicModelsResponse, error) {
+	return c.fetchProfileDynamicModels(ctx, agentName, req, nil)
+}
+
+func (c *Controller) fetchProfileDynamicModels(
+	ctx context.Context,
+	agentName string,
+	req dto.ProfileCapabilityRequest,
+	observe func(hostutility.ProfileProbeContext, hostutility.ProfileCapabilityResult) *dto.CatalogPublicationDTO,
+) (*dto.DynamicModelsResponse, error) {
 	if c.agentRegistry == nil {
 		return nil, ErrAgentNotFound
 	}
@@ -79,6 +88,9 @@ func (c *Controller) FetchProfileDynamicModels(
 	}
 	for _, command := range caps.Commands {
 		resp.Commands = append(resp.Commands, dto.CommandEntryDTO{Name: command.Name, Description: command.Description})
+	}
+	if observe != nil {
+		resp.Publication = observe(profileContext, result)
 	}
 	return c.finishDynamicModels(ctx, agentName, resp, req.Refresh), nil
 }

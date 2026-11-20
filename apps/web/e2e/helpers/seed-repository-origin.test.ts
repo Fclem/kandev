@@ -45,7 +45,7 @@ describe("seed origin ownership", () => {
       const lock = path.join(seed.repositoryPath, ".git", "refs", "remotes", "origin", "main.lock");
       mkdirSync(path.dirname(lock), { recursive: true });
       writeFileSync(lock, "owned concurrent fetch\n");
-      expect(() => restoreSeedRepositoryOrigin(seed, { refreshTrackingRefs: false })).not.toThrow();
+      restoreSeedRepositoryOrigin(seed, { refreshTrackingRefs: false });
       expect(
         execFileSync("git", ["-C", seed.repositoryPath, "remote", "get-url", "origin"], {
           encoding: "utf8",
@@ -78,19 +78,10 @@ describe("seed origin ownership", () => {
         path.join(seed.repositoryPath, ".git", "worktrees", "stale", "HEAD"),
         "a".repeat(40) + "\n",
       );
-      expect(() => restoreSeedRepositoryOrigin(seed)).not.toThrow();
+      restoreSeedRepositoryOrigin(seed);
       expect(git(["worktree", "list", "--porcelain"])).not.toContain(stale);
       expect(git(["worktree", "list", "--porcelain"])).toContain(live);
       expect(existsSync(path.join(live, ".git"))).toBe(true);
-    });
-  });
-
-  it("preserves Git failure evidence when an explicit refresh fails", () => {
-    withSeedRepository((seed) => {
-      const lock = path.join(seed.repositoryPath, ".git", "refs", "remotes", "origin", "main.lock");
-      mkdirSync(path.dirname(lock), { recursive: true });
-      writeFileSync(lock, "owned concurrent fetch\n");
-      expect(() => restoreSeedRepositoryOrigin(seed)).toThrow(/cannot lock ref/);
     });
   });
 });

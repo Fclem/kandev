@@ -29,8 +29,8 @@ relaxed: the separate publication operation cannot mutate effective settings.
 - `settings/controller/profile_discovery.go:FetchProfileDynamicModels` resolves
   saved or complete draft launch inputs and calls `ProbeProfileCapabilities`.
   Its internal result contains `ConfigOptions`, while the settings response is
-  also enriched with host-CLI suggestions by `finishDynamicModels`. Session
-  publication must use the profile probe result before that enrichment.
+  also enriched with host-CLI suggestions by `finishDynamicModels`. Neither
+  result supplies task candidates; successful saved discovery gates task probing.
 - `hostutility.AgentCapabilities` carries models, modes, current defaults, and
   normalized configuration choices. `ProfileCapabilityResult.ContextRevision`
   is a process-local context/cache identity, not a durable ordered revision.
@@ -72,12 +72,12 @@ publish. The server independently pins and rechecks the saved launch context;
 frontend equality is not authorization or freshness proof. Automatic editor
 loads and runtime-update-triggered discovery retain the existing pure probe path.
 
-Extract the narrow common probe/result conversion path inside the settings
-controller rather than executing two probes. The new operation forces one fresh
-saved-context probe, retains the existing editor response, and publishes the
-successful normalized profile result through a narrow injected consumer wired
-in `internal/backendapp`. Settings must not import the orchestrator or lifecycle
-manager. Carry context currency through publication, not only the HTTP response.
+Share the settings probe/conversion path rather than executing two settings
+probes. Retain its editor response and pass a pinned saved-source token through
+a narrow injected consumer wired in `internal/backendapp`. Settings must not
+import orchestrator/lifecycle. That consumer obtains separate fresh task-context
+results under [the acquisition contract](session-catalog-task-discovery.md).
+Generic settings choices and host-CLI enrichment never become task candidates.
 
 Only `status: ok` can publish. Require the same complete context/generation checks
 as profile discovery before each session write. A save, secret rebind, runtime
@@ -103,17 +103,14 @@ Profile configuration authority does not grant access to every workspace using
 that global profile. Filter inaccessible sessions without disclosing their IDs
 or counts. Do not enter an unscoped internal context for fan-out.
 
-Direct candidate publication requires actual `models.ExecutorTypeLocal` (`local`)
-or `models.ExecutorTypeWorktree` (`worktree`), with `local_pc` supported only as a
-legacy host alias. Match provider/protocol and recorded launch context, with no
-unmatched executor, workspace, repository, wrapper, credential-home,
-secret-binding, or runtime selection overlay. Use the existing launch/environment
-resolvers and recorded execution inputs, not a second precedence implementation.
-Compare secret references/generations internally without exposing resolved values.
-When locality or running context cannot be proven compatible (including empty
-executor type or older incomplete snapshots), use notice-only. Do not reuse
-`isHostLocalExecutor` unchanged: its empty-type compatibility case is not proof.
-Same physical host alone is insufficient.
+Candidate publication requires actual `local` or `worktree`, with `local_pc`
+only as a legacy alias, and a qualified task-probe capability with sealed current
+execution context. [Fresh task-context discovery](session-catalog-task-discovery.md)
+defines provider support, launch/source ownership, authentication and admission.
+It replaces utility-to-task launch equivalence, not installer-sharing behavior.
+Unknown locality, legacy evidence, unsupported capability or a changed saved
+source yields notice-only. Physical host/profile equality and installer digests
+are not qualifying proof. Do not use `isHostLocalExecutor`'s empty-type allowance.
 
 Worktree isolation is not container isolation. `local_docker`, `ssh`,
 `remote_docker`, `sprites`, `k8s`, and plugin-provided remote executors are always
@@ -136,8 +133,8 @@ The bounded record contains:
 - Execution/attempt/source identity captured at publication, for replacement
   settlement; use the existing settings identity conventions.
 - Disposition `host_candidates` or `rediscovery_required`.
-- For compatible host sessions only: normalized exact model/mode choices and
-  bounded structured model catalog data from that same probe.
+- For compatible host sessions only: models/modes and bounded catalog data from
+  that target's fresh task probe, with versioned `task_probe_v1` provenance.
 - Notice reason `new_candidates`, `executor_scoped`, or `context_unverified`.
   Remote records contain no host model names or choices.
 
@@ -162,6 +159,22 @@ revision. A cleared notice is an explicit empty/tombstone projection with a
 newer revision, not an omitted field. Boot/task-detail hydration carries the same
 record and revision. Older live or HTTP hydration cannot overwrite newer state.
 
+Persist provider availability independently at
+`acp_model_state.catalog_discovery`, with its own monotonic per-session revision,
+concrete profile, execution/attempt/source owner, and normalized result. Preserve
+that revision across source rotations; retaining an old record does not transfer
+its ownership to the new source. This projection carries explicit empty and
+unsupported surfaces even when there is no pending host notice, without replacing
+effective values, baselines, overrides, or the rest of `acp_model_state`.
+
+Emit `session.catalog_discovery_updated` only after its expected-owner SQL write
+commits. Its `{task_id, session_id, provider}` payload uses the same session-scoped
+subscription boundary as the host observation. The host notification carries
+`{task_id, session_id, record}`. Provider advertisement can update availability
+without settling a host notice; only the explicit replacement discovery finalizer
+can perform that settlement. Independent revision guards prevent delayed HTTP
+snapshots or source-local counters from reviving stale selectable controls.
+
 ## Projection
 
 Add the observation to the existing session-runtime view model and task-detail
@@ -176,6 +189,12 @@ occurrence identities. Provider-only choices remain in an identified current
 session group; a host-only choice removed by a later refresh disappears. Keep a
 removed selected model visible as the current label, without fabricating a
 selectable candidate. Modes follow the same candidate-versus-provider rule.
+
+Resolve the current execution from the existing live `sessionAgentctl` projection,
+falling back to the full session snapshot only when live identity is absent.
+Explicit postcommit provider evidence for that execution can advance its settings
+source before HTTP metadata catches up. A different execution, older source, or
+conflicting attempt cannot become current merely because its choices are present.
 
 Never transplant probe `CurrentModelID`, `CurrentModeID`, or model-dependent
 option defaults/choices into the live controls. A richer model navigation catalog
@@ -332,5 +351,25 @@ Related decisions remain unchanged:
 - [Explicit resume settings](../../../decisions/2026-09-29-explicit-resume-settings.md)
 - [Session restart composition](../../tasks/system-design/session-tab-restart.md)
 
-No separate ADR is required: the design preserves existing selection and recovery
-authority; its candidate-versus-effective distinction records the local tradeoff.
+The existing selection/recovery design remains unchanged. The revised acquisition
+boundary and its rationale live in
+[Fresh task-context discovery](session-catalog-task-discovery.md), including
+provider capability limits, fresh helper ownership and rollout cutover. The old
+[attestation proposal](session-catalog-launch-context-evidence.md) is superseded,
+not an authorized implementation dependency.
+
+## Superseded generic-transfer feasibility
+
+Provider research found cwd/project, credentials, permission modes, protocol
+and configuration/cache dependencies omitted by installer identity. Ordinary
+utility and task working directories differ even without wrappers. Native
+Codex's retained `model/list` can remain stale after a catalog-file update, while
+a fresh process observes it. These findings invalidate earlier generic-candidate
+qualification; they do not invalidate independent restart/terminal/UI evidence.
+
+The user selected task-context design after completing provider-contract research.
+The revised design preserves AC001.1 through qualified fresh task-side acquisition,
+not universal notice-only, blanket generated-variable exclusions, copying task
+secrets into the utility or adding cryptographic equality proofs. Initial native
+support and explicitly unqualified ACP/custom surfaces require review in the
+linked compatibility matrix. No revised-boundary production proof exists yet.

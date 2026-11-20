@@ -46,6 +46,7 @@ function resetSessionActionMocks() {
     tasks: { activeTaskId: "t1", activeSessionId: null },
     taskRemoval: { navigationRevision: 0 },
     taskSessions: { items: {} },
+    sessionCatalogRefresh: { bySessionId: {} },
     taskSessionsByTask: { itemsByTaskId: { t1: [{ id: "s1", state: "RUNNING" }] } },
     quickChat: { sessions: [] },
     setActiveSession: mockSetActiveSession,

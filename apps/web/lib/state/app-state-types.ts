@@ -172,6 +172,7 @@ export type AppState = KanbanSlice & {
   sessionTodos: (typeof defaultSessionRuntimeState)["sessionTodos"];
   agentCapabilities: (typeof defaultSessionRuntimeState)["agentCapabilities"];
   sessionModels: (typeof defaultSessionRuntimeState)["sessionModels"];
+  sessionCatalogRefresh: (typeof defaultSessionRuntimeState)["sessionCatalogRefresh"];
   sessionMcpStatus: (typeof defaultSessionRuntimeState)["sessionMcpStatus"];
   promptUsage: (typeof defaultSessionRuntimeState)["promptUsage"];
   usageInvalidation: (typeof defaultSessionRuntimeState)["usageInvalidation"];

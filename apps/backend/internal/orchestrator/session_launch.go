@@ -13,6 +13,7 @@ import (
 
 	agentruntime "github.com/kandev/kandev/internal/agent/runtime"
 	"github.com/kandev/kandev/internal/automation"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/orchestrator/executor"
 	taskdto "github.com/kandev/kandev/internal/task/dto"
 	"github.com/kandev/kandev/internal/task/models"
@@ -337,6 +338,7 @@ type LaunchSessionResponse struct {
 	Success                           bool                                      `json:"success"`
 	InProgress                        bool                                      `json:"in_progress,omitempty"`
 	TaskID                            string                                    `json:"task_id"`
+	AcceptedLaunchOwner               *sessioncatalog.Owner                     `json:"accepted_launch_owner,omitempty"`
 	SessionID                         string                                    `json:"session_id,omitempty"`
 	AgentExecutionID                  string                                    `json:"agent_execution_id,omitempty"`
 	AgentProfileID                    string                                    `json:"agent_profile_id,omitempty"`
@@ -2720,6 +2722,7 @@ func executionToLaunchResponse(taskID string, exec *executor.TaskExecution) *Lau
 		AgentProfileID:                    exec.AgentProfileID,
 		State:                             string(exec.SessionState),
 		WorkspaceInventoryRecoveryReceipt: exec.WorkspaceInventoryRecoveryReceipt,
+		AcceptedLaunchOwner:               exec.AcceptedLaunchOwner,
 	}
 	if exec.WorktreePath != "" {
 		resp.WorktreePath = &exec.WorktreePath

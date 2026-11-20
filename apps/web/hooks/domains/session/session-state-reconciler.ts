@@ -139,6 +139,9 @@ async function readAndReconcile(
   const session = result.data.session;
   if (!session) return;
 
+  // Catalog availability has its own revisions, independent of session state timestamps.
+  store.getState().hydrateSessionCatalogRefresh(session);
+
   const current = store.getState().taskSessions.items[sessionId];
   if (isStaleSessionStateEvent(current, session.updated_at)) {
     if (result.etag !== reconciliation.etag) reconciliation.etag = null;

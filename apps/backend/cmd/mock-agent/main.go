@@ -53,6 +53,7 @@ type mockAgent struct {
 	conn                               sessionUpdater
 	rawOut                             *serializedACPWriter
 	model                              string
+	catalogFixture                     *acp.NewSessionResponse
 	copilotNativeSubscribed            bool
 	clientSupportsCompaction           bool
 	sessions                           map[acp.SessionId]bool
@@ -153,6 +154,9 @@ func (a *mockAgent) Initialize(_ context.Context, req acp.InitializeRequest) (ac
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("E2E_MOCK_AGENT_FAIL_INITIALIZE")), "true") {
 		return acp.InitializeResponse{}, errors.New("mock ACP initialization failed by E2E fixture")
 	}
+	if err := a.loadCatalogFixture(); err != nil {
+		return acp.InitializeResponse{}, err
+	}
 	agentInfo := mockClaudeBridgeAgentInfo()
 	var meta map[string]any
 	if copilotNativeFixtureEnabled() {
@@ -204,7 +208,7 @@ func mockPromptSuggestionsEnabled() bool {
 // show model and mode options for mock-agent in E2E, and lets profile-mode
 // tests select a non-default mode.
 func (a *mockAgent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.NewSessionResponse, error) {
-	configOptions := mockSessionConfigOptions()
+	configOptions := a.catalogConfigOptions(modelFast)
 	// Register MCP servers from the ACP session request (SSE servers). Keep the
 	// returned definitions on this session. The process may host multiple ACP
 	// sessions, and the global registry alone would route calls to the last URL.
@@ -240,7 +244,7 @@ func (a *mockAgent) NewSession(ctx context.Context, req acp.NewSessionRequest) (
 
 	return acp.NewSessionResponse{
 		SessionId:     sid,
-		Modes:         mockSessionModes(mockDefaultMode),
+		Modes:         a.catalogModes(mockDefaultMode),
 		ConfigOptions: cloneSessionConfigOptions(configOptions),
 	}, nil
 }
@@ -459,7 +463,7 @@ func (a *mockAgent) LoadSession(ctx context.Context, req acp.LoadSessionRequest)
 	a.sessionMCPServers[req.SessionId] = cloneMCPServerDefs(sessionMCPServers)
 	configOptions, ok := a.sessionConfig[req.SessionId]
 	if !ok {
-		a.sessionConfig[req.SessionId] = mockSessionConfigOptions()
+		a.sessionConfig[req.SessionId] = a.catalogConfigOptions(modelFast)
 		configOptions = a.sessionConfig[req.SessionId]
 	}
 	responseConfigOptions := cloneSessionConfigOptions(configOptions)
@@ -482,7 +486,7 @@ func (a *mockAgent) LoadSession(ctx context.Context, req acp.LoadSessionRequest)
 
 	return acp.LoadSessionResponse{
 		ConfigOptions: responseConfigOptions,
-		Modes:         mockSessionModes(currentMode),
+		Modes:         a.catalogModes(currentMode),
 	}, nil
 }
 
@@ -711,7 +715,8 @@ func (a *mockAgent) Authenticate(_ context.Context, _ acp.AuthenticateRequest) (
 // agents use. The host must observe this report before it claims convergence.
 func (a *mockAgent) SetSessionMode(_ context.Context, req acp.SetSessionModeRequest) (acp.SetSessionModeResponse, error) {
 	traceACP("set_mode", string(req.SessionId), map[string]string{"mode_id": string(req.ModeId)})
-	if req.ModeId != mockDefaultMode && req.ModeId != mockPlanMode {
+	modes := a.catalogModes(mockDefaultMode)
+	if modes == nil || !slices.ContainsFunc(modes.AvailableModes, func(mode acp.SessionMode) bool { return mode.Id == req.ModeId }) {
 		return acp.SetSessionModeResponse{}, fmt.Errorf("unknown mock mode %q", req.ModeId)
 	}
 	a.mu.Lock()
@@ -785,7 +790,7 @@ func (a *mockAgent) SetSessionConfigOption(_ context.Context, req acp.SetSession
 	}
 	if req.ValueId.ConfigId == modelConfigID {
 		modeValue := mockConfigOptionValue(options, "mode")
-		options = mockSessionConfigOptionsForModel(string(req.ValueId.Value))
+		options = a.catalogConfigOptions(string(req.ValueId.Value))
 		for i := range options {
 			if options[i].Select != nil && options[i].Select.Id == "mode" && modeValue != "" {
 				if mockConfigOptionContainsValue(options[i].Select.Options, modeValue) {

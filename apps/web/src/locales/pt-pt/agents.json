@@ -303,6 +303,7 @@
   "profileCapabilitiesReady": "Os modelos correspondem às definições de execução atuais.",
   "profileCapabilitiesStale": "As definições de execução foram alteradas. Atualize os modelos.",
   "refreshCapabilities": "Atualizar modelos",
+  "profileCatalogPublicationFailed": "As opções do perfil foram detetadas, mas não foi possível concluir as atualizações das sessões existentes. Atualize os modelos novamente. As seleções guardadas mantêm-se inalteradas.",
   "remove": "Remover",
   "removeCliFlag": "Remover {{name}}",
   "removeThisProfile": "Remover este perfil",

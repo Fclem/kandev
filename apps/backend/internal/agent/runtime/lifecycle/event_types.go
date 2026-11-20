@@ -8,6 +8,7 @@ import (
 
 	"github.com/kandev/kandev/internal/agent/mcpconfig"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/task/models"
 )
@@ -337,6 +338,7 @@ type AgentStreamEventData struct {
 	SessionModels           []streams.SessionModelInfo `json:"session_models,omitempty"`
 	ConfigOptions           []streams.ConfigOption     `json:"config_options,omitempty"`
 	VerifiedConfigOptionIDs []string                   `json:"verified_config_option_ids,omitempty"`
+	CatalogDiscovery        *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
 	// ConfigBaselineCandidate is an authoritative startup response snapshot.
 	// ConfigOptions remains the latest live provider state.
 	ConfigBaselineCandidate []streams.ConfigOption `json:"config_baseline_candidate,omitempty"`
@@ -820,17 +822,18 @@ func (p SessionModelSelectionWarningEventPayload) GetSessionID() string {
 // SessionModelsSnapshot is the persisted provider-derived state needed to
 // hydrate the task model selector before live session events reconnect.
 type SessionModelsSnapshot struct {
-	CurrentModelID            string                        `json:"current_model_id"`
-	CurrentModeID             string                        `json:"current_mode_id,omitempty"`
-	SettingsAttemptID         string                        `json:"settings_attempt_id,omitempty"`
-	SettingsPolicy            streams.SessionSettingsPolicy `json:"settings_policy,omitempty"`
-	SettingsSourceExecutionID string                        `json:"settings_source_execution_id,omitempty"`
-	SettingsSourceGeneration  uint64                        `json:"settings_source_generation,omitempty"`
-	CurrentModelGeneration    uint64                        `json:"current_model_generation,omitempty"`
-	CurrentModeGeneration     uint64                        `json:"current_mode_generation,omitempty"`
-	Models                    []streams.SessionModelInfo    `json:"models"`
-	ConfigOptions             []streams.ConfigOption        `json:"config_options,omitempty"`
-	ConfigOptionsSettled      bool                          `json:"config_options_settled,omitempty"`
+	CurrentModelID            string                          `json:"current_model_id"`
+	CurrentModeID             string                          `json:"current_mode_id,omitempty"`
+	SettingsAttemptID         string                          `json:"settings_attempt_id,omitempty"`
+	SettingsPolicy            streams.SessionSettingsPolicy   `json:"settings_policy,omitempty"`
+	SettingsSourceExecutionID string                          `json:"settings_source_execution_id,omitempty"`
+	SettingsSourceGeneration  uint64                          `json:"settings_source_generation,omitempty"`
+	CurrentModelGeneration    uint64                          `json:"current_model_generation,omitempty"`
+	CurrentModeGeneration     uint64                          `json:"current_mode_generation,omitempty"`
+	Models                    []streams.SessionModelInfo      `json:"models"`
+	ConfigOptions             []streams.ConfigOption          `json:"config_options,omitempty"`
+	ConfigOptionsSettled      bool                            `json:"config_options_settled,omitempty"`
+	CatalogDiscovery          *sessioncatalog.ProviderCatalog `json:"catalog_discovery,omitempty"`
 }
 
 // LoadSessionModelsSnapshot decodes typed and JSON-rehydrated metadata values.

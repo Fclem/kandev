@@ -312,6 +312,7 @@
   "profileCapabilitiesReady": "모델이 현재 실행 설정과 일치합니다.",
   "profileCapabilitiesStale": "실행 설정이 변경되었습니다. 모델을 새로 고치세요.",
   "refreshCapabilities": "모델 새로 고침",
+  "profileCatalogPublicationFailed": "프로필 선택 항목은 검색했지만 기존 세션 업데이트를 완료할 수 없습니다. 모델을 다시 새로 고치세요. 저장된 선택은 변경되지 않았습니다.",
   "remove": "제거",
   "removeCliFlag": "{{name}} 제거",
   "removeThisProfile": "이 프로필 제거",

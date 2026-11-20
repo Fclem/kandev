@@ -11,3 +11,12 @@ export async function probeAgentProfile(
     init: { method: "POST", body: JSON.stringify(payload), ...(options?.init ?? {}) },
   });
 }
+
+export async function refreshAgentProfileCatalog(
+  profileId: string,
+): Promise<DynamicModelsResponse> {
+  return fetchJson<DynamicModelsResponse>(
+    `/api/v1/agent-profiles/${encodeURIComponent(profileId)}/model-catalog/refresh`,
+    { init: { method: "POST" } },
+  );
+}

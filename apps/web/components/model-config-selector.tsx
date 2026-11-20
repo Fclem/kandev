@@ -1,6 +1,15 @@
 "use client";
 
-import { memo, useRef, useState, type ReactNode, type Ref } from "react";
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { IconChevronDown } from "@tabler/icons-react";
@@ -11,6 +20,8 @@ import { settingsControlClassName } from "@/components/settings/settings-control
 import { ModelConfigSelectorContent } from "@/components/model-config-selector-content";
 import { ModelConfigSheet } from "@/components/model-config-sheet";
 import type { ModelCatalog } from "@kandev/types/model-catalog";
+import { MobileConfirmationHost } from "@/components/confirmation/mobile-confirmation-host";
+import type { MobileConfirmationHostState } from "@/components/confirmation/mobile-confirmation-host";
 import { composedPairingLabel } from "@/lib/model-catalog-selection";
 import {
   useModelCatalogNavigation,
@@ -35,6 +46,7 @@ export type ModelSelectorOption = {
   /** Unavailable models are dimmed and non-selectable with a reason tooltip. */
   disabled?: boolean;
   disabledReason?: string;
+  requiresRefresh?: boolean;
 };
 
 export type DynamicConfigOption = {
@@ -211,6 +223,7 @@ export type ModelConfigSelectorProps = {
   configOptions?: DynamicConfigOption[];
   onModelChange: (modelId: string) => void;
   onConfigChange?: (configId: string, value: string) => void;
+  onRefreshRequired?: () => void;
   /**
    * Receives the completed exact model plus the provider option values chosen
    * for it. Without it the selector falls back to the ordinary model change
@@ -232,6 +245,8 @@ export type ModelConfigSelectorProps = {
   popoverAlign?: "start" | "center" | "end";
   popoverSide?: "top" | "bottom";
   triggerClassName?: string;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+  confirmation?: ReactNode;
   providerIcon?: ReactNode;
   triggerSummary?: "all" | "changed";
   configBaseline?: Record<string, string>;
@@ -339,13 +354,15 @@ type SelectorPresentationProps = {
   onOpenChange: (open: boolean) => void;
   trigger: ReactNode;
   content: ReactNode;
-  triggerRef: Ref<HTMLButtonElement>;
+  triggerRef: RefObject<HTMLButtonElement | null>;
   align: "start" | "center" | "end";
   side: "top" | "bottom";
   title: string;
+  confirmation?: ReactNode;
+  confirmationState?: MobileConfirmationHostState;
 };
 
-function SelectorPresentation({
+function SelectorSurface({
   isMobile,
   open,
   onOpenChange,
@@ -355,6 +372,7 @@ function SelectorPresentation({
   align,
   side,
   title,
+  confirmationState,
 }: SelectorPresentationProps) {
   if (isMobile) {
     return (
@@ -364,10 +382,10 @@ function SelectorPresentation({
           open={open}
           onOpenChange={onOpenChange}
           title={title}
+          confirmationState={confirmationState}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            const element = triggerRef as { current?: HTMLButtonElement | null };
-            element.current?.focus({ preventScroll: true });
+            triggerRef.current?.focus({ preventScroll: true });
           }}
         >
           {content}
@@ -389,6 +407,20 @@ function SelectorPresentation({
   );
 }
 
+function SelectorPresentation(props: SelectorPresentationProps) {
+  if (!props.confirmation) return <SelectorSurface {...props} />;
+  return (
+    <MobileConfirmationHost open={props.isMobile && props.open} surface="drawer">
+      {(confirmationState) => (
+        <>
+          <SelectorSurface {...props} confirmationState={confirmationState} />
+          {props.confirmation}
+        </>
+      )}
+    </MobileConfirmationHost>
+  );
+}
+
 function useModelConfigSelectorController({
   modelOptions,
   currentModel,
@@ -401,11 +433,23 @@ function useModelConfigSelectorController({
   configOptionsLoading = false,
   keepOpenOnModelChange = false,
   resolveConfigurationOptions,
+  triggerRef: suppliedTriggerRef,
+  onRefreshRequired,
 }: ModelConfigSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const internalTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = suppliedTriggerRef ?? internalTriggerRef;
+  const refreshModels = useMemo(() => {
+    const ids = new Set<string>();
+    for (const model of modelOptions) if (model.requiresRefresh) ids.add(model.id);
+    return ids;
+  }, [modelOptions]);
+  const requiresRefreshModel = useCallback(
+    (model: string) => refreshModels.has(model),
+    [refreshModels],
+  );
   const selectConfigOptions = usableConfigOptions(configOptions);
   const modelConfig = selectConfigOptions.find(isModelConfigOption);
   const extraConfigOptions = selectConfigOptions.filter((option) => !isModelConfigOption(option));
@@ -427,6 +471,8 @@ function useModelConfigSelectorController({
     },
     onApplied: closeAfterApply,
     resolveConfigurationOptions,
+    requiresRefreshModel,
+    onRefreshRequired,
   });
   const label = resolveTriggerLabel(
     modelOptions,
@@ -444,6 +490,10 @@ function useModelConfigSelectorController({
 
   const onModelSelect = (value: string) => {
     if (!value) return;
+    if (refreshModels.has(value)) {
+      onRefreshRequired?.();
+      return;
+    }
     onModelChange(value);
     if (!keepOpenOnModelChange && !hasExtraConfigOptions && !configOptionsLoading) {
       setOpen(false);
@@ -480,7 +530,8 @@ export const ModelConfigSelector = memo(function ModelConfigSelector(
   props: ModelConfigSelectorProps,
 ) {
   const { t } = useTranslation();
-  const { isMobile } = useResponsiveBreakpoint();
+  const viewport = useResponsiveBreakpoint();
+  const isMobile = viewport.isMobile || (!!props.confirmation && !viewport.isFinePointer);
   const {
     disabled,
     placeholder,
@@ -559,6 +610,7 @@ export const ModelConfigSelector = memo(function ModelConfigSelector(
       align={popoverAlign}
       side={popoverSide}
       title={pickerTitle ?? t("agents:modelSettings")}
+      confirmation={props.confirmation}
     />
   );
 });

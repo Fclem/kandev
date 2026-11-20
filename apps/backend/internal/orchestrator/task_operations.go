@@ -3926,7 +3926,7 @@ func (s *Service) resumeTaskSessionWithContinuationAndReservation(
 		// workflow-entry dispatch fence after the initial prompt settles.
 		releaseDispatchOnReturn = false
 	}
-	return execution, nil
+	return s.acceptedCatalogLaunch(ctx, execution, attempt), nil
 }
 
 func (s *Service) admitResumeSessionLaunch(

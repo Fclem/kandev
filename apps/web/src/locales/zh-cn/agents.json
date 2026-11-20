@@ -391,6 +391,7 @@
   "profileCapabilitiesReady": "模型与当前启动设置一致。",
   "profileCapabilitiesStale": "启动设置已更改。请刷新模型。",
   "refreshCapabilities": "刷新模型",
+  "profileCatalogPublicationFailed": "已获取配置文件选项，但无法完成现有会话的更新。请再次刷新模型。已保存的选择保持不变。",
   "remove": "移除",
   "removeCliFlag": "移除 {{name}}",
   "removeDynamicCandidate": "移除候选配置",

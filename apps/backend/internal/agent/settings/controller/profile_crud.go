@@ -652,6 +652,8 @@ func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest
 	}
 	if enabledOnlyUpdate(req) {
 		profile.UserModified = true
+		finishMutation := c.beginCatalogProfileMutation(profile.ID)
+		defer finishMutation()
 		updatedAt, err := c.repo.UpdateAgentProfileEnabled(ctx, profile.ID, profile.Enabled)
 		if err != nil {
 			return nil, err
@@ -755,6 +757,8 @@ func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest
 	if selectionIntent != nil {
 		selectionIntent = &profile.CopilotSelectedPlugins
 	}
+	finishMutation := c.beginCatalogProfileMutation(profile.ID)
+	defer finishMutation()
 	if intent, ok := c.repo.(store.AgentProfileSelectionIntent); ok {
 		if err := intent.UpdateAgentProfileWithSelectionIntent(ctx, profile, req.Enabled, selectionIntent); err != nil {
 			return nil, err
@@ -1216,6 +1220,8 @@ func (c *Controller) DeleteProfile(ctx context.Context, id string, force bool) (
 	if err := c.disableReferencingAutomations(ctx, id); err != nil {
 		return nil, err
 	}
+	finishMutation := c.beginCatalogProfileMutation(id)
+	defer finishMutation()
 	if err := c.repo.DeleteAgentProfile(ctx, id); err != nil {
 		if isProfileNotFoundErr(err) {
 			return nil, ErrAgentProfileNotFound

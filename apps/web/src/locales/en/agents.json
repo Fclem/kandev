@@ -322,6 +322,7 @@
   "profileCapabilitiesReady": "Models match the current launch settings.",
   "profileCapabilitiesStale": "Launch settings changed. Refresh models.",
   "refreshCapabilities": "Refresh models",
+  "profileCatalogPublicationFailed": "Profile choices were discovered, but updates to existing sessions could not be completed. Refresh models again. Saved selections are unchanged.",
   "remove": "Remove",
   "removeCliFlag": "Remove {{name}}",
   "removeThisProfile": "Remove this profile",

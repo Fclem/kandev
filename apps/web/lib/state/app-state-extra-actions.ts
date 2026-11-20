@@ -1,6 +1,7 @@
 import type { UISliceActions as UIA } from "./slices/ui/types";
 import type {
   SystemSliceActions,
+  SessionRuntimeSliceActions,
   AutomationsSliceActions,
   CoordinatorsSliceActions,
   FeaturesSliceActions,
@@ -27,6 +28,13 @@ export type AppStateExtraActions = Pick<
   | "waitForSidebarViewSync"
   | "reconcileSidebarGroupDisclosure"
 > &
+  Pick<
+    SessionRuntimeSliceActions,
+    | "applySessionCatalogRefresh"
+    | "applySessionProviderCatalog"
+    | "observeSessionCatalogRefresh"
+    | "hydrateSessionCatalogRefresh"
+  > &
   GitHubSliceActions &
   GitLabSliceActions &
   JiraSliceActions &

@@ -383,6 +383,7 @@ export function ProfileCapabilitiesSection({
   resolveConfigurationOptions,
   onConfigurationApply,
 }: ProfileCapabilitiesSectionProps) {
+  const { t } = useTranslation();
   const {
     capabilities,
     configOptions,
@@ -394,35 +395,46 @@ export function ProfileCapabilitiesSection({
     discoveryState,
   } = result;
   return (
-    <CapabilitiesRow
-      profile={profile}
-      models={capabilities.models}
-      discovery={capabilities.discovery}
-      modes={capabilities.modes}
-      commands={capabilities.commands}
-      currentModelId={capabilities.currentModelId}
-      currentModeId={capabilities.currentModeId}
-      status={capabilities.status}
-      reasonCode={capabilities.reasonCode}
-      discoveryState={discoveryState}
-      disableUnverifiedModels={discoveryState !== "ready"}
-      agentName={agentName}
-      onChange={onChange}
-      isCompact={isCompact}
-      isLoading={capabilities.isLoading}
-      onRefresh={refresh}
-      error={capabilities.error}
-      runtimeVariant={capabilities.runtimeVariant}
-      modelConfig={modelConfig}
-      configOptions={configOptions}
-      configStatus={configStatus}
-      configReasonCode={result.configReasonCode}
-      configError={configError}
-      configIsLoading={configIsLoading}
-      onRetryConfig={refreshModelConfig}
-      baselineProfile={baselineProfile}
-      resolveConfigurationOptions={resolveConfigurationOptions}
-      onConfigurationApply={onConfigurationApply}
-    />
+    <>
+      <CapabilitiesRow
+        profile={profile}
+        models={capabilities.models}
+        discovery={capabilities.discovery}
+        modes={capabilities.modes}
+        commands={capabilities.commands}
+        currentModelId={capabilities.currentModelId}
+        currentModeId={capabilities.currentModeId}
+        status={capabilities.status}
+        reasonCode={capabilities.reasonCode}
+        discoveryState={discoveryState}
+        disableUnverifiedModels={discoveryState !== "ready"}
+        agentName={agentName}
+        onChange={onChange}
+        isCompact={isCompact}
+        isLoading={capabilities.isLoading}
+        onRefresh={refresh}
+        error={capabilities.error}
+        runtimeVariant={capabilities.runtimeVariant}
+        modelConfig={modelConfig}
+        configOptions={configOptions}
+        configStatus={configStatus}
+        configReasonCode={result.configReasonCode}
+        configError={configError}
+        configIsLoading={configIsLoading}
+        onRetryConfig={refreshModelConfig}
+        baselineProfile={baselineProfile}
+        resolveConfigurationOptions={resolveConfigurationOptions}
+        onConfigurationApply={onConfigurationApply}
+      />
+      {result.publicationFailed && (
+        <p
+          role="alert"
+          data-testid="profile-catalog-publication-error"
+          className="text-xs text-amber-600 dark:text-amber-400"
+        >
+          {t("agents:profileCatalogPublicationFailed")}
+        </p>
+      )}
+    </>
   );
 }

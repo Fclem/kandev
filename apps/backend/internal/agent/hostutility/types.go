@@ -149,6 +149,7 @@ type ProfileCapabilityResult struct {
 	Capabilities    AgentCapabilities
 	ContextRevision string
 	ReasonCode      string `json:"-"`
+	currency        profileCapabilityCurrency
 }
 
 // ModelConfigResolution is the provider's complete option snapshot for one

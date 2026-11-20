@@ -184,6 +184,9 @@ func (a *Adapter) newSession(ctx context.Context, mcpServers []types.McpServer) 
 		return "", err
 	}
 	defer a.configChangeMu.Unlock()
+	a.beginCatalogHandshake()
+	catalogSuccess := false
+	defer func() { a.finishCatalogHandshake(catalogSuccess) }()
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -320,6 +323,7 @@ func (a *Adapter) newSession(ctx context.Context, mcpServers []types.McpServer) 
 	if resp.Modes == nil {
 		a.availableModes, _ = a.sessionModesFromConfig(initialConfigOptions)
 	}
+	a.recordCatalogHandshakeLocked(catalogSurfacePresence(resp.Meta, resp.ConfigOptions, resp.LegacyModels != nil, resp.Modes != nil))
 	a.mu.Unlock()
 	if sessionID != priorSessionID {
 		// Only a proven conversation replacement discards the prior suggestion
@@ -371,6 +375,7 @@ func (a *Adapter) newSession(ctx context.Context, mcpServers []types.McpServer) 
 		},
 	})
 
+	catalogSuccess = true
 	return sessionID, nil
 }
 
@@ -671,6 +676,9 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string, mcpServers 
 		return err
 	}
 	defer a.configChangeMu.Unlock()
+	a.beginCatalogHandshake()
+	catalogSuccess := false
+	defer func() { a.finishCatalogHandshake(catalogSuccess) }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -820,6 +828,7 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string, mcpServers 
 	if resp.Modes == nil {
 		a.availableModes, _ = a.sessionModesFromConfig(initialConfigOptions)
 	}
+	a.recordCatalogHandshakeLocked(catalogSurfacePresence(resp.Meta, resp.ConfigOptions, resp.LegacyModels != nil, resp.Modes != nil))
 	a.mu.Unlock()
 	if sessionID != priorSessionID {
 		// A same-ID restore keeps the same provider conversation, so its prior
@@ -875,6 +884,7 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string, mcpServers 
 		},
 	})
 
+	catalogSuccess = true
 	return nil
 }
 
@@ -884,6 +894,9 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string, mcpServers 
 func (a *Adapter) ResumeSession(ctx context.Context, sessionID string, mcpServers []types.McpServer) error {
 	a.configChangeMu.Lock()
 	defer a.configChangeMu.Unlock()
+	a.beginCatalogHandshake()
+	catalogSuccess := false
+	defer func() { a.finishCatalogHandshake(catalogSuccess) }()
 	a.mu.Lock()
 	conn := a.acpConn
 	supportsResume := a.capabilities.SessionCapabilities.Resume != nil
@@ -908,7 +921,7 @@ func (a *Adapter) ResumeSession(ctx context.Context, sessionID string, mcpServer
 	a.pendingCopilotNative = nil
 	a.pendingCopilotNativeDropped = false
 	a.mu.Unlock()
-	_, err := conn.ResumeSession(ctx, acp.ResumeSessionRequest{
+	resp, err := conn.ResumeSession(ctx, acp.ResumeSessionRequest{
 		SessionId: acp.SessionId(sessionID), Cwd: a.cfg.WorkDir,
 		McpServers: toACPMcpServers(filteredServers),
 		Meta:       a.promptSuggestionSessionMeta(),
@@ -935,6 +948,7 @@ func (a *Adapter) ResumeSession(ctx context.Context, sessionID string, mcpServer
 		a.emitMCPAttachmentEvidence(ctx, server, streams.MCPAttachmentEvidenceSessionAccepted, "", "")
 	}
 	a.emitProjectMCPSessionAccepted(ctx, projectAccepted)
+	initialModels, initialConfigOptions := a.initialSessionConfigState(resp.Meta, resp.ConfigOptions, resp.LegacyModels)
 	a.mu.Lock()
 	currentSessionID := a.sessionID
 	if currentSessionID != "" && currentSessionID != sessionID {
@@ -946,12 +960,33 @@ func (a *Adapter) ResumeSession(ctx context.Context, sessionID string, mcpServer
 	retiredWatches := a.advanceNativeGenerationLocked(sessionID)
 	a.rebindClaudeMonitorReaderGenerationLocked(sessionID, a.nativeGeneration)
 	a.configGeneration++
+	a.availableModels = nil
+	a.availableConfigOptions = cloneConfigOptions(initialConfigOptions)
+	a.resetSessionModeLocked()
+	if initialModels != nil {
+		a.availableModels = initialModels.AvailableModels
+	}
+	if resp.Modes == nil {
+		a.availableModes, _ = sessionModesFromConfig(initialConfigOptions)
+	}
+	a.recordCatalogHandshakeLocked(catalogSurfacePresence(resp.Meta, resp.ConfigOptions, resp.LegacyModels != nil, resp.Modes != nil))
+	settingsPolicy := a.sessionSettingsPolicy
 	a.mu.Unlock()
 	a.installNativeBindingBarrier(sessionID, false, a.copilotNativeSessionEvents)
 	for _, event := range retiredWatches {
 		a.sendUpdate(event)
 	}
 	a.attachMgr.SetSessionID(sessionID)
+	if resp.Modes != nil {
+		a.emitInitialModeState(sessionID, resp.Modes, settingsPolicy)
+	} else {
+		a.emitInitialModeConfigState(sessionID, initialConfigOptions, settingsPolicy)
+	}
+	if initialModels != nil {
+		a.emitSessionModels(sessionID, initialModels, resp.Meta, resp.ConfigOptions, settingsPolicy)
+	} else if len(initialConfigOptions) > 0 {
+		a.emitSessionConfigOptionsState(sessionID, initialConfigOptions, settingsPolicy)
+	}
 	span.SetAttributes(attribute.String("session_id", sessionID))
 	a.logger.Info("resumed session", zap.String("session_id", sessionID))
 	a.sendUpdate(AgentEvent{
@@ -959,6 +994,7 @@ func (a *Adapter) ResumeSession(ctx context.Context, sessionID string, mcpServer
 		SessionStatus: streams.SessionStatusResumed,
 		Data:          map[string]any{"session_status": streams.SessionStatusResumed, "init": true},
 	})
+	catalogSuccess = true
 	return nil
 }
 
@@ -2057,6 +2093,7 @@ func (a *Adapter) emitAuthoritativeConfigOptionsWithPolicy(
 	}
 	a.availableConfigOptions = configOptions
 	a.clearUnknownThinkingModeLocked(configOptions)
+	a.noteCatalogOptionsLocked(configOptions)
 	if modes, found := a.sessionModesFromConfig(configOptions); found {
 		a.availableModes = modes
 	}

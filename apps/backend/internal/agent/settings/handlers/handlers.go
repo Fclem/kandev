@@ -144,6 +144,7 @@ func (h *Handlers) registerHTTP(router *gin.Engine) {
 	api.GET("/agents/:id/logo", h.httpGetAgentLogo)
 	api.GET("/agent-models/:agentName", h.httpGetAgentModels)
 	api.POST("/agent-models/:agentName/probe", cfg, h.httpProbeAgentProfile)
+	api.POST("/agent-profiles/:id/model-catalog/refresh", cfg, h.httpRefreshProfileModelCatalog)
 	api.POST("/agent-models/:agentName/resolve", h.httpResolveAgentModelConfig)
 	api.POST("/agent-command-preview/:agentName", h.httpPreviewAgentCommand)
 	api.POST("/agent-install/:agentName", cfg, h.interlock, h.httpInstallAgent)

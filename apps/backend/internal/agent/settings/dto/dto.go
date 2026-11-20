@@ -657,19 +657,27 @@ type CommandPreviewResponse struct {
 // DynamicModelsResponse is the response for the /agent-models/:agentName endpoint.
 // Data now comes from the host utility capability cache populated by ACP probes.
 type DynamicModelsResponse struct {
-	AgentName       string              `json:"agent_name"`
-	RuntimeVariant  string              `json:"runtime_variant,omitempty"`
-	Status          string              `json:"status"` // "probing" | "ok" | "auth_required" | "not_installed" | "failed"
-	ReasonCode      string              `json:"reason_code,omitempty"`
-	Models          []ModelEntryDTO     `json:"models"`
-	CurrentModelID  string              `json:"current_model_id,omitempty"`
-	Modes           []ModeEntryDTO      `json:"modes,omitempty"`
-	CurrentModeID   string              `json:"current_mode_id,omitempty"`
-	Commands        []CommandEntryDTO   `json:"commands,omitempty"`
-	Error           *string             `json:"error"`
-	Discovery       *ModelDiscoveryDTO  `json:"discovery,omitempty"`
-	ContextRevision string              `json:"context_revision,omitempty"`
-	RuntimeInfo     *agents.RuntimeInfo `json:"runtime_info,omitempty"`
+	AgentName       string                 `json:"agent_name"`
+	RuntimeVariant  string                 `json:"runtime_variant,omitempty"`
+	Status          string                 `json:"status"` // "probing" | "ok" | "auth_required" | "not_installed" | "failed"
+	ReasonCode      string                 `json:"reason_code,omitempty"`
+	Models          []ModelEntryDTO        `json:"models"`
+	CurrentModelID  string                 `json:"current_model_id,omitempty"`
+	Modes           []ModeEntryDTO         `json:"modes,omitempty"`
+	CurrentModeID   string                 `json:"current_mode_id,omitempty"`
+	Commands        []CommandEntryDTO      `json:"commands,omitempty"`
+	Error           *string                `json:"error"`
+	Discovery       *ModelDiscoveryDTO     `json:"discovery,omitempty"`
+	ContextRevision string                 `json:"context_revision,omitempty"`
+	RuntimeInfo     *agents.RuntimeInfo    `json:"runtime_info,omitempty"`
+	Publication     *CatalogPublicationDTO `json:"publication,omitempty"`
+}
+
+// CatalogPublicationDTO reports publication independently of profile discovery.
+// It never contains inaccessible session identifiers or batch counts.
+type CatalogPublicationDTO struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
 }
 
 // ProfileLaunchSettingsRequest is a complete, request-only profile snapshot.

@@ -43,15 +43,18 @@ type AgentExecution struct {
 	// projectMCP carries execution-bound evidence that the host materialized
 	// the selected built-in packages into a project configuration file. It is
 	// produced only after a successful write and never persisted.
-	projectMCP                   projectMCPDeliveryState
-	builtinDispatch              *builtinDispatchState
-	RequiredNativeConversationID string
-	InterruptedSubmissionID      string
-	InterruptedStreamID          string
-	InterruptedHarnessGeneration uint64
-	successorGenerationOwner     atomic.Pointer[successorGenerationOwner]
-	streamProgress               atomic.Pointer[streamProjectionProgress]
-	streamProjection             atomic.Pointer[streamProjectionTracker]
+	projectMCP                    projectMCPDeliveryState
+	builtinDispatch               *builtinDispatchState
+	RequiredNativeConversationID  string
+	InterruptedSubmissionID       string
+	InterruptedStreamID           string
+	InterruptedHarnessGeneration  uint64
+	successorGenerationOwner      atomic.Pointer[successorGenerationOwner]
+	streamProgress                atomic.Pointer[streamProjectionProgress]
+	streamProjection              atomic.Pointer[streamProjectionTracker]
+	catalogCommand                atomic.Pointer[catalogLaunchCommand]
+	catalogEnvironmentRevision    atomic.Uint64
+	catalogInitializedEnvironment atomic.Uint64
 
 	ID string
 	// CausingRunID is the trusted Office run that initiated this task-owned
@@ -631,6 +634,9 @@ func (e *AgentExecution) isSessionInitialized() bool {
 func (e *AgentExecution) setSessionInitialized(value bool) {
 	e.sessionInitializedMu.Lock()
 	e.sessionInitialized = value
+	if value {
+		e.catalogInitializedEnvironment.Store(e.catalogEnvironmentRevision.Load())
+	}
 	e.sessionInitializedMu.Unlock()
 }
 
@@ -702,6 +708,7 @@ func (e *AgentExecution) setRuntimeEnvironment(env map[string]string) {
 	}
 	e.runtimeEnvMu.Lock()
 	e.runtimeEnv = cloneStringMap(env)
+	e.catalogEnvironmentRevision.Add(1)
 	e.runtimeEnvMu.Unlock()
 }
 
@@ -724,6 +731,7 @@ func (e *AgentExecution) clearRuntimeEnvironment() {
 	}
 	e.runtimeEnvMu.Lock()
 	e.runtimeEnv = nil
+	e.catalogEnvironmentRevision.Add(1)
 	e.runtimeEnvMu.Unlock()
 }
 

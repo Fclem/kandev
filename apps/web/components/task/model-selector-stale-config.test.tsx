@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => {
     for (const listener of listeners) listener();
   }
   const appState = {
+    sessionCatalogRefresh: { bySessionId: {} },
+    hydrateSessionCatalogRefresh: vi.fn(),
     activeModel: { bySessionId: {} as Record<string, string> },
     sessionModels: { bySessionId: {} as Record<string, SessionModelsEntry | undefined> },
     settingsAgents: { items: [] as Agent[] },

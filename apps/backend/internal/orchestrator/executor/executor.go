@@ -18,6 +18,7 @@ import (
 	"github.com/kandev/kandev/internal/agentruntime"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/common/mcpmode"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	mcpprofile "github.com/kandev/kandev/internal/mcp/profile"
 	"github.com/kandev/kandev/internal/repoclone"
 	"github.com/kandev/kandev/internal/secrets"
@@ -934,13 +935,14 @@ type RepoWorktreeResult struct {
 
 // TaskExecution tracks an active task execution
 type TaskExecution struct {
-	TaskID           string
-	AgentExecutionID string
-	AgentProfileID   string
-	TurnID           string
-	StartedAt        time.Time
-	SessionState     v1.TaskSessionState
-	LastUpdate       time.Time
+	TaskID              string
+	AgentExecutionID    string
+	AgentProfileID      string
+	AcceptedLaunchOwner *sessioncatalog.Owner
+	TurnID              string
+	StartedAt           time.Time
+	SessionState        v1.TaskSessionState
+	LastUpdate          time.Time
 	// SessionID is the database ID of the agent session
 	SessionID string
 	// Worktree info for the agent

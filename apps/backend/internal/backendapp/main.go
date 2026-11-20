@@ -850,6 +850,7 @@ func startAgentInfrastructure(
 		return false
 	}
 	services.Task.SetWorkflowMovePreflight(orchestratorSvc)
+	agentSettingsController.SetCatalogRefreshPublisher(orchestratorSvc.PublishProfileCatalog)
 	orchestratorSvc.SetAgentctlBinaryPath(agentctlBinaryPath)
 	// These queries distinguish successfully re-tracked executions from remote
 	// owners whose guarded retry is still pending during startup reconciliation.

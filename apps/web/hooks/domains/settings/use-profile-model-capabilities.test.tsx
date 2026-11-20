@@ -22,6 +22,7 @@ const CATALOG_SELECTOR_DESCRIPTION = "catalog selector";
 const DRAFT_B_MODEL_ID = "draft-b-model";
 const DRAFT_B_MODEL_NAME = "Draft B model";
 const probeAgentProfileMock = vi.fn();
+const refreshAgentProfileCatalogMock = vi.fn();
 const resolveAgentModelConfigMock = vi.fn();
 
 vi.mock("@/lib/api/domains/settings-api", () => ({
@@ -30,6 +31,7 @@ vi.mock("@/lib/api/domains/settings-api", () => ({
 
 vi.mock("@/lib/api/domains/profile-capability-api", () => ({
   probeAgentProfile: (...args: unknown[]) => probeAgentProfileMock(...args),
+  refreshAgentProfileCatalog: (...args: unknown[]) => refreshAgentProfileCatalogMock(...args),
 }));
 
 import { useProfileModelCapabilities } from "./use-profile-model-capabilities";
@@ -144,6 +146,7 @@ afterEach(() => {
   cleanup();
   profileStore = null;
   probeAgentProfileMock.mockReset();
+  refreshAgentProfileCatalogMock.mockReset();
   resolveAgentModelConfigMock.mockReset();
 });
 
@@ -326,7 +329,7 @@ describe("useProfileModelCapabilities response ordering", () => {
 
     await waitFor(() => expect(result.current.capabilities.reasonCode).toBe("policy_unverified"));
     let rejectOldProbe: ((error: Error) => void) | undefined;
-    probeAgentProfileMock.mockImplementationOnce(
+    refreshAgentProfileCatalogMock.mockImplementationOnce(
       () =>
         new Promise<DynamicModelsResponse>((_resolve, reject) => {
           rejectOldProbe = reject;
@@ -336,7 +339,7 @@ describe("useProfileModelCapabilities response ordering", () => {
     act(() => {
       oldRefresh = result.current.refresh();
     });
-    await waitFor(() => expect(probeAgentProfileMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(refreshAgentProfileCatalogMock).toHaveBeenCalledOnce());
 
     const recoveredProfile = { ...selectedProfile, copilot_selected_plugins: [] };
     rerender({ profile: recoveredProfile });
@@ -636,4 +639,30 @@ describe("draft profile capability discovery", () => {
     });
     expect(onChange).not.toHaveBeenCalled();
   });
+});
+
+it("keeps automatic runtime activation on pure probing even for an unchanged saved baseline", async () => {
+  probeAgentProfileMock.mockResolvedValue(
+    capabilityResponse([{ id: SAVED_MODEL_ID, name: SAVED_MODEL_NAME }], REVISION_A),
+  );
+  refreshAgentProfileCatalogMock.mockResolvedValue(
+    capabilityResponse([{ id: "host-only", name: "Host only" }], REVISION_B),
+  );
+  const onChange = vi.fn();
+  const { result } = renderHook(
+    () =>
+      useProfileModelCapabilities(MOCK_AGENT_NAME, initialProfile, modelConfig, onChange, {
+        profileId: PROFILE_ID_A,
+        savedLaunchSettings,
+      }),
+    { wrapper: profileStoreWrapper },
+  );
+  await waitFor(() => expect(result.current.discoveryState).toBe("ready"));
+  await act(async () => {
+    profileStore!.getState().upsertAgentUpdateJob(updateJob());
+  });
+  expect(refreshAgentProfileCatalogMock).not.toHaveBeenCalled();
+  await waitFor(() => expect(probeAgentProfileMock).toHaveBeenCalledTimes(2));
+  expect(result.current.capabilities.models.some((model) => model.id === "host-only")).toBe(false);
+  expect(onChange).not.toHaveBeenCalled();
 });

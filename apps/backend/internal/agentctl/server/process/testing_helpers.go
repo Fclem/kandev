@@ -14,6 +14,13 @@ func (m *Manager) SetAdapterForTest(a adapter.AgentAdapter) {
 	m.adapter = a
 }
 
+// AdvanceProcessGenerationForTest starts a new owned generation without a child.
+func (m *Manager) AdvanceProcessGenerationForTest() uint64 {
+	m.startMu.Lock()
+	defer m.startMu.Unlock()
+	return m.beginManagedStartupGeneration()
+}
+
 // SetStatusForTest injects the process status for API and lifecycle tests.
 func (m *Manager) SetStatusForTest(status Status) {
 	m.status.Store(status)

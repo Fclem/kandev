@@ -34,7 +34,7 @@ type HostContext = {
 const Context = createContext<HostContext | null>(null);
 export const useMobileConfirmationHost = () => useContext(Context);
 
-type HostState = {
+export type MobileConfirmationHostState = {
   active: boolean;
   contentProps: {
     "aria-labelledby"?: string;
@@ -52,7 +52,7 @@ export function MobileConfirmationHost({
 }: {
   open: boolean;
   surface?: "drawer" | "dialog";
-  children: (state: HostState) => ReactNode;
+  children: (state: MobileConfirmationHostState) => ReactNode;
 }) {
   const current = useRef<Request | null>(null);
   const originRef = useRef<HTMLDivElement>(null);
@@ -111,7 +111,7 @@ export function MobileConfirmationHost({
           ...(request ? { height: "auto", maxHeight: "calc(100dvh - 1rem)", marginTop: 0 } : {}),
         }
       : undefined;
-  const contentProps: HostState["contentProps"] = request
+  const contentProps: MobileConfirmationHostState["contentProps"] = request
     ? {
         "aria-labelledby": request.titleId,
         "aria-describedby": request.descriptionId,

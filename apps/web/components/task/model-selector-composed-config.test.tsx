@@ -83,6 +83,8 @@ const mocks = vi.hoisted(() => {
     },
   };
   const appState = {
+    sessionCatalogRefresh: { bySessionId: {} },
+    hydrateSessionCatalogRefresh: vi.fn(),
     activeModel: { bySessionId: {} as Record<string, string> },
     sessionModels: {
       bySessionId: {

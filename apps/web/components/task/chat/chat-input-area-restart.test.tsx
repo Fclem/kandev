@@ -11,6 +11,7 @@ const mockState = {
   tasks: { activeTaskId: TASK_ID, activeSessionId: null },
   taskRemoval: { navigationRevision: 0 },
   taskSessions: { items: {} },
+  sessionCatalogRefresh: { bySessionId: {} },
   taskSessionsByTask: {
     itemsByTaskId: { [TASK_ID]: [{ id: SESSION_ID, state: "WAITING_FOR_INPUT" }] },
   },

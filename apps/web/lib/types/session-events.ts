@@ -20,6 +20,10 @@ import type {
   SessionTodosPayload,
 } from "./session-runtime-payloads";
 import type { TurnChangeSetSummary } from "./turn-changes";
+import type {
+  SessionCatalogRefreshPayload,
+  SessionCatalogDiscoveryPayload,
+} from "./session-catalog";
 
 export type MessageAddedPayload = {
   task_id: string;
@@ -371,6 +375,14 @@ export type SessionBackendMessageMap = {
     AgentCapabilitiesPayload
   >;
   "session.models_updated": BackendMessage<"session.models_updated", SessionModelsPayload>;
+  "session.catalog_refresh_updated": BackendMessage<
+    "session.catalog_refresh_updated",
+    SessionCatalogRefreshPayload
+  >;
+  "session.catalog_discovery_updated": BackendMessage<
+    "session.catalog_discovery_updated",
+    SessionCatalogDiscoveryPayload
+  >;
   "session.model_fallback": BackendMessage<
     "session.model_fallback",
     {

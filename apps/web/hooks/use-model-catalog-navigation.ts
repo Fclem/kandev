@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type {
   ModelCatalog,
   ModelCatalogComposition,
@@ -66,6 +67,8 @@ type Options = {
   onApplied?: () => void;
   /** Resolves a candidate model's authoritative provider options without mutation. */
   resolveConfigurationOptions?: (model: string) => Promise<ConfigurationOption[] | undefined>;
+  requiresRefreshModel?: (model: string) => boolean;
+  onRefreshRequired?: () => void;
 };
 
 const IDLE_CANDIDATE_OPTIONS: CandidateOptionsState = { status: "idle", options: [] };
@@ -87,22 +90,43 @@ function defaultOptionValues(options: ConfigurationOption[]): Record<string, str
   return Object.fromEntries(options.map((option) => [option.id, option.currentValue]));
 }
 
-function useDraftDimensionSetter(
-  setActiveGroupId: React.Dispatch<React.SetStateAction<string | null>>,
-  setDrafts: React.Dispatch<React.SetStateAction<Record<string, ModelCatalogDraft>>>,
-) {
+type DimensionDraftOwner = Pick<Options, "requiresRefreshModel" | "onRefreshRequired"> & {
+  groupId: string | null;
+  composition: ModelCatalogComposition | undefined;
+  draft: ModelCatalogDraft;
+  setDrafts: Dispatch<SetStateAction<Record<string, ModelCatalogDraft>>>;
+};
+
+function useDraftDimensionSetter({
+  groupId,
+  composition,
+  draft,
+  setDrafts,
+  requiresRefreshModel,
+  onRefreshRequired,
+}: DimensionDraftOwner) {
   return useCallback(
     (dimensionId: string, value: string) => {
-      setActiveGroupId((groupId) => {
-        if (!groupId) return groupId;
-        setDrafts((previous) => ({
-          ...previous,
-          [groupId]: { ...(previous[groupId] ?? {}), [dimensionId]: value },
-        }));
-        return groupId;
-      });
+      if (!groupId || !composition) return;
+      const next = { ...draft, [dimensionId]: value };
+      const constraints = Object.entries(next);
+      let matched = false;
+      let onlyHost = true;
+      for (const binding of composition.bindings) {
+        if (constraints.some(([id, choice]) => binding.values[id] !== choice)) continue;
+        matched = true;
+        if (!requiresRefreshModel?.(binding.model)) {
+          onlyHost = false;
+          break;
+        }
+      }
+      if (matched && onlyHost) {
+        onRefreshRequired?.();
+        return;
+      }
+      setDrafts((previous) => ({ ...previous, [groupId]: next }));
     },
-    [setActiveGroupId, setDrafts],
+    [groupId, composition, draft, setDrafts, requiresRefreshModel, onRefreshRequired],
   );
 }
 
@@ -165,6 +189,74 @@ function useResolvedCandidateOptions(
   return { state, values, setValue };
 }
 
+function useCatalogDraft({
+  catalog,
+  currentModelValue,
+  requiresRefreshModel,
+  onRefreshRequired,
+}: Pick<Options, "catalog" | "currentModelValue" | "requiresRefreshModel" | "onRefreshRequired">) {
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [activeDimensionId, setActiveDimensionId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, ModelCatalogDraft>>({});
+  const activeComposition = activeGroupId ? catalogComposition(catalog, activeGroupId) : undefined;
+  const draft = activeGroupId ? (drafts[activeGroupId] ?? {}) : {};
+  const setDimension = useDraftDimensionSetter({
+    groupId: activeGroupId,
+    composition: activeComposition,
+    draft,
+    setDrafts,
+    requiresRefreshModel,
+    onRefreshRequired,
+  });
+  const resolution =
+    activeComposition && activeGroupId
+      ? composeCatalogSelection(activeComposition, draft, catalog)
+      : undefined;
+  const resolvedModel =
+    resolution?.status === "complete" && !requiresRefreshModel?.(resolution.model)
+      ? resolution.model
+      : undefined;
+  // A new owning model or catalog invalidates every unfinished draft.
+  useEffect(() => {
+    setDrafts({});
+    setActiveDimensionId(null);
+  }, [catalog, currentModelValue]);
+  const openComposition = useCallback(
+    (group: CatalogGroupEntry) => {
+      const composition = catalogComposition(catalog, group.id);
+      if (!composition) return;
+      if (
+        composition.bindings.length &&
+        composition.bindings.every((binding) => requiresRefreshModel?.(binding.model))
+      ) {
+        onRefreshRequired?.();
+        return;
+      }
+      setActiveGroupId(group.id);
+      setActiveDimensionId(null);
+      setDrafts((previous) =>
+        previous[group.id]
+          ? previous
+          : { ...previous, [group.id]: initialCompositionDraft(composition, currentModelValue) },
+      );
+    },
+    [catalog, currentModelValue, requiresRefreshModel, onRefreshRequired],
+  );
+  return {
+    activeGroupId,
+    setActiveGroupId,
+    activeDimensionId,
+    setActiveDimensionId,
+    activeComposition,
+    draft,
+    resolution,
+    resolvedModel,
+    setDrafts,
+    setDimension,
+    openComposition,
+  };
+}
+
 /**
  * Owns the composed-selection draft, its resolved provider options, and the
  * picker's navigation position. The unfinished draft is kept per group while
@@ -177,27 +269,23 @@ export function useModelCatalogNavigation({
   onApply,
   onApplied,
   resolveConfigurationOptions,
+  requiresRefreshModel,
+  onRefreshRequired,
 }: Options): ModelCatalogNavigation | undefined {
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
-  const [activeDimensionId, setActiveDimensionId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, ModelCatalogDraft>>({});
+  const {
+    activeGroupId,
+    setActiveGroupId,
+    activeDimensionId,
+    setActiveDimensionId,
+    activeComposition,
+    draft,
+    resolution,
+    resolvedModel,
+    setDrafts,
+    setDimension,
+    openComposition,
+  } = useCatalogDraft({ catalog, currentModelValue, requiresRefreshModel, onRefreshRequired });
   const [optionRetry, setOptionRetry] = useState(0);
-  const setDimension = useDraftDimensionSetter(setActiveGroupId, setDrafts);
-
-  const activeComposition = activeGroupId ? catalogComposition(catalog, activeGroupId) : undefined;
-  const draft = activeGroupId ? (drafts[activeGroupId] ?? {}) : {};
-  const resolution =
-    activeComposition && activeGroupId
-      ? composeCatalogSelection(activeComposition, draft, catalog)
-      : undefined;
-  const resolvedModel = resolution?.status === "complete" ? resolution.model : undefined;
-
-  // A new owning model or a different catalog invalidates every unfinished
-  // draft: a stale pairing must never survive into a different catalog.
-  useEffect(() => {
-    setDrafts({});
-    setActiveDimensionId(null);
-  }, [catalog, currentModelValue]);
 
   const {
     state: candidateOptions,
@@ -205,23 +293,12 @@ export function useModelCatalogNavigation({
     setValue: setCandidateOption,
   } = useResolvedCandidateOptions(resolvedModel, resolveConfigurationOptions, optionRetry);
 
-  const openComposition = useCallback(
-    (group: CatalogGroupEntry) => {
-      const composition = catalogComposition(catalog, group.id);
-      if (!composition) return;
-      setActiveGroupId(group.id);
-      setActiveDimensionId(null);
-      setDrafts((previous) =>
-        previous[group.id]
-          ? previous
-          : { ...previous, [group.id]: initialCompositionDraft(composition, currentModelValue) },
-      );
-    },
-    [catalog, currentModelValue],
-  );
-
   const apply = useCallback(() => {
     if (!activeGroupId || resolution?.status !== "complete") return;
+    if (requiresRefreshModel?.(resolution.model)) {
+      onRefreshRequired?.();
+      return;
+    }
     const optionsReady =
       !resolveConfigurationOptions ||
       (candidateOptions.status === "ready" && candidateOptions.model === resolvedModel);
@@ -246,14 +323,17 @@ export function useModelCatalogNavigation({
     candidateOptionValues,
     onApply,
     onApplied,
+    resolvedModel,
+    requiresRefreshModel,
+    onRefreshRequired,
+    setDrafts,
+    setActiveGroupId,
+    setActiveDimensionId,
   ]);
 
-  const applyEnabled = canApplyComposition(
-    resolution,
-    resolveConfigurationOptions,
-    candidateOptions,
-    resolvedModel,
-  );
+  const applyEnabled =
+    !!resolvedModel &&
+    canApplyComposition(resolution, resolveConfigurationOptions, candidateOptions, resolvedModel);
 
   if (!catalog) return undefined;
   return {

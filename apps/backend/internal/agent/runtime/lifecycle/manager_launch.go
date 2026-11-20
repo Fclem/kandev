@@ -676,6 +676,7 @@ type agentCommands struct {
 	continue_       string // continue command for one-shot agents (empty if not applicable)
 	args            []string
 	continueArgs    []string
+	catalogCommand  *catalogLaunchCommand
 }
 
 func newAgentCommands(args, continueArgs []string) agentCommands {
@@ -815,6 +816,15 @@ func (m *Manager) buildAgentCommandWithRuntimeOptions(
 		Family: cmdOpts.ManagedRuntimeFamily, Source: cmdOpts.ManagedRuntimeSource, Version: cmdOpts.ManagedRuntimeVersion,
 	}
 	commands.wrapper = launchwrapper.Profile(commandPrefixTokens)
+	commands.catalogCommand = &catalogLaunchCommand{
+		flags:          cliFlagTokens,
+		prefix:         commandPrefixTokens,
+		runtimeOptions: managedRuntimeOptions,
+		provider:       agentConfig.ID(),
+	}
+	if profileInfo != nil {
+		commands.catalogCommand.plugins = append([]string(nil), profileInfo.CopilotSelectedPlugins...)
+	}
 	return commands, nil
 }
 
@@ -2236,6 +2246,7 @@ func (m *Manager) promoteWorkspaceExecution(ctx context.Context, execution *Agen
 			profile := mcpprofile.Normalize(*req.McpProfile)
 			execution.McpProfile = &profile
 		}
+		execution.catalogCommand.Store(cmds.catalogCommand)
 		execution.ExecutionProfileID = executionProfileID(req)
 		if profileInfo != nil {
 			execution.CopilotSelectedPlugins = append([]string{}, profileInfo.CopilotSelectedPlugins...)
@@ -2800,6 +2811,7 @@ func (m *Manager) buildExecutionFromInstance(
 	execution.OpenCodeRuntime = cmds.openCodeRuntime
 	execution.LocalRuntimeSelection = req.LocalRuntimeSelection
 	execution.LocalRuntimeEnv = cloneStringMap(req.LocalRuntimeEnv)
+	execution.catalogCommand.Store(cmds.catalogCommand)
 	return execution, nil
 }
 

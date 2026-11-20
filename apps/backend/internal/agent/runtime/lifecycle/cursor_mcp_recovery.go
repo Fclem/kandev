@@ -418,7 +418,7 @@ func (m *Manager) reloadCursorMCPACPSession(ctx context.Context, target *cursorM
 	if err := m.validateCursorMCPRecoveryTarget(ctx, target, workspaceKey, generation); err != nil {
 		return ErrCursorMCPRecoveryUnavailable
 	}
-	attemptID, err := client.LoadSessionWithResult(target.operation.context(ctx), target.execution.ACPSessionID, target.operation.servers, streams.SessionSettingsPolicyStrict)
+	result, err := client.LoadSessionWithResult(target.operation.context(ctx), target.execution.ACPSessionID, target.operation.servers, streams.SessionSettingsPolicyStrict)
 	if err != nil {
 		return ErrCursorMCPRecoveryUnavailable
 	}
@@ -426,7 +426,7 @@ func (m *Manager) reloadCursorMCPACPSession(ctx context.Context, target *cursorM
 		return ErrCursorMCPRecoveryUnavailable
 	}
 	if target.setupCaptured {
-		m.recordAcceptedMCPSetupOperation(ctx, target.execution, target.setup, target.setupRevision, attemptID)
+		m.recordAcceptedMCPSetupOperation(ctx, target.execution, target.setup, target.setupRevision, result.AttachmentAttemptID)
 	}
 	if err := m.restoreSessionRuntimeConfigWithClient(ctx, target.execution, client, target.execution.ACPSessionID, runtimeConfig); err != nil {
 		return ErrCursorMCPRecoveryUnavailable

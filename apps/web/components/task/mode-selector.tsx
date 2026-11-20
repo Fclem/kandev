@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { RefObject } from "react";
 import { IconAlertTriangle, IconCheck, IconChevronDown, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import {
@@ -28,21 +29,32 @@ import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useAvailableAgents } from "@/hooks/domains/settings/use-available-agents";
 import { useSettingsData } from "@/hooks/domains/settings/use-settings-data";
 import { setSessionMode } from "@/lib/api/domains/session-api";
-import { usePickerConfigurationFeedback } from "@/components/task/session-configuration-feedback";
+import {
+  usePickerConfigurationFeedback,
+  type PickerConfigurationFeedbackController,
+} from "@/components/task/session-configuration-feedback";
 import { cn } from "@/lib/utils";
 import { prioritizeSelectedOption } from "@/lib/utils/selector-options";
 import type { Agent, AgentProfile, AvailableAgent } from "@/lib/types/http";
 import { useTranslation } from "react-i18next";
+import { useSessionCatalogRefresh } from "@/hooks/domains/session/use-session-catalog-refresh";
+import { SessionCatalogRefreshConfirmation } from "./session-catalog-refresh-confirmation";
+import { projectSessionModeChoices } from "./mode-selector-catalog-refresh";
+import type { SessionCatalogOwner, SessionCatalogRefreshEntry } from "@/lib/types/session-catalog";
+import { MobileConfirmationHost } from "@/components/confirmation/mobile-confirmation-host";
+import type { MobileConfirmationHostState } from "@/components/confirmation/mobile-confirmation-host";
 
 const THINKING_LEVEL_LABEL = "agents:thinkingLevel";
 
-type ModeOption = {
+export type ModeOption = {
   id: string;
   name: string;
   description?: string;
+  requiresRefresh?: boolean;
+  disabled?: boolean;
 };
 
-type ModeSelectorState = {
+export type ModeSelectorState = {
   thinking?: boolean;
   currentModeId: string;
   availableModes: ModeOption[];
@@ -135,7 +147,11 @@ function buildModeState(
   };
 }
 
-function useModeSelectorState(sessionId: string | null) {
+function useModeSelectorState(
+  sessionId: string | null,
+  entry: SessionCatalogRefreshEntry | undefined,
+  sourceOwner: SessionCatalogOwner | undefined,
+) {
   useSettingsData(true);
 
   const liveModeState = useAppStore((state) =>
@@ -165,16 +181,34 @@ function useModeSelectorState(sessionId: string | null) {
     usableConfigOptions(configOptions).some((option) => option.category === "thought_level");
   return useMemo(() => {
     if (hasThinkingConfig) return undefined;
+    const currentModeId = liveModeState ? liveModeState.currentModeId : snapshotMode || profileMode;
+    const state = buildModeState(currentModeId, liveModeState?.availableModes, staticModes);
     const resolved = withRequestedMode(
-      buildModeState(
-        liveModeState ? liveModeState.currentModeId : snapshotMode || profileMode,
-        liveModeState?.availableModes,
-        staticModes,
-      ),
+      projectSessionModeChoices({
+        state,
+        currentModeId,
+        currentModeName:
+          liveModeState?.availableModes.find((mode) => mode.id === currentModeId)?.name ??
+          (currentModeId ? formatModeName(currentModeId) : ""),
+        liveModes: liveModeState?.availableModes,
+        session,
+        entry,
+        sourceOwner,
+      }),
       liveModeState?.requestedModeId,
     );
     return resolved ? { ...resolved, thinking: isPi } : undefined;
-  }, [liveModeState, profileMode, snapshotMode, staticModes, isPi, hasThinkingConfig]);
+  }, [
+    liveModeState,
+    profileMode,
+    snapshotMode,
+    staticModes,
+    session,
+    entry,
+    sourceOwner,
+    isPi,
+    hasThinkingConfig,
+  ]);
 }
 
 function ModeMismatchWarning({
@@ -218,6 +252,7 @@ function MobileModeOption({
       data-testid={`session-mode-option-${mode.id}`}
       aria-label={mode.name}
       aria-pressed={selected}
+      disabled={mode.disabled}
       className={cn(
         "relative flex min-h-11 w-full cursor-pointer items-center rounded-md border px-3 py-2 pr-10 text-left",
         selected ? "border-primary/50 bg-card font-medium" : "border-transparent hover:bg-muted/60",
@@ -239,10 +274,12 @@ function MobileModeOptions({
   modeState,
   onModeChange,
   onClose,
+  onRefreshRequired,
 }: {
   modeState: ModeSelectorState;
   onModeChange: (modeId: string) => Promise<void>;
   onClose: () => void;
+  onRefreshRequired: () => void;
 }) {
   return (
     <div className="space-y-1">
@@ -252,6 +289,11 @@ function MobileModeOptions({
           mode={mode}
           selected={mode.id === modeState.currentModeId}
           onSelect={() => {
+            if (mode.disabled) return;
+            if (mode.requiresRefresh) {
+              onRefreshRequired();
+              return;
+            }
             void onModeChange(mode.id);
             onClose();
           }}
@@ -261,27 +303,38 @@ function MobileModeOptions({
   );
 }
 
+type ModePresentationProps = {
+  modeState: ModeSelectorState;
+  displayName: string;
+  requestedName?: string;
+  triggerClassName?: string;
+  onModeChange: (modeId: string) => Promise<void>;
+  onRefreshRequired: () => void;
+  anchorRef: RefObject<HTMLButtonElement | null>;
+};
+
 function MobileModeSelector({
   modeState,
   displayName,
   requestedName,
   triggerClassName,
   onModeChange,
-}: {
-  modeState: ModeSelectorState;
-  displayName: string;
-  requestedName?: string;
-  triggerClassName?: string;
-  onModeChange: (modeId: string) => Promise<void>;
+  onRefreshRequired,
+  anchorRef,
+  open,
+  onOpenChange,
+  confirmationState,
+}: ModePresentationProps & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  confirmationState: MobileConfirmationHostState;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <>
       <MobilePillButton
-        ref={triggerRef}
+        ref={anchorRef}
         icon={
           requestedName ? (
             <IconAlertTriangle className="h-3 w-3 shrink-0 text-amber-500" aria-hidden />
@@ -290,19 +343,20 @@ function MobileModeSelector({
         label={displayName}
         ariaLabel={displayName}
         isOpen={open}
-        onClick={() => setOpen(true)}
+        onClick={() => onOpenChange(true)}
         data-testid="session-mode-selector"
         className={cn("h-11 min-h-11 min-w-11", triggerClassName)}
       />
       <MobilePickerSheet
         open={open}
-        onOpenChange={setOpen}
-        title={t(modeState.thinking ? THINKING_LEVEL_LABEL : "task:agentPermissionMode")}
+        onOpenChange={onOpenChange}
+        title={translateModeLabel(t, modeState.thinking)}
         description={t(modeState.thinking ? THINKING_LEVEL_LABEL : "task:availableModes")}
         contentTestId="session-mode-picker-scroll"
+        confirmationState={confirmationState}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          triggerRef.current?.focus({ preventScroll: true });
+          anchorRef.current?.focus({ preventScroll: true });
         }}
         fixedContent={
           requestedName ? (
@@ -320,7 +374,7 @@ function MobileModeSelector({
             className="h-12 w-12 shrink-0"
             aria-label={t("common:close")}
             data-testid="session-mode-mobile-picker-close"
-            onClick={() => setOpen(false)}
+            onClick={() => onOpenChange(false)}
           >
             <IconX className="h-4 w-4" aria-hidden />
           </Button>
@@ -329,7 +383,8 @@ function MobileModeSelector({
         <MobileModeOptions
           modeState={modeState}
           onModeChange={onModeChange}
-          onClose={() => setOpen(false)}
+          onClose={() => onOpenChange(false)}
+          onRefreshRequired={onRefreshRequired}
         />
       </MobilePickerSheet>
     </>
@@ -404,14 +459,27 @@ function useModeSelectorDropdownState() {
   };
 }
 
-function useModeChangeHandler(
-  sessionId: string | null,
-  feedback: ReturnType<typeof usePickerConfigurationFeedback>,
-  label: string,
-) {
+function useModeChangeHandler({
+  sessionId,
+  modeState,
+  onRefreshRequired,
+  feedback,
+  label,
+}: {
+  sessionId: string | null;
+  modeState: ModeSelectorState | null;
+  onRefreshRequired: () => void;
+  feedback: PickerConfigurationFeedbackController;
+  label: string;
+}) {
   return useCallback(
     async (modeId: string) => {
-      if (!sessionId) return;
+      const mode = modeState?.availableModes.find((item) => item.id === modeId);
+      if (!sessionId || !mode || mode.disabled) return;
+      if (mode.requiresRefresh) {
+        onRefreshRequired();
+        return;
+      }
       const feedbackId = feedback.begin();
       const change = { configId: "mode", label, requested: modeId };
       try {
@@ -421,7 +489,7 @@ function useModeChangeHandler(
         feedback.showChanges(feedbackId, [{ ...change, error }]);
       }
     },
-    [feedback, label, sessionId],
+    [feedback, label, modeState, onRefreshRequired, sessionId],
   );
 }
 
@@ -469,6 +537,7 @@ function DesktopModeSelector({
   onDropdownOpenChange,
   onTooltipOpenChange,
   onModeChange,
+  anchorRef,
 }: {
   modeState: ModeSelectorState;
   displayName: string;
@@ -480,6 +549,7 @@ function DesktopModeSelector({
   onDropdownOpenChange: (open: boolean) => void;
   onTooltipOpenChange: (open: boolean) => void;
   onModeChange: (modeId: string) => void;
+  anchorRef: RefObject<HTMLButtonElement | null>;
 }) {
   const { t } = useTranslation();
   return (
@@ -488,6 +558,7 @@ function DesktopModeSelector({
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <ModeSelectorTrigger
+              ref={anchorRef}
               displayName={displayName}
               notApplied={Boolean(requestedName)}
               triggerClassName={triggerClassName}
@@ -503,6 +574,7 @@ function DesktopModeSelector({
         {modeState.availableModes.map((mode) => (
           <DropdownMenuItem
             key={mode.id}
+            disabled={mode.disabled}
             onClick={() => onModeChange(mode.id)}
             className={cn(
               "relative min-h-11 cursor-pointer border border-transparent pr-7 sm:min-h-8",
@@ -533,7 +605,9 @@ export const ModeSelector = memo(function ModeSelector({
   const { t } = useTranslation();
   const { isMobile, isFinePointer } = useResponsiveBreakpoint();
   const feedback = usePickerConfigurationFeedback(sessionId, "mode");
-  const modeState = useModeSelectorState(sessionId);
+  const refresh = useSessionCatalogRefresh(sessionId);
+  const modeState = useModeSelectorState(sessionId, refresh.entry, refresh.sourceOwner);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { dropdownOpen, tooltipOpen, handleDropdownOpenChange, handleTooltipOpenChange } =
     useModeSelectorDropdownState();
 
@@ -543,30 +617,19 @@ export const ModeSelector = memo(function ModeSelector({
     }
   }, [handleDropdownOpenChange, modeState, sessionId]);
 
-  const handleModeChange = useModeChangeHandler(
+  const handleModeChange = useModeChangeHandler({
     sessionId,
+    modeState,
+    onRefreshRequired: refresh.requestRefresh,
     feedback,
-    translateModeLabel(t, modeState?.thinking),
-  );
+    label: translateModeLabel(t, modeState?.thinking),
+  });
 
   if (!sessionId || !modeState) {
     return null;
   }
 
   const { displayName, requestedName } = resolveModeDisplayNames(modeState, t);
-
-  if (isMobile || !isFinePointer) {
-    return (
-      <MobileModeSelector
-        modeState={modeState}
-        displayName={displayName}
-        requestedName={requestedName}
-        triggerClassName={triggerClassName}
-        onModeChange={handleModeChange}
-      />
-    );
-  }
-
   const tooltipLabel = resolveModeTooltipLabel({
     modeState,
     requestedName,
@@ -574,19 +637,47 @@ export const ModeSelector = memo(function ModeSelector({
     defaultLabel: translateModeLabel(t, modeState.thinking),
     t,
   });
-
+  const mobile = isMobile || !isFinePointer;
   return (
-    <DesktopModeSelector
-      modeState={modeState}
-      displayName={displayName}
-      requestedName={requestedName}
-      triggerClassName={triggerClassName}
-      tooltipLabel={tooltipLabel}
-      dropdownOpen={dropdownOpen}
-      tooltipOpen={tooltipOpen}
-      onDropdownOpenChange={handleDropdownOpenChange}
-      onTooltipOpenChange={handleTooltipOpenChange}
-      onModeChange={handleModeChange}
-    />
+    <MobileConfirmationHost open={mobile && mobileOpen} surface="drawer">
+      {(confirmationState) => (
+        <>
+          {mobile ? (
+            <MobileModeSelector
+              modeState={modeState}
+              displayName={displayName}
+              requestedName={requestedName}
+              triggerClassName={triggerClassName}
+              onModeChange={handleModeChange}
+              onRefreshRequired={refresh.requestRefresh}
+              anchorRef={refresh.anchorRef}
+              open={mobileOpen}
+              onOpenChange={setMobileOpen}
+              confirmationState={confirmationState}
+            />
+          ) : (
+            <DesktopModeSelector
+              modeState={modeState}
+              displayName={displayName}
+              requestedName={requestedName}
+              triggerClassName={triggerClassName}
+              tooltipLabel={tooltipLabel}
+              dropdownOpen={dropdownOpen}
+              tooltipOpen={tooltipOpen}
+              onDropdownOpenChange={handleDropdownOpenChange}
+              onTooltipOpenChange={handleTooltipOpenChange}
+              onModeChange={handleModeChange}
+              anchorRef={refresh.anchorRef}
+            />
+          )}
+          <SessionCatalogRefreshConfirmation
+            target={refresh.target}
+            anchorRef={refresh.anchorRef}
+            onDismiss={refresh.dismiss}
+            onConfirm={refresh.confirm}
+          />
+        </>
+      )}
+    </MobileConfirmationHost>
   );
 });

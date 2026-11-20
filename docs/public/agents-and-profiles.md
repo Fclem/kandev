@@ -592,6 +592,55 @@ After you edit launch settings, choose **Refresh models** to check the current d
 The provider returns the model catalog. Discovery success does not confirm
 catalog completeness or account access to every model.
 
+### Refresh choices in an existing session
+
+After installing, authenticating, or updating a CLI, open its saved profile and
+choose **Refresh models** without changing the profile's launch settings. This
+checks the saved configuration and publishes a session-refresh notice to eligible
+initialized sessions using that concrete profile. It does not restart an agent,
+send a prompt, change a saved selection, or apply a new model or mode.
+
+Automatic discovery and **Refresh models** on an unsaved draft only update the
+profile editor. Save intentional launch-setting changes before using the
+saved-profile refresh flow. If discovery succeeds but session publication fails,
+the profile keeps its discovered choices and shows a separate notification
+failure. Retry the saved refresh to notify sessions.
+
+Compatible local and worktree sessions can show the host's newly observed models
+and modes as candidates. Provider groups and exact identifiers are retained.
+Choices already advertised by the session remain selectable normally. Selecting
+a host-only candidate opens **Refresh session** consent instead of sending an
+unadvertised model or configuration request. A host listing does not prove
+account entitlement or support in the running provider.
+
+An isolated or remote executor, an unknown execution context, or different
+effective launch settings receives a notice without importing host choices.
+Its own provider catalog remains authoritative. The composer notice is available
+even when the provider has no usable model picker.
+
+Choose **Refresh session** in the task, preview, or Quick Chat composer to stop
+and resume the captured session on its existing executor. Review the interruption
+warning first. Ordinary resume resolves the profile's **current** environment,
+CLI flags, and command prefix, including changes saved while consent was open.
+It does not freeze the original launch configuration.
+
+The conversation, native session identity, unsent input and attachments, and
+saved model/mode/configuration intent are retained under the normal resume policy.
+The refresh does not automatically select a discovered candidate. Once the
+executor advertises it, select it through the ordinary model or mode control.
+
+The Resume acknowledgment is not a discovery result. Kandev waits for an explicit
+result owned by the accepted execution. An empty model list or a mode-only result
+retires stale model choices; unsupported and failed discovery remain distinct.
+If no matching result reaches the browser within **60 seconds after Resume is
+acknowledged**, checking ends and the notice remains unavailable for manual retry.
+A later matching result can still update it. Timeout never starts another
+restart or claims that an empty or unsupported catalog was received.
+
+If Stop or Resume fails, keep the notice and follow the existing session recovery
+guidance. Refresh does not create a replacement conversation, replay an uncertain
+prompt, or dismiss a durable recovery requirement.
+
 ### Create the first profile for a newly installed agent
 
 If you install an agent CLI after Kandev started, **Settings > Agents** can list it

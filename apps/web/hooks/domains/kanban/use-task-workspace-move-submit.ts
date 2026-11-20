@@ -54,9 +54,11 @@ export function useTaskWorkspaceMoveOperation(taskId: string | null) {
       // read must not discard an accepted receipt.
       registry.settle(identity, pending, settled);
       if (settled.status === "committed") {
-        // Canonical placement is reconciled before success is announced. A
-        // failed reconciliation read leaves the operation committed.
+        // Success stays hidden until canonical placement is reconciled. A failed
+        // reconciliation read leaves the receipt committed.
+        registry.beginReconcile(identity, taskId);
         await reconcileTaskMembership(store, taskId).catch(() => undefined);
+        registry.endReconcile(identity, taskId);
       }
     },
     [identity, registry, store, taskId],

@@ -155,6 +155,21 @@ describe("submission", () => {
     expect(reconcile).toHaveBeenCalledWith(store, "task-1");
   });
 
+  it("reveals the accepted receipt only after canonical membership is reconciled", async () => {
+    const gate = Promise.withResolvers<undefined>();
+    reconcile.mockReturnValueOnce(gate.promise);
+    api.transferTask.mockResolvedValueOnce({ receipt });
+    const hook = render();
+    await choose(hook);
+    act(() => {
+      void hook.result.current.submit();
+    });
+    await waitFor(() => expect(reconcile).toHaveBeenCalledWith(store, "task-1"));
+    expect(hook.result.current.operation?.status).toBe("submitting");
+    await act(async () => gate.resolve(undefined));
+    expect(hook.result.current.operation?.status).toBe("committed");
+  });
+
   it("keeps choices after an original rejection and uses a fresh key next time", async () => {
     api.transferTask.mockRejectedValueOnce(conflict("step_incompatible"));
     const hook = render();

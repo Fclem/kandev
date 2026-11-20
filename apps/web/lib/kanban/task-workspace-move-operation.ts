@@ -137,12 +137,33 @@ export class WorkspaceMoveOperations {
   /** The in-flight request admitted for each task; only it may settle that task. */
   private readonly live = new Map<string, object>();
   private readonly unverifiable = new Set<string>();
+  /** Committed receipts hidden as `submitting` until canonical membership is reconciled. */
+  private readonly reconciling = new Map<string, WorkspaceMoveOperation>();
   private storageUnavailable = false;
   private readonly listeners = new Set<Listener>();
 
   get(identity: string, taskId: string): WorkspaceMoveOperation | null {
     this.adopt(identity);
-    return this.byTask.get(taskId) ?? null;
+    return this.reconciling.get(taskId) ?? this.byTask.get(taskId) ?? null;
+  }
+
+  /** Hides an accepted receipt from the visible surface until membership is reconciled. */
+  beginReconcile(identity: string, taskId: string): void {
+    if (identity !== this.identity) return;
+    const committed = this.byTask.get(taskId);
+    if (committed?.status !== "committed") return;
+    this.reconciling.set(taskId, {
+      status: "submitting",
+      taskId,
+      body: committed.body,
+      attempt: "submit",
+    });
+    this.emit();
+  }
+
+  endReconcile(identity: string, taskId: string): void {
+    if (identity !== this.identity) return;
+    if (this.reconciling.delete(taskId)) this.emit();
   }
 
   /** A restored record for this task failed validation and cannot be checked here. */
@@ -201,6 +222,7 @@ export class WorkspaceMoveOperations {
     const hadState = this.byTask.size > 0 || this.unverifiable.size > 0 || this.storageUnavailable;
     this.identity = identity;
     this.byTask.clear();
+    this.reconciling.clear();
     this.live.clear();
     this.unverifiable.clear();
     // Another caller's stored records are hidden, never cleared.

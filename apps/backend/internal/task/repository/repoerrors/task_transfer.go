@@ -16,6 +16,7 @@ const (
 	TaskTransferProfileMappingRequired    TaskTransferConflictReason = "profile_mapping_required"
 	TaskTransferPendingStepUnmapped       TaskTransferConflictReason = "pending_step_unmapped"
 	TaskTransferCleanupActive             TaskTransferConflictReason = "cleanup_active"
+	TaskTransferRelationsBusy             TaskTransferConflictReason = "relations_busy"
 	TaskTransferIdempotencyConflict       TaskTransferConflictReason = "idempotency_conflict"
 	TaskTransferOperationRejected         TaskTransferConflictReason = "operation_rejected"
 	TaskTransferUnsupported               TaskTransferConflictReason = "transfer_unsupported"

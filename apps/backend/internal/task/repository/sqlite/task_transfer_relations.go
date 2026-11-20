@@ -70,7 +70,7 @@ func lockTaskTransferRelationsNowait(ctx context.Context, tx *sqlx.Tx, tables, m
 	_, err := tx.ExecContext(ctx, `LOCK TABLE `+tables+` IN `+mode+` MODE NOWAIT`)
 	var busy *pgconn.PgError
 	if errors.As(err, &busy) && busy.Code == "55P03" {
-		return fmt.Errorf("%w: transfer relations busy", repoerrors.ErrTaskTransferConflict)
+		return repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferRelationsBusy, "transfer relations busy")
 	}
 	return err
 }

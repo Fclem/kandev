@@ -182,7 +182,7 @@ func httpTaskTransferConflictCode(reason repoerrors.TaskTransferConflictReason) 
 	case repoerrors.TaskTransferSourceChanged, repoerrors.TaskTransferDestinationUnavailable,
 		repoerrors.TaskTransferStepIncompatible, repoerrors.TaskTransferDestinationFull,
 		repoerrors.TaskTransferWorkspaceRelationUnmapped, repoerrors.TaskTransferProfileMappingRequired,
-		repoerrors.TaskTransferPendingStepUnmapped, repoerrors.TaskTransferCleanupActive,
+		repoerrors.TaskTransferPendingStepUnmapped, repoerrors.TaskTransferCleanupActive, repoerrors.TaskTransferRelationsBusy,
 		repoerrors.TaskTransferIdempotencyConflict, repoerrors.TaskTransferOperationRejected:
 		return string(reason)
 	default:

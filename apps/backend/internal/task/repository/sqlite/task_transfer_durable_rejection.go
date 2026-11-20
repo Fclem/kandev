@@ -197,7 +197,7 @@ func (r *Repository) TaskTransferPrecheck(
 		return nil, err
 	}
 	if found {
-		return receipt, nil
+		return r.commitTaskTransferReplay(ctx, tx, command, receipt)
 	}
 	rejection := r.taskTransferTerminalRejection(ctx, tx, command)
 	receipt, found, err = r.replayTaskTransfer(ctx, tx, command, requestDigest)
@@ -205,9 +205,26 @@ func (r *Repository) TaskTransferPrecheck(
 		return nil, err
 	}
 	if found {
-		return receipt, nil
+		return r.commitTaskTransferReplay(ctx, tx, command, receipt)
 	}
 	return nil, rejection
+}
+
+// commitTaskTransferReplay audits a receipt served by precheck and commits the
+// transaction, so a replayed attempt is never left without its audit row.
+func (r *Repository) commitTaskTransferReplay(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	command models.TaskTransferCommand,
+	receipt *models.TaskTransferReceipt,
+) (*models.TaskTransferReceipt, error) {
+	if err := r.insertTaskTransferAudit(ctx, tx, command, receipt, "idempotent_replay"); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return receipt, nil
 }
 
 // commitTaskTransferRejection rolls back mutation effects to the savepoint,

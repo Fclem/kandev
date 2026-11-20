@@ -95,7 +95,8 @@ function settleCheckAttempt(
   if (status === 0 || status >= 500) return { status: "uncertain", taskId, body };
   if (status === 409 && error instanceof ApiError) {
     const code = conflictCode(error);
-    if (code && KNOWN_CONFLICT_CODES.has(code)) {
+    // A busy relation lock is transient; a check must not render the refused copy for it.
+    if (code && code !== "relations_busy" && KNOWN_CONFLICT_CODES.has(code)) {
       return { status: "check-unavailable", taskId, body, code: code as TransferRejectionCode };
     }
   }

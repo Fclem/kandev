@@ -212,8 +212,9 @@ handler plus repository duplicate.
 Introduce a typed reason alongside `repoerrors.ErrTaskTransferConflict`, not
 string matching against Go error messages. Its `Unwrap`/`errors.Is` behavior
 must preserve existing MCP classification. Repository guard conditions stay
-unchanged. The Web operation's durable rejection rule below additionally binds
-the outcome of a reviewed submission; it does not loosen any transfer guard.
+unchanged. The Web operation's durable rejection rule in
+[Cross-workspace task transfer web submission recovery System Design](cross-workspace-task-transfer-web-recovery.md)
+additionally binds the outcome of a reviewed submission; it does not loosen any transfer guard.
 
 The Web error body is `{ "error": "task transfer conflict", "code": "..." }`.
 Allowlist these proposed codes and translate their recovery copy in the client:
@@ -298,9 +299,10 @@ the Traditional Chinese pair through the existing locale script.
 
 ## Submission recovery
 
-Web submission, uncertainty, check, session-storage recovery, and the backend
-durable-rejection, serialization, and cancellation rules those operations use are in
+Web submission, uncertainty, check, session-storage recovery, and the Web durable-rejection
+outcome and cancellation boundary are in
 [Cross-workspace task transfer web submission recovery System Design](cross-workspace-task-transfer-web-recovery.md).
+Workspace-first lock acquisition order stays in [Workspace-first concurrency boundary](#workspace-first-concurrency-boundary).
 
 ## Client reconciliation
 

@@ -55,7 +55,7 @@ Add `POST /api/v1/tasks/:id/transfer` in task HTTP handlers with strict body dec
 
 Bind the complete exact source and `updated_at` string plus stable destination IDs and one idempotency key. No JavaScript Date conversion of source generation. Keep identity/auth context through cancellation; preserve existing post-commit reconciliation ownership.
 
-For reviewed Web operations only, terminalize source/lane/relation/capacity domain rejection under shared transfer serialization. Acquire the lock before a mutation savepoint, roll back task effects on a guard failure, recheck receipt precedence, and commit one existing `failed` audit row bound to the exact Web command and actor. That row is the same-key no-later-commit barrier. An exact retry can then settle a lost original 409 as `operation_rejected`; changed-body/actor probes cannot install or replace that barrier. Keep MCP conflict behavior and audit count unchanged. Marker persistence or lookup failure remains uncertain.
+For reviewed Web operations only, terminalize source/lane/workspace_relation_unmapped/capacity domain rejection under shared transfer serialization. Acquire the lock before a mutation savepoint, roll back task effects on a guard failure, recheck receipt precedence, and commit one existing `failed` audit row bound to the exact Web command and actor. That row is the same-key no-later-commit barrier. `relations_busy` is excluded: it stays a non-barrier conflict audit. An exact retry can then settle a lost original 409 as `operation_rejected`; changed-body/actor probes cannot install or replace that barrier. Keep MCP conflict behavior and audit count unchanged. Marker persistence or lookup failure remains uncertain.
 
 ### Client membership and continuity
 

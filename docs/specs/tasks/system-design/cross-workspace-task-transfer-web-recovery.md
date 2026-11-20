@@ -12,9 +12,11 @@ requirements:
 # Cross-workspace task transfer web submission recovery System Design
 
 Companion to [Audited cross-workspace task transfers System Design](cross-workspace-task-transfer.md).
-Owns the Web submission and recovery rules, plus the backend durable-rejection,
-serialization, and cancellation rules that those Web operations depend on. The
-parent keeps the HTTP boundary, conflict-code table, persistence, and observability.
+Owns the Web submission and recovery rules, plus the Web durable-rejection outcome
+precedence and the pre/post-commit cancellation boundary those operations depend on.
+Workspace-first lock acquisition order and the SQLite serialization reservation stay
+in the parent. The parent keeps the HTTP boundary, conflict-code table, persistence,
+and observability.
 
 ## Submission recovery
 
@@ -60,6 +62,10 @@ independent of render timing. No optimistic workspace removal occurs.
   409. The rejected transfer changes no task/context data. This record is both
   the redacted attempt audit and the existing no-later-same-key-commit barrier;
   do not add a duplicate outside-transaction conflict audit.
+- `relations_busy` (PostgreSQL `55P03` from the NOWAIT relation lock) is not a
+  domain-guard rejection. After rollback it records one non-barrier `conflict` audit
+  row outside the transaction and leaves the same key retryable. It writes no
+  `failed` barrier and no `operation_rejected` terminal result.
 - Bind Web terminal-result lookup to the exact task, expected source placement
   and generation, destination IDs, policy, key, and server-attested actor/session
   stored in the audit columns. A changed request or other actor's key collision

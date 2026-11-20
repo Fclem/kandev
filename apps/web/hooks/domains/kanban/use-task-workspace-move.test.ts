@@ -463,7 +463,7 @@ describe("superseded responses across caller switches", () => {
 
   it("keeps an accepted receipt committed when a caller switch lands during reconciliation", async () => {
     signIn("user-a");
-    const gate = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<undefined>();
     reconcile.mockReturnValueOnce(gate.promise);
     api.transferTask.mockResolvedValueOnce({ receipt });
     const hook = render();
@@ -476,7 +476,7 @@ describe("superseded responses across caller switches", () => {
     signIn("user-a");
     await waitFor(() => expect(Object.keys(window.sessionStorage)).toHaveLength(0));
     expect(hook.result.current.operation?.status).not.toBe("uncertain");
-    await act(async () => gate.resolve());
+    await act(async () => gate.resolve(undefined));
     expect(Object.keys(window.sessionStorage)).toHaveLength(0);
     expect(hook.result.current.operation?.status).not.toBe("uncertain");
   });

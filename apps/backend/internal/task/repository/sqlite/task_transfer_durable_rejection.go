@@ -13,6 +13,16 @@ import (
 
 const taskTransferApplySavepoint = "task_transfer_apply"
 
+// taskTransferSettled marks an error whose outcome row is already committed by the
+// transaction that returned it, so the durable wrapper must not audit it again.
+type taskTransferSettled struct {
+	err error
+}
+
+func (s taskTransferSettled) Error() string { return s.err.Error() }
+
+func (s taskTransferSettled) Unwrap() error { return s.err }
+
 // taskTransferAttemptIdentity is the request identity a failed-key barrier
 // row was recorded for.
 type taskTransferAttemptIdentity struct {
@@ -47,18 +57,39 @@ func (r *Repository) transferTaskWithDurableRejection(
 	command models.TaskTransferCommand,
 	requestDigest string,
 ) (*models.TaskTransferReceipt, error) {
+	receipt, err := r.runDurableTaskTransfer(ctx, command, requestDigest)
+	var settled taskTransferSettled
+	switch {
+	case err == nil:
+		return receipt, nil
+	case errors.As(err, &settled):
+		return nil, settled.err
+	default:
+		// The transaction rolled back before this point, so no outcome row is committed.
+		// Record exactly one failed row on a detached context so cancellation cannot drop it.
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(context.WithoutCancel(ctx), command, taskTransferResultFailed))
+	}
+}
+
+// runDurableTaskTransfer returns taskTransferSettled only for errors whose outcome
+// row was committed by the transaction that produced them. Every other error leaves
+// the transaction rolled back for transferTaskWithDurableRejection to audit once.
+func (r *Repository) runDurableTaskTransfer(
+	ctx context.Context,
+	command models.TaskTransferCommand,
+	requestDigest string,
+) (*models.TaskTransferReceipt, error) {
 	projections, counts, inventory, err := r.inspectTaskTransferRelations(ctx)
 	if err != nil {
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, err
 	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := r.lockTaskTransferRelations(ctx, tx, projections, counts, inventory); err != nil {
-		_ = tx.Rollback()
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, err
 	}
 	if receipt, found, err := r.serializedTaskTransferOutcome(ctx, tx, command, requestDigest); err != nil || found {
 		return receipt, err
@@ -74,8 +105,7 @@ func (r *Repository) transferTaskWithDurableRejection(
 		return receipt, nil
 	}
 	if !errors.Is(applyErr, repoerrors.ErrTaskTransferConflict) {
-		_ = tx.Rollback()
-		return nil, errors.Join(applyErr, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, applyErr
 	}
 	return r.commitTaskTransferRejection(ctx, tx, command, requestDigest, applyErr)
 }
@@ -145,17 +175,39 @@ func (r *Repository) taskTransferTerminalRejection(
 		"idempotency key belongs to another rejected request")
 }
 
-// TaskTransferRejection reports this caller's durable terminal rejection for the
-// exact request without consulting mutable workflow or workspace state. It only
-// reads the failed-key barrier, so the service can settle a lost 409 even after
-// the destination workflow has been deleted or moved.
-func (r *Repository) TaskTransferRejection(ctx context.Context, command models.TaskTransferCommand) error {
+// TaskTransferPrecheck resolves this caller's exact request before the service
+// runs its mutable boundary checks. Replay runs again after the barrier read:
+// under READ COMMITTED each statement has its own snapshot, so a receipt that
+// commits between the two reads still wins over a barrier read in between.
+func (r *Repository) TaskTransferPrecheck(
+	ctx context.Context,
+	command models.TaskTransferCommand,
+) (*models.TaskTransferReceipt, error) {
+	requestDigest, err := taskTransferRequestDigest(command)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return r.taskTransferTerminalRejection(ctx, tx, command)
+	receipt, found, err := r.replayTaskTransfer(ctx, tx, command, requestDigest)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return receipt, nil
+	}
+	rejection := r.taskTransferTerminalRejection(ctx, tx, command)
+	receipt, found, err = r.replayTaskTransfer(ctx, tx, command, requestDigest)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return receipt, nil
+	}
+	return nil, rejection
 }
 
 // commitTaskTransferRejection rolls back mutation effects to the savepoint,
@@ -183,7 +235,7 @@ func (r *Repository) commitTaskTransferRejection(
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return nil, rejection
+	return nil, taskTransferSettled{err: rejection}
 }
 
 // commitTaskTransferAttemptConflict audits a non-terminal conflict inside the
@@ -200,5 +252,5 @@ func (r *Repository) commitTaskTransferAttemptConflict(
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return conflict
+	return taskTransferSettled{err: conflict}
 }

@@ -37,7 +37,7 @@ import {
 import { taskRemovalOwnsDepartureForTask } from "@/lib/state/task-removal";
 import { isSessionRestartPending } from "@/lib/session/session-restart-state";
 import { applyTaskOverviewEvent, applyTaskOverviewPatch } from "./task-overview";
-import { admitTaskEvent, invalidateTaskMembership } from "./task-transfer";
+import { admitTaskEvent, invalidateTaskMembership, retireTaskMembership } from "./task-transfer";
 import { taskOverviewPatch } from "@/lib/state/slices/task-overview-patch";
 const lifecycleDebug = createDebugLogger("task-lifecycle:ws");
 
@@ -439,6 +439,7 @@ type TaskDeletedMessage = Parameters<NonNullable<WsHandlers["task.deleted"]>>[0]
 
 function handleTaskDeleted(store: StoreApi<AppState>, message: TaskDeletedMessage): void {
   const deletedId = message.payload.task_id;
+  retireTaskMembership(store, deletedId);
   const currentState = store.getState();
   currentState.cancelWorkflowSessionFocus?.({ taskId: deletedId });
   removeRecentTask(deletedId);

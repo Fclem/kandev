@@ -52,11 +52,19 @@ test.describe("Task workspace move", () => {
         content: "Plan survives the workspace move",
       });
       const sessionsBefore = (await apiClient.listTaskSessions(task.id)).sessions.map((s) => s.id);
+      // Agent output only: the user prompt contains the same marker text.
       // The move form must read the task after the running turn writes its first marker.
+      await expect
+        .poll(
+          async () =>
+            (await apiClient.listSessionMessages(sessionsBefore[0])).messages.some(
+              (message) =>
+                message.author_type === "agent" && message.content.includes("desktop before move"),
+            ),
+          { timeout: 30_000 },
+        )
+        .toBe(true);
       await testPage.goto(`/t/${task.id}`);
-      await expect(testPage.getByText(/desktop before move/).last()).toBeVisible({
-        timeout: 30_000,
-      });
       const kanban = new KanbanPage(testPage);
       await kanban.goto(fixture.sourceWorkflow.id);
       await expect(kanban.taskCard(task.id)).toBeVisible();
@@ -96,9 +104,16 @@ test.describe("Task workspace move", () => {
       await form.press(testPage.getByTestId("workspace-move-open-task"));
       await expect(testPage).toHaveURL(new RegExp(`/t/${task.id}`));
       // The running turn finishes after the move, in the same session transcript.
-      await expect(testPage.getByText(/desktop after move/).last()).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect
+        .poll(
+          async () =>
+            (await apiClient.listSessionMessages(sessionsBefore[0])).messages.some(
+              (message) =>
+                message.author_type === "agent" && message.content.includes("desktop after move"),
+            ),
+          { timeout: 30_000 },
+        )
+        .toBe(true);
       const moved = await apiClient.getTask(task.id);
       expect(moved.workspace_id).toBe(fixture.destination.id);
       expect(moved.workflow_step_id).toBe(fixture.destinationStep.id);
@@ -111,6 +126,7 @@ test.describe("Task workspace move", () => {
 
       // The persisted transcript keeps the turn's output from before and after the move.
       const transcript = (await apiClient.listSessionMessages(sessionsBefore[0])).messages
+        .filter((message) => message.author_type === "agent")
         .map((message) => message.content)
         .join("\n");
       expect(transcript).toContain("desktop before move");
@@ -285,6 +301,11 @@ test.describe("Task workspace move", () => {
     await expect(transcript).toBeVisible({ timeout: 30_000 });
     const routeBefore = testPage.url();
 
+    const departureRead = testPage.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        new URL(response.url()).pathname === `/api/v1/tasks/${task.id}`,
+    );
     await apiClient.transferTask(
       task.id,
       await transferBody(
@@ -298,6 +319,9 @@ test.describe("Task workspace move", () => {
         `away-${task.id}`,
       ),
     );
+    // Departure reconciliation reads the canonical task; the return must not race that read.
+    const departure = await departureRead;
+    expect((await departure.json()).workspace_id).toBe(fixture.destination.id);
     await expect
       .poll(() => testPage.evaluate(() => window.location.pathname))
       .toBe(new URL(routeBefore).pathname);

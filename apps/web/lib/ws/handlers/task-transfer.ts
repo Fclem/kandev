@@ -171,6 +171,19 @@ export function taskMembershipSettled(store: StoreApi<AppState>, taskId: string)
   return records.get(store)?.get(taskId)?.running ?? Promise.resolve();
 }
 
+/**
+ * Retires a deleted task's membership record. A canonical read already in flight
+ * observes the retirement and applies nothing, so a delete cannot be undone by a
+ * read that resolves after it.
+ */
+export function retireTaskMembership(store: StoreApi<AppState>, taskId: string): void {
+  const byTask = records.get(store);
+  const record = byTask?.get(taskId);
+  if (!byTask || !record) return;
+  clearTimeout(record.retryTimer);
+  byTask.delete(taskId);
+}
+
 function captureFence(store: StoreApi<AppState>, taskId: string, epoch: number): ReadFence {
   const state = store.getState();
   return {
@@ -198,9 +211,11 @@ async function reconcileUntilCurrent(
 ): Promise<void> {
   for (;;) {
     await awaitRefreshWindow(record);
+    if (records.get(store)?.get(taskId) !== record) return;
     const fence = captureFence(store, taskId, record.epoch);
     record.lastReadAt = Date.now();
     const result = await readCanonicalTask(taskId);
+    if (records.get(store)?.get(taskId) !== record) return;
     const state = store.getState();
     if (
       (state.workspaces?.activeId ?? null) !== fence.workspaceId ||

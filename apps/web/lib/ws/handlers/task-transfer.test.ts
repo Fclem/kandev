@@ -586,3 +586,23 @@ describe("departure adoption follows the detail route, not a preview", () => {
     expect(store.getState().tasks.activeSessionId).toBe(SESSION);
   });
 });
+
+describe("transfer departure read across a delete", () => {
+  it("does not resurrect a task deleted while its departure read is in flight", async () => {
+    const { store, handlers } = sourceStore();
+    const read = Promise.withResolvers<CanonicalTask>();
+    fetchTask.mockReturnValueOnce(read.promise);
+
+    departureMarker(handlers);
+    expect(resident(store)).toBe(true);
+    await vi.waitFor(() => expect(fetchTask).toHaveBeenCalledTimes(1));
+    const settled = taskMembershipSettled(store, TASK);
+    deliver(handlers, "task.deleted", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
+    expect(resident(store)).toBe(false);
+
+    read.resolve(canonical({ workspace_id: SOURCE, workflow_id: "wf-a" }));
+    await settled;
+    expect(resident(store)).toBe(false);
+    expect(fetchTask).toHaveBeenCalledTimes(1);
+  });
+});

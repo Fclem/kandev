@@ -396,6 +396,17 @@ is still not passed. The remaining
 cause is deadline-bound tests on a shared host with varying load. No assertion,
 deadline or selection was changed.
 
+Serialized retry (requested configuration): `make test-web` as this task's only
+heavy job with `VITEST_MAX_WORKERS=1 RAYON_NUM_THREADS=1 TOKIO_WORKER_THREADS=1
+GOMAXPROCS=1`, default Node heap, unchanged selection and deadlines. Result rc=2
+in 1125s: 31,436 passed, 4 skipped, 3 failed. Two cold ESLint loads
+(`eslint-i18n-config`, `migrated-system-query-owner-wiring`) exceeded 15s, and
+`goal-section.test.tsx:135` saw the Set goal button still disabled immediately
+after a name change. Sampled 1-minute load averaged 10.91 (peak 13.52). Wall time
+matched the 4-worker run, so the cap did not measurably reduce suite contention.
+Retries stop here. The complete web gate remains failed; it needs quieter
+execution access. These failures are residual blockers, not a pass.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

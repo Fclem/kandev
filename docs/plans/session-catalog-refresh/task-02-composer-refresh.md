@@ -376,7 +376,25 @@ do not qualify task-owned provenance.
   record checks moved into `expectExecutorScopedNotice` and `make lint-web` then
   reported 0 warnings.
 
-In progress only for the real Docker run above; every other Task 02 gate passed.
+In progress with two open blockers: the real Docker run above, and the complete
+web gate. The full root run recorded 2 web failures; the isolated 66/66 pass is
+diagnosis, not a passing complete web or root gate.
+
+Full-web diagnosis (2026-11-21). The retained root log shows both failures are
+deadline-bound: the first cold ESLint config load in
+`migrated-system-query-owner-wiring` took 19.6s against 15s, and the storage
+test took 5.6s against 5s while neighbouring cases took 1.7-4.7s. One complete
+retry then ran `make test-web` as the only gate from this task, with
+`VITEST_MAX_WORKERS=4` (default 8), the default Node heap, unchanged selection
+and unchanged deadlines. It finished in 1135s with 31,436 passed, 4 skipped and
+3 failed. The original two passed. The new failures were also deadline-bound: two
+cold ESLint loads (`tanstack-query-eslint-config`, `task-link-wiring`) over 15s,
+and `ssh-failure-diagnostics`, whose fake-Docker read has a 1s limit and left no
+output. Host load, sampled every 30s and including this run plus other agents'
+services, averaged 11.85 (1-minute, peak 18.53) on 40 CPUs. The complete web gate
+is still not passed. The remaining
+cause is deadline-bound tests on a shared host with varying load. No assertion,
+deadline or selection was changed.
 
 ### Historical generic-candidate evidence
 

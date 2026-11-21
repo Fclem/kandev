@@ -62,6 +62,9 @@ independent of render timing. No optimistic workspace removal occurs.
   409. The rejected transfer changes no task/context data. This record is both
   the redacted attempt audit and the existing no-later-same-key-commit barrier;
   do not add a duplicate outside-transaction conflict audit.
+- A `source_changed` found after the workspace-row locks but before the relation
+  reservation takes no savepoint. It rechecks receipt precedence and commits the
+  same caller-bound failed barrier while holding only those workspace locks.
 - `relations_busy` (PostgreSQL `55P03` from the NOWAIT relation lock) is not a
   domain-guard rejection. After rollback it records one non-barrier `conflict` audit
   row outside the transaction and leaves the same key retryable. It writes no

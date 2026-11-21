@@ -1,7 +1,7 @@
 ---
 id: "01-scoped-publication"
 title: "Publish scoped saved-profile catalog observations"
-status: in_progress
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -220,6 +220,80 @@ Fusion qualification in the adjacent selector repair plan.
 - Scoped backend guidance and the plan's compatibility matrix.
 
 ## Results
+
+### Revised acquisition implementation (2026-11-21)
+
+A later explicit user request authorized implementation of the revised package.
+The sections after this one are historical; they do not qualify this boundary.
+
+Generic candidate eligibility is removed. The saved POST remains the editor
+response and success gate; `PublishProfileCatalog(ctx, profileID, agentName,
+commit)` receives no probe choices or launch context. Installer-digest and
+environment-revision comparisons were deleted from candidate admission; the
+installer-sharing digest itself is unchanged.
+
+- **Sealed launch and helper.** `process.Manager` seals the successful command
+  (`cmd.Path`, argv, `cmd.Environ()`, `cmd.Dir`) per generation and runs a fresh
+  helper from it in its own process group. Behavioral RED was the stubbed
+  endpoint failing every case. GREEN covers exact live/helper environment, argv
+  and cwd (including an empty value and a task credential); only
+  `initialize`/`initialized`/paginated `model/list` frames; unchanged live
+  advertisement; explicit `[]`; null, absent, malformed, repeated-cursor, page and
+  choice bounds; unsupported version; zero/foreign/stale owners and missing
+  launch evidence; same-process reload and replacement during the helper;
+  cancellation reaping the helper and its grandchild only; one-helper admission.
+- **Capability.** The table qualifies only the built-in unwrapped managed
+  `@openai/codex@0.169.0 app-server` launch (models only) and the mock-agent
+  fixture. ACP, flags, wrappers, custom commands and other versions are
+  unsupported.
+- **API and proxies.** The instance route requires authenticated control and the
+  exact `X-Instance-ID`, decodes a bounded owner-only request and returns
+  `no-store` replies. A mutation that returned the plain transport made the
+  browser-proxy test RED; `ProxyTransport` now refuses traversal, case,
+  encoded and trailing variants. The client binds the reply to its request,
+  instance, manager, generation and handshake epoch.
+- **Lifecycle and publication.** The client records handshake epochs from
+  New/Load/Resume/Reset replies; the manager ID comes from the authenticated
+  delivery descriptor. A host launch records an in-memory saved-source digest of
+  resolved profile environment, flags, prefix, plugins, provider binding and
+  runtime selection; edited sources are not current. The publisher authorizes
+  before probing, admits two sessions, bounds fan-out to 60 seconds and probes to
+  15 seconds, then rechecks under the existing CAS. Records carry
+  `source: task_probe_v1` and the per-surface `probe`; unsupported/failed probes
+  become `task_discovery_unsupported`/`task_discovery_failed` notices.
+- **Legacy cutover.** Startup retirement converts generic-origin host candidates
+  to a newer-revision `context_unverified` notice without touching provider
+  choices or settings; SQLite and PostgreSQL contracts pass.
+
+Actual native proof used `@openai/codex@0.169.0` through real `kandev`,
+`agentctl` and the saved POST, with isolated cache-backed HOME, a local fake
+Responses provider and project catalog files. Local and Worktree sessions kept
+live catalog A after their files changed; their helpers returned distinct
+task catalogs while the editor returned generic A. Executions, rollout count and
+provider-request count were unchanged by the helpers. Consented Stop/Resume of
+each kept the same native thread, advertised that task's B catalog, cleared the
+notice and left the sibling unchanged. A throwaway harness recorded the
+production helper's frames to the real binary as `initialize`, `initialized`,
+`model/list`. Evidence: `/home/clem/.cache/session-catalog-5237/native/`.
+
+Final-source package runs used a sanitized environment (no inherited live-service
+`KANDEV_*`, private cache-backed HOME) with PostgreSQL enabled. `process`,
+`api`, `runtime/agentctl`, `lifecycle`, `orchestrator`, settings
+`controller`/`handlers`, `cmd/mock-agent` and `sessioncatalog` passed complete.
+`TestPostgresBootInitializesRepositories` failed only because the local DSN had
+no password, so the test's rebuilt key/value DSN lost `dbname`; it passed with a
+password-bearing DSN. `TestDeliveryRetentionCompleteTerminalOutcomes` hit its
+context deadline while E2E and root gates ran concurrently and passed alone. All
+other `internal/task/repository/sqlite` and `internal/backendapp` tests passed.
+Changed-package `golangci-lint` reported 0 issues; earlier race runs of the
+refresh and discovery tests passed.
+
+Root gates: `make fmt` passed, then one sanitized `make -k typecheck test lint`
+run passed typecheck, every backend package, CLI and script tests, backend
+`golangci-lint` and harness/specification/architecture lint. Its web failures were
+two load timeouts in unrelated files that pass alone, plus one Docker-spec
+complexity warning since fixed; Task 02 records the details. Docs validators and
+`git diff --check` are recorded in the plan. This work order is complete.
 
 ### Revised acquisition design checkpoint
 

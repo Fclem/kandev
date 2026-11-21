@@ -5,6 +5,7 @@ import { watchWs } from "../../helpers/causal-waits";
 import { catalogRecord, refreshSavedSessionCatalog } from "../../helpers/session-catalog-refresh";
 import type { MockACPTrace } from "../../helpers/transient-turn-runtime-continuity";
 import type { ApiClient } from "../../helpers/api-client";
+import type { SessionCatalogRecord } from "../../../lib/types/session-catalog";
 
 function readContainerCatalogTrace(containerId: string, workspacePath: string): MockACPTrace[] {
   const contents = execFileSync(
@@ -24,6 +25,22 @@ async function requireCatalogContainer(api: ApiClient, taskId: string) {
   if (!environment?.container_id || !environment.workspace_path)
     throw new Error("Docker catalog environment is incomplete");
   return environment;
+}
+
+function expectExecutorScopedNotice(record: SessionCatalogRecord | undefined) {
+  expect(record).toMatchObject({
+    disposition: "rediscovery_required",
+    reason: "executor_scoped",
+  });
+  expect(record?.models ?? []).toEqual([]);
+  expect(record?.modes ?? []).toEqual([]);
+  expect(record?.catalog).toBeUndefined();
+  expect(
+    record?.source,
+    "isolated executors never receive an automatic task probe",
+  ).toBeUndefined();
+  expect(record?.probe).toBeUndefined();
+  expect(JSON.stringify(record)).not.toContain("host-only-new");
 }
 
 // @covers AC-AGENTS-SESSION-CATALOG-001.2, AC-AGENTS-SESSION-CATALOG-001.5, AC-AGENTS-SESSION-CATALOG-002.3, AC-AGENTS-SESSION-CATALOG-002.4, AC-AGENTS-SESSION-CATALOG-003.1
@@ -83,15 +100,7 @@ test("keeps host refresh notice-only on a real Docker executor and rediscovers t
     });
     await refreshSavedSessionCatalog(apiClient, profile.id);
     const published = (await apiClient.getTaskSession(sessionId)).session;
-    const record = catalogRecord(published);
-    expect(record).toMatchObject({
-      disposition: "rediscovery_required",
-      reason: "executor_scoped",
-    });
-    expect(record?.models ?? []).toEqual([]);
-    expect(record?.modes ?? []).toEqual([]);
-    expect(record?.catalog).toBeUndefined();
-    expect(JSON.stringify(record)).not.toContain("host-only-new");
+    expectExecutorScopedNotice(catalogRecord(published));
     expect(published.agent_execution_id).toBe(before.agent_execution_id);
     const model = testPage.getByRole("button", { name: "Session model settings", exact: true });
     await model.click();

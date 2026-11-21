@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kandev/kandev/internal/agent/hostutility"
 	"github.com/kandev/kandev/internal/agent/settings/models"
 	"github.com/kandev/kandev/internal/agent/settings/store"
 	"github.com/stretchr/testify/require"
@@ -55,7 +54,7 @@ func TestSavedProfileCatalogRefreshRejectsInFlightSavedMutation(t *testing.T) {
 			ctrl.hostUtility = &recordingProfileDiscoveryUtility{}
 			ctrl.SetHostCLIRunner(&stubCLIRunner{listJSON: codexListJSON})
 			published := false
-			ctrl.SetCatalogRefreshPublisher(func(ctx context.Context, _, _ string, _ hostutility.ProfileProbeContext, _ hostutility.AgentCapabilities, commit func(context.Context, func() error) error) error {
+			ctrl.SetCatalogRefreshPublisher(func(ctx context.Context, _, _ string, commit func(context.Context, func() error) error) error {
 				return commit(ctx, func() error { published = true; return nil })
 			})
 			var observedStatus string

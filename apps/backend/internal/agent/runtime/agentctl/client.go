@@ -94,6 +94,10 @@ type Client struct {
 	// lastAttachmentAttemptID is returned by session/load and session/resume
 	// after the backend starts its evidence timeline.
 	lastAttachmentAttemptID string
+	// sessionSource is the adapter handshake epoch reported by the most recent
+	// accepted New/Load/Resume/Reset, bound to the process generation current
+	// when it was recorded. Zero means no handshake evidence.
+	sessionSource catalogSessionSource
 	// durableDelivery records the agentctl transport capability returned during
 	// initialize. It is separate from ACP capabilities because it describes the
 	// retained agentctl-to-backend journal rather than the native harness.
@@ -592,17 +596,18 @@ func closeUpdatesStream(cleanup updatesStreamDialCleanup, conn *websocket.Conn) 
 	}
 }
 
-// ProxyTransport returns the same authenticated upstream transport used by
-// agentctl HTTP requests. Gateway proxies use it so provider leases, host
-// authentication, and instance fencing are applied to HTTP and upgrades alike.
+// ProxyTransport returns the authenticated upstream transport for browser
+// gateway proxies. Provider leases, host authentication and instance fencing
+// apply to HTTP and upgrades alike, while backend-only actions are refused.
 func (c *Client) ProxyTransport() http.RoundTripper {
-	if c.endpointTransport != nil {
-		return c.endpointTransport
+	base := http.DefaultTransport
+	switch {
+	case c.endpointTransport != nil:
+		base = c.endpointTransport
+	case c.httpClient.Transport != nil:
+		base = c.httpClient.Transport
 	}
-	if c.httpClient.Transport != nil {
-		return c.httpClient.Transport
-	}
-	return http.DefaultTransport
+	return browserProxyTransport{base: base}
 }
 
 // authTransport is an http.RoundTripper that injects an Authorization header.

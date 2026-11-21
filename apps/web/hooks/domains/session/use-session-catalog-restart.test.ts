@@ -60,6 +60,12 @@ function seedNotice() {
     disposition: "host_candidates",
     reason: "new_candidates",
     models: [{ id: "candidate", name: "Candidate" }],
+    source: "task_probe_v1",
+    probe: {
+      outcome: "complete",
+      models: { present: true, supported: true, choices: [{ id: "candidate", name: "Candidate" }] },
+      modes: { present: false, supported: false, choices: null },
+    },
   });
   mockStore.getState().applySessionCatalogRefresh("t1", "s1", record);
   return record;

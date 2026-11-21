@@ -88,6 +88,7 @@ type NewSessionResponse struct {
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
 	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
+	SessionSource       uint64                     `json:"session_source,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -106,6 +107,7 @@ type LoadSessionResponse struct {
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
 	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
+	SessionSource       uint64                     `json:"session_source,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -125,6 +127,7 @@ type ResumeSessionResponse struct {
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
 	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
+	SessionSource       uint64                     `json:"session_source,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -1226,6 +1229,7 @@ func (s *Server) handleWSNewSession(ctx context.Context, msg *ws.Message) *ws.Me
 		SessionID:           sessionID,
 		ModelState:          sessionModelState(adapter),
 		CatalogDiscovery:    sessionCatalogDiscovery(adapter),
+		SessionSource:       process.SessionCatalogSource(adapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp
@@ -1312,6 +1316,7 @@ func (s *Server) handleWSLoadSession(ctx context.Context, msg *ws.Message) *ws.M
 		SessionID:           req.SessionID,
 		ModelState:          sessionModelState(adapter),
 		CatalogDiscovery:    sessionCatalogDiscovery(adapter),
+		SessionSource:       process.SessionCatalogSource(adapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp
@@ -1377,6 +1382,7 @@ func (s *Server) handleWSResumeSession(ctx context.Context, msg *ws.Message) *ws
 	resp, _ := ws.NewResponse(msg.ID, msg.Action, ResumeSessionResponse{
 		Success: true, SessionID: req.SessionID, ModelState: sessionModelState(adapter),
 		CatalogDiscovery:    sessionCatalogDiscovery(adapter),
+		SessionSource:       process.SessionCatalogSource(adapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp
@@ -1918,6 +1924,7 @@ func (s *Server) handleWSResetSession(ctx context.Context, msg *ws.Message) *ws.
 		SessionID:           sessionID,
 		ModelState:          sessionModelState(agentAdapter),
 		CatalogDiscovery:    sessionCatalogDiscovery(agentAdapter),
+		SessionSource:       process.SessionCatalogSource(agentAdapter),
 		AttachmentAttemptID: attachmentContext.Attempt.AttemptID,
 	})
 	return resp

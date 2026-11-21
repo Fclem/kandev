@@ -309,12 +309,11 @@ orders are sequential; they share contracts and are not parallel-safe.
 ### Revised acquisition checkpoint
 
 The user selected fresh task-context design after provider research completed
-without a qualified generic-transfer path. This is a new review checkpoint:
-existing implementation and results remain partial; neither work order is done.
-Task 01 owns the replacement acquisition and provenance cutover; Task 02 consumes
-only qualified task-owned candidates and repeats endpoint/browser proof. Preserve
-historical results below, but do not treat them as proof of this new boundary.
-Do not implement the revised boundary until the user later explicitly requests it.
+without a qualified generic-transfer path. A later explicit user request then
+authorized its implementation. Task 01 owns the replacement acquisition and
+provenance cutover; Task 02 consumes only qualified task-owned candidates and
+repeats endpoint/browser proof. Historical results below are not proof of this
+boundary; each work order records the revised evidence first.
 
 Review tradeoff: initial production-native model acquisition is explicit, while
 ACP mode/model acquisition remains unsupported until qualified. This is not a
@@ -509,6 +508,24 @@ ST1005 correction was followed by native-package pass and exact `make lint` pass
 waiver or complete aggregate pass is inferred. The revised task-discovery draft
 still requires its review/later-implementation checkpoint and actual native
 helper/provenance plus real Docker qualification.
+
+Revised acquisition implementation (2026-11-21, explicit user authorization).
+Generic candidate eligibility is removed; host candidates now require a fresh
+task probe in the live owner's sealed launch context (`task_probe_v1`). Task 01
+records the helper, capability, API, lifecycle, publication and legacy cutover
+evidence, including the actual Codex 0.169.0 Local/Worktree experiment: live A
+unchanged, distinct task catalogs, generic editor A, helper frames limited to
+`initialize`/`initialized`/`model/list`, and consented resume of the same native
+thread. Final-source package, PostgreSQL, race and changed-package lint runs
+passed apart from two environment-only cases explained in Task 01. Desktop and
+phone collections passed 22 and 19 tests. `make fmt` and one sanitized
+`make -k typecheck test lint` passed every target except two unrelated web load
+timeouts (passing alone) and one Docker-spec complexity warning, fixed and
+rechecked with `make lint-web`. `list-docs.py validate` (457 decisions, 2055
+specifications), `lint-spec-files.py --all`, the harness lint, public-docs
+validation (55 pages) and `git diff --check` passed. Task 01 is done. Task 02
+stays in progress only because no Docker daemon is reachable here; its real
+Docker spec has not run.
 
 ## Risks
 

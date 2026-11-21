@@ -11,10 +11,11 @@ requirements:
 ## Review boundary
 
 The user selected this design direction after provider-contract research failed
-to qualify generic utility-to-task catalog transfer. This is a replacement design
-for AC-AGENTS-SESSION-CATALOG-001.1, not approval to implement new runtime APIs.
-The [parent design](session-catalog-refresh.md) retains publication, provider
-availability, restart, consent, recovery and desktop/phone ownership.
+to qualify generic utility-to-task catalog transfer. It replaces the acquisition
+path of AC-AGENTS-SESSION-CATALOG-001.1; a later explicit user request authorized
+its implementation. The [parent design](session-catalog-refresh.md) retains
+publication, provider availability, restart, consent, recovery and desktop/phone
+ownership.
 
 Agents owns acquisition and provenance; Tasks owns authorization, execution and
 publication. A successful saved-profile probe gates the operation but supplies
@@ -203,14 +204,30 @@ advertised by the live provider. A fresh helper never authorizes SetModel on a
 warm live adapter or auto-applies a candidate. Terminal startup evidence alone
 settles the replacement notice under the parent design.
 
+## Implemented boundaries
+
+- `process.Manager` seals `cmd.Path`, argv, `cmd.Environ()` and `cmd.Dir` when a
+  generation starts. `DiscoverCatalogCandidates` captures and rechecks manager,
+  positive generation, adapter, native ID and handshake epoch under `startMu`.
+- `qualifyCatalogLaunch` is the capability table. `codex_app_server_model_list_v1@0.169.0`
+  requires the built-in unwrapped managed `@openai/codex@0.169.0 app-server`
+  launch without agent arguments and a `kandev/0.169.0` runtime user agent.
+  `mock_acp_catalog_v1` is the mock-agent fixture only.
+- The instance route requires authenticated control and the exact `X-Instance-ID`.
+  `client.ProxyTransport` refuses the action for every browser proxy.
+- The backend client records handshake epochs from New/Load/Resume/Reset replies
+  and reads the manager from the authenticated delivery descriptor. Lifecycle
+  compares an in-memory saved-source digest recorded at host launch.
+- `PublishProfileCatalog` stores `source: task_probe_v1` with the per-surface
+  `probe`; failures use `task_discovery_unsupported` or `task_discovery_failed`.
+  Startup retirement and the browser schema demote legacy candidates to notices.
+
 ## Verification and review gates
 
 Task 01 owns API/proxy authorization, epoch and sealed-context capture, fresh
 helper cleanup/pagination/capability, provenance cutover and backend publication.
 Task 02 owns legacy-candidate rejection, per-surface UI projection and real
-endpoint-to-native-helper browser proof. No new production code is authorized
-until this revised package has been reviewed and the user later requests its
-implementation.
+endpoint-to-native-helper browser proof.
 
 Required behavioral RED/GREEN includes same-native-ID replacement, same-process
 reload, zero/unknown generations, auth/header/proxy rejection, source/profile/
@@ -226,4 +243,4 @@ frames to prove the helper never starts/resumes a thread or sends a prompt.
 Keep PostgreSQL/CAS/race, complete desktop/phone collections, actual Docker
 notice-only proof and the requested root format/typecheck/test/lint gates.
 Historical generic-candidate browser passes are not provenance qualification.
-These are planned gates, not current product/runtime evidence.
+Recorded evidence and any remaining external gate live in the work orders.

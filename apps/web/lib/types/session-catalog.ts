@@ -79,7 +79,11 @@ export const sessionCatalogDiscoverySchema = z
   });
 export type SessionCatalogDiscovery = z.infer<typeof sessionCatalogDiscoverySchema>;
 
-export const sessionCatalogRecordSchema = z.object({
+// Host candidates are task-owned only when the target's own complete fresh
+// task probe produced them.
+export const SESSION_CATALOG_TASK_PROBE_SOURCE = "task_probe_v1";
+
+const rawSessionCatalogRecordSchema = z.object({
   version: z.literal(1),
   revision: safeCounter.positive(),
   profile_id: identifier,
@@ -87,11 +91,45 @@ export const sessionCatalogRecordSchema = z.object({
   owner: sessionCatalogOwnerSchema,
   disposition: z.enum(["host_candidates", "rediscovery_required", "cleared"]),
   reason: z.string(),
+  source: z.string().optional(),
   models: choices.optional(),
   modes: choices.optional(),
   catalog,
+  probe: sessionCatalogDiscoverySchema.optional(),
   result: sessionCatalogDiscoverySchema.optional(),
 });
+type RawSessionCatalogRecord = z.infer<typeof rawSessionCatalogRecordSchema>;
+
+// Missing or legacy provenance is never reinterpreted as task-owned: such a
+// record becomes a rediscovery notice. An unsupported surface never supplies
+// candidates, even when a list accompanies it.
+function retainTaskOwnedCandidates(record: RawSessionCatalogRecord): RawSessionCatalogRecord {
+  if (record.disposition !== "host_candidates") return record;
+  const probe = record.probe;
+  if (record.source !== SESSION_CATALOG_TASK_PROBE_SOURCE || probe?.outcome !== "complete") {
+    return {
+      ...record,
+      disposition: "rediscovery_required",
+      reason: "context_unverified",
+      source: undefined,
+      models: undefined,
+      modes: undefined,
+      catalog: undefined,
+      probe: undefined,
+    };
+  }
+  const modelsSupported = probe.models.present && probe.models.supported;
+  const modesSupported = probe.modes.present && probe.modes.supported;
+  return {
+    ...record,
+    models: modelsSupported ? record.models : undefined,
+    catalog: modelsSupported ? record.catalog : undefined,
+    modes: modesSupported ? record.modes : undefined,
+  };
+}
+
+export const sessionCatalogRecordSchema =
+  rawSessionCatalogRecordSchema.transform(retainTaskOwnedCandidates);
 export type SessionCatalogRecord = z.infer<typeof sessionCatalogRecordSchema>;
 
 export const sessionProviderCatalogSchema = z.object({

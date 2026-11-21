@@ -670,13 +670,13 @@ func baseBranchMetadataKey(spec RepoLaunchSpec) string {
 
 // agentCommands holds both the display strings and structured argv for an agent execution.
 type agentCommands struct {
-	openCodeRuntime managedruntime.OpenCodeRuntime
-	wrapper         launchwrapper.Spec
-	initial         string
-	continue_       string // continue command for one-shot agents (empty if not applicable)
-	args            []string
-	continueArgs    []string
-	catalogCommand  *catalogLaunchCommand
+	openCodeRuntime    managedruntime.OpenCodeRuntime
+	wrapper            launchwrapper.Spec
+	initial            string
+	continue_          string // continue command for one-shot agents (empty if not applicable)
+	args               []string
+	continueArgs       []string
+	catalogSavedSource string
 }
 
 func newAgentCommands(args, continueArgs []string) agentCommands {
@@ -816,15 +816,7 @@ func (m *Manager) buildAgentCommandWithRuntimeOptions(
 		Family: cmdOpts.ManagedRuntimeFamily, Source: cmdOpts.ManagedRuntimeSource, Version: cmdOpts.ManagedRuntimeVersion,
 	}
 	commands.wrapper = launchwrapper.Profile(commandPrefixTokens)
-	commands.catalogCommand = &catalogLaunchCommand{
-		flags:          cliFlagTokens,
-		prefix:         commandPrefixTokens,
-		runtimeOptions: managedRuntimeOptions,
-		provider:       agentConfig.ID(),
-	}
-	if profileInfo != nil {
-		commands.catalogCommand.plugins = append([]string(nil), profileInfo.CopilotSelectedPlugins...)
-	}
+	commands.catalogSavedSource = m.launchCatalogSavedSource(ctx, profileInfo, agentConfig, runtime)
 	return commands, nil
 }
 
@@ -2246,7 +2238,7 @@ func (m *Manager) promoteWorkspaceExecution(ctx context.Context, execution *Agen
 			profile := mcpprofile.Normalize(*req.McpProfile)
 			execution.McpProfile = &profile
 		}
-		execution.catalogCommand.Store(cmds.catalogCommand)
+		execution.catalogSavedSource.Store(&cmds.catalogSavedSource)
 		execution.ExecutionProfileID = executionProfileID(req)
 		if profileInfo != nil {
 			execution.CopilotSelectedPlugins = append([]string{}, profileInfo.CopilotSelectedPlugins...)
@@ -2811,7 +2803,7 @@ func (m *Manager) buildExecutionFromInstance(
 	execution.OpenCodeRuntime = cmds.openCodeRuntime
 	execution.LocalRuntimeSelection = req.LocalRuntimeSelection
 	execution.LocalRuntimeEnv = cloneStringMap(req.LocalRuntimeEnv)
-	execution.catalogCommand.Store(cmds.catalogCommand)
+	execution.catalogSavedSource.Store(&cmds.catalogSavedSource)
 	return execution, nil
 }
 

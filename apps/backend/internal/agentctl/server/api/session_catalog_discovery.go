@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"github.com/kandev/kandev/internal/agentctl/server/adapter"
+	"github.com/kandev/kandev/internal/agentctl/server/process"
 	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	ws "github.com/kandev/kandev/pkg/websocket"
 )
@@ -15,14 +16,6 @@ func sessionCatalogDiscovery(agentAdapter adapter.AgentAdapter) *sessioncatalog.
 		return nil
 	}
 	return provider.GetSessionCatalogDiscovery()
-}
-
-func sessionCatalogSourceGeneration(agentAdapter adapter.AgentAdapter) uint64 {
-	provider, ok := agentAdapter.(interface{ SessionCatalogSourceGeneration() uint64 })
-	if !ok {
-		return 0
-	}
-	return provider.SessionCatalogSourceGeneration()
 }
 
 func (s *Server) handleWSSessionCatalogDiscovery(_ context.Context, msg *ws.Message) *ws.Message {
@@ -39,7 +32,7 @@ func (s *Server) handleWSSessionCatalogDiscovery(_ context.Context, msg *ws.Mess
 		response, _ := ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, "session catalog source changed", nil)
 		return response
 	}
-	source := sessionCatalogSourceGeneration(agentAdapter)
+	source := process.SessionCatalogSource(agentAdapter)
 	if source == 0 {
 		response, _ := ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, "session catalog source is unknown", nil)
 		return response
@@ -53,7 +46,7 @@ func (s *Server) handleWSSessionCatalogDiscovery(_ context.Context, msg *ws.Mess
 	}
 	currentAdapter, current := s.procMgr.GetAdapterForGeneration(request.ProcessGeneration)
 	if !current || currentAdapter != agentAdapter || agentAdapter.GetSessionID() != request.SessionID ||
-		sessionCatalogSourceGeneration(agentAdapter) != source {
+		process.SessionCatalogSource(agentAdapter) != source {
 		response, _ := ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, "session catalog source changed", nil)
 		return response
 	}

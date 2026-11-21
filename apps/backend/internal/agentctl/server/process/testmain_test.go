@@ -44,6 +44,10 @@ func TestMain(m *testing.M) {
 		runContributionHistoryGitShim(mode)
 		return
 	}
+	if dir := os.Getenv(fakeCodexAppServerEnv); dir != "" {
+		runFakeCodexAppServer(dir)
+		return
+	}
 	// Tests build GitOperator with a nil environment (NewGitOperator(dir, log,
 	// nil)), which falls back to os.Environ() (environmentValues in git.go).
 	// An inherited KANDEV_GITLAB_HOST / GITLAB_HOST / GITLAB_TOKEN then leaks

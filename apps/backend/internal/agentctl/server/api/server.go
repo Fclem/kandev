@@ -146,6 +146,8 @@ func (s *Server) setupRoutes() {
 		api.GET("/agent/opencode/credentials", s.handleOpenCodeCredentialStatus)
 		api.POST("/agent/managed-runtime/cache-repair", s.handleManagedRuntimeCacheRepair)
 		api.POST("/agent/background-work/action", s.handleBackgroundWorkAction)
+		// Backend-only fresh task-context catalog observation; browser proxies deny it.
+		api.POST(catalogCandidatesRoute, s.handleCatalogCandidatesDiscover)
 		api.POST("/start", s.handleStart)
 		api.POST("/stop", s.handleStop)
 

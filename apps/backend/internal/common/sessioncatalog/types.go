@@ -16,6 +16,16 @@ const (
 
 	ReasonNewCandidates     = "new_candidates"
 	ReasonDiscoveryComplete = "discovery_complete"
+	// ReasonExecutorScoped marks remote and isolated executors; they never
+	// receive host choices or an automatic task probe.
+	ReasonExecutorScoped = "executor_scoped"
+	// ReasonContextUnverified covers unknown locality, legacy evidence, a
+	// changed saved source and legacy generic candidates.
+	ReasonContextUnverified = "context_unverified"
+	// ReasonTaskDiscoveryUnsupported and ReasonTaskDiscoveryFailed describe a
+	// task probe outcome; neither is provider startup evidence.
+	ReasonTaskDiscoveryUnsupported = "task_discovery_unsupported"
+	ReasonTaskDiscoveryFailed      = "task_discovery_failed"
 
 	PolicyStrict           = "strict"
 	PolicyProviderRestored = "provider_restored"
@@ -52,6 +62,9 @@ type Discovery struct {
 }
 
 // Observation is revisioned session metadata. A cleared disposition is a tombstone.
+// Host candidates are selectable only with Source SourceTaskProbeV1: Probe is
+// that target's own complete per-surface result, never another session's or
+// the generic settings probe.
 type Observation struct {
 	Version     int                   `json:"version"`
 	Revision    uint64                `json:"revision"`
@@ -60,29 +73,31 @@ type Observation struct {
 	Owner       Owner                 `json:"owner"`
 	Disposition string                `json:"disposition"`
 	Reason      string                `json:"reason"`
+	Source      string                `json:"source,omitempty"`
 	Models      []Choice              `json:"models,omitempty"`
 	Modes       []Choice              `json:"modes,omitempty"`
 	Catalog     *modelcatalog.Catalog `json:"catalog,omitempty"`
+	Probe       *Discovery            `json:"probe,omitempty"`
 	Result      *Discovery            `json:"result,omitempty"`
 }
 
-// LaunchContext is request-scoped evidence. It must never be persisted or sent
-// to a browser: its environment can contain resolved profile secrets.
-type LaunchContext struct {
-	Env                    map[string]string
-	CLIFlags               []string
-	CommandPrefix          []string
-	CopilotSelectedPlugins []string
+// TaskOwnedCandidates reports whether the record may supply selectable host
+// candidates. Legacy generic-origin records never qualify.
+func (o *Observation) TaskOwnedCandidates() bool {
+	return o.Disposition == DispositionHostCandidates && o.Source == SourceTaskProbeV1 && o.Probe != nil &&
+		o.Probe.Outcome == OutcomeComplete
 }
 
 // ExecutionEvidence describes the actual initialized execution being refreshed.
+// SavedSourceCurrent means it was launched under the profile's current saved
+// launch-input revision; it is not launch-context equivalence with a utility.
 type ExecutionEvidence struct {
-	Owner        Owner
-	ProfileID    string
-	AgentID      string
-	ExecutorType string
-	Initialized  bool
-	Compatible   bool
+	Owner              Owner
+	ProfileID          string
+	AgentID            string
+	ExecutorType       string
+	Initialized        bool
+	SavedSourceCurrent bool
 }
 
 // Update is delivered only to subscribers of the owning task session.

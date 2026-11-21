@@ -18,8 +18,14 @@ const pending = {
   owner,
   disposition: "host_candidates",
   reason: "new_candidates",
+  source: "task_probe_v1",
   models: [{ id: "new-model", name: "New model" }],
   modes: [{ id: "new-mode", name: "New mode" }],
+  probe: {
+    outcome: "complete",
+    models: { present: true, supported: true, choices: [{ id: "new-model", name: "New model" }] },
+    modes: { present: true, supported: true, choices: [{ id: "new-mode", name: "New mode" }] },
+  },
 };
 const disposers: Array<() => void> = [];
 afterEach(() => {
@@ -126,4 +132,32 @@ it("retains independent provider availability without fabricating host notice se
   expect(catalog()?.provider).toEqual(provider);
   expect(catalog()?.record).toEqual(pending);
   expect(store.getState().taskSessions.items[sessionId].metadata).toEqual(metadata);
+});
+
+// @covers AC-AGENTS-SESSION-CATALOG-001.7
+it("accepts candidates only from the target's own task probe and keeps per-surface support", () => {
+  const { dispatch, catalog } = harness();
+  const legacyGeneric = { ...pending, revision: 7, source: undefined, probe: undefined };
+  dispatch({ task_id: taskId, session_id: sessionId, record: legacyGeneric });
+  expect(catalog()?.record).toMatchObject({
+    revision: 7,
+    disposition: "rediscovery_required",
+    reason: "context_unverified",
+  });
+  expect(catalog()?.record?.models).toBeUndefined();
+  expect(catalog()?.record?.modes).toBeUndefined();
+
+  const modelOnly = {
+    ...pending,
+    revision: 8,
+    probe: {
+      outcome: "complete",
+      models: { present: true, supported: true, choices: [{ id: "new-model", name: "New model" }] },
+      modes: { present: false, supported: false, choices: null },
+    },
+  };
+  dispatch({ task_id: taskId, session_id: sessionId, record: modelOnly });
+  expect(catalog()?.record?.disposition).toBe("host_candidates");
+  expect(catalog()?.record?.models).toEqual([{ id: "new-model", name: "New model" }]);
+  expect(catalog()?.record?.modes).toBeUndefined();
 });

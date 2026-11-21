@@ -93,7 +93,7 @@ type Controller struct {
 	copilotPluginKey               []byte
 	copilotPluginRandom            io.Reader
 	hostUtility                    hostUtilityProvider
-	catalogRefreshPublisher        func(context.Context, string, string, hostutility.ProfileProbeContext, hostutility.AgentCapabilities, func(context.Context, func() error) error) error
+	catalogRefreshPublisher        CatalogRefreshPublisher
 	catalogRefreshMu               sync.Mutex
 	catalogRefreshGeneration       uint64
 	catalogRefreshFlights          map[string]uint64

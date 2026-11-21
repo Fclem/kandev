@@ -371,5 +371,5 @@ The user selected task-context design after completing provider-contract researc
 The revised design preserves AC001.1 through qualified fresh task-side acquisition,
 not universal notice-only, blanket generated-variable exclusions, copying task
 secrets into the utility or adding cryptographic equality proofs. Initial native
-support and explicitly unqualified ACP/custom surfaces require review in the
-linked compatibility matrix. No revised-boundary production proof exists yet.
+support and explicitly unqualified ACP/custom surfaces follow the linked
+compatibility matrix; production-native proof is recorded in the work orders.

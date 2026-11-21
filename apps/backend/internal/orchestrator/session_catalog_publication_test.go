@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
-	"github.com/kandev/kandev/internal/agent/hostutility"
 	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
@@ -17,17 +17,60 @@ import (
 
 type catalogWorkspaceContextKey struct{}
 
+// catalogFanoutManager is a capability-complete catalogRefreshRuntime fake.
+// Each session's probe returns its own task-owned catalog.
 type catalogFanoutManager struct {
 	*mockAgentManager
-	evidence map[string]sessioncatalog.ExecutionEvidence
-	observed func(string)
+	mu          sync.Mutex
+	evidence    map[string]sessioncatalog.ExecutionEvidence
+	probes      map[string]int
+	savedSource string
+	observed    func(string)
+	probe       func(context.Context, string) (sessioncatalog.TaskProbeReply, error)
 }
 
-func (m *catalogFanoutManager) CatalogRefreshExecution(_ context.Context, sessionID string, _ sessioncatalog.LaunchContext) (sessioncatalog.ExecutionEvidence, error) {
+func (m *catalogFanoutManager) CurrentCatalogSavedSource(context.Context, string) (string, error) {
+	return m.savedSource, nil
+}
+
+func (m *catalogFanoutManager) CatalogRefreshExecution(_ context.Context, sessionID, savedSource string) (sessioncatalog.ExecutionEvidence, error) {
 	if m.observed != nil {
 		m.observed(sessionID)
 	}
-	return m.evidence[sessionID], nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	evidence := m.evidence[sessionID]
+	evidence.SavedSourceCurrent = evidence.SavedSourceCurrent && savedSource == m.savedSource
+	return evidence, nil
+}
+
+func (m *catalogFanoutManager) DiscoverTaskCatalogCandidates(ctx context.Context, sessionID string, owner sessioncatalog.Owner) (sessioncatalog.TaskProbeReply, error) {
+	m.mu.Lock()
+	m.probes[sessionID]++
+	expected := m.evidence[sessionID].Owner
+	m.mu.Unlock()
+	if owner != expected {
+		return sessioncatalog.TaskProbeReply{}, sessioncatalog.ErrTaskProbeOwner
+	}
+	if m.probe != nil {
+		return m.probe(ctx, sessionID)
+	}
+	return taskOwnedReply(sessionID), nil
+}
+
+func (m *catalogFanoutManager) probeCount(sessionID string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.probes[sessionID]
+}
+
+func taskOwnedReply(sessionID string) sessioncatalog.TaskProbeReply {
+	return sessioncatalog.TaskProbeReply{Capability: "fixture", Result: sessioncatalog.Discovery{
+		Outcome: sessioncatalog.OutcomeComplete,
+		Models: sessioncatalog.Surface{Present: true, Supported: true, Choices: []sessioncatalog.Choice{
+			{ID: "model-of-" + sessionID, Name: "Model of " + sessionID},
+		}},
+	}}
 }
 
 type catalogFaultRepository struct {
@@ -53,7 +96,7 @@ func catalogFanoutFixture(t *testing.T, count int) (*Service, *sqliterepo.Reposi
 	require.NoError(t, repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws1", Name: "Own"}))
 	require.NoError(t, repo.CreateWorkflow(ctx, &models.Workflow{ID: "wf1", WorkspaceID: "ws1", Name: "Own"}))
 	seedTaskAndSessionInWorkspace(t, repo, "ws1", "wf1", "catalog-own-task", "own-000", "")
-	manager := &catalogFanoutManager{mockAgentManager: &mockAgentManager{}, evidence: map[string]sessioncatalog.ExecutionEvidence{}}
+	manager := &catalogFanoutManager{mockAgentManager: &mockAgentManager{}, evidence: map[string]sessioncatalog.ExecutionEvidence{}, probes: map[string]int{}, savedSource: "saved-source"}
 	for i := range count {
 		id := fmt.Sprintf("own-%03d", i)
 		if i > 0 {
@@ -89,11 +132,9 @@ func seedCatalogFanoutExecution(t *testing.T, repo *sqliterepo.Repository, manag
 	owner := sessioncatalog.Owner{ExecutionID: "execution-" + sessionID, AttemptID: "attempt-" + sessionID, SourceGeneration: 1}
 	require.NoError(t, repo.UpsertExecutorRunning(ctx, &models.ExecutorRunning{ID: "runtime-" + sessionID, TaskID: session.TaskID, SessionID: sessionID, ExecutionProfileID: "catalog-profile", AgentExecutionID: owner.ExecutionID, Status: models.ExecutorRunningStatusReady}))
 	require.NoError(t, repo.SetSessionMetadataKey(ctx, sessionID, models.SessionMetaKeyACPModelState, map[string]any{"settings_source_execution_id": owner.ExecutionID, "settings_source_generation": owner.SourceGeneration, "settings_attempt_id": owner.AttemptID}))
-	manager.evidence[sessionID] = sessioncatalog.ExecutionEvidence{Owner: owner, ProfileID: "catalog-profile", AgentID: "claude-acp", ExecutorType: "worktree", Initialized: true, Compatible: true}
-}
-
-func catalogFanoutCaps() hostutility.AgentCapabilities {
-	return hostutility.AgentCapabilities{Status: hostutility.StatusOK, Models: []hostutility.Model{{ID: "candidate-model", Name: "Candidate model"}}, Modes: []hostutility.Mode{{ID: "candidate-mode", Name: "Candidate mode"}}}
+	manager.mu.Lock()
+	manager.evidence[sessionID] = sessioncatalog.ExecutionEvidence{Owner: owner, ProfileID: "catalog-profile", AgentID: "codex-app-server", ExecutorType: "worktree", Initialized: true, SavedSourceCurrent: true}
+	manager.mu.Unlock()
 }
 
 func catalogFanoutGuard(ctx context.Context, write func() error) error {
@@ -103,6 +144,8 @@ func catalogFanoutGuard(ctx context.Context, write func() error) error {
 	return write()
 }
 
+// @covers AC-AGENTS-SESSION-CATALOG-001.4
+// @covers AC-AGENTS-SESSION-CATALOG-001.7
 func TestSessionCatalogRefreshBoundedAuthorizedPartialPublication(t *testing.T) {
 	service, repo, manager := catalogFanoutFixture(t, 130)
 	ctx := context.WithValue(context.Background(), catalogWorkspaceContextKey{}, "ws1")
@@ -125,6 +168,7 @@ func TestSessionCatalogRefreshBoundedAuthorizedPartialPublication(t *testing.T) 
 		require.NoError(t, repo.UpsertExecutorRunning(ctx, running))
 	}
 	service.repo = faults
+	var deliveredMu sync.Mutex
 	delivered := map[string]bool{}
 	subscription, err := service.eventBus.Subscribe(events.BuildSessionCatalogRefreshWildcardSubject(), func(ctx context.Context, event *bus.Event) error {
 		update := event.Data.(sessioncatalog.Update)
@@ -133,15 +177,18 @@ func TestSessionCatalogRefreshBoundedAuthorizedPartialPublication(t *testing.T) 
 		record, ok := loadCatalogObservation(current.Metadata[sessioncatalog.MetadataKey])
 		require.True(t, ok)
 		require.Equal(t, record, update.Record)
+		deliveredMu.Lock()
 		delivered[update.SessionID] = true
+		deliveredMu.Unlock()
 		return nil
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subscription.Unsubscribe() })
-	publicationErr := service.PublishProfileCatalog(ctx, "catalog-profile", "claude-acp", hostutility.ProfileProbeContext{}, catalogFanoutCaps(), catalogFanoutGuard)
+	publicationErr := service.PublishProfileCatalog(ctx, "catalog-profile", "codex-app-server", catalogFanoutGuard)
 	require.Error(t, publicationErr, "partial persistence failure must not claim all-session publication")
 	require.NotContains(t, publicationErr.Error(), "TOKEN")
 	require.NotContains(t, publicationErr.Error(), "own-001")
+	require.Zero(t, manager.probeCount("foreign-session"), "an unauthorized task must not reach a task-side request")
 	for sessionID, evidence := range manager.evidence {
 		current, readErr := repo.GetTaskSession(ctx, sessionID)
 		require.NoError(t, readErr)
@@ -158,12 +205,14 @@ func TestSessionCatalogRefreshBoundedAuthorizedPartialPublication(t *testing.T) 
 		require.True(t, ok, sessionID)
 		require.Equal(t, uint64(1), record.Revision)
 		require.Equal(t, evidence.Owner, record.Owner)
-		require.Equal(t, []sessioncatalog.Choice{{ID: "candidate-model", Name: "Candidate model"}}, record.Models)
-		require.Equal(t, []sessioncatalog.Choice{{ID: "candidate-mode", Name: "Candidate mode"}}, record.Modes)
+		require.Equal(t, sessioncatalog.SourceTaskProbeV1, record.Source)
+		require.Equal(t, []sessioncatalog.Choice{{ID: "model-of-" + sessionID, Name: "Model of " + sessionID}}, record.Models, "each session receives only its own task-owned catalog")
+		require.Nil(t, record.Modes, "an unsupported mode surface is not an empty supported catalog")
 		require.True(t, delivered[sessionID], sessionID)
 	}
 }
 
+// @covers AC-AGENTS-SESSION-CATALOG-001.4
 func TestSessionCatalogRefreshReauthorizesObservedTaskBeforeCommit(t *testing.T) {
 	service, repo, manager := catalogFanoutFixture(t, 1)
 	ctx := context.WithValue(context.Background(), catalogWorkspaceContextKey{}, "ws1")
@@ -174,44 +223,53 @@ func TestSessionCatalogRefreshReauthorizesObservedTaskBeforeCommit(t *testing.T)
 		}
 		return nil
 	}
-	manager.observed = func(string) { authorized = false }
-	require.Error(t, service.PublishProfileCatalog(ctx, "catalog-profile", "claude-acp", hostutility.ProfileProbeContext{}, catalogFanoutCaps(), catalogFanoutGuard))
+	manager.probe = func(_ context.Context, sessionID string) (sessioncatalog.TaskProbeReply, error) {
+		authorized = false
+		return taskOwnedReply(sessionID), nil
+	}
+	require.NoError(t, service.PublishProfileCatalog(ctx, "catalog-profile", "codex-app-server", catalogFanoutGuard))
 	current, err := repo.GetTaskSession(ctx, "own-000")
 	require.NoError(t, err)
-	require.Nil(t, current.Metadata[sessioncatalog.MetadataKey], "authorization observed before runtime inspection cannot authorize the later write")
+	require.Nil(t, current.Metadata[sessioncatalog.MetadataKey], "authorization observed before the task probe cannot authorize the later write")
 }
 
+// @covers AC-AGENTS-SESSION-CATALOG-001.6
 func TestSessionCatalogRefreshCancellationPreservesCommittedDelivery(t *testing.T) {
-	service, repo, _ := catalogFanoutFixture(t, 2)
+	service, repo, manager := catalogFanoutFixture(t, 3)
 	scoped := context.WithValue(context.Background(), catalogWorkspaceContextKey{}, "ws1")
 	ctx, cancel := context.WithCancel(scoped)
 	t.Cleanup(cancel)
+	committed := make(chan struct{})
+	manager.probe = func(probeCtx context.Context, sessionID string) (sessioncatalog.TaskProbeReply, error) {
+		if sessionID == "own-000" {
+			return taskOwnedReply(sessionID), nil
+		}
+		<-committed
+		cancel()
+		<-probeCtx.Done()
+		return sessioncatalog.TaskProbeReply{}, probeCtx.Err()
+	}
 	delivered := false
 	subscription, err := service.eventBus.Subscribe(events.BuildSessionCatalogRefreshWildcardSubject(), func(ctx context.Context, event *bus.Event) error {
 		require.NoError(t, ctx.Err(), "a committed observation still needs a usable post-commit delivery context")
 		require.Equal(t, "ws1", ctx.Value(catalogWorkspaceContextKey{}))
 		update := event.Data.(sessioncatalog.Update)
-		current, readErr := repo.GetTaskSession(ctx, update.SessionID)
-		require.NoError(t, readErr)
-		require.NotNil(t, current.Metadata[sessioncatalog.MetadataKey])
+		require.Equal(t, "own-000", update.SessionID)
 		delivered = true
+		close(committed)
 		return nil
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subscription.Unsubscribe() })
-	guard := func(ctx context.Context, write func() error) error {
-		if err := write(); err != nil {
-			return err
-		}
-		cancel()
-		return nil
-	}
-	require.ErrorIs(t, service.PublishProfileCatalog(ctx, "catalog-profile", "claude-acp", hostutility.ProfileProbeContext{}, catalogFanoutCaps(), guard), context.Canceled)
+	require.ErrorIs(t, service.PublishProfileCatalog(ctx, "catalog-profile", "codex-app-server", catalogFanoutGuard), context.Canceled)
 	first, err := repo.GetTaskSession(scoped, "own-000")
 	require.NoError(t, err)
 	require.NotNil(t, first.Metadata[sessioncatalog.MetadataKey])
-	second, err := repo.GetTaskSession(scoped, "own-001")
-	require.NoError(t, err)
-	require.Nil(t, second.Metadata[sessioncatalog.MetadataKey], "request cancellation stops the remaining fan-out")
+	for _, sessionID := range []string{"own-001", "own-002"} {
+		current, readErr := repo.GetTaskSession(scoped, sessionID)
+		require.NoError(t, readErr)
+		require.Nil(t, current.Metadata[sessioncatalog.MetadataKey], "request cancellation stops the remaining fan-out")
+	}
 	require.True(t, delivered)
+	require.Zero(t, manager.probeCount("own-000")-1, "the committed session was probed exactly once")
 }

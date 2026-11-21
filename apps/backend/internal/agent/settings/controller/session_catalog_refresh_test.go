@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -14,7 +13,7 @@ import (
 )
 
 type catalogPublisherInstaller interface {
-	SetCatalogRefreshPublisher(func(context.Context, string, string, hostutility.ProfileProbeContext, hostutility.AgentCapabilities, func(context.Context, func() error) error) error)
+	SetCatalogRefreshPublisher(CatalogRefreshPublisher)
 }
 
 // @covers AC-AGENTS-SESSION-CATALOG-001.3
@@ -31,12 +30,12 @@ func TestSavedRefreshDoesNotPublishDraftOrFailedProbe(t *testing.T) {
 	if !ok {
 		t.Fatal("successful saved refresh has no publication boundary")
 	}
-	var published []hostutility.AgentCapabilities
-	installer.SetCatalogRefreshPublisher(func(ctx context.Context, id, agent string, launch hostutility.ProfileProbeContext, caps hostutility.AgentCapabilities, commit func(context.Context, func() error) error) error {
-		if id != profile.ID || agent != "codex-acp" || launch.Scope != "user-1:"+profile.ID {
-			t.Fatal("publication lost saved profile scope")
+	var published []string
+	installer.SetCatalogRefreshPublisher(func(ctx context.Context, id, agent string, commit func(context.Context, func() error) error) error {
+		if id != profile.ID || agent != "codex-acp" {
+			t.Fatal("publication lost saved profile identity")
 		}
-		return commit(ctx, func() error { published = append(published, caps); return nil })
+		return commit(ctx, func() error { published = append(published, id); return nil })
 	})
 	if _, err := ctrl.FetchProfileDynamicModels(ctx, "codex-acp", dto.ProfileCapabilityRequest{ProfileID: profile.ID, AuthorizationScope: "user-1", Refresh: true}); err != nil {
 		t.Fatal(err)
@@ -51,8 +50,8 @@ func TestSavedRefreshDoesNotPublishDraftOrFailedProbe(t *testing.T) {
 	if len(result.Models) < 2 || result.Models[0].ID == "model-a" {
 		t.Fatalf("test did not enable separate host-CLI enrichment: %+v", result.Models)
 	}
-	if len(published) != 1 || !reflect.DeepEqual(published[0].Models, []hostutility.Model{{ID: "model-a", Name: "Model A"}}) {
-		t.Fatalf("saved publication = %+v", published)
+	if len(published) != 1 {
+		t.Fatalf("saved publication = %+v, want exactly one gated fan-out", published)
 	}
 	assertCatalogPublicationStatus(t, result, "published")
 	utility.capabilityResult = &hostutility.ProfileCapabilityResult{Capabilities: hostutility.AgentCapabilities{Status: hostutility.StatusFailed, Error: "TOKEN=secret"}}
@@ -64,7 +63,7 @@ func TestSavedRefreshDoesNotPublishDraftOrFailedProbe(t *testing.T) {
 		t.Fatal("failed probe published a session update")
 	}
 	assertCatalogPublicationStatus(t, result, "not_published")
-	installer.SetCatalogRefreshPublisher(func(context.Context, string, string, hostutility.ProfileProbeContext, hostutility.AgentCapabilities, func(context.Context, func() error) error) error {
+	installer.SetCatalogRefreshPublisher(func(context.Context, string, string, func(context.Context, func() error) error) error {
 		return errors.New("TOKEN=private-session")
 	})
 	utility.capabilityResult = nil
@@ -133,7 +132,7 @@ func TestSavedProfileCatalogRefreshRejectsSupersededProbe(t *testing.T) {
 	utility := &changingCatalogUtility{}
 	ctrl.hostUtility = utility
 	published := 0
-	ctrl.SetCatalogRefreshPublisher(func(ctx context.Context, _, _ string, _ hostutility.ProfileProbeContext, _ hostutility.AgentCapabilities, commit func(context.Context, func() error) error) error {
+	ctrl.SetCatalogRefreshPublisher(func(ctx context.Context, _, _ string, commit func(context.Context, func() error) error) error {
 		return commit(ctx, func() error { published++; return nil })
 	})
 	utility.afterProbe = func() {
@@ -166,7 +165,7 @@ func TestSavedProfileCatalogRefreshRechecksContextDuringFanout(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			committed := 0
-			ctrl.SetCatalogRefreshPublisher(func(ctx context.Context, _, _ string, _ hostutility.ProfileProbeContext, _ hostutility.AgentCapabilities, commit func(context.Context, func() error) error) error {
+			ctrl.SetCatalogRefreshPublisher(func(ctx context.Context, _, _ string, commit func(context.Context, func() error) error) error {
 				if err := commit(ctx, func() error { committed++; return nil }); err != nil {
 					return err
 				}

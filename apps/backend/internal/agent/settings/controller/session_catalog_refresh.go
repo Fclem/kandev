@@ -53,10 +53,13 @@ func (c *Controller) beginCatalogProfileMutation(profileID string) func() {
 	}
 }
 
+// CatalogRefreshPublisher fans a successful saved-profile probe out to the
+// profile's authorized live sessions. It receives only the saved-source
+// identity and the commit fence, never the generic probe's choices.
+type CatalogRefreshPublisher func(ctx context.Context, profileID, agentName string, commit func(context.Context, func() error) error) error
+
 // SetCatalogRefreshPublisher connects saved discovery to authorized session publication.
-func (c *Controller) SetCatalogRefreshPublisher(
-	publish func(context.Context, string, string, hostutility.ProfileProbeContext, hostutility.AgentCapabilities, func(context.Context, func() error) error) error,
-) {
+func (c *Controller) SetCatalogRefreshPublisher(publish CatalogRefreshPublisher) {
 	c.catalogRefreshPublisher = publish
 }
 
@@ -118,7 +121,7 @@ func (c *Controller) publishSavedProfileCatalog(
 	if err := commit(ctx, func() error { return nil }); err != nil {
 		return catalogPublicationFailed()
 	}
-	if err := c.catalogRefreshPublisher(ctx, profile.ID, agentName, launch, result.Capabilities, commit); err != nil {
+	if err := c.catalogRefreshPublisher(ctx, profile.ID, agentName, commit); err != nil {
 		return catalogPublicationFailed()
 	}
 	return &dto.CatalogPublicationDTO{Status: "published"}

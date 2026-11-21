@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { test } from "../../fixtures/test-base";
 import {
   assertCatalogNativeRetained,
+  assertCatalogProbeHelpersOnly,
   catalogMutationFrames,
   catalogRecord,
   cleanupSessionCatalogScenario,
@@ -64,8 +65,10 @@ test("publishes saved catalog drift to the open composer and requires consent be
     expect(catalogRecord(published)).toMatchObject({
       disposition: "host_candidates",
       reason: "new_candidates",
+      source: "task_probe_v1",
       owner: { execution_id: before.agent_execution_id },
     });
+    assertCatalogProbeHelpersOnly(fixture);
     expect(published.agent_execution_id).toBe(before.agent_execution_id);
     expect(published.metadata?.runtime_config).toEqual(before.metadata?.runtime_config);
     expect(published.metadata?.acp_config_baseline).toEqual(before.metadata?.acp_config_baseline);

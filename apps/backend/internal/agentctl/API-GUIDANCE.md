@@ -5,6 +5,10 @@ agentctl exposes these route groups (see `server/api/`):
 - `/instances/*` - Multi-instance management
 - `/processes/*` - Agent subprocess management (start/stop)
 - `/agent/configure`, `/agent/stream` - Agent configuration and event streaming
+- `/agent/catalog-candidates/discover` - Backend-only fresh catalog read in the sealed
+  launch context of the named live owner (`process/catalog_probe*.go`). Requires
+  authenticated control plus the exact `X-Instance-ID`; browser proxies refuse it via
+  `client.ProxyTransport`. The helper never starts or resumes a conversation.
 - `/lsp/stream` - Task-host language-server stdio/WebSocket bridge
 - `/git/*` - Git operations (status, commit, push, pull, rebase, stage, create PR, etc.)
 - `/shell/*` - Shell session management

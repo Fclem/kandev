@@ -2122,7 +2122,7 @@ func (m *Manager) resetAgentRestartState(executionID string, preparation agentRe
 		exec.ContinueArgs = commands.continueArgs
 		exec.LaunchWrapper = commands.wrapper
 		exec.OpenCodeRuntime = commands.openCodeRuntime
-		exec.catalogCommand.Store(commands.catalogCommand)
+		exec.catalogSavedSource.Store(&commands.catalogSavedSource)
 		if preparation.copilotPluginArgsPrepared {
 			exec.setRuntimeEnvironment(preparation.runtimeEnvironment)
 		}

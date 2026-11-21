@@ -58,6 +58,7 @@ func (s *Service) settleCatalogDiscovery(ctx context.Context, store catalogDisco
 	next := previous
 	next.Owner = *owner
 	next.Models, next.Modes, next.Catalog = nil, nil, nil
+	next.Source, next.Probe, next.Digest = "", nil, ""
 	next.Result = payload.Data.CatalogDiscovery
 	next.Disposition, next.Reason = sessioncatalog.DispositionRediscoveryRequired, next.Result.Outcome
 	if next.Result.Outcome == sessioncatalog.OutcomeComplete {

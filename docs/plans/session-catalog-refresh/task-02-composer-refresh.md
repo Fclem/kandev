@@ -324,6 +324,62 @@ not a new runtime discovery timeout or automatic recovery policy.
 
 ## Results
 
+### Revised acquisition implementation (2026-11-21)
+
+The paragraphs after this section are historical generic-candidate evidence and
+do not qualify task-owned provenance.
+
+- **Provenance gate.** `sessionCatalogRecordSchema` accepts host candidates only
+  with `source: "task_probe_v1"` and a complete `probe`. A missing or legacy
+  source becomes a `context_unverified` rediscovery notice; an unsupported probe
+  surface drops its list. Because every HTTP, boot and WebSocket parse uses the
+  schema, no consumer can reinterpret legacy candidates. Behavioral RED: the
+  existing projection kept the legacy record and stripped the new provenance;
+  GREEN after the transform. Six affected frontend suites passed 44 tests,
+  with fixtures migrated to the task-owned shape.
+- **Mock fixture.** The mock agent answers a read-only `initialize` extension
+  from its own catalog file and records a `catalog_probe` trace event. It opens
+  no session (RED: invalid result before wiring; GREEN after).
+- **Browser fixture.** The desktop catalog scenario no longer aligns GitLab
+  credentials between the settings probe and the task, because candidates no
+  longer depend on that equality. It asserts `source: task_probe_v1` and that
+  helper processes emitted only `initialize`/`catalog_probe`. The Docker spec
+  additionally asserts that no task probe provenance reaches an isolated
+  executor.
+- **Guidance.** The public profile guide describes per-session fresh readers,
+  the qualified native capability, distinct task catalogs, notice-only cases and
+  the 60-second fan-out bound. `i18n:check` and the new-code ratchet passed.
+- **Browser collections.** After rebuilding the backend, fixtures, plugin
+  package and `build:e2e` assets on cache-backed outputs, the final-source
+  desktop collection (catalog, restart and profile discovery specs, project
+  `chromium`) passed 22 tests in 7.9 minutes, and the phone collection (project
+  `mobile-chrome`) passed 19 tests in 5.1 minutes. Inspected captures show the
+  task-owned candidate marked **Requires session refresh**, the provider-only
+  group, retained draft, and the phone confirmation with 44px actions.
+- **Native proof.** The actual Codex 0.169.0 Local/Worktree experiment in Task 01
+  ran through the real saved endpoint and native helper; two tasks received
+  distinct task-owned catalogs while the editor reported a third.
+- **Docker.** Still unavailable: no `docker`/`podman` binary or socket, and the
+  install's Local Docker executor has no profile and points to a missing
+  socket. `tests/docker/session-catalog-refresh.spec.ts` now also asserts that no
+  task-probe provenance reaches the container, but it has not run. This remains
+  the open external gate for this work order.
+- **Root gates.** `make fmt` passed; its only rewrite outside this change
+  (`apps/packages/plugin-sdk/sdk-release.json`) was restored to committed bytes.
+  `make -k typecheck test lint` then ran once in a sanitized environment with
+  `GOFLAGS='-p=2 -timeout=2h'`: typecheck, every backend package, CLI and
+  script tests, backend `golangci-lint` (0 issues), harness, specification and
+  architecture lint passed. Web tests passed 31,437 with 2 load timeouts in
+  unrelated files (`scripts/lib/migrated-system-query-owner-wiring.test.ts`,
+  `storage-maintenance-settings.test.tsx`); both files passed alone (66 tests).
+  Oxlint flagged complexity 16 in the Docker spec after its new assertions; the
+  record checks moved into `expectExecutorScopedNotice` and `make lint-web` then
+  reported 0 warnings.
+
+In progress only for the real Docker run above; every other Task 02 gate passed.
+
+### Historical generic-candidate evidence
+
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race
 results and complete desktop/phone collections passed. The full scripts gate
 now passes after native Rust and cache-backed desktop-build prerequisites were

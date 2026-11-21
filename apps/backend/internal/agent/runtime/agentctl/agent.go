@@ -177,6 +177,7 @@ type NewSessionResponse struct {
 	SessionID           string                     `json:"session_id,omitempty"`
 	ModelState          *streams.SessionModelState `json:"model_state,omitempty"`
 	CatalogDiscovery    *sessioncatalog.Discovery  `json:"catalog_discovery,omitempty"`
+	SessionSource       uint64                     `json:"session_source,omitempty"`
 	AttachmentAttemptID string                     `json:"attachment_attempt_id,omitempty"`
 	Error               string                     `json:"error,omitempty"`
 }
@@ -216,6 +217,7 @@ func (c *Client) createSessionRequest(ctx context.Context, action, cwd string, m
 	}
 	c.setSessionSetupModelState(result.SessionID, result.ModelState)
 	c.setLastAttachmentAttemptID(result.AttachmentAttemptID)
+	c.recordSessionSource(result.SessionID, result.SessionSource)
 	return result, nil
 }
 
@@ -308,6 +310,7 @@ func (c *Client) LoadSessionWithResult(ctx context.Context, sessionID string, mc
 	}
 	c.setSessionSetupModelState(sessionID, result.ModelState)
 	c.setLastAttachmentAttemptID(result.AttachmentAttemptID)
+	c.recordSessionSource(sessionID, result.SessionSource)
 	return result, nil
 }
 
@@ -351,6 +354,7 @@ func (c *Client) ResumeSessionWithResult(ctx context.Context, sessionID, cwd str
 	}
 	c.setSessionSetupModelState(sessionID, result.ModelState)
 	c.setLastAttachmentAttemptID(result.AttachmentAttemptID)
+	c.recordSessionSource(sessionID, result.SessionSource)
 	return result, nil
 }
 

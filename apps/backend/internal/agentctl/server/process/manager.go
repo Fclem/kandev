@@ -427,6 +427,14 @@ type Manager struct {
 	// agentProcessIdentity is the running agent child's process-group identity,
 	// reported in the delivery descriptor for per-session termination proof.
 	agentProcessIdentity atomic.Pointer[processidentity.Identity]
+
+	// catalogLaunch is the sealed final command of the current generation.
+	// catalogProbeActive admits one fresh catalog helper per instance.
+	catalogLaunch      atomic.Pointer[catalogLaunch]
+	catalogProbeActive atomic.Bool
+	// catalogProbeQualifier is a deterministic test seam for helper fixtures.
+	// Production leaves it nil and uses the versioned capability table.
+	catalogProbeQualifier func(*catalogLaunch) (catalogProbeCapability, bool)
 }
 
 // ErrManagerStopping indicates that process admission is closed for teardown.
@@ -2568,6 +2576,8 @@ func (m *Manager) startManagedProcess() (uint64, error) {
 	// Auto-create shell session if enabled
 	m.startAgentShell()
 
+	m.catalogLaunch.Store(sealCatalogLaunch(m.cmd, processGeneration, m.cfg.AgentType, string(m.cfg.Protocol),
+		!m.cfg.LaunchWrapper.IsZero() || m.cfg.LaunchWrapperRequired, m.managedRuntimeCommand))
 	m.status.Store(StatusRunning)
 	m.logger.Info("agent process started", zap.Int("pid", m.cmd.Process.Pid))
 

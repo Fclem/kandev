@@ -138,16 +138,15 @@ export async function createSessionCatalogScenario(
   seed: SeedData,
   backend: BackendContext,
 ): Promise<SessionCatalogScenario> {
-  const releaseBackend = await backend.useEnv({ KANDEV_MOCK_GITLAB: "true" });
+  // Task-side discovery reads the session's own sealed context, so no
+  // credential alignment between the settings probe and the task is needed.
+  const releaseBackend = async () => {};
   try {
     const fixtureRoot = fs.mkdtempSync(path.join(backend.tmpDir, "session-catalog-"));
     const catalogPath = path.join(fixtureRoot, "catalog.json");
     const tracePath = path.join(fixtureRoot, "acp.jsonl");
     writeSessionCatalogFile(catalogPath, "baseline");
     fs.writeFileSync(tracePath, "");
-    const host = "https://gitlab.catalog-fixture.invalid";
-    const token = `catalog-fixture:${seed.workspaceId}`;
-    await api.configureGitLab(seed.workspaceId, host, token);
     const { agents } = await api.listAgents();
     const agent = agents.find((candidate) => candidate.name === "mock-agent");
     if (!agent) throw new Error("Mock agent is required for catalog refresh");
@@ -159,8 +158,6 @@ export async function createSessionCatalogScenario(
       env_vars: [
         { key: "MOCK_AGENT_SESSION_CATALOG_FILE", value: catalogPath },
         { key: "E2E_MOCK_AGENT_ACP_TRACE_FILE", value: tracePath },
-        { key: "GITLAB_HOST", value: host },
-        { key: "GITLAB_TOKEN", value: token },
       ],
     });
     const wire = watchWs(page);
@@ -311,6 +308,22 @@ export function assertCatalogNativeRetained(
   expect(
     events.filter((event) => event.event === "prompt" && event.session_id === fixture.nativeId),
   ).toHaveLength(expectedPrompts);
+}
+
+// Fresh task-side helpers are separate processes that only initialize with
+// the read-only probe extension: no session, load, prompt or setting.
+export function assertCatalogProbeHelpersOnly(fixture: SessionCatalogScenario): void {
+  const events = readMockACPTrace(fixture.tracePath);
+  const helpers = new Set(
+    events.filter((event) => event.event === "catalog_probe").map((event) => event.process_id),
+  );
+  expect(helpers.size).toBeGreaterThan(0);
+  expect(
+    events
+      .filter((event) => helpers.has(event.process_id))
+      .map((event) => event.event)
+      .filter((event) => event !== "initialize" && event !== "catalog_probe"),
+  ).toEqual([]);
 }
 
 export async function cleanupSessionCatalogScenario(

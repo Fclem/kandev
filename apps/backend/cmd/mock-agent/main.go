@@ -16,6 +16,7 @@ import (
 	"time"
 
 	acp "github.com/coder/acp-go-sdk"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 )
 
 // Advertised model ids. mock-slow is a delay tier (see delayRange) that E2E
@@ -164,7 +165,7 @@ func (a *mockAgent) Initialize(_ context.Context, req acp.InitializeRequest) (ac
 	} else {
 		meta = mockClaudeCodeMeta()
 	}
-	return acp.InitializeResponse{
+	response := acp.InitializeResponse{
 		ProtocolVersion: acp.ProtocolVersionNumber,
 		AgentInfo:       agentInfo,
 		AgentCapabilities: acp.AgentCapabilities{
@@ -178,7 +179,12 @@ func (a *mockAgent) Initialize(_ context.Context, req acp.InitializeRequest) (ac
 			},
 			Meta: meta,
 		},
-	}, nil
+	}
+	if catalogProbeRequested(req) {
+		traceACP("catalog_probe", "", nil)
+		response.Meta = map[string]any{sessioncatalog.MockCatalogProbeMetaKey: a.catalogProbeDiscovery()}
+	}
+	return response, nil
 }
 
 // mockClaudeCodeMeta advertises the two independent Claude contracts the mock

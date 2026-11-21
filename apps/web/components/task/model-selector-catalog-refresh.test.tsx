@@ -68,6 +68,20 @@ const ARIA_DISABLED_ATTRIBUTE = "aria-disabled";
 
 const id = "catalog-session";
 const owner = { execution_id: "execution-1", attempt_id: "attempt-1", source_generation: 1 };
+type ProbeChoice = { id: string; name?: string };
+// The target's own complete task probe; only this provenance is selectable.
+function taskProbe(models: ProbeChoice[], modes?: ProbeChoice[]) {
+  return {
+    source: "task_probe_v1",
+    probe: {
+      outcome: "complete",
+      models: { present: true, supported: true, choices: models },
+      modes: modes
+        ? { present: true, supported: true, choices: modes }
+        : { present: false, supported: false, choices: null },
+    },
+  };
+}
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.request.mockReset();
@@ -130,6 +144,13 @@ beforeEach(() => {
         { id: "old-model", name: "Old model" },
       ],
       modes: [],
+      ...taskProbe(
+        [
+          { id: "new-model", name: "New model" },
+          { id: "old-model", name: "Old model" },
+        ],
+        [],
+      ),
     }),
   );
 });
@@ -209,6 +230,7 @@ it("offers candidates for an initial owner whose empty attempt is omitted from t
       reason: "new_candidates",
       models: [{ id: "new-model", name: "New model" }],
       modes: [],
+      ...taskProbe([{ id: "new-model", name: "New model" }], []),
     }),
   );
   render(
@@ -432,6 +454,10 @@ function publishGroupedHostCatalog(composed: boolean, mixed = false) {
       profile_id: "profile",
       disposition: "host_candidates",
       reason: "new_candidates",
+      ...taskProbe([
+        { id: "new-model", name: "New model" },
+        { id: "old-model", name: "Old model" },
+      ]),
       models: [
         { id: "new-model", name: "New model" },
         { id: "old-model", name: "Old model" },

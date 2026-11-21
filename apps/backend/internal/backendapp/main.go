@@ -851,6 +851,9 @@ func startAgentInfrastructure(
 	}
 	services.Task.SetWorkflowMovePreflight(orchestratorSvc)
 	agentSettingsController.SetCatalogRefreshPublisher(orchestratorSvc.PublishProfileCatalog)
+	if repos.Task != nil {
+		retireLegacySessionCatalogCandidates(ctx, repos.Task, log)
+	}
 	orchestratorSvc.SetAgentctlBinaryPath(agentctlBinaryPath)
 	// These queries distinguish successfully re-tracked executions from remote
 	// owners whose guarded retry is still pending during startup reconciliation.

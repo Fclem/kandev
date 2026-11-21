@@ -606,17 +606,32 @@ saved-profile refresh flow. If discovery succeeds but session publication fails,
 the profile keeps its discovered choices and shows a separate notification
 failure. Retry the saved refresh to notify sessions.
 
-Compatible local and worktree sessions can show the host's newly observed models
-and modes as candidates. Provider groups and exact identifiers are retained.
-Choices already advertised by the session remain selectable normally. Selecting
-a host-only candidate opens **Refresh session** consent instead of sending an
-unadvertised model or configuration request. A host listing does not prove
+A successful saved refresh does not copy the profile editor's list into tasks.
+Instead, each eligible local or worktree session checks its own current
+configuration with a short-lived, separate catalog reader. The reader uses that
+session's actual launch command, environment, and working directory. It never
+starts, resumes, or prompts a conversation, and it never changes the running
+agent's selection. Two tasks can therefore show different candidates, and the
+profile editor can show a third list. Kandev checks at most two sessions at a
+time and stops checking after 60 seconds.
+
+Candidates appear only for providers whose fresh catalog reader is supported.
+Currently, this is native Codex app-server version 0.169.0 without a wrapper or
+custom CLI flags, and it reports models only. Other providers, custom commands,
+wrappers, and older sessions that predate the reader receive a notice and keep
+their own provider choices.
+
+Candidate choices retain their provider groups and exact identifiers. Choices
+already advertised by the session remain selectable normally. Selecting a
+session-only candidate opens **Refresh session** consent instead of sending an
+unadvertised model or configuration request. A catalog listing does not prove
 account entitlement or support in the running provider.
 
-An isolated or remote executor, an unknown execution context, or different
-effective launch settings receives a notice without importing host choices.
-Its own provider catalog remains authoritative. The composer notice is available
-even when the provider has no usable model picker.
+An isolated or remote executor, an unknown execution context, a session launched
+with older saved launch settings, or a failed or unsupported check receives a
+notice without importing other choices. Its own provider catalog remains
+authoritative. The composer notice is available even when the provider has no
+usable model picker.
 
 Choose **Refresh session** in the task, preview, or Quick Chat composer to stop
 and resume the captured session on its existing executor. Review the interruption

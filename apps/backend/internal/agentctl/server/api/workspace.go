@@ -178,7 +178,7 @@ func (s *Server) handleWorkspaceRootFiles(c *gin.Context) {
 	listing, err := s.procMgr.WorkspaceRootFiles(c.Request.Context())
 	if err != nil {
 		s.logger.Error("failed to list workspace root files", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list workspace root files"})
+		c.JSON(http.StatusInternalServerError, gin.H{errKey: "failed to list workspace root files"})
 		return
 	}
 	c.JSON(http.StatusOK, listing)

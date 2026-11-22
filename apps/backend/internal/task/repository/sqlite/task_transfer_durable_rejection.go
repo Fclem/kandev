@@ -49,8 +49,9 @@ func (identity taskTransferAttemptIdentity) matches(command models.TaskTransferC
 // transferTaskWithDurableRejection runs one reviewed Web transfer under the
 // shared transfer serialization. Outcome precedence is: committed receipt,
 // then this caller's terminal rejection, then the guarded mutation. A domain
-// guard rejection rolls back to the mutation savepoint and commits exactly one
-// failed attempt row bound to this caller and request; that row is the barrier
+// guard rejection commits exactly one failed attempt row bound to this caller
+// and request after rolling back any mutation effects (a source_changed found
+// under the workspace-row locks takes no savepoint); that row is the barrier
 // that keeps every later same-key attempt from committing.
 func (r *Repository) transferTaskWithDurableRejection(
 	ctx context.Context,

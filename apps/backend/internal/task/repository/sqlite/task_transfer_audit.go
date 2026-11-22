@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,8 +103,10 @@ func (r *Repository) insertTaskTransferAttempt(
 	command models.TaskTransferCommand,
 	result string,
 ) error {
-	if result != taskTransferResultDenied && result != taskTransferResultConflict && result != taskTransferResultFailed {
-		result = taskTransferResultFailed
+	// An unknown result is a programming error, never coerced: failed is a durable
+	// Web barrier, so a silent fallback would terminalize a retryable key.
+	if result != models.TaskTransferAuditDenied && result != models.TaskTransferAuditConflict && result != models.TaskTransferAuditFailed {
+		return fmt.Errorf("unknown task transfer audit result %q", result)
 	}
 	auditID := command.AuditAttemptID
 	if auditID == "" {

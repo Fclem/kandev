@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository/repoerrors"
 )
 
@@ -15,7 +16,7 @@ func TestTaskTransferPrecheckReturnsCommittedReceiptBeforeBarrier(t *testing.T) 
 	if err != nil {
 		t.Fatalf("TransferTask: %v", err)
 	}
-	if err := repo.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed); err != nil {
+	if err := repo.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditFailed); err != nil {
 		t.Fatalf("RecordTaskTransferAttempt after commit: %v", err)
 	}
 	replay, err := repo.TaskTransferPrecheck(ctx, command)
@@ -31,7 +32,7 @@ func TestTaskTransferPrecheckReturnsTerminalRejectionForBarrier(t *testing.T) {
 	repo, task := seedTaskTransferFixture(t)
 	ctx := context.Background()
 	command := taskTransferCommand(task)
-	if err := repo.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed); err != nil {
+	if err := repo.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditFailed); err != nil {
 		t.Fatalf("RecordTaskTransferAttempt: %v", err)
 	}
 	receipt, err := repo.TaskTransferPrecheck(ctx, command)

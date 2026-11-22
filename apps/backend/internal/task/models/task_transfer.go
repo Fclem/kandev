@@ -4,6 +4,15 @@ import "time"
 
 const TaskTransferPreservationPolicyV1 = "preserve-task-identity-v1"
 
+// Audit results for an attempt that commits no transfer. Denied and failed rows
+// are terminal barriers to a durable Web retry of the same request; conflict rows
+// never are.
+const (
+	TaskTransferAuditDenied   = "denied"
+	TaskTransferAuditConflict = "conflict"
+	TaskTransferAuditFailed   = "failed"
+)
+
 type TaskTransferActorKind string
 
 const (

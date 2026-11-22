@@ -63,7 +63,7 @@ const rejectedTaskTransferAuditTimeout = 2 * time.Second
 func (h *Handlers) handleTransferTask(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var request taskTransferRequest
 	if err := decodeTaskTransferRequest(msg.Payload, &request); err != nil {
-		h.auditRejectedTaskTransfer(ctx, request, "failed")
+		h.auditRejectedTaskTransfer(ctx, request, models.TaskTransferAuditFailed)
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeBadRequest, "invalid task transfer payload", nil)
 	}
 	if h.taskTransferSvc == nil {
@@ -71,9 +71,9 @@ func (h *Handlers) handleTransferTask(ctx context.Context, msg *ws.Message) (*ws
 	}
 	command, err := h.taskTransferCommand(ctx, request)
 	if err != nil {
-		result := "denied"
+		result := models.TaskTransferAuditDenied
 		if errors.Is(err, repoerrors.ErrTaskTransferConflict) {
-			result = "conflict"
+			result = models.TaskTransferAuditConflict
 		}
 		h.auditRejectedTaskTransfer(ctx, request, result)
 		if errors.Is(err, repoerrors.ErrTaskTransferConflict) {
@@ -118,7 +118,7 @@ func (h *Handlers) handleAuditTaskTransferAttempt(ctx context.Context, msg *ws.M
 	if err != nil {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeBadRequest, "invalid task transfer audit payload", nil)
 	}
-	if err := h.recordRejectedTaskTransfer(ctx, request, "failed"); err != nil {
+	if err := h.recordRejectedTaskTransfer(ctx, request, models.TaskTransferAuditFailed); err != nil {
 		h.logger.Error("audit rejected task transfer", zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "task transfer audit failed", nil)
 	}

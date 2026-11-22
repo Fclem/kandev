@@ -185,8 +185,8 @@ func TestTransferTaskAuditsValidationAndTransactionFailuresAfterCancellation(t *
 			command := taskTransferCommand(task)
 			command.DestinationWorkflowID = ""
 			return command
-		}, result: taskTransferResultConflict},
-		{name: "transaction failure", command: taskTransferCommand, result: taskTransferResultFailed},
+		}, result: models.TaskTransferAuditConflict},
+		{name: "transaction failure", command: taskTransferCommand, result: models.TaskTransferAuditFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -219,7 +219,7 @@ func TestDurableTransferInterruptionLeavesKeyRetryable(t *testing.T) {
 	}
 	var barriers int
 	if err := repo.db.Get(&barriers, `SELECT COUNT(*) FROM task_transfer_audit
-		WHERE task_id = ? AND result = ?`, task.ID, taskTransferResultFailed); err != nil {
+		WHERE task_id = ? AND result = ?`, task.ID, models.TaskTransferAuditFailed); err != nil {
 		t.Fatalf("read barrier rows: %v", err)
 	}
 	if barriers != 0 {

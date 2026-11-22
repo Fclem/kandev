@@ -28,8 +28,6 @@ const (
 	taskTransferErrorInvalid        = "invalid task transfer request"
 	taskTransferErrorFailed         = "task transfer failed"
 	taskTransferCodeKey             = "code"
-	taskTransferAuditResultDenied   = "denied"
-	taskTransferAuditResultConflict = "conflict"
 )
 
 // httpTaskTransferRequest is the complete Web transfer body. Task identity is
@@ -61,12 +59,12 @@ func (h *TaskHandlers) httpTransferTask(c *gin.Context) {
 	actor, attested := httpTaskTransferActor(ctx)
 	command.Actor = actor
 	if !attested {
-		h.auditRejectedHTTPTaskTransfer(ctx, command, taskTransferAuditResultDenied)
+		h.auditRejectedHTTPTaskTransfer(ctx, command, models.TaskTransferAuditDenied)
 		c.JSON(http.StatusNotFound, gin.H{dependencyKeyError: taskTransferErrorUnavailable})
 		return
 	}
 	if decodeErr != nil || commandErr != nil {
-		h.auditRejectedHTTPTaskTransfer(ctx, command, taskTransferAuditResultConflict)
+		h.auditRejectedHTTPTaskTransfer(ctx, command, models.TaskTransferAuditConflict)
 		c.JSON(http.StatusBadRequest, gin.H{dependencyKeyError: taskTransferErrorInvalid})
 		return
 	}

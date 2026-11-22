@@ -244,9 +244,10 @@ and explains failures without creating a new permission or exposing private data
   unverified event. Transient reconciliation-read failure shall not count as
   confirmed departure, except that a read answered with the authorization
   layer's existence-hiding not-found because a membership or unit-reach lookup
-  failed is indistinguishable from revoked access; the next accepted canonical
-  read or source refresh shall restore that membership. A source-only reader
-  shall receive no private destination payload.
+  failed is indistinguishable from revoked access and also leaves that task's
+  open route; the next accepted canonical read or source refresh shall restore the
+  listing membership, but not the route. A source-only reader shall receive no
+  private destination payload.
   This guarantee shall survive browser reconnection within the same authenticated
   page/store, including when an old source event arrives through the new socket.
   It shall also hold when the transfer occurred while the browser was disconnected

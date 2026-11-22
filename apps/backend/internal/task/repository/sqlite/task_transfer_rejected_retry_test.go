@@ -10,7 +10,7 @@ import (
 )
 
 func TestTransferTaskRefusesSameCallerRejectedKey(t *testing.T) {
-	for _, result := range []string{taskTransferResultDenied, taskTransferResultFailed} {
+	for _, result := range []string{models.TaskTransferAuditDenied, models.TaskTransferAuditFailed} {
 		t.Run(result, func(t *testing.T) {
 			repo, task := seedTaskTransferFixture(t)
 			command := taskTransferCommand(task)
@@ -39,7 +39,7 @@ func TestTransferTaskRejectedKeyCannotPoisonAnotherCaller(t *testing.T) {
 	command := taskTransferCommand(task)
 	rejected := command
 	rejected.Actor = models.TaskTransferActor{Kind: models.TaskTransferActorRejected, ID: "other-human"}
-	if err := repo.RecordTaskTransferAttempt(context.Background(), rejected, taskTransferResultDenied); err != nil {
+	if err := repo.RecordTaskTransferAttempt(context.Background(), rejected, models.TaskTransferAuditDenied); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.TransferTask(context.Background(), command); err != nil {
@@ -53,7 +53,7 @@ func TestTransferTaskRefusesRejectedConfigurationSessionKey(t *testing.T) {
 	command.Actor.SessionID = "configuration-session"
 	rejected := command
 	rejected.Actor = models.TaskTransferActor{Kind: models.TaskTransferActorRejected, ID: "configuration-task", SessionID: command.Actor.SessionID}
-	if err := repo.RecordTaskTransferAttempt(context.Background(), rejected, taskTransferResultFailed); err != nil {
+	if err := repo.RecordTaskTransferAttempt(context.Background(), rejected, models.TaskTransferAuditFailed); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.TransferTask(context.Background(), command); !errors.Is(err, repoerrors.ErrTaskTransferConflict) {

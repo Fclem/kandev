@@ -334,8 +334,9 @@ row, including one installed after a return, is retained. A timeout, cancellatio
 invalidation; never infer departure. Do not reveal destination data to a
 source-only reader. Accepted residual: the task read keeps the authorization
 layer's existence-hiding 404 when a membership or unit-reach lookup fails closed,
-so that rare transient failure reads as departure for a non-owner. The next
-accepted canonical read or source refresh restores the membership.
+so that rare transient failure reads as departure for a non-owner, including
+leaving that task's open route. The next accepted canonical read or source
+refresh restores the listing membership; the route change is not undone.
 
 Fence each reconciliation read with the captured task/source identity, current
 workspace generation, and existing accepted overview/sidebar read revisions.

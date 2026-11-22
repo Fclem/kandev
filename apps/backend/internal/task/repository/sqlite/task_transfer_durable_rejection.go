@@ -70,7 +70,7 @@ func (r *Repository) transferTaskWithDurableRejection(
 		// so no outcome is committed. Audit a non-barrier conflict so the key stays
 		// retryable. A failed row here would turn cancellation, lock timeouts (including
 		// NOWAIT relation conflicts), and infrastructure errors into a terminal rejection.
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(context.WithoutCancel(ctx), command, taskTransferResultConflict))
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(context.WithoutCancel(ctx), command, models.TaskTransferAuditConflict))
 	}
 }
 
@@ -260,7 +260,7 @@ func (r *Repository) commitTaskTransferRejection(
 	if reason, _ := repoerrors.TaskTransferConflictReasonOf(rejection); reason == repoerrors.TaskTransferIdempotencyConflict {
 		return nil, r.commitTaskTransferAttemptConflict(ctx, tx, command, rejection)
 	}
-	if err := r.insertTaskTransferAttempt(ctx, tx, command, taskTransferResultFailed); err != nil {
+	if err := r.insertTaskTransferAttempt(ctx, tx, command, models.TaskTransferAuditFailed); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -277,7 +277,7 @@ func (r *Repository) commitTaskTransferAttemptConflict(
 	command models.TaskTransferCommand,
 	conflict error,
 ) error {
-	if err := r.insertTaskTransferAttempt(ctx, tx, command, taskTransferResultConflict); err != nil {
+	if err := r.insertTaskTransferAttempt(ctx, tx, command, models.TaskTransferAuditConflict); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

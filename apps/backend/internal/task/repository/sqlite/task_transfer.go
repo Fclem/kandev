@@ -22,12 +22,7 @@ import (
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 )
 
-const (
-	taskTransferResultDenied   = "denied"
-	taskTransferResultConflict = "conflict"
-	taskTransferResultFailed   = "failed"
-	taskTransferOperationIndex = "idx_task_transfer_operations_idempotency"
-)
+const taskTransferOperationIndex = "idx_task_transfer_operations_idempotency"
 
 const sqliteTaskTransferOperationViolation = "UNIQUE constraint failed: task_transfer_operations.source_workspace_id, task_transfer_operations.idempotency_key"
 const postgresForUpdateClause = " FOR UPDATE"
@@ -92,11 +87,11 @@ func (r *Repository) TransferTask(
 ) (*models.TaskTransferReceipt, error) {
 	command.DestinationStepName = strings.TrimSpace(command.DestinationStepName)
 	if err := validateTaskTransferCommand(command); err != nil {
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultConflict))
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditConflict))
 	}
 	requestDigest, err := taskTransferRequestDigest(command)
 	if err != nil {
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditFailed))
 	}
 	if command.DurableRejection {
 		return r.transferTaskWithDurableRejection(ctx, command, requestDigest)
@@ -108,12 +103,12 @@ func (r *Repository) TransferTask(
 	}
 	projections, counts, inventory, err := r.inspectTaskTransferRelations(ctx)
 	if err != nil {
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditFailed))
 	}
 
 	tx, err := r.db.BeginTxx(ctx, r.hierarchyTxOptions())
 	if err != nil {
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditFailed))
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := r.lockTaskTransferWorkspaces(ctx, tx, command); err != nil {
@@ -131,7 +126,7 @@ func (r *Repository) TransferTask(
 	}
 	if err := tx.Commit(); err != nil {
 		_ = tx.Rollback()
-		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultFailed))
+		return nil, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditFailed))
 	}
 	return receipt, nil
 }
@@ -146,16 +141,16 @@ func (r *Repository) handleTaskTransferApplyError(
 		replay, found, replayErr := r.replayTaskTransferCommitted(ctx, command, requestDigest)
 		switch {
 		case replayErr != nil:
-			return nil, errors.Join(replayErr, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultConflict))
+			return nil, errors.Join(replayErr, r.RecordTaskTransferAttempt(ctx, command, models.TaskTransferAuditConflict))
 		case found:
 			return replay, nil
 		case isTaskTransferOperationViolation(applyErr):
 			applyErr = repoerrors.NewTaskTransferConflict(repoerrors.TaskTransferIdempotencyConflict, "idempotency key request differs")
 		}
 	}
-	result := taskTransferResultFailed
+	result := models.TaskTransferAuditFailed
 	if errors.Is(applyErr, repoerrors.ErrTaskTransferConflict) {
-		result = taskTransferResultConflict
+		result = models.TaskTransferAuditConflict
 	}
 	return nil, errors.Join(applyErr, r.RecordTaskTransferAttempt(ctx, command, result))
 }
@@ -175,9 +170,9 @@ func isTaskTransferOperationViolation(err error) bool {
 // ends here never settles a domain guard, so it stays a retryable conflict.
 func taskTransferResultForError(command models.TaskTransferCommand, err error) string {
 	if command.DurableRejection || errors.Is(err, repoerrors.ErrTaskTransferConflict) {
-		return taskTransferResultConflict
+		return models.TaskTransferAuditConflict
 	}
-	return taskTransferResultFailed
+	return models.TaskTransferAuditFailed
 }
 
 func validateTaskTransferCommand(command models.TaskTransferCommand) error {

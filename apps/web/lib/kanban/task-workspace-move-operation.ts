@@ -181,7 +181,10 @@ export class WorkspaceMoveOperations {
     return identity === this.identity && this.unverifiable.has(taskId);
   }
 
-  /** Tab storage cannot be read for this caller, so no move can be made durable here. */
+  /**
+   * Tab storage cannot be read, or refused a submission's write, for this caller,
+   * so no new move can be made durable here.
+   */
   isStorageUnavailable(identity: string): boolean {
     return identity === this.identity && this.storageUnavailable;
   }

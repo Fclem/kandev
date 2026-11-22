@@ -6,7 +6,7 @@ import type {
   SessionCatalogRefreshEntry,
 } from "@/lib/types/session-catalog";
 import type { TaskSession } from "@/lib/types/http";
-import type { ModeOption, ModeSelectorState } from "./mode-selector";
+import type { ModeOption, ModeSelectorState } from "./mode-selector-state";
 
 type Input = {
   state: ModeSelectorState | undefined;

@@ -9,7 +9,16 @@ import type {
   WorkspaceRestorationState,
 } from "./workspace-restoration";
 import type { NativeMCPDiagnostic } from "@/lib/prepare/native-mcp-diagnostic";
-import type { ModelCatalog } from "@kandev/types/model-catalog";
+import type {
+  ConfigOptionEntry,
+  SessionModelEntry,
+  SessionModelsState,
+} from "./session-models-types";
+export type {
+  ConfigOptionEntry,
+  SessionModelEntry,
+  SessionModelsState,
+} from "./session-models-types";
 import type { UserShellScope } from "@/lib/state/user-shell-scope";
 import type { WorkspaceRootFilesResponse } from "@/lib/types/workspace-files";
 import type * as ConfigurationFeedback from "./session-configuration-feedback";
@@ -348,26 +357,6 @@ export type AuthMethodEntry = {
   meta?: Record<string, unknown>;
 };
 
-export type SessionModelEntry = {
-  modelId: string;
-  name: string;
-  description?: string;
-  usageMultiplier?: string;
-  meta?: Record<string, unknown>;
-};
-
-export type ConfigOptionEntry = {
-  type: string;
-  id: string;
-  name: string;
-  description?: string;
-  currentValue: string;
-  category?: string;
-  options?: { value: string; name: string; description?: string }[];
-  /** Bounded provider group structure and verified composition bindings. */
-  catalog?: ModelCatalog;
-};
-
 export type AgentCapabilitiesEntry = {
   supportsImage: boolean;
   supportsAudio: boolean;
@@ -385,31 +374,6 @@ export type PromptUsageEntry = {
 
 export type AgentCapabilitiesState = {
   bySessionId: Record<string, AgentCapabilitiesEntry>;
-};
-
-export type SessionModelsState = {
-  bySessionId: Record<
-    string,
-    {
-      currentModelId: string;
-      models: SessionModelEntry[];
-      configOptions: ConfigOptionEntry[];
-      configOptionsSettled?: boolean;
-      /** Provider-reported config values from the last settled snapshot. */
-      confirmedConfigOptions?: Record<string, string>;
-      confirmedConfigOptionsExecutionId?: string;
-      pendingConfirmedConfigOptions?: {
-        executionId: string;
-        values: Record<string, string>;
-      };
-      configBaseline?: Record<string, string>;
-      /** Marks the effective selector snapshot restored after explicit recovery. */
-      settingsPolicy?: "provider_restored";
-      /** Set when the session started on the profile's fallback model. */
-      fallbackModel?: string;
-      savedModelPreferenceId?: string;
-    }
-  >;
 };
 
 export type MCPAttachmentStatus =
@@ -661,8 +625,10 @@ export type SessionRuntimeSliceState = ConfigurationFeedback.ConfigurationFeedba
   backgroundWork: BackgroundWorkState;
 };
 
-export type SessionRuntimeSliceActions = ConfigurationFeedback.ConfigurationFeedbackActions &
-  SessionCatalogRefreshActions & {
+type SessionRuntimeExtensionActions = ConfigurationFeedback.ConfigurationFeedbackActions &
+  SessionCatalogRefreshActions;
+
+export type SessionRuntimeSliceActions = SessionRuntimeExtensionActions & {
   setTerminalOutput: (terminalId: string, data: string) => void;
   appendShellOutput: (sessionId: string, data: string) => void;
   setShellStatus: (

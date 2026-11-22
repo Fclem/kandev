@@ -28,11 +28,13 @@ const (
 	catalogOwnerLiveQuery = catalogOwnerQueryPrefix +
 		`AND er.status IN ` + catalogLiveExecutorStatuses + ` AND t.state NOT IN ` + catalogTerminalTaskStates +
 		` AND ts.state IN ` + catalogLiveStates + ` AND t.archived_at IS NULL`
+	// A prepare-only launch leaves its executor row "prepared" until the same
+	// execution's first prompt; that execution still owns its startup.
 	catalogOwnerStartingQuery = catalogOwnerQueryPrefix +
-		`AND er.status IN ('starting', 'running', 'ready')
+		`AND er.status IN ('prepared', 'starting', 'running', 'ready')
  AND ts.state IN ('CREATED', 'STARTING', 'RUNNING', 'WAITING_FOR_INPUT', 'IDLE') AND t.archived_at IS NULL`
 	catalogOwnerTerminalQuery = catalogOwnerQueryPrefix +
-		`AND er.status IN ('starting', 'running', 'ready', 'failed')
+		`AND er.status IN ('prepared', 'starting', 'running', 'ready', 'failed')
  AND ts.state IN ('CREATED', 'STARTING', 'RUNNING', 'WAITING_FOR_INPUT', 'IDLE', 'FAILED') AND t.archived_at IS NULL`
 )
 

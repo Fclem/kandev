@@ -68,7 +68,8 @@ func validAgentDeliveryWorkflowNoOp(taskID string, effect *models.AgentDeliveryE
 	if effect.EffectKey != "workflow.on_turn_complete:"+effect.TurnID {
 		return false
 	}
-	return effect.Outcome == "no_automatic_transition" || effect.Outcome == "not_required" ||
+	return effect.Outcome == models.DeliveryWorkflowOutcomeNoAutomaticTransition ||
+		effect.Outcome == models.DeliveryWorkflowOutcomeNotRequired ||
 		effect.Outcome == models.DeliveryWorkflowOutcomeStoppedRecovery
 }
 

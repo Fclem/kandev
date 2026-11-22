@@ -161,6 +161,12 @@ func exerciseCatalogLifecycleExclusion(t *testing.T, repo *Repository) {
 				require.NoError(t, beginErr)
 				require.NotNil(t, launch, "publication exclusions must not block ordinary resume of a completed task before task promotion")
 			}
+			if tc.name == "prepared-execution" {
+				require.NoError(t, repo.UpdateTaskSessionState(ctx, session.ID, models.TaskSessionStateStarting, ""))
+				launch, beginErr := repo.BeginSessionCatalogDiscovery(ctx, session.ID, profileID, owner, "strict")
+				require.NoError(t, beginErr)
+				require.NotNil(t, launch, "the first launch of a prepare-only session starts from its prepared executor row")
+			}
 		})
 	}
 }

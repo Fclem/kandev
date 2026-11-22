@@ -3434,5 +3434,5 @@
   "workspaceMoveErrorUnavailable": "タスクまたは移動先を利用できません。",
   "workspaceMoveErrorInvalid": "移動リクエストは受け付けられませんでした。",
   "workspaceMoveRestoreUnverifiable": "ページを再読み込みする前の移動は、このブラウザーでは確認できません。移動が失敗したという意味ではありません。タスクの現在の配置を確認してください。",
-  "workspaceMoveStorageUnavailable": "このブラウザーはこのページのセッションストレージをブロックしているため、移動を安全に記録できません。サイトデータを許可してから、ページを再読み込みしてください。"
+  "workspaceMoveStorageUnavailable": "このタブでは移動の記録を保存できないため、ここでは移動を無効にしています。サイトデータを許可するか、このサイトのストレージを空けてから、ページを再読み込みしてください。"
 }

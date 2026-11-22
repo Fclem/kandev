@@ -431,6 +431,23 @@ describe("storage unavailable", () => {
       restore();
     }
   });
+
+  it("replaces a stale rejection with the storage notice when a resubmission cannot be saved", async () => {
+    api.transferTask.mockRejectedValueOnce(conflict("destination_full"));
+    const hook = render();
+    await choose(hook);
+    await act(() => hook.result.current.submit());
+    expect(hook.result.current.operation?.status).toBe("rejected");
+    const restore = refuseWrites();
+    try {
+      await act(() => hook.result.current.submit());
+      expect(api.transferTask).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.storageUnavailable).toBe(true);
+      expect(hook.result.current.operation).toBeNull();
+    } finally {
+      restore();
+    }
+  });
 });
 
 describe("caller-partitioned restore", () => {

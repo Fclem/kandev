@@ -128,10 +128,11 @@ independent of render timing. No optimistic workspace removal occurs.
 - If a restored record fails validation, the Web keeps placement reads only and
   shows that the earlier move cannot be checked from this browser. It does not
   claim the original move failed, and it enables no fresh-key move.
-- If tab storage is unavailable, no move can be recorded durably. The Web keeps
-  placement reads only, says that the browser is blocking site data and asks for
-  a reload after allowing it, and enables no fresh-key move. It does not claim an
-  earlier move exists.
+- If tab storage cannot be read, or refuses the write for a new submission, no
+  move can be recorded durably. The Web keeps placement reads only, replaces any
+  resolved outcome with a cause-neutral notice (allow site data or free storage,
+  then reload), and enables no fresh-key move. It does not claim an earlier move
+  exists. A check of an already stored record still re-sends it.
 - If the user navigates to another task while the request settles, reconcile
   memberships but do not navigate, reopen the form, or steal focus.
 

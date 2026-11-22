@@ -199,10 +199,12 @@ export class WorkspaceMoveOperations {
     if (identity !== this.identity || !this.admits(taskId, attempt)) return null;
     const next = { status: "submitting" as const, taskId, body, attempt };
     // A new request must be durable before it leaves this tab. A check re-sends a
-    // record that was already stored, so only a submission writes here; a refused
-    // write marks storage unavailable so the form says why nothing was sent.
+    // record that was already stored, so only a submission writes here. A refused
+    // write marks storage unavailable and drops the resolved outcome it would have
+    // replaced, so the form says why nothing was sent.
     if (attempt === "submit" && !persistWorkspaceMove(identity, taskId, body)) {
       this.storageUnavailable = true;
+      this.byTask.delete(taskId);
       this.emit();
       return null;
     }

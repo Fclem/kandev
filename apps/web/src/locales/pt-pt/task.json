@@ -3434,5 +3434,5 @@
   "workspaceMoveErrorUnavailable": "A tarefa ou o destino não está disponível.",
   "workspaceMoveErrorInvalid": "O pedido de movimentação não foi aceite.",
   "workspaceMoveRestoreUnverifiable": "Não é possível verificar neste browser uma movimentação feita antes de recarregar a página. Isto não significa que tenha falhado; verifique a posição atual da tarefa.",
-  "workspaceMoveStorageUnavailable": "Este browser está a bloquear o armazenamento de sessão desta página, por isso não é possível registar uma movimentação em segurança. Permita os dados do site e recarregue a página."
+  "workspaceMoveStorageUnavailable": "Este separador não consegue guardar um registo de movimentação, por isso as movimentações estão desativadas aqui. Permita os dados do site ou liberte armazenamento para este site e, em seguida, recarregue a página."
 }

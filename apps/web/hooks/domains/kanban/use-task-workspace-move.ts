@@ -43,7 +43,9 @@ function useSourceSnapshot(workflowId: string | null | undefined) {
       active = false;
     };
   }, [workflowId]);
-  return snapshot;
+  // A snapshot is shown only for the workflow it was loaded for, so a reused form
+  // never names the previous task's workflow while the next one loads or fails.
+  return snapshot?.workflow.id === workflowId ? snapshot : null;
 }
 
 function orderedSteps(snapshot: WorkflowSnapshot | null): WorkflowStepDTO[] {

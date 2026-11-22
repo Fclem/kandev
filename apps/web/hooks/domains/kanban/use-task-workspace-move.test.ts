@@ -134,6 +134,24 @@ describe("destination choices", () => {
     );
     expect(hook.result.current.workflows.map((workflow) => workflow.id)).toEqual(["wf-c"]);
   });
+
+  it("never names the previous task's source workflow while the next task's loads", async () => {
+    const other = { ...task, id: "task-2", workflow_id: "wf-x", workflow_step_id: "wf-x-first" };
+    api.fetchTask.mockImplementation(async (id: string) => (id === "task-2" ? other : task));
+    const hook = renderHook(
+      ({ taskId }: { taskId: string }) =>
+        useTaskWorkspaceMove({ open: true, taskId, workspaceId: "ws-a" }),
+      { initialProps: { taskId: "task-1" } },
+    );
+    await waitFor(() => expect(hook.result.current.sourceWorkflowName).toBe("wf-a name"));
+    api.fetchWorkflowSnapshot.mockImplementation((id: string) =>
+      id === "wf-x" ? new Promise(() => undefined) : Promise.resolve(snapshotFor(id)),
+    );
+    hook.rerender({ taskId: "task-2" });
+    await waitFor(() => expect(hook.result.current.task?.id).toBe("task-2"));
+    expect(hook.result.current.sourceWorkflowName).toBeNull();
+    expect(hook.result.current.sourceStepName).toBeNull();
+  });
 });
 
 describe("submission", () => {

@@ -105,3 +105,43 @@ describe("WorkspaceMoveOperations reconcile overlay", () => {
     expect(registry.get("user-a", "task-stale")?.status).toBe("committed");
   });
 });
+
+describe("WorkspaceMoveOperations refused writes", () => {
+  it("drops another task's resolved rejection so its form explains why moves are off", () => {
+    const identity = "user-refused-write";
+    const rejectedBody = { idempotency_key: "key-rejected" } as TaskTransferRequest;
+    const registry = new WorkspaceMoveOperations();
+    registry.adopt(identity);
+    const pending = registry.begin(identity, "task-x", rejectedBody, "submit");
+    if (!pending) throw new Error("admission refused");
+    registry.settle(identity, pending, {
+      status: "rejected",
+      taskId: "task-x",
+      body: rejectedBody,
+      code: "destination_full",
+    });
+    const real = window.sessionStorage;
+    const original = Object.getOwnPropertyDescriptor(window, "sessionStorage");
+    const refusing = new Proxy(real, {
+      get(target, prop) {
+        if (prop === "setItem") {
+          return () => {
+            throw new DOMException("quota", "QuotaExceededError");
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    Object.defineProperty(window, "sessionStorage", { configurable: true, get: () => refusing });
+    try {
+      const refused = { idempotency_key: "key-refused" } as TaskTransferRequest;
+      expect(registry.begin(identity, "task-y", refused, "submit")).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(window, "sessionStorage", original);
+      else Reflect.deleteProperty(window, "sessionStorage");
+    }
+    expect(registry.isStorageUnavailable(identity)).toBe(true);
+    expect(registry.get(identity, "task-x")).toBeNull();
+  });
+});

@@ -221,7 +221,9 @@ export class WorkspaceMoveOperations {
     this.storageUnavailable = true;
     this.byTask.delete(taskId);
     for (const [id, operation] of this.byTask) {
-      if (operation.status === "rejected") this.byTask.delete(id);
+      if (operation.status === "rejected" || operation.status === "operation-rejected") {
+        this.byTask.delete(id);
+      }
     }
     this.emit();
   }

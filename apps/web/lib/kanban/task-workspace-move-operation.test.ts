@@ -108,18 +108,32 @@ describe("WorkspaceMoveOperations reconcile overlay", () => {
 });
 
 describe("WorkspaceMoveOperations refused writes", () => {
-  it("drops another task's resolved rejection so its form explains why moves are off", () => {
+  it("drops other tasks' resolved rejections so their forms explain why moves are off", () => {
     const identity = "user-refused-write";
     const rejectedBody = { idempotency_key: "key-rejected" } as TaskTransferRequest;
+    const barredBody = { idempotency_key: "key-barred" } as TaskTransferRequest;
     const registry = new WorkspaceMoveOperations();
     registry.adopt(identity);
-    const pending = registry.begin(identity, "task-x", rejectedBody, "submit");
-    if (!pending) throw new Error("admission refused");
-    registry.settle(identity, pending, {
+    const rejectedSubmit = registry.begin(identity, "task-x", rejectedBody, "submit");
+    const barredSubmit = registry.begin(identity, "task-z", barredBody, "submit");
+    if (!rejectedSubmit || !barredSubmit) throw new Error("admission refused");
+    registry.settle(identity, rejectedSubmit, {
       status: "rejected",
       taskId: "task-x",
       body: rejectedBody,
       code: "destination_full",
+    });
+    registry.settle(identity, barredSubmit, {
+      status: "uncertain",
+      taskId: "task-z",
+      body: barredBody,
+    });
+    const barredCheck = registry.begin(identity, "task-z", barredBody, "check");
+    if (!barredCheck) throw new Error("check refused");
+    registry.settle(identity, barredCheck, {
+      status: "operation-rejected",
+      taskId: "task-z",
+      body: barredBody,
     });
     const real = window.sessionStorage;
     const original = Object.getOwnPropertyDescriptor(window, "sessionStorage");
@@ -144,5 +158,6 @@ describe("WorkspaceMoveOperations refused writes", () => {
     }
     expect(registry.isStorageUnavailable(identity)).toBe(true);
     expect(registry.get(identity, "task-x")).toBeNull();
+    expect(registry.get(identity, "task-z")).toBeNull();
   });
 });

@@ -142,6 +142,22 @@ function reconcileFetchedOverview(
   return true;
 }
 
+/** Keeps live-only task fields that changed while the snapshot read was in flight. */
+function preserveLiveTaskFields(
+  snapshotTasks: KanbanTask[],
+  fetchedAtStartTasks: KanbanTask[],
+  currentTasks: KanbanTask[],
+) {
+  return preserveLiveParkedFields(
+    preserveLiveWorkspaceOrphaned(
+      preserveLiveAutoStartFailed(snapshotTasks, fetchedAtStartTasks, currentTasks),
+      fetchedAtStartTasks,
+      currentTasks,
+    ),
+    currentTasks,
+  );
+}
+
 export function useWorkflowSnapshot(
   workflowId: string | null,
   options: { skipIfHydrated?: boolean } = {},
@@ -195,19 +211,10 @@ export function useWorkflowSnapshot(
         }
         const nextState = snapshotToState(snapshot);
         if (nextState.kanban) {
-          const currentTasks = store.getState().kanban.tasks;
-          const fetchedAtStartTasks = existing.tasks;
-          nextState.kanban.tasks = preserveLiveParkedFields(
-            preserveLiveWorkspaceOrphaned(
-              preserveLiveAutoStartFailed(
-                nextState.kanban.tasks,
-                fetchedAtStartTasks,
-                currentTasks,
-              ),
-              fetchedAtStartTasks,
-              currentTasks,
-            ),
-            currentTasks,
+          nextState.kanban.tasks = preserveLiveTaskFields(
+            nextState.kanban.tasks,
+            existing.tasks,
+            store.getState().kanban.tasks,
           );
           if (!reconcileFetchedOverview(store, nextState, overviewRead, snapshot)) return;
         }

@@ -29,6 +29,7 @@ const UPDATED_AT = "2026-11-01T10:00:00.123456789Z";
 const RETURNED_STEP = "step-a-returned";
 const TASK_UPDATED = "task.updated" as const;
 const TASK_STATE_CHANGED = "task.state_changed" as const;
+const TASK_DELETED = "task.deleted" as const;
 
 type CanonicalTask = {
   id: string;
@@ -114,7 +115,7 @@ function sessionsKept(store: Store): boolean {
 }
 
 function departureMarker(handlers: Handlers) {
-  deliver(handlers, "task.deleted", {
+  deliver(handlers, TASK_DELETED, {
     task_id: TASK,
     workspace_id: SOURCE,
     workflow_id: "wf-a",
@@ -253,7 +254,7 @@ describe("transfer departure marker", () => {
 
   it("keeps the normal cleanup for a real deletion", () => {
     const { store, handlers } = sourceStore();
-    deliver(handlers, "task.deleted", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
+    deliver(handlers, TASK_DELETED, { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
     expect(resident(store)).toBe(false);
     expect(store.getState().taskSessionsByTask.itemsByTaskId[TASK] ?? []).toHaveLength(0);
     expect(fetchTask).not.toHaveBeenCalled();
@@ -597,7 +598,7 @@ describe("transfer departure read across a delete", () => {
     expect(resident(store)).toBe(true);
     await vi.waitFor(() => expect(fetchTask).toHaveBeenCalledTimes(1));
     const settled = taskMembershipSettled(store, TASK);
-    deliver(handlers, "task.deleted", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
+    deliver(handlers, TASK_DELETED, { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
     expect(resident(store)).toBe(false);
 
     read.resolve(canonical({ workspace_id: SOURCE, workflow_id: "wf-a" }));
@@ -612,7 +613,7 @@ describe("delayed events after a genuine delete", () => {
     const { store, handlers } = sourceStore();
     fetchTask.mockResolvedValue(canonical({ workspace_id: SOURCE, workflow_id: "wf-a" }));
 
-    deliver(handlers, "task.deleted", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
+    deliver(handlers, TASK_DELETED, { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
     expect(resident(store)).toBe(false);
 
     deliver(handlers, "task.updated", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });

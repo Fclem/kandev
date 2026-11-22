@@ -7,6 +7,7 @@ import {
   buildCardPluginEntries,
   useKanbanCardMoveTargets,
   type KanbanCardMenuEntry,
+  type PluginEntryInputs,
 } from "@/components/kanban-card-menu-items";
 import { buildKanbanCardMenuEntries } from "@/components/kanban-card-menu-builder";
 import { useTaskPluginLinkActions } from "@/components/task/task-session-sidebar-link-actions";
@@ -217,6 +218,35 @@ function useShowGraphHandler(
   return multiSelection ? undefined : () => showInGraph(taskId, workflowId);
 }
 
+/**
+ * Builds the plugin entries once for both menu variants. They share every input
+ * the entries depend on (the processing flags, the edit handler and the context),
+ * so each plugin action's items() is evaluated once per card per render (see
+ * buildCardPluginEntries).
+ */
+function buildSharedPluginMenu(
+  flags: Pick<
+    PluginEntryInputs,
+    "disabled" | "isDeleting" | "isArchiving" | "isDetaching" | "onEdit"
+  >,
+  unlinkMenu: { entries: KanbanCardMenuEntry[]; loadingLabel?: string },
+  pluginMenuContext: PluginTaskMenuContext,
+) {
+  const nativeUnlinkEntries = unlinkMenu.entries;
+  const loadingUnlinkLabel = unlinkMenu.loadingLabel;
+  const pluginEntries = buildCardPluginEntries({
+    disabled: flags.disabled,
+    isDeleting: flags.isDeleting,
+    isArchiving: flags.isArchiving,
+    isDetaching: flags.isDetaching,
+    onEdit: flags.onEdit,
+    nativeUnlinkEntries,
+    loadingUnlinkLabel,
+    pluginMenuContext,
+  });
+  return { pluginMenuContext, pluginEntries, nativeUnlinkEntries, loadingUnlinkLabel };
+}
+
 /** Opens the app-level workspace move form for one captured task. */
 function useWorkspaceMoveRequest(taskId: string, workspaceId: string | null) {
   const store = useAppStoreApi();
@@ -288,23 +318,12 @@ export function useKanbanCardMenus({
     pluginLinkActions,
   };
 
-  const pluginMenuContext = buildPluginMenuContext(task, workspaceId, presentation);
-  const nativeUnlinkEntries = prUnlinkMenu.entries;
-  const loadingUnlinkLabel = prUnlinkMenu.loadingLabel;
-  // Both variants below share every input the plugin entries depend on -- the
-  // processing flags, the edit handler and the context -- so build them once:
-  // passing one result to both keeps each plugin action's items() to a single
-  // evaluation per card per render (see buildCardPluginEntries).
-  const pluginEntries = buildCardPluginEntries({
-    disabled: menuBase.disabled,
-    isDeleting: menuBase.isDeleting,
-    isArchiving: menuBase.isArchiving,
-    isDetaching: menuBase.isDetaching,
-    onEdit: menuBase.onEdit,
-    nativeUnlinkEntries,
-    loadingUnlinkLabel,
-    pluginMenuContext,
-  });
+  const { pluginMenuContext, pluginEntries, nativeUnlinkEntries, loadingUnlinkLabel } =
+    buildSharedPluginMenu(
+      menuBase,
+      prUnlinkMenu,
+      buildPluginMenuContext(task, workspaceId, presentation),
+    );
 
   return {
     ...dialogs,

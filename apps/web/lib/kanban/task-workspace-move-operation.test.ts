@@ -89,20 +89,21 @@ describe("WorkspaceMoveOperations reconcile overlay", () => {
 
   it("ignores a stale overlay token after an identity switch and return", () => {
     const registry = new WorkspaceMoveOperations();
-    commitTask(registry, "user-a", "task-stale");
-    const firstOverlay = registry.beginReconcile("user-a", "task-stale");
+    const taskId = "task-stale";
+    commitTask(registry, "user-a", taskId);
+    const firstOverlay = registry.beginReconcile("user-a", taskId);
     if (!firstOverlay) throw new Error("expected overlay");
     registry.adopt("user-b");
     registry.adopt("user-a");
-    commitTask(registry, "user-a", "task-stale");
-    const currentOverlay = registry.beginReconcile("user-a", "task-stale");
+    commitTask(registry, "user-a", taskId);
+    const currentOverlay = registry.beginReconcile("user-a", taskId);
     if (!currentOverlay) throw new Error("expected overlay");
 
-    registry.endReconcile("user-a", "task-stale", firstOverlay);
-    expect(registry.get("user-a", "task-stale")?.status).toBe("submitting");
+    registry.endReconcile("user-a", taskId, firstOverlay);
+    expect(registry.get("user-a", taskId)?.status).toBe("submitting");
 
-    registry.endReconcile("user-a", "task-stale", currentOverlay);
-    expect(registry.get("user-a", "task-stale")?.status).toBe("committed");
+    registry.endReconcile("user-a", taskId, currentOverlay);
+    expect(registry.get("user-a", taskId)?.status).toBe("committed");
   });
 });
 

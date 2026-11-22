@@ -208,7 +208,9 @@ describe("submission", () => {
     const [first, second] = sentBodies();
     expect(second.idempotency_key).not.toBe(first.idempotency_key);
   });
+});
 
+describe("submission checks", () => {
   it("settles a lost domain rejection only through an authoritative check", async () => {
     api.transferTask.mockRejectedValueOnce(networkLost());
     const hook = render();

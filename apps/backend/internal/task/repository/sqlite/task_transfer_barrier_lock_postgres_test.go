@@ -29,12 +29,11 @@ const (
 // barrier lookup: a retry that starts while the barrier insert is in flight waits
 // on the rejecting transaction and then observes the committed barrier.
 func TestDurableRejectionHoldsSerializationUntilBarrierCommits(t *testing.T) {
-	repo, tasks := seedPostgresConcurrentTransferTasks(t, 1)
+	repo, tasks := seedPostgresConcurrentTransferTasks(t, 0)
 	repo.db.SetMaxOpenConns(8)
 	ctx := context.Background()
-	_, err := repo.db.Exec(`UPDATE tasks SET workspace_id = 'pg-race-destination',
-		workflow_id = 'pg-race-wf-destination', workflow_step_id = 'pg-race-step-destination',
-		wip_admitted = 1, queued_for_step_id = '' WHERE id = $1`, tasks[1].ID)
+	_, err := repo.db.Exec(`UPDATE workflow_steps SET prompt = 'different instructions'
+		WHERE id = 'pg-race-step-destination'`)
 	require.NoError(t, err)
 	holder := holdTransferInserts(t, repo.db, "task_transfer_audit", "NEW.result = 'failed'")
 
@@ -51,7 +50,7 @@ func TestDurableRejectionHoldsSerializationUntilBarrierCommits(t *testing.T) {
 	_, err = holder.ExecContext(ctx, fmt.Sprintf(`SELECT pg_advisory_unlock(%d, %s)`,
 		transferBarrierHoldClass, transferBarrierHoldKeySQL))
 	require.NoError(t, err)
-	requireTransferConflictReason(t, first, repoerrors.TaskTransferDestinationFull)
+	requireTransferConflictReason(t, first, repoerrors.TaskTransferStepIncompatible)
 	requireTransferConflictReason(t, retry, repoerrors.TaskTransferOperationRejected)
 
 	var barriers int

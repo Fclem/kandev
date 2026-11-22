@@ -3408,6 +3408,7 @@
   "workspaceMoveNotice": "履歴とセッションは、実行中の作業を含めてタスクとともに保持されます。タスクは新しい移動としてステップに入らないため、ステップのアクションは実行されません。ステップは同じ名前と保存済みの設定を持つ必要があり、ラベルやプロジェクトなどのワークスペースの関連付けによって移動がブロックされる場合があります。",
   "workspaceMoveMoving": "タスクを移動中...",
   "workspaceMoveSuccess": "タスクを移動しました。",
+  "workspaceMoveCommittedReconciling": "タスクを移動しました。ボードはまだ更新中で、自動的に反映されます。",
   "workspaceMoveOpenTask": "タスクを開く",
   "workspaceMoveUncertain": "移動の結果を確認できませんでした。結果を確認するまで選択内容は保持されます。",
   "workspaceMoveCheckResult": "結果を確認",

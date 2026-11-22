@@ -5,7 +5,7 @@ import type { TaskOverview } from "@/lib/state/slices/task-overview-types";
 import type { TaskSession } from "@/lib/types/http";
 import { ApiError } from "@/lib/api/client";
 import { reconcileTaskMembership, registerTasksHandlers } from "./tasks";
-import { taskMembershipSettled } from "./task-transfer";
+import { taskMembershipReconciled, taskMembershipSettled } from "./task-transfer";
 import type { StoreApi } from "zustand";
 import type { AppState } from "@/lib/state/store";
 import type { WsHandlers } from "./types";
@@ -619,5 +619,34 @@ describe("delayed events after a genuine delete", () => {
     deliver(handlers, "task.updated", { task_id: TASK, workspace_id: SOURCE, workflow_id: "wf-a" });
     await taskMembershipSettled(store, TASK);
     expect(resident(store)).toBe(false);
+  });
+});
+
+describe("reconciliation outcome", () => {
+  it("reports a transient read as pending and resolves once a retry reconciles", async () => {
+    vi.useFakeTimers();
+    try {
+      const { store } = sourceStore();
+      fetchTask
+        .mockRejectedValueOnce(new ApiError("unavailable", 503, null))
+        .mockResolvedValue(canonical({ workspace_id: SOURCE, workflow_id: "wf-a" }));
+
+      const first = reconcileTaskMembership(store, TASK);
+      await vi.advanceTimersByTimeAsync(300);
+      await expect(first).resolves.toBe("pending");
+      let reconciled = false;
+      void taskMembershipReconciled(store, TASK).then(() => {
+        reconciled = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reconciled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await taskMembershipSettled(store, TASK);
+      expect(reconciled).toBe(true);
+      await expect(taskMembershipReconciled(store, TASK)).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

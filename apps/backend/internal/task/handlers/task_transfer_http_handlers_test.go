@@ -640,6 +640,64 @@ func TestHTTPTransferTaskTerminalRejectedKey(t *testing.T) {
 	})
 }
 
+// A rejection whose cause can clear without the request changing writes no
+// barrier: once the cause clears, the identical body and key commit.
+// @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-005.3
+func TestHTTPTransferTaskRetryableRejectionKeepsKey(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		setup  func(*testing.T, *httpTransferFixture, map[string]any)
+		repair func(*testing.T, *httpTransferFixture)
+		want   string
+	}{
+		{name: "destination unavailable", setup: func(_ *testing.T, _ *httpTransferFixture, body map[string]any) {
+			body["destination_workflow_step_id"] = "step-b-later"
+		}, repair: func(t *testing.T, f *httpTransferFixture) {
+			f.exec(t, `INSERT INTO workflow_steps (id, workflow_id, name, position) VALUES (?, ?, ?, 0)`,
+				"step-b-later", "wf-b", "Work")
+		}, want: "destination_unavailable"},
+		{name: "destination full", setup: func(t *testing.T, f *httpTransferFixture, _ map[string]any) {
+			f.exec(t, `UPDATE tasks SET wip_admitted = 1, queued_for_step_id = '' WHERE id = ?`, transferHTTPTaskID)
+			f.exec(t, `UPDATE workflow_steps SET wip_limit = 1 WHERE id IN (?, ?)`, "step-a-work", "step-b-work")
+			require.NoError(t, f.repo.CreateTask(context.Background(), &models.Task{
+				ID: "transfer-http-occupant", WorkspaceID: "ws-b", WorkflowID: "wf-b", WorkflowStepID: "step-b-work",
+				Title: "Occupant",
+			}))
+		}, repair: func(t *testing.T, f *httpTransferFixture) {
+			f.exec(t, `UPDATE tasks SET archived_at = ? WHERE id = ?`, time.Now().UTC(), "transfer-http-occupant")
+		}, want: "destination_full"},
+		{name: "cleanup active", setup: func(t *testing.T, f *httpTransferFixture, _ map[string]any) {
+			now := time.Now().UTC()
+			f.exec(t, `INSERT INTO task_resource_cleanup_jobs (id, operation_id, task_id, trigger, state, created_at,
+				updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, "cleanup-1", "cleanup-op", transferHTTPTaskID, "archive",
+				"running", now, now)
+		}, repair: func(t *testing.T, f *httpTransferFixture) {
+			f.exec(t, `UPDATE task_resource_cleanup_jobs SET state = 'completed' WHERE id = ?`, "cleanup-1")
+		}, want: "cleanup_active"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newHTTPTransferFixture(t)
+			owner := identityFor(transferHTTPOwner)
+			body := f.body("step-b-work", transferHTTPKey)
+			tt.setup(t, f, body)
+			f.refreshTask(t)
+			body["expected_task_updated_at"] = f.task.UpdatedAt.Format(time.RFC3339Nano)
+
+			rejected := f.post(t, owner, body)
+			require.Equal(t, http.StatusConflict, rejected.status, "body: %v", rejected.body)
+			require.Equal(t, tt.want, rejected.code(t))
+			var barriers int
+			require.NoError(t, f.repo.DB().QueryRow(`SELECT COUNT(*) FROM task_transfer_audit
+				WHERE idempotency_key = ? AND result IN ('denied', 'failed')`, transferHTTPKey).Scan(&barriers))
+			require.Zero(t, barriers, "a retryable rejection must not write a barrier")
+
+			tt.repair(t, f)
+			retried := f.post(t, owner, body)
+			require.Equal(t, http.StatusOK, retried.status, "body: %v", retried.body)
+		})
+	}
+}
+
 // @covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-005.3
 func TestHTTPTransferTaskLostDomainConflictResponse(t *testing.T) {
 	for _, tt := range []struct {

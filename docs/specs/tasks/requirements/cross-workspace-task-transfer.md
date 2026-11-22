@@ -227,10 +227,14 @@ and explains failures without creating a new permission or exposing private data
   shall use a fresh operation identity. A stale-source rejection shall require
   refresh and another explicit submission, never silently overwrite a concurrent
   move or edit.
-  When the original response for a domain-guard rejection is lost, a later exact
-  check with current access shall be able to establish terminal rejection and
-  permit a new reviewed submission. Once terminal rejection is established, no
-  concurrent or later attempt of that same operation shall commit.
+  When the original response for a terminal domain-guard rejection is lost, a
+  later exact check with current access shall be able to establish terminal
+  rejection and permit a new reviewed submission. Once terminal rejection is
+  established, no concurrent or later attempt of that same operation shall
+  commit. A rejection whose cause can clear without the request changing
+  (destination unavailable, destination full, active cleanup) shall leave the
+  same operation retryable: a later exact check may commit it once the cause
+  clears, and until then its lost response stays unresolved.
 - **AC-TASKS-CROSS-WORKSPACE-TRANSFER-005.4:** Source-removal notifications shall
   remove only source-workspace listing membership, not delete the task's local
   transcript, sessions, drafts, plan, or selected-session state. Destination

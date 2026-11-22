@@ -3408,6 +3408,7 @@
   "workspaceMoveNotice": "History and sessions stay with the task, including running work. The task does not enter the step as a new move, so step actions do not run. The step must have the same name and saved settings, and workspace associations such as labels or projects can block the move.",
   "workspaceMoveMoving": "Moving task...",
   "workspaceMoveSuccess": "Task moved.",
+  "workspaceMoveCommittedReconciling": "Task moved. The board is still updating and will catch up automatically.",
   "workspaceMoveOpenTask": "Open task",
   "workspaceMoveUncertain": "The move result was not confirmed. Your choices are kept until the result is checked.",
   "workspaceMoveCheckResult": "Check result",

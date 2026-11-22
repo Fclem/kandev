@@ -205,6 +205,17 @@ describe("TaskWorkspaceMoveDialog outcomes", () => {
     expect(screen.queryByTestId(SUBMIT_TEST_ID)).toBeNull();
   });
 
+  it("says the board is still updating while a committed move is reconciling", () => {
+    useTaskWorkspaceMoveMock.mockReturnValue(
+      state({ operation: operation("committed", { reconcilePending: true }) }),
+    );
+    renderDialog();
+    expect(screen.getByTestId("workspace-move-committed").getAttribute("data-reconciling")).toBe(
+      "true",
+    );
+    expect(screen.getByTestId("workspace-move-open-task")).toBeTruthy();
+  });
+
   it("uses an inset drawer with touch-sized actions on phones", () => {
     responsiveMock.isMobile = true;
     useTaskWorkspaceMoveMock.mockReturnValue(state());

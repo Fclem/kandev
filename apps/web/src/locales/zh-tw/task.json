@@ -3408,6 +3408,7 @@
   "workspaceMoveNotice": "歷史記錄和工作階段會隨任務一起保留，包括正在執行的工作。任務不會作為一次新的移動進入該步驟，因此不會執行步驟操作。目標步驟必須具有相同的名稱和已儲存的設定，標籤或專案等工作區關聯可能會阻止移動。",
   "workspaceMoveMoving": "正在移動任務...",
   "workspaceMoveSuccess": "任務已移動。",
+  "workspaceMoveCommittedReconciling": "任務已移動。看板仍在更新，稍後會自動同步。",
   "workspaceMoveOpenTask": "開啟任務",
   "workspaceMoveUncertain": "移動結果尚未確認。在檢查結果之前，你的選擇會被保留。",
   "workspaceMoveCheckResult": "檢查結果",

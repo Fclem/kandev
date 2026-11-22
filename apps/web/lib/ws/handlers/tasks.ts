@@ -37,7 +37,12 @@ import {
 import { taskRemovalOwnsDepartureForTask } from "@/lib/state/task-removal";
 import { isSessionRestartPending } from "@/lib/session/session-restart-state";
 import { applyTaskOverviewEvent, applyTaskOverviewPatch } from "./task-overview";
-import { admitTaskEvent, invalidateTaskMembership, retireTaskMembership } from "./task-transfer";
+import {
+  admitTaskEvent,
+  invalidateTaskMembership,
+  retireTaskMembership,
+  type MembershipReconcileOutcome,
+} from "./task-transfer";
 import { taskOverviewPatch } from "@/lib/state/slices/task-overview-patch";
 const lifecycleDebug = createDebugLogger("task-lifecycle:ws");
 
@@ -350,9 +355,13 @@ function applyCanonicalTask(store: StoreApi<AppState>, payload: TaskEventPayload
 
 /**
  * Reconciles one task's active-workspace membership from a canonical read.
- * Settles after the accepted result (or a superseding one) is applied.
+ * Settles after the accepted result (or a superseding one) is applied, and reports
+ * "pending" when a transient read left a retry scheduled.
  */
-export function reconcileTaskMembership(store: StoreApi<AppState>, taskId: string): Promise<void> {
+export function reconcileTaskMembership(
+  store: StoreApi<AppState>,
+  taskId: string,
+): Promise<MembershipReconcileOutcome> {
   return invalidateTaskMembership(store, taskId, applyCanonicalTask);
 }
 

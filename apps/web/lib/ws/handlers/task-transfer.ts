@@ -41,13 +41,20 @@ const REFRESH_COOLDOWN_MS = 250;
 /** Applies an accepted canonical task row through the ordinary update path. */
 export type CanonicalTaskApplier = (store: StoreApi<AppState>, payload: TaskEventPayload) => void;
 
+/** Whether a membership read reconciled the task, or a transient failure left a retry pending. */
+export type MembershipReconcileOutcome = "reconciled" | "pending";
+
 type ReconcileRecord = {
   apply: CanonicalTaskApplier;
   epoch: number;
-  running?: Promise<void>;
+  running?: Promise<MembershipReconcileOutcome>;
   retries: number;
   retryTimer?: ReturnType<typeof setTimeout>;
   lastReadAt?: number;
+  /** A transient read left this task's membership unconfirmed. */
+  pending: boolean;
+  /** Resolved once the membership is no longer pending. */
+  waiters: Array<() => void>;
 };
 
 type CanonicalRead = { kind: "task"; task: Task } | { kind: "unavailable" } | { kind: "transient" };
@@ -74,7 +81,7 @@ function recordFor(
   }
   let record = byTask.get(taskId);
   if (!record) {
-    record = { apply, epoch: 0, retries: 0 };
+    record = { apply, epoch: 0, retries: 0, pending: false, waiters: [] };
     byTask.set(taskId, record);
   }
   return record;
@@ -142,14 +149,15 @@ export function admitTaskEvent(
 /**
  * Invalidates one task's membership and reconciles it from a canonical read.
  * Concurrent invalidations coalesce into one read; a newer invalidation
- * supersedes an in-flight result. The promise settles after reconciliation.
+ * supersedes an in-flight result. The promise settles after reconciliation and
+ * reports "pending" when a transient read left a retry scheduled.
  */
 export function invalidateTaskMembership(
   store: StoreApi<AppState>,
   taskId: string,
   apply: CanonicalTaskApplier,
   fromRetry = false,
-): Promise<void> {
+): Promise<MembershipReconcileOutcome> {
   const record = recordFor(store, taskId, apply);
   record.apply = apply;
   if (!fromRetry) record.retries = 0;
@@ -159,16 +167,43 @@ export function invalidateTaskMembership(
     record.retryTimer = undefined;
   }
   if (!record.running) {
-    record.running = reconcileUntilCurrent(store, taskId, record).finally(() => {
-      record.running = undefined;
-    });
+    record.running = reconcileUntilCurrent(store, taskId, record)
+      .then((outcome) => {
+        record.pending = outcome === "pending";
+        if (!record.pending) settleReconcileWaiters(record);
+        return outcome;
+      })
+      .finally(() => {
+        record.running = undefined;
+      });
   }
   return record.running;
 }
 
 /** Resolves once no canonical membership read is in flight for the task. */
-export function taskMembershipSettled(store: StoreApi<AppState>, taskId: string): Promise<void> {
-  return records.get(store)?.get(taskId)?.running ?? Promise.resolve();
+export async function taskMembershipSettled(
+  store: StoreApi<AppState>,
+  taskId: string,
+): Promise<void> {
+  await records.get(store)?.get(taskId)?.running;
+}
+
+/**
+ * Resolves once no transient read leaves the task's membership unconfirmed:
+ * immediately when nothing is pending, otherwise when a later read reconciles it
+ * or the task is retired.
+ */
+export function taskMembershipReconciled(store: StoreApi<AppState>, taskId: string): Promise<void> {
+  const record = records.get(store)?.get(taskId);
+  if (!record?.pending) return Promise.resolve();
+  const waiter = Promise.withResolvers<void>();
+  record.waiters.push(waiter.resolve);
+  return waiter.promise;
+}
+
+function settleReconcileWaiters(record: ReconcileRecord): void {
+  record.pending = false;
+  for (const resolve of record.waiters.splice(0)) resolve();
 }
 
 /** Task ids this store has seen really deleted. Task ids are never reused. */
@@ -190,6 +225,7 @@ export function retireTaskMembership(store: StoreApi<AppState>, taskId: string):
   const record = byTask?.get(taskId);
   if (!byTask || !record) return;
   clearTimeout(record.retryTimer);
+  settleReconcileWaiters(record);
   byTask.delete(taskId);
 }
 
@@ -217,28 +253,27 @@ async function reconcileUntilCurrent(
   store: StoreApi<AppState>,
   taskId: string,
   record: ReconcileRecord,
-): Promise<void> {
+): Promise<MembershipReconcileOutcome> {
   for (;;) {
     await awaitRefreshWindow(record);
-    if (records.get(store)?.get(taskId) !== record) return;
+    if (records.get(store)?.get(taskId) !== record) return "reconciled";
     const fence = captureFence(store, taskId, record.epoch);
     record.lastReadAt = Date.now();
     const result = await readCanonicalTask(taskId);
-    if (records.get(store)?.get(taskId) !== record) return;
+    if (records.get(store)?.get(taskId) !== record) return "reconciled";
     const state = store.getState();
     if (
       (state.workspaces?.activeId ?? null) !== fence.workspaceId ||
       state.workspaceContextGeneration !== fence.workspaceContextGeneration
     ) {
-      return;
+      return "reconciled";
     }
     const superseded =
       record.epoch !== fence.epoch ||
       state.taskOverview.generation !== fence.overviewGeneration ||
       taskMembershipAdmissionSequence(store, taskId) !== fence.admission;
     if (superseded) continue;
-    applyCanonicalMembership(store, taskId, result, fence.workspaceId, record);
-    return;
+    return applyCanonicalMembership(store, taskId, result, fence.workspaceId, record);
   }
 }
 
@@ -259,20 +294,21 @@ function applyCanonicalMembership(
   result: CanonicalRead,
   workspaceId: string | null,
   record: ReconcileRecord,
-): void {
-  if (!workspaceId) return;
-  if (deletedTaskIds.get(store)?.has(taskId)) return;
+): MembershipReconcileOutcome {
+  if (!workspaceId) return "reconciled";
+  if (deletedTaskIds.get(store)?.has(taskId)) return "reconciled";
   if (result.kind === "transient") {
     scheduleRetry(store, taskId, record);
-    return;
+    return "pending";
   }
   record.retries = 0;
   if (result.kind === "task" && result.task.workspace_id === workspaceId) {
     admitTaskMembership(store, [taskId]);
     record.apply(store, canonicalPayload(store, result.task));
-    return;
+    return "reconciled";
   }
   departWorkspace(store, taskId, workspaceId, result.kind === "task" ? result.task : null, record);
+  return "reconciled";
 }
 
 function canonicalPayload(store: StoreApi<AppState>, task: Task): TaskEventPayload {

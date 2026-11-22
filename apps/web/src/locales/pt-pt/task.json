@@ -3408,6 +3408,7 @@
   "workspaceMoveNotice": "O histórico e as sessões permanecem com a tarefa, incluindo o trabalho em curso. A tarefa não entra no passo como uma nova movimentação, por isso as ações do passo não são executadas. O passo tem de ter o mesmo nome e as mesmas definições guardadas, e associações do espaço de trabalho, como etiquetas ou projetos, podem bloquear a movimentação.",
   "workspaceMoveMoving": "A mover a tarefa...",
   "workspaceMoveSuccess": "Tarefa movida.",
+  "workspaceMoveCommittedReconciling": "Tarefa movida. O quadro ainda está a atualizar e vai ficar em dia automaticamente.",
   "workspaceMoveOpenTask": "Abrir tarefa",
   "workspaceMoveUncertain": "O resultado da movimentação não foi confirmado. As suas escolhas são mantidas até o resultado ser verificado.",
   "workspaceMoveCheckResult": "Verificar resultado",

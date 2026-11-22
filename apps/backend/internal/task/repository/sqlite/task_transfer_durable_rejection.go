@@ -48,11 +48,12 @@ func (identity taskTransferAttemptIdentity) matches(command models.TaskTransferC
 
 // transferTaskWithDurableRejection runs one reviewed Web transfer under the
 // shared transfer serialization. Outcome precedence is: committed receipt,
-// then this caller's terminal rejection, then the guarded mutation. A domain
-// guard rejection commits exactly one failed attempt row bound to this caller
-// and request after rolling back any mutation effects (a source_changed found
-// under the workspace-row locks takes no savepoint); that row is the barrier
-// that keeps every later same-key attempt from committing.
+// then this caller's terminal rejection, then the guarded mutation. A terminal
+// domain guard rejection commits exactly one failed attempt row bound to this
+// caller and request after rolling back any mutation effects (a source_changed
+// found under the workspace-row locks takes no savepoint); that row is the barrier
+// that keeps every later same-key attempt from committing. A retryable rejection
+// (see taskTransferRejectionTerminal) commits a non-barrier conflict row instead.
 func (r *Repository) transferTaskWithDurableRejection(
 	ctx context.Context,
 	command models.TaskTransferCommand,
@@ -245,8 +246,10 @@ func (r *Repository) commitTaskTransferReplay(
 }
 
 // commitTaskTransferRejection rechecks receipt precedence and commits one failed
-// barrier row for a domain guard rejection. The caller has rolled back any
-// mutation effects. A storage or commit failure stays an uncertain error.
+// barrier row for a terminal domain guard rejection. A retryable rejection and an
+// idempotency conflict commit a non-barrier conflict row instead. The caller has
+// rolled back any mutation effects. A storage or commit failure stays an
+// uncertain error.
 func (r *Repository) commitTaskTransferRejection(
 	ctx context.Context,
 	tx *sqlx.Tx,
@@ -257,7 +260,7 @@ func (r *Repository) commitTaskTransferRejection(
 	if receipt, found, err := r.serializedTaskTransferOutcome(ctx, tx, command, requestDigest); err != nil || found {
 		return receipt, err
 	}
-	if reason, _ := repoerrors.TaskTransferConflictReasonOf(rejection); reason == repoerrors.TaskTransferIdempotencyConflict {
+	if reason, _ := repoerrors.TaskTransferConflictReasonOf(rejection); !taskTransferRejectionTerminal(reason) {
 		return nil, r.commitTaskTransferAttemptConflict(ctx, tx, command, rejection)
 	}
 	if err := r.insertTaskTransferAttempt(ctx, tx, command, models.TaskTransferAuditFailed); err != nil {
@@ -267,6 +270,21 @@ func (r *Repository) commitTaskTransferRejection(
 		return nil, err
 	}
 	return nil, taskTransferSettled{err: rejection}
+}
+
+// taskTransferRejectionTerminal reports whether a domain rejection bars every
+// later commit of the same request. A cause that can clear without the request
+// changing (destination availability, lane capacity, an active cleanup) stays
+// retryable under the same key, and an idempotency conflict never replaces another
+// request's barrier.
+func taskTransferRejectionTerminal(reason repoerrors.TaskTransferConflictReason) bool {
+	switch reason {
+	case repoerrors.TaskTransferDestinationUnavailable, repoerrors.TaskTransferDestinationFull,
+		repoerrors.TaskTransferCleanupActive, repoerrors.TaskTransferIdempotencyConflict:
+		return false
+	default:
+		return true
+	}
 }
 
 // commitTaskTransferAttemptConflict audits a non-terminal conflict inside the

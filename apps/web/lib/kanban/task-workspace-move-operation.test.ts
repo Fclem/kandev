@@ -99,10 +99,10 @@ describe("WorkspaceMoveOperations reconcile overlay", () => {
     const currentOverlay = registry.beginReconcile("user-a", taskId);
     if (!currentOverlay) throw new Error("expected overlay");
 
-    registry.endReconcile("user-a", taskId, firstOverlay);
+    registry.endReconcile("user-a", taskId, firstOverlay, true);
     expect(registry.get("user-a", taskId)?.status).toBe("submitting");
 
-    registry.endReconcile("user-a", taskId, currentOverlay);
+    registry.endReconcile("user-a", taskId, currentOverlay, true);
     expect(registry.get("user-a", taskId)?.status).toBe("committed");
   });
 });

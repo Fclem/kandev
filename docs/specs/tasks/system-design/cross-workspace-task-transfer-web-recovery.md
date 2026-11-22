@@ -12,11 +12,12 @@ requirements:
 # Cross-workspace task transfer web submission recovery System Design
 
 Companion to [Audited cross-workspace task transfers System Design](cross-workspace-task-transfer.md).
-Owns the Web submission and recovery rules, plus the Web durable-rejection outcome
-precedence and the pre/post-commit cancellation boundary those operations depend on.
-Workspace-first lock acquisition order and the SQLite serialization reservation stay
-in the parent. The parent keeps the HTTP boundary, conflict-code table, persistence,
-and observability.
+Owns the Web-only rules: submission and recovery on the client, and the Web
+durable-rejection outcome precedence, failed-key barrier, and audit classification
+on the server. Transfer serialization (workspace-first lock order and the SQLite
+serialization reservation) and the pre/post-commit cancellation boundary are owned
+by the parent and apply unchanged here. The parent also keeps the HTTP boundary,
+conflict-code table, persistence, and observability.
 
 ## Submission recovery
 
@@ -25,7 +26,10 @@ Before the first POST, capture the complete immutable request and allocate one
 independent of render timing. No optimistic workspace removal occurs.
 
 - A 200 receipt settles the operation. Reconcile canonical task placement and
-  memberships before announcing success or offering navigation.
+  memberships before announcing success or offering navigation. If that
+  reconciliation read fails transiently, show a committed-but-reconciling state
+  ("task moved; the board is still updating") with navigation, and switch to plain
+  success once a later canonical read reconciles the membership.
 - A definitive rejection received for the original submission keeps still-valid
   draft choices. A `source_changed` response offers Refresh and requires a new
   explicit submit. A new reviewed attempt gets a fresh key.
@@ -49,20 +53,27 @@ independent of render timing. No optimistic workspace removal occurs.
   server-only durable-rejection mode on its internal command; it is not accepted
   from JSON and is excluded from the request digest. Existing MCP conflicts
   retain their current behavior and generic error text.
-- Acquire transfer serialization before a mutation savepoint. An exact
-  committed receipt takes precedence over any caller/request-bound terminal
-  rejection, and both take precedence over a mutable source/lane validation
-  result. All same-key attempts, including ones already admitted at the
-  service, must acquire this same serialization and check the existing
-  failed-key barrier before any commit.
-- If an authorized, well-formed Web operation fails a domain guard, including
-  `source_changed` or `step_incompatible`, roll back its mutation savepoint
-  while retaining the outer serialization lock. Recheck committed receipt
+- Under the parent's transfer serialization, an exact committed receipt takes
+  precedence over any caller/request-bound terminal rejection, and both take
+  precedence over a mutable source/lane validation result. All same-key
+  attempts, including ones already admitted at the service, check the existing
+  failed-key barrier under that serialization before any commit, and the
+  mutation savepoint is taken only after it.
+- If an authorized, well-formed Web operation fails a terminal domain guard
+  (such as `source_changed` or `step_incompatible`), roll back its mutation
+  savepoint while retaining the outer serialization lock. Recheck committed receipt
   precedence, then persist one durable `failed` attempt in the existing audit
   table and commit only that rejection record before returning its specific
   409. The rejected transfer changes no task/context data. This record is both
   the redacted attempt audit and the existing no-later-same-key-commit barrier;
   do not add a duplicate outside-transaction conflict audit.
+- A domain rejection whose cause can clear without the request changing
+  (`destination_unavailable`, `destination_full`, `cleanup_active`) is retryable:
+  after the same rollback and receipt recheck it commits one non-barrier
+  `conflict` row and returns its specific 409, and the same key can commit once
+  the cause clears. Tradeoff: a lost response for such an attempt stays uncertain
+  until a check commits or meets a terminal result, because a delayed original
+  request could still commit under that key.
 - The source predicate is checked under the workspace-row locks, before the
   relation reservation. A `source_changed` found there takes no savepoint. It
   first resolves receipt and barrier precedence: a committed receipt replays, an
@@ -102,7 +113,7 @@ independent of render timing. No optimistic workspace removal occurs.
   workspace-row locks, plus the relation reservation after the workspace stage),
   and the relation reservation holds the audit table, so a boundary `denied` row
   cannot land beside an admitted attempt that can still commit.
-  Thus a lost original domain-409 response can settle and release the form for
+  Thus a lost original terminal-domain-409 response can settle and release the form for
   a fresh reviewed key. An overlapping writer either committed first (receipt
   wins), or observes the barrier and cannot subsequently commit. Audit write,
   lookup, or commit failure remains uncertain; missing-key or arbitrary-409
@@ -140,8 +151,3 @@ independent of render timing. No optimistic workspace removal occurs.
   and a check of an already stored record still re-sends it.
 - If the user navigates to another task while the request settles, reconcile
   memberships but do not navigate, reopen the form, or steal focus.
-
-The repository continues using the initiating context until commit. Caller
-cancellation before commit rolls back; committed work retains the existing
-bounded `context.WithoutCancel` event/WIP reconciliation. Test both cancellation
-boundaries. There is no shared background transfer worker or extra retry loop.

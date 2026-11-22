@@ -9,6 +9,7 @@ import {
   type WorkspaceMoveOperation,
 } from "@/lib/kanban/task-workspace-move-operation";
 import type { TaskTransferRequest } from "@/lib/types/http";
+import { taskMembershipReconciled } from "@/lib/ws/handlers/task-transfer";
 import { reconcileTaskMembership } from "@/lib/ws/handlers/tasks";
 
 function useAuthIdentity(): string {
@@ -62,11 +63,19 @@ export function useTaskWorkspaceMoveOperation(taskId: string | null) {
       // read must not discard an accepted receipt.
       registry.settle(identity, pending, settled);
       if (settled.status === "committed") {
-        // Success stays hidden until canonical placement is reconciled. A failed
-        // reconciliation read leaves the receipt committed.
+        // Success stays hidden until canonical placement is reconciled. A transient
+        // reconciliation failure reveals the receipt as committed but still
+        // reconciling, until a later canonical read confirms placement.
         const overlay = registry.beginReconcile(identity, taskId);
-        await reconcileTaskMembership(store, taskId).catch(() => undefined);
-        if (overlay) registry.endReconcile(identity, taskId, overlay);
+        const outcome = await reconcileTaskMembership(store, taskId).catch(
+          () => "pending" as const,
+        );
+        if (overlay) registry.endReconcile(identity, taskId, overlay, outcome === "reconciled");
+        if (outcome === "pending") {
+          void taskMembershipReconciled(store, taskId).then(() =>
+            registry.confirmReconciled(identity, taskId),
+          );
+        }
       }
     },
     [identity, registry, store, taskId],

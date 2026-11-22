@@ -3408,6 +3408,7 @@
   "workspaceMoveNotice": "历史记录和会话会随任务一起保留，包括正在运行的工作。任务不会作为一次新的移动进入该步骤，因此不会运行步骤操作。目标步骤必须具有相同的名称和已保存的设置，标签或项目等工作区关联可能会阻止移动。",
   "workspaceMoveMoving": "正在移动任务...",
   "workspaceMoveSuccess": "任务已移动。",
+  "workspaceMoveCommittedReconciling": "任务已移动。看板仍在更新，稍后会自动同步。",
   "workspaceMoveOpenTask": "打开任务",
   "workspaceMoveUncertain": "移动结果尚未确认。在检查结果之前，你的选择会被保留。",
   "workspaceMoveCheckResult": "检查结果",

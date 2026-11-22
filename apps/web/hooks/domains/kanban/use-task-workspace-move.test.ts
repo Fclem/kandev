@@ -4,6 +4,7 @@ import { useStore } from "zustand";
 import { ApiError } from "@/lib/api/client";
 import { createAppStore, type AppState } from "@/lib/state/store";
 import type { Task, TaskTransferReceipt, TaskTransferRequest } from "@/lib/types/http";
+import type { MembershipReconcileOutcome } from "@/lib/ws/handlers/task-transfer";
 import { useTaskWorkspaceMove } from "./use-task-workspace-move";
 import { useTaskWorkspaceMoveOperation } from "./use-task-workspace-move-submit";
 
@@ -19,8 +20,15 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   ...api,
 }));
-const reconcile = vi.hoisted(() => vi.fn(async () => undefined));
+const reconcile = vi.hoisted(() =>
+  vi.fn(async (): Promise<MembershipReconcileOutcome> => "reconciled"),
+);
 vi.mock("@/lib/ws/handlers/tasks", () => ({ reconcileTaskMembership: reconcile }));
+const membershipReconciled = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/lib/ws/handlers/task-transfer", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ws/handlers/task-transfer")>()),
+  taskMembershipReconciled: membershipReconciled,
+}));
 
 let store: ReturnType<typeof createAppStore>;
 vi.mock("@/components/state-provider", () => ({
@@ -175,7 +183,7 @@ describe("submission", () => {
   });
 
   it("reveals the accepted receipt only after canonical membership is reconciled", async () => {
-    const gate = Promise.withResolvers<undefined>();
+    const gate = Promise.withResolvers<MembershipReconcileOutcome>();
     reconcile.mockReturnValueOnce(gate.promise);
     api.transferTask.mockResolvedValueOnce({ receipt });
     const hook = render();
@@ -187,8 +195,27 @@ describe("submission", () => {
     expect(hook.result.current.operation?.status).toBe("submitting");
     await act(() => hook.result.current.submit());
     expect(api.transferTask).toHaveBeenCalledTimes(1);
-    await act(async () => gate.resolve(undefined));
+    await act(async () => gate.resolve("reconciled"));
     expect(hook.result.current.operation?.status).toBe("committed");
+  });
+
+  it("shows a committed-but-reconciling outcome until a later read confirms placement", async () => {
+    reconcile.mockResolvedValueOnce("pending");
+    const confirmed = Promise.withResolvers<undefined>();
+    membershipReconciled.mockReturnValueOnce(confirmed.promise);
+    api.transferTask.mockResolvedValueOnce({ receipt });
+    const hook = render();
+    await choose(hook);
+    await act(() => hook.result.current.submit());
+    expect(hook.result.current.operation).toMatchObject({
+      status: "committed",
+      reconcilePending: true,
+    });
+    expect(membershipReconciled).toHaveBeenCalledWith(store, "task-1");
+
+    await act(async () => confirmed.resolve(undefined));
+    expect(hook.result.current.operation?.status).toBe("committed");
+    expect(hook.result.current.operation).not.toHaveProperty("reconcilePending");
   });
 
   it("keeps choices after an original rejection and uses a fresh key next time", async () => {
@@ -568,7 +595,7 @@ describe("superseded responses across caller switches", () => {
 
   it("keeps an accepted receipt committed when a caller switch lands during reconciliation", async () => {
     signIn("user-a");
-    const gate = Promise.withResolvers<undefined>();
+    const gate = Promise.withResolvers<MembershipReconcileOutcome>();
     reconcile.mockReturnValueOnce(gate.promise);
     api.transferTask.mockResolvedValueOnce({ receipt });
     const hook = render();
@@ -581,7 +608,7 @@ describe("superseded responses across caller switches", () => {
     signIn("user-a");
     await waitFor(() => expect(Object.keys(window.sessionStorage)).toHaveLength(0));
     expect(hook.result.current.operation?.status).not.toBe("uncertain");
-    await act(async () => gate.resolve(undefined));
+    await act(async () => gate.resolve("reconciled"));
     expect(Object.keys(window.sessionStorage)).toHaveLength(0);
     expect(hook.result.current.operation?.status).not.toBe("uncertain");
   });

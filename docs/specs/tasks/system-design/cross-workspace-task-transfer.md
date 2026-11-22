@@ -118,7 +118,14 @@ reason codes only after the caller is authorized for both workspaces.
 Every failure before commit leaves source and destination state unchanged and
 returns the stable conflict result. Committed transfers are durable: a retry
 after a caller-visible failure replays the stored receipt under the same actor,
-session, and key. Post-commit reconciliation is idempotent under cancellation.
+session, and key.
+
+Cancellation boundary (MCP and Web): the repository uses the initiating context
+until commit, so caller cancellation before commit rolls back with no task or
+context change. Committed work runs its post-commit event and WIP reconciliation
+under a bounded `context.WithoutCancel` deadline, idempotently and exactly once.
+There is no shared background transfer worker or extra retry loop. Tests cover
+both sides of the boundary.
 
 A caller must use a fresh key after its denied or failed attempt. Rejected
 attempts from another actor or session cannot poison that caller's key.
@@ -300,9 +307,11 @@ the Traditional Chinese pair through the existing locale script.
 ## Submission recovery
 
 Web submission, uncertainty, check, session-storage recovery, and the Web durable-rejection
-outcome and cancellation boundary are in
+outcome rules are in
 [Cross-workspace task transfer web submission recovery System Design](cross-workspace-task-transfer-web-recovery.md).
-Workspace-first lock acquisition order stays in [Workspace-first concurrency boundary](#workspace-first-concurrency-boundary).
+Transfer serialization (workspace-first lock order) stays in
+[Workspace-first concurrency boundary](#workspace-first-concurrency-boundary), and the
+cancellation boundary in [Failure and recovery](#failure-and-recovery).
 
 ## Client reconciliation
 

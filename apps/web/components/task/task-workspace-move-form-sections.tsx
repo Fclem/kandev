@@ -340,10 +340,14 @@ type OutcomeProps = SectionProps & { showOpenTask: boolean; onOpenTask: () => vo
 
 function CommittedOutcome({ state, isTouchSurface, showOpenTask, onOpenTask }: OutcomeProps) {
   const { t } = useTranslation();
-  const taskId = state.operation?.taskId ?? "";
+  const operation = state.operation;
+  const taskId = operation?.taskId ?? "";
+  const reconciling = operation?.status === "committed" && operation.reconcilePending === true;
   return (
     <>
-      <span>{t("task:workspaceMoveSuccess")}</span>
+      <span data-testid="workspace-move-committed" data-reconciling={reconciling}>
+        {reconciling ? t("task:workspaceMoveCommittedReconciling") : t("task:workspaceMoveSuccess")}
+      </span>
       {showOpenTask && (
         <AppLink
           href={linkToTask(taskId)}

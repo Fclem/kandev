@@ -23,7 +23,14 @@ export type WorkspaceMoveOperation =
       body: TaskTransferRequest;
       code?: TransferRejectionCode;
     }
-  | { status: "committed"; taskId: string; body: TaskTransferRequest; receipt: TaskTransferReceipt }
+  | {
+      status: "committed";
+      taskId: string;
+      body: TaskTransferRequest;
+      receipt: TaskTransferReceipt;
+      /** Committed, but a transient read has not yet reconciled canonical membership. */
+      reconcilePending?: true;
+    }
   | { status: "rejected"; taskId: string; body: TaskTransferRequest; code: TransferRejectionCode }
   | { status: "operation-rejected"; taskId: string; body: TaskTransferRequest };
 
@@ -168,11 +175,28 @@ export class WorkspaceMoveOperations {
     return overlay;
   }
 
-  /** Clears only the overlay this reconcile created; a superseded token is ignored. */
-  endReconcile(identity: string, taskId: string, overlay: object): void {
+  /**
+   * Clears only the overlay this reconcile created; a superseded token is ignored.
+   * An unconfirmed reconcile reveals the receipt as committed but still reconciling.
+   */
+  endReconcile(identity: string, taskId: string, overlay: object, confirmed: boolean): void {
     if (identity !== this.identity) return;
     if (this.reconciling.get(taskId) !== overlay) return;
     this.reconciling.delete(taskId);
+    const committed = this.byTask.get(taskId);
+    if (!confirmed && committed?.status === "committed") {
+      this.byTask.set(taskId, { ...committed, reconcilePending: true });
+    }
+    this.emit();
+  }
+
+  /** A later canonical read reconciled a receipt that was still reconciling. */
+  confirmReconciled(identity: string, taskId: string): void {
+    if (identity !== this.identity) return;
+    const committed = this.byTask.get(taskId);
+    if (committed?.status !== "committed" || !committed.reconcilePending) return;
+    const { reconcilePending: _pending, ...confirmed } = committed;
+    this.byTask.set(taskId, confirmed);
     this.emit();
   }
 

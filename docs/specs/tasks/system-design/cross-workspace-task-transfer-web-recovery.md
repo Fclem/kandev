@@ -124,10 +124,13 @@ independent of render timing. No optimistic workspace removal occurs.
   under current authorization, exactly as in an in-page check. No POST replays
   automatically, and a restored record never enables a fresh-key move until a
   terminal result is established by the rules above.
-- If storage is unavailable or the record fails validation, the Web keeps
-  placement reads only and shows that the prior operation cannot be checked from
-  this browser. It does not claim the original move failed, and it enables no
-  fresh-key move.
+- If a restored record fails validation, the Web keeps placement reads only and
+  shows that the earlier move cannot be checked from this browser. It does not
+  claim the original move failed, and it enables no fresh-key move.
+- If tab storage is unavailable, no move can be recorded durably. The Web keeps
+  placement reads only, says that the browser is blocking site data and asks for
+  a reload after allowing it, and enables no fresh-key move. It does not claim an
+  earlier move exists.
 - If the user navigates to another task while the request settles, reconcile
   memberships but do not navigate, reopen the form, or steal focus.
 

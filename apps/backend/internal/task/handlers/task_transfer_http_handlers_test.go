@@ -764,11 +764,15 @@ func TestHTTPTransferTaskCancelledBeforeCommitLeavesTaskUnchanged(t *testing.T) 
 	f.router.ServeHTTP(recorder, request)
 	require.NotEqual(t, http.StatusOK, recorder.Code, "cancelled request committed: %s", recorder.Body.String())
 	f.requireSourcePlacement(t, f.task)
+	var barriers int
+	require.NoError(t, f.repo.DB().QueryRow(`SELECT COUNT(*) FROM task_transfer_audit
+		WHERE idempotency_key = ? AND result IN ('denied', 'failed')`, transferHTTPKey).Scan(&barriers))
+	require.Zero(t, barriers, "a cancelled attempt must not write a terminal barrier")
 
-	// The cancelled attempt never commits later; checking it settles the
-	// operation instead of moving the task.
+	// A cancelled attempt settles nothing: checking the same operation commits it.
 	check := f.post(t, owner, body)
-	require.Equal(t, http.StatusConflict, check.status, "body: %v", check.body)
-	require.Equal(t, "operation_rejected", check.code(t))
-	f.requireSourcePlacement(t, f.task)
+	require.Equal(t, http.StatusOK, check.status, "body: %v", check.body)
+	stored, err := f.repo.GetTask(context.Background(), transferHTTPTaskID)
+	require.NoError(t, err)
+	require.Equal(t, "ws-b", stored.WorkspaceID)
 }

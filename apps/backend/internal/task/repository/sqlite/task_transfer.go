@@ -102,7 +102,7 @@ func (r *Repository) TransferTask(
 		return r.transferTaskWithDurableRejection(ctx, command, requestDigest)
 	}
 	if receipt, found, replayErr := r.replayTaskTransferCommitted(ctx, command, requestDigest); replayErr != nil {
-		return nil, errors.Join(replayErr, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultForError(replayErr)))
+		return nil, errors.Join(replayErr, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultForError(command, replayErr)))
 	} else if found {
 		return receipt, nil
 	}
@@ -171,8 +171,10 @@ func isTaskTransferOperationViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == taskTransferOperationIndex
 }
 
-func taskTransferResultForError(err error) string {
-	if errors.Is(err, repoerrors.ErrTaskTransferConflict) {
+// taskTransferResultForError audits a failed attempt. A durable Web attempt that
+// ends here never settles a domain guard, so it stays a retryable conflict.
+func taskTransferResultForError(command models.TaskTransferCommand, err error) string {
+	if command.DurableRejection || errors.Is(err, repoerrors.ErrTaskTransferConflict) {
 		return taskTransferResultConflict
 	}
 	return taskTransferResultFailed
@@ -264,7 +266,7 @@ func (r *Repository) ReplayTaskTransfer(
 	if err == nil {
 		return receipt, found, nil
 	}
-	return nil, found, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultForError(err)))
+	return nil, found, errors.Join(err, r.RecordTaskTransferAttempt(ctx, command, taskTransferResultForError(command, err)))
 }
 
 func (r *Repository) replayTaskTransfer(

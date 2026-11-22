@@ -269,6 +269,57 @@ func TestServiceTransferTaskDurableRejectionWritesOneAuditRowPerAttempt(t *testi
 	}
 }
 
+func TestServiceTransferTaskDurableBoundaryAuditKeepsInterruptionsRetryable(t *testing.T) {
+	t.Run("cancelled attempt leaves the key retryable", func(t *testing.T) {
+		svc, _, repo := createTestService(t)
+		task := seedServiceTaskTransfer(t, repo, "owner-1")
+		ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner-1", Role: authn.RoleMember})
+		command := serviceTaskTransferCommand(task)
+		command.DurableRejection = true
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+
+		if _, err := svc.TransferTask(cancelled, command); !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled TransferTask error = %v, want context canceled", err)
+		}
+		if got := serviceTransferAuditResults(t, repo, command.IdempotencyKey); got != "conflict" {
+			t.Fatalf("audit results after cancellation = %q, want one conflict", got)
+		}
+		receipt, err := svc.TransferTask(ctx, command)
+		if err != nil {
+			t.Fatalf("same-key retry after cancellation: %v", err)
+		}
+		if receipt.DestinationWorkspaceID != "transfer-ws-destination" {
+			t.Fatalf("retry receipt = %+v", receipt)
+		}
+	})
+	t.Run("authorization denial stays a terminal barrier", func(t *testing.T) {
+		svc, _, repo := createTestService(t)
+		task := seedServiceTaskTransfer(t, repo, "owner-2")
+		ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "owner-1", Role: authn.RoleMember})
+		command := serviceTaskTransferCommand(task)
+		command.DurableRejection = true
+
+		if _, err := svc.TransferTask(ctx, command); !errors.Is(err, repoerrors.ErrWorkspaceNotFound) {
+			t.Fatalf("TransferTask error = %v, want workspace not found", err)
+		}
+		if got := serviceTransferAuditResults(t, repo, command.IdempotencyKey); got != "denied" {
+			t.Fatalf("audit results after denial = %q, want one denied", got)
+		}
+	})
+}
+
+func serviceTransferAuditResults(t *testing.T, repo *sqliterepo.Repository, key string) string {
+	t.Helper()
+	var results string
+	if err := repo.DB().QueryRow(
+		`SELECT COALESCE(GROUP_CONCAT(result), '') FROM task_transfer_audit WHERE idempotency_key = ?`, key,
+	).Scan(&results); err != nil {
+		t.Fatalf("read audit results: %v", err)
+	}
+	return results
+}
+
 func serviceTransferAuditRows(t *testing.T, repo *sqliterepo.Repository, key string) int {
 	t.Helper()
 	var count int

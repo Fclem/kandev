@@ -45,10 +45,10 @@ func (s *Service) TransferTask(
 		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "failed"))
 	}
 	if err := s.authorizeTaskScope(ctx, command.TaskID, authz.ScopeTaskWrite); err != nil {
-		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "denied"))
+		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, taskTransferBoundaryAuditResult(command, err)))
 	}
 	if err := s.AuthorizeWorkspaceScope(ctx, command.DestinationWorkspaceID, authz.ScopeTaskWrite); err != nil {
-		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "denied"))
+		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, taskTransferBoundaryAuditResult(command, err)))
 	}
 	if replayRepository, ok := s.tasks.(taskTransferReplayRepository); ok {
 		receipt, found, err := replayRepository.ReplayTaskTransfer(ctx, command)
@@ -62,21 +62,18 @@ func (s *Service) TransferTask(
 	if precheck, ok := s.tasks.(taskTransferPrecheckRepository); ok && command.DurableRejection {
 		receipt, err := precheck.TaskTransferPrecheck(ctx, command)
 		if err != nil {
-			if errors.Is(err, repoerrors.ErrTaskTransferConflict) {
-				return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "conflict"))
-			}
-			return nil, err
+			return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "conflict"))
 		}
 		if receipt != nil {
 			return receipt, nil
 		}
 	}
 	if err := s.authorizeWorkflowID(ctx, command.DestinationWorkflowID); err != nil {
-		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "denied"))
+		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, taskTransferBoundaryAuditResult(command, err)))
 	}
 	authorizedOwnerID, err := s.validateTaskTransferBoundary(ctx, command)
 	if err != nil {
-		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "denied"))
+		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, taskTransferBoundaryAuditResult(command, err)))
 	}
 	command.AuthorizedOwnerID = authorizedOwnerID
 	command.OwnerPredicateSet = true
@@ -91,6 +88,18 @@ func (s *Service) TransferTask(
 		s.pullNextTaskOnVacate(postCommitCtx, receipt.SourceStepID, receipt.TaskID)
 	}
 	return receipt, nil
+}
+
+// taskTransferBoundaryAuditResult classifies a failed authorization or boundary
+// check. A durable Web attempt writes the terminal denied barrier only for a
+// settled authorization outcome; cancellation or a lookup failure is audited as a
+// non-barrier conflict so the same key stays retryable.
+func taskTransferBoundaryAuditResult(command models.TaskTransferCommand, err error) string {
+	if !command.DurableRejection || IsForbidden(err) || errors.Is(err, repoerrors.ErrTaskNotFound) ||
+		errors.Is(err, repoerrors.ErrWorkspaceNotFound) || errors.Is(err, repoerrors.ErrWorkflowNotFound) {
+		return "denied"
+	}
+	return "conflict"
 }
 
 // AuditTaskTransferAttempt records a redacted denied attempt without invoking

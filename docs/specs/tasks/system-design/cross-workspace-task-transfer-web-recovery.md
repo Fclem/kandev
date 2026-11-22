@@ -135,9 +135,9 @@ independent of render timing. No optimistic workspace removal occurs.
 - If tab storage cannot be read, or refuses the write for a new submission, no
   move can be recorded durably. The Web keeps placement reads only, shows a
   cause-neutral notice (allow site data or free storage, then reload) in place of
-  the submitting task's outcome and of any resolved rejection, and enables no
-  fresh-key move. It does not claim an earlier move exists. A check of an already
-  stored record still re-sends it.
+  any resolved rejection, whenever it settled, and enables no fresh-key move. It
+  does not claim an earlier move exists. Unresolved outcomes keep `Check result`,
+  and a check of an already stored record still re-sends it.
 - If the user navigates to another task while the request settles, reconcile
   memberships but do not navigate, reopen the form, or steal focus.
 

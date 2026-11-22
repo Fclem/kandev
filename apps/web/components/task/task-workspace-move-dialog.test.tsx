@@ -8,6 +8,7 @@ import { TaskWorkspaceMoveDialog } from "./task-workspace-move-dialog";
 
 // Covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.2, 004.3, 004.5 and 005.3.
 const SUBMIT_TEST_ID = "workspace-move-submit";
+const OUTCOME_TEST_ID = "workspace-move-outcome";
 
 const { useTaskWorkspaceMoveMock, responsiveMock } = vi.hoisted(() => ({
   useTaskWorkspaceMoveMock: vi.fn(),
@@ -84,6 +85,10 @@ function operation(status: WorkspaceMoveOperation["status"], extra = {}): Worksp
   return { status, taskId: "task-1", body, ...extra } as WorkspaceMoveOperation;
 }
 
+function outcomeStatus(): string | null {
+  return screen.getByTestId(OUTCOME_TEST_ID).getAttribute("data-status");
+}
+
 beforeEach(() => {
   responsiveMock.isMobile = false;
   responsiveMock.isFinePointer = true;
@@ -129,20 +134,22 @@ describe("TaskWorkspaceMoveDialog", () => {
       state({ operation: operation("rejected", { code: "step_incompatible" }), canSubmit: true }),
     );
     renderDialog();
-    const outcome = screen.getByTestId("workspace-move-outcome");
+    const outcome = screen.getByTestId(OUTCOME_TEST_ID);
     expect(outcome.getAttribute("role")).toBe("alert");
     expect(screen.getByTestId("workspace-move-rejection").getAttribute("data-code")).toBe(
       "step_incompatible",
     );
     expect(screen.getByTestId(SUBMIT_TEST_ID).hasAttribute("disabled")).toBe(false);
   });
+});
 
+describe("TaskWorkspaceMoveDialog outcomes", () => {
   it("keeps an uncertain or unverifiable request checkable without offering a new move", () => {
     for (const status of ["uncertain", "check-unavailable"] as const) {
       const hook = state({ operation: operation(status), frozen: true });
       useTaskWorkspaceMoveMock.mockReturnValue(hook);
       renderDialog();
-      expect(screen.getByTestId("workspace-move-outcome").getAttribute("data-status")).toBe(status);
+      expect(outcomeStatus()).toBe(status);
       expect(screen.getByTestId(SUBMIT_TEST_ID).hasAttribute("disabled")).toBe(true);
       fireEvent.click(screen.getByTestId("workspace-move-check-result"));
       expect(hook.check).toHaveBeenCalledOnce();
@@ -157,9 +164,29 @@ describe("TaskWorkspaceMoveDialog", () => {
     ] as const) {
       useTaskWorkspaceMoveMock.mockReturnValue(state(overrides));
       renderDialog();
-      expect(screen.getByTestId("workspace-move-outcome").getAttribute("data-status")).toBe(status);
+      expect(outcomeStatus()).toBe(status);
       cleanup();
     }
+  });
+
+  it("shows the storage notice over a resolved rejection but keeps an unresolved one checkable", () => {
+    for (const resolved of [
+      operation("rejected", { code: "destination_full" }),
+      operation("operation-rejected"),
+    ]) {
+      useTaskWorkspaceMoveMock.mockReturnValue(
+        state({ operation: resolved, storageUnavailable: true, sourceStale: true }),
+      );
+      renderDialog();
+      expect(outcomeStatus()).toBe("storage-unavailable");
+      cleanup();
+    }
+    useTaskWorkspaceMoveMock.mockReturnValue(
+      state({ operation: operation("uncertain"), frozen: true, storageUnavailable: true }),
+    );
+    renderDialog();
+    expect(outcomeStatus()).toBe("uncertain");
+    expect(screen.getByTestId("workspace-move-check-result")).toBeTruthy();
   });
 
   it("requires a refreshed review after a stale source or terminal rejection", () => {

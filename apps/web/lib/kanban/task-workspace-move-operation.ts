@@ -202,30 +202,17 @@ export class WorkspaceMoveOperations {
     if (identity !== this.identity || !this.admits(taskId, attempt)) return null;
     const next = { status: "submitting" as const, taskId, body, attempt };
     // A new request must be durable before it leaves this tab. A check re-sends a
-    // record that was already stored, so only a submission writes here.
+    // record that was already stored, so only a submission writes here. A refused
+    // write disables new moves for this caller; the form then shows why in place
+    // of any resolved rejection.
     if (attempt === "submit" && !persistWorkspaceMove(identity, taskId, body)) {
-      this.markStorageUnavailable(taskId);
+      this.storageUnavailable = true;
+      this.emit();
       return null;
     }
     this.live.set(taskId, next);
     this.set(taskId, next);
     return next;
-  }
-
-  /**
-   * A refused write disables new moves for this caller. The submitting task's
-   * outcome and every resolved rejection are dropped, so each task's form shows
-   * why moves are off instead of a stale rejection that still looks retryable.
-   */
-  private markStorageUnavailable(taskId: string): void {
-    this.storageUnavailable = true;
-    this.byTask.delete(taskId);
-    for (const [id, operation] of this.byTask) {
-      if (operation.status === "rejected" || operation.status === "operation-rejected") {
-        this.byTask.delete(id);
-      }
-    }
-    this.emit();
   }
 
   /** Whether the adopted caller may start this attempt for the task now. */

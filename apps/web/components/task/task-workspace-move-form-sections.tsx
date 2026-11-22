@@ -416,27 +416,44 @@ function OperationOutcome(props: OutcomeProps) {
   }
 }
 
+/**
+ * The notice that replaces the outcome. Unavailable storage outranks a resolved
+ * rejection, whenever it settled: no move can be retried from this tab, so a
+ * retryable-looking rejection would mislead. Unresolved and committed outcomes
+ * keep rendering.
+ */
+function workspaceMoveNotice(
+  state: TaskWorkspaceMoveState,
+): "storage-unavailable" | "restore-unverifiable" | null {
+  const status = state.operation?.status;
+  const resolvedRejection = status === "rejected" || status === "operation-rejected";
+  if (state.storageUnavailable && (!status || resolvedRejection)) return "storage-unavailable";
+  if (!status && state.restoreUnverifiable) return "restore-unverifiable";
+  return null;
+}
+
 /** One announced region for every operation outcome. */
 export function WorkspaceMoveOutcome(props: OutcomeProps) {
   const { t } = useTranslation();
   const { state, isTouchSurface } = props;
   const status = state.operation?.status;
   const stale = state.sourceStale && status !== "submitting";
-  if (!status && (state.restoreUnverifiable || state.storageUnavailable))
+  const alert = status === "rejected" || status === "operation-rejected";
+  const notice = workspaceMoveNotice(state);
+  if (notice)
     return (
       <div
         role="status"
         data-testid="workspace-move-outcome"
-        data-status={state.restoreUnverifiable ? "restore-unverifiable" : "storage-unavailable"}
+        data-status={notice}
         className="rounded-md border p-3 text-sm break-words"
       >
-        {state.restoreUnverifiable
-          ? t("task:workspaceMoveRestoreUnverifiable")
-          : t("task:workspaceMoveStorageUnavailable")}
+        {notice === "storage-unavailable"
+          ? t("task:workspaceMoveStorageUnavailable")
+          : t("task:workspaceMoveRestoreUnverifiable")}
       </div>
     );
   if (!status && !stale) return null;
-  const alert = status === "rejected" || status === "operation-rejected";
   return (
     <div
       role={alert ? "alert" : "status"}

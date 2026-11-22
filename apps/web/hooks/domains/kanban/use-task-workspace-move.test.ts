@@ -452,7 +452,7 @@ describe("storage unavailable", () => {
     }
   });
 
-  it("replaces a stale rejection with the storage notice when a resubmission cannot be saved", async () => {
+  it("disables moves when a resubmission after a rejection cannot be saved", async () => {
     api.transferTask.mockRejectedValueOnce(conflict("destination_full"));
     const hook = render();
     await choose(hook);
@@ -463,7 +463,7 @@ describe("storage unavailable", () => {
       await act(() => hook.result.current.submit());
       expect(api.transferTask).toHaveBeenCalledTimes(1);
       expect(hook.result.current.storageUnavailable).toBe(true);
-      expect(hook.result.current.operation).toBeNull();
+      expect(hook.result.current.canSubmit).toBe(false);
     } finally {
       restore();
     }

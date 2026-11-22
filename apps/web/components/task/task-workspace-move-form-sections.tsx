@@ -422,15 +422,17 @@ export function WorkspaceMoveOutcome(props: OutcomeProps) {
   const { state, isTouchSurface } = props;
   const status = state.operation?.status;
   const stale = state.sourceStale && status !== "submitting";
-  if (!status && state.restoreUnverifiable)
+  if (!status && (state.restoreUnverifiable || state.storageUnavailable))
     return (
       <div
         role="status"
         data-testid="workspace-move-outcome"
-        data-status="restore-unverifiable"
+        data-status={state.restoreUnverifiable ? "restore-unverifiable" : "storage-unavailable"}
         className="rounded-md border p-3 text-sm break-words"
       >
-        {t("task:workspaceMoveRestoreUnverifiable")}
+        {state.restoreUnverifiable
+          ? t("task:workspaceMoveRestoreUnverifiable")
+          : t("task:workspaceMoveStorageUnavailable")}
       </div>
     );
   if (!status && !stale) return null;

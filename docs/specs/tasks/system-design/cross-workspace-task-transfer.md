@@ -332,7 +332,10 @@ member or access is definitively unavailable (403/404). A confirmed current sour
 row, including one installed after a return, is retained. A timeout, cancellation,
 5xx, or other transient read failure keeps membership/preview and a retryable
 invalidation; never infer departure. Do not reveal destination data to a
-source-only reader.
+source-only reader. Accepted residual: the task read keeps the authorization
+layer's existence-hiding 404 when a membership or unit-reach lookup fails closed,
+so that rare transient failure reads as departure for a non-owner. The next
+accepted canonical read or source refresh restores the membership.
 
 Fence each reconciliation read with the captured task/source identity, current
 workspace generation, and existing accepted overview/sidebar read revisions.

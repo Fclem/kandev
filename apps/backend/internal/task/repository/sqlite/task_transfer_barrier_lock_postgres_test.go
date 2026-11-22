@@ -36,13 +36,13 @@ func TestDurableRejectionHoldsSerializationUntilBarrierCommits(t *testing.T) {
 		workflow_id = 'pg-race-wf-destination', workflow_step_id = 'pg-race-step-destination',
 		wip_admitted = 1, queued_for_step_id = '' WHERE id = $1`, tasks[1].ID)
 	require.NoError(t, err)
-	holder := holdTransferBarrierInserts(t, repo.db)
+	holder := holdTransferInserts(t, repo.db, "task_transfer_audit", "NEW.result = 'failed'")
 
 	command := postgresRaceTransferCommand(tasks[0], "barrier-hold-durable")
 	command.DurableRejection = true
 	first := make(chan error, 1)
 	go func() { _, transferErr := repo.TransferTask(ctx, command); first <- transferErr }()
-	rejectingPID := waitForTransferBarrierWaiter(t, repo.db, first)
+	rejectingPID := waitForHeldTransferInsert(t, repo.db, first)
 
 	retry := make(chan error, 1)
 	go func() { _, transferErr := repo.TransferTask(ctx, command); retry <- transferErr }()
@@ -62,17 +62,63 @@ func TestDurableRejectionHoldsSerializationUntilBarrierCommits(t *testing.T) {
 	assertPostgresTransferSourceUnchanged(t, repo, tasks[0])
 }
 
-// holdTransferBarrierInserts installs a schema-local trigger that makes every
-// failed-barrier insert wait on this schema's advisory key, then takes that key on
-// a pinned connection the caller releases.
-func holdTransferBarrierInserts(t *testing.T, db *sqlx.DB) *sqlx.Conn {
+// A boundary denied row is written outside transfer serialization, but the
+// relation reservation holds task_transfer_audit, so the denied insert waits for
+// an admitted attempt to finish. Precheck therefore never reads a denied barrier
+// beside an attempt that can still commit; once the attempt commits, its receipt
+// wins over the denied row.
+func TestDeniedAuditWaitsForAdmittedApply(t *testing.T) {
+	repo, tasks := seedPostgresConcurrentTransferTasks(t, 0)
+	repo.db.SetMaxOpenConns(8)
+	ctx := context.Background()
+	holder := holdTransferInserts(t, repo.db, "task_transfer_operations", "true")
+	command := postgresRaceTransferCommand(tasks[0], "denied-during-apply")
+	command.DurableRejection = true
+
+	applying := make(chan error, 1)
+	go func() { _, transferErr := repo.TransferTask(ctx, command); applying <- transferErr }()
+	applyingPID := waitForHeldTransferInsert(t, repo.db, applying)
+	denied := make(chan error, 1)
+	go func() { denied <- repo.RecordTaskTransferAttempt(ctx, command, "denied") }()
+	waitForBackendBlockedBy(t, repo.db, applyingPID, denied)
+	receipt, err := repo.TaskTransferPrecheck(ctx, command)
+	require.NoError(t, err, "no denied barrier may be visible while the admitted attempt applies")
+	require.Nil(t, receipt)
+
+	_, err = holder.ExecContext(ctx, fmt.Sprintf(`SELECT pg_advisory_unlock(%d, %s)`,
+		transferBarrierHoldClass, transferBarrierHoldKeySQL))
+	require.NoError(t, err)
+	select {
+	case transferErr := <-applying:
+		require.NoError(t, transferErr)
+	case <-time.After(10 * time.Second):
+		t.Fatal("admitted transfer did not commit")
+	}
+	select {
+	case auditErr := <-denied:
+		// The denied write either lands after the commit or exhausts its bounded wait.
+		if auditErr != nil {
+			require.ErrorIs(t, auditErr, context.DeadlineExceeded)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("denied audit did not finish")
+	}
+	receipt, err = repo.TaskTransferPrecheck(ctx, command)
+	require.NoError(t, err)
+	require.NotNil(t, receipt, "the committed receipt wins over the later denied row")
+}
+
+// holdTransferInserts installs a schema-local trigger that makes every insert into
+// table matching when wait on this schema's advisory key, then takes that key on a
+// pinned connection the caller releases.
+func holdTransferInserts(t *testing.T, db *sqlx.DB, table, when string) *sqlx.Conn {
 	t.Helper()
-	_, err := db.Exec(fmt.Sprintf(`CREATE FUNCTION hold_transfer_barrier() RETURNS trigger LANGUAGE plpgsql AS $$
+	_, err := db.Exec(fmt.Sprintf(`CREATE FUNCTION hold_transfer_insert() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN PERFORM pg_advisory_xact_lock(%d, %s); RETURN NEW; END $$`,
 		transferBarrierHoldClass, transferBarrierHoldKeySQL))
 	require.NoError(t, err)
-	_, err = db.Exec(`CREATE TRIGGER hold_transfer_barrier BEFORE INSERT ON task_transfer_audit
-		FOR EACH ROW WHEN (NEW.result = 'failed') EXECUTE FUNCTION hold_transfer_barrier()`)
+	_, err = db.Exec(`CREATE TRIGGER hold_transfer_insert BEFORE INSERT ON ` + table +
+		` FOR EACH ROW WHEN (` + when + `) EXECUTE FUNCTION hold_transfer_insert()`)
 	require.NoError(t, err)
 	holder, err := db.Connx(context.Background())
 	require.NoError(t, err)
@@ -87,14 +133,14 @@ func holdTransferBarrierInserts(t *testing.T, db *sqlx.DB) *sqlx.Conn {
 	return holder
 }
 
-// waitForTransferBarrierWaiter returns the backend parked in the barrier insert.
-func waitForTransferBarrierWaiter(t *testing.T, db *sqlx.DB, done <-chan error) int {
+// waitForHeldTransferInsert returns the backend parked in the held insert.
+func waitForHeldTransferInsert(t *testing.T, db *sqlx.DB, done <-chan error) int {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
 		case transferErr := <-done:
-			t.Fatalf("rejecting transfer finished before its barrier insert was held: %v", transferErr)
+			t.Fatalf("transfer finished before its held insert was reached: %v", transferErr)
 		default:
 		}
 		var pids []int
@@ -104,33 +150,33 @@ func waitForTransferBarrierWaiter(t *testing.T, db *sqlx.DB, done <-chan error) 
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("rejecting transfer never reached its barrier insert")
+	t.Fatal("transfer never reached its held insert")
 	return 0
 }
 
-// waitForBackendBlockedBy requires another backend to wait on the rejecting
-// transaction while no second transfer reaches the barrier insert.
-func waitForBackendBlockedBy(t *testing.T, db *sqlx.DB, rejectingPID int, done <-chan error) {
+// waitForBackendBlockedBy requires the operation behind done to wait on the
+// holding transaction while no second backend reaches the held insert.
+func waitForBackendBlockedBy(t *testing.T, db *sqlx.DB, holdingPID int, done <-chan error) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
-		case transferErr := <-done:
-			t.Fatalf("same-key retry bypassed the rejecting transaction's serialization: %v", transferErr)
+		case operationErr := <-done:
+			t.Fatalf("operation bypassed the holding transaction's locks: %v", operationErr)
 		default:
 		}
 		var blocked, barrierWaiters int
 		require.NoError(t, db.Get(&blocked, `SELECT count(*) FROM pg_stat_activity
-			WHERE pid <> $1 AND $1 = ANY(pg_blocking_pids(pid))`, rejectingPID))
+			WHERE pid <> $1 AND $1 = ANY(pg_blocking_pids(pid))`, holdingPID))
 		require.NoError(t, db.Get(&barrierWaiters, `SELECT count(*) FROM (`+transferBarrierWaiterQuery+`) AS waiters`,
 			transferBarrierHoldClass))
-		require.LessOrEqual(t, barrierWaiters, 1, "same-key retry reached the barrier insert past the rejecting transaction's locks")
+		require.LessOrEqual(t, barrierWaiters, 1, "a second backend reached the held insert past the holding transaction's locks")
 		if blocked > 0 {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("same-key retry never waited on the rejecting transaction")
+	t.Fatal("operation never waited on the holding transaction")
 }
 
 func requireTransferConflictReason(t *testing.T, done <-chan error, want repoerrors.TaskTransferConflictReason) {

@@ -190,7 +190,10 @@ func (r *Repository) taskTransferTerminalRejection(
 // TaskTransferPrecheck resolves this caller's exact request before the service
 // runs its mutable boundary checks. Replay runs again after the barrier read:
 // under READ COMMITTED each statement has its own snapshot, so a receipt that
-// commits between the two reads still wins over a barrier read in between.
+// commits between the two reads still wins over a barrier read in between. A
+// barrier read here never sits beside an attempt that can still commit: the
+// relation reservation holds task_transfer_audit, so a boundary denied row waits
+// for any admitted attempt to finish before it becomes visible.
 func (r *Repository) TaskTransferPrecheck(
 	ctx context.Context,
 	command models.TaskTransferCommand,

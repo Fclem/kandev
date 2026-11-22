@@ -3433,5 +3433,6 @@
   "workspaceMoveErrorForbidden": "両方のワークスペースでタスクを編集する権限が必要です。",
   "workspaceMoveErrorUnavailable": "タスクまたは移動先を利用できません。",
   "workspaceMoveErrorInvalid": "移動リクエストは受け付けられませんでした。",
-  "workspaceMoveRestoreUnverifiable": "ページを再読み込みする前の移動は、このブラウザーでは確認できません。移動が失敗したという意味ではありません。タスクの現在の配置を確認してください。"
+  "workspaceMoveRestoreUnverifiable": "ページを再読み込みする前の移動は、このブラウザーでは確認できません。移動が失敗したという意味ではありません。タスクの現在の配置を確認してください。",
+  "workspaceMoveStorageUnavailable": "このブラウザーはこのページのセッションストレージをブロックしているため、移動を安全に記録できません。サイトデータを許可してから、ページを再読み込みしてください。"
 }

@@ -54,6 +54,7 @@ function state(overrides: Partial<TaskWorkspaceMoveState> = {}): TaskWorkspaceMo
     chooseStep: vi.fn(),
     operation: null,
     restoreUnverifiable: false,
+    storageUnavailable: false,
     frozen: false,
     sourceStale: false,
     canSubmit: false,
@@ -145,6 +146,18 @@ describe("TaskWorkspaceMoveDialog", () => {
       expect(screen.getByTestId(SUBMIT_TEST_ID).hasAttribute("disabled")).toBe(true);
       fireEvent.click(screen.getByTestId("workspace-move-check-result"));
       expect(hook.check).toHaveBeenCalledOnce();
+      cleanup();
+    }
+  });
+
+  it("names unavailable tab storage separately from an uncheckable earlier move", () => {
+    for (const [overrides, status] of [
+      [{ restoreUnverifiable: true }, "restore-unverifiable"],
+      [{ storageUnavailable: true }, "storage-unavailable"],
+    ] as const) {
+      useTaskWorkspaceMoveMock.mockReturnValue(state(overrides));
+      renderDialog();
+      expect(screen.getByTestId("workspace-move-outcome").getAttribute("data-status")).toBe(status);
       cleanup();
     }
   });

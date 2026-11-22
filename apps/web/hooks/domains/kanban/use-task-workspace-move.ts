@@ -161,7 +161,7 @@ export function useTaskWorkspaceMove({ open, taskId, workspaceId }: Args) {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const catalog = useChangeWorkflowCatalog(open, selectedWorkspaceId || null);
   const destination = useChangeWorkflowDestination(open);
-  const { operation, unverifiable, submit, check, clearResolved } =
+  const { operation, unverifiable, storageUnavailable, submit, check, clearResolved } =
     useTaskWorkspaceMoveOperation(taskId);
   const frozen = isUnresolvedWorkspaceMove(operation);
   const [sourceStale, setSourceStale] = useState(false);
@@ -190,7 +190,7 @@ export function useTaskWorkspaceMove({ open, taskId, workspaceId }: Args) {
   );
   const canSubmit = canSubmitWorkspaceMove({
     taskReady: Boolean(task) && taskData.status === "success",
-    blocked: frozen || sourceStale || unverifiable,
+    blocked: frozen || sourceStale || unverifiable || storageUnavailable,
     selectedWorkspaceId,
     catalogReady: catalog.status === "success",
     destination,
@@ -245,6 +245,8 @@ export function useTaskWorkspaceMove({ open, taskId, workspaceId }: Args) {
     operation,
     /** A prior operation from before a reload cannot be checked from this browser. */
     restoreUnverifiable: unverifiable,
+    /** Tab storage is unavailable, so no move can be recorded durably from this browser. */
+    storageUnavailable,
     frozen,
     sourceStale,
     canSubmit,

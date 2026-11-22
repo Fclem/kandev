@@ -3433,5 +3433,6 @@
   "workspaceMoveErrorForbidden": "你需要在兩個工作區中都有編輯任務的權限。",
   "workspaceMoveErrorUnavailable": "任務或目標不可用。",
   "workspaceMoveErrorInvalid": "移動請求未被接受。",
-  "workspaceMoveRestoreUnverifiable": "無法在此瀏覽器中檢查頁面重新載入前的移動。這並不表示移動失敗；請檢視任務的目前位置。"
+  "workspaceMoveRestoreUnverifiable": "無法在此瀏覽器中檢查頁面重新載入前的移動。這並不表示移動失敗；請檢視任務的目前位置。",
+  "workspaceMoveStorageUnavailable": "此瀏覽器阻止了本頁面的工作階段儲存，因此無法安全地記錄移動。請允許網站資料，然後重新載入頁面。"
 }

@@ -93,6 +93,10 @@ independent of render timing. No optimistic workspace removal occurs.
   Ordinary historical `conflict` rows alone are not terminal evidence.
 - An exact retry returns `operation_rejected` only after serialized receipt
   lookup finds no committed receipt and verifies the durable failed-key barrier.
+  The service precheck reads the barrier without serialization; this is
+  equivalent because the relation reservation holds the audit table, so neither a
+  failed row nor a boundary `denied` row becomes visible beside an attempt that
+  can still commit.
   Thus a lost original domain-409 response can settle and release the form for
   a fresh reviewed key. An overlapping writer either committed first (receipt
   wins), or observes the barrier and cannot subsequently commit. Audit write,

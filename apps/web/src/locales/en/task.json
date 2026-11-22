@@ -3433,5 +3433,6 @@
   "workspaceMoveErrorForbidden": "You need permission to edit tasks in both workspaces.",
   "workspaceMoveErrorUnavailable": "The task or destination is not available.",
   "workspaceMoveErrorInvalid": "The move request was not accepted.",
-  "workspaceMoveRestoreUnverifiable": "A move from before this page was reloaded cannot be checked from this browser. This does not mean it failed; check the task's current placement."
+  "workspaceMoveRestoreUnverifiable": "A move from before this page was reloaded cannot be checked from this browser. This does not mean it failed; check the task's current placement.",
+  "workspaceMoveStorageUnavailable": "This browser is blocking session storage for this page, so a move cannot be recorded safely. Allow site data, then reload the page."
 }

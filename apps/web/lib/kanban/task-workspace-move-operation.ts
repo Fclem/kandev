@@ -146,8 +146,9 @@ export class WorkspaceMoveOperations {
   private storageUnavailable = false;
   private readonly listeners = new Set<Listener>();
 
+  /** Pure read for render; returns null until `adopt` has switched to this caller. */
   get(identity: string, taskId: string): WorkspaceMoveOperation | null {
-    this.adopt(identity);
+    if (identity !== this.identity) return null;
     return this.reconciling.get(taskId) ?? this.byTask.get(taskId) ?? null;
   }
 
@@ -177,18 +178,25 @@ export class WorkspaceMoveOperations {
 
   /** A restored record for this task failed validation and cannot be checked here. */
   isUnverifiable(identity: string, taskId: string): boolean {
-    this.adopt(identity);
-    return this.storageUnavailable || this.unverifiable.has(taskId);
+    return identity === this.identity && this.unverifiable.has(taskId);
   }
 
-  /** Admits one request synchronously; a second click while busy is refused. */
+  /** Tab storage cannot be read for this caller, so no move can be made durable here. */
+  isStorageUnavailable(identity: string): boolean {
+    return identity === this.identity && this.storageUnavailable;
+  }
+
+  /**
+   * Admits one request synchronously; a second click while busy is refused, and
+   * so is a request from a caller other than the adopted one.
+   */
   begin(
     identity: string,
     taskId: string,
     body: TaskTransferRequest,
     attempt: "submit" | "check",
   ): Extract<WorkspaceMoveOperation, { status: "submitting" }> | null {
-    this.adopt(identity);
+    if (identity !== this.identity) return null;
     const current = this.byTask.get(taskId);
     if (this.reconciling.has(taskId)) return null;
     if (current?.status === "submitting") return null;
@@ -217,7 +225,7 @@ export class WorkspaceMoveOperations {
 
   /** Forgets a resolved operation. Unresolved and unverifiable records are never dismissed here. */
   clearResolved(identity: string, taskId: string): void {
-    this.adopt(identity);
+    if (identity !== this.identity) return;
     if (isUnresolvedWorkspaceMove(this.byTask.get(taskId) ?? null)) return;
     if (this.byTask.delete(taskId)) this.emit();
   }
@@ -227,9 +235,13 @@ export class WorkspaceMoveOperations {
     return () => this.listeners.delete(listener);
   }
 
-  private adopt(identity: string): void {
+  /**
+   * Switches the visible caller and restores that caller's stored records. It
+   * reads storage and notifies listeners, so call it from an effect or an event,
+   * never during render.
+   */
+  adopt(identity: string): void {
     if (identity === this.identity) return;
-    const hadState = this.byTask.size > 0 || this.unverifiable.size > 0 || this.storageUnavailable;
     this.identity = identity;
     this.byTask.clear();
     this.reconciling.clear();
@@ -242,7 +254,7 @@ export class WorkspaceMoveOperations {
       this.byTask.set(taskId, { status: "uncertain", taskId, body });
     }
     for (const taskId of restored.invalidTaskIds) this.unverifiable.add(taskId);
-    if (hadState) this.emit();
+    this.emit();
   }
 
   private set(taskId: string, operation: WorkspaceMoveOperation): void {

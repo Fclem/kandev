@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useLayoutEffect, useSyncExternalStore } from "react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { transferTask } from "@/lib/api";
 import {
@@ -28,14 +28,22 @@ export function useTaskWorkspaceMoveOperation(taskId: string | null) {
   const store = useAppStoreApi();
   const identity = useAuthIdentity();
   const registry = workspaceMoveOperations(store);
+  const subscribe = useCallback((listener: () => void) => registry.subscribe(listener), [registry]);
+  // Adoption reads storage and notifies every consumer, so it runs after render.
+  useLayoutEffect(() => registry.adopt(identity), [identity, registry]);
   const operation = useSyncExternalStore(
-    useCallback((listener: () => void) => registry.subscribe(listener), [registry]),
+    subscribe,
     () => (taskId ? registry.get(identity, taskId) : null),
     () => null,
   );
   const unverifiable = useSyncExternalStore(
-    useCallback((listener: () => void) => registry.subscribe(listener), [registry]),
+    subscribe,
     () => (taskId ? registry.isUnverifiable(identity, taskId) : false),
+    () => false,
+  );
+  const storageUnavailable = useSyncExternalStore(
+    subscribe,
+    () => registry.isStorageUnavailable(identity),
     () => false,
   );
 
@@ -74,5 +82,5 @@ export function useTaskWorkspaceMoveOperation(taskId: string | null) {
     if (taskId) registry.clearResolved(identity, taskId);
   }, [identity, registry, taskId]);
 
-  return { operation, unverifiable, submit, check, clearResolved };
+  return { operation, unverifiable, storageUnavailable, submit, check, clearResolved };
 }

@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api/client";
 import { createAppStore, type AppState } from "@/lib/state/store";
 import type { Task, TaskTransferReceipt, TaskTransferRequest } from "@/lib/types/http";
 import { useTaskWorkspaceMove } from "./use-task-workspace-move";
+import { useTaskWorkspaceMoveOperation } from "./use-task-workspace-move-submit";
 
 // Covers AC-TASKS-CROSS-WORKSPACE-TRANSFER-004.2 and 005.3.
 
@@ -383,7 +384,9 @@ describe("storage unavailable", () => {
     try {
       const hook = render();
       await choose(hook);
-      expect(hook.result.current.restoreUnverifiable).toBe(true);
+      expect(hook.result.current.storageUnavailable).toBe(true);
+      // No earlier move exists, so the reload-specific notice must not be claimed.
+      expect(hook.result.current.restoreUnverifiable).toBe(false);
       expect(hook.result.current.canSubmit).toBe(false);
       await act(() => hook.result.current.submit());
       expect(api.transferTask).not.toHaveBeenCalled();
@@ -435,6 +438,31 @@ describe("caller-partitioned restore", () => {
     expect(Object.keys(window.sessionStorage)).toHaveLength(0);
   });
 });
+
+describe("identity switch with several consumers", () => {
+  it("adopts the new caller without updating another consumer during render", async () => {
+    signIn("user-a");
+    api.transferTask.mockRejectedValueOnce(networkLost());
+    const hook = render();
+    const other = renderHook(() => useTaskWorkspaceMoveOperation("task-1"));
+    await choose(hook);
+    await act(() => hook.result.current.submit());
+    expect(other.result.current.operation?.status).toBe("uncertain");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      signIn("user-b");
+      await waitFor(() => expect(other.result.current.operation).toBeNull());
+      expect(hook.result.current.operation).toBeNull();
+      const renderPhaseUpdates = errors.mock.calls.filter((call) =>
+        String(call[0]).includes("Cannot update a component"),
+      );
+      expect(renderPhaseUpdates).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});
+
 describe("superseded responses across caller switches", () => {
   it("ignores a late original failure after a successful check that followed a caller switch", async () => {
     signIn("user-a");

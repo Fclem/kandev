@@ -68,6 +68,7 @@ describe("WorkspaceMoveOperations reconcile overlay", () => {
   const receipt = {} as TaskTransferReceipt;
 
   function commitTask(registry: WorkspaceMoveOperations, identity: string, taskId: string) {
+    registry.adopt(identity);
     const pending = registry.begin(identity, taskId, overlayBody, "submit");
     if (!pending) throw new Error("admission refused");
     registry.settle(identity, pending, {
@@ -91,8 +92,8 @@ describe("WorkspaceMoveOperations reconcile overlay", () => {
     commitTask(registry, "user-a", "task-stale");
     const firstOverlay = registry.beginReconcile("user-a", "task-stale");
     if (!firstOverlay) throw new Error("expected overlay");
-    registry.get("user-b", "task-stale");
-    registry.get("user-a", "task-stale");
+    registry.adopt("user-b");
+    registry.adopt("user-a");
     commitTask(registry, "user-a", "task-stale");
     const currentOverlay = registry.beginReconcile("user-a", "task-stale");
     if (!currentOverlay) throw new Error("expected overlay");

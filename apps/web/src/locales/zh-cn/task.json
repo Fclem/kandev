@@ -3433,5 +3433,6 @@
   "workspaceMoveErrorForbidden": "你需要在两个工作区中都有编辑任务的权限。",
   "workspaceMoveErrorUnavailable": "任务或目标不可用。",
   "workspaceMoveErrorInvalid": "移动请求未被接受。",
-  "workspaceMoveRestoreUnverifiable": "无法在此浏览器中检查页面重新加载前的移动。这并不表示移动失败；请查看任务的当前位置。"
+  "workspaceMoveRestoreUnverifiable": "无法在此浏览器中检查页面重新加载前的移动。这并不表示移动失败；请查看任务的当前位置。",
+  "workspaceMoveStorageUnavailable": "此浏览器阻止了本页面的会话存储，因此无法安全地记录移动。请允许网站数据，然后重新加载页面。"
 }

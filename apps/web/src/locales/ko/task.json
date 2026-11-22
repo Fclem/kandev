@@ -3433,5 +3433,6 @@
   "workspaceMoveErrorForbidden": "두 워크스페이스 모두에서 작업을 편집할 권한이 필요합니다.",
   "workspaceMoveErrorUnavailable": "작업 또는 대상을 사용할 수 없습니다.",
   "workspaceMoveErrorInvalid": "이동 요청이 수락되지 않았습니다.",
-  "workspaceMoveRestoreUnverifiable": "페이지를 다시 불러오기 전에 수행한 이동은 이 브라우저에서 확인할 수 없습니다. 이동이 실패했다는 뜻은 아닙니다. 작업의 현재 위치를 확인하세요."
+  "workspaceMoveRestoreUnverifiable": "페이지를 다시 불러오기 전에 수행한 이동은 이 브라우저에서 확인할 수 없습니다. 이동이 실패했다는 뜻은 아닙니다. 작업의 현재 위치를 확인하세요.",
+  "workspaceMoveStorageUnavailable": "이 브라우저가 이 페이지의 세션 저장소를 차단하고 있어 이동을 안전하게 기록할 수 없습니다. 사이트 데이터를 허용한 후 페이지를 다시 불러오세요."
 }

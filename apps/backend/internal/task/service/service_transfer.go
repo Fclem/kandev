@@ -92,9 +92,13 @@ func (s *Service) TransferTask(
 
 // taskTransferBoundaryAuditResult classifies a failed authorization or boundary
 // check. A durable Web attempt writes the terminal denied barrier only for a
-// settled authorization outcome; cancellation or a lookup failure is audited as a
-// non-barrier conflict so the same key stays retryable.
+// settled authorization outcome; cancellation, a lookup failure, or a denial
+// produced by a failed access lookup is audited as a non-barrier conflict so the
+// same key stays retryable.
 func taskTransferBoundaryAuditResult(command models.TaskTransferCommand, err error) string {
+	if command.DurableRejection && errors.Is(err, errAccessLookupFailed) {
+		return "conflict"
+	}
 	if !command.DurableRejection || IsForbidden(err) || errors.Is(err, repoerrors.ErrTaskNotFound) ||
 		errors.Is(err, repoerrors.ErrWorkspaceNotFound) || errors.Is(err, repoerrors.ErrWorkflowNotFound) {
 		return "denied"

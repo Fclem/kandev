@@ -80,6 +80,8 @@ independent of render timing. No optimistic workspace removal occurs.
   error) records one detached non-barrier `conflict` row, leaves the same key
   retryable, and is uncertain to the client. A settled authorization outcome
   (forbidden, or task, workspace, or workflow not found) stays a `denied` barrier.
+  A not-found that only fails closed because a membership or unit-reach lookup
+  failed keeps its 404 response but is audited as `conflict`.
   The MCP path audits the same infrastructure failures as `failed` or `denied`;
   the Web path audits them as `conflict`.
 - Bind Web terminal-result lookup to the exact task, expected source placement

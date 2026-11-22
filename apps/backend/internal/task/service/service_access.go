@@ -84,12 +84,20 @@ func callerSubject(ctx context.Context) authz.Subject {
 // which is exactly how a transient database error becomes a privilege
 // escalation.
 func (s *Service) workspaceDecision(ctx context.Context, workspace *models.Workspace) authz.Decision {
+	decision, _ := s.workspaceDecisionResult(ctx, workspace)
+	return decision
+}
+
+// workspaceDecisionResult is workspaceDecision that also reports
+// errAccessLookupFailed when the denial came from a failed membership or unit
+// reach lookup rather than a settled answer.
+func (s *Service) workspaceDecisionResult(ctx context.Context, workspace *models.Workspace) (authz.Decision, error) {
 	subject := callerSubject(ctx)
 	if subject.Unscoped {
-		return authz.ResolveWorkspace(subject, authz.WorkspaceRef{})
+		return authz.ResolveWorkspace(subject, authz.WorkspaceRef{}), nil
 	}
 	if workspace == nil {
-		return authz.Denied()
+		return authz.Denied(), nil
 	}
 
 	ref := authz.WorkspaceRef{
@@ -100,28 +108,28 @@ func (s *Service) workspaceDecision(ctx context.Context, workspace *models.Works
 	// membership, so a foreign-org workspace is resolved without touching the
 	// member table at all.
 	if subject.OrgID != "" && workspace.OrgID != "" && subject.OrgID != workspace.OrgID {
-		return authz.Denied()
+		return authz.Denied(), nil
 	}
 	// Owner and unowned workspaces resolve without touching the tree.
 	if workspace.OwnerID == "" || workspace.OwnerID == subject.UserID {
-		return authz.ResolveWorkspace(subject, ref)
+		return authz.ResolveWorkspace(subject, ref), nil
 	}
 
 	inherited, ok := s.inheritedRole(ctx, subject.UserID, workspace)
 	if !ok {
-		return authz.Denied()
+		return authz.Denied(), errAccessLookupFailed
 	}
 	ref.InheritedRole = inherited
 
 	member, err := s.workspaces.GetWorkspaceMember(ctx, workspace.ID, subject.UserID)
 	if err != nil {
 		s.logger.Warn("workspace membership lookup failed; denying access")
-		return authz.Denied()
+		return authz.Denied(), errAccessLookupFailed
 	}
 	if member != nil {
 		ref.MemberRole = authz.NormalizeWorkspaceRole(member.Role)
 	}
-	return authz.ResolveWorkspace(subject, ref)
+	return authz.ResolveWorkspace(subject, ref), nil
 }
 
 // WorkspaceDecisionByID is the public resolver used by handlers that need the
@@ -171,9 +179,9 @@ func (s *Service) requireWorkspaceScopeAction(
 	if err != nil {
 		return authz.Denied(), err
 	}
-	decision := s.workspaceDecision(ctx, workspace)
+	decision, lookupErr := s.workspaceDecisionResult(ctx, workspace)
 	if !decision.CanRead() {
-		return decision, notFound
+		return decision, accessDenial(notFound, lookupErr)
 	}
 	if !decision.Has(scope) {
 		return decision, ErrForbidden
@@ -286,9 +294,9 @@ func (s *Service) authorizeTaskScopeActionWorkspace(ctx context.Context, taskID 
 	case workspace == nil:
 		return "", repoerrors.ErrTaskNotFound
 	}
-	decision := s.workspaceDecision(ctx, workspace)
+	decision, lookupErr := s.workspaceDecisionResult(ctx, workspace)
 	if !decision.CanRead() {
-		return "", repoerrors.ErrTaskNotFound
+		return "", accessDenial(repoerrors.ErrTaskNotFound, lookupErr)
 	}
 	if !decision.Has(scope) {
 		return "", ErrForbidden
@@ -375,13 +383,13 @@ func (s *Service) authorizeWorkflowScopeAction(
 		// letting a transient database error read as either allow or deny.
 		return err
 	}
-	decision := s.workspaceDecision(ctx, workspace)
+	decision, lookupErr := s.workspaceDecisionResult(ctx, workspace)
 	if !decision.CanRead() {
 		// Collapse to the workflow's own not-found sentinel, matching
 		// authorizeTaskScope's equivalent branch, so a workflow that exists in
 		// a workspace the caller cannot reach reads identically to one that
 		// does not exist at all.
-		return repoerrors.ErrWorkflowNotFound
+		return accessDenial(repoerrors.ErrWorkflowNotFound, lookupErr)
 	}
 	if !decision.Has(scope) {
 		return ErrForbidden

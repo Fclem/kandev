@@ -309,6 +309,43 @@ func TestServiceTransferTaskDurableBoundaryAuditKeepsInterruptionsRetryable(t *t
 	})
 }
 
+func TestServiceTransferTaskDurableAccessLookupFailureStaysRetryable(t *testing.T) {
+	svc, _, repo := createTestService(t)
+	task := seedServiceTaskTransfer(t, repo, "owner-1")
+	for _, workspaceID := range []string{"transfer-ws-source", "transfer-ws-destination"} {
+		if err := repo.UpsertWorkspaceMember(context.Background(), &models.WorkspaceMember{
+			WorkspaceID: workspaceID, UserID: "member-1", Role: "collaborator", AddedBy: "owner-1",
+		}); err != nil {
+			t.Fatalf("UpsertWorkspaceMember: %v", err)
+		}
+	}
+	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "member-1", Role: authn.RoleMember})
+	command := serviceTaskTransferCommand(task)
+	command.Actor.ID = "member-1"
+	command.DurableRejection = true
+	if _, err := repo.DB().Exec(`ALTER TABLE workspace_members RENAME TO workspace_members_unavailable`); err != nil {
+		t.Fatalf("break membership lookup: %v", err)
+	}
+
+	_, err := svc.TransferTask(ctx, command)
+	if !errors.Is(err, repoerrors.ErrTaskNotFound) {
+		t.Fatalf("TransferTask error = %v, want fail-closed task not found", err)
+	}
+	if got := serviceTransferAuditResults(t, repo, command.IdempotencyKey); got != "conflict" {
+		t.Fatalf("audit results after access lookup failure = %q, want one conflict", got)
+	}
+	if _, err := repo.DB().Exec(`ALTER TABLE workspace_members_unavailable RENAME TO workspace_members`); err != nil {
+		t.Fatalf("restore membership lookup: %v", err)
+	}
+	receipt, err := svc.TransferTask(ctx, command)
+	if err != nil {
+		t.Fatalf("same-key retry after access lookup recovered: %v", err)
+	}
+	if receipt.DestinationWorkspaceID != "transfer-ws-destination" {
+		t.Fatalf("retry receipt = %+v", receipt)
+	}
+}
+
 func serviceTransferAuditResults(t *testing.T, repo *sqliterepo.Repository, key string) string {
 	t.Helper()
 	var results string

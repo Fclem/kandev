@@ -22,6 +22,26 @@ var ErrForbidden = errors.New("insufficient permissions for this action")
 // IsForbidden reports whether an error is the scope-denied sentinel.
 func IsForbidden(err error) bool { return errors.Is(err, ErrForbidden) }
 
+// errAccessLookupFailed marks a denial produced by a failed membership or unit
+// reach lookup rather than a settled authorization decision.
+var errAccessLookupFailed = errors.New("workspace access lookup failed")
+
+// accessDenial is the fail-closed not-found error for an unreadable resource. It
+// reads exactly as notFound; when lookupErr is set it also matches
+// errAccessLookupFailed, so a caller that must not settle on an interrupted
+// lookup can tell the two apart without changing the response.
+func accessDenial(notFound, lookupErr error) error {
+	if lookupErr == nil {
+		return notFound
+	}
+	return accessLookupDenial{notFound: notFound}
+}
+
+type accessLookupDenial struct{ notFound error }
+
+func (e accessLookupDenial) Error() string   { return e.notFound.Error() }
+func (e accessLookupDenial) Unwrap() []error { return []error{e.notFound, errAccessLookupFailed} }
+
 // requireWorkspaceManage gates the owner-only workspace actions: rename,
 // defaults, visibility, and delete. It applies the 404-vs-403 rule so a caller
 // who cannot see the workspace never learns it exists.

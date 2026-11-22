@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,14 +11,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// transferBarrierHoldKey parks failed-barrier inserts on a test-held advisory lock.
-const transferBarrierHoldKey = 75130161
+// transferBarrierHoldClass and the isolated schema name form the advisory key that
+// parks failed-barrier inserts, so concurrent runs on a shared cluster never see
+// each other's waiters. Every query runs under the test schema's search_path.
+const (
+	transferBarrierHoldClass   = 75130
+	transferBarrierHoldKeySQL  = "hashtext(current_schema())"
+	transferBarrierWaiterQuery = `SELECT pid FROM pg_locks
+		WHERE locktype = 'advisory' AND NOT granted AND objsubid = 2
+			AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+			AND classid = $1::int4::oid AND objid = hashtext(current_schema())::oid`
+)
 
-// A durable domain rejection must keep every serialization lock until its failed
+// A durable domain rejection must keep its workspace-row locks until its failed
 // barrier commits. ROLLBACK TO SAVEPOINT releases locks taken after the savepoint,
-// so the savepoint must follow the workspace and relation locks: a same-key retry
-// that starts while the barrier insert is in flight waits on the rejecting
-// transaction and then observes the committed barrier.
+// so the savepoint must follow the workspace-row locks, which key every same-key
+// barrier lookup: a retry that starts while the barrier insert is in flight waits
+// on the rejecting transaction and then observes the committed barrier.
 func TestDurableRejectionHoldsSerializationUntilBarrierCommits(t *testing.T) {
 	repo, tasks := seedPostgresConcurrentTransferTasks(t, 1)
 	repo.db.SetMaxOpenConns(8)
@@ -38,7 +48,8 @@ func TestDurableRejectionHoldsSerializationUntilBarrierCommits(t *testing.T) {
 	go func() { _, transferErr := repo.TransferTask(ctx, command); retry <- transferErr }()
 	waitForBackendBlockedBy(t, repo.db, rejectingPID, retry)
 
-	_, err = holder.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, transferBarrierHoldKey)
+	_, err = holder.ExecContext(ctx, fmt.Sprintf(`SELECT pg_advisory_unlock(%d, %s)`,
+		transferBarrierHoldClass, transferBarrierHoldKeySQL))
 	require.NoError(t, err)
 	requireTransferConflictReason(t, first, repoerrors.TaskTransferDestinationFull)
 	requireTransferConflictReason(t, retry, repoerrors.TaskTransferOperationRejected)
@@ -52,12 +63,13 @@ func TestDurableRejectionHoldsSerializationUntilBarrierCommits(t *testing.T) {
 }
 
 // holdTransferBarrierInserts installs a schema-local trigger that makes every
-// failed-barrier insert wait on transferBarrierHoldKey, then takes that lock on a
-// pinned connection the caller releases.
+// failed-barrier insert wait on this schema's advisory key, then takes that key on
+// a pinned connection the caller releases.
 func holdTransferBarrierInserts(t *testing.T, db *sqlx.DB) *sqlx.Conn {
 	t.Helper()
-	_, err := db.Exec(`CREATE FUNCTION hold_transfer_barrier() RETURNS trigger LANGUAGE plpgsql AS $$
-		BEGIN PERFORM pg_advisory_xact_lock(75130161); RETURN NEW; END $$`)
+	_, err := db.Exec(fmt.Sprintf(`CREATE FUNCTION hold_transfer_barrier() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN PERFORM pg_advisory_xact_lock(%d, %s); RETURN NEW; END $$`,
+		transferBarrierHoldClass, transferBarrierHoldKeySQL))
 	require.NoError(t, err)
 	_, err = db.Exec(`CREATE TRIGGER hold_transfer_barrier BEFORE INSERT ON task_transfer_audit
 		FOR EACH ROW WHEN (NEW.result = 'failed') EXECUTE FUNCTION hold_transfer_barrier()`)
@@ -68,8 +80,10 @@ func holdTransferBarrierInserts(t *testing.T, db *sqlx.DB) *sqlx.Conn {
 		_, _ = holder.ExecContext(context.Background(), `SELECT pg_advisory_unlock_all()`)
 		_ = holder.Close()
 	})
-	_, err = holder.ExecContext(context.Background(), `SELECT pg_advisory_lock($1)`, transferBarrierHoldKey)
-	require.NoError(t, err)
+	var acquired bool
+	require.NoError(t, holder.GetContext(context.Background(), &acquired, fmt.Sprintf(
+		`SELECT pg_try_advisory_lock(%d, %s)`, transferBarrierHoldClass, transferBarrierHoldKeySQL)))
+	require.True(t, acquired, "this schema's barrier hold key is already taken")
 	return holder
 }
 
@@ -84,9 +98,7 @@ func waitForTransferBarrierWaiter(t *testing.T, db *sqlx.DB, done <-chan error) 
 		default:
 		}
 		var pids []int
-		require.NoError(t, db.Select(&pids, `SELECT pid FROM pg_locks
-			WHERE locktype = 'advisory' AND classid = 0 AND objid = $1 AND objsubid = 1 AND NOT granted`,
-			transferBarrierHoldKey))
+		require.NoError(t, db.Select(&pids, transferBarrierWaiterQuery, transferBarrierHoldClass))
 		if len(pids) == 1 {
 			return pids[0]
 		}
@@ -110,9 +122,8 @@ func waitForBackendBlockedBy(t *testing.T, db *sqlx.DB, rejectingPID int, done <
 		var blocked, barrierWaiters int
 		require.NoError(t, db.Get(&blocked, `SELECT count(*) FROM pg_stat_activity
 			WHERE pid <> $1 AND $1 = ANY(pg_blocking_pids(pid))`, rejectingPID))
-		require.NoError(t, db.Get(&barrierWaiters, `SELECT count(*) FROM pg_locks
-			WHERE locktype = 'advisory' AND classid = 0 AND objid = $1 AND objsubid = 1 AND NOT granted`,
-			transferBarrierHoldKey))
+		require.NoError(t, db.Get(&barrierWaiters, `SELECT count(*) FROM (`+transferBarrierWaiterQuery+`) AS waiters`,
+			transferBarrierHoldClass))
 		require.LessOrEqual(t, barrierWaiters, 1, "same-key retry reached the barrier insert past the rejecting transaction's locks")
 		if blocked > 0 {
 			return

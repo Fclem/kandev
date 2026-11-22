@@ -49,11 +49,12 @@ independent of render timing. No optimistic workspace removal occurs.
   server-only durable-rejection mode on its internal command; it is not accepted
   from JSON and is excluded from the request digest. Existing MCP conflicts
   retain their current behavior and generic error text.
-- Acquire transfer serialization before a mutation savepoint. Resolve an exact
-  committed receipt first, then any caller/request-bound terminal rejection,
-  before mutable source/lane validation. All same-key attempts, including ones
-  already admitted at the service, must acquire this same serialization and
-  check the existing failed-key barrier before any commit.
+- Acquire transfer serialization before a mutation savepoint. An exact
+  committed receipt takes precedence over any caller/request-bound terminal
+  rejection, and both take precedence over a mutable source/lane validation
+  result. All same-key attempts, including ones already admitted at the
+  service, must acquire this same serialization and check the existing
+  failed-key barrier before any commit.
 - If an authorized, well-formed Web operation fails a domain guard, including
   `source_changed` or `step_incompatible`, roll back its mutation savepoint
   while retaining the outer serialization lock. Recheck committed receipt
@@ -62,9 +63,13 @@ independent of render timing. No optimistic workspace removal occurs.
   409. The rejected transfer changes no task/context data. This record is both
   the redacted attempt audit and the existing no-later-same-key-commit barrier;
   do not add a duplicate outside-transaction conflict audit.
-- A `source_changed` found after the workspace-row locks but before the relation
-  reservation takes no savepoint. It rechecks receipt precedence and commits the
-  same caller-bound failed barrier while holding only those workspace locks.
+- The source predicate is checked under the workspace-row locks, before the
+  relation reservation. A `source_changed` found there takes no savepoint. It
+  first resolves receipt and barrier precedence: a committed receipt replays, an
+  exact recorded barrier returns `operation_rejected`, and a barrier for another
+  request returns `idempotency_conflict`, writing no second `failed` row.
+  Otherwise it commits the caller-bound failed barrier while holding only those
+  workspace locks, which key every same-key barrier lookup.
 - `relations_busy` (PostgreSQL `55P03` from the NOWAIT relation lock) is not a
   domain-guard rejection. After rollback it records one non-barrier `conflict` audit
   row outside the transaction and leaves the same key retryable. It writes no

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- every composed-configuration case shares one hoisted live-session fixture graph. */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TooltipProvider } from "@kandev/ui/tooltip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

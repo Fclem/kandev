@@ -535,6 +535,15 @@ then failed three cases: two ESLint cold-load timeouts and
 [#5425](https://github.com/kdlbs/kandev/issues/5425) outside this change. The
 complete web gate stays unpassed; Task 02 records the details.
 
+After the 2026-11-22 rebase onto upstream `cef5eb5e61`, browser verification
+found a real first-launch failure for prepared sessions, fixed in `e1b4a8926a`.
+The root gate again failed: three backend packages with failures that reproduce
+on pristine upstream, one orchestrator case that passed alone, and 11 web
+time-limit failures under load. Typecheck
+passed after rerunning at the 5 GiB heap; web lint passed after `56bb7d7238`;
+goal-section now passes. Task 02 records exact results. Real Docker is still
+open.
+
 ## Risks
 
 - Host-probe compatibility cannot be inferred from profile ID alone. Older

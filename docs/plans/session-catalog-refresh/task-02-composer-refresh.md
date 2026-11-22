@@ -417,6 +417,62 @@ each finished in 7-8s when run alone with `--testTimeout=120000`. That is
 diagnosis only. The complete web gate remains unpassed: the #5425 failure plus
 the two ESLint cold-load timeouts under load. Real Docker also remains open.
 
+### Rebased verification (2026-11-22, HEAD after upstream `cef5eb5e61`)
+
+The parent rebased this branch onto upstream `cef5eb5e61`, which includes the
+#5425 goal-editor fix (#5430) and the picker configuration-feedback work (#5411).
+
+- **Merge review.** The mode and model selectors run the `requiresRefresh`
+  guards before `feedback.begin()`. The configuration-feedback and catalog-refresh
+  slices both remain.
+- **Browser collections on fresh builds.** The desktop catalog, restart,
+  profile-discovery, model-selector and configuration-feedback specs passed 36
+  and failed 1. The phone equivalents (including mode mismatch) passed 25. The
+  failure was real: the upstream `session-configuration-feedback.spec.ts` first
+  launch of a `prepare_session` task failed with `catalog discovery startup owner
+  changed`. Temporary diagnostics, since removed, showed that the executor row was
+  still `prepared`, and the starting and terminal catalog owner queries admitted
+  only `starting`, `running` and `ready`. A repository regression
+  (`prepared-execution`) failed on SQLite before the fix. Commit `e1b4a8926a`
+  admits `prepared` for startup and terminal ownership only; live publication
+  still requires `running` or `ready`. The SQLite and PostgreSQL catalog
+  contracts passed afterwards. On rebuilt binaries the desktop feedback spec
+  passed 3/3 and the phone spec 2/2. The other 33 desktop cases ran on the
+  pre-fix binary; the fix changes only these two SQL predicates.
+- **`make fmt`** made no changes.
+- **`make -k typecheck test lint`**, run once with PostgreSQL enabled, failed.
+  The causes, exactly:
+  - Typecheck ran out of memory at the default Node heap. A rerun with the
+    5 GiB heap used by the earlier passing root run passed.
+  - Backend: every package passed except four.
+    - `office/routines` (3 PostgreSQL tests: `relation "tasks" does not exist`).
+    - `secrets` (6 PostgreSQL transfer tests).
+    - `sentry` (`TestPostgresStoreSchemaReplay`).
+    - `orchestrator` (`TestStepCompletionOutcome_SupersededConsumerRetryThroughHandler`).
+    The office, secrets and sentry packages are untouched by this branch. Their
+    failures reproduce on a pristine `cef5eb5e61` extraction, including on a
+    freshly created database. The orchestrator case passed 3/3 alone on both
+    trees.
+  - Web: 31,894 passed, 4 skipped and 11 failed, all on time limits. Eight are
+    in `linear-watch-dialog-lifetime`, two in `sentry-watch-dialog-lifetime`,
+    and one is the `migrated-system-query-owner-wiring` ESLint cold load.
+    `goal-section.test.tsx` passed 17/17. Run alone, the three files passed
+    91/91; that is diagnosis only.
+  - CLI and script tests, backend `golangci-lint` (0 issues), and harness,
+    specification and architecture lint passed.
+  - Web lint failed: `model-selector-composed-config.test.tsx` reached 602
+    lines. Commit `56bb7d7238` adds the repository's file-level test
+    `max-lines` exemption, and `make lint-web` then reported 0 warnings.
+- **Docs.** `list-docs.py validate` (461 decisions, 2091 specifications),
+  `lint-spec-files` tests and `--all`, public docs (63 tests, 56 pages),
+  `git diff --check` and pr-docs coverage (`covered`) passed.
+
+The complete backend and web gates remain unpassed. Backend has pre-existing
+upstream PostgreSQL failures plus one orchestrator case that failed in the
+aggregate and passed alone. Web has time-limit failures under shared-host load.
+Real Docker is still
+required and has not run.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

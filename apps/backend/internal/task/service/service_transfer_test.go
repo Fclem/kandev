@@ -309,40 +309,88 @@ func TestServiceTransferTaskDurableBoundaryAuditKeepsInterruptionsRetryable(t *t
 	})
 }
 
-func TestServiceTransferTaskDurableAccessLookupFailureStaysRetryable(t *testing.T) {
-	svc, _, repo := createTestService(t)
-	task := seedServiceTaskTransfer(t, repo, "owner-1")
-	for _, workspaceID := range []string{"transfer-ws-source", "transfer-ws-destination"} {
-		if err := repo.UpsertWorkspaceMember(context.Background(), &models.WorkspaceMember{
-			WorkspaceID: workspaceID, UserID: "member-1", Role: "collaborator", AddedBy: "owner-1",
-		}); err != nil {
-			t.Fatalf("UpsertWorkspaceMember: %v", err)
-		}
-	}
-	ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "member-1", Role: authn.RoleMember})
-	command := serviceTaskTransferCommand(task)
-	command.Actor.ID = "member-1"
-	command.DurableRejection = true
-	if _, err := repo.DB().Exec(`ALTER TABLE workspace_members RENAME TO workspace_members_unavailable`); err != nil {
-		t.Fatalf("break membership lookup: %v", err)
-	}
+// failingUnitReach fails exactly the failOn-th inherited-role lookup and grants
+// no unit role otherwise, so workspace membership alone decides access.
+type failingUnitReach struct{ calls, failOn int }
 
-	_, err := svc.TransferTask(ctx, command)
-	if !errors.Is(err, repoerrors.ErrTaskNotFound) {
-		t.Fatalf("TransferTask error = %v, want fail-closed task not found", err)
+func (r *failingUnitReach) InheritedRole(context.Context, string, string) (string, error) {
+	r.calls++
+	if r.calls == r.failOn {
+		return "", errors.New("unit reach unavailable")
 	}
-	if got := serviceTransferAuditResults(t, repo, command.IdempotencyKey); got != "conflict" {
-		t.Fatalf("audit results after access lookup failure = %q, want one conflict", got)
-	}
-	if _, err := repo.DB().Exec(`ALTER TABLE workspace_members_unavailable RENAME TO workspace_members`); err != nil {
-		t.Fatalf("restore membership lookup: %v", err)
-	}
-	receipt, err := svc.TransferTask(ctx, command)
-	if err != nil {
-		t.Fatalf("same-key retry after access lookup recovered: %v", err)
-	}
-	if receipt.DestinationWorkspaceID != "transfer-ws-destination" {
-		t.Fatalf("retry receipt = %+v", receipt)
+	return "", nil
+}
+
+func (r *failingUnitReach) InheritedRolesByUnit(context.Context, string, []string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (r *failingUnitReach) UnitReaders(context.Context, string) ([]string, error) { return nil, nil }
+
+// Each case fails one access lookup in a different boundary check; the check is
+// identified by the fail-closed not-found sentinel it returns.
+func TestServiceTransferTaskDurableAccessLookupFailureStaysRetryable(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		breakMembership  bool
+		failUnitLookupOn int
+		want             error
+	}{
+		{name: "membership lookup in task check", breakMembership: true, want: repoerrors.ErrTaskNotFound},
+		{name: "unit reach in task check", failUnitLookupOn: 1, want: repoerrors.ErrTaskNotFound},
+		{name: "unit reach in destination workspace check", failUnitLookupOn: 2, want: repoerrors.ErrWorkspaceNotFound},
+		{name: "unit reach in destination workflow check", failUnitLookupOn: 3, want: repoerrors.ErrWorkflowNotFound},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _, repo := createTestService(t)
+			task := seedServiceTaskTransfer(t, repo, "owner-1")
+			for _, workspaceID := range []string{"transfer-ws-source", "transfer-ws-destination"} {
+				if err := repo.UpsertWorkspaceMember(context.Background(), &models.WorkspaceMember{
+					WorkspaceID: workspaceID, UserID: "member-1", Role: "collaborator", AddedBy: "owner-1",
+				}); err != nil {
+					t.Fatalf("UpsertWorkspaceMember: %v", err)
+				}
+			}
+			if tt.failUnitLookupOn > 0 {
+				if _, err := repo.DB().Exec(`UPDATE workspaces SET unit_id = 'transfer-unit'`); err != nil {
+					t.Fatalf("place workspaces in a unit: %v", err)
+				}
+				svc.SetUnitReach(&failingUnitReach{failOn: tt.failUnitLookupOn})
+			}
+			setMembershipLookup := func(available bool) {
+				from, to := "workspace_members_unavailable", "workspace_members"
+				if !available {
+					from, to = to, from
+				}
+				if _, err := repo.DB().Exec(`ALTER TABLE ` + from + ` RENAME TO ` + to); err != nil {
+					t.Fatalf("toggle membership lookup: %v", err)
+				}
+			}
+			ctx := authn.WithIdentity(context.Background(), authn.Identity{UserID: "member-1", Role: authn.RoleMember})
+			command := serviceTaskTransferCommand(task)
+			command.Actor.ID = "member-1"
+			command.DurableRejection = true
+
+			if tt.breakMembership {
+				setMembershipLookup(false)
+			}
+			if _, err := svc.TransferTask(ctx, command); !errors.Is(err, tt.want) {
+				t.Fatalf("TransferTask error = %v, want fail-closed %v", err, tt.want)
+			}
+			if got := serviceTransferAuditResults(t, repo, command.IdempotencyKey); got != "conflict" {
+				t.Fatalf("audit results after access lookup failure = %q, want one conflict", got)
+			}
+			if tt.breakMembership {
+				setMembershipLookup(true)
+			}
+			receipt, err := svc.TransferTask(ctx, command)
+			if err != nil {
+				t.Fatalf("same-key retry after access lookup recovered: %v", err)
+			}
+			if receipt.DestinationWorkspaceID != "transfer-ws-destination" {
+				t.Fatalf("retry receipt = %+v", receipt)
+			}
+		})
 	}
 }
 

@@ -14,6 +14,13 @@ import (
 
 const taskTransferPostCommitTimeout = 10 * time.Second
 
+// Audit results the service records for an attempt that reaches no repository mutation.
+const (
+	taskTransferAuditDenied   = "denied"
+	taskTransferAuditConflict = "conflict"
+	taskTransferAuditFailed   = "failed"
+)
+
 type taskTransferRepository interface {
 	TransferTask(context.Context, models.TaskTransferCommand) (*models.TaskTransferReceipt, error)
 }
@@ -42,7 +49,7 @@ func (s *Service) TransferTask(
 	repository, ok := s.tasks.(taskTransferRepository)
 	if !ok {
 		err := fmt.Errorf("task transfer repository is unavailable")
-		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "failed"))
+		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, taskTransferAuditFailed))
 	}
 	if err := s.authorizeTaskScope(ctx, command.TaskID, authz.ScopeTaskWrite); err != nil {
 		return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, taskTransferBoundaryAuditResult(command, err)))
@@ -62,7 +69,7 @@ func (s *Service) TransferTask(
 	if precheck, ok := s.tasks.(taskTransferPrecheckRepository); ok && command.DurableRejection {
 		receipt, err := precheck.TaskTransferPrecheck(ctx, command)
 		if err != nil {
-			return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, "conflict"))
+			return nil, errors.Join(err, s.AuditTaskTransferAttempt(ctx, command, taskTransferAuditConflict))
 		}
 		if receipt != nil {
 			return receipt, nil
@@ -97,13 +104,13 @@ func (s *Service) TransferTask(
 // same key stays retryable.
 func taskTransferBoundaryAuditResult(command models.TaskTransferCommand, err error) string {
 	if command.DurableRejection && errors.Is(err, errAccessLookupFailed) {
-		return "conflict"
+		return taskTransferAuditConflict
 	}
 	if !command.DurableRejection || IsForbidden(err) || errors.Is(err, repoerrors.ErrTaskNotFound) ||
 		errors.Is(err, repoerrors.ErrWorkspaceNotFound) || errors.Is(err, repoerrors.ErrWorkflowNotFound) {
-		return "denied"
+		return taskTransferAuditDenied
 	}
-	return "conflict"
+	return taskTransferAuditConflict
 }
 
 // AuditTaskTransferAttempt records a redacted denied attempt without invoking

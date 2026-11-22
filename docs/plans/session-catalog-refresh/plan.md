@@ -529,7 +529,11 @@ stays in progress with two blockers: the complete web gate and real Docker (no
 daemon is reachable here; its spec has not run). No complete verification or
 review-ready state is claimed. A resource-bounded complete web retry (sole gate,
 4 workers, unchanged deadlines) passed the original two cases but failed three
-other deadline-bound cases under shared-host load; Task 02 records the details.
+other deadline-bound cases under shared-host load. A serialized one-worker retry
+then failed three cases: two ESLint cold-load timeouts and
+`goal-section.test.tsx:135`, a real pre-existing lost-edit bug tracked by
+[#5425](https://github.com/kdlbs/kandev/issues/5425) outside this change. The
+complete web gate stays unpassed; Task 02 records the details.
 
 ## Risks
 

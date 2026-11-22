@@ -404,8 +404,18 @@ in 1125s: 31,436 passed, 4 skipped, 3 failed. Two cold ESLint loads
 `goal-section.test.tsx:135` saw the Set goal button still disabled immediately
 after a name change. Sampled 1-minute load averaged 10.91 (peak 13.52). Wall time
 matched the 4-worker run, so the cap did not measurably reduce suite contention.
-Retries stop here. The complete web gate remains failed; it needs quieter
-execution access. These failures are residual blockers, not a pass.
+Retries stop here.
+
+The `goal-section.test.tsx:135` failure is a real pre-existing product bug, not
+host load: a deterministic jsdom probe using React's real scheduler showed that
+a name typed after the first-data commit but before the goal editor's passive
+adoption effect is overwritten by `EMPTY_GOAL_FORM`. It has not been reproduced
+in an actual browser. It is outside this change and is tracked by
+[#5425](https://github.com/kdlbs/kandev/issues/5425) in a separate task; no
+coordinator code or fixture was changed here. The two ESLint cold-load failures
+each finished in 7-8s when run alone with `--testTimeout=120000`. That is
+diagnosis only. The complete web gate remains unpassed: the #5425 failure plus
+the two ESLint cold-load timeouts under load. Real Docker also remains open.
 
 ### Historical generic-candidate evidence
 

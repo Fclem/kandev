@@ -161,6 +161,7 @@ describe("TaskWorkspaceMoveDialog outcomes", () => {
     for (const [overrides, status] of [
       [{ restoreUnverifiable: true }, "restore-unverifiable"],
       [{ storageUnavailable: true }, "storage-unavailable"],
+      [{ restoreUnverifiable: true, storageUnavailable: true }, "restore-unverifiable"],
     ] as const) {
       useTaskWorkspaceMoveMock.mockReturnValue(state(overrides));
       renderDialog();

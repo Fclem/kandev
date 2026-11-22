@@ -417,18 +417,19 @@ function OperationOutcome(props: OutcomeProps) {
 }
 
 /**
- * The notice that replaces the outcome. Unavailable storage outranks a resolved
- * rejection, whenever it settled: no move can be retried from this tab, so a
- * retryable-looking rejection would mislead. Unresolved and committed outcomes
- * keep rendering.
+ * The notice that replaces the outcome. A task's own uncheckable restored record
+ * comes first, since it names what the user must verify. Otherwise unavailable
+ * storage outranks a resolved rejection, whenever it settled: no move can be
+ * retried from this tab, so a retryable-looking rejection would mislead.
+ * Unresolved and committed outcomes keep rendering.
  */
 function workspaceMoveNotice(
   state: TaskWorkspaceMoveState,
 ): "storage-unavailable" | "restore-unverifiable" | null {
   const status = state.operation?.status;
   const resolvedRejection = status === "rejected" || status === "operation-rejected";
-  if (state.storageUnavailable && (!status || resolvedRejection)) return "storage-unavailable";
   if (!status && state.restoreUnverifiable) return "restore-unverifiable";
+  if (state.storageUnavailable && (!status || resolvedRejection)) return "storage-unavailable";
   return null;
 }
 

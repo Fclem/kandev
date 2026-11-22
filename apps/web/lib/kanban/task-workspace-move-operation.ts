@@ -196,21 +196,31 @@ export class WorkspaceMoveOperations {
     body: TaskTransferRequest,
     attempt: "submit" | "check",
   ): Extract<WorkspaceMoveOperation, { status: "submitting" }> | null {
-    if (identity !== this.identity) return null;
-    const current = this.byTask.get(taskId);
-    if (this.reconciling.has(taskId)) return null;
-    if (current?.status === "submitting") return null;
-    if (attempt === "submit" && isUnresolvedWorkspaceMove(current ?? null)) return null;
-    if (attempt === "submit" && (this.storageUnavailable || this.unverifiable.has(taskId))) {
+    if (identity !== this.identity || !this.admits(taskId, attempt)) return null;
+    const next = { status: "submitting" as const, taskId, body, attempt };
+    // A new request must be durable before it leaves this tab. A check re-sends a
+    // record that was already stored, so only a submission writes here; a refused
+    // write marks storage unavailable so the form says why nothing was sent.
+    if (attempt === "submit" && !persistWorkspaceMove(identity, taskId, body)) {
+      this.storageUnavailable = true;
+      this.emit();
       return null;
     }
-    if (attempt === "check" && (!current || !isUnresolvedWorkspaceMove(current))) return null;
-    const next = { status: "submitting" as const, taskId, body, attempt };
-    // The record must be durable before any request can leave this tab.
-    if (!persistWorkspaceMove(identity, taskId, body)) return null;
     this.live.set(taskId, next);
     this.set(taskId, next);
     return next;
+  }
+
+  /** Whether the adopted caller may start this attempt for the task now. */
+  private admits(taskId: string, attempt: "submit" | "check"): boolean {
+    const current = this.byTask.get(taskId) ?? null;
+    if (this.reconciling.has(taskId) || current?.status === "submitting") return false;
+    if (attempt === "check") return isUnresolvedWorkspaceMove(current);
+    return (
+      !isUnresolvedWorkspaceMove(current) &&
+      !this.storageUnavailable &&
+      !this.unverifiable.has(taskId)
+    );
   }
 
   settle(identity: string, pending: object, operation: WorkspaceMoveOperation): void {

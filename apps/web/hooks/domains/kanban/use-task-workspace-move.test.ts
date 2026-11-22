@@ -395,7 +395,7 @@ describe("storage unavailable", () => {
     }
   });
 
-  it("sends nothing when the immutable record cannot be persisted", async () => {
+  it("sends nothing and says why when the immutable record cannot be persisted", async () => {
     const restore = refuseWrites();
     try {
       const hook = render();
@@ -404,6 +404,29 @@ describe("storage unavailable", () => {
       await act(() => hook.result.current.submit());
       expect(api.transferTask).not.toHaveBeenCalled();
       expect(hook.result.current.operation).toBeNull();
+      expect(hook.result.current.storageUnavailable).toBe(true);
+      expect(hook.result.current.canSubmit).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it("still checks an already stored request when new writes are refused", async () => {
+    api.transferTask.mockRejectedValueOnce(networkLost());
+    const first = render();
+    await choose(first);
+    await act(() => first.result.current.submit());
+    const original = sentBodies()[0];
+    first.unmount();
+    reload();
+    const restore = refuseWrites();
+    try {
+      const restored = render();
+      expect(restored.result.current.operation?.status).toBe("uncertain");
+      api.transferTask.mockResolvedValueOnce({ receipt });
+      await act(() => restored.result.current.check());
+      expect(sentBodies()[1]).toEqual(original);
+      expect(restored.result.current.operation?.status).toBe("committed");
     } finally {
       restore();
     }

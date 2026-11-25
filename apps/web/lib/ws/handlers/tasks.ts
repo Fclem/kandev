@@ -549,8 +549,9 @@ export function registerTasksHandlers(store: StoreApi<AppState>): WsHandlers {
     },
     "task.deleted": (message) => {
       // A transfer moves the task, it does not delete it: only workspace
-      // membership is reconciled, and task-owned data is kept.
-      if (message.payload.transfer_operation_id) {
+      // membership is reconciled, and task-owned data is kept. The transfer
+      // marker is not part of the shared task payload type.
+      if ("transfer_operation_id" in message.payload && message.payload.transfer_operation_id) {
         void reconcileTaskMembership(store, message.payload.task_id);
         return;
       }

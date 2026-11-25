@@ -470,8 +470,31 @@ The parent rebased this branch onto upstream `cef5eb5e61`, which includes the
 The complete backend and web gates remain unpassed. Backend has pre-existing
 upstream PostgreSQL failures plus one orchestrator case that failed in the
 aggregate and passed alone. Web has time-limit failures under shared-host load.
-Real Docker is still
-required and has not run.
+
+### Real Docker run (2026-11-25, HEAD `647510bc71`)
+
+The containers project ran `tests/docker/session-catalog-refresh.spec.ts` against
+a real Docker 29.1.3 daemon (data root on the cache drive) and passed 1/1 in
+2.8 minutes with no retries. It built the repository's unchanged
+`kandev-agent:e2e` image. APT inside that build reached Debian through the host
+APT cache, via a Docker client-config `httpProxy`; neither the repository nor
+the test changed. The run verified the following:
+
+- The saved refresh left an `executor_scoped` notice with no candidates and no
+  task-probe `source` or `probe`.
+- The execution was unchanged.
+- The host-only model was absent.
+- Consented refresh stopped and resumed the session in the same environment and
+  executor profile, loaded the original native session ID, created no new
+  session and did not replay the prompt.
+- The draft, runtime configuration and messages were retained.
+- The provider then advertised `Profile env host-only-new`, and selecting it
+  updated the session.
+
+The executor-notice and rediscovered captures were inspected. Earlier attempts
+failed in image setup only, because registry and Debian egress was blocked; no
+product step ran in those attempts. The real Docker gate is now passed. The
+complete backend and web aggregate gates above remain unpassed.
 
 ### Historical generic-candidate evidence
 

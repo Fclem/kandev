@@ -541,8 +541,9 @@ The root gate again failed: three backend packages with failures that reproduce
 on pristine upstream, one orchestrator case that passed alone, and 11 web
 time-limit failures under load. Typecheck
 passed after rerunning at the 5 GiB heap; web lint passed after `56bb7d7238`;
-goal-section now passes. Task 02 records exact results. Real Docker is still
-open.
+goal-section now passes. Task 02 records exact results. On 2026-11-25 the real
+Docker spec passed 1/1 against a real daemon. The backend and web aggregate
+gates remain unpassed.
 
 ## Risks
 

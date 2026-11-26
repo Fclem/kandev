@@ -495,4 +495,4 @@ it("create scope switch preserves portable fields and clears captured scoped sel
   });
   await active.settle(1);
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-}, 10_000);
+});

@@ -141,7 +141,7 @@ for (const success of [true, false]) {
     expect(screen.getByText(success ? "Watcher created" : /rejected-save-0/)).toBeTruthy();
     cancel();
     expect(active.writes).toHaveLength(1);
-  }, 10_000);
+  });
   it(`old ${success ? "success" : "failure"} cannot clear a newer pending save`, async () => {
     active = transport();
     render(<Parent />);
@@ -161,7 +161,7 @@ for (const success of [true, false]) {
     );
     await active.settle(1);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  }, 10_000);
+  });
 }
 it("current failure retains raw draft and permits a successful retry", async () => {
   active = transport();

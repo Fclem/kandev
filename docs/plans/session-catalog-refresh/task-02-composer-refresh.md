@@ -533,6 +533,34 @@ the end.
    resolution takes 4.0–7.3 seconds alone and over 19.6 seconds under aggregate
    contention, against a 15-second limit.
 
+### Rebased re-verification (2026-11-26, upstream `f675a554a5`)
+
+The branch was rebased onto upstream `f675a554a5` (56 new commits). Upstream
+split the AGENTS trees into `STORE-STRUCTURE.md` and `API-GUIDANCE.md`; the
+catalog lines moved there. The mode selector keeps upstream's Pi thinking-level
+handling, now in `mode-selector-state.ts`, alongside the catalog projection.
+
+One sequential run on fresh builds:
+
+- **Browser and Docker specs.** Desktop (catalog, restart, profile discovery,
+  model selector, picker feedback) passed 37/37. Phone (equivalents plus mode
+  mismatch) passed 25/25. The real Docker catalog spec passed 1/1.
+- **`make fmt`** made no changes.
+- **`make -k typecheck test lint`** ran once with the 5 GiB Node heap and
+  PostgreSQL through a key=value DSN (as CI uses), and returned rc=2.
+  - Typecheck, CLI and script tests, backend `golangci-lint` (0 issues), web
+    lint (0 warnings), and harness, specification and architecture lint passed.
+  - Backend: every package passed except `office/routines` (item 3: three
+    PostgreSQL fixture failures) and `sentry` (item 2: PostgreSQL 18 `23001`).
+    `secrets` (item 1) and the orchestrator test (item 4) passed.
+  - Web: 32,082 passed, 4 skipped and 3 failed, all on time limits. The Linear
+    `create scope switch …` case took 5104 ms (item 5). The ESLint cold loads
+    took 18.7 s (`tanstack-query-eslint-config`) and 27.5 s (`task-link-wiring`)
+    (item 6). `goal-section` passed.
+
+Every remaining failure is one of the pre-existing, non-catalog causes listed
+above. The complete aggregate gate remains unpassed.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

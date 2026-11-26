@@ -496,6 +496,43 @@ failed in image setup only, because registry and Debian egress was blocked; no
 product step ran in those attempts. The real Docker gate is now passed. The
 complete backend and web aggregate gates above remain unpassed.
 
+### Remaining aggregate failures: root causes (2026-11-26)
+
+None of the remaining aggregate failures is caused by the catalog change. Each
+is pre-existing, and none was edited on this branch except the timeout revert at
+the end.
+
+1. **Fixture DSN-format mismatch (`secrets`, 6 PostgreSQL tests).**
+   `openPGWithConns` appends ` options=-csearch_path=<schema>`, which works only
+   for key=value DSNs. The local URL DSN swallowed it, so the tests shared one
+   schema and hit duplicate keys. They pass with a key=value DSN, the form CI
+   uses.
+2. **PostgreSQL 18 `23001` product gap (`sentry`
+   `TestPostgresStoreSchemaReplay`).** `db.IsForeignKeyViolation` matches only
+   SQLSTATE `23503`. PostgreSQL 18.6 reports `23001` for `ON DELETE RESTRICT`
+   (reproduced in psql), so `DeleteInstance` returns a raw error instead of
+   `ErrInstanceInUse`. CI pins PostgreSQL 16.
+3. **Missing referenced table in the `office/routines` fixture (3 PostgreSQL
+   tests).** The fixture creates only the settings and office schemas, but
+   office tables reference `tasks(id)`. SQLite tolerates the missing table;
+   PostgreSQL rejects it. CI never runs this package with a PostgreSQL DSN.
+4. **Orchestrator event-count race
+   (`TestStepCompletionOutcome_SupersededConsumerRetryThroughHandler`).** It
+   failed 2 of 300 runs under CPU contention. In every case the extra
+   `task_session.state_changed` came from the asynchronous
+   `launchProcessOnEnter` waiting event after the move to step2, and the
+   assertion counts all subjects.
+5. **Slow tests under load (Linear/Sentry `*-watch-dialog-lifetime`).** Run
+   alone, cases take 2.1–3.9 seconds against a 5-second limit. Commit
+   `5b0b9d62e0` had raised three cases to `10_000` milliseconds; this branch now
+   reverts them to upstream bytes. One run of both files afterwards (1-minute
+   load about 2–4): Sentry passed 20/20; Linear failed 1 of 28. The failure was
+   `create scope switch preserves portable fields and clears captured scoped
+   selections` at 5621 ms, one of the reverted cases.
+6. **ESLint cold load (ESLint wiring tests).** The first configuration
+   resolution takes 4.0–7.3 seconds alone and over 19.6 seconds under aggregate
+   contention, against a 15-second limit.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

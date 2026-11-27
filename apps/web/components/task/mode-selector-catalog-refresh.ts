@@ -1,9 +1,13 @@
 import { t } from "@/lib/i18n";
-import { matchesSessionCatalogSource } from "@/lib/types/session-catalog";
+import {
+  projectedSessionProviderCatalog,
+  matchesSessionCatalogSource,
+} from "@/lib/types/session-catalog";
 import type {
   SessionCatalogOwner,
   SessionCatalogRecord,
   SessionCatalogRefreshEntry,
+  ProjectedSessionProviderCatalog,
 } from "@/lib/types/session-catalog";
 import type { TaskSession } from "@/lib/types/http";
 import type { ModeOption, ModeSelectorState } from "./mode-selector-state";
@@ -22,26 +26,58 @@ export function projectSessionModeChoices(input: Input): ModeSelectorState | und
   const { state, currentModeId, currentModeName, session, entry, sourceOwner } = input;
   const profileId = session?.execution_profile_id || session?.agent_profile_id;
   const host = hostModeCatalog(entry?.record, profileId, sourceOwner);
-  if (!entry?.provider && !host) return state;
-  const { availableModes: providerModes, providerIds } = providerModeChoices(input, profileId);
-  let availableModes = providerModes;
-  if (host) availableModes = mergeHostModes(host, availableModes, providerIds);
-  if (currentModeId && !availableModes.some((mode) => mode.id === currentModeId)) {
-    availableModes = [
-      ...availableModes,
-      {
-        id: currentModeId,
-        name: currentModeName,
-        disabled: true,
-        description: t("task:sessionCatalogChoiceUnavailable"),
-      },
-    ];
-  }
+  const provider = projectedSessionProviderCatalog(entry?.provider, profileId, sourceOwner);
+  const unchanged = unprojectedModeState(input, host, provider);
+  if (unchanged) return unchanged.value;
+  const { availableModes: providerModes, providerIds } = providerModeChoices(input, provider);
+  const choices = host ? mergeHostModes(host, providerModes, providerIds) : providerModes;
+  const availableModes = retainCurrentMode(choices, currentModeId, currentModeName);
+  if (availableModes.length === 0) return undefined;
   return {
     currentModeId: currentModeId ?? "",
     availableModes,
     requestedModeId: state?.requestedModeId,
   };
+}
+
+// Returns the result when there is no catalog evidence to project. A current
+// provider without a mode surface says nothing about modes: with no host
+// candidates and no current mode there is nothing to show. An unproven owner's
+// live list may be stale, so it is not revived either.
+function unprojectedModeState(
+  input: Input,
+  host: SessionCatalogRecord | undefined,
+  provider: ProjectedSessionProviderCatalog | undefined,
+): { value: ModeSelectorState | undefined } | undefined {
+  if (!provider && !host) return { value: input.state };
+  if (host || advertisesModes(provider) || input.currentModeId) return undefined;
+  return { value: provider?.current === false ? undefined : input.state };
+}
+
+// The current mode stays visible, disabled, when the catalog no longer offers it.
+function retainCurrentMode(
+  availableModes: ModeOption[],
+  currentModeId: string | null,
+  currentModeName: string,
+): ModeOption[] {
+  if (!currentModeId || availableModes.some((mode) => mode.id === currentModeId)) {
+    return availableModes;
+  }
+  return [
+    ...availableModes,
+    {
+      id: currentModeId,
+      name: currentModeName,
+      disabled: true,
+      description: t("task:sessionCatalogChoiceUnavailable"),
+    },
+  ];
+}
+
+function advertisesModes(provider: ProjectedSessionProviderCatalog | undefined): boolean {
+  if (!provider?.current) return false;
+  const { outcome, modes } = provider.record.result;
+  return outcome === "complete" && modes.present && modes.supported;
 }
 
 function hostModeCatalog(
@@ -58,21 +94,15 @@ function hostModeCatalog(
   return record;
 }
 
-function providerModeChoices(input: Input, profileId: string | undefined) {
-  const { state, liveModes, sourceOwner } = input;
-  const provider = input.entry?.provider;
+function providerModeChoices(input: Input, provider: ProjectedSessionProviderCatalog | undefined) {
+  const { state, liveModes } = input;
   if (!provider)
     return {
       availableModes: state?.availableModes ?? [],
       providerIds: new Set((liveModes ?? []).map((mode) => mode.id)),
     };
-  const surface = provider.result.modes;
-  const advertised =
-    matchesSessionCatalogSource(provider, profileId, sourceOwner) &&
-    provider.result.outcome === "complete" &&
-    surface.present &&
-    surface.supported;
-  const availableModes: ModeOption[] = advertised
+  const surface = provider.record.result.modes;
+  const availableModes: ModeOption[] = advertisesModes(provider)
     ? (surface.choices ?? []).map((mode) => ({
         id: mode.id,
         name: mode.name || mode.id,

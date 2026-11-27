@@ -590,6 +590,39 @@ One sequential run on fresh builds (sampled 1-minute load peaked at 45.9):
 No catalog test failed. The complete aggregate gate remains unpassed for the
 recorded non-catalog causes.
 
+### Review round 2 fixes (2026-11-27)
+
+- **Mode picker for models-only providers.** A current provider record without a
+  supported mode surface no longer produces an empty "Unknown" mode trigger.
+  With no host mode candidates and no current mode, the projection returns the
+  original state: it stays hidden for Codex app-server and mode-less ACP agents.
+  A current mode still remains visible and disabled when the surface is
+  unsupported, and an empty projected list renders nothing. Behavioral RED: the
+  trigger rendered for `mock-agent` and `codex-app-server` models-only providers.
+- **Stale provider records (scope decision).** A provider record is projected only
+  as the current owner's evidence. When the current owner is proven (the
+  settings source matches the live execution) and differs from the record's
+  owner, the record is ignored. A failed start or an earlier ACP v1 launch
+  therefore cannot disable the live choices of a later launch whose transport
+  never publishes discovery, such as acpv2; acpv2 discovery itself is not
+  implemented. While the owner is unproven (the live execution has moved past
+  the settings source), the record still retires choices instead of reviving a
+  possibly stale live list. The existing "does not revive a previous provider's
+  choices" test covers that path. Behavioral RED: a previous-owner record hid the
+  live `Provider only` model and the live modes.
+- **New-owner settings reservation.** `reserveCatalogSettingsSource` merged the
+  new owner's identity into the previous execution's ACP settings snapshot. The
+  previous `current_mode_id`, `current_model_id`, lists and
+  `config_options_settled=true` were therefore relabelled as the new owner's, and
+  the merge also zeroed the previous generation counters. A different source now
+  starts a fresh snapshot with the new identity and policy. It keeps only the
+  durable `catalog_discovery` availability record, as the event projection does
+  on owner change; consumers scope that record by its own owner. Same-source
+  re-entry stays a merge. RED on SQLite and PostgreSQL showed the old mode, the
+  settled flag and the lists after `Begin`. An orchestrator RED (run against the
+  previous implementation) showed the new owner's unsettled `session_models`
+  report persisting as settled with `old-mode`.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

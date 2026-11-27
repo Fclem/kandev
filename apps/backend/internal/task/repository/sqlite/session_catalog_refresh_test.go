@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/kandev/kandev/internal/agentruntime"
@@ -99,6 +100,67 @@ func exerciseCatalogConditionalWrite(t *testing.T, repo *Repository) {
 	require.Nil(t, oldLaunch, "late old finalizer cannot reserve over an accepted newer source")
 	exerciseCatalogFailedOwnerSettlement(t, repo)
 	exerciseCatalogLifecycleExclusion(t, repo)
+	exerciseCatalogNewOwnerReservation(t, repo)
+}
+
+// A new owner's reservation starts its own settings snapshot: the previous
+// execution's settled options, current mode/model and lists must not be
+// relabelled as the new source. Durable provider availability is retained,
+// as the event projection retains it on owner change.
+func exerciseCatalogNewOwnerReservation(t *testing.T, repo *Repository) {
+	t.Helper()
+	ctx := context.Background()
+	const taskID, sessionID, profileID = "reserve-task", "reserve-session", "reserve-profile"
+	previous := sessioncatalog.Owner{ExecutionID: "reserve-e1", AttemptID: "reserve-a1", SourceGeneration: 4}
+	next := sessioncatalog.Owner{ExecutionID: "reserve-e2", AttemptID: "reserve-a2", SourceGeneration: 1}
+	require.NoError(t, repo.CreateTask(ctx, &models.Task{ID: taskID, Title: "Reserve"}))
+	require.NoError(t, repo.CreateTaskSession(ctx, &models.TaskSession{ID: sessionID, TaskID: taskID, AgentProfileID: profileID, ExecutionProfileID: profileID, State: models.TaskSessionStateStarting}))
+	require.NoError(t, repo.UpsertExecutorRunning(ctx, &models.ExecutorRunning{ID: "reserve-runtime", TaskID: taskID, SessionID: sessionID, ExecutionProfileID: profileID, AgentExecutionID: next.ExecutionID, Status: models.ExecutorRunningStatusStarting}))
+	providerAvailability := map[string]any{"revision": 3, "profile_id": profileID}
+	require.NoError(t, repo.SetSessionMetadataKey(ctx, sessionID, models.SessionMetaKeyACPModelState, map[string]any{
+		"settings_source_execution_id": previous.ExecutionID, "settings_attempt_id": previous.AttemptID,
+		"settings_source_generation": previous.SourceGeneration, "settings_policy": "strict",
+		"current_model_id": "old-model", "current_mode_id": "old-mode", "current_model_generation": 9, "current_mode_generation": 9,
+		"models":                 []map[string]any{{"modelId": "old-model"}},
+		"config_options":         []map[string]any{{"id": "effort", "currentValue": "high"}},
+		"config_options_settled": true,
+		"catalog_discovery":      providerAvailability,
+	}))
+	launch, err := repo.BeginSessionCatalogDiscovery(ctx, sessionID, profileID, next, "strict")
+	require.NoError(t, err)
+	require.NotNil(t, launch)
+	stored, err := repo.GetTaskSession(ctx, sessionID)
+	require.NoError(t, err)
+	raw, err := json.Marshal(stored.Metadata[models.SessionMetaKeyACPModelState])
+	require.NoError(t, err)
+	var state map[string]any
+	require.NoError(t, json.Unmarshal(raw, &state))
+	require.Equal(t, next.ExecutionID, state["settings_source_execution_id"])
+	require.Equal(t, next.AttemptID, state["settings_attempt_id"])
+	require.EqualValues(t, next.SourceGeneration, state["settings_source_generation"])
+	require.Equal(t, "strict", state["settings_policy"])
+	for _, key := range []string{"current_model_id", "current_mode_id", "current_model_generation", "current_mode_generation", "models", "config_options", "config_options_settled"} {
+		require.NotContains(t, state, key, "the previous owner's %s must not be relabelled as the new source", key)
+	}
+	require.Equal(t, map[string]any{"revision": float64(3), "profile_id": profileID}, state["catalog_discovery"])
+
+	// Same-owner re-entry stays a merge: settings the owner already reported survive.
+	require.NoError(t, repo.SetSessionMetadataKey(ctx, sessionID, models.SessionMetaKeyACPModelState, map[string]any{
+		"settings_source_execution_id": next.ExecutionID, "settings_attempt_id": next.AttemptID,
+		"settings_source_generation": next.SourceGeneration, "settings_policy": "strict",
+		"current_mode_id": "own-mode", "config_options_settled": true,
+	}))
+	again, err := repo.BeginSessionCatalogDiscovery(ctx, sessionID, profileID, next, "strict")
+	require.NoError(t, err)
+	require.NotNil(t, again)
+	stored, err = repo.GetTaskSession(ctx, sessionID)
+	require.NoError(t, err)
+	raw, err = json.Marshal(stored.Metadata[models.SessionMetaKeyACPModelState])
+	require.NoError(t, err)
+	state = map[string]any{}
+	require.NoError(t, json.Unmarshal(raw, &state))
+	require.Equal(t, "own-mode", state["current_mode_id"])
+	require.Equal(t, true, state["config_options_settled"])
 }
 
 func exerciseCatalogLifecycleExclusion(t *testing.T, repo *Repository) {

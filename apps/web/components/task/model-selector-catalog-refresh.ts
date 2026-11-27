@@ -3,7 +3,10 @@ import type { ModelCatalog, ModelCatalogNode } from "@kandev/types/model-catalog
 import { isModelConfigOption } from "@/components/model-config-selector";
 import type { ModelSelectorOption, SelectConfigOption } from "@/components/model-config-selector";
 import type { TaskSession } from "@/lib/types/http";
-import { matchesSessionCatalogSource, sameSessionCatalogOwner } from "@/lib/types/session-catalog";
+import {
+  projectedSessionProviderCatalog,
+  sameSessionCatalogOwner,
+} from "@/lib/types/session-catalog";
 import type {
   SessionCatalogOwner,
   SessionCatalogRecord,
@@ -52,14 +55,15 @@ function projectModelConfig(
 }
 
 function projectProviderModelChoices(input: Input) {
-  const { provider, session, sourceOwner, currentModel } = input;
-  if (!provider) return input;
-  const surface = provider.result.models;
-  const current = matchesSessionCatalogSource(
-    provider,
+  const { session, sourceOwner, currentModel } = input;
+  const projected = projectedSessionProviderCatalog(
+    input.provider,
     session?.execution_profile_id || session?.agent_profile_id,
     sourceOwner,
   );
+  if (!projected) return input;
+  const { record: provider, current } = projected;
+  const surface = provider.result.models;
   const advertised =
     current && provider.result.outcome === "complete" && surface.present && surface.supported;
   const modelOptions: ModelSelectorOption[] = advertised

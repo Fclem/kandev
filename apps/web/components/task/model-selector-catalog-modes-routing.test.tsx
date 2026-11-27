@@ -66,6 +66,7 @@ const PROVIDER_MODEL_LABEL = "Provider only";
 const MODEL_SETTINGS_LABEL = "Session model settings";
 const CATALOG_CONFIRMATION_ID = "session-catalog-refresh-confirmation";
 const ARIA_DISABLED_ATTRIBUTE = "aria-disabled";
+const MODE_SELECTOR_TEST_ID = "session-mode-selector";
 
 const id = "catalog-session";
 const owner = { execution_id: "execution-1", attempt_id: "attempt-1", source_generation: 1 };
@@ -183,7 +184,7 @@ function prepareModeChoices() {
 }
 
 function openModePicker() {
-  const trigger = screen.getByTestId("session-mode-selector");
+  const trigger = screen.getByTestId(MODE_SELECTOR_TEST_ID);
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
   fireEvent.click(trigger);
 }
@@ -249,7 +250,7 @@ it.each(["empty", "models-only", "unsupported", "failed"] as const)(
         <ModeSelector sessionId={id} />
       </TooltipProvider>,
     );
-    expect(screen.getByTestId("session-mode-selector").textContent).toContain("Default");
+    expect(screen.getByTestId(MODE_SELECTOR_TEST_ID).textContent).toContain("Default");
     openModePicker();
     const stale = screen.queryByRole("menuitem", { name: "Default" });
     expect(!stale || stale.getAttribute(ARIA_DISABLED_ATTRIBUTE) === "true").toBe(true);
@@ -268,7 +269,7 @@ it("keeps phone mode refresh consent in the picker and cancels without SetMode o
       <ModeSelector sessionId={id} />
     </TooltipProvider>,
   );
-  fireEvent.click(screen.getByTestId("session-mode-selector"));
+  fireEvent.click(screen.getByTestId(MODE_SELECTOR_TEST_ID));
   fireEvent.click(screen.getByRole("button", { name: "Host mode" }));
   expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
   const dialog = screen.getByRole("dialog");
@@ -438,4 +439,107 @@ it("retires open consent when the concrete execution profile changes under the s
   await waitFor(() => expect(screen.queryByRole("button", { name: "Refresh session" })).toBeNull());
   expect(sessionApi.setSessionModel).not.toHaveBeenCalled();
   expect(mocks.request).not.toHaveBeenCalled();
+});
+
+const UNSUPPORTED_SURFACE = { present: false, supported: false, choices: null };
+
+function applyProviderCatalog(providerOwner: typeof owner, result: Record<string, unknown>) {
+  store.getState().applySessionProviderCatalog(
+    CATALOG_TASK_ID,
+    id,
+    sessionProviderCatalogSchema.parse({
+      revision: 1,
+      profile_id: "profile",
+      owner: providerOwner,
+      result,
+    }),
+  );
+}
+
+function renderModeSelector() {
+  render(
+    <TooltipProvider>
+      <ModeSelector sessionId={id} />
+    </TooltipProvider>,
+  );
+}
+
+it.each(["mock-agent", "codex-app-server"])(
+  "hides the mode picker for a %s provider with models only and no current mode",
+  (agentName) => {
+    const session = store.getState().taskSessions.items[id];
+    store.getState().setTaskSession({
+      ...session,
+      agent_profile_snapshot: { agent_name: agentName, model: "old-model" },
+    });
+    applyProviderCatalog(owner, {
+      outcome: "complete",
+      models: { present: true, supported: true, choices: [{ id: "old-model", name: "Old model" }] },
+      modes: UNSUPPORTED_SURFACE,
+    });
+    renderModeSelector();
+    expect(screen.queryByTestId(MODE_SELECTOR_TEST_ID)).toBeNull();
+  },
+);
+
+it("keeps the mode picker for a models-only provider when the session has a current mode", () => {
+  store.getState().setSessionMode(id, "default", [
+    { id: "default", name: "Default" },
+    { id: "plan", name: "Plan" },
+  ]);
+  applyProviderCatalog(owner, {
+    outcome: "complete",
+    models: { present: true, supported: true, choices: [{ id: "old-model", name: "Old model" }] },
+    modes: UNSUPPORTED_SURFACE,
+  });
+  renderModeSelector();
+  expect(screen.getByTestId(MODE_SELECTOR_TEST_ID).textContent).toContain("Default");
+});
+
+// A provider record left by an earlier owner (a failed start, or a previous
+// launch whose transport never publishes discovery) is not evidence about the
+// current owner and must not disable its live choices.
+it("ignores a previous owner's provider record when the current owner never publishes", async () => {
+  const previousOwner = {
+    execution_id: "execution-0",
+    attempt_id: "attempt-0",
+    source_generation: 1,
+  };
+  store.getState().setSessionMode(id, "default", [
+    { id: "default", name: "Default" },
+    { id: "provider-mode", name: "Provider mode" },
+  ]);
+  applyProviderCatalog(previousOwner, {
+    outcome: "complete",
+    models: {
+      present: true,
+      supported: true,
+      choices: [{ id: "stale-model", name: "Stale model" }],
+    },
+    modes: { present: true, supported: true, choices: [{ id: "stale-mode", name: "Stale mode" }] },
+  });
+  render(
+    <TooltipProvider>
+      <ModelSelector sessionId={id} />
+      <ModeSelector sessionId={id} />
+    </TooltipProvider>,
+  );
+  const trigger = screen.getByRole("button", { name: MODEL_SETTINGS_LABEL });
+  fireEvent.pointerDown(trigger);
+  fireEvent.click(trigger);
+  expect(
+    screen
+      .getByRole("option", { name: PROVIDER_MODEL_LABEL })
+      .getAttribute(ARIA_DISABLED_ATTRIBUTE),
+  ).not.toBe("true");
+  expect(screen.queryByRole("option", { name: "Stale model" })).toBeNull();
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+  cleanup();
+  renderModeSelector();
+  openModePicker();
+  const providerMode = screen.getByRole("menuitem", { name: "Provider mode" });
+  expect(providerMode.getAttribute(ARIA_DISABLED_ATTRIBUTE)).not.toBe("true");
+  expect(screen.queryByRole("menuitem", { name: "Stale mode" })).toBeNull();
+  fireEvent.click(providerMode);
+  await waitFor(() => expect(sessionApi.setSessionMode).toHaveBeenCalledWith(id, "provider-mode"));
 });

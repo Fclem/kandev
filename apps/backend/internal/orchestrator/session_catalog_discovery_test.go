@@ -52,6 +52,11 @@ func TestSessionCatalogRefreshOrderingAndSettlement(t *testing.T) {
 			launch, err := repo.BeginSessionCatalogDiscovery(ctx, session.ID, "concrete-profile", owner, "strict")
 			require.NoError(t, err)
 			require.Equal(t, uint64(1), launch.NoticeRevision)
+			afterBegin, err := repo.GetTaskSession(ctx, session.ID)
+			require.NoError(t, err)
+			reserved := afterBegin.Metadata[models.SessionMetaKeyACPModelState].(map[string]any)
+			require.NotContains(t, reserved, "current_model_id", "the previous owner's model is not relabelled for the replacement")
+			require.Equal(t, owner.ExecutionID, reserved["settings_source_execution_id"])
 			service := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), &mockAgentManager{})
 			service.eventBus = bus.NewMemoryEventBus(testLogger())
 			eventCount := 0
@@ -77,7 +82,8 @@ func TestSessionCatalogRefreshOrderingAndSettlement(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, intent, current.Metadata["runtime_config"])
 				require.Equal(t, "unsent work", current.Metadata["composer_draft"])
-				require.Equal(t, "selected-model", current.Metadata[models.SessionMetaKeyACPModelState].(map[string]any)["current_model_id"])
+				// Settlement never edits the reserved settings snapshot's selection.
+				require.Equal(t, reserved["current_model_id"], current.Metadata[models.SessionMetaKeyACPModelState].(map[string]any)["current_model_id"])
 				return record
 			}
 			stale := *payload
@@ -120,4 +126,54 @@ func TestSessionCatalogRefreshOrderingAndSettlement(t *testing.T) {
 			require.Equal(t, *newer, read(), "replacement cannot clear a refresh published after it began")
 		})
 	}
+}
+
+// A new owner's catalog reservation must not relabel the previous execution's
+// settled options and current mode as its own: the new owner's first,
+// unsettled report then reads as unsettled with no mode.
+func TestSessionCatalogReservationStartsNewOwnerSettingsUnsettled(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedTaskAndSession(t, repo, "reserve-task", "reserve-session", models.TaskSessionStateStarting)
+	session, err := repo.GetTaskSession(ctx, "reserve-session")
+	require.NoError(t, err)
+	session.AgentProfileID = "concrete-profile"
+	session.ExecutionProfileID = "concrete-profile"
+	require.NoError(t, repo.UpdateTaskSession(ctx, session))
+	previous := sessioncatalog.Owner{ExecutionID: "previous-execution", AttemptID: "previous-attempt", SourceGeneration: 4}
+	require.NoError(t, repo.SetSessionMetadataKey(ctx, session.ID, models.SessionMetaKeyACPModelState, lifecycle.SessionModelsSnapshot{
+		SettingsSourceExecutionID: previous.ExecutionID, SettingsAttemptID: previous.AttemptID, SettingsSourceGeneration: previous.SourceGeneration,
+		SettingsPolicy: streams.SessionSettingsPolicyStrict, CurrentModelID: "old-model", CurrentModeID: "old-mode",
+		Models:               []streams.SessionModelInfo{{ModelID: "old-model", Name: "Old model"}},
+		ConfigOptions:        []streams.ConfigOption{{ID: "effort", CurrentValue: "high"}},
+		ConfigOptionsSettled: true,
+	}))
+	seedExecutorRunning(t, repo, session.ID, session.TaskID, "next-execution")
+	running, err := repo.GetExecutorRunningBySessionID(ctx, session.ID)
+	require.NoError(t, err)
+	running.ExecutionProfileID = "concrete-profile"
+	require.NoError(t, repo.UpsertExecutorRunning(ctx, running))
+	next := sessioncatalog.Owner{ExecutionID: "next-execution", AttemptID: "next-attempt", SourceGeneration: 1}
+	launch, err := repo.BeginSessionCatalogDiscovery(ctx, session.ID, "concrete-profile", next, "strict")
+	require.NoError(t, err)
+	require.NotNil(t, launch)
+
+	service := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), &mockAgentManager{})
+	service.eventBus = bus.NewMemoryEventBus(testLogger())
+	service.handleAgentStreamEvent(ctx, &lifecycle.AgentStreamEventPayload{
+		TaskID: session.TaskID, SessionID: session.ID, ExecutionID: next.ExecutionID, AttemptID: next.AttemptID,
+		SessionSettingsSourceGeneration: next.SourceGeneration,
+		Data: &lifecycle.AgentStreamEventData{
+			Type:          streams.EventTypeSessionModels,
+			SessionModels: []streams.SessionModelInfo{{ModelID: "new-model", Name: "New model"}},
+			Data:          map[string]any{"config_options_settled": false},
+		},
+	})
+	current, err := repo.GetTaskSession(ctx, session.ID)
+	require.NoError(t, err)
+	snapshot, ok := lifecycle.LoadSessionModelsSnapshot(current.Metadata[models.SessionMetaKeyACPModelState])
+	require.True(t, ok)
+	require.Equal(t, next.ExecutionID, snapshot.SettingsSourceExecutionID)
+	require.False(t, snapshot.ConfigOptionsSettled, "the previous owner's settled options must not settle the new owner")
+	require.Empty(t, snapshot.CurrentModeID, "the previous owner's mode must not become the new owner's")
 }

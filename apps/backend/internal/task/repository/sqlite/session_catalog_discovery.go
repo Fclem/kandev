@@ -38,6 +38,10 @@ const (
  AND ts.state IN ('CREATED', 'STARTING', 'RUNNING', 'WAITING_FOR_INPUT', 'IDLE', 'FAILED') AND t.archived_at IS NULL`
 )
 
+// catalogDiscoveryMetadataKey holds the durable provider availability record
+// inside the ACP settings snapshot.
+const catalogDiscoveryMetadataKey = "catalog_discovery"
+
 type catalogSource struct {
 	ExecutionID     string `json:"settings_source_execution_id"`
 	AttemptID       string `json:"settings_attempt_id"`
@@ -45,6 +49,15 @@ type catalogSource struct {
 	ModelGeneration uint64 `json:"current_model_generation"`
 	ModeGeneration  uint64 `json:"current_mode_generation"`
 	Policy          string `json:"settings_policy"`
+}
+
+// catalogSourceIdentity is the owner identity a catalog reservation writes;
+// it deliberately omits the generation counters, which belong to the source.
+type catalogSourceIdentity struct {
+	ExecutionID string `json:"settings_source_execution_id"`
+	AttemptID   string `json:"settings_attempt_id"`
+	Generation  uint64 `json:"settings_source_generation"`
+	Policy      string `json:"settings_policy"`
 }
 
 func catalogSettingsSource(metadata map[string]json.RawMessage) (catalogSource, error) {
@@ -191,18 +204,35 @@ func catalogLaunchNoticeRevision(raw json.RawMessage, profileID string) (uint64,
 	return 0, nil
 }
 
+// reserveCatalogSettingsSource labels the settings snapshot with the starting
+// owner. Re-entry by the same source keeps what that source already reported.
+// A different source starts a fresh snapshot, so the previous execution's
+// current mode/model, lists and settled options are never relabelled as the
+// new owner's. Durable provider availability is retained, as the event
+// projection retains it on owner change; consumers scope it by its own owner.
 func (r *Repository) reserveCatalogSettingsSource(ctx context.Context, tx *sqlx.Tx, sessionID string, metadata map[string]json.RawMessage, owner sessioncatalog.Owner, policy string) error {
-	snapshot := make(map[string]json.RawMessage)
-	if raw := metadata[models.SessionMetaKeyACPModelState]; len(raw) > 0 {
-		if err := json.Unmarshal(raw, &snapshot); err != nil {
+	previous := make(map[string]json.RawMessage)
+	if raw := metadata[models.SessionMetaKeyACPModelState]; len(raw) > 0 && string(raw) != jsonNull {
+		if err := json.Unmarshal(raw, &previous); err != nil {
 			return err
 		}
 	}
-	update, err := json.Marshal(catalogSource{ExecutionID: owner.ExecutionID, AttemptID: owner.AttemptID, Generation: owner.SourceGeneration, Policy: policy})
+	source, err := catalogSettingsSource(metadata)
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(update, &snapshot); err != nil {
+	snapshot := previous
+	if source.ExecutionID != owner.ExecutionID || source.AttemptID != owner.AttemptID || source.Generation != owner.SourceGeneration {
+		snapshot = make(map[string]json.RawMessage)
+		if discovery, ok := previous[catalogDiscoveryMetadataKey]; ok {
+			snapshot[catalogDiscoveryMetadataKey] = discovery
+		}
+	}
+	identity, err := json.Marshal(catalogSourceIdentity{ExecutionID: owner.ExecutionID, AttemptID: owner.AttemptID, Generation: owner.SourceGeneration, Policy: policy})
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(identity, &snapshot); err != nil {
 		return err
 	}
 	payload, err := json.Marshal(snapshot)

@@ -151,6 +151,29 @@ export function matchesSessionCatalogSource(
     sameSessionCatalogOwner(catalog.owner, sourceOwner)
   );
 }
+
+export type ProjectedSessionProviderCatalog = {
+  record: SessionProviderCatalog;
+  // Only a current-owner record may advertise choices.
+  current: boolean;
+};
+
+// A provider record proves availability only for the owner that reported it.
+// When the current owner is proven and differs (a failed start, or a transport
+// that never publishes discovery), the record is ignored so it cannot disable
+// that owner's live choices. While the owner is unproven the live lists may be
+// stale too, so the record still retires them instead of reviving them.
+export function projectedSessionProviderCatalog(
+  provider: SessionProviderCatalog | undefined,
+  profileId: string | undefined,
+  sourceOwner: SessionCatalogOwner | undefined,
+): ProjectedSessionProviderCatalog | undefined {
+  if (!provider) return undefined;
+  if (matchesSessionCatalogSource(provider, profileId, sourceOwner)) {
+    return { record: provider, current: true };
+  }
+  return sourceOwner ? undefined : { record: provider, current: false };
+}
 export const sessionCatalogResumeAckSchema = z.object({
   accepted_launch_owner: sessionCatalogOwnerSchema.optional(),
 });

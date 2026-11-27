@@ -545,7 +545,9 @@ goal-section now passes. Task 02 records exact results. On 2026-11-25 the real
 Docker spec passed 1/1 against a real daemon. The backend and web aggregate
 gates remain unpassed. After the 2026-11-26 rebase onto upstream `f675a554a5`,
 desktop 37/37, phone 25/25 and Docker 1/1 passed. The root gate failed only on
-pre-existing, non-catalog causes recorded in Task 02.
+pre-existing, non-catalog causes recorded in Task 02. After the 2026-11-27
+rebase onto `6388b86453`, desktop 38/38, phone 26/26 and Docker 1/1 passed.
+The root gate again failed only on those non-catalog causes.
 
 ## Risks
 

@@ -561,6 +561,35 @@ One sequential run on fresh builds:
 Every remaining failure is one of the pre-existing, non-catalog causes listed
 above. The complete aggregate gate remains unpassed.
 
+### Rebased re-verification (2026-11-27, upstream `6388b86453`)
+
+The branch was rebased onto upstream `6388b86453` (23 further commits). Upstream
+added shared `streams.ConfigOptionsSource*` constants, so the duplicate local
+constant was removed and catalog enrichment now uses the shared keys. Build,
+vet, gofmt and the ACP adapter package passed.
+
+One sequential run on fresh builds (sampled 1-minute load peaked at 45.9):
+
+- **Browser and Docker specs.** Desktop passed 38/38, phone passed 26/26 and the
+  real Docker spec passed 1/1.
+- **`make fmt`** again reformatted only `apps/packages/plugin-sdk/sdk-release.json`,
+  which was restored to committed bytes.
+- **`make -k typecheck test lint`** returned rc=2.
+  - Typecheck, CLI and script tests, backend `golangci-lint` (0 issues), web
+    lint (0 warnings), and harness, specification and architecture lint passed.
+  - Backend: every package passed except `office/routines` (item 3) and
+    `sentry` (item 2).
+  - Web: 32,623 passed, 4 skipped and 8 failed, all load-bound.
+    - Item 6: four ESLint cold loads took 16.3–22.8 s.
+    - Item 5: two Linear cases timed out at 5506 ms and 5868 ms. A third Linear
+      case did not find its dialog within the default query wait (3920 ms
+      total).
+    - Item 5: one Sentry case timed out.
+    - `storage-maintenance-settings` timed out at 6172 ms.
+
+No catalog test failed. The complete aggregate gate remains unpassed for the
+recorded non-catalog causes.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

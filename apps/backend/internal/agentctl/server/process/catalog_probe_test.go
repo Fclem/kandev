@@ -60,7 +60,8 @@ func writeFakeCodexScript(t *testing.T, dir string, script fakeCodexScript) {
 // native acquisition. The production table additionally requires the exact
 // managed package and version, covered separately.
 func fixtureCodexQualifier(launch *catalogLaunch) (catalogProbeCapability, bool) {
-	return codexModelListCapability(), launch.protocol == string(agent.ProtocolCodexAppServer) && !launch.wrapped
+	qualification, _ := codexQualificationFor("@openai/codex@0.169.0")
+	return codexModelListCapability(qualification), launch.protocol == string(agent.ProtocolCodexAppServer) && !launch.wrapped
 }
 
 func startCatalogProbeFixture(t *testing.T, live fakeCodexScript) *catalogProbeFixture {

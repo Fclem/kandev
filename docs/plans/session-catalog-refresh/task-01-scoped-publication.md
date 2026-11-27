@@ -243,9 +243,9 @@ installer-sharing digest itself is unchanged.
   launch evidence; same-process reload and replacement during the helper;
   cancellation reaping the helper and its grandchild only; one-helper admission.
 - **Capability.** The table qualifies only the built-in unwrapped managed
-  `@openai/codex@0.169.0 app-server` launch (models only) and the mock-agent
-  fixture. ACP, flags, wrappers, custom commands and other versions are
-  unsupported.
+  `@openai/codex@0.169.0 app-server` and `@openai/codex@0.171.0 app-server`
+  launches (models only, each an exact version) and the mock-agent fixture.
+  ACP, flags, wrappers, custom commands and other versions are unsupported.
 - **API and proxies.** The instance route requires authenticated control and the
   exact `X-Instance-ID`, decodes a bounded owner-only request and returns
   `no-store` replies. A mutation that returned the plain transport made the
@@ -294,6 +294,49 @@ run passed typecheck, every backend package, CLI and script tests, backend
 two load timeouts in unrelated files that pass alone, plus one Docker-spec
 complexity warning since fixed; Task 02 records the details. Docs validators and
 `git diff --check` are recorded in the plan. This work order is complete.
+
+### Requalification for the reviewed default Codex pin (2026-11-27)
+
+Review round 1 found that the only qualified capability was
+`@openai/codex@0.169.0`, while the reviewed default managed pin had moved to
+0.171.0 (#5404), so every default Codex Local/Worktree session became
+`task_discovery_unsupported`.
+
+- **RED.** `TestSessionCatalogTaskDiscoveryQualifiesReviewedDefaultCodex`
+  requires `agents.MustDefaultManagedNPMRuntimeVersion("@openai/codex")` to
+  qualify with its exact capability ID. It failed with `reviewed default
+  @openai/codex@0.171.0 is not a qualified catalog capability`.
+- **Helper frames, actual binaries.** A throwaway harness, since deleted, ran
+  the production acquisition against the real managed npx launch, using the
+  production npm-prefix preparation and recording stdin/stdout. Results:
+  - 0.171.0: frames `initialize`, `initialized`, `model/list`; complete;
+    task catalog returned; 0 rollouts; user agent `kandev/0.171.0 …`.
+  - 0.169.0: the same frames and outcome; user agent `kandev/0.169.0 …`.
+- **Same-contract native proof for 0.171.0.** Real `kandev` and `agentctl` were
+  built with 0.171.0 provisionally listed and run with the default managed
+  runtime, an isolated cache-backed HOME, a fake Responses provider and
+  per-task project catalogs. The run's npx package was `@openai/codex` 0.171.0,
+  and its rollouts recorded `cli_version=0.171.0`.
+  - Local and Worktree kept live catalog A, and executions were unchanged.
+  - Fresh helpers returned distinct task catalogs (`task-one-b-model`;
+    `task-two-b-model`, `task-two-b-extra`) as `task_probe_v1` candidates,
+    while the editor returned generic A.
+  - Rollouts stayed at 2 and provider requests at 2.
+  - Consented Stop/Resume of each retained its native thread ID, advertised
+    that task's catalog, and cleared the notice (`discovery_complete`). The
+    sibling kept A until its own resume.
+  - Evidence: `/home/clem/.cache/session-catalog-5237/native-0171/`.
+- **Change.** The capability table is now a list of exact qualifications, each
+  with its own capability ID, package spec and user-agent prefix: 0.169.0 and
+  0.171.0. There are no ranges; neighbouring 0.170.0 and 0.166.0 stay
+  unsupported.
+- **0.169.0 decision.** 0.169.0 stays qualified. Its full Local/Worktree proof
+  (2026-11-21) stands, today's real-binary helper check passed, and the only
+  acquisition change is the per-version user-agent parameter.
+- **GREEN.** The `TestSessionCatalogTaskDiscovery` tests in
+  `internal/agentctl/server/process`, including the new regression, pass.
+
+This work order remains complete with 0.171.0 requalified.
 
 ### Revised acquisition design checkpoint
 

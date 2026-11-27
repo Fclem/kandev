@@ -23,10 +23,9 @@ func mockCatalogCapability() catalogProbeCapability {
 func acquireMockCatalog(ctx context.Context, helper *catalogHelper) (sessioncatalog.Discovery, error) {
 	request, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": acp.AgentMethodInitialize,
-		"params": map[string]any{
-			"protocolVersion":    1,
-			"clientCapabilities": map[string]any{},
-			"_meta":              map[string]any{sessioncatalog.MockCatalogProbeMetaKey: true},
+		"params": acp.InitializeRequest{
+			ProtocolVersion: acp.ProtocolVersionNumber,
+			Meta:            map[string]any{sessioncatalog.MockCatalogProbeMetaKey: true},
 		},
 	})
 	if err != nil {

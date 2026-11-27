@@ -139,7 +139,7 @@ Chat reuse through session-scoped hooks rather than adding page-specific effects
 
 | Provider/transport and actual executor | Identity/capability shape | Behavior and verification | Unsupported or unknown fallback |
 | --- | --- | --- | --- |
-| Qualified native Codex built-in unwrapped host app-server, actual 0.169.0 | Sealed current task command/context plus source/profile fences | Fresh helper initialize/model-list only; complete pagination, model surface supported; actual native Local and Worktree proof required | Unknown runtime/version/wrapper or unavailable context gets notice-only; native modes remain explicitly unsupported |
+| Qualified native Codex built-in unwrapped host app-server, actual 0.169.0 or 0.171.0 (exact versions only) | Sealed current task command/context plus source/profile fences | Fresh helper initialize/model-list only; complete pagination, model surface supported; actual native Local and Worktree proof required per version | Unknown runtime/version/wrapper or unavailable context gets notice-only; native modes remain explicitly unsupported |
 | ACP including grouped/mode-capable providers | No qualified generic fresh read-only task acquisition established by research | Preserve live provider choices and offer notice/explicit rediscovery; deterministic task-probe fixture covers model/mode UI independently | No invented RPC or new native conversation to manufacture eligibility; concrete future capabilities need same-contract proof |
 | Custom/passthrough/wrapped or legacy host runtime | No qualified acquisition capability/launch evidence | Notice-only with exact current selections retained | No generic environment exclusions or installer equality |
 | Any Docker/SSH/Remote Docker/Sprites/Kubernetes/plugin remote, or unknown locality | Actual executor identity | Notice-only; explicit restart stays on that executor; real Docker proof remains required | Never run automatic task probes or import host choices |
@@ -299,7 +299,7 @@ Restore all fixture mutations and close the second tab even on failure.
 
 ## Work orders
 
-- [ ] [Task 01: Publish scoped saved-profile catalog observations](task-01-scoped-publication.md)
+- [x] [Task 01: Publish scoped saved-profile catalog observations](task-01-scoped-publication.md)
 - [ ] [Task 02: Refresh session catalogs from the composer](task-02-composer-refresh.md)
 
 Task 02 depends on Task 01. The split follows the independently verifiable
@@ -548,6 +548,12 @@ desktop 37/37, phone 25/25 and Docker 1/1 passed. The root gate failed only on
 pre-existing, non-catalog causes recorded in Task 02. After the 2026-11-27
 rebase onto `6388b86453`, desktop 38/38, phone 26/26 and Docker 1/1 passed.
 The root gate again failed only on those non-catalog causes.
+
+Review round 1 (2026-11-27) found the reviewed default Codex pin, 0.171.0,
+unqualified. A regression now requires the default managed pin to be in the
+exact-version capability table. 0.171.0 was requalified with real-binary helper
+frames and the same-contract Local/Worktree experiment before being listed, and
+0.169.0 stays qualified. Task 01 records the evidence.
 
 ## Risks
 

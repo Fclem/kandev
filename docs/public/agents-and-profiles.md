@@ -616,8 +616,10 @@ profile editor can show a third list. Kandev checks at most two sessions at a
 time and stops checking after 60 seconds.
 
 Candidates appear only for providers whose fresh catalog reader is supported.
-Currently, this is native Codex app-server version 0.169.0 without a wrapper or
-custom CLI flags, and it reports models only. Other providers, custom commands,
+Currently, this is native Codex app-server versions 0.169.0 and 0.171.0 (the
+default managed version) without a wrapper or custom CLI flags, and it reports
+models only. Each version is qualified individually, so a newer Codex version
+receives a notice until it is checked. Other providers, custom commands,
 wrappers, and older sessions that predate the reader receive a notice and keep
 their own provider choices.
 

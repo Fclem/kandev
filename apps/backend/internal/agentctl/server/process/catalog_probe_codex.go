@@ -10,15 +10,42 @@ import (
 	protocol "github.com/kandev/kandev/pkg/codexappserver"
 )
 
-const (
-	codexCatalogCapabilityID = "codex_app_server_model_list_v1@0.169.0"
-	codexQualifiedPackage    = "@openai/codex@0.169.0"
-	// codexProbeClientName matches the live adapter's client declaration.
-	codexProbeClientName = "kandev"
-	// codexQualifiedUserAgent is the actual process implementation evidence:
-	// the provider derives it from the client name and its own version.
-	codexQualifiedUserAgent = codexProbeClientName + "/0.169.0 "
-)
+// codexProbeClientName matches the live adapter's client declaration.
+const codexProbeClientName = "kandev"
+
+// codexQualification is one exact @openai/codex version whose app-server
+// model/list contract passed same-contract native qualification. There are no
+// version ranges: a new reviewed pin stays notice-only until it is requalified
+// and listed here.
+type codexQualification struct {
+	capabilityID string
+	packageSpec  string
+	// userAgentPrefix is the actual process implementation evidence: the
+	// provider derives it from the client name and its own version.
+	userAgentPrefix string
+}
+
+var codexQualifications = []codexQualification{
+	{
+		capabilityID:    "codex_app_server_model_list_v1@0.169.0",
+		packageSpec:     "@openai/codex@0.169.0",
+		userAgentPrefix: codexProbeClientName + "/0.169.0 ",
+	},
+	{
+		capabilityID:    "codex_app_server_model_list_v1@0.171.0",
+		packageSpec:     "@openai/codex@0.171.0",
+		userAgentPrefix: codexProbeClientName + "/0.171.0 ",
+	},
+}
+
+func codexQualificationFor(packageSpec string) (codexQualification, bool) {
+	for _, qualification := range codexQualifications {
+		if qualification.packageSpec == packageSpec {
+			return qualification, true
+		}
+	}
+	return codexQualification{}, false
+}
 
 var (
 	errCatalogProbeServerRequest = errors.New("catalog probe does not serve provider requests")
@@ -27,14 +54,19 @@ var (
 	errCodexModelListCursor      = errors.New("codex model/list repeated a cursor")
 )
 
-func codexModelListCapability() catalogProbeCapability {
-	return catalogProbeCapability{id: codexCatalogCapabilityID, acquire: acquireCodexModelCatalog}
+func codexModelListCapability(qualification codexQualification) catalogProbeCapability {
+	return catalogProbeCapability{
+		id: qualification.capabilityID,
+		acquire: func(ctx context.Context, helper *catalogHelper) (sessioncatalog.Discovery, error) {
+			return acquireCodexModelCatalog(ctx, helper, qualification.userAgentPrefix)
+		},
+	}
 }
 
 // acquireCodexModelCatalog sends only initialize, initialized and complete
 // paginated model/list. No thread, turn, configuration or model setter is
 // ever sent, so the helper cannot start or alter a conversation.
-func acquireCodexModelCatalog(ctx context.Context, helper *catalogHelper) (sessioncatalog.Discovery, error) {
+func acquireCodexModelCatalog(ctx context.Context, helper *catalogHelper, userAgentPrefix string) (sessioncatalog.Discovery, error) {
 	client := protocol.NewClient(helper.stdin, helper.stdout, protocol.Options{
 		MaxFrameBytes: sessioncatalog.MaxTaskProbePayloadBytes + 64<<10,
 	})
@@ -50,7 +82,7 @@ func acquireCodexModelCatalog(ctx context.Context, helper *catalogHelper) (sessi
 	}, &initialized); err != nil {
 		return failedCatalogDiscovery(), err
 	}
-	if !strings.HasPrefix(initialized.UserAgent, codexQualifiedUserAgent) {
+	if !strings.HasPrefix(initialized.UserAgent, userAgentPrefix) {
 		return unsupportedCatalogDiscovery(), nil
 	}
 	if err := client.Notify(ctx, protocol.MethodInitialized, struct{}{}); err != nil {

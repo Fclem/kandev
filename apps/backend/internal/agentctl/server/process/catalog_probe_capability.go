@@ -21,8 +21,11 @@ func qualifyCatalogLaunch(launch *catalogLaunch) (catalogProbeCapability, bool) 
 	switch {
 	case launch.protocol == string(agent.ProtocolCodexAppServer) && launch.agentType == codexAppServerAgentType:
 		_, invocation, ok := agents.MatchBuiltinManagedNPMRuntime(launch.agentType, launch.logical)
-		if ok && invocation.PackageSpec == codexQualifiedPackage && len(invocation.AgentArgs()) == 0 {
-			return codexModelListCapability(), true
+		if !ok || len(invocation.AgentArgs()) != 0 {
+			break
+		}
+		if qualification, qualified := codexQualificationFor(invocation.PackageSpec); qualified {
+			return codexModelListCapability(qualification), true
 		}
 	case launch.protocol == string(agent.ProtocolACP) && launch.agentType == mockCatalogAgentType:
 		return mockCatalogCapability(), true

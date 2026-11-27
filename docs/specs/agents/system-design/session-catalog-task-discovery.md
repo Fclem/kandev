@@ -54,7 +54,7 @@ is not evidence of the process implementation.
 
 | Implementation | Planned acquisition | Initial eligibility |
 | --- | --- | --- |
-| Native Codex built-in unwrapped app-server, actual 0.169.0 | New helper process; initialize then complete `model/list`; no thread operations | Model surface only, after versioned process/protocol tests and actual runtime proof |
+| Native Codex built-in unwrapped app-server, actual 0.169.0 and 0.171.0 (each exact version) | New helper process; initialize then complete `model/list`; no thread operations | Model surface only, after versioned process/protocol tests and actual runtime proof for that exact version |
 | ACP, including Claude/Codex ACP/Gemini/OpenCode/Copilot/Pi/Muse | No qualified generic fresh read-only model/mode operation established | Notice-only until a concrete implementation satisfies this contract |
 | Custom command, passthrough, wrapper, unrecognized runtime/version | No established safe fresh-probe launch shape | Notice-only |
 | Deterministic mock adapter | Real helper/protocol fixture with distinct task-specific models and modes | Tests only; never production-provider qualification |
@@ -209,9 +209,12 @@ settles the replacement notice under the parent design.
 - `process.Manager` seals `cmd.Path`, argv, `cmd.Environ()` and `cmd.Dir` when a
   generation starts. `DiscoverCatalogCandidates` captures and rechecks manager,
   positive generation, adapter, native ID and handshake epoch under `startMu`.
-- `qualifyCatalogLaunch` is the capability table. `codex_app_server_model_list_v1@0.169.0`
-  requires the built-in unwrapped managed `@openai/codex@0.169.0 app-server`
-  launch without agent arguments and a `kandev/0.169.0` runtime user agent.
+- `qualifyCatalogLaunch` is the capability table. Each exact Codex version has its
+  own entry (`codex_app_server_model_list_v1@0.169.0` and `@0.171.0`) requiring the
+  built-in unwrapped managed `@openai/codex@<version> app-server` launch without
+  agent arguments and a `kandev/<version>` runtime user agent. There are no
+  ranges; a regression test requires the reviewed default managed pin to be in
+  the table, so a pin bump fails until it is requalified with native evidence.
   `mock_acp_catalog_v1` is the mock-agent fixture only.
 - The instance route requires authenticated control and the exact `X-Instance-ID`.
   `client.ProxyTransport` refuses the action for every browser proxy.

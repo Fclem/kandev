@@ -623,6 +623,40 @@ recorded non-catalog causes.
   previous implementation) showed the new owner's unsettled `session_models`
   report persisting as settled with `old-mode`.
 
+### Review round 3 fixes (2026-11-27)
+
+- **Generic static modes after discovery.** The round-2 projection returned the
+  original selector state when a provider record applied but advertised no
+  modes, offered no host candidates and had no current mode. That state is built
+  from the generic profile's static modes, so an "Unknown" trigger offered
+  enabled, unadvertised modes and called `setSessionMode` for them. Such a
+  projection now returns nothing for both current and unproven owners. A current
+  mode still goes through disabled retention.
+  - RED: with seeded `settingsAgents` and `model_config.available_modes`, the
+    failed, unsupported and models-only outcomes rendered the trigger on desktop
+    and phone (6/6 failures).
+  - GREEN: no trigger, no "Static A", and no `setSessionMode` call.
+- **Selection-preservation assertions.** The round-2 assertions compared an
+  absent `current_model_id` with an absent one. Both orchestrator tests keep the
+  post-`Begin` check that the previous model is not relabelled, then write a
+  same-owner selection (`owner-selected-model`) and assert that availability and
+  settlement leave it unchanged. Sensitivity: a temporary mutation that rebuilt
+  the ACP snapshot in `PersistSessionCatalogAvailability` made both tests fail
+  (expected `owner-selected-model`, got nil), and it was reverted.
+- **Same-owner reservation merge.** Reachability evidence: the catalog launch
+  marker has one writer, `BeginSessionCatalogDiscovery`.
+  `restoreRecoveredSessionSettingsSource`, used by process and remote recovery,
+  writes `acp_model_state` directly for the same execution at the next generation
+  and keeps that execution's snapshot. It writes no catalog marker. The stored
+  source can therefore equal the owner while the marker names an earlier
+  generation, and a `Begin` by that owner passes both early returns and reaches
+  the merge. The merge is kept. The test now builds exactly that state (restored
+  source at generation 2 under a generation-1 marker) and asserts the restored
+  selection, mode and settled flag survive. Sensitivity: a temporary mutation
+  that always built a fresh snapshot failed on SQLite and PostgreSQL (expected
+  `selected-model`, got nil), and it was reverted. The duplicate
+  `catalogDiscoveryMetadataKey` now uses `sessioncatalog.ProviderMetadataField`.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

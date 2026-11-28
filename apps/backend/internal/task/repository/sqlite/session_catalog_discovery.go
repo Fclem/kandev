@@ -38,10 +38,6 @@ const (
  AND ts.state IN ('CREATED', 'STARTING', 'RUNNING', 'WAITING_FOR_INPUT', 'IDLE', 'FAILED') AND t.archived_at IS NULL`
 )
 
-// catalogDiscoveryMetadataKey holds the durable provider availability record
-// inside the ACP settings snapshot.
-const catalogDiscoveryMetadataKey = "catalog_discovery"
-
 type catalogSource struct {
 	ExecutionID     string `json:"settings_source_execution_id"`
 	AttemptID       string `json:"settings_attempt_id"`
@@ -224,8 +220,8 @@ func (r *Repository) reserveCatalogSettingsSource(ctx context.Context, tx *sqlx.
 	snapshot := previous
 	if source.ExecutionID != owner.ExecutionID || source.AttemptID != owner.AttemptID || source.Generation != owner.SourceGeneration {
 		snapshot = make(map[string]json.RawMessage)
-		if discovery, ok := previous[catalogDiscoveryMetadataKey]; ok {
-			snapshot[catalogDiscoveryMetadataKey] = discovery
+		if discovery, ok := previous[sessioncatalog.ProviderMetadataField]; ok {
+			snapshot[sessioncatalog.ProviderMetadataField] = discovery
 		}
 	}
 	identity, err := json.Marshal(catalogSourceIdentity{ExecutionID: owner.ExecutionID, AttemptID: owner.AttemptID, Generation: owner.SourceGeneration, Policy: policy})

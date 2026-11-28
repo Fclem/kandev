@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TooltipProvider } from "@kandev/ui/tooltip";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand";
 import { createAppStore } from "@/lib/state/store";
@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   toast: vi.fn(),
   updateToast: vi.fn(),
-  availableAgents: [],
+  availableAgents: [] as unknown[],
   mobile: false,
 }));
 let store: StoreApi<AppState>;
@@ -67,6 +67,9 @@ const MODEL_SETTINGS_LABEL = "Session model settings";
 const CATALOG_CONFIRMATION_ID = "session-catalog-refresh-confirmation";
 const ARIA_DISABLED_ATTRIBUTE = "aria-disabled";
 const MODE_SELECTOR_TEST_ID = "session-mode-selector";
+const MOCK_AGENT = "mock-agent";
+const COMPLETE = "complete";
+const FIXTURE_TIME = "2026-11-16T00:00:00Z";
 
 const id = "catalog-session";
 const owner = { execution_id: "execution-1", attempt_id: "attempt-1", source_generation: 1 };
@@ -87,6 +90,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.request.mockReset();
   mocks.mobile = false;
+  mocks.availableAgents = [];
   store = createAppStore();
   store.getState().upsertTaskSessionFromEvent(CATALOG_TASK_ID, {
     id: sessionId(id),
@@ -94,9 +98,9 @@ beforeEach(() => {
     state: "WAITING_FOR_INPUT",
     agent_execution_id: owner.execution_id,
     agent_profile_id: agentProfileId("profile"),
-    agent_profile_snapshot: { agent_name: "mock-agent", model: "old-model" },
-    started_at: "2026-11-16T00:00:00Z",
-    updated_at: "2026-11-16T00:00:00Z",
+    agent_profile_snapshot: { agent_name: MOCK_AGENT, model: "old-model" },
+    started_at: FIXTURE_TIME,
+    updated_at: FIXTURE_TIME,
     metadata: {
       acp_model_state: {
         settings_source_execution_id: owner.execution_id,
@@ -212,7 +216,7 @@ it.each(["empty", "models-only", "unsupported", "failed"] as const)(
     prepareModeChoices();
     const absent = { present: false, supported: false, choices: null };
     const result = {
-      outcome: kind === "empty" || kind === "models-only" ? "complete" : kind,
+      outcome: kind === "empty" || kind === "models-only" ? COMPLETE : kind,
       models:
         kind === "models-only"
           ? { present: true, supported: true, choices: [{ id: "model", name: "Model" }] }
@@ -283,7 +287,7 @@ it("keeps phone mode refresh consent in the picker and cancels without SetMode o
 it("uses newly advertised mode-only results through the ordinary SetMode path", async () => {
   prepareModeChoices();
   const result = {
-    outcome: "complete",
+    outcome: COMPLETE,
     models: { present: false, supported: false, choices: null },
     modes: { present: true, supported: true, choices: [{ id: "fresh-mode", name: "Fresh mode" }] },
   };
@@ -338,7 +342,7 @@ it("offers concrete-profile candidates and confirms restart for a routed session
       profile_id: "profile",
       owner,
       result: {
-        outcome: "complete",
+        outcome: COMPLETE,
         models: {
           present: true,
           supported: true,
@@ -397,7 +401,7 @@ it("offers concrete-profile mode candidates for a routed session", () => {
       profile_id: "profile",
       owner,
       result: {
-        outcome: "complete",
+        outcome: COMPLETE,
         models: { present: false, supported: false, choices: null },
         modes: { present: true, supported: true, choices: [{ id: "default", name: "Default" }] },
       },
@@ -464,7 +468,7 @@ function renderModeSelector() {
   );
 }
 
-it.each(["mock-agent", "codex-app-server"])(
+it.each([MOCK_AGENT, "codex-app-server"])(
   "hides the mode picker for a %s provider with models only and no current mode",
   (agentName) => {
     const session = store.getState().taskSessions.items[id];
@@ -473,7 +477,7 @@ it.each(["mock-agent", "codex-app-server"])(
       agent_profile_snapshot: { agent_name: agentName, model: "old-model" },
     });
     applyProviderCatalog(owner, {
-      outcome: "complete",
+      outcome: COMPLETE,
       models: { present: true, supported: true, choices: [{ id: "old-model", name: "Old model" }] },
       modes: UNSUPPORTED_SURFACE,
     });
@@ -482,13 +486,73 @@ it.each(["mock-agent", "codex-app-server"])(
   },
 );
 
+// The generic profile's static modes are not the current owner's catalog: with
+// no advertised modes, no host candidates and no current mode there is nothing
+// selectable, so they must not surface as enabled SetMode targets.
+function seedGenericStaticModes() {
+  store.getState().setSettingsAgents([
+    {
+      id: "mock-agent-id",
+      name: MOCK_AGENT,
+      supports_mcp: false,
+      profiles: [{ id: "profile", name: "Profile", agent_id: "mock-agent-id" }],
+      created_at: FIXTURE_TIME,
+      updated_at: FIXTURE_TIME,
+    },
+  ] as never);
+  mocks.availableAgents = [
+    {
+      name: MOCK_AGENT,
+      model_config: {
+        default_model: "old-model",
+        available_models: [],
+        available_modes: [
+          { id: "static-a", name: "Static A" },
+          { id: "static-b", name: "Static B" },
+        ],
+        supports_dynamic_models: false,
+      },
+    },
+  ];
+}
+
+describe.each([false, true])("generic static modes (mobile=%s)", (mobile) => {
+  it.each([
+    ["failed", { outcome: "failed", models: UNSUPPORTED_SURFACE, modes: UNSUPPORTED_SURFACE }],
+    [
+      "unsupported",
+      { outcome: "unsupported", models: UNSUPPORTED_SURFACE, modes: UNSUPPORTED_SURFACE },
+    ],
+    [
+      "models-only provider",
+      {
+        outcome: COMPLETE,
+        models: {
+          present: true,
+          supported: true,
+          choices: [{ id: "old-model", name: "Old model" }],
+        },
+        modes: UNSUPPORTED_SURFACE,
+      },
+    ],
+  ])("never offers them after %s discovery without a current mode", (_kind, result) => {
+    mocks.mobile = mobile;
+    seedGenericStaticModes();
+    applyProviderCatalog(owner, result);
+    renderModeSelector();
+    expect(screen.queryByTestId(MODE_SELECTOR_TEST_ID)).toBeNull();
+    expect(screen.queryByText("Static A")).toBeNull();
+    expect(sessionApi.setSessionMode).not.toHaveBeenCalled();
+  });
+});
+
 it("keeps the mode picker for a models-only provider when the session has a current mode", () => {
   store.getState().setSessionMode(id, "default", [
     { id: "default", name: "Default" },
     { id: "plan", name: "Plan" },
   ]);
   applyProviderCatalog(owner, {
-    outcome: "complete",
+    outcome: COMPLETE,
     models: { present: true, supported: true, choices: [{ id: "old-model", name: "Old model" }] },
     modes: UNSUPPORTED_SURFACE,
   });
@@ -510,7 +574,7 @@ it("ignores a previous owner's provider record when the current owner never publ
     { id: "provider-mode", name: "Provider mode" },
   ]);
   applyProviderCatalog(previousOwner, {
-    outcome: "complete",
+    outcome: COMPLETE,
     models: {
       present: true,
       supported: true,

@@ -144,21 +144,29 @@ func exerciseCatalogNewOwnerReservation(t *testing.T, repo *Repository) {
 	}
 	require.Equal(t, map[string]any{"revision": float64(3), "profile_id": profileID}, state["catalog_discovery"])
 
-	// Same-owner re-entry stays a merge: settings the owner already reported survive.
+	// Recovery (restoreRecoveredSessionSettingsSource) reserves the next
+	// generation of the same execution directly in acp_model_state, keeping that
+	// execution's snapshot and writing no catalog launch marker. A Begin by the
+	// restored owner therefore finds its own source under an older marker and
+	// must merge: the settings it already holds survive the reservation.
+	restored := sessioncatalog.Owner{ExecutionID: next.ExecutionID, AttemptID: next.AttemptID, SourceGeneration: next.SourceGeneration + 1}
 	require.NoError(t, repo.SetSessionMetadataKey(ctx, sessionID, models.SessionMetaKeyACPModelState, map[string]any{
-		"settings_source_execution_id": next.ExecutionID, "settings_attempt_id": next.AttemptID,
-		"settings_source_generation": next.SourceGeneration, "settings_policy": "strict",
-		"current_mode_id": "own-mode", "config_options_settled": true,
+		"settings_source_execution_id": restored.ExecutionID, "settings_attempt_id": restored.AttemptID,
+		"settings_source_generation": restored.SourceGeneration, "settings_policy": "strict",
+		"current_model_id": "selected-model", "current_mode_id": "own-mode", "config_options_settled": true,
 	}))
-	again, err := repo.BeginSessionCatalogDiscovery(ctx, sessionID, profileID, next, "strict")
+	again, err := repo.BeginSessionCatalogDiscovery(ctx, sessionID, profileID, restored, "strict")
 	require.NoError(t, err)
 	require.NotNil(t, again)
+	require.Equal(t, restored, again.Owner, "the restored owner reaches the reservation rather than an early return")
 	stored, err = repo.GetTaskSession(ctx, sessionID)
 	require.NoError(t, err)
 	raw, err = json.Marshal(stored.Metadata[models.SessionMetaKeyACPModelState])
 	require.NoError(t, err)
 	state = map[string]any{}
 	require.NoError(t, json.Unmarshal(raw, &state))
+	require.EqualValues(t, restored.SourceGeneration, state["settings_source_generation"])
+	require.Equal(t, "selected-model", state["current_model_id"])
 	require.Equal(t, "own-mode", state["current_mode_id"])
 	require.Equal(t, true, state["config_options_settled"])
 }

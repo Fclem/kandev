@@ -57,6 +57,8 @@ func TestSessionCatalogRefreshOrderingAndSettlement(t *testing.T) {
 			reserved := afterBegin.Metadata[models.SessionMetaKeyACPModelState].(map[string]any)
 			require.NotContains(t, reserved, "current_model_id", "the previous owner's model is not relabelled for the replacement")
 			require.Equal(t, owner.ExecutionID, reserved["settings_source_execution_id"])
+			// The replacement owner then reports its own selection.
+			require.NoError(t, repo.SetSessionMetadataKey(ctx, session.ID, models.SessionMetaKeyACPModelState, map[string]any{"settings_source_execution_id": owner.ExecutionID, "settings_attempt_id": owner.AttemptID, "settings_source_generation": owner.SourceGeneration, "settings_policy": "strict", "current_model_id": "owner-selected-model"}))
 			service := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), &mockAgentManager{})
 			service.eventBus = bus.NewMemoryEventBus(testLogger())
 			eventCount := 0
@@ -82,8 +84,8 @@ func TestSessionCatalogRefreshOrderingAndSettlement(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, intent, current.Metadata["runtime_config"])
 				require.Equal(t, "unsent work", current.Metadata["composer_draft"])
-				// Settlement never edits the reserved settings snapshot's selection.
-				require.Equal(t, reserved["current_model_id"], current.Metadata[models.SessionMetaKeyACPModelState].(map[string]any)["current_model_id"])
+				// Settlement never edits the owner's reported selection.
+				require.Equal(t, "owner-selected-model", current.Metadata[models.SessionMetaKeyACPModelState].(map[string]any)["current_model_id"])
 				return record
 			}
 			stale := *payload

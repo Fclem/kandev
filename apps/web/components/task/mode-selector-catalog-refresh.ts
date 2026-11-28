@@ -40,10 +40,11 @@ export function projectSessionModeChoices(input: Input): ModeSelectorState | und
   };
 }
 
-// Returns the result when there is no catalog evidence to project. A current
-// provider without a mode surface says nothing about modes: with no host
-// candidates and no current mode there is nothing to show. An unproven owner's
-// live list may be stale, so it is not revived either.
+// Returns the result when there is nothing to project. Without catalog evidence
+// the live state stands. Once a provider record applies, only advertised modes,
+// host candidates or the current mode may appear: the generic profile's static
+// modes and an unproven owner's live list are not this owner's catalog, so with
+// none of the three there is nothing to show.
 function unprojectedModeState(
   input: Input,
   host: SessionCatalogRecord | undefined,
@@ -51,7 +52,7 @@ function unprojectedModeState(
 ): { value: ModeSelectorState | undefined } | undefined {
   if (!provider && !host) return { value: input.state };
   if (host || advertisesModes(provider) || input.currentModeId) return undefined;
-  return { value: provider?.current === false ? undefined : input.state };
+  return { value: undefined };
 }
 
 // The current mode stays visible, disabled, when the catalog no longer offers it.

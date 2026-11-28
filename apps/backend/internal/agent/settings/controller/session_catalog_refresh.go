@@ -5,14 +5,22 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
+	"time"
 
 	"github.com/kandev/kandev/internal/agent/hostutility"
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
+	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/agent/settings/dto"
 	"github.com/kandev/kandev/internal/agent/settings/models"
 )
 
 const catalogPublicationStatusFailed = "failed"
+
+// ProfileCatalogRefreshResponseBudget is the write deadline of a synchronous
+// saved refresh: the forced saved-profile probe, then the bounded session
+// fan-out, plus a margin for the surrounding reads, fences and response.
+const ProfileCatalogRefreshResponseBudget = hostutility.ProbeTimeout + sessioncatalog.TaskProbeFanoutTimeout + 30*time.Second
 
 func (c *Controller) beginCatalogRefresh(profileID string) (uint64, func()) {
 	c.catalogRefreshMu.Lock()
@@ -103,7 +111,7 @@ func (c *Controller) publishSavedProfileCatalog(
 		CommitProfileCapability(context.Context, hostutility.ProfileCapabilityResult, func() error) error
 	})
 	if !ok || c.catalogRefreshPublisher == nil {
-		return catalogPublicationFailed()
+		return c.catalogPublicationFailed(profile.ID, agentName, catalogPublicationReasonUnavailable, nil)
 	}
 	commit := func(ctx context.Context, write func() error) error {
 		return provider.CommitProfileCapability(ctx, result, func() error {
@@ -119,10 +127,10 @@ func (c *Controller) publishSavedProfileCatalog(
 		})
 	}
 	if err := commit(ctx, func() error { return nil }); err != nil {
-		return catalogPublicationFailed()
+		return c.catalogPublicationFailed(profile.ID, agentName, catalogPublicationReasonPrecheck, err)
 	}
 	if err := c.catalogRefreshPublisher(ctx, profile.ID, agentName, commit); err != nil {
-		return catalogPublicationFailed()
+		return c.catalogPublicationFailed(profile.ID, agentName, catalogPublicationReasonFanout, err)
 	}
 	return &dto.CatalogPublicationDTO{Status: "published"}
 }
@@ -150,6 +158,18 @@ func (c *Controller) checkSavedCatalogContext(
 	return nil
 }
 
-func catalogPublicationFailed() *dto.CatalogPublicationDTO {
+// Stable publication failure categories for logs. Error text from storage,
+// runtime or provider paths can carry private detail, so logs record only a
+// category and a sanitized cause, never the error itself.
+const (
+	catalogPublicationReasonUnavailable = "publisher_unavailable"
+	catalogPublicationReasonPrecheck    = "precheck_fence"
+	catalogPublicationReasonFanout      = "fanout_failed"
+)
+
+func (c *Controller) catalogPublicationFailed(profileID, agentName, reason string, err error) *dto.CatalogPublicationDTO {
+	c.logger.Warn("saved catalog publication failed",
+		zap.String("profile_id", profileID), zap.String("agent", agentName),
+		zap.String("reason", reason), zap.String("cause", sessioncatalog.FailureCause(err)))
 	return &dto.CatalogPublicationDTO{Status: catalogPublicationStatusFailed, Error: "session catalog publication could not be completed"}
 }

@@ -10,6 +10,10 @@ import (
 	"github.com/kandev/kandev/internal/agent/hostutility"
 	"github.com/kandev/kandev/internal/agent/settings/dto"
 	"github.com/kandev/kandev/internal/agent/settings/models"
+	"github.com/kandev/kandev/internal/common/logger"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type catalogPublisherInstaller interface {
@@ -67,6 +71,7 @@ func TestSavedRefreshDoesNotPublishDraftOrFailedProbe(t *testing.T) {
 		return errors.New("TOKEN=private-session")
 	})
 	utility.capabilityResult = nil
+	logs := observeControllerWarnings(t, ctrl)
 	result, err = ctrl.RefreshProfileModelCatalog(ctx, profile.ID, "user-1")
 	if err != nil {
 		t.Fatal(err)
@@ -79,6 +84,15 @@ func TestSavedRefreshDoesNotPublishDraftOrFailedProbe(t *testing.T) {
 	if strings.Contains(string(payload), "TOKEN=") {
 		t.Fatal("publication failure leaked internal error")
 	}
+	failures := logs.FilterMessage("saved catalog publication failed").All()
+	if len(failures) != 1 {
+		t.Fatalf("publication failure logs = %d, want one aggregate entry", len(failures))
+	}
+	fields := failures[0].ContextMap()
+	if fields["reason"] != "fanout_failed" || fields["profile_id"] != profile.ID || fields["agent"] != "codex-acp" {
+		t.Fatalf("publication failure log fields = %+v", fields)
+	}
+	assertNoLoggedSecret(t, logs, "TOKEN=")
 	saved, err := repo.GetAgentProfile(ctx, profile.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -196,4 +210,28 @@ func (u *recordingProfileDiscoveryUtility) CommitProfileCapability(ctx context.C
 		return err
 	}
 	return commit()
+}
+
+func observeControllerWarnings(t *testing.T, ctrl *Controller) *observer.ObservedLogs {
+	t.Helper()
+	core, logs := observer.New(zapcore.WarnLevel)
+	log, err := logger.NewFromZap(zap.New(core))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctrl.logger = log
+	return logs
+}
+
+func assertNoLoggedSecret(t *testing.T, logs *observer.ObservedLogs, secret string) {
+	t.Helper()
+	for _, entry := range logs.All() {
+		encoded, err := json.Marshal(entry.ContextMap())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(entry.Message, secret) || strings.Contains(string(encoded), secret) {
+			t.Fatalf("log %q leaked %q: %s", entry.Message, secret, encoded)
+		}
+	}
 }

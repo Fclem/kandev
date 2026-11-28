@@ -680,6 +680,60 @@ unreachable in production.
   selection and settled flag untouched. The new-owner red/green coverage is
   unchanged.
 
+### Review round 6 fixes (2026-11-28)
+
+Review round 6 found one blocker and two suggestions.
+
+- **Blocker: the saved refresh outlived the server write timeout.** The
+  synchronous `POST /api/v1/agent-profiles/:id/model-catalog/refresh` runs the
+  forced saved probe (up to `hostutility.ProbeTimeout`, 60s) and then the session
+  fan-out (up to `sessioncatalog.TaskProbeFanoutTimeout`, 60s). The server-wide
+  write timeout defaults to 30s, so a slow refresh dropped its connection and
+  the editor reported a failed discovery. The handler now extends its write
+  deadline by `controller.ProfileCatalogRefreshResponseBudget`. That budget is
+  the probe bound plus the fan-out bound plus a 30s margin, the same pattern
+  that `handlers/update_status_deadline.go` uses. The probe and fan-out bounds
+  are now exported shared constants rather than private duplicates. The web
+  client `refreshAgentProfileCatalog` uses `fetchJson`, which sets no client
+  timeout, so the web code needs no change.
+  - RED: `TestSavedProfileCatalogRefreshOutlivesServerWriteTimeout` uses a
+    100ms server `WriteTimeout` and a profile read that takes 300ms. It failed
+    with `saved refresh lost its response: ... EOF`.
+  - GREEN: the client receives 200 with the `devin-acp` discovery result.
+- **Suggestion: publication failures were not logged.** The orchestrator now
+  logs one Warn for each failed session, with `profile_id`, `task_id`,
+  `session_id`, `execution_id`, a stable `reason`, and a sanitized `cause`. The
+  reasons are `execution_evidence_failed`, `fanout_deadline`, and
+  `commit_failed`. The controller logs one aggregate Warn with `profile_id`,
+  `agent`, `reason`, and `cause`. Its reasons are `publisher_unavailable`,
+  `precheck_fence`, and `fanout_failed`. `sessioncatalog.FailureCause` maps an
+  error to `none`, `deadline_exceeded`, `canceled`, or `error` and never emits
+  error text. Logs carry no environment, argv, paths, or catalog content.
+  - RED: `TestSavedRefreshDoesNotPublishDraftOrFailedProbe` failed with
+    `publication failure logs = 0, want one aggregate entry`.
+    `TestSessionCatalogRefreshBoundedAuthorizedPartialPublication` failed with
+    `"[]" should have 1 item(s), but has 0`.
+  - GREEN: both pass. Both also assert that the injected `TOKEN=` error text
+    appears in no logged message or field. `TestFailureCauseNeverExposesErrorText`
+    covers the classifier.
+- **Suggestion: the public doc described the retired raw-observation
+  publication.** `docs/public/websocket-api.md` now states the current contract:
+  - the saved probe only gates publication;
+  - each qualifying authorized Local/Worktree session gets its own
+    `task_probe_v1` read;
+  - every other session gets a rediscovery notice;
+  - saved choices are never published.
+
+  It also lists the record `reason` values and states that the response can
+  take longer than ordinary requests.
+
+Verification: `go test -tags fts5 -count=1` passed for `sessioncatalog`,
+`settings/handlers`, `settings/controller`, `hostutility`, and the orchestrator
+run `-run 'TestSessionCatalog|Catalog'`. `validate-public-docs.mjs` validated
+56 pages, and its 63 tests passed. `list-docs.py validate`,
+`lint-spec-files.py --all`, `git diff --check`, and `scripts/lint-go-changed`
+on the changed Go files (`0 issues`) passed.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

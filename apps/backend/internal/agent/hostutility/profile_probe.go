@@ -204,7 +204,7 @@ func (m *Manager) probeProfileCapabilitiesFlight(
 	}
 	probeReq.InferenceConfig.CLIFlags = append([]string(nil), cliFlags...)
 	probeReq.InferenceConfig.LaunchWrapper = launchwrapper.Profile(req.Context.CommandPrefix)
-	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	probeCtx, cancel := context.WithTimeout(ctx, ProbeTimeout)
 	defer cancel()
 	release, err := inst.acquireOperation(probeCtx, false)
 	if err != nil {
@@ -386,7 +386,7 @@ func (m *Manager) resolveProfileModelConfigFlight(
 	}
 	probeReq.InferenceConfig.CLIFlags = append([]string(nil), cliFlags...)
 	probeReq.InferenceConfig.LaunchWrapper = launchwrapper.Profile(req.ProfileContext.CommandPrefix)
-	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	probeCtx, cancel := context.WithTimeout(ctx, ProbeTimeout)
 	defer cancel()
 	release, err := inst.acquireOperation(probeCtx, false)
 	if err != nil {

@@ -21,6 +21,8 @@ const (
 	MaxTaskProbeRequestIDLength = 128
 	MaxTaskProbeReplyBytes      = 2 << 20
 	TaskProbeHelperTimeout      = 15 * time.Second
+	// TaskProbeFanoutTimeout bounds a saved refresh's whole session fan-out.
+	TaskProbeFanoutTimeout = 60 * time.Second
 )
 
 // TaskProbeRequest names the expected live owner. It carries no launch input,

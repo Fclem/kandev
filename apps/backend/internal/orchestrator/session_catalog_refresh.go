@@ -8,7 +8,8 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/modelcatalog"
 	"github.com/kandev/kandev/internal/common/sessioncatalog"
@@ -16,9 +17,8 @@ import (
 )
 
 const (
-	catalogRefreshPageSize       = 128
-	catalogRefreshConcurrency    = 2
-	catalogRefreshFanoutDeadline = 60 * time.Second
+	catalogRefreshPageSize    = 128
+	catalogRefreshConcurrency = 2
 )
 
 var errCatalogPublication = errors.New("session catalog publication could not be completed")
@@ -68,7 +68,7 @@ func (s *Service) PublishProfileCatalog(ctx context.Context, profileID, agentNam
 	if err != nil {
 		savedSource = ""
 	}
-	fanout, cancel := context.WithTimeout(ctx, catalogRefreshFanoutDeadline)
+	fanout, cancel := context.WithTimeout(ctx, sessioncatalog.TaskProbeFanoutTimeout)
 	defer cancel()
 	refresh := &catalogRefresh{service: s, store: store, runtime: runtime, profileID: profileID, agentName: agentName, savedSource: savedSource, commit: commit}
 	for after := ""; ; {
@@ -116,26 +116,41 @@ func (r *catalogRefresh) publishPage(ctx context.Context, sessions []*models.Tas
 		go func(session *models.TaskSession) {
 			defer wg.Done()
 			defer func() { <-slots }()
-			if err := r.publishSession(ctx, session); err != nil {
+			if reason, err := r.publishSession(ctx, session); err != nil {
 				r.failed.Store(true)
+				r.service.logger.Warn("session catalog publication failed",
+					zap.String("profile_id", r.profileID), zap.String("task_id", session.TaskID),
+					zap.String("session_id", session.ID), zap.String("execution_id", session.AgentExecutionID),
+					zap.String("reason", reason), zap.String("cause", sessioncatalog.FailureCause(err)))
 			}
 		}(session)
 	}
 }
 
-func (r *catalogRefresh) publishSession(ctx context.Context, observed *models.TaskSession) error {
+// Stable per-session publication failure categories. Logs record a category
+// and a sanitized cause, never error text, launch input or catalog content.
+const (
+	catalogPublishReasonEvidence = "execution_evidence_failed"
+	catalogPublishReasonDeadline = "fanout_deadline"
+	catalogPublishReasonCommit   = "commit_failed"
+)
+
+func (r *catalogRefresh) publishSession(ctx context.Context, observed *models.TaskSession) (string, error) {
 	evidence, err := r.runtime.CatalogRefreshExecution(ctx, observed.ID, r.savedSource)
 	if err != nil {
-		return err
+		return catalogPublishReasonEvidence, err
 	}
 	if !evidence.Initialized || evidence.ProfileID != r.profileID || evidence.Owner.ExecutionID != observed.AgentExecutionID {
-		return nil
+		return "", nil
 	}
 	projection := r.acquire(ctx, observed.ID, &evidence)
 	if err := ctx.Err(); err != nil {
-		return err
+		return catalogPublishReasonDeadline, err
 	}
-	return r.commitSession(ctx, observed, &evidence, projection)
+	if err := r.commitSession(ctx, observed, &evidence, projection); err != nil {
+		return catalogPublishReasonCommit, err
+	}
+	return "", nil
 }
 
 // acquire classifies the actual execution. Only a host process launched under

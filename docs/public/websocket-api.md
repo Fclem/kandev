@@ -855,10 +855,18 @@ creates an `AutomationRun`.
 ### Refresh saved profile catalogs over HTTP
 
 `POST /api/v1/agent-profiles/:id/model-catalog/refresh` forces discovery from the
-saved concrete profile and publishes the raw probe observation to eligible,
-authorized initialized sessions. Send no request body. The endpoint does not
-accept launch overrides, client catalogs, or target-session lists, and it uses
-the existing profile discovery/configuration authorization boundary.
+saved concrete profile. Send no request body. The endpoint does not accept launch
+overrides, client catalogs, or target-session lists, and it uses the existing
+profile discovery/configuration authorization boundary.
+
+The saved discovery only gates publication; its choices are never copied into
+sessions. After it succeeds, each eligible, authorized, initialized Local or
+Worktree session whose execution qualifies gets its own fresh task-side
+catalog, read in that session's launch context and recorded with
+`source: "task_probe_v1"`. Every other session gets a rediscovery notice instead:
+isolated, remote, unverified, or unsupported executions, and failed reads. The
+whole fan-out is bounded, and the response can take longer than ordinary
+requests.
 
 The normal model-discovery response includes a separate `publication` object:
 
@@ -868,10 +876,8 @@ The normal model-discovery response includes a separate `publication` object:
   remain usable in the settings response even when publication is incomplete.
 
 Publication does not restart sessions or change their effective configuration.
-Compatible local/worktree executions may receive host candidates; isolated,
-remote, or unverified contexts receive only a rediscovery notice. Inaccessible
-sessions and their counts are not disclosed. A later explicit refresh can finish
-a partial batch.
+Inaccessible sessions and their counts are not disclosed. A later explicit
+refresh can finish a partial batch.
 
 Draft and automatic discovery continue to use the pure
 `POST /api/v1/agent-models/:agentName/probe` operation. See
@@ -1170,9 +1176,20 @@ Catalog notifications carry `task_id` and `session_id`. The
 `session.catalog_refresh_updated` payload contains `record`, a version-1 host
 observation with its own positive monotonic `revision`, concrete `profile_id`,
 execution/attempt/source `owner`, and `disposition` (`host_candidates`,
-`rediscovery_required`, or `cleared`). Only compatible host observations include
-candidate model/mode choices or a structured catalog. A newer `cleared` record
-is an explicit tombstone, not an absent field.
+`rediscovery_required`, or `cleared`) with a `reason`:
+
+- `new_candidates` and `discovery_complete` accompany fresh candidates and
+  settlement.
+- `executor_scoped` marks isolated or remote executors.
+- `context_unverified` marks unverified launch contexts and retired legacy
+  candidates.
+- `task_discovery_unsupported` and `task_discovery_failed` mark task-side reads
+  that are not qualified or that failed.
+
+Only `host_candidates` records from a session's own task read include candidate
+model/mode choices or a structured catalog; they carry `source: "task_probe_v1"`
+and the per-surface `probe` result. A newer `cleared` record is an explicit
+tombstone, not an absent field.
 
 The independent `session.catalog_discovery_updated` payload contains `provider`
 with its own positive monotonic `revision`, `profile_id`, `owner`, and explicit

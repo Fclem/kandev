@@ -2,17 +2,21 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"testing"
 
+	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/task/models"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type catalogWorkspaceContextKey struct{}
@@ -184,10 +188,26 @@ func TestSessionCatalogRefreshBoundedAuthorizedPartialPublication(t *testing.T) 
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subscription.Unsubscribe() })
+	logCore, logs := observer.New(zap.WarnLevel)
+	service.logger, err = logger.NewFromZap(zap.New(logCore))
+	require.NoError(t, err)
 	publicationErr := service.PublishProfileCatalog(ctx, "catalog-profile", "codex-app-server", catalogFanoutGuard)
 	require.Error(t, publicationErr, "partial persistence failure must not claim all-session publication")
 	require.NotContains(t, publicationErr.Error(), "TOKEN")
 	require.NotContains(t, publicationErr.Error(), "own-001")
+	failures := logs.FilterMessage("session catalog publication failed").All()
+	require.Len(t, failures, 1, "each failed session is logged once")
+	fields := failures[0].ContextMap()
+	require.Equal(t, "commit_failed", fields["reason"])
+	require.Equal(t, "catalog-profile", fields["profile_id"])
+	require.Equal(t, "own-001", fields["session_id"])
+	require.NotEmpty(t, fields["task_id"])
+	require.NotEmpty(t, fields["execution_id"])
+	for _, entry := range logs.All() {
+		encoded, encodeErr := json.Marshal(entry.ContextMap())
+		require.NoError(t, encodeErr)
+		require.NotContains(t, entry.Message+string(encoded), "TOKEN", "logs never carry storage or provider error text")
+	}
 	require.Zero(t, manager.probeCount("foreign-session"), "an unauthorized task must not reach a task-side request")
 	for sessionID, evidence := range manager.evidence {
 		current, readErr := repo.GetTaskSession(ctx, sessionID)

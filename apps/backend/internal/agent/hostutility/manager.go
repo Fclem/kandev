@@ -930,13 +930,14 @@ func (m *Manager) dropStaleInstance(ctx context.Context, agentType string, inst 
 	m.mu.Unlock()
 }
 
-// probeTimeout caps each ACP probe so an agent that hangs (e.g. one that
+// ProbeTimeout caps each ACP probe so an agent that hangs (e.g. one that
 // blocks waiting for interactive auth) doesn't keep its UI badge stuck on
 // "Probing". 60s is generous enough for cold npm fetches and ACP handshake,
 // short enough that the user sees a definitive Error/AuthRequired status
 // quickly. Without this bound the only ceiling is the 5-minute HTTP client
-// timeout on the agentctl call.
-const probeTimeout = 60 * time.Second
+// timeout on the agentctl call. Synchronous probe responses size their write
+// deadline from it.
+const ProbeTimeout = 60 * time.Second
 
 // maxConcurrentBootstraps caps how many agents are warmed and probed at once at
 // boot. Unbounded, every ACP-capable agent starts together, and each spawns its
@@ -976,7 +977,7 @@ func (m *Manager) probeWithOverrides(
 	env map[string]string,
 	stripEnv []string,
 ) AgentCapabilities {
-	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	probeCtx, cancel := context.WithTimeout(ctx, ProbeTimeout)
 	defer cancel()
 	req := buildProbeRequest(inst, ia, refresh, command)
 	if workDir != "" {

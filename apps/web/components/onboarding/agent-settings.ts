@@ -11,7 +11,6 @@ export type AgentSetting = {
   draft: OnboardingAgentDraft;
   baseline: OnboardingAgentDraft;
   savedLaunchSettings: ProfileLaunchSettingsRequest;
-  savedMode?: string;
   dirty: boolean;
 };
 
@@ -25,6 +24,7 @@ export function buildAgentSettings(
     const profile = dbAgent?.profiles?.[0];
     if (profile) {
       const savedLaunchSettings: ProfileLaunchSettingsRequest = {
+        mode: profile.mode ?? "",
         env_vars: profile.envVars ?? [],
         cli_flags: profile.cliFlags ?? [],
         command_prefix: profile.commandPrefix ?? "",
@@ -44,7 +44,6 @@ export function buildAgentSettings(
           config_options: { ...(profile.configOptions ?? {}) },
         },
         savedLaunchSettings,
-        savedMode: profile.mode ?? "",
         dirty: false,
       };
     }

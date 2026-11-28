@@ -854,11 +854,34 @@ failed only the two base-identical tests. `tsrs --noEmit --fast`,
 `oxlint --deny-warnings` and `prettier --check` on the changed web files, and
 `scripts/lint-go-changed` on the two Go files (`0 issues`), passed.
 
-Observation, not changed in this round: onboarding builds
-`savedLaunchSettings` without `mode` but passes `mode: savedMode` in the
-discovery profile. For a saved profile with a non-empty mode,
-`savedPublicationProfileId` therefore sees a mode-only difference, and
-Refresh falls back to a pure probe instead of the saved publication.
+Follow-up fix in this round: onboarding built `savedLaunchSettings` without
+`mode` but passed the saved mode in the discovery profile. For a saved profile
+with a non-empty mode, `savedPublicationProfileId` therefore saw a mode-only
+difference, and Refresh fell back to a pure probe instead of the saved
+publication. `buildAgentSettings` now includes `mode` in
+`savedLaunchSettings`, matching `savedProfileLaunchSettings` in the settings
+editor; the separate `savedMode` field is removed and the discovery profile
+reads the mode from the saved launch settings. The canonical comparison is
+unchanged.
+
+- **RED/GREEN.** `agent-setup-fields.test.tsx` adds `publishes the saved
+  catalog for a saved profile with a mode (%s)` for an unchanged profile and a
+  model-only draft, both built through `buildAgentSettings` with `mode: "plan"`.
+  Before the fix both failed (`refreshAgentProfileCatalog` called 0 times);
+  after it both pass, together with the existing unchanged-profile case.
+- **Checks.** Vitest on `components/onboarding`, `hooks/domains/settings` and
+  `components/settings/profile*` passed 96 files (783 tests).
+  `tsrs --noEmit --fast`, `oxlint -c oxlint.config.mjs --deny-warnings` and
+  `prettier --check` on the three changed files passed.
+- **Browser.** On a fresh managed host build, `onboarding-agent-setup.spec.ts`
+  (project `chromium`) passed 6 tests. One of them, `opens the install catalog
+  from a first run with no installed agents`, was flaky: the first two attempts
+  timed out waiting for the install catalog button, and the third passed. That
+  case marks every agent unavailable and renders no setup fields, so it does
+  not reach the changed code. `mobile-onboarding-dialog.spec.ts` (project
+  `mobile-chrome`, same build) passed 1 test. Neither spec clicks Refresh, and
+  the seeded mock profile has an empty mode. They cover the saved-context
+  auto-probe and the model and config edits in the same discovery path.
 
 ### Historical generic-candidate evidence
 

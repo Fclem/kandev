@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@kandev/ui/tooltip";
 import { AgentSetupFields, type AgentSetupFieldsProps } from "./agent-setup-fields";
 import { StepAgents } from "./step-agents";
-import type { AgentSetting } from "./agent-settings";
-import type { AvailableAgent, DynamicModelsResponse } from "@/lib/types/http";
+import { buildAgentSettings, type AgentSetting } from "./agent-settings";
+import type { AgentProfile, AvailableAgent, DynamicModelsResponse } from "@/lib/types/http";
 
 const { useIsAdmin } = vi.hoisted(() => ({ useIsAdmin: vi.fn() }));
 vi.mock("@/hooks/domains/auth/use-is-admin", () => ({ useIsAdmin }));
@@ -228,6 +228,40 @@ describe("AgentSetupFields", () => {
     expect(probeAgentProfileMock).toHaveBeenCalledTimes(1);
   });
 });
+
+it.each([
+  ["unchanged", "gpt-4"],
+  ["model-only draft", "gpt-3.5"],
+])(
+  "publishes the saved catalog for a saved profile with a mode (%s)",
+  async (_case, draftModel) => {
+    const response = capabilityResponse([{ id: "gpt-4", name: "GPT-4" }]);
+    probeAgentProfileMock.mockResolvedValue(response);
+    refreshAgentProfileCatalogMock.mockResolvedValue(response);
+    const savedProfile = {
+      id: "profile-1",
+      model: "gpt-4",
+      mode: "plan",
+      envVars: [],
+      cliFlags: [],
+      commandPrefix: "",
+      cliPassthrough: false,
+    } as unknown as AgentProfile;
+    const built = buildAgentSettings(
+      [mockAgent],
+      [{ name: TEST_AGENT_NAME, profiles: [savedProfile] }],
+    )[TEST_AGENT_NAME];
+    const setting = { ...built, draft: { ...built.draft, model: draftModel } };
+
+    renderFields({ agent: mockAgent, setting, onChange: vi.fn() });
+
+    await waitFor(() => expect(probeAgentProfileMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("onboarding-agent-refresh-models"));
+
+    await waitFor(() => expect(refreshAgentProfileCatalogMock).toHaveBeenCalledWith("profile-1"));
+    expect(probeAgentProfileMock).toHaveBeenCalledTimes(1);
+  },
+);
 
 it("announces authentication failure and links to the saved profile settings", async () => {
   probeAgentProfileMock.mockResolvedValue({

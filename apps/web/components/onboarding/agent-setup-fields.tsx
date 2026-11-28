@@ -226,15 +226,10 @@ function useAgentSetupCapabilities(
     () => ({
       ...setting.savedLaunchSettings,
       model: setting.draft.model,
-      mode: setting.savedMode ?? "",
+      mode: setting.savedLaunchSettings.mode ?? "",
       config_options: setting.draft.config_options,
     }),
-    [
-      setting.savedLaunchSettings,
-      setting.draft.model,
-      setting.savedMode,
-      setting.draft.config_options,
-    ],
+    [setting.savedLaunchSettings, setting.draft.model, setting.draft.config_options],
   );
   const discovery = useProfileModelCapabilities(agent.name, profile, agent.model_config, onChange, {
     profileId: setting.profileId,

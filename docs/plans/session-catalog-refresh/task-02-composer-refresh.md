@@ -792,6 +792,74 @@ on the changed Go files (`0 issues`) passed.
   design records the acquire bound, supersession cancellation, and busy
   outcome.
 
+### Review round 9 fixes (2026-11-28)
+
+Review round 9 found one blocker. The checkpoint commit `4ad7a8fe56`
+resolved a stale rebase by deleting or weakening regression tests for
+behavior this branch does not change. Coverage is restored from upstream
+`8e0d003da8`; only mocks change where the composer now needs a real store.
+
+- **Restored cases.**
+  - `chat-input-area.test.tsx`: `projects the derived %s input mode on the
+    composer surface` (direct and queue), `resolveInputPlaceholder invites
+    queueing while a clarification remains pending`, `ChatInputArea proceed
+    visibility keeps proceed hidden until durable clarification hydration
+    clears`, and `useChatPanelHandlers can disable the global focus shortcut
+    for embedded panels`. The store mock now uses `createAppStore()`. The
+    catalog-refresh composer case moved to
+    `chat-input-area-catalog-refresh.test.tsx`, which keeps the base file under
+    the 600-line limit.
+  - `selector-trigger-class.test.tsx`: `forwards custom trigger classes to the
+    model selector trigger`, `subscribes only to the active session model
+    entry`, and `forwards custom trigger classes to the mode selector trigger`.
+    The store mock now uses `createAppStore()`.
+  - `agent-setup-fields.test.tsx`: the onboarding refresh-button case is now
+    `publishes the saved catalog when refreshing an unchanged saved profile`.
+    It asserts `refreshAgentProfileCatalog("profile-1")` and no second probe.
+    Onboarding has no editable launch settings, and a model-only dirty draft
+    still publishes the saved catalog. A dirty-draft probe case therefore has
+    no reachable onboarding path. The pure-probe boundary stays covered by
+    `use-profile-capability-discovery.test.tsx`.
+- **Reverted to base content.** These files are now byte-identical to
+  `8e0d003da8`: `worktree/manager_refresh_lock_test.go`,
+  `mcpconfig/cursor_auth_bridge_test.go`, `e2e/helpers/seed-repository-origin.test.ts`,
+  `lib/http-git-server.test.ts`, and `gitlab/watch-dialog-ownership.test.tsx`.
+- **Rest of the branch test diff.** Every other modified test file only adds
+  catalog cases or store fields that the catalog slice needs, except
+  `mcp_session_result_test.go`, which follows the
+  `LoadSessionWithResult`/`ResumeSessionWithResult` signature change. The
+  interrupted-turn rewrite in `e2e/tests/session/session-tab-restart.spec.ts`
+  is the intentional change recorded under "Combined browser collections"
+  below; it is not restored.
+- **Pre-existing environmental failures.** These tests fail identically on an
+  untouched `8e0d003da8` worktree in this environment (git 2.53.0):
+  - `TestCreateWorktree_RefreshLockPolicy` (two strict-refresh subtests): the
+    error lacks the `lock contention` text.
+  - `TestAggregateCursorMCPAuthExcludesLegacyConfiguredTaskRootSlug`: the
+    legacy task slug is aggregated.
+  - `seed origin ownership > preserves Git failure evidence when an explicit
+    refresh fails`: git reports `reference already exists` rather than
+    `cannot lock ref`.
+  - In the combined requested Vitest run, `watch-dialog-ownership.test.tsx`
+    (two to four cases) and `chat-input-area-context-submission.test.tsx` hit
+    the 5s default timeout under load. The same combined run on the base
+    worktree times out the same way. Both files pass when run alone on this
+    branch.
+
+Verification: the requested Vitest set ran 2,590 tests; only the failures
+listed above failed. The isolated run of the onboarding, seed-origin, GitLab
+watch-dialog and context-submission files failed only the seed-origin case.
+`go test -tags fts5 -count=1 ./internal/worktree/ ./internal/agent/mcpconfig/`
+failed only the two base-identical tests. `tsrs --noEmit --fast`,
+`oxlint --deny-warnings` and `prettier --check` on the changed web files, and
+`scripts/lint-go-changed` on the two Go files (`0 issues`), passed.
+
+Observation, not changed in this round: onboarding builds
+`savedLaunchSettings` without `mode` but passes `mode: savedMode` in the
+discovery profile. For a saved profile with a non-empty mode,
+`savedPublicationProfileId` therefore sees a mode-only difference, and
+Refresh falls back to a pure probe instead of the saved publication.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

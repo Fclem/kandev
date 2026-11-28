@@ -3,21 +3,18 @@ import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-li
 import type { ReactNode } from "react";
 import { planCommentRecovery } from "@/lib/plan-comment-recovery";
 import { QueueAdmissionError, QueueFullError } from "@/lib/api/domains/queue-api";
-import { useStore } from "zustand";
-import type { StoreApi } from "zustand";
-import { createAppStore } from "@/lib/state/store";
-import type { AppState } from "@/lib/state/store";
-import { sessionId, taskId } from "@/lib/types/http";
-import { sessionCatalogRecordSchema } from "@/lib/types/session-catalog";
+import { useStore, type StoreApi } from "zustand";
+import { createAppStore, type AppState } from "@/lib/state/store";
 
 const toastMock = vi.fn();
 const handleSendMessageMock = vi.fn();
 const fetchTaskMock = vi.hoisted(() => vi.fn());
+const useKeyboardShortcutMock = vi.hoisted(() => vi.fn());
 const MESSAGE_NOT_SENT_TITLE = "Message not sent";
+let mockProceedStepName: string | null = null;
 let mockQueuePopulated = false;
 
 let mockStore: StoreApi<AppState>;
-const catalogLifecycleRequestMock = vi.fn();
 
 vi.mock("@/components/task/chat/use-composer-prompt-suggestion", () => ({
   useComposerPromptSuggestion: () => ({ promptSuggestion: null }),
@@ -90,7 +87,14 @@ vi.mock("./dynamic-route-recovery", () => ({
 
 vi.mock("./chat-status-bar", () => ({
   ComposerCIStatus: () => null,
-  ChatStatusBar: () => null,
+  ChatStatusBar: (props: {
+    nextStepName: string | null;
+    isAgentBusy: boolean;
+    hasPendingClarification: boolean;
+  }) =>
+    props.nextStepName && !props.isAgentBusy && !props.hasPendingClarification ? (
+      <button type="button" data-testid="proceed-next-step" />
+    ) : null,
   resolveStatusRowTaskId: (sessionTaskId: string | null, statusTaskId: string | null) =>
     sessionTaskId ?? statusTaskId,
 }));
@@ -105,7 +109,7 @@ vi.mock("./pr-archive-banners", () => ({
 }));
 
 vi.mock("@/hooks/use-keyboard-shortcut", () => ({
-  useKeyboardShortcut: vi.fn(),
+  useKeyboardShortcut: useKeyboardShortcutMock,
 }));
 
 vi.mock("@/hooks/use-message-handler", () => ({
@@ -116,7 +120,7 @@ vi.mock("@/hooks/use-message-handler", () => ({
 vi.mock("@/hooks/domains/kanban/use-plan-actions", () => ({
   usePlanActions: () => ({
     implementPlanHandler: vi.fn(),
-    proceedStepName: null,
+    proceedStepName: mockProceedStepName,
     proceed: vi.fn(),
     isMoving: false,
   }),
@@ -130,20 +134,27 @@ vi.mock("@/hooks/domains/session/use-executor-environment-availability", () => (
 }));
 
 vi.mock("@/lib/ws/connection", () => ({
-  getWebSocketClient: () => ({ send: vi.fn(), request: catalogLifecycleRequestMock }),
+  getWebSocketClient: () => ({ send: vi.fn() }),
 }));
 
-import { ChatInputArea, useSubmitHandler } from "./chat-input-area";
+import {
+  ChatInputArea,
+  resolveInputPlaceholder,
+  useChatPanelHandlers,
+  useSubmitHandler,
+} from "./chat-input-area";
 
 beforeEach(() => {
   mockStore = createAppStore();
   handleSendMessageMock.mockReset();
   handleSendMessageMock.mockResolvedValue(undefined);
+  useKeyboardShortcutMock.mockReset();
   fetchTaskMock.mockReset().mockResolvedValue({ workspace_id: "task-workspace" });
 });
 
 afterEach(() => {
   cleanup();
+  mockProceedStepName = null;
   mockQueuePopulated = false;
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -216,6 +227,7 @@ function composerPanelState(overrides = {}) {
 }
 
 function composerElement(panelStateOverride = {}) {
+  mockProceedStepName = "Review";
   return (
     <ChatInputArea
       chatInputRef={{ current: null }}
@@ -249,35 +261,47 @@ it("keeps the composer mounted and focused as the queue fills and drains", () =>
   }
 });
 
-it("exposes refresh outside model hydration and toolbar visibility without touching an unsent draft", () => {
-  mockStore.getState().upsertTaskSessionFromEvent("task-1", {
-    id: sessionId("session-1"),
-    task_id: taskId("task-1"),
-    state: "WAITING_FOR_INPUT",
-    agent_profile_id: "profile",
-    started_at: "2026-11-16T00:00:00Z",
-    updated_at: "2026-11-16T00:00:00Z",
+it.each(["direct", "queue"] as const)(
+  "projects the derived %s input mode on the composer surface",
+  (inputMode) => {
+    renderComposer({ inputMode });
+
+    expect(screen.getByTestId("chat-input-area").getAttribute("data-input-mode")).toBe(inputMode);
+  },
+);
+
+describe("resolveInputPlaceholder", () => {
+  it("invites queueing while a clarification remains pending", () => {
+    expect(resolveInputPlaceholder(false, undefined, false, true, false)).toBe(
+      "Queue instructions while the question is pending...",
+    );
   });
-  mockStore.getState().applySessionCatalogRefresh(
-    "task-1",
-    "session-1",
-    sessionCatalogRecordSchema.parse({
-      version: 1,
-      revision: 1,
-      profile_id: "profile",
-      disposition: "rediscovery_required",
-      reason: "remote_executor",
-      owner: { execution_id: "execution", attempt_id: "attempt", source_generation: 1 },
-    }),
-  );
-  renderComposer();
-  const editor = screen.getByRole("textbox", { name: "Draft" });
-  fireEvent.change(editor, { target: { value: "Unsent work" } });
-  const action = screen.getByRole("button", { name: "Refresh session" });
-  expect(action.getAttribute("disabled")).toBeNull();
-  expect(screen.getByRole("textbox", { name: "Draft" })).toBe(editor);
-  expect(editor instanceof HTMLTextAreaElement && editor.value).toBe("Unsent work");
-  expect(catalogLifecycleRequestMock).not.toHaveBeenCalled();
+});
+
+describe("ChatInputArea proceed visibility", () => {
+  it("keeps proceed hidden until durable clarification hydration clears", () => {
+    const { rerender } = renderComposer();
+
+    expect(screen.queryByTestId("proceed-next-step")).toBeNull();
+
+    rerender(
+      <ChatInputArea
+        chatInputRef={{ current: null }}
+        clarificationKey={0}
+        onClarificationResolved={vi.fn()}
+        handleSubmit={vi.fn()}
+        handleCancelTurn={vi.fn().mockResolvedValue(undefined)}
+        showRequestChangesTooltip={false}
+        panelState={composerPanelState({
+          hasPendingClarification: false,
+          session: { state: "WAITING_FOR_INPUT", pending_action: null },
+        })}
+        isSending={false}
+      />,
+    );
+
+    expect(screen.getByTestId("proceed-next-step")).toBeTruthy();
+  });
 });
 
 describe("useSubmitHandler", () => {
@@ -302,6 +326,20 @@ describe("useSubmitHandler", () => {
         "The connection dropped or timed out. Refresh the task to confirm whether it went through.",
       variant: "error",
     });
+  });
+});
+
+describe("useChatPanelHandlers", () => {
+  it("can disable the global focus shortcut for embedded panels", () => {
+    renderHook(() =>
+      useChatPanelHandlers("session-1", { current: null }, { enableFocusShortcut: false }),
+    );
+
+    expect(useKeyboardShortcutMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ enabled: false }),
+    );
   });
 });
 

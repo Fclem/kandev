@@ -22,10 +22,12 @@ function renderFields(props: AgentSetupFieldsProps) {
 }
 
 const probeAgentProfileMock = vi.fn();
+const refreshAgentProfileCatalogMock = vi.fn();
 const resolveAgentModelConfigMock = vi.fn();
 
 vi.mock("@/lib/api/domains/profile-capability-api", () => ({
   probeAgentProfile: (...args: unknown[]) => probeAgentProfileMock(...args),
+  refreshAgentProfileCatalog: (...args: unknown[]) => refreshAgentProfileCatalogMock(...args),
 }));
 
 vi.mock("@/lib/api/domains/settings-api", () => ({
@@ -208,6 +210,22 @@ describe("AgentSetupFields", () => {
       expect(screen.queryByRole("status")).toBeNull();
     });
     expect(onStatusChange).toHaveBeenCalledWith("ok", null);
+  });
+
+  it("publishes the saved catalog when refreshing an unchanged saved profile", async () => {
+    const response = capabilityResponse([{ id: "gpt-4", name: "GPT-4" }]);
+    probeAgentProfileMock.mockResolvedValue(response);
+    refreshAgentProfileCatalogMock.mockResolvedValue(response);
+
+    renderFields({ agent: mockAgent, setting: mockSetting, onChange: vi.fn() });
+
+    await waitFor(() => expect(probeAgentProfileMock).toHaveBeenCalledTimes(1));
+
+    const refreshButton = screen.getByTestId("onboarding-agent-refresh-models");
+    fireEvent.click(refreshButton);
+
+    await waitFor(() => expect(refreshAgentProfileCatalogMock).toHaveBeenCalledWith("profile-1"));
+    expect(probeAgentProfileMock).toHaveBeenCalledTimes(1);
   });
 });
 

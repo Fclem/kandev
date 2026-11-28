@@ -827,10 +827,10 @@ behavior this branch does not change. Coverage is restored from upstream
 - **Rest of the branch test diff.** Every other modified test file only adds
   catalog cases or store fields that the catalog slice needs, except
   `mcp_session_result_test.go`, which follows the
-  `LoadSessionWithResult`/`ResumeSessionWithResult` signature change. The
-  interrupted-turn rewrite in `e2e/tests/session/session-tab-restart.spec.ts`
-  is the intentional change recorded under "Combined browser collections"
-  below; it is not restored.
+  `LoadSessionWithResult`/`ResumeSessionWithResult` signature change. Round 9
+  wrongly kept the interrupted-turn rewrite in
+  `e2e/tests/session/session-tab-restart.spec.ts` as intentional; review round
+  10 restored the replaced base case (see "Review round 10 fixes").
 - **Pre-existing environmental failures.** These tests fail identically on an
   untouched `8e0d003da8` worktree in this environment (git 2.53.0):
   - `TestCreateWorktree_RefreshLockPolicy` (two strict-refresh subtests): the
@@ -882,6 +882,47 @@ unchanged.
   `mobile-chrome`, same build) passed 1 test. Neither spec clicks Refresh, and
   the seeded mock profile has an empty mode. They cover the saved-context
   auto-probe and the model and config edits in the same discovery path.
+
+### Review round 10 fixes (2026-11-28)
+
+Review round 10 found one blocker. The branch had replaced the base test
+`keeps history and recovery available after restarting an interrupted turn`
+in `e2e/tests/session/session-tab-restart.spec.ts` with a
+`--fail-on-resume` variant. After that, no E2E covered restart of an
+interrupted turn with a successful native restore, which
+AC-PLATFORM-DURABLE-AGENT-DELIVERY-006.21 and the no-replay invariant behind
+AC-AGENTS-SESSION-CATALOG-002.3 depend on. The two earlier justifications were
+wrong. The contract does require the block after a successful restore, and
+the spec is desktop-only, so a phone failure could not apply.
+
+- **Restored case.** The base test is back from `8e0d003da8` as an additional
+  test, with two changes. Its launch waiter now matches only the explicit
+  Resume (`session_id`, `intent === "resume"`, no `activation_source`). The
+  legacy failed-session-banner wording is replaced by the shipped
+  `user-message-delivery-blocked` element plus an enabled
+  `recovery-resume-button`. It keeps the `unknown_prompt_outcome` check on a
+  launch rejection, the persisted `unknown_prompt_outcome` block, retained
+  history and the exact single Stop and single Resume for the target.
+- **Rejection case.** The native-restore-rejection test remains separate. Its
+  waiter now accepts only the rejection that the failed native restore
+  produces, the orchestrator's post-resume readiness failure surfaced by
+  `orchestrator/handlers/handlers.go`:
+  `Failed to launch session: session not ready after resume: session failed: The agent could not start.`
+  It also asserts that the launch rejects. The persisted
+  `unknown_prompt_outcome` block is still asserted separately.
+- **Coverage audit.** `git diff 8e0d003da8 HEAD -- apps/web/e2e` modifies one
+  existing file, `session-tab-restart.spec.ts`; every other changed E2E file
+  (the five `session-catalog-*` helpers, the desktop, phone and Docker catalog
+  specs) is new. No base E2E file is deleted, and no other base case is
+  replaced or weakened.
+- **Browser.** On a fresh managed host build (project `chromium`), the
+  restored successful-restore case passed on its first attempt. The rejection
+  case with a waiter that required `unknown_prompt_outcome` in the launch
+  rejection failed all four attempts, which identified the actual rejection
+  string above. With the exact-string waiter, the whole spec passed 7 of 7
+  (3.1m), with no retries.
+- **Checks.** `oxlint -c oxlint.config.mjs --deny-warnings`,
+  `prettier --check` and `node scripts/check-new-e2e-sleeps.mjs` passed.
 
 ### Historical generic-candidate evidence
 
@@ -1075,6 +1116,12 @@ exactly two original native prompts. No replay or forced recovery completion
 occurred. The assertions use the shipped recovery surface rather than requiring
 the legacy banner on phone. Temporary launch diagnostics were removed.
 
+Correction (review round 10): this phone observation concerns the catalog
+fixture only. It does not justify replacing the desktop-only
+`session-tab-restart.spec.ts` base case; the `chromium` project ignores
+`mobile-*.spec.ts`, so that spec never ran on phone. The restored base case
+covers restart with a successful native restore.
+
 No result here qualifies the defective launch-equivalence predicate. No final
 formatter/broad pipeline, real Docker proof, complete verified implementation,
 commit or Sol review handoff is claimed.
@@ -1172,16 +1219,22 @@ commit or Sol review-ready handoff is claimed.
 The first combined desktop run passed all thirteen catalog cases, all three
 profile-discovery cases and five of six ordinary restart cases. The remaining
 test asserted legacy recovery-banner wording while the captured UI was still
-restarting; its waiter did not correlate the explicit Resume source. The normal
-restart contract requires recovery after a failed Resume, not a permanent
-uncertainty block after a successful native restore.
+restarting; its waiter did not correlate the explicit Resume source.
 
-That test now uses its own profile with the existing native-restore rejection
-and controlled cancel-hold, correlates the ordinary Resume, and asserts the
-actual unknown-delivery block, available recovery action, retained history and
-exact Stop/Resume target. Its implementation-specific wording assertion was
-deleted rather than re-pinned. The focused case passed (20.0s), followed by both
-complete collections:
+Correction (review round 10): this run replaced that base test instead of
+fixing its waiter, on the claim that the restart contract does not require the
+uncertainty block after a successful native restore. That claim is wrong:
+AC-PLATFORM-DURABLE-AGENT-DELIVERY-006.21 requires a successful native restore
+to preserve the interrupted submission's uncertain outcome. The failure was the
+uncorrelated Resume waiter plus the wording assertion. The base case is
+restored alongside the native-restore-rejection case described next.
+
+The rejection case uses its own profile with the existing native-restore
+rejection and controlled cancel-hold, correlates the ordinary Resume, and
+asserts the actual unknown-delivery block, available recovery action, retained
+history and exact Stop/Resume target. Its implementation-specific wording
+assertion was deleted rather than re-pinned. The focused case passed (20.0s),
+followed by both complete collections:
 
 - Desktop: 22 passed (7.0m), log
   `/home/clem/.cache/tmp/session-catalog-runlogs-20261117/kandev-run.e2e.IdLPrJ2Q.log`.

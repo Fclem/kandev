@@ -83,6 +83,72 @@ test("blocks sending throughout restart while keeping the draft editable", async
 });
 
 // @covers AC-TASKS-SESSION-TAB-RESTART-001.1, AC-TASKS-SESSION-TAB-RESTART-001.2, AC-TASKS-SESSION-TAB-RESTART-001.3, AC-TASKS-SESSION-TAB-RESTART-001.5
+test("keeps history and recovery available after restarting an interrupted turn", async ({
+  testPage,
+  apiClient,
+  seedData,
+}) => {
+  test.setTimeout(120_000);
+  const fixture = await createRestartScenario(testPage, apiClient, seedData, async () => {
+    await suppressSessionFocusLaunches(testPage);
+  });
+  await fixture.session.sendMessage('e2e:message("Restart running witness")\ne2e:delay(60000)');
+  await expect(
+    fixture.session.chat.getByText("Restart running witness", { exact: true }),
+  ).toBeVisible();
+  const before = await captureRestartBaseline(apiClient, fixture.task.id, fixture.sessionId);
+  expect(before.target.state).toBe("RUNNING");
+  const stop = fixture.wire.waitForResponse("session.stop");
+  const launch = fixture.wire
+    .waitForResponse("session.launch", {
+      requestWhere: (payload) =>
+        payload.session_id === fixture.sessionId &&
+        payload.intent === "resume" &&
+        !payload.activation_source,
+      timeout: 30_000,
+      timeoutAfter: stop,
+    })
+    .catch((error: unknown) => error);
+  const wireStart = fixture.traffic.frames.length;
+  await fixture.session.sessionTabBySessionId(fixture.sessionId).click({ button: "right" });
+  await testPage.getByRole("menuitem", { name: "Restart session", exact: true }).click();
+  await stop;
+  const launchOutcome = await launch;
+  if (launchOutcome instanceof Error) {
+    expect(launchOutcome.message).toContain("unknown_prompt_outcome");
+  }
+  await expect(testPage.getByTestId("session-restart-status")).not.toBeVisible();
+  await expect
+    .poll(
+      async () =>
+        (await apiClient.getTaskSession(fixture.sessionId)).session.session_recovery_blocks?.some(
+          (block) => block.reason === "unknown_prompt_outcome",
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  await expect(testPage.getByTestId("user-message-delivery-blocked")).toBeVisible();
+  await expect(fixture.session.recoveryResumeButton()).toBeEnabled();
+  await assertRestartDataRetained(apiClient, fixture.task.id, fixture.sessionId, before);
+  await expect(
+    fixture.session.chat.getByText("simple mock response", { exact: false }),
+  ).toBeVisible();
+  // Focus signals are independent from the explicit Stop/Resume sequence.
+  const requests = fixture.traffic.frames
+    .slice(wireStart)
+    .filter(
+      (f) =>
+        f.direction === "sent" &&
+        f.activationSource !== "session_focus" &&
+        ["session.stop", "session.launch"].includes(f.action ?? ""),
+    );
+  expect(requests.map((f) => [f.action, f.sessionId])).toEqual([
+    ["session.stop", fixture.sessionId],
+    ["session.launch", fixture.sessionId],
+  ]);
+});
+
+// @covers AC-TASKS-SESSION-TAB-RESTART-001.1, AC-TASKS-SESSION-TAB-RESTART-001.2, AC-TASKS-SESSION-TAB-RESTART-001.3, AC-TASKS-SESSION-TAB-RESTART-001.5
 test("keeps history and recovery when native restore rejects an interrupted turn", async ({
   testPage,
   apiClient,
@@ -136,10 +202,14 @@ test("keeps history and recovery when native restore rejects an interrupted turn
           payload.intent === "resume" &&
           !payload.activation_source,
       })
+      // --fail-on-resume makes the mock agent fail while loading its native session,
+      // so the orchestrator's post-resume readiness wait rejects the launch.
       .catch((error: unknown) => {
         if (
           !(error instanceof Error) ||
-          !error.message.startsWith('watchWs.waitForResponse: "session.launch" was rejected: ')
+          !error.message.includes(
+            "Failed to launch session: session not ready after resume: session failed: The agent could not start.",
+          )
         )
           throw error;
         return error;
@@ -147,7 +217,8 @@ test("keeps history and recovery when native restore rejects an interrupted turn
     const wireStart = fixture.traffic.frames.length;
     await fixture.session.sessionTabBySessionId(fixture.sessionId).click({ button: "right" });
     await testPage.getByRole("menuitem", { name: "Restart session", exact: true }).click();
-    await Promise.all([stop, launch]);
+    const [, launchOutcome] = await Promise.all([stop, launch]);
+    expect(launchOutcome).toBeInstanceOf(Error);
     await expect(testPage.getByTestId("session-restart-status")).not.toBeVisible();
     await expect
       .poll(

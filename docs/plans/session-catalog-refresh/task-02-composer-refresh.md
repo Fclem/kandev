@@ -643,19 +643,42 @@ recorded non-catalog causes.
   settlement leave it unchanged. Sensitivity: a temporary mutation that rebuilt
   the ACP snapshot in `PersistSessionCatalogAvailability` made both tests fail
   (expected `owner-selected-model`, got nil), and it was reverted.
-- **Same-owner reservation merge.** Reachability evidence: the catalog launch
-  marker has one writer, `BeginSessionCatalogDiscovery`.
-  `restoreRecoveredSessionSettingsSource`, used by process and remote recovery,
-  writes `acp_model_state` directly for the same execution at the next generation
-  and keeps that execution's snapshot. It writes no catalog marker. The stored
-  source can therefore equal the owner while the marker names an earlier
-  generation, and a `Begin` by that owner passes both early returns and reaches
-  the merge. The merge is kept. The test now builds exactly that state (restored
-  source at generation 2 under a generation-1 marker) and asserts the restored
-  selection, mode and settled flag survive. Sensitivity: a temporary mutation
-  that always built a fresh snapshot failed on SQLite and PostgreSQL (expected
-  `selected-model`, got nil), and it was reverted. The duplicate
-  `catalogDiscoveryMetadataKey` now uses `sessioncatalog.ProviderMetadataField`.
+- **Same-owner reservation merge.** Round 3 kept the merge on the claim that
+  recovery reaches it: `restoreRecoveredSessionSettingsSource` writes the same
+  execution's snapshot at the next generation and no catalog launch marker. The
+  claim was wrong, and so was the test, which called `Begin` with that restored
+  owner directly. See round 4 below. The duplicate `catalogDiscoveryMetadataKey`
+  now uses `sessioncatalog.ProviderMetadataField`.
+
+### Review round 4 fix (2026-11-28)
+
+Review round 4 found no blockers. It showed that the round-3 merge is
+unreachable in production.
+
+- **Why it is unreachable.** `InitializeAndPromptWithLayers` takes its catalog
+  owner from `execution.startupAttemptSnapshot()` (`session.go:615`).
+  `restoreSessionSettingsSource` sets that counter to the restored generation G'
+  (`types.go:1107`). Every production path into ACP initialization advances the
+  counter first:
+  - `startAgentProcess` → `bindPassthroughStartupOrBegin` →
+    `beginStartupAttemptWithID` (`manager_startup.go:200`,
+    `manager_passthrough_reuse.go:47`); its live-passthrough return is PTY-only
+    and never reaches ACP initialization;
+  - the managed-runtime retry, `beginStartupRecoveryWithCancel`
+    (`managed_runtime_startup.go:569`);
+  - restart, `beginStartupAttemptPreservingIdentity`;
+  - workspace rebind.
+
+  Recovered executions are adopted already initialized. The next `Begin` owner is
+  therefore G'+1 and never matches the stored source, while same-owner re-entry
+  returns early on the launch marker.
+- **Change.** `reserveCatalogSettingsSource` always builds a fresh snapshot: the
+  owner identity and policy plus the retained provider availability. The merge
+  branch and the restored-owner scenario are deleted.
+- **Test.** The test now covers what production does: a second `Begin` by the
+  same owner returns the existing launch and leaves that owner's reported
+  selection and settled flag untouched. The new-owner red/green coverage is
+  unchanged.
 
 ### Historical generic-candidate evidence
 

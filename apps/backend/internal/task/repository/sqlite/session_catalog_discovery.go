@@ -200,12 +200,13 @@ func catalogLaunchNoticeRevision(raw json.RawMessage, profileID string) (uint64,
 	return 0, nil
 }
 
-// reserveCatalogSettingsSource labels the settings snapshot with the starting
-// owner. Re-entry by the same source keeps what that source already reported.
-// A different source starts a fresh snapshot, so the previous execution's
-// current mode/model, lists and settled options are never relabelled as the
-// new owner's. Durable provider availability is retained, as the event
-// projection retains it on owner change; consumers scope it by its own owner.
+// reserveCatalogSettingsSource starts the reserving owner's settings snapshot.
+// Same-owner re-entry returns before reaching here, and every startup path
+// advances the source generation before it reserves, so the stored source is
+// always another owner's: its current mode/model, lists and settled options are
+// never relabelled as the new owner's. Durable provider availability is
+// retained, as the event projection retains it on owner change; consumers scope
+// it by its own owner.
 func (r *Repository) reserveCatalogSettingsSource(ctx context.Context, tx *sqlx.Tx, sessionID string, metadata map[string]json.RawMessage, owner sessioncatalog.Owner, policy string) error {
 	previous := make(map[string]json.RawMessage)
 	if raw := metadata[models.SessionMetaKeyACPModelState]; len(raw) > 0 && string(raw) != jsonNull {
@@ -213,16 +214,9 @@ func (r *Repository) reserveCatalogSettingsSource(ctx context.Context, tx *sqlx.
 			return err
 		}
 	}
-	source, err := catalogSettingsSource(metadata)
-	if err != nil {
-		return err
-	}
-	snapshot := previous
-	if source.ExecutionID != owner.ExecutionID || source.AttemptID != owner.AttemptID || source.Generation != owner.SourceGeneration {
-		snapshot = make(map[string]json.RawMessage)
-		if discovery, ok := previous[sessioncatalog.ProviderMetadataField]; ok {
-			snapshot[sessioncatalog.ProviderMetadataField] = discovery
-		}
+	snapshot := make(map[string]json.RawMessage)
+	if discovery, ok := previous[sessioncatalog.ProviderMetadataField]; ok {
+		snapshot[sessioncatalog.ProviderMetadataField] = discovery
 	}
 	identity, err := json.Marshal(catalogSourceIdentity{ExecutionID: owner.ExecutionID, AttemptID: owner.AttemptID, Generation: owner.SourceGeneration, Policy: policy})
 	if err != nil {

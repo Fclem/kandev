@@ -22,19 +22,35 @@ const catalogPublicationStatusFailed = "failed"
 // fan-out, plus a margin for the surrounding reads, fences and response.
 const ProfileCatalogRefreshResponseBudget = hostutility.ProbeTimeout + sessioncatalog.TaskProbeFanoutTimeout + 30*time.Second
 
-func (c *Controller) beginCatalogRefresh(profileID string) (uint64, func()) {
+// catalogRefreshFlight is the one saved refresh per profile allowed to
+// publish. cancel stops its session fan-out once a newer refresh or a saved
+// mutation fences it, so a refresh that can no longer commit frees each
+// task's single helper slot instead of probing on.
+type catalogRefreshFlight struct {
+	generation uint64
+	cancel     context.CancelFunc
+}
+
+// beginCatalogRefresh supersedes the profile's previous flight and returns the
+// context its publication must run under.
+func (c *Controller) beginCatalogRefresh(ctx context.Context, profileID string) (uint64, context.Context, func()) {
+	flightCtx, cancel := context.WithCancel(ctx)
 	c.catalogRefreshMu.Lock()
 	defer c.catalogRefreshMu.Unlock()
 	if c.catalogRefreshFlights == nil {
-		c.catalogRefreshFlights = make(map[string]uint64)
+		c.catalogRefreshFlights = make(map[string]catalogRefreshFlight)
+	}
+	if previous, ok := c.catalogRefreshFlights[profileID]; ok {
+		previous.cancel()
 	}
 	c.catalogRefreshGeneration++
 	generation := c.catalogRefreshGeneration
-	c.catalogRefreshFlights[profileID] = generation
-	return generation, func() {
+	c.catalogRefreshFlights[profileID] = catalogRefreshFlight{generation: generation, cancel: cancel}
+	return generation, flightCtx, func() {
+		cancel()
 		c.catalogRefreshMu.Lock()
 		defer c.catalogRefreshMu.Unlock()
-		if c.catalogRefreshFlights[profileID] == generation {
+		if c.catalogRefreshFlights[profileID].generation == generation {
 			delete(c.catalogRefreshFlights, profileID)
 		}
 	}
@@ -48,7 +64,10 @@ func (c *Controller) beginCatalogProfileMutation(profileID string) func() {
 		c.catalogProfileMutations = make(map[string]uint32)
 	}
 	c.catalogProfileMutations[profileID]++
-	delete(c.catalogRefreshFlights, profileID)
+	if flight, ok := c.catalogRefreshFlights[profileID]; ok {
+		flight.cancel()
+		delete(c.catalogRefreshFlights, profileID)
+	}
 	c.catalogRefreshMu.Unlock()
 	return func() {
 		c.catalogRefreshMu.Lock()
@@ -76,7 +95,7 @@ func (c *Controller) RefreshProfileModelCatalog(ctx context.Context, profileID, 
 	if profileID == "" || authorizationScope == "" || c.repo == nil {
 		return nil, ErrInvalidProfileDiscovery
 	}
-	generation, finish := c.beginCatalogRefresh(profileID)
+	generation, flightCtx, finish := c.beginCatalogRefresh(ctx, profileID)
 	defer finish()
 	profile, err := c.repo.GetAgentProfile(ctx, profileID)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && profile == nil) {
@@ -92,7 +111,7 @@ func (c *Controller) RefreshProfileModelCatalog(ctx context.Context, profileID, 
 	return c.fetchProfileDynamicModels(ctx, agentName, dto.ProfileCapabilityRequest{
 		ProfileID: profileID, AuthorizationScope: authorizationScope, Refresh: true,
 	}, func(launch hostutility.ProfileProbeContext, result hostutility.ProfileCapabilityResult) *dto.CatalogPublicationDTO {
-		return c.publishSavedProfileCatalog(ctx, profile, agentName, authorizationScope, generation, launch, result)
+		return c.publishSavedProfileCatalog(flightCtx, profile, agentName, authorizationScope, generation, launch, result)
 	})
 }
 
@@ -117,7 +136,7 @@ func (c *Controller) publishSavedProfileCatalog(
 		return provider.CommitProfileCapability(ctx, result, func() error {
 			c.catalogRefreshMu.Lock()
 			defer c.catalogRefreshMu.Unlock()
-			if c.catalogRefreshFlights[profile.ID] != generation || c.catalogProfileMutations[profile.ID] != 0 {
+			if c.catalogRefreshFlights[profile.ID].generation != generation || c.catalogProfileMutations[profile.ID] != 0 {
 				return ErrInvalidProfileDiscovery
 			}
 			if err := c.checkSavedCatalogContext(ctx, profile, agentName, scope, launch); err != nil {

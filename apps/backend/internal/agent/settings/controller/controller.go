@@ -96,7 +96,7 @@ type Controller struct {
 	catalogRefreshPublisher        CatalogRefreshPublisher
 	catalogRefreshMu               sync.Mutex
 	catalogRefreshGeneration       uint64
-	catalogRefreshFlights          map[string]uint64
+	catalogRefreshFlights          map[string]catalogRefreshFlight
 	catalogProfileMutations        map[string]uint32
 	jobStore                       *JobStore
 	updateJobStore                 *AgentUpdateJobStore

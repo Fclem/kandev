@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/kandev/kandev/internal/common/logger"
@@ -292,4 +293,91 @@ func TestSessionCatalogRefreshCancellationPreservesCommittedDelivery(t *testing.
 	}
 	require.True(t, delivered)
 	require.Zero(t, manager.probeCount("own-000")-1, "the committed session was probed exactly once")
+}
+
+type staleCatalogRefreshKey struct{}
+
+// A superseded refresh can still hold an in-flight instance's single helper
+// slot while agentctl reaps it. Its cancelled fan-out must start no further
+// probe, and the current refresh must treat busy as contention: no write, the
+// prior task-owned record intact, and an unpublished partial result.
+// @covers AC-AGENTS-SESSION-CATALOG-001.6
+// @covers AC-AGENTS-SESSION-CATALOG-001.7
+func TestSessionCatalogRefreshBusyHelperFromSupersededFanout(t *testing.T) {
+	service, repo, manager := catalogFanoutFixture(t, 3)
+	scoped := context.WithValue(context.Background(), catalogWorkspaceContextKey{}, "ws1")
+	require.NoError(t, service.PublishProfileCatalog(scoped, "catalog-profile", "codex-app-server", catalogFanoutGuard))
+	var reasonsMu sync.Mutex
+	var committedReasons []string
+	subscription, err := service.eventBus.Subscribe(events.BuildSessionCatalogRefreshWildcardSubject(), func(_ context.Context, event *bus.Event) error {
+		reasonsMu.Lock()
+		defer reasonsMu.Unlock()
+		committedReasons = append(committedReasons, event.Data.(sessioncatalog.Update).Record.Reason)
+		return nil
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = subscription.Unsubscribe() })
+
+	var slotMu sync.Mutex
+	staleHeld := map[string]bool{}
+	staleStarted := make(chan struct{}, catalogRefreshConcurrency)
+	var busyReplies atomic.Int32
+	manager.probe = func(ctx context.Context, sessionID string) (sessioncatalog.TaskProbeReply, error) {
+		slotMu.Lock()
+		if staleHeld[sessionID] {
+			slotMu.Unlock()
+			busyReplies.Add(1)
+			return sessioncatalog.TaskProbeReply{}, sessioncatalog.ErrTaskProbeBusy
+		}
+		if ctx.Value(staleCatalogRefreshKey{}) == nil {
+			slotMu.Unlock()
+			reply := taskOwnedReply(sessionID)
+			reply.Result.Models.Choices = []sessioncatalog.Choice{{ID: "fresh-" + sessionID, Name: "Fresh " + sessionID}}
+			return reply, nil
+		}
+		// The stale helper keeps the slot after its request ends, as agentctl
+		// does while it reaps a cancelled helper.
+		staleHeld[sessionID] = true
+		slotMu.Unlock()
+		staleStarted <- struct{}{}
+		<-ctx.Done()
+		return sessioncatalog.TaskProbeReply{}, ctx.Err()
+	}
+
+	staleCtx, supersede := context.WithCancel(context.WithValue(scoped, staleCatalogRefreshKey{}, true))
+	defer supersede()
+	staleErr := make(chan error, 1)
+	go func() {
+		staleErr <- service.PublishProfileCatalog(staleCtx, "catalog-profile", "codex-app-server", catalogFanoutGuard)
+	}()
+	for range catalogRefreshConcurrency {
+		<-staleStarted
+	}
+	supersede()
+	require.ErrorIs(t, <-staleErr, context.Canceled)
+	require.Error(t, service.PublishProfileCatalog(scoped, "catalog-profile", "codex-app-server", catalogFanoutGuard),
+		"sessions skipped as busy must not be reported as published")
+
+	require.Equal(t, int32(catalogRefreshConcurrency), busyReplies.Load(), "busy is reported once per held slot, never retried")
+	slotMu.Lock()
+	require.Len(t, staleHeld, catalogRefreshConcurrency)
+	require.False(t, staleHeld["own-002"], "a superseded refresh starts no further task probe")
+	slotMu.Unlock()
+	reasonsMu.Lock()
+	require.NotContains(t, committedReasons, sessioncatalog.ReasonTaskDiscoveryFailed, "busy is never committed as a failed discovery")
+	reasonsMu.Unlock()
+	for _, sessionID := range []string{"own-000", "own-001", "own-002"} {
+		current, readErr := repo.GetTaskSession(scoped, sessionID)
+		require.NoError(t, readErr)
+		record, ok := loadCatalogObservation(current.Metadata[sessioncatalog.MetadataKey])
+		require.True(t, ok, sessionID)
+		require.Equal(t, sessioncatalog.SourceTaskProbeV1, record.Source, sessionID)
+		if staleHeld[sessionID] {
+			require.Equal(t, uint64(1), record.Revision, sessionID)
+			require.Equal(t, []sessioncatalog.Choice{{ID: "model-of-" + sessionID, Name: "Model of " + sessionID}}, record.Models, "a busy session keeps its prior task-owned record")
+			continue
+		}
+		require.Equal(t, uint64(2), record.Revision, sessionID)
+		require.Equal(t, []sessioncatalog.Choice{{ID: "fresh-" + sessionID, Name: "Fresh " + sessionID}}, record.Models, sessionID)
+	}
 }

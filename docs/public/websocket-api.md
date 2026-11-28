@@ -864,9 +864,11 @@ sessions. After it succeeds, each eligible, authorized, initialized Local or
 Worktree session whose execution qualifies gets its own fresh task-side
 catalog, read in that session's launch context and recorded with
 `source: "task_probe_v1"`. Every other session gets a rediscovery notice instead:
-isolated, remote, unverified, or unsupported executions, and failed reads. The
-whole fan-out is bounded, and the response can take longer than ordinary
-requests.
+isolated, remote, unverified, or unsupported executions, and failed reads. A
+session whose instance is already running a catalog read keeps its current
+record and makes the publication incomplete. A newer refresh or a saved profile
+change stops an older refresh's remaining reads. The whole fan-out is bounded,
+and the response can take longer than ordinary requests.
 
 The normal model-discovery response includes a separate `publication` object:
 
@@ -1178,18 +1180,25 @@ observation with its own positive monotonic `revision`, concrete `profile_id`,
 execution/attempt/source `owner`, and `disposition` (`host_candidates`,
 `rediscovery_required`, or `cleared`) with a `reason`:
 
-- `new_candidates` and `discovery_complete` accompany fresh candidates and
-  settlement.
+- `new_candidates` accompanies fresh task-owned candidates.
 - `executor_scoped` marks isolated or remote executors.
 - `context_unverified` marks unverified launch contexts and retired legacy
   candidates.
 - `task_discovery_unsupported` and `task_discovery_failed` mark task-side reads
   that are not qualified or that failed.
+- `discovery_complete`, `unsupported`, and `failed` settle a pending record
+  once the session's own provider reports discovery. A `complete` report yields
+  a `cleared` record with `discovery_complete`; an `unsupported` or `failed`
+  report keeps `rediscovery_required` with that outcome as the reason.
 
-Only `host_candidates` records from a session's own task read include candidate
-model/mode choices or a structured catalog; they carry `source: "task_probe_v1"`
-and the per-surface `probe` result. A newer `cleared` record is an explicit
-tombstone, not an absent field.
+Only `host_candidates` records from a session's own task read include
+top-level candidate `models`, `modes`, or a structured `catalog`; they carry
+`source: "task_probe_v1"` and the per-surface `probe` result. Settled records
+drop those candidates and instead carry `result`: the owner-correlated provider
+discovery, with an `outcome` and `models` and `modes` surfaces that each have
+`present`, `supported`, `choices`, and optional `catalog`. That `result` is the
+provider's own evidence, not host candidates. A newer `cleared` record is an
+explicit tombstone, not an absent field.
 
 The independent `session.catalog_discovery_updated` payload contains `provider`
 with its own positive monotonic `revision`, `profile_id`, `owner`, and explicit

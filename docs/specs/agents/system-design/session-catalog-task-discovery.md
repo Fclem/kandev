@@ -89,8 +89,13 @@ profile's environment or CLI to an older execution to make it match.
 Use one active helper per target instance and at most two per saved-refresh
 request, with paginated admission and no detached worker. Saved probing retains
 its existing bound. Following saved-probe success, fan-out has a 60-second total
-deadline; each helper has a 15-second cap within the remaining budget. Cancellation
-stops admission, cancels owned helpers and preserves earlier committed writes.
+deadline; each helper has a 15-second cap within the remaining budget. The
+backend waits for one task read up to that cap plus agentctl's reap and pipe-drain
+bounds and a margin, so it never abandons a request whose helper still holds the
+slot. A newer refresh or saved mutation cancels the superseded request's fan-out.
+Cancellation stops admission, cancels owned helpers and preserves earlier
+committed writes. A busy target instance is contention, not that task's result:
+write nothing, keep the prior record and report the publication partial.
 Exhaustion is a sanitized partial/unavailable publication outcome, not all-session
 success. Do not queue probes after the request ends or add automatic retries.
 

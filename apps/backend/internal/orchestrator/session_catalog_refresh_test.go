@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/common/modelcatalog"
 	"github.com/kandev/kandev/internal/common/sessioncatalog"
 	"github.com/kandev/kandev/internal/events"
@@ -13,6 +14,8 @@ import (
 	"github.com/kandev/kandev/internal/task/models"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func seedCatalogEligibilitySession(t *testing.T, repo *sqliterepo.Repository) map[string]any {
@@ -151,7 +154,6 @@ func TestSessionCatalogRefreshTaskProbeOutcomes(t *testing.T) {
 		"unsupported capability": {reply: sessioncatalog.TaskProbeReply{Result: sessioncatalog.Discovery{Outcome: sessioncatalog.OutcomeUnsupported}}, disposition: sessioncatalog.DispositionRediscoveryRequired, reason: sessioncatalog.ReasonTaskDiscoveryUnsupported},
 		"failed helper":          {reply: sessioncatalog.TaskProbeReply{Result: sessioncatalog.Discovery{Outcome: sessioncatalog.OutcomeFailed}}, disposition: sessioncatalog.DispositionRediscoveryRequired, reason: sessioncatalog.ReasonTaskDiscoveryFailed},
 		"unavailable instance":   {err: sessioncatalog.ErrTaskProbeUnavailable, disposition: sessioncatalog.DispositionRediscoveryRequired, reason: sessioncatalog.ReasonTaskDiscoveryFailed},
-		"busy instance":          {err: sessioncatalog.ErrTaskProbeBusy, disposition: sessioncatalog.DispositionRediscoveryRequired, reason: sessioncatalog.ReasonTaskDiscoveryFailed},
 		"supported empty models": {
 			reply:       sessioncatalog.TaskProbeReply{Capability: "fixture", Result: sessioncatalog.Discovery{Outcome: sessioncatalog.OutcomeComplete, Models: sessioncatalog.Surface{Present: true, Supported: true, Choices: []sessioncatalog.Choice{}}}},
 			disposition: sessioncatalog.DispositionHostCandidates, reason: sessioncatalog.ReasonNewCandidates,
@@ -211,4 +213,34 @@ func TestSessionCatalogRefreshReplacesLegacyGenericCandidates(t *testing.T) {
 	require.Equal(t, uint64(5), observation.Revision, "a newer revision replaces the legacy record")
 	require.Equal(t, sessioncatalog.DispositionRediscoveryRequired, observation.Disposition)
 	require.Empty(t, observation.Models, "a failed task probe must not retain or transfer generic candidates")
+}
+
+// Busy means the instance's helper slot is held, not that the target's
+// discovery failed: the prior task-owned record stays, nothing is retried, and
+// the refresh reports the session unpublished.
+// @covers AC-AGENTS-SESSION-CATALOG-001.7
+func TestSessionCatalogRefreshBusyHelperKeepsPriorRecord(t *testing.T) {
+	ctx := context.Background()
+	repo := setupTestRepo(t)
+	seedCatalogEligibilitySession(t, repo)
+	manager := newCatalogEligibilityManager("worktree", true)
+	svc := createTestServiceWithAgent(repo, newMockStepGetter(), newMockTaskRepo(), manager)
+	svc.eventBus = bus.NewMemoryEventBus(testLogger())
+	require.NoError(t, svc.PublishProfileCatalog(ctx, "concrete-profile", "codex-app-server", catalogFanoutGuard))
+	prior := readCatalogObservation(t, repo, "catalog-session")
+	require.Equal(t, sessioncatalog.SourceTaskProbeV1, prior.Source)
+	manager.probe = func(context.Context, string) (sessioncatalog.TaskProbeReply, error) {
+		return sessioncatalog.TaskProbeReply{}, sessioncatalog.ErrTaskProbeBusy
+	}
+	logCore, logs := observer.New(zap.WarnLevel)
+	var err error
+	svc.logger, err = logger.NewFromZap(zap.New(logCore))
+	require.NoError(t, err)
+	require.Error(t, svc.PublishProfileCatalog(ctx, "concrete-profile", "codex-app-server", catalogFanoutGuard),
+		"an unpublished session must not be reported as published")
+	require.Equal(t, prior, readCatalogObservation(t, repo, "catalog-session"), "busy never replaces task-owned evidence")
+	require.Equal(t, 2, manager.probeCount("catalog-session"), "busy is not retried")
+	failures := logs.FilterMessage("session catalog publication failed").All()
+	require.Len(t, failures, 1)
+	require.Equal(t, "helper_busy", failures[0].ContextMap()["reason"])
 }

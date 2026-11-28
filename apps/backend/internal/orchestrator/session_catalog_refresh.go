@@ -131,6 +131,7 @@ func (r *catalogRefresh) publishPage(ctx context.Context, sessions []*models.Tas
 // and a sanitized cause, never error text, launch input or catalog content.
 const (
 	catalogPublishReasonEvidence = "execution_evidence_failed"
+	catalogPublishReasonBusy     = "helper_busy"
 	catalogPublishReasonDeadline = "fanout_deadline"
 	catalogPublishReasonCommit   = "commit_failed"
 )
@@ -143,9 +144,12 @@ func (r *catalogRefresh) publishSession(ctx context.Context, observed *models.Ta
 	if !evidence.Initialized || evidence.ProfileID != r.profileID || evidence.Owner.ExecutionID != observed.AgentExecutionID {
 		return "", nil
 	}
-	projection := r.acquire(ctx, observed.ID, &evidence)
-	if err := ctx.Err(); err != nil {
-		return catalogPublishReasonDeadline, err
+	projection, err := r.acquire(ctx, observed.ID, &evidence)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return catalogPublishReasonDeadline, ctxErr
+	}
+	if err != nil {
+		return catalogPublishReasonBusy, err
 	}
 	if err := r.commitSession(ctx, observed, &evidence, projection); err != nil {
 		return catalogPublishReasonCommit, err
@@ -156,7 +160,13 @@ func (r *catalogRefresh) publishSession(ctx context.Context, observed *models.Ta
 // acquire classifies the actual execution. Only a host process launched under
 // the current saved source enters fresh task-side acquisition; remote,
 // isolated and unknown executors never receive an automatic probe.
-func (r *catalogRefresh) acquire(ctx context.Context, sessionID string, evidence *sessioncatalog.ExecutionEvidence) sessioncatalog.Observation {
+//
+// A busy instance is the only error: its single helper slot is held, so the
+// target produced no result of its own. Recording that as a failed discovery
+// would replace the owner's task-owned evidence with a false failure, so the
+// caller writes nothing and reports the session unpublished. Busy is never
+// retried automatically.
+func (r *catalogRefresh) acquire(ctx context.Context, sessionID string, evidence *sessioncatalog.ExecutionEvidence) (sessioncatalog.Observation, error) {
 	projection := sessioncatalog.Observation{
 		Version: 1, ProfileID: r.profileID, Owner: evidence.Owner,
 		Disposition: sessioncatalog.DispositionRediscoveryRequired, Reason: sessioncatalog.ReasonContextUnverified,
@@ -164,17 +174,20 @@ func (r *catalogRefresh) acquire(ctx context.Context, sessionID string, evidence
 	switch catalogExecutorLocality(evidence.ExecutorType) {
 	case catalogLocalityRemote:
 		projection.Reason = sessioncatalog.ReasonExecutorScoped
-		return projection
+		return projection, nil
 	case catalogLocalityUnknown:
-		return projection
+		return projection, nil
 	}
 	if !evidence.SavedSourceCurrent || evidence.AgentID != r.agentName {
-		return projection
+		return projection, nil
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, sessioncatalog.TaskProbeHelperTimeout)
+	probeCtx, cancel := context.WithTimeout(ctx, sessioncatalog.TaskProbeAcquireTimeout)
 	defer cancel()
 	reply, err := r.runtime.DiscoverTaskCatalogCandidates(probeCtx, sessionID, evidence.Owner)
-	return taskProbeProjection(projection, reply, err)
+	if errors.Is(err, sessioncatalog.ErrTaskProbeBusy) {
+		return projection, err
+	}
+	return taskProbeProjection(projection, reply, err), nil
 }
 
 func (r *catalogRefresh) commitSession(ctx context.Context, observed *models.TaskSession, evidence *sessioncatalog.ExecutionEvidence, projection sessioncatalog.Observation) error {

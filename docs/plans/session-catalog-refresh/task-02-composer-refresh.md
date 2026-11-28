@@ -734,6 +734,64 @@ run `-run 'TestSessionCatalog|Catalog'`. `validate-public-docs.mjs` validated
 `lint-spec-files.py --all`, `git diff --check`, and `scripts/lint-go-changed`
 on the changed Go files (`0 issues`) passed.
 
+### Review round 7 fixes (2026-11-28)
+
+- **Superseded refreshes kept probing, and busy became a false failure.**
+  `beginCatalogRefresh` only bumped the generation, so a superseded or fenced
+  refresh kept starting task probes that could never commit. agentctl admits
+  one helper per instance and answers 429 (`ErrTaskProbeBusy`) to the next, and
+  `taskProbeProjection` recorded that as `task_discovery_failed`. An overlapping
+  current refresh could therefore replace valid `task_probe_v1` candidates with
+  a false failure.
+  - **Cancellation.** Each profile flight now owns a cancel func
+    (`catalogRefreshFlight`). `beginCatalogRefresh` cancels the predecessor, and
+    `beginCatalogProfileMutation` cancels the flight it fences. Publication runs
+    under the flight context; the saved probe keeps the request context, so the
+    stale request still answers.
+  - **Busy outcome (skip, not retry).** `acquire` returns `ErrTaskProbeBusy`
+    instead of a projection. `publishSession` writes nothing, keeps the prior
+    record, logs `reason=helper_busy`, and marks the publication failed.
+    AC-AGENTS-SESSION-CATALOG-001.7 keeps honest notices for the target's own
+    unsupported or failed discovery and forbids one success from concealing
+    another target's failure. Busy is neither: the target produced no result,
+    so a failure record would be false, while the failed publication keeps the
+    partial result visible. The task-discovery design already forbids automatic
+    retries. A successor reaches the fan-out only after its own saved probe, by
+    which time the cancelled helper has normally been reaped.
+  - **Acquire deadline.** `sessioncatalog.TaskProbeAcquireTimeout` =
+    helper timeout (15s) + `TaskProbeHelperReapTimeout` (5s) +
+    `TaskProbeHelperWaitDelay` (2s) + 3s margin. agentctl's
+    `catalogHelperReapTimeout` and `catalogHelperWaitDelay` now alias the shared
+    constants. `TaskProbeFanoutTimeout` is unchanged, so
+    `ProfileCatalogRefreshResponseBudget` is unchanged.
+  - RED: `TestSavedProfileCatalogRefreshCancelsSupersededFanout` failed in both
+    the `refresh` and `saved mutation` subtests with
+    `in chain: "superseded fan-out kept running"`.
+    The first draft of the overlap test, which expected a retry, committed
+    `["task_discovery_failed", "new_candidates", "new_candidates"]` on the old
+    code. `TestSessionCatalogRefreshBusyHelperKeepsPriorRecord` failed with
+    `An error is expected but got nil`. The overlap test was then rewritten for
+    the skip outcome as `TestSessionCatalogRefreshBusyHelperFromSupersededFanout`;
+    the mutation below proves the final version.
+  - GREEN: all three pass. The overlap test asserts that the cancelled stale
+    fan-out never probes `own-002` and that each busy session gets one call
+    with no retry. The busy sessions keep their revision-1 `task_probe_v1`
+    records, the free session gets its fresh revision-2 record, no
+    `task_discovery_failed` event is committed, and the current refresh
+    returns an error. The table row that mapped busy to `task_discovery_failed`
+    is removed.
+  - Sensitivity: a temporary mutation that disabled the busy branch in `acquire`
+    made both orchestrator busy tests fail with
+    `An error is expected but got nil`. It was reverted.
+- **Public doc gaps.** `docs/public/websocket-api.md` now lists the settlement
+  reasons `discovery_complete`, `unsupported` and `failed`, and states that only
+  `host_candidates` records carry top-level candidate `models`/`modes`/`catalog`.
+  Settled records carry `result`, the owner-correlated provider discovery,
+  which is provider evidence and not host candidates. The saved-refresh section
+  describes the busy and supersession outcomes. The task-discovery system
+  design records the acquire bound, supersession cancellation, and busy
+  outcome.
+
 ### Historical generic-candidate evidence
 
 In progress. Root formatting/typecheck, earlier scoped backend/PostgreSQL/race

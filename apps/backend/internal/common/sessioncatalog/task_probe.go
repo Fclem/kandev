@@ -21,6 +21,15 @@ const (
 	MaxTaskProbeRequestIDLength = 128
 	MaxTaskProbeReplyBytes      = 2 << 20
 	TaskProbeHelperTimeout      = 15 * time.Second
+	// TaskProbeHelperReapTimeout bounds agentctl's kill and reap of a helper.
+	TaskProbeHelperReapTimeout = 5 * time.Second
+	// TaskProbeHelperWaitDelay bounds pipe draining after a helper exits.
+	TaskProbeHelperWaitDelay = 2 * time.Second
+	// TaskProbeAcquireTimeout bounds one backend task-probe request. agentctl
+	// holds its single helper slot until the helper is reaped, so the backend
+	// waits for the helper's own deadline and reaping instead of abandoning a
+	// request whose helper still occupies the slot.
+	TaskProbeAcquireTimeout = TaskProbeHelperTimeout + TaskProbeHelperReapTimeout + TaskProbeHelperWaitDelay + 3*time.Second
 	// TaskProbeFanoutTimeout bounds a saved refresh's whole session fan-out.
 	TaskProbeFanoutTimeout = 60 * time.Second
 )

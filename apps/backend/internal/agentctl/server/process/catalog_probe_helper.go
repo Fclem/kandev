@@ -7,12 +7,14 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/kandev/kandev/internal/common/sessioncatalog"
 )
 
 const (
 	catalogHelperStderrLimit = 64 << 10
-	catalogHelperReapTimeout = 5 * time.Second
-	catalogHelperWaitDelay   = 2 * time.Second
+	catalogHelperReapTimeout = sessioncatalog.TaskProbeHelperReapTimeout
+	catalogHelperWaitDelay   = sessioncatalog.TaskProbeHelperWaitDelay
 )
 
 var errCatalogHelperUnavailable = errors.New("catalog helper launch context is unavailable")

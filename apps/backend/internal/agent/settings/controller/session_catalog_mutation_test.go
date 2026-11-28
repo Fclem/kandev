@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -79,6 +81,61 @@ func TestSavedProfileCatalogRefreshRejectsInFlightSavedMutation(t *testing.T) {
 			}
 			require.Equal(t, "failed", observedStatus, "a snapshot read while its saved mutation is in flight cannot publish")
 			require.False(t, published, "publication must not race the saved context's pending commit")
+		})
+	}
+}
+
+// A superseded or fenced refresh can never commit, so its session fan-out must
+// stop at once instead of holding each task's single helper slot.
+// @covers AC-AGENTS-SESSION-CATALOG-001.3
+// @covers AC-AGENTS-SESSION-CATALOG-001.6
+func TestSavedProfileCatalogRefreshCancelsSupersededFanout(t *testing.T) {
+	for _, successor := range []string{"refresh", "saved mutation"} {
+		t.Run(successor, func(t *testing.T) {
+			ctrl, repo, ctx, agentID, _ := newProviderTestController(t)
+			profile := &models.AgentProfile{AgentID: agentID, Name: "Saved", Model: "saved-model", Enabled: true}
+			require.NoError(t, repo.CreateAgentProfile(ctx, profile))
+			ctrl.hostUtility = &recordingProfileDiscoveryUtility{}
+			ctrl.SetHostCLIRunner(&stubCLIRunner{listJSON: codexListJSON})
+			staleStarted := make(chan struct{})
+			staleStopped := make(chan error, 1)
+			var calls atomic.Int32
+			var successorPublished atomic.Bool
+			ctrl.SetCatalogRefreshPublisher(func(ctx context.Context, _, _ string, commit func(context.Context, func() error) error) error {
+				if calls.Add(1) > 1 {
+					return commit(ctx, func() error { successorPublished.Store(true); return nil })
+				}
+				close(staleStarted)
+				select {
+				case <-ctx.Done():
+					staleStopped <- ctx.Err()
+				case <-time.After(5 * time.Second):
+					staleStopped <- errors.New("superseded fan-out kept running")
+				}
+				return ctx.Err()
+			})
+			staleDone := make(chan string, 1)
+			go func() {
+				result, err := ctrl.RefreshProfileModelCatalog(ctx, profile.ID, "user-1")
+				if err != nil || result.Publication == nil {
+					staleDone <- "missing publication"
+					return
+				}
+				staleDone <- result.Publication.Status
+			}()
+			<-staleStarted
+			if successor == "refresh" {
+				fresh, err := ctrl.RefreshProfileModelCatalog(ctx, profile.ID, "user-1")
+				require.NoError(t, err)
+				assertCatalogPublicationStatus(t, fresh, "published")
+				require.True(t, successorPublished.Load())
+			} else {
+				prefix := "wrapper --"
+				_, err := ctrl.UpdateProfile(ctx, UpdateProfileRequest{ID: profile.ID, CommandPrefix: &prefix})
+				require.NoError(t, err)
+			}
+			require.ErrorIs(t, <-staleStopped, context.Canceled, "the successor must cancel the stale fan-out")
+			require.Equal(t, "failed", <-staleDone, "a cancelled fan-out never reports publication")
 		})
 	}
 }
